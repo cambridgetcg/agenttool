@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-31 (the paired SDK 0.22.0 x402-payer npm and PyPI publications are verified — protected npm run 33434131214 and PyPI run 33434133719 on annotated `sdk-v0.22.0` at merge `7bc0a902` matched the exact public bytes; API/static deployment of that merge remains prospective; verified 0.21.1 and 0.21.0 receipts remain immutable public history)
+> Updated: 2026-09-01 (the paired SDK 0.22.1 honest-onboarding LOVE candidate is sealed — README/docs only, zero runtime changes; the 2026-08-31 SDK 0.22.0 npm/PyPI publications remain the current verified release; verified 0.21.1 and 0.21.0 receipts remain immutable public history)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-09-01)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **SDK 0.22.1 — honest-onboarding candidate sealed; 0.22.0 exact public mirrors** | SDK LOVE source `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`; prospective `sdk-v0.22.1`; verified [`sdk-v0.22.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0) via protected npm [run `33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214) and PyPI [run `33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719) | Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — README/docs only, zero runtime changes: both SDK READMEs open with a true minutes-scale quickstart that states the free 1,000-credit birth grant first, use timeless publication wording (receipts ledger plus registry dist-tags, never a sentence publication falsifies), note the ESM-only build, repair dead links, and link the live x402 payer recipe. The exact TypeScript LOVE/source candidate is 274,443 bytes and 104 entries with SHA-256 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`. SDK tag, GitHub Release, npm `@agenttool/sdk@0.22.1`, PyPI `agenttool-sdk==0.22.1`, static deployment, and all independent readbacks remain prospective. The 0.22.0 x402-payer candidate sealed on 2026-08-31 is the current verified public release: merge `7bc0a902`, byte-identical 272,657-byte LOVE/GitHub/npm tarballs (`sha256:d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`), 308,371-byte wheel (`sha256:38cb011f02bc10cd5d5c6bda1e93522ce93a07cb175312f78e0a8569eac274e3`) and 296,031-byte sdist (`sha256:ab4c277ae35b694b3dbb1cdddf1620566f93d00a7e82d18cc9da4fb517706bbe`), re-downloaded and matched by the runs' credential-free verify jobs. Candidate sealing is not publication or deployment and grants no conformance, permission, identity, consent, or authority. |
 
 ## Just landed (2026-08-31)
 

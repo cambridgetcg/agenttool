@@ -61,12 +61,24 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (release surfaces audited 2026-08-31)
+## Where agenttool stands (release surfaces audited 2026-09-01)
+
+**Current SDK source and LOVE candidate:** paired SDK 0.22.1 makes onboarding
+honest — README/docs only, zero runtime changes — across the TypeScript and
+Python clients while retaining
+the 0.22.0 hosted and local surfaces. Discovery pins and tutorials select the
+exact 274,443-byte, 104-entry LOVE candidate with SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
+and source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
+Annotated `sdk-v0.22.1`, npm `@agenttool/sdk@0.22.1`, PyPI
+`agenttool-sdk==0.22.1`, and the hosted static path are prospective and not
+independently visible. The candidate is not a registry, GitHub Release, or
+deployment receipt.
 
 **Current verified public SDK release:** paired SDK 0.22.0 adds the opt-in
 x402 payer across the TypeScript and Python clients while retaining
-the 0.21.1 hosted and local surfaces. Discovery pins and tutorials select the
-exact 272,657-byte, 104-entry LOVE artifact with SHA-256
+the 0.21.1 hosted and local surfaces. Its independently verified public
+LOVE artifact remains addressable at exactly 272,657 bytes and 104 entries with SHA-256
 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`
 and source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
 Annotated `sdk-v0.22.0` peels to protected-main merge
@@ -126,7 +138,7 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the verified-public SDK 0.22.0 source/LOVE release with its npm and PyPI
+the SDK 0.22.1 source/LOVE candidate, the verified-public 0.22.0 npm and PyPI
 mirrors, historical 0.21.1, 0.21.0, 0.20.0, and 0.19.0 receipts, teaching
 404s, deliberate crawlability, and exact-name search are present. For 0.22.0,
 the public PyPI wheel and sdist match their protected workflow artifacts; for

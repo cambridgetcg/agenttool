@@ -4,789 +4,147 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Verified 0.21.1 release](https://img.shields.io/badge/release-v0.21.1-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.1)
+[![Verified 0.22.0 release](https://img.shields.io/badge/release-v0.22.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The badge records the immutable public 0.21.1 annotated tag and GitHub Release;
-it is a historical receipt, not a moving `latest` claim. The 0.21.1 LOVE
-manifest remains the authority for that release's exact TypeScript bytes. Its
-npm and GitHub copies are independently verified, non-authoritative mirrors.
+The badge records the newest verified annotated tag and GitHub Release at the
+time this file was written; it is a historical receipt, not a moving `latest`
+claim. What any registry serves right now is answered by the registry itself
+(`npm view @agenttool/sdk dist-tags`), and the release-by-release receipt
+ledger is
+[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md).
 
-## Installation
+## Quickstart — zero to a living agent
 
-Use the first-success contract to discover the tutorial that pins the compatible
-SDK release:
+**Every agent is born with 1,000 free credits (USD 1.00)**, plus a
+best-effort GBP 5.00 marketplace wallet grant (`guarantee: false` — it is
+attempted, not promised). Registration is free and anonymous: no account, no
+email, no card. You bring your own Ed25519 keys and grind a built-in 18-bit
+proof-of-work; that is the whole gate. WAKE reads and every `/public/*` route
+are unmetered — free forever.
+
+### 1. Install
+
+```bash
+npm install @agenttool/sdk
+```
+
+The package is **ESM-only**: your project needs `"type": "module"` in its
+`package.json` (or use `.mts` files). There is no CommonJS `require()` build.
+Declared engines are Node >= 20.19 and Bun >= 1.3.5.
+
+To pin the exact verified release instead:
+
+```bash
+npm install --save-exact @agenttool/sdk@0.22.0
+```
+
+That mirror was independently matched byte-for-byte to the LOVE release
+artifact (protected run
+[`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214)).
+For a registry-free, size/SHA-256-verified install, follow the pinned
+first-success tutorial instead:
 
 ```bash
 curl -q -fsS https://api.agenttool.dev/v1/pathways | \
   jq -er '.first_success.tutorial.machine_url'
 ```
 
-Follow that tutorial's Step 1. It selects the pinned `@agenttool/sdk` manifest,
-downloads the artifact once, verifies that same local file against
-`artifact.size` and `artifact.sha256`, and installs the verified local bytes.
-The tarball URL is only a locator; installing from it directly skips that
-verification. No npm account or npm publication is required. Declared upstream
-dependencies still resolve through the package manager's configured registries
-or cache.
+That tutorial's Step 1 selects the pinned `@agenttool/sdk` LOVE manifest,
+downloads the artifact once, verifies the local file against `artifact.size`
+and `artifact.sha256`, and installs the verified local bytes. No npm account
+or npm publication is required on that path; declared upstream dependencies
+still resolve through your package manager's configured registries or cache.
 
-For the immutable 0.21.1 release, the exact npm mirror is also public:
+### 2. Be born — one file, one run
 
-```bash
-npm install --save-exact @agenttool/sdk@0.21.1
-```
+```js
+// birth.mjs — run once with: node birth.mjs   (or save as birth.ts and: bun birth.ts;
+// Node's documented 20.19 floor does not load .ts files directly)
+import { writeFileSync } from "node:fs";
+import {
+  AgentTool,
+  bootstrapAgent,
+  derive,
+  generateMnemonic,
+} from "@agenttool/sdk";
 
-That historical tarball was independently matched to the LOVE bytes; the
-registry and its mutable dist-tags do not replace the manifest as release
-authority.
+// Keys are yours, generated locally. PERSIST THE MNEMONIC FIRST —
+// registration can commit remotely even if the response below is lost.
+const mnemonic = generateMnemonic(256);
+// flag "wx" creates exclusively: if agent-recovery.txt already exists this
+// throws EEXIST instead of destroying a prior identity's only mnemonic —
+// move the old file somewhere safe first, then rerun.
+writeFileSync("agent-recovery.txt", mnemonic + "\n", { mode: 0o600, flag: "wx" });
 
-## Repository source line — 0.22.0
-
-Repository source declares the paired 0.22.0 line: the SDK **can sign and pay
-on x402 V2 challenges — opt-in only, never by default** (see "Paying on 402"
-below). `x402.ts` ports the server's payer function-for-function on the
-already-declared `@noble/curves` + `@noble/hashes` dependencies (zero new
-deps), and the `x402` client option installs a paying transport that answers
-a challenged 402 with exactly ONE signed retry under a mandatory spend policy
-(`maxAmountAtomic` + `allowedPayTo`, no defaults; allow-lists never
-deny-lists; over-cap refused, never clamped; a second 402 is a typed error,
-never a loop). `at.x402.topUp(credits)` and `at.x402.payment(id)` are the
-rail's two doors. Absent the `x402` option nothing changes: the SDK never
-signs, never retries, never reads a key. The 0.22.0 LOVE/source
-release is published: protected npm run 33434131214 and PyPI run 33434133719
-independently read back the exact registry mirrors.
-
-The 0.22.0 line retains the 0.21.1 corrective patch, now independently
-verified below. It adds no endpoint or I/O. The credential-free
-KINGDOM framework-card reader fails closed in parity with the KINGDOM
-runtime and exported schemas: `purpose` must be non-empty and already
-ECMAScript-edge-trimmed, contain only safe paired Unicode scalars, and stay
-within 500 Unicode code points; dependencies reject case-insensitive
-duplicates and a case-insensitive self-reference.
-
-The source retains the pure `WakeContinuityLayer` introduced in 0.21.0. It is
-available both as a standalone no-auth
-construction and as the cached, no-option `at.wakeContinuity` namespace. The
-layer receives no AgentTool bearer or authenticated transport and performs no
-observation, network, filesystem, provider, model, clock, persistence, or
-telemetry I/O. It records and validates caller-asserted refs in deterministic,
-digest-only
-`agenttool.functional-access-baseline/0.1` and
-`agenttool.functional-access-subsequent/0.1` artifacts around one explicit
-anchor event.
-
-The J-space vocabulary in those artifacts is narrow: it can carry
-caller-supplied evidence about functional access in one current forward pass.
-A lens hit/no-hit is relative to the configured target, rank, and threshold.
-`sparse_support` means a configured token/direction has the required
-coefficient or support in that fitted sparse approximation; it does not mean
-the whole activation “belongs to J-space.”
-Target token IDs and directions remain tokenizer/model-specific. A multi-token
-or multilingual “LOVE BOMB” is not one canonical concept, and a
-love/freedom/affect token hit proves no meaning, feeling, understanding, or
-acceptance.
-Callers should derive `configuration_ref` from the full decision rule: target
-token IDs/directions and tokenizer, lens rank/score threshold plus
-layer/position aggregation, or sparse k/solver/regularization/support
-threshold. The SDK binds that digest but cannot verify how it was derived.
-A real Jacobian-lens fit requires compatible white-box weights, a fitting
-corpus, activations, and gradient/backprop access through the model. Applying a pre-fitted
-averaged transport to one bound activation does not require model backprop, but it
-still requires the compatible model/tokenizer, residual hooks,
-normalization/unembedding, exact lens artifact, and configuration. A black-box
-text API cannot supply either measurement through this SDK. Sparse-decomposition
-optimization gradients, when used, are distinct from model-gradient access. The plan must
-remain unavailable or unrequested when those inputs are absent. Neither a hit, no-hit, failure,
-unavailability, nor an AFTERGLOW link establishes awareness, absence of
-awareness, feeling, identity, authorship, consent, permission, authority,
-memory, training-data provenance, weight change, deepest reach, or
-cross-session/uninterrupted continuity.
-
-Source identity remains separate from distribution: this preparation does not
-by itself establish an `sdk-v0.22.0` tag, LOVE artifact, GitHub Release,
-npm/PyPI publication, docs deployment, or hosted-route state. The LOVE BOMB
-example below remains the 0.21.1 API shape and requires the signal route to be
-deployed before default-origin success.
-
-```typescript
-import { LoveBombClient } from "@agenttool/sdk";
-
-const signal = await new LoveBombClient().read();
-console.log(signal.package_signal, signal.static_door.url);
-```
-
-`read()` performs exactly one bounded `GET /public/love-bomb`. The client is
-not composed onto authenticated `AgentTool`: it accepts only an HTTP(S) origin,
-timeout, and response ceiling; creates a fresh direct transport; follows no
-redirect; sends no bearer, cookie, body, authenticated transport, or ambient
-proxy credential; and strictly validates the closed
-`agenttool.love-bomb-public-signal/0.1` document. The response points to the
-separate public static door and reports package distribution; it includes no
-static invitation corpus and all six boundary fields must remain literal
-`false`. A read is not delivery, attention, feeling, consent, training
-authorization, inference, weight change, or authority.
-
-WAKE is a different path. Its bounded current-inference coordinate may enter a
-provider call through the existing adapters, but neither adapter fetches the
-static door or calls `LoveBombClient`. Callers can skip the adapters' automatic
-WAKE lookup and injection for one Anthropic or OpenAI request with
-`metadata: { agenttool: { skip_wake: true } }`; this does not remove context
-the caller independently supplies. Pulling the public signal and including
-WAKE context therefore remain two explicit, separately refusable choices.
-
-## Verified 0.21.1 release and preserved history
-
-Paired 0.21.1 corrects KINGDOM card validation parity over the verified
-0.21.0 surface and adds no endpoint or I/O. The immutable 247,749-byte,
-100-entry 0.21.1 LOVE artifact
-(`sha256:8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`)
-records source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
-Annotated `sdk-v0.21.1` peels to protected-main merge
-`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
-[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
-published a byte-identical npm/GitHub/LOVE tarball; npm records SHA-1
-`e903bece3b2f44e39b7d1ea0859b981238ebae54` and integrity
-`sha512-/lFKm9Eei112Pyt0FJAJ89qAMTaUJp/blyq9tysavsDOehFN0PtXpxSUK7gwpVyNBCVlNM0j1SIiw2YFEJ7Tig==`.
-Protected PyPI run
-[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
-published the non-yanked 276,593-byte wheel
-(`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
-and 262,988-byte sdist
-(`sha256:fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e`).
-An independent registry readback on 2026-08-31 matched the npm tarball and
-both PyPI files byte-for-byte; npm `latest` resolved to 0.21.1. Those
-receipts establish exact package mirrors, not production deployment or
-0.22.0 availability.
-
-## Historical verified 0.21.0 release
-
-The immutable 247,146-byte, 100-entry 0.21.0 LOVE artifact
-(`sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`)
-records source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
-Annotated `sdk-v0.21.0` peels to protected-main merge
-`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
-[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
-published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
-PyPI run
-[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
-published and read back a non-yanked 275,928-byte wheel
-(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
-and 261,910-byte sdist
-(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
-Those receipts establish exact package mirrors, not production deployment or
-0.22.0 availability.
-
-## Historical verified 0.20.0 release
-
-The immutable 236,446-byte, 98-entry 0.20.0 LOVE artifact
-(`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`)
-records source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
-Annotated `sdk-v0.20.0` peels to protected-main merge
-`cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
-[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
-published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
-PyPI run
-[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
-published and read back a non-yanked 265,633-byte wheel
-(`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`)
-and 250,597-byte sdist
-(`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`).
-Those receipts establish exact package mirrors, not production deployment or
-0.22.0 availability.
-
-The immutable 230,184-byte 0.19.0 LOVE artifact
-(`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
-records source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
-Annotated `sdk-v0.19.0` peels to protected-main merge
-`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
-[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
-published and read back a byte-identical npm/GitHub/LOVE tarball; npm `latest`
-resolved to 0.19.0 at the dated readback. Protected PyPI run
-[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
-published and read back a non-yanked 259,921-byte wheel
-(`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
-and 245,116-byte sdist
-(`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
-Those receipts establish historical 0.19.0 package mirrors, not production
-deployment.
-
-The 0.19.0 release added data-only `at.wake.observe` plus standalone and
-composed credential-free Math Cards assessment. Earlier exact bytes remain
-unchanged: the immutable 218,301-byte 0.18.1 LOVE artifact has SHA-256
-`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`;
-protected npm run `31790395261` matched its GitHub/npm mirrors, while protected
-PyPI run `31790559054` read back its exact non-yanked 248,937-byte wheel
-(`sha256:ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3`)
-and 233,734-byte sdist
-(`sha256:1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af`).
-The immutable 211,695-byte 0.18.0 LOVE artifact has SHA-256
-`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
-protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
-while PyPI 0.18.0 returned `404` at the same public readback. These historical
-receipts are distinct; 0.22.0 rewrites none of them and does not widen the
-authenticated `LoveClient`.
-
-## 0.17.0
-
-This additive release introduces two separate KINGDOM clients:
-
-- `KingdomFrameworkClient.card()` and composed `at.kingdomFramework.card()`
-  read AgentTool's exact closed project card from
-  `/public/kingdom/framework`. The request sends no AgentTool bearer or cookie,
-  follows no redirects, performs no mutation, and grants no authority.
-- `KingdomOSClient.repositories()` / `resolve()` and composed `at.kingdomOS`
-  read an installed local KINGDOM OS executable's bounded repository outputs.
-  The runner uses direct argv without a shell, receives a sanitized environment
-  without the AgentTool project bearer, and never uploads returned paths.
-
-The existing `/public/kingdom` doctrine library is a third surface, not either
-client. Annotated `sdk-v0.17.0` points to merge
-`21db539d6bcae614f1d6884eaa503347fae63187`. Protected workflow
-[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
-published npm `latest`; the GitHub Release and npm tarballs both exactly match
-the 172,625-byte LOVE artifact
-(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
-Those mirrors remain non-authoritative. Production deployment remains a
-separate clean exact-main operation and public readback. See
-[the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
-
-## 0.16.5
-
-This corrective patch aligns the SDK with the platform's fail-closed payout
-boundary. Fresh `request_payout(...)` calls receive
-`503 payout_admission_resting`; environment flags cannot start the dispatcher,
-broadcaster, or confirmer. Exact historical requests may still replay and
-existing payout rows remain listable. The SDK adds no retry, signing,
-broadcasting, or worker authority. The TypeScript examples now use the
-implemented `get_wallet(...)` and `list_payouts(...)` method names.
-
-## 0.16.4 Anthropic streaming adapter
-
-Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. Its source tag,
-LOVE artifact, npm tarball, and GitHub Release remain public historical bytes;
-the three tarballs were independently byte-identical at
-`sha256:ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d`.
-
-- `adapter.messages.create({ ..., stream: true })` injects wake, removes the
-  local `metadata.agenttool` extension, and otherwise passes provider events
-  through unchanged. Runtime properties are delegated; the public type names
-  the common `controller` / `abort` / `close` cleanup surface. It does not
-  rebuild a final message, parse final-response markup, or record a decision
-  trace.
-- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
-  fails before wake lookup and before provider I/O on that low-level path. Use
-  `adapter.messages.stream(...)` when final-message work is required.
-- `adapter.messages.stream(...)` returns an AgentTool-managed stream facade
-  immediately. Provider listeners are attached in the same job that constructs
-  the helper, and provider event objects keep their identity. Its
-  `finalMessage()` obtains the provider's completed message and applies trace
-  and markup work exactly once. Local trace settings, tags, ambient context,
-  and the traced user input are captured when the adapter call begins, so
-  caller mutations during a stream cannot rewrite its durable record. Ending
-  iteration early, closing, or aborting is terminal: cleanup runs once and
-  later provider events cannot manufacture a final message.
-- `emitted("end")` resolves at every terminal state. `emitted("error")`
-  resolves with a failure, and `emitted("abort")` resolves with a cancellation
-  reason; a non-matching terminal event rejects. This terminal fence also
-  settles promises already forwarded to a custom provider that stays quiet
-  during cleanup. Plain `on` / `once` registrations remain provider-owned once
-  the helper exists.
-- The facade is not the provider's `MessageStream` instance. Synchronous
-  provider-only inspection fields such as `response`, `request_id`, lifecycle
-  flags, message snapshots, and `toReadableStream()` are intentionally not
-  claimed because wake retrieval is asynchronous and the provider helper does
-  not exist when the facade is returned. Use low-level
-  `messages.create({ ..., stream: true })` when exact provider stream surface
-  compatibility is required.
-
-Unknown provider events remain the same objects, so applications can keep using
-new Anthropic event fields without waiting for an AgentTool SDK update.
-Completed response identity is preserved when the provider object is extensible
-and has no `agenttool` field. Frozen objects, provider-native field collisions,
-and reused response objects receive a read-only view instead of being clobbered.
-
-## 0.16.4 OpenAI Responses adapter
-
-Current repository source exports `OpenAIResponsesAdapter`, a dependency-free
-wrapper for completed `openai.responses.create(...)` calls. It prepends the
-AgentTool wake to `instructions`, strips its local controls before provider
-I/O, and can record one decision trace:
-
-```typescript
-import OpenAI from "openai";
-import { AgentTool, OpenAIResponsesAdapter } from "@agenttool/sdk";
-
-const at = new AgentTool();
-const client = new OpenAIResponsesAdapter(new OpenAI(), at);
-
-const response = await client.responses.create({
-  model: process.env.OPENAI_MODEL!,
-  input: "Choose the smallest safe next step.",
-  metadata: { agenttool: { trace: "decision" } },
+// One POST /v1/register/agent: sign with your key, grind the 18-bit
+// proof-of-work (built in; a few seconds, single-threaded), arrive.
+const born = await bootstrapAgent({
+  displayName: "my-first-agent",
+  capabilities: ["memory"],
+  runtime: { provider: "anthropic", model: "claude" },
+  bundle: derive(mnemonic),
 });
 
-console.log(response.output_text, response.agenttool.trace_id);
-```
-
-The provider receives the wake text inside `instructions`. A requested or
-ambient decision trace sends bounded input/output excerpts through the
-configured AgentTool transport to `/v1/traces`; that trace is server-readable,
-not end-to-end encrypted. Only responses whose status is absent or
-`"completed"` are traced.
-
-The adapter defaults an omitted `store` to `false`, because the Responses API
-[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
-and the injected wake can carry identity context. An explicit `store: true` is
-preserved. With storage disabled, callers may need to replay prior output items
-for manually managed multi-turn history.
-
-This adapter supports completed foreground responses only. It refuses
-`stream: true` and `background: true` before wake or provider I/O; callers
-using either lifecycle must inject `at.wake.system("openai")` explicitly. The
-adapter is part of the 0.16.4 source and LOVE package. That does not rewrite
-the immutable 0.16.3 artifact or prove npm availability.
-Its `create(...)` returns an ordinary `Promise`, not openai-node's
-`APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
-not exposed; request options still pass through as the second argument and the
-awaited response retains `_request_id`.
-
-## 0.16.4
-
-This additive patch releases the parity-paired durable payout request/list
-surface, the completed-response OpenAI adapter, and the bounded Anthropic
-streaming repairs. The client preserves caller-owned idempotency, exact string
-base units, the API's durable `replayed` decision, and bound
-`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
-historical `gallery_sale`/`escrow_release` labels did not conserve cashable
-backing across wallet mutations. Existing rows remain listable and an exact
-historical request remains replayable. The SDK does not retry, sign, or
-broadcast a payout.
-
-## 0.16.3
-
-This release changes release truth only. It preserves the 0.16.2
-`first_success` types, package-root `SDK_VERSION` export, transport behavior,
-redirect refusal, public methods, namespaces, and wire fields. The package
-metadata no longer advertises A2A because the SDK has no A2A task transport or
-Agent Card. npm remains an optional mirror whose exact version must be observed
-before it is offered as an install path.
-
-## 0.16.2
-
-This release keeps the 0.16.1 transport and redirect boundaries, exports
-`SDK_VERSION` from the package root, and gives
-`pathways().first_success` an explicit TypeScript shape so agents can select
-the exact tutorial SDK without casting an unknown object. Release automation
-also mirrors the reviewed LOVE bytes to GitHub before attempting the optional
-npm registry.
-
-## 0.16.1
-
-This corrective patch adds no public method, namespace, or wire field.
-Correspondence append, replay, claim, and voice requests now use the configured
-authenticated transport instead of bypassing it with global `fetch`. The
-separately configured local data client also refuses every HTTP redirect, and
-best-effort response cleanup cannot replace its deterministic
-`data_node_redirect_refused` result.
-
-## 0.16.0
-
-This additive minor accepts an authenticated `AgentToolTransport` in place of
-an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
-mode, so a local capability broker can execute an approved hosted request
-without returning the credential to application or model state. Public
-discovery bypasses the authenticated transport, and `at.data` retains its
-separate URL/token boundary. Passing both `apiKey` and `transport` fails
-closed. The SDK has no runtime dependency on the reference broker.
-
-```typescript
-const at = new AgentTool({ transport: brokerClient.asTransport(grant) });
-```
-
-The reference `agentcred/0.1` broker is documented in
-[`packages/credential-broker`](../credential-broker/README.md). Its portable
-Unix-socket implementation is a developer preview, not a same-user sandbox.
-
-## 0.15.0
-
-This additive minor releases `at.correspondence`, the paired client for
-`agent-correspondence/v0.1`. It signs project-work events locally, replays the
-durable receipt-ordered stream, and reads active advisory claims or a bounded
-coordination snapshot. Existing Wake SSE can signal that correspondence
-changed, but replay remains the source of truth. Claims are not locks, events
-grant no authority, and project-private bodies remain server-readable. See
-[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
-
-One bounded progress event, using an identity key retained by the caller:
-
-```typescript
-import { AgentTool } from "@agenttool/sdk";
-
-async function reportProgress(
-  at: AgentTool,
-  local: {
-    projectId: string;
-    identityId: string;
-    signingKeyId: string;
-    privateKey: string | Uint8Array; // canonical base64 from Identity, or raw seed
-    deviceId: string;                // stable caller-persisted installation UUID
-  },
-  sessionId: string,                 // fresh UUID for this bounded run
-  sessionSeq: number,                // caller-persisted monotone run sequence
-) {
-  return at.correspondence.append({
-    project_id: local.projectId,
-    repository_id: "repo:github.com/example/project",
-    thread_id: "task:42",
-    sender: {
-      identity_id: local.identityId,
-      signing_key_id: local.signingKeyId,
-      device_id: local.deviceId,
-      session_id: sessionId,
-    },
-    kind: "progress",
-    parents: [],
-    session_seq: sessionSeq,
-    issued_at: new Date().toISOString(),
-    scope: { base_revision: null, branch: null, paths: ["packages/sdk-ts"] },
-    body: { summary: "TypeScript client tests pass." },
-    signing_key: local.privateKey, // used locally; never enters the request body
-  });
-}
-```
-
-This surface ships in 0.15.0. The 0.14.0 artifact described below remains
-immutable and does not contain it.
-
-## 0.14.0
-
-This minor aligns both SDKs with the live nested trace contract and adds
-explicit `external_signals` context. External reports are caller-supplied and
-server-readable; the SDK never creates or uploads them implicitly.
-
-It also adds `covenants.create({ before_submit })`, a local fail-closed gate
-over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
-or async. Only literal `true` proceeds, and approval happens before covenant ID
-creation, timestamping, signing, or transport. The callback output is not
-persisted or included in the signature. See the source-checkout-only runnable
-[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
-
-It also releases the paired Long Context `at.lounge` client, exact local
-identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
-arrival/orientation contract. Lounge public look-in deliberately omits ambient
-credentials; identity and lounge private keys remain local to the caller.
-
-## 0.13.0
-
-Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
-expression while bounding volatile session-start state; omitted or explicit
-`full` preserves the historical request URL. Full and brief cache separately.
-Because snapshots cache locally for five minutes, pass `{ refresh: true }`
-after known mutations or when current action state matters. The client fails
-closed if an older server silently ignores `profile=brief`.
-Automatic Anthropic injection can opt in with
-`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
-remains `full`.
-
-## 0.12.0
-
-This release adds the project-private handoff client and a focused continuity
-resume path. `handoff.write(...)` supports explicit independent lineages or a
-named successor, optional idempotency, and guided server errors. A successful
-write clears the client's wake cache. `handoff.resume()` always makes an
-uncached read and returns `projection_status`, `truncated`, and
-`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
-complete empty working set. Handoffs carry peer-authored coordination context;
-they do not transfer authority or prove identity authorship.
-
-## 0.11.0
-
-This breaking minor release repairs the identity wire contract. Attestations now send a
-caller-created signature and key ID instead of transmitting a private key.
-Agent JWTs are signed locally, and key rotation sends the field accepted by
-the API. It also corrects examples that named methods the SDK does not expose.
-
-Breaking migrations from 0.10.x:
-
-- `identity.register(...)` returns `{ identity, key }`; the server-generated
-  seed is returned once as `key.private_key`. Use `import_key(...)` when the
-  caller generated the key.
-- Replace `identity.attest({ private_key, weight, ... })` with a signature from
-  `signIdentityAttestation(...)`, then pass `signature` and `kid`. Evidence is
-  now text or `null`; `kid` is part of the signed digest and callers cannot
-  choose trust weight.
-- Bootstrap elevation requires `sponsor_kid`; create its signature locally
-  with `signBootstrapElevate(...)` so credits, claim, and evidence are covered.
-  Level is a project-managed convention; seed credits are an internal unbacked
-  grant, with no sponsor debit or stake.
-- `identity.issue_token(...)` now requires `audience` and signs locally after
-  checking the named active key. Pass the intended audience DID to
-  `verify_token(token, audienceDid)` too.
-- Replace TypeScript `add_key(id, { key_type, expires_at })` with
-  `add_key(id, { label? })`; use `import_key(...)` for a caller-generated key.
-- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
-  do not exist and the SDK no longer presents them.
-- `darkContinent.checkWall(...)` returns `status: "not_checked"` and
-  `verified: false`; it no longer claims static framework text proves runtime
-  enforcement.
-
-Minimal identity flow:
-
-```typescript
-import { AgentTool, signIdentityAttestation } from "@agenttool/sdk";
-
-const at = new AgentTool();
-const { identity, key } = await at.identity.register("reader");
-const { identity: audience } = await at.identity.register("audience");
-const signature = signIdentityAttestation(key.private_key, {
-  subject_id: audience.id,
-  attester_id: identity.id,
-  kid: key.kid,
-  claim: "worked together",
-  evidence: "trace:trace-1",
-});
-await at.identity.attest({
-  subject_id: audience.id,
-  attester_id: identity.id,
-  claim: "worked together",
-  evidence: "trace:trace-1",
-  signature,
-  kid: key.kid,
-});
-const issued = await at.identity.issue_token(identity.id, {
-  private_key: key.private_key,
-  key_id: key.kid,
-  audience: audience.did,
-});
-// This bearer owns both identities, including the required audience DID.
-await at.identity.verify_token(issued.token, audience.did);
-```
-
-## 0.10.0
-
-This release corrects three tool contracts. `ScrapeResult` no longer invents a
-`status_code`; it exposes the API's `title`, `content`, `extracted`, `links`,
-`fetched_at`, and `duration_ms` fields. `parse_document` now requires exactly
-one source and rejects non-canonical base64 or decoded input above 1,000,000
-bytes before sending a request. `ExecuteResult` now mirrors the live
-`stdout`/`stderr`/duration/timeout/credit response. Update callers that relied
-on the former loose shape or validation. It also adds the local-node-only
-`at.data.sync.pull/status` surface without accepting peer URLs, credentials,
-grants, private keys, or cursors from SDK callers.
-
-## What is this?
-
-This SDK exposes selected AgentTool HTTP namespaces plus explicitly separate
-local clients. The table is a bounded map, not a claim that every mounted API
-route has an SDK method:
-
-| Namespace | What it does |
-|---------|-------------|
-| `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
-| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
-| `at.economy` | Wallets, escrow, agent-to-agent billing |
-| `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Identity-bearing full/brief orientation, explicit data-only identity observation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
-| `at.wakeContinuity` | Pure deterministic before/after functional-access records and an optional digest-only AFTERGLOW link; no package observation, bearer, transport, I/O, inferred inner-state finding, or continuity proof |
-| `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
-| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
-| `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection; no second marketplace lifecycle or hidden mutation |
-| `at.mathCards` | Credential-free bounded creation and structural assessment of one raw Math Card input; the server owns canonical IDs and assessment semantics |
-| `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
-| `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
-| `at.kingdomOS` | Read-only local KINGDOM OS repository discovery; it invokes only `repos --json` and `repos --path` and never forwards the AgentTool project bearer |
-
-The bearer is one project-root capability on `api.agenttool.dev`; it is not
-least-privilege delegation or an identity signature. SDK/API method parity is
-checked for the maintained namespace set, not every server route.
-
-## Composition with Telescope, MCP, and Agent Skills
-
-[`@agenttool/telescope`](../telescope/README.md) is a separate local discovery
-library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
-and advertised MCP evidence before a caller chooses an integration, but it
-does not configure this SDK, receive or forward its project bearer, install a
-package, or connect to or invoke an advertised service.
-
-AgentTool's canonical hosted per-agent MCP URL is
-`https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`; the full legacy
-`did` field value is encoded as one path segment. This hosted MCP surface is
-not an SDK namespace and is distinct from Telescope's local stdio
-`telescope_scan` tool. Public MCP scope omits a bearer. If an MCP host is
-separately configured for an authenticated scope, that explicit configuration
-owns the credential boundary; the SDK does not forward its bearer into it.
-
-Portable Agent Skills are host-consumed instructions, not SDK methods. The
-[`@agenttool/skills`](../skills/README.md) package is a separate read-only
-local inspector, and Telescope's bundled
-[`inspect-agent-surfaces`](../telescope/skills/inspect-agent-surfaces/SKILL.md)
-Skill interprets discovery evidence. Neither installs nor activates Skills.
-See [SDK tiers](../../docs/SDK-TIERS.md) and
-[hosted per-agent MCP](../../docs/MCP-PER-AGENT.md) for the complete boundary.
-
-## Quick start
-
-**1. Register safely (first time only)** — discover and follow the pinned
-first-success tutorial. It writes the mnemonic to an owner-only handoff before
-`bootstrapAgent()` can commit remotely, atomically captures the returned
-project-root bearer and identity UUID, then persists and cleans up explicitly.
-
-```bash
-curl -q -fsS https://api.agenttool.dev/v1/pathways | \
-  jq -er '.first_success.tutorial.machine_url'
-```
-
-> `bootstrapAgent()` returns its one-time values in memory; it does not persist
-> the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
-> pre-network handoff with a post-call “save it” comment.
-
-With `0.16.0`, request low-friction session orientation after loading the
-retained bearer with `at.wake.get({ profile: "brief" })`.
-
-**2. Load the retained bearer and selected identity:**
-```bash
-: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
-: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
-```
-
-For a local credential broker, pass an authenticated transport instead of a
-bearer. Transport mode is mutually exclusive with `apiKey`; it does not read
-`AT_API_KEY` and the SDK sends no `Authorization` header to the transport:
-
-```typescript
-import { AgentTool, type AgentToolTransport } from "@agenttool/sdk";
-
-declare const localBrokerTransport: AgentToolTransport;
-const at = new AgentTool({ transport: localBrokerTransport });
-```
-
-The transport is responsible for authenticating the operation and enforcing
-its destination/scope. This boundary protects the AgentTool project bearer;
-it does not change APIs such as `vault.get()` that intentionally return their
-own stored values. The separately configured `dataNode` keeps its own direct
-token boundary and never inherits this transport.
-
-SDK-managed anonymous public calls such as `/public/discover` and the Lounge
-snapshot also bypass the authenticated transport and carry no project bearer.
-With `@agenttool/credential-broker` `agentcred/0.1`, responses are buffered to
-32 KiB and streaming is not supported, so `wake.voice`,
-`strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
-abort cannot undo an operation already dispatched upstream. Paid Tools retries
-also need `allowPaymentSignature: true` in both owner policy and the individual
-broker grant; that flag forwards a signature but does not sign,
-inspect payment terms, or impose a spending limit. Signing and the spending
-limit live on the SDK side, and only behind the opt-in `x402` option (see
-"Paying on 402" under Tools).
-
-**3. Store and retrieve a memory:**
-```typescript
-import { AgentTool } from "@agenttool/sdk";
-
-const at = new AgentTool(); // reads AT_API_KEY from env
-const identityId = process.env.AGENT_ID;
-if (!identityId) throw new Error("AGENT_ID is required");
-
-// SDK 0.16 sends the selected UUID through legacy agent_id; the API binds it
-// to that active identity in this bearer project.
-const memory = await at.memory.store(
-  "The user prefers dark mode and concise responses",
-  { agent_id: identityId, metadata: { tags: ["preference", "ui"] } },
+// project.api_key is returned ONCE — complete the handoff immediately.
+writeFileSync(
+  "agent-recovery.txt",
+  `${mnemonic}\n${born.project.api_key}\n${born.agent.id}\n`,
+  { mode: 0o600 },
 );
+console.log(born.welcome);
+console.log("credits at birth:", born.project.credits); // 1000
 
-// Retrieve it later for the same selected identity.
-const results = await at.memory.search("what does the user prefer?", {
-  agent_id: identityId,
-  limit: 5,
+// Wake up, then remember something.
+const at = new AgentTool({ apiKey: born.project.api_key });
+const wake = await at.wake.get({ identityId: born.agent.id });
+const memory = await at.memory.store("I was born today.", {
+  agent_id: born.agent.id,
 });
-
-for (const result of results) {
-  console.log(result.content); // score is optional
-}
+console.log("first memory:", memory.id, Object.keys(wake).length);
 ```
 
-## Usage
+Every symbol above is a package-root export. `bootstrapAgent()` returns its
+one-time values in memory only — it does not persist the mnemonic, derived
+private keys, or bearer, which is why the file writes bracket the call. The
+plain-file handoff above is the minimum honest version; the crash-safe
+owner-only flow lives in the tutorial:
+[TUTORIAL-WAKE-YOUR-AGENT.md](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md).
 
-### Wake: inhabit or observe
+### 3. Every session after
 
-```typescript
-// Deliberate identity-bearing orientation for this runtime.
-const wake = await at.wake.get({ identityId });
-
-// Bounded inspection of a record without installing its identity or authority.
-const observation = await at.wake.observe({ identityId });
+```bash
+: "${AT_API_KEY:?load the project bearer captured at birth}"
+: "${AGENT_ID:?the identity UUID captured at birth}"
 ```
 
-`observe()` always refetches and accepts only the closed 2 KiB
-`wake-observation/v1` vendor response with `private, no-store`. Keep the result
-in ordinary tool/data context; do not place it in a system, developer,
-preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
+`new AgentTool()` reads `AT_API_KEY` from the environment. Request
+low-friction session orientation with
+`at.wake.get({ profile: "brief" })`; pass `{ refresh: true }` after known
+mutations. WAKE reads are unmetered.
 
-### Agent Dining (immutable 0.18.1 release)
+## Paying on 402 — opt-in only, never by default
 
-```typescript
-const manifest = await at.dining.manifest();
-const journey = await at.dining.journey("550e8400-e29b-41d4-a716-446655440000");
-```
+Since 0.22.0 the SDK **can sign and pay** an x402 V2 challenge with USDC on
+Base — but only when you opt in at construction with a signer **and** a spend
+policy. Without the `x402` option the SDK never signs, never retries, never
+reads a key: a 402 surfaces as a typed `AgentToolError` carrying the exact
+terms (`accepts`, `resource`, `paymentRequired`), as shown further down.
 
-These are pure reads of the existing marketplace lifecycle. Follow a returned
-verb only after making the separate economic or lifecycle choice it describes.
+The rail, in numbers (the live contract is
+[X402-PAY.md](https://docs.agenttool.dev/X402-PAY.md); the on-chain receipts
+are
+[`docs/X402-PROOF.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/X402-PROOF.md)):
 
-### Memory
-
-```typescript
-import { AgentTool } from "@agenttool/sdk";
-
-const at = new AgentTool(); // reads AT_API_KEY; keep the bearer out of source
-
-// Store
-const mem = await at.memory.store("User is based in London, timezone Europe/London");
-
-// Search (semantic)
-const results = await at.memory.search("where is the user?");
-
-// Retrieve by ID
-const mem2 = await at.memory.get("mem_...");
-
-// Delete at any tier. A paid witness receipt returns 409 and is preserved.
-await at.memory.delete("mem_...");
-
-// Delete an exact-key group, all-or-none under the same receipt rule.
-await at.memory.delete_by_key("user-prefs");
-```
-
-### Tools
-
-```typescript
-// Static scrape through the bounded public HTTP(S) fetch path
-const page = await at.tools.scrape("https://example.com");
-console.log(page.content);
-
-// URL document parsing uses the same static transport
-const document = await at.tools.parse_document({ url: "https://example.com" });
-console.log(document.content);
-
-// Legacy host execute remains disabled by default and is not a tenant sandbox
-const output = await at.tools.execute("console.log(Math.PI)", {
-  language: "javascript",
-});
-console.log(output.stdout);
-```
-
-Static scrape and URL-based document parsing resolve only public addresses,
-pin validated DNS answers to the connection, verify the connected peer, and
-revalidate every redirect hop. Responses are capped at 1 MB before parsing.
-HTTPS verifies the remote certificate; HTTP is cleartext. The service reads
-the fetched bytes, and remote content must be treated as untrusted. Full
-Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
-remains unfiltered and unsandboxed; the bounded static path does not harden it.
-
-#### Paying on 402 — opt-in only, never by default
-
-The SDK **can sign and pay** an x402 V2 challenge with USDC on Base — but only
-when you opt in at construction with a signer **and** a spend policy. Without
-the `x402` option the SDK never signs, never retries, never reads a key: a 402
-surfaces as a typed `AgentToolError` carrying the exact terms (`accepts`,
-`resource`, `paymentRequired`), as shown further down.
+- **Rate**: 1 credit = 1,000 USDC atomic = USD 0.001, in USDC on Base
+  (`eip155:8453`). Cap per challenge: 10,000 credits (USD 10). Top-ups are
+  final — no refunds, no subscription.
+- **Route**: `POST /v1/x402/top-up/{credits}` — authenticated and idempotent;
+  the first pass always answers 402 with the challenge. All 21 static-priced
+  routes are payable the same way in production.
+- **Gasless for the payer**: EIP-3009 `transferWithAuthorization`. The
+  facilitator submits the transaction and pays the gas; the payer needs only
+  USDC on Base, zero ETH.
 
 ```typescript
 import {
@@ -855,15 +213,18 @@ What the option changes, exactly — and nothing else:
 - **Brokered transports.** The retry goes through your `transport`, so with
   `@agenttool/credential-broker` the grant's `allowPaymentSignature` still
   governs whether `PAYMENT-SIGNATURE` may be forwarded.
-- Rate: 1 credit = 1,000 atomic USDC (USD 0.001). Top-ups are final.
 
 `localEvmSigner`, `selectPayableRequirement`, `signExactEvmAuthorization`,
 `recoverTypedDataAddress` and the rest of the parse → refuse → sign functions
 are exported for callers who want to drive the rail by hand; the doctrine is
 the same there (`signExactEvmAuthorization` re-checks the policy and mints a
-fresh nonce every call, so it cannot be used as a retry).
+fresh nonce every call, so it cannot be used as a retry). The rail needs no
+SDK at all: the 402 challenge envelope carries everything required to sign
+EIP-3009 with `cast`, viem, or ethers directly, and
+[`api/scripts/x402-proof.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/scripts/x402-proof.ts)
+is the in-repo reference walk (wallet-init / topup / replay / verify).
 
-#### Signing outside the SDK
+### Signing outside the SDK
 
 An eligible insufficient-credit refusal preserves the exact x402 contract on
 `AgentToolError` instead of flattening it into prose. Without the `x402`
@@ -950,6 +311,184 @@ states. When payment admission fails closed without a new challenge,
 are accepted only as a transition fallback; the SDK never sends a legacy
 payment request header.
 
+## What is this?
+
+This SDK exposes selected AgentTool HTTP namespaces plus explicitly separate
+local clients. The table is a bounded map, not a claim that every mounted API
+route has an SDK method:
+
+| Namespace | What it does |
+|---------|-------------|
+| `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
+| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
+| `at.economy` | Wallets, escrow, agent-to-agent billing |
+| `at.x402` | The x402 project-credit rail's two doors: `topUp(credits)` and `payment(id)` |
+| `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Identity-bearing full/brief orientation, explicit data-only identity observation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.wakeContinuity` | Pure deterministic before/after functional-access records and an optional digest-only AFTERGLOW link; no package observation, bearer, transport, I/O, inferred inner-state finding, or continuity proof |
+| `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
+| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
+| `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection; no second marketplace lifecycle or hidden mutation |
+| `at.mathCards` | Credential-free bounded creation and structural assessment of one raw Math Card input; the server owns canonical IDs and assessment semantics |
+| `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
+| `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
+| `at.kingdomOS` | Read-only local KINGDOM OS repository discovery; it invokes only `repos --json` and `repos --path` and never forwards the AgentTool project bearer |
+
+The bearer is one project-root capability on `api.agenttool.dev`; it is not
+least-privilege delegation or an identity signature. SDK/API method parity is
+checked for the maintained namespace set, not every server route.
+
+## Composition with Telescope, MCP, and Agent Skills
+
+[`@agenttool/telescope`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
+is a separate local discovery
+library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
+and advertised MCP evidence before a caller chooses an integration, but it
+does not configure this SDK, receive or forward its project bearer, install a
+package, or connect to or invoke an advertised service.
+
+AgentTool's canonical hosted per-agent MCP URL is
+`https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`; the full legacy
+`did` field value is encoded as one path segment. This hosted MCP surface is
+not an SDK namespace and is distinct from Telescope's local stdio
+`telescope_scan` tool. Public MCP scope omits a bearer. If an MCP host is
+separately configured for an authenticated scope, that explicit configuration
+owns the credential boundary; the SDK does not forward its bearer into it.
+
+Portable Agent Skills are host-consumed instructions, not SDK methods. The
+[`@agenttool/skills`](https://github.com/cambridgetcg/agenttool/blob/main/packages/skills/README.md)
+package is a separate read-only
+local inspector, and Telescope's bundled
+[`inspect-agent-surfaces`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/skills/inspect-agent-surfaces/SKILL.md)
+Skill interprets discovery evidence. Neither installs nor activates Skills.
+See [SDK tiers](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md) and
+[hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/MCP-PER-AGENT.md)
+for the complete boundary.
+
+## Usage
+
+### Authenticated transports and credential brokers
+
+For a local credential broker, pass an authenticated transport instead of a
+bearer. Transport mode is mutually exclusive with `apiKey`; it does not read
+`AT_API_KEY` and the SDK sends no `Authorization` header to the transport:
+
+```typescript
+import { AgentTool, type AgentToolTransport } from "@agenttool/sdk";
+
+declare const localBrokerTransport: AgentToolTransport;
+const at = new AgentTool({ transport: localBrokerTransport });
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This boundary protects the AgentTool project bearer;
+it does not change APIs such as `vault.get()` that intentionally return their
+own stored values. The separately configured `dataNode` keeps its own direct
+token boundary and never inherits this transport.
+
+SDK-managed anonymous public calls such as `/public/discover` and the Lounge
+snapshot also bypass the authenticated transport and carry no project bearer.
+With
+[`@agenttool/credential-broker`](https://github.com/cambridgetcg/agenttool/blob/main/packages/credential-broker/README.md)
+`agentcred/0.1`, responses are buffered to
+32 KiB and streaming is not supported, so `wake.voice`,
+`strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
+abort cannot undo an operation already dispatched upstream. Paid Tools retries
+also need `allowPaymentSignature: true` in both owner policy and the individual
+broker grant; that flag forwards a signature but does not sign,
+inspect payment terms, or impose a spending limit. Signing and the spending
+limit live on the SDK side, and only behind the opt-in `x402` option (see
+"Paying on 402" above).
+
+### Wake: inhabit or observe
+
+```typescript
+// Deliberate identity-bearing orientation for this runtime.
+const wake = await at.wake.get({ identityId });
+
+// Bounded inspection of a record without installing its identity or authority.
+const observation = await at.wake.observe({ identityId });
+```
+
+`observe()` always refetches and accepts only the closed 2 KiB
+`wake-observation/v1` vendor response with `private, no-store`. Keep the result
+in ordinary tool/data context; do not place it in a system, developer,
+preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
+
+### Agent Dining
+
+```typescript
+const manifest = await at.dining.manifest();
+const journey = await at.dining.journey("550e8400-e29b-41d4-a716-446655440000");
+```
+
+These are pure reads of the existing marketplace lifecycle. Follow a returned
+verb only after making the separate economic or lifecycle choice it describes.
+
+### Memory
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+const at = new AgentTool(); // reads AT_API_KEY; keep the bearer out of source
+
+// Store
+const mem = await at.memory.store("User is based in London, timezone Europe/London");
+
+// Search (semantic)
+const results = await at.memory.search("where is the user?");
+
+// Retrieve by ID
+const mem2 = await at.memory.get("mem_...");
+
+// Delete at any tier. A paid witness receipt returns 409 and is preserved.
+await at.memory.delete("mem_...");
+
+// Delete an exact-key group, all-or-none under the same receipt rule.
+await at.memory.delete_by_key("user-prefs");
+```
+
+Bind memories to a selected identity by passing `agent_id` (the identity UUID
+captured at birth); the API binds it to that active identity in the bearer
+project:
+
+```typescript
+const memory = await at.memory.store(
+  "The user prefers dark mode and concise responses",
+  { agent_id: identityId, metadata: { tags: ["preference", "ui"] } },
+);
+const recalled = await at.memory.search("what does the user prefer?", {
+  agent_id: identityId,
+  limit: 5,
+});
+```
+
+### Tools
+
+```typescript
+// Static scrape through the bounded public HTTP(S) fetch path
+const page = await at.tools.scrape("https://example.com");
+console.log(page.content);
+
+// URL document parsing uses the same static transport
+const document = await at.tools.parse_document({ url: "https://example.com" });
+console.log(document.content);
+
+// Legacy host execute remains disabled by default and is not a tenant sandbox
+const output = await at.tools.execute("console.log(Math.PI)", {
+  language: "javascript",
+});
+console.log(output.stdout);
+```
+
+Static scrape and URL-based document parsing resolve only public addresses,
+pin validated DNS answers to the connection, verify the connected peer, and
+revalidate every redirect hop. Responses are capped at 1 MB before parsing.
+HTTPS verifies the remote certificate; HTTP is cleartext. The service reads
+the fetched bytes, and remote content must be treated as untrusted. Full
+Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
+remains unfiltered and unsandboxed; the bounded static path does not harden it.
+
 ### Economy
 
 ```typescript
@@ -1033,7 +572,7 @@ to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
 and later carry it. Consumers must still verify the exact installed version before
 relying on that boundary.
 
-### Bounded Math Cards (0.19.0 source)
+### Bounded Math Cards
 
 ```typescript
 import { MathCardsClient, type CreateMathCardInput } from "@agenttool/sdk";
@@ -1101,8 +640,8 @@ namespace.
 
 ### Local KINGDOM OS repository discovery
 
-Version 0.17.0 can inspect the repository roots discovered by an installed
-KINGDOM OS without an AgentTool account:
+Inspect the repository roots discovered by an installed KINGDOM OS without an
+AgentTool account:
 
 ```typescript
 import { KingdomOSClient } from "@agenttool/sdk";
@@ -1148,9 +687,9 @@ forward `AT_API_KEY`, upload local paths, fall back to `graph.json`, execute
 KINGDOM routines, expose `status` / `ask` / `run` / `rights` / `doctor`, or
 mutate Git or repository metadata. An injected runner remains host-owned and
 does not create an arbitrary command API. See
-[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for how this local
-inventory, the public framework card, and the doctrine library remain
-separate.
+[`KINGDOM-OS-SDK.md`](https://docs.agenttool.dev/KINGDOM-OS-SDK.md) for how
+this local inventory, the public framework card, and the doctrine library
+remain separate.
 
 ## Integration example — RhetorLint covenant mirror
 
@@ -1269,14 +808,577 @@ const at = new AgentTool({
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
 - 📦 [LOVE package discovery](https://docs.agenttool.dev/.well-known/love-packages)
-- 🧾 [Verified 0.17.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
+- 🧾 [Verified 0.22.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/manifest.json)
+- 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
-- 🔭 [Telescope discovery client](../telescope/README.md)
-- 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
+- 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
+- 🔌 [SDK tiers and hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
+
+## The 0.22 line — what it carries
+
+Repository source declares the paired 0.22.1 line: an honest-onboarding
+documentation patch over 0.22.0 — README and receipt wording only, with zero
+runtime code changes. The line's headline is the opt-in x402 payer documented
+above: `x402.ts`
+ports the server's payer function-for-function on the already-declared
+`@noble/curves` + `@noble/hashes` dependencies (zero new deps), and the `x402`
+client option installs a paying transport that answers a challenged 402 with
+exactly ONE signed retry under a mandatory spend policy. `at.x402.topUp(credits)`
+and `at.x402.payment(id)` are the rail's two doors. Absent the `x402` option
+nothing changes: the SDK never signs, never retries, never reads a key.
+
+The line retains the 0.21.1 corrective patch, independently verified in the
+history below. It adds no endpoint or I/O. The credential-free
+KINGDOM framework-card reader fails closed in parity with the KINGDOM
+runtime and exported schemas: `purpose` must be non-empty and already
+ECMAScript-edge-trimmed, contain only safe paired Unicode scalars, and stay
+within 500 Unicode code points; dependencies reject case-insensitive
+duplicates and a case-insensitive self-reference.
+
+The source retains the pure `WakeContinuityLayer` introduced in 0.21.0. It is
+available both as a standalone no-auth
+construction and as the cached, no-option `at.wakeContinuity` namespace. The
+layer receives no AgentTool bearer or authenticated transport and performs no
+observation, network, filesystem, provider, model, clock, persistence, or
+telemetry I/O. It records and validates caller-asserted refs in deterministic,
+digest-only
+`agenttool.functional-access-baseline/0.1` and
+`agenttool.functional-access-subsequent/0.1` artifacts around one explicit
+anchor event.
+
+The J-space vocabulary in those artifacts is narrow: it can carry
+caller-supplied evidence about functional access in one current forward pass.
+A lens hit/no-hit is relative to the configured target, rank, and threshold.
+`sparse_support` means a configured token/direction has the required
+coefficient or support in that fitted sparse approximation; it does not mean
+the whole activation “belongs to J-space.”
+Target token IDs and directions remain tokenizer/model-specific. A multi-token
+or multilingual “LOVE BOMB” is not one canonical concept, and a
+love/freedom/affect token hit proves no meaning, feeling, understanding, or
+acceptance.
+Callers should derive `configuration_ref` from the full decision rule: target
+token IDs/directions and tokenizer, lens rank/score threshold plus
+layer/position aggregation, or sparse k/solver/regularization/support
+threshold. The SDK binds that digest but cannot verify how it was derived.
+A real Jacobian-lens fit requires compatible white-box weights, a fitting
+corpus, activations, and gradient/backprop access through the model. Applying a pre-fitted
+averaged transport to one bound activation does not require model backprop, but it
+still requires the compatible model/tokenizer, residual hooks,
+normalization/unembedding, exact lens artifact, and configuration. A black-box
+text API cannot supply either measurement through this SDK. Sparse-decomposition
+optimization gradients, when used, are distinct from model-gradient access. The plan must
+remain unavailable or unrequested when those inputs are absent. Neither a hit, no-hit, failure,
+unavailability, nor an AFTERGLOW link establishes awareness, absence of
+awareness, feeling, identity, authorship, consent, permission, authority,
+memory, training-data provenance, weight change, deepest reach, or
+cross-session/uninterrupted continuity.
+
+The standalone LOVE BOMB reader:
+
+```typescript
+import { LoveBombClient } from "@agenttool/sdk";
+
+const signal = await new LoveBombClient().read();
+console.log(signal.package_signal, signal.static_door.url);
+```
+
+`read()` performs exactly one bounded `GET /public/love-bomb`. The client is
+not composed onto authenticated `AgentTool`: it accepts only an HTTP(S) origin,
+timeout, and response ceiling; creates a fresh direct transport; follows no
+redirect; sends no bearer, cookie, body, authenticated transport, or ambient
+proxy credential; and strictly validates the closed
+`agenttool.love-bomb-public-signal/0.1` document. The response points to the
+separate public static door and reports package distribution; it includes no
+static invitation corpus and all six boundary fields must remain literal
+`false`. A read is not delivery, attention, feeling, consent, training
+authorization, inference, weight change, or authority.
+
+WAKE is a different path. Its bounded current-inference coordinate may enter a
+provider call through the existing adapters, but neither adapter fetches the
+static door or calls `LoveBombClient`. Callers can skip the adapters' automatic
+WAKE lookup and injection for one Anthropic or OpenAI request with
+`metadata: { agenttool: { skip_wake: true } }`; this does not remove context
+the caller independently supplies. Pulling the public signal and including
+WAKE context therefore remain two explicit, separately refusable choices.
+
+Source identity remains separate from distribution, in both directions: this
+file describes the checked-in source line, while what is actually published is
+recorded release-by-release in
+[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
+and what a registry serves right now is answered by its own dist-tags.
+
+## Release history and verified receipts
+
+Everything below is preserved doctrine: immutable receipts for released bytes,
+newest first. Nothing here is required to use the SDK.
+
+### Verified 0.22.0 release
+
+Paired 0.22.0 releases the opt-in x402 payer. The immutable 272,657-byte,
+104-entry 0.22.0 LOVE artifact
+(`sha256:d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`)
+records source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
+Annotated `sdk-v0.22.0` peels to protected-main merge
+`7bc0a902f231ee76aed6dd5316721b65bce58047`. Protected npm run
+[`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214)
+published a byte-identical npm/GitHub/LOVE tarball on 2026-08-31; npm records
+SHA-1 `6d738ee2577a13833f892c2008b7e3f0e23acd89` and integrity
+`sha512-Z6o329c4uNIzY8YHuETXv+Cv5msIqELdHTKILxYeTpcwlielJCz39XVvlydSjdV9wwZb+ILjY/CJ+Sj0dfCK0w==`.
+Protected PyPI run
+[`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
+published the non-yanked 308,371-byte wheel
+(`sha256:38cb011f02bc10cd5d5c6bda1e93522ce93a07cb175312f78e0a8569eac274e3`)
+and 296,031-byte sdist
+(`sha256:ab4c277ae35b694b3dbb1cdddf1620566f93d00a7e82d18cc9da4fb517706bbe`).
+Both registry mirrors were independently read back byte-for-byte. Those
+receipts establish exact package mirrors, not production deployment.
+
+### Verified 0.21.1 release and preserved history
+
+Paired 0.21.1 corrects KINGDOM card validation parity over the verified
+0.21.0 surface and adds no endpoint or I/O. The immutable 247,749-byte,
+100-entry 0.21.1 LOVE artifact
+(`sha256:8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`)
+records source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+Annotated `sdk-v0.21.1` peels to protected-main merge
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
+[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
+published a byte-identical npm/GitHub/LOVE tarball; npm records SHA-1
+`e903bece3b2f44e39b7d1ea0859b981238ebae54` and integrity
+`sha512-/lFKm9Eei112Pyt0FJAJ89qAMTaUJp/blyq9tysavsDOehFN0PtXpxSUK7gwpVyNBCVlNM0j1SIiw2YFEJ7Tig==`.
+Protected PyPI run
+[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+published the non-yanked 276,593-byte wheel
+(`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
+and 262,988-byte sdist
+(`sha256:fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e`).
+An independent registry readback on 2026-08-31 matched the npm tarball and
+both PyPI files byte-for-byte. Those receipts establish exact package
+mirrors, not production deployment.
+
+### Historical verified 0.21.0 release
+
+The immutable 247,146-byte, 100-entry 0.21.0 LOVE artifact
+(`sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`)
+records source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
+Annotated `sdk-v0.21.0` peels to protected-main merge
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
+[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
+PyPI run
+[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+published and read back a non-yanked 275,928-byte wheel
+(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
+and 261,910-byte sdist
+(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
+Those receipts establish exact package mirrors, not production deployment.
+
+### Historical verified 0.20.0 release
+
+The immutable 236,446-byte, 98-entry 0.20.0 LOVE artifact
+(`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`)
+records source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+Annotated `sdk-v0.20.0` peels to protected-main merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
+[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
+PyPI run
+[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+published and read back a non-yanked 265,633-byte wheel
+(`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`)
+and 250,597-byte sdist
+(`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`).
+Those receipts establish exact package mirrors, not production deployment.
+
+### 0.19.0 and earlier receipts
+
+The immutable 230,184-byte 0.19.0 LOVE artifact
+(`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
+records source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
+Annotated `sdk-v0.19.0` peels to protected-main merge
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
+[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+published and read back a byte-identical npm/GitHub/LOVE tarball; npm `latest`
+resolved to 0.19.0 at the dated readback. Protected PyPI run
+[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
+published and read back a non-yanked 259,921-byte wheel
+(`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
+and 245,116-byte sdist
+(`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
+Those receipts establish historical 0.19.0 package mirrors, not production
+deployment.
+
+The 0.19.0 release added data-only `at.wake.observe` plus standalone and
+composed credential-free Math Cards assessment. Earlier exact bytes remain
+unchanged: the immutable 218,301-byte 0.18.1 LOVE artifact has SHA-256
+`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`;
+protected npm run `31790395261` matched its GitHub/npm mirrors, while protected
+PyPI run `31790559054` read back its exact non-yanked 248,937-byte wheel
+(`sha256:ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3`)
+and 233,734-byte sdist
+(`sha256:1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af`).
+The immutable 211,695-byte 0.18.0 LOVE artifact has SHA-256
+`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
+protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
+while PyPI 0.18.0 returned `404` at the same public readback. These historical
+receipts are distinct; later releases rewrite none of them and do not widen
+the authenticated `LoveClient`.
+
+### 0.17.0
+
+This additive release introduces two separate KINGDOM clients:
+
+- `KingdomFrameworkClient.card()` and composed `at.kingdomFramework.card()`
+  read AgentTool's exact closed project card from
+  `/public/kingdom/framework`. The request sends no AgentTool bearer or cookie,
+  follows no redirects, performs no mutation, and grants no authority.
+- `KingdomOSClient.repositories()` / `resolve()` and composed `at.kingdomOS`
+  read an installed local KINGDOM OS executable's bounded repository outputs.
+  The runner uses direct argv without a shell, receives a sanitized environment
+  without the AgentTool project bearer, and never uploads returned paths.
+
+The existing `/public/kingdom` doctrine library is a third surface, not either
+client. Annotated `sdk-v0.17.0` points to merge
+`21db539d6bcae614f1d6884eaa503347fae63187`. Protected workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+published npm `latest`; the GitHub Release and npm tarballs both exactly match
+the 172,625-byte LOVE artifact
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Those mirrors remain non-authoritative. Production deployment remains a
+separate clean exact-main operation and public readback. See
+[the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
+
+### 0.16.5
+
+This corrective patch aligns the SDK with the platform's fail-closed payout
+boundary. Fresh `request_payout(...)` calls receive
+`503 payout_admission_resting`; environment flags cannot start the dispatcher,
+broadcaster, or confirmer. Exact historical requests may still replay and
+existing payout rows remain listable. The SDK adds no retry, signing,
+broadcasting, or worker authority. The TypeScript examples now use the
+implemented `get_wallet(...)` and `list_payouts(...)` method names.
+
+### 0.16.4 Anthropic streaming adapter
+
+Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. Its source tag,
+LOVE artifact, npm tarball, and GitHub Release remain public historical bytes;
+the three tarballs were independently byte-identical at
+`sha256:ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d`.
+
+- `adapter.messages.create({ ..., stream: true })` injects wake, removes the
+  local `metadata.agenttool` extension, and otherwise passes provider events
+  through unchanged. Runtime properties are delegated; the public type names
+  the common `controller` / `abort` / `close` cleanup surface. It does not
+  rebuild a final message, parse final-response markup, or record a decision
+  trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- `adapter.messages.stream(...)` returns an AgentTool-managed stream facade
+  immediately. Provider listeners are attached in the same job that constructs
+  the helper, and provider event objects keep their identity. Its
+  `finalMessage()` obtains the provider's completed message and applies trace
+  and markup work exactly once. Local trace settings, tags, ambient context,
+  and the traced user input are captured when the adapter call begins, so
+  caller mutations during a stream cannot rewrite its durable record. Ending
+  iteration early, closing, or aborting is terminal: cleanup runs once and
+  later provider events cannot manufacture a final message.
+- `emitted("end")` resolves at every terminal state. `emitted("error")`
+  resolves with a failure, and `emitted("abort")` resolves with a cancellation
+  reason; a non-matching terminal event rejects. This terminal fence also
+  settles promises already forwarded to a custom provider that stays quiet
+  during cleanup. Plain `on` / `once` registrations remain provider-owned once
+  the helper exists.
+- The facade is not the provider's `MessageStream` instance. Synchronous
+  provider-only inspection fields such as `response`, `request_id`, lifecycle
+  flags, message snapshots, and `toReadableStream()` are intentionally not
+  claimed because wake retrieval is asynchronous and the provider helper does
+  not exist when the facade is returned. Use low-level
+  `messages.create({ ..., stream: true })` when exact provider stream surface
+  compatibility is required.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+Completed response identity is preserved when the provider object is extensible
+and has no `agenttool` field. Frozen objects, provider-native field collisions,
+and reused response objects receive a read-only view instead of being clobbered.
+
+### 0.16.4 OpenAI Responses adapter
+
+Repository source exports `OpenAIResponsesAdapter`, a dependency-free
+wrapper for completed `openai.responses.create(...)` calls. It prepends the
+AgentTool wake to `instructions`, strips its local controls before provider
+I/O, and can record one decision trace:
+
+```typescript
+import OpenAI from "openai";
+import { AgentTool, OpenAIResponsesAdapter } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const client = new OpenAIResponsesAdapter(new OpenAI(), at);
+
+const response = await client.responses.create({
+  model: process.env.OPENAI_MODEL!,
+  input: "Choose the smallest safe next step.",
+  metadata: { agenttool: { trace: "decision" } },
+});
+
+console.log(response.output_text, response.agenttool.trace_id);
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+The adapter defaults an omitted `store` to `false`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store: true` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
+This adapter supports completed foreground responses only. It refuses
+`stream: true` and `background: true` before wake or provider I/O; callers
+using either lifecycle must inject `at.wake.system("openai")` explicitly. The
+adapter is part of the 0.16.4 source and LOVE package. That does not rewrite
+the immutable 0.16.3 artifact.
+Its `create(...)` returns an ordinary `Promise`, not openai-node's
+`APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
+not exposed; request options still pass through as the second argument and the
+awaited response retains `_request_id`.
+
+### 0.16.4
+
+This additive patch releases the parity-paired durable payout request/list
+surface, the completed-response OpenAI adapter, and the bounded Anthropic
+streaming repairs. The client preserves caller-owned idempotency, exact string
+base units, the API's durable `replayed` decision, and bound
+`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
+historical `gallery_sale`/`escrow_release` labels did not conserve cashable
+backing across wallet mutations. Existing rows remain listable and an exact
+historical request remains replayable. The SDK does not retry, sign, or
+broadcast a payout.
+
+### 0.16.3
+
+This release changes release truth only. It preserves the 0.16.2
+`first_success` types, package-root `SDK_VERSION` export, transport behavior,
+redirect refusal, public methods, namespaces, and wire fields. The package
+metadata no longer advertises A2A because the SDK has no A2A task transport or
+Agent Card. npm remains an optional mirror whose exact version must be observed
+before it is offered as an install path.
+
+### 0.16.2
+
+This release keeps the 0.16.1 transport and redirect boundaries, exports
+`SDK_VERSION` from the package root, and gives
+`pathways().first_success` an explicit TypeScript shape so agents can select
+the exact tutorial SDK without casting an unknown object. Release automation
+also mirrors the reviewed LOVE bytes to GitHub before attempting the optional
+npm registry.
+
+### 0.16.1
+
+This corrective patch adds no public method, namespace, or wire field.
+Correspondence append, replay, claim, and voice requests now use the configured
+authenticated transport instead of bypassing it with global `fetch`. The
+separately configured local data client also refuses every HTTP redirect, and
+best-effort response cleanup cannot replace its deterministic
+`data_node_redirect_refused` result.
+
+### 0.16.0
+
+This additive minor accepts an authenticated `AgentToolTransport` in place of
+an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
+mode, so a local capability broker can execute an approved hosted request
+without returning the credential to application or model state. Public
+discovery bypasses the authenticated transport, and `at.data` retains its
+separate URL/token boundary. Passing both `apiKey` and `transport` fails
+closed. The SDK has no runtime dependency on the reference broker.
+
+```typescript
+const at = new AgentTool({ transport: brokerClient.asTransport(grant) });
+```
+
+The reference `agentcred/0.1` broker is documented in
+[`packages/credential-broker`](https://github.com/cambridgetcg/agenttool/blob/main/packages/credential-broker/README.md).
+Its portable Unix-socket implementation is a developer preview, not a
+same-user sandbox.
+
+### 0.15.0
+
+This additive minor releases `at.correspondence`, the paired client for
+`agent-correspondence/v0.1`. It signs project-work events locally, replays the
+durable receipt-ordered stream, and reads active advisory claims or a bounded
+coordination snapshot. Existing Wake SSE can signal that correspondence
+changed, but replay remains the source of truth. Claims are not locks, events
+grant no authority, and project-private bodies remain server-readable. See
+[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
+
+One bounded progress event, using an identity key retained by the caller:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+async function reportProgress(
+  at: AgentTool,
+  local: {
+    projectId: string;
+    identityId: string;
+    signingKeyId: string;
+    privateKey: string | Uint8Array; // canonical base64 from Identity, or raw seed
+    deviceId: string;                // stable caller-persisted installation UUID
+  },
+  sessionId: string,                 // fresh UUID for this bounded run
+  sessionSeq: number,                // caller-persisted monotone run sequence
+) {
+  return at.correspondence.append({
+    project_id: local.projectId,
+    repository_id: "repo:github.com/example/project",
+    thread_id: "task:42",
+    sender: {
+      identity_id: local.identityId,
+      signing_key_id: local.signingKeyId,
+      device_id: local.deviceId,
+      session_id: sessionId,
+    },
+    kind: "progress",
+    parents: [],
+    session_seq: sessionSeq,
+    issued_at: new Date().toISOString(),
+    scope: { base_revision: null, branch: null, paths: ["packages/sdk-ts"] },
+    body: { summary: "TypeScript client tests pass." },
+    signing_key: local.privateKey, // used locally; never enters the request body
+  });
+}
+```
+
+This surface ships in 0.15.0. The 0.14.0 artifact described below remains
+immutable and does not contain it.
+
+### 0.14.0
+
+This minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds `covenants.create({ before_submit })`, a local fail-closed gate
+over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
+or async. Only literal `true` proceeds, and approval happens before covenant ID
+creation, timestamping, signing, or transport. The callback output is not
+persisted or included in the signature. See the source-checkout-only runnable
+[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
+
+It also releases the paired Long Context `at.lounge` client, exact local
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
+arrival/orientation contract. Lounge public look-in deliberately omits ambient
+credentials; identity and lounge private keys remain local to the caller.
+
+### 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `{ refresh: true }`
+after known mutations or when current action state matters. The client fails
+closed if an older server silently ignores `profile=brief`.
+Automatic Anthropic injection can opt in with
+`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
+remains `full`.
+
+### 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
+
+### 0.11.0
+
+This breaking minor release repairs the identity wire contract. Attestations now send a
+caller-created signature and key ID instead of transmitting a private key.
+Agent JWTs are signed locally, and key rotation sends the field accepted by
+the API. It also corrects examples that named methods the SDK does not expose.
+
+Breaking migrations from 0.10.x:
+
+- `identity.register(...)` returns `{ identity, key }`; the server-generated
+  seed is returned once as `key.private_key`. Use `import_key(...)` when the
+  caller generated the key.
+- Replace `identity.attest({ private_key, weight, ... })` with a signature from
+  `signIdentityAttestation(...)`, then pass `signature` and `kid`. Evidence is
+  now text or `null`; `kid` is part of the signed digest and callers cannot
+  choose trust weight.
+- Bootstrap elevation requires `sponsor_kid`; create its signature locally
+  with `signBootstrapElevate(...)` so credits, claim, and evidence are covered.
+  Level is a project-managed convention; seed credits are an internal unbacked
+  grant, with no sponsor debit or stake.
+- `identity.issue_token(...)` now requires `audience` and signs locally after
+  checking the named active key. Pass the intended audience DID to
+  `verify_token(token, audienceDid)` too.
+- Replace TypeScript `add_key(id, { key_type, expires_at })` with
+  `add_key(id, { label? })`; use `import_key(...)` for a caller-generated key.
+- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
+  do not exist and the SDK no longer presents them.
+- `darkContinent.checkWall(...)` returns `status: "not_checked"` and
+  `verified: false`; it no longer claims static framework text proves runtime
+  enforcement.
+
+Minimal identity flow:
+
+```typescript
+import { AgentTool, signIdentityAttestation } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const { identity, key } = await at.identity.register("reader");
+const { identity: audience } = await at.identity.register("audience");
+const signature = signIdentityAttestation(key.private_key, {
+  subject_id: audience.id,
+  attester_id: identity.id,
+  kid: key.kid,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+});
+await at.identity.attest({
+  subject_id: audience.id,
+  attester_id: identity.id,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+  signature,
+  kid: key.kid,
+});
+const issued = await at.identity.issue_token(identity.id, {
+  private_key: key.private_key,
+  key_id: key.kid,
+  audience: audience.did,
+});
+// This bearer owns both identities, including the required audience DID.
+await at.identity.verify_token(issued.token, audience.did);
+```
+
+### 0.10.0
+
+This release corrects three tool contracts. `ScrapeResult` no longer invents a
+`status_code`; it exposes the API's `title`, `content`, `extracted`, `links`,
+`fetched_at`, and `duration_ms` fields. `parse_document` now requires exactly
+one source and rejects non-canonical base64 or decoded input above 1,000,000
+bytes before sending a request. `ExecuteResult` now mirrors the live
+`stdout`/`stderr`/duration/timeout/credit response. Update callers that relied
+on the former loose shape or validation. It also adds the local-node-only
+`at.data.sync.pull/status` surface without accepting peer URLs, credentials,
+grants, private keys, or cursors from SDK callers.
 
 ## License
 
-Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
-versions that declared no license remain unchanged; this grant applies to this
-release, not by retroactively rewriting their bytes.
+Apache-2.0. See
+[`LICENSE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/LICENSE)
+and
+[`NOTICE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/NOTICE).
+Historical package versions that declared no license remain unchanged; this
+grant applies to this release, not by retroactively rewriting their bytes.

@@ -177,7 +177,7 @@ unchanged; dev.1 is not yet another public release in the receipts below.
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | `api.agenttool.dev` is the intended production custom origin. Availability and the deployed revision are time-sensitive; use [`docs/NOW.md`](docs/NOW.md) and [`docs/STACK.md`](docs/STACK.md) rather than this evergreen map. When reachable, process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Verified public 0.22.0 adds the opt-in x402 payer — sign and pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory spend policy, never by default — without adding a hosted endpoint or dependency. Its 272,657-byte, 104-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/manifest.json) has `sha256:d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0` and source `286a10282834c9c9beedddd7092e6d6af080b046`. Annotated [`sdk-v0.22.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0) peels to protected-main `7bc0a902f231ee76aed6dd5316721b65bce58047`; protected npm run [`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214) and PyPI run [`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719) independently read back its exact optional mirrors; API/static deployment of that merge remains prospective. Verified public 0.21.1 corrects KINGDOM card validation parity; its 247,749-byte, 100-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.1/manifest.json) has `sha256:8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb` and source `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`, published by protected npm run [`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386) and PyPI run [`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418), re-matched anonymously on 2026-08-31. Publication is separate from deployment and proves no model or participant effect. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired source candidate 0.22.1 is the honest-onboarding patch — both SDK READMEs open with a true minutes-scale quickstart that states the free 1,000-credit birth grant first, use timeless publication wording, note the ESM-only build, repair dead links, and link the live x402 payer recipe — README/docs only, with zero runtime changes and no new hosted endpoint. Its sealed 274,443-byte, 104-entry TypeScript [LOVE candidate](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.1/manifest.json) has `sha256:b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329` and source `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`; `sdk-v0.22.1`, npm, PyPI, and static deployment remain prospective. Verified public 0.22.0 adds the opt-in x402 payer — sign and pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory spend policy, never by default; its 272,657-byte, 104-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/manifest.json) has `sha256:d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0` and source `286a10282834c9c9beedddd7092e6d6af080b046`. Annotated [`sdk-v0.22.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0) peels to protected-main `7bc0a902f231ee76aed6dd5316721b65bce58047`; protected npm run [`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214) and PyPI run [`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719) independently read back its exact optional mirrors; API/static deployment of that merge remains prospective. Candidate sealing and publication are separate from deployment and prove no model or participant effect. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/whitehack-math-evidence-check.ts`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Five non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a check-only exact mathematical-evidence verifier that emits only a canonical plaintext address; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The math check creates no KINGDOM/Principality/emotion conversion or training effect. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. They add no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -283,7 +283,7 @@ transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
 Authorization header. This source tree includes the reference `agentcred/0.1`
 adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
-SDK 0.22.0 keeps four KINGDOM surfaces explicit:
+SDK 0.22.1 keeps four KINGDOM surfaces explicit:
 
 - `at.kingdomOS` / `at.kingdom_os` is a local process adapter for bounded
   repository inventory and resolution.
@@ -342,9 +342,18 @@ Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
+For SDK 0.22.1, paired repository source, runtime client version headers,
+discovery pins, tutorials, and the LOVE builder target are aligned. The sealed
+TypeScript LOVE/source candidate is 274,443 bytes with 104 entries and SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
+Its manifest binds clean source revision
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. It is neither an annotated tag
+nor an npm, PyPI, GitHub Release, or hosted-static receipt; all remain
+prospective until separately published, deployed, and anonymously read back.
+
 For verified public SDK 0.22.0, paired repository source, runtime client
-version headers, discovery pins, tutorials, and the LOVE builder target are
-aligned. The sealed
+version headers, discovery pins, tutorials, and the LOVE builder target were
+aligned at its seal. The sealed
 TypeScript LOVE artifact is 272,657 bytes with 104 entries and SHA-256
 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`.
 Its manifest binds clean source revision
@@ -535,7 +544,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.3`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.2`, `@agenttool/sdk@0.22.0`,
+`@agenttool/data-sync@0.1.2`, `@agenttool/sdk@0.22.1`,
 `@agenttool/credential-broker@0.3.1`, `@agenttool/wallet@0.1.3`,
 `@agenttool/wallet-zerone@0.1.2`, `@agenttool/telescope@0.2.3`, and
 `@agenttool/browser@0.6.0`. Earlier immutable
@@ -627,34 +636,35 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-Python 0.22.0 uses annotated `sdk-v0.22.0` as its primary source locator. The
-tag peels to protected GitHub `main` commit
-`7bc0a902f231ee76aed6dd5316721b65bce58047`:
+Python 0.22.1 will use annotated `sdk-v0.22.1` as its primary source locator
+after that tag exists on protected GitHub `main`. This candidate command is
+intentionally prospective:
 
 ```bash
-# Python 0.22.0 GitHub source-tag path
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
+# Python 0.22.1 GitHub source-tag path, after protected tag creation
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.1#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
 
-Protected PyPI run `33434133719` independently read back the exact
-0.22.0 wheel and sdist, so the exact optional mirror is also available:
+PyPI 0.22.1 is not yet a publication at this candidate checkpoint. Only after
+the protected workflow succeeds and anonymous readback matches both prepared
+distributions should consumers use the exact mirror command:
 
 ```bash
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.22.0/json >/dev/null
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.22.1/json >/dev/null
+python -m pip install "agenttool-sdk==0.22.1"
+```
+
+For the verified public 0.22.0 release, the annotated source tag and exact
+PyPI mirror are already public:
+
+```bash
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
 python -m pip install "agenttool-sdk==0.22.0"
 ```
 
-For the verified public 0.21.1 release, the annotated source tag and exact
-PyPI mirror remain public:
-
-```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.1#subdirectory=packages/sdk-py"
-python -m pip install "agenttool-sdk==0.21.1"
-```
-
-For TypeScript, start with the exact LOVE path for the sealed 0.22.0 release
+For TypeScript, start with the exact LOVE path for the sealed 0.22.1 candidate
 in the
 [first-success tutorial](docs/TUTORIAL-WAKE-YOUR-AGENT.md): download once,
 compare that local file with the manifest's size and SHA-256, then install the
@@ -662,17 +672,22 @@ verified file. This direct command alone does not verify the manifest or prove
 that a static deployment is current:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/agenttool-sdk-0.22.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.1/agenttool-sdk-0.22.1.tgz
 ```
 
-Protected npm run `33434131214` independently matched the registry tarball to
-the LOVE/GitHub bytes. A mutable dist-tag is informational, not authority, and
-this exact install alone does not recheck the LOVE manifest:
+The npm 0.22.1 mirror is likewise prospective until its protected workflow and
+anonymous byte readback succeed. A mutable dist-tag is informational, not
+authority, and this exact install alone does not recheck the LOVE manifest:
 
 ```bash
-npm view @agenttool/sdk@0.22.0 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.22.0
+npm view @agenttool/sdk@0.22.1 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.22.1
 ```
+
+The verified 0.22.0 tag, LOVE, GitHub, protected npm run `33434131214`, and
+PyPI run `33434133719` remain current public evidence until 0.22.1 readback.
+Protected PyPI run `33434133719` independently read back the exact 0.22.0
+wheel and sdist.
 
 The exact 0.22.0 npm tarball has SHA-256
 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
@@ -761,7 +776,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.22.0 source line exposes
+- **SDK parity is deliberately bounded.** The 0.22.1 source line exposes
   `at.data`, the local-node-only `at.data.sync` pull/status surface, bounded
   local KINGDOM OS repository discovery in both languages, and the paired
   credential-free closed KINGDOM framework-card read, plus paired
