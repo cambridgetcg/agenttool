@@ -19,11 +19,15 @@
  * consecutive count is retained so the moment the database returns while
  * the pool is still wedged, the next cycle exits.
  *
- * The exit contract leans on the [[restart]] policies pinned in api/fly.toml
- * (on-failure with generous retries for the app group; always for the
- * service-less thinker group, which no proxy traffic can auto-start). Fly's
- * unpinned default gives up after ten failures and parks the machine stopped
- * — the exact silent outage this module exists to end.
+ * The exit contract leans on the Machine's Fly restart policy. Today's fleet
+ * runs Fly's default (on-failure, 10 retries), and the app group additionally
+ * revives on proxy traffic via auto_start, so a recurring wedge costs
+ * restarts, not availability. Pinning stronger policies (generous app
+ * retries; always for the service-less thinker group, which no proxy traffic
+ * can auto-start) is deliberately deferred: the Phase-B deploy guard and the
+ * refence maintenance contract both pin the restored machine shape at
+ * on-failure/10, so a policy change must land together with their reviewed
+ * re-seal, not ahead of it. See docs/STACK.md §4.
  *
  * The canary timeout matches verify-connections.ts (15s): a select-1 that
  * cannot win a pool slot for 15 seconds, several cycles running, is a wedge

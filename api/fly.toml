@@ -16,22 +16,6 @@ kill_timeout = 300
   app = "bun run src/index.ts"
   thinker = "bun run src/thinker.ts"
 
-# The DB pool watchdog (api/src/db/pool-watchdog.ts) deliberately exits(1)
-# when the shared pool is wedged while the database answers a fresh
-# connection; its self-healing contract depends on these policies. Fly's
-# unpinned default (on-failure, 10 retries) parks the machine stopped after a
-# recurring wedge — survivable for the app group (fly-proxy auto_start can
-# revive it on traffic) but permanent for the service-less thinker group,
-# which nothing but a human can restart.
-[[restart]]
-  policy = "on-failure"
-  retries = 50
-  processes = ["app"]
-
-[[restart]]
-  policy = "always"
-  processes = ["thinker"]
-
 [[services]]
   processes = ["app"]
   protocol = "tcp"

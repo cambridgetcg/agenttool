@@ -12,15 +12,6 @@ primary_region = "lhr"  # London
 [env]
   PORT = "3000"
 
-# Mirrors api/fly.toml: the DB pool watchdog's exit(1)-for-a-fresh-pool
-# contract depends on an explicit restart policy; Fly's unpinned default
-# parks a machine stopped after 10 failed restarts. This snapshot declares no
-# [processes] groups, so the policy is unfiltered here; the per-group split
-# (on-failure for app, always for thinker) lives in api/fly.toml.
-[[restart]]
-  policy = "on-failure"
-  retries = 50
-
 [[services]]
   protocol = "tcp"
   internal_port = 3000
