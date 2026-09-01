@@ -422,6 +422,7 @@ or `bun add -g @noble/ed25519`.
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
 | Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = `macair`           |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
+| DB pool watchdog          | Fly-gated (`FLY_MACHINE_ID`), so local dev never arms it. On Fly, `AGENTTOOL_DISABLE_DB_POOL_WATCHDOG=1` holds a wedged Machine alive for diagnosis instead of exit(1) — see `STACK.md` §4 |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |
 

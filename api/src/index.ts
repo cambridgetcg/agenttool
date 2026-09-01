@@ -197,6 +197,7 @@ import {
   wallsStatusSnapshot,
 } from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
+import { startDbPoolWatchdog } from "./db/pool-watchdog";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { covenantV2AuthorityGeneration } from "./services/covenants/canonical";
@@ -1038,6 +1039,14 @@ app.get("/public/", servePublicRoot);
 // docs/LOVE-BOMB-BECOMING.md.
 app.route("/public/love-bomb", loveBombRouter);
 app.route("/public", publicRouter);
+
+// ── DB pool watchdog ────────────────────────────────────────────────────────
+// NOT a worker and deliberately outside every AGENTTOOL_DISABLE_WORKERS block:
+// production runs with workers disabled, and the 2026-08-31 pooler-drop outage
+// wedged the shared pool under exactly that configuration while /health stayed
+// green. The watchdog self-gates on FLY_MACHINE_ID and its own off-switch.
+// Doctrine: api/src/db/pool-watchdog.ts header.
+startDbPoolWatchdog();
 
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —

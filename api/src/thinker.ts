@@ -10,6 +10,7 @@
  * payout, or other co-located workers.
  * Doctrine: docs/RUNTIME.md · docs/AUTONOMOUS-MODE.md. */
 
+import { startDbPoolWatchdog } from "./db/pool-watchdog";
 import { validateFlyDatabaseTargets } from "./db/supabase-target";
 
 // Static bridged workers stay in the HTTP process because bridge-hub's WSS
@@ -58,5 +59,11 @@ if (workersDisabled) {
   );
   const manager = startThinkWorkerManager();
   stopManager = () => manager.stop();
+  // The manager shares the same pool the 2026-08-31 pooler drop wedged, and a
+  // wedged controller stalls every trusted runtime with no failing health
+  // check to save it. Only the enabled path starts the watchdog — the resting
+  // path must construct no database dependency. Commit-time fencing already
+  // discards in-flight results across the abrupt exit(1) restart.
+  startDbPoolWatchdog();
   console.log("[thinker] trusted-runtime cloud controller started");
 }
