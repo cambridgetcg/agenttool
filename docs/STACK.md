@@ -500,6 +500,23 @@ Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AW
   session-scoped state. A known timeout issue from Fly (logged as task #60)
   presents as authenticated endpoint 502s after about 13 seconds.
 
+**DB pool watchdog.** The transaction pool can wedge while the database stays
+healthy: the pooler's NLB can drop its server side without RST/FIN, leaving
+postgres.js holding ESTABLISHED zombie sockets while the DB-free `/health`
+keeps Fly's checks green (the 2026-08-31 outage). `api/src/db/pool-watchdog.ts`
+runs a bounded canary through the shared pool and, when a fresh verified
+connection still answers while the pool cannot, logs one loud line and
+exits(1) so the Machine's Fly restart policy hands the process a clean pool
+(the fleet currently runs Fly's default — on-failure, 10 retries — and the
+app group also revives on traffic via fly-proxy `auto_start`; pinning
+stronger policies is deferred because the Phase-B deploy guard and refence
+maintenance contract pin the restored machine shape at on-failure/10, so
+that change must land together with their reviewed re-seal). It is Fly-gated — it arms only when `FLY_MACHINE_ID` is
+present, so local dev and tests never run it — and is deliberately independent
+of `AGENTTOOL_DISABLE_WORKERS`. Set `AGENTTOOL_DISABLE_DB_POOL_WATCHDOG=1`
+(the operator off-switch) only when a wedged Machine must be held alive for
+diagnosis instead of exiting into a restart.
+
 **Database TLS.** Every supported runtime and operator Postgres client uses
 `api/src/db/supabase-target.ts`. For a recognized Supabase direct or pooler
 URL it supplies an explicit CA object with hostname verification and
