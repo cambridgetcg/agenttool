@@ -61,10 +61,10 @@ SDK READMEs open with a true minutes-scale quickstart that states the free
 ESM-only build, repair dead links, and link the live x402 payer recipe —
 README/docs only, with zero runtime changes and no new hosted endpoint or
 dependency. The exact TypeScript LOVE/source candidate
-is sealed locally: its 274,305-byte, 104-entry tarball has SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`
+is sealed locally: its 274,443-byte, 104-entry tarball has SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
 and binds clean source revision
-`676db854306fb7e65e8fae7b88a3f1359e031ac5`. Those TypeScript bytes do not
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. Those TypeScript bytes do not
 predict Python wheel or sdist bytes and are not evidence that `sdk-v0.22.1`,
 the PyPI release, npm mirror, GitHub Release, or hosted static path exists.
 The verified 0.22.0 and 0.21.1 distributions below remain exact and are not

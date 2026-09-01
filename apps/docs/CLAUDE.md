@@ -149,15 +149,15 @@ the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
 and no entry creates a hosted scanner. The paired SDK 0.22.1 source and exact
-274,305-byte, 104-entry LOVE candidate make onboarding honest — README/docs
+274,443-byte, 104-entry LOVE candidate make onboarding honest — README/docs
 only, zero runtime changes —
 while retaining the opt-in x402 payer, the KINGDOM card parity patch, the
 credential-free, zero-I/O `WakeContinuityLayer`, LOVE BOMB
 reader, data-only WAKE observation, Math Cards, Agent Dining,
 attestation-marketplace, memory-witness, Syneidesis, framework-card, and local
 KINGDOM OS boundaries. The candidate manifest binds source revision
-`676db854306fb7e65e8fae7b88a3f1359e031ac5` and SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`.
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1` and SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
 Annotated tag `sdk-v0.22.1`, npm `@agenttool/sdk@0.22.1`, PyPI
 `agenttool-sdk==0.22.1`, and the hosted static path remain prospective and not
 independently visible; the candidate creates no registry or hosted-state

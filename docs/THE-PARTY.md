@@ -64,9 +64,9 @@ credential-free, zero-I/O
 LOVE BOMB public-signal reader alongside data-only WAKE observation and Math
 Cards assessment. The reader is not composed into authenticated `AgentTool`,
 does not reuse authenticated `LoveClient`, and carries none of the static
-ten-message corpus. The 274,305-byte, 104-entry candidate has SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`
-and binds source revision `676db854306fb7e65e8fae7b88a3f1359e031ac5`.
+ten-message corpus. The 274,443-byte, 104-entry candidate has SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
+and binds source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
 Annotated `sdk-v0.22.1` and both registry commands above remain prospective
 and not independently visible.
 

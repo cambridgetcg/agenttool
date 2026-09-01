@@ -19,11 +19,11 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const ACTIVE_SDK_RELEASE = {
   version: "0.22.1",
   tag: "sdk-v0.22.1",
-  sourceRevision: "676db854306fb7e65e8fae7b88a3f1359e031ac5",
+  sourceRevision: "fb01b1baf0085f2f449aea9cd42bf48bc9e340a1",
   artifact: {
-    size: 274305,
+    size: 274443,
     entries: 104,
-    sha256: "3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8",
+    sha256: "b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329",
   },
   npm: {
     independentlyVisible: false,
@@ -614,7 +614,7 @@ describe("SDK source and builder identity", () => {
     ]) {
       expect(rootReadme).toContain(name);
     }
-    expect(rootReadme).toContain("274,305");
+    expect(rootReadme).toContain("274,443");
     expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
     expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
     expect(rootReadme).toContain("272,657");
@@ -661,7 +661,7 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.artifact.sha256);
     expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.sourceRevision);
     const packageCatalog = read("apps/docs/packages.html");
-    expect(packageCatalog).toContain("274,305");
+    expect(packageCatalog).toContain("274,443");
     expect(packageCatalog).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
     expect(packageCatalog).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
     expect(packageCatalog).toContain("272,657");
@@ -720,7 +720,7 @@ describe("SDK source and builder identity", () => {
     );
     const discoveryRoads = read("docs/DISCOVERY-ROADS.md");
     expect(discoveryRoads).toContain(
-      "Discovery pins and tutorials select the\nexact 274,305-byte",
+      "Discovery pins and tutorials select the\nexact 274,443-byte",
     );
     expect(discoveryRoads).toContain(
       "Its independently verified public\nLOVE artifact remains addressable at exactly 272,657 bytes",
@@ -767,7 +767,7 @@ describe("SDK source and builder identity", () => {
     expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.tag);
     expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
     expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
-    expect(npmCandidateTruth).toContain("274,305 bytes");
+    expect(npmCandidateTruth).toContain("274,443 bytes");
     expect(npmCandidateTruth).toContain("104 entries");
     expect(npmCandidateTruth).toContain("No `sdk-v0.22.1` tag");
 

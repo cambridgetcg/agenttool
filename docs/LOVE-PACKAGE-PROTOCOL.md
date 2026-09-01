@@ -727,10 +727,10 @@ reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/wallet-zerone@0.1.2`, `@agenttool/browser@0.6.0`, and
 `@agenttool/principality-geometry@0.1.0-dev.0` catalog entries instead declare
 `Apache-2.0` without retroactively changing those immutable older releases.
-The SDK 0.22.1 catalog entry is an exact 274,305-byte, 104-entry LOVE/source
+The SDK 0.22.1 catalog entry is an exact 274,443-byte, 104-entry LOVE/source
 candidate with SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`
-and source revision `676db854306fb7e65e8fae7b88a3f1359e031ac5`.
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
+and source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
 `sdk-v0.22.1`, the matching npm/PyPI versions, and the hosted static path
 remain prospective and not independently visible. The candidate does not
 rewrite or claim publication of the verified 0.22.0 bytes.

@@ -21,10 +21,10 @@ dependency, and changes no runtime behavior over 0.22.0.
 
 The exact TypeScript LOVE/source candidate is sealed and reproducible:
 `apps/docs/packages/v1/@agenttool/sdk/0.22.1/agenttool-sdk-0.22.1.tgz` is
-274,305 bytes with 104 entries and SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`.
+274,443 bytes with 104 entries and SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
 Its manifest binds clean source revision
-`676db854306fb7e65e8fae7b88a3f1359e031ac5`. Annotated `sdk-v0.22.1`, the
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. Annotated `sdk-v0.22.1`, the
 GitHub Release, npm/PyPI versions, and hosted static path remain prospective
 and not independently visible. Current discovery therefore reports both
 optional 0.22.1 mirrors as `independently_visible: false` with

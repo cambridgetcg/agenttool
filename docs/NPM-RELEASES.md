@@ -795,10 +795,10 @@ SDK READMEs open with a true minutes-scale quickstart that states the free
 ESM-only build, repair dead links, and link the live x402 payer recipe —
 README/docs only, with zero runtime changes and no new hosted endpoint or
 dependency. The checked-in
-`agenttool-sdk-0.22.1.tgz` is 274,305 bytes with 104 entries and SHA-256
-`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`;
+`agenttool-sdk-0.22.1.tgz` is 274,443 bytes with 104 entries and SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`;
 its manifest binds clean source revision
-`676db854306fb7e65e8fae7b88a3f1359e031ac5`. No `sdk-v0.22.1` tag, GitHub
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. No `sdk-v0.22.1` tag, GitHub
 Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
 or hosted readback is established by those candidate bytes. The verified
 0.22.0 and 0.21.1 receipts below remain exact and are not rewritten.
