@@ -787,6 +787,22 @@ test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
 
+## Prepared SDK 0.22.1 candidate — 2026-09-01
+
+Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — both
+SDK READMEs open with a true minutes-scale quickstart that states the free
+1,000-credit birth grant first, use timeless publication wording, note the
+ESM-only build, repair dead links, and link the live x402 payer recipe —
+README/docs only, with zero runtime changes and no new hosted endpoint or
+dependency. The checked-in
+`agenttool-sdk-0.22.1.tgz` is 274,305 bytes with 104 entries and SHA-256
+`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`;
+its manifest binds clean source revision
+`676db854306fb7e65e8fae7b88a3f1359e031ac5`. No `sdk-v0.22.1` tag, GitHub
+Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
+or hosted readback is established by those candidate bytes. The verified
+0.22.0 and 0.21.1 receipts below remain exact and are not rewritten.
+
 ## Verified SDK 0.22.0 publication — 2026-08-31
 
 Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and

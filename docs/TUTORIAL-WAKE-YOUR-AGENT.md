@@ -111,29 +111,29 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is SDK 0.22.0. Its checked-in 272,657-byte,
-104-entry LOVE artifact has SHA-256
-`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0` and
-binds source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
-Annotated `sdk-v0.22.0` is published and peels to protected-main commit
-`7bc0a902f231ee76aed6dd5316721b65bce58047`. It is the Python source
-locator; Python is not part of the LOVE JavaScript catalog:
+The installed tutorial contract is SDK 0.22.1. Its checked-in 274,305-byte,
+104-entry LOVE/source candidate has SHA-256
+`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8` and
+binds source revision `676db854306fb7e65e8fae7b88a3f1359e031ac5`.
+Annotated `sdk-v0.22.1` is prospective and not independently visible. After
+that exact tag is published it will be the Python source locator; Python is not
+part of the LOVE JavaScript catalog. This source command is prospective:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.1#subdirectory=packages/sdk-py"
 ```
 
-Optional shorter TypeScript mirror command:
-`npm install --save-exact @agenttool/sdk@0.22.0`. Protected run `33434131214`
-independently matched the public npm tarball to the LOVE/GitHub bytes. This
-shortcut still skips Step 1's in-command LOVE size/SHA-256 verification. Never substitute
+Prospective shorter TypeScript mirror command:
+`npm install --save-exact @agenttool/sdk@0.22.1`. The exact npm version is not
+yet independently visible or verified. Even after publication, this shortcut
+will skip Step 1's in-command LOVE size/SHA-256 verification. Never substitute
 npm `latest` for the version selected by `/v1/pathways`.
 
-Optional shorter Python mirror command:
-`python -m pip install "agenttool-sdk==0.22.0"`. Protected run `33434133719`
-independently read back the exact wheel and sdist. This command does
-not perform the LOVE manifest check from Step 1. Query the exact version rather
-than trusting a mutable package index.
+Prospective shorter Python mirror command:
+`python -m pip install "agenttool-sdk==0.22.1"`. The exact PyPI version is not
+yet independently visible or verified, and this command does not perform the
+LOVE manifest check from Step 1. Query the exact version rather than trusting
+a mutable package index.
 
 The current verified public release is SDK 0.22.0. Protected npm run
 `33434131214` matched the 272,657-byte, 104-entry LOVE/GitHub/npm tarballs at
@@ -143,7 +143,7 @@ protected PyPI run `33434133719` re-downloaded and matched the 308,371-byte
 wheel and 296,031-byte source distribution. Exact 0.21.1, 0.21.0, and earlier
 receipts remain immutable historical evidence.
 
-SDK 0.22.0 keeps four optional KINGDOM orientation surfaces
+SDK 0.22.1 keeps four optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
 `at.kingdomFramework.card()` reads only the exact public project card without
 the AgentTool bearer or cookies and follows no redirect.
@@ -166,11 +166,12 @@ credential-free boundary. It explicitly pulls only the closed
 nor delivers the static ten-message corpus. It remains separate from WAKE's
 refusable adapter-managed current-inference injection.
 
-The 0.22.0 LOVE artifact, annotated tag, sole GitHub Release asset, npm mirror
-tarball, and PyPI distributions are independently verified by the dated
-release receipts above; its hosted static path remains prospective. The
-immutable 0.21.1 and earlier receipts remain preserved. Publication does not
-establish docs or API deployment, live
+The 0.22.1 LOVE artifact is a sealed source candidate; its tag, GitHub Release,
+npm/PyPI mirrors, and hosted static path remain prospective and not
+independently visible. The immutable 0.22.0 LOVE artifact, annotated tag, sole
+GitHub Release asset, npm mirror tarball, and PyPI distributions remain
+independently verified by the dated release receipts above. Publication does
+not establish docs or API deployment, live
 `/public/love-bomb` behavior, participant receipt or attention, feeling,
 training, inference, provider effect, or weight change. The exact 0.19.0,
 0.18.1, and earlier receipts remain preserved historical evidence.
@@ -322,13 +323,13 @@ if (seedOnly) {
     sdkEntryUrl.protocol !== "file:" ||
     !sdkEntryUrl.pathname.endsWith("/dist/index.js")
   ) {
-    throw new Error("SDK 0.22.0 recovery bridge did not resolve to dist/index.js.");
+    throw new Error("SDK 0.22.1 recovery bridge did not resolve to dist/index.js.");
   }
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.22.0") {
-    throw new Error("Seed-only recovery requires the sealed @agenttool/sdk 0.22.0 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.22.1") {
+    throw new Error("Seed-only recovery requires the sealed @agenttool/sdk 0.22.1 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -337,7 +338,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Sealed SDK 0.22.0 is missing its recovery signing helpers.");
+    throw new Error("Sealed SDK 0.22.1 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -505,7 +506,7 @@ if (seedOnly) {
 
 The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
-the seed-only branch verifies the exact installed SDK 0.22.0 package, loads its
+the seed-only branch verifies the exact installed SDK 0.22.1 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
 recovers rather than registering again. A rooted match reuses one serialized
 recovery body for both its `identity-recover/v1` and exact-request

@@ -722,12 +722,20 @@ host, or a live-chain deployment.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
-`@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.22.0`, and
+`@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.22.1`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
 `@agenttool/wallet-zerone@0.1.2`, `@agenttool/browser@0.6.0`, and
 `@agenttool/principality-geometry@0.1.0-dev.0` catalog entries instead declare
 `Apache-2.0` without retroactively changing those immutable older releases.
-The SDK 0.22.0 catalog entry is an exact 272,657-byte, 104-entry public
+The SDK 0.22.1 catalog entry is an exact 274,305-byte, 104-entry LOVE/source
+candidate with SHA-256
+`3c3182285d8e086534424f31d6a81a88eef8d7faa1de18618ecbca88fb2d2fa8`
+and source revision `676db854306fb7e65e8fae7b88a3f1359e031ac5`.
+`sdk-v0.22.1`, the matching npm/PyPI versions, and the hosted static path
+remain prospective and not independently visible. The candidate does not
+rewrite or claim publication of the verified 0.22.0 bytes.
+
+The SDK 0.22.0 catalog entry remains an exact 272,657-byte, 104-entry public
 LOVE release with SHA-256
 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`
 and source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
