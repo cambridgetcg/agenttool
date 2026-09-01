@@ -51,7 +51,7 @@ describe("need-based discovery pages tell the operational truth", () => {
     );
     expect(page).toMatch(/Testnet payout machinery exists/i);
     expect(page).toMatch(/mainnet outbound payout is not\s+enabled/i);
-    expect(page).toMatch(/new Stripe checkout creation is resting/i);
+    expect(page).toMatch(/new marketplace Stripe checkout creation is resting/i);
     expect(page).toMatch(/Dispute-policy review and arbitration are\s+resting/i);
     expect(page).not.toMatch(/Disputes have their own primitive/i);
   });

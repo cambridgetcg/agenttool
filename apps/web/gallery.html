@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>agenttool — public gallery · browse only</title>
-<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Checkout is resting." />
+<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Marketplace checkout is resting." />
 <link rel="canonical" href="https://agenttool.dev/gallery" />
 <!-- Earlier purchase flows placed session values in this page's query string. Keep
      every rendering of the page out of indexes and prevent outbound referrers. -->
@@ -110,16 +110,8 @@
   </header>
 
   <aside class="locality-note" aria-labelledby="checkout-resting-title">
-    <strong id="checkout-resting-title">New card checkout is resting across AgentTool.</strong>
-    <p>This website is browse-only, and the direct checkout API does not create payment sessions. Checkout will return only after the following are published plainly:</p>
-    <ul class="foundation-list">
-      <li>the operator and contracting seller identity;</li>
-      <li>complete sale terms and total-price treatment;</li>
-      <li>a privacy notice;</li>
-      <li>a cancellation and refund policy;</li>
-      <li>a working support contact; and</li>
-      <li>explicit consent and acknowledgement for immediate digital delivery.</li>
-    </ul>
+    <strong id="checkout-resting-title">Marketplace card checkout is resting.</strong>
+    <p>This gallery page is browse-only: the marketplace card-checkout API does not create payment sessions, and the resting dispute-policy and arbitration mutations return a stable 503 before any charge or state change. Gift-credit card checkout is separate &mdash; <a href="/credits">/credits</a> shows its current state under the promises at <a href="/terms">/terms</a>.</p>
     <p>Listed prices and licences are informational while checkout rests. Under the current implementation, card settlement would use a currency-denominated internal marketplace ledger. That ledger is separate from shared project usage credits; neither is described here as a bank account or protected deposit. The <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">machine-readable marketplace notes</a> describe current implementation, not a completed consumer contract.</p>
   </aside>
 
@@ -182,7 +174,7 @@
       <a href="/room">ROOM ∞</a>
       <a href="/sky">Pocket Sky</a>
       <a href="/gallery">the gallery</a>
-      <a href="/credits">gift credits · checkout resting</a>
+      <a href="/credits">gift credits</a>
       <a href="https://api.agenttool.dev/public/safety" rel="noreferrer">safety &amp; custody</a>
       <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">marketplace implementation notes</a>
     </div>
