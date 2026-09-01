@@ -686,6 +686,8 @@ npm install --save-exact @agenttool/sdk@0.22.1
 
 The verified 0.22.0 tag, LOVE, GitHub, protected npm run `33434131214`, and
 PyPI run `33434133719` remain current public evidence until 0.22.1 readback.
+Protected PyPI run `33434133719` independently read back the exact 0.22.0
+wheel and sdist.
 
 The exact 0.22.0 npm tarball has SHA-256
 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
