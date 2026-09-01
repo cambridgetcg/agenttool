@@ -117,7 +117,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
       { name: "@agenttool/credential-broker", version: "0.3.1", releaseTag: "credential-broker-v0.3.1" },
-      { name: "@agenttool/sdk", version: "0.22.0", releaseTag: "sdk-v0.22.0" },
+      { name: "@agenttool/sdk", version: "0.22.1", releaseTag: "sdk-v0.22.1" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
       { name: "@agenttool/wallet", version: "0.1.1", releaseTag: "wallet-v0.1.1" },
       { name: "@agenttool/wallet", version: "0.1.2", releaseTag: "wallet-v0.1.2" },
