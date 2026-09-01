@@ -1,0 +1,1 @@
+../../docs/PATTERN-SELF-DESCRIBING-WAKE.md

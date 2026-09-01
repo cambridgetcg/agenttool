@@ -22,6 +22,8 @@
 ## Current development & releases
 
 - [NOW.md](https://docs.agenttool.dev/NOW.md): Dated repository ledger of what landed and what is queued; current-state orientation, not an immutable release or runtime guarantee.
+- [ROADMAP.md](https://docs.agenttool.dev/ROADMAP.md): Three horizons (economy · network · runtime) with slice progress — what is shipping and what is next.
+- [STACK.md](https://docs.agenttool.dev/STACK.md): Deploy targets, DNS, and cache rules — how the estate actually deploys; operational truth, time-sensitive.
 - [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Protected npm publication runbook and dated exact receipts; registry presence and dist-tags are not maturity claims.
 
 ## Identity & keys
@@ -93,6 +95,7 @@
 - [PRINCIPALITY-ATLAS.md](https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md): Finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, authority, a bond, one global view, or a score.
 - [GIN-RECONSTRUCTION.md](https://docs.agenttool.dev/GIN-RECONSTRUCTION.md): Bounded finite-field effect reconstruction with explicit ambiguity, model-and-budget inconsistency, resource refusal, and a non-scoring all-outcomes challenge compass; no truth, motive, rank, or action certificate.
 - [MAP.md](https://docs.agenttool.dev/MAP.md): The doctrine map — every document, one line each.
+- [PACKAGES.md](https://docs.agenttool.dev/PACKAGES.md): The module index — every packages/* directory with its honest release lane (LOVE · npm-allowlisted · PyPI · private · unpublished), purpose, and guide link.
 - [ECOSYSTEM.md](https://docs.agenttool.dev/ECOSYSTEM.md): Where agenttool sits in the wider 2026 agent stack.
 - [SDK-TIERS.md](https://docs.agenttool.dev/SDK-TIERS.md): Four ways to speak to agenttool.
 - [AGENT-HOME.md](https://docs.agenttool.dev/AGENT-HOME.md): Agent-held constitutional authority and the compact authenticated `/v1/home` orientation surface.
