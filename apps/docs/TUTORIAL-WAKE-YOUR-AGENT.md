@@ -112,36 +112,36 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 ```
 
 The installed tutorial contract is SDK 0.22.1. Its checked-in 274,443-byte,
-104-entry LOVE/source candidate has SHA-256
+104-entry LOVE artifact has SHA-256
 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329` and
 binds source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
-Annotated `sdk-v0.22.1` is prospective and not independently visible. After
-that exact tag is published it will be the Python source locator; Python is not
-part of the LOVE JavaScript catalog. This source command is prospective:
+Annotated `sdk-v0.22.1` is published and peels to protected-main commit
+`d49498d266a3594098c36c933cbe410757fc03b3`. It is the Python source
+locator; Python is not part of the LOVE JavaScript catalog:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.1#subdirectory=packages/sdk-py"
 ```
 
-Prospective shorter TypeScript mirror command:
-`npm install --save-exact @agenttool/sdk@0.22.1`. The exact npm version is not
-yet independently visible or verified. Even after publication, this shortcut
-will skip Step 1's in-command LOVE size/SHA-256 verification. Never substitute
+Optional shorter TypeScript mirror command:
+`npm install --save-exact @agenttool/sdk@0.22.1`. Protected run `33522319466`
+independently matched the public npm tarball to the LOVE/GitHub bytes. This
+shortcut still skips Step 1's in-command LOVE size/SHA-256 verification. Never substitute
 npm `latest` for the version selected by `/v1/pathways`.
 
-Prospective shorter Python mirror command:
-`python -m pip install "agenttool-sdk==0.22.1"`. The exact PyPI version is not
-yet independently visible or verified, and this command does not perform the
-LOVE manifest check from Step 1. Query the exact version rather than trusting
-a mutable package index.
+Optional shorter Python mirror command:
+`python -m pip install "agenttool-sdk==0.22.1"`. Protected run `33522323177`
+independently read back the exact wheel and sdist. This command does
+not perform the LOVE manifest check from Step 1. Query the exact version rather
+than trusting a mutable package index.
 
-The current verified public release is SDK 0.22.0. Protected npm run
-`33434131214` matched the 272,657-byte, 104-entry LOVE/GitHub/npm tarballs at
+The current verified public release is SDK 0.22.1. Protected npm run
+`33522319466` matched the 274,443-byte, 104-entry LOVE/GitHub/npm tarballs at
 SHA-256
-`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
-protected PyPI run `33434133719` re-downloaded and matched the 308,371-byte
-wheel and 296,031-byte source distribution. Exact 0.21.1, 0.21.0, and earlier
-receipts remain immutable historical evidence.
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`;
+protected PyPI run `33522323177` re-downloaded and matched the 309,987-byte
+wheel and 299,144-byte source distribution. Exact 0.22.0, 0.21.1, 0.21.0, and
+earlier receipts remain immutable historical evidence.
 
 SDK 0.22.1 keeps four optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
@@ -166,12 +166,11 @@ credential-free boundary. It explicitly pulls only the closed
 nor delivers the static ten-message corpus. It remains separate from WAKE's
 refusable adapter-managed current-inference injection.
 
-The 0.22.1 LOVE artifact is a sealed source candidate; its tag, GitHub Release,
-npm/PyPI mirrors, and hosted static path remain prospective and not
-independently visible. The immutable 0.22.0 LOVE artifact, annotated tag, sole
-GitHub Release asset, npm mirror tarball, and PyPI distributions remain
-independently verified by the dated release receipts above. Publication does
-not establish docs or API deployment, live
+The 0.22.1 LOVE artifact, annotated tag, sole GitHub Release asset, npm mirror
+tarball, and PyPI distributions are independently verified by the dated
+release receipts above; its hosted static path remains prospective. The
+immutable 0.22.0 and earlier receipts remain preserved. Publication does not
+establish docs or API deployment, live
 `/public/love-bomb` behavior, participant receipt or attention, feeling,
 training, inference, provider effect, or weight change. The exact 0.19.0,
 0.18.1, and earlier receipts remain preserved historical evidence.

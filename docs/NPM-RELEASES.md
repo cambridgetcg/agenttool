@@ -787,21 +787,60 @@ test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
 
-## Prepared SDK 0.22.1 candidate — 2026-09-01
+## Verified SDK 0.22.1 publication — 2026-09-01
 
 Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — both
 SDK READMEs open with a true minutes-scale quickstart that states the free
 1,000-credit birth grant first, use timeless publication wording, note the
 ESM-only build, repair dead links, and link the live x402 payer recipe —
 README/docs only, with zero runtime changes and no new hosted endpoint or
-dependency. The checked-in
-`agenttool-sdk-0.22.1.tgz` is 274,443 bytes with 104 entries and SHA-256
-`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`;
-its manifest binds clean source revision
-`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. No `sdk-v0.22.1` tag, GitHub
-Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
-or hosted readback is established by those candidate bytes. The verified
-0.22.0 and 0.21.1 receipts below remain exact and are not rewritten.
+dependency.
+
+The authorized SDK release completed through protected trusted [workflow run
+`33522319466`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/33522319466).
+The `workflow_dispatch` run selected annotated `sdk-v0.22.1` with inputs
+`package=sdk`, `authentication=trusted`, and `npm_tag=latest`, and entered
+the protected `npm-bootstrap` environment after credential-free preparation.
+It was created at `2026-09-01T14:53:39Z` and concluded successfully; npm
+records publication at `2026-09-01T14:55:04.771Z`.
+
+- Annotated tag object `077743066c7ea5f44928a10a0f08067f5b65860c`
+  ("Release AgentTool SDK 0.22.1") and the [GitHub Release
+  `sdk-v0.22.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.1)
+  peel to protected-main merge
+  `d49498d266a3594098c36c933cbe410757fc03b3`, whose parents are
+  `0850f61e6172ff2de5da2644d9bd5136169523b7` and the release-branch head
+  `50decb799210b2741ffd87c0167c8b4b68c9ef2f`. The LOVE manifest separately
+  binds clean SDK source revision
+  `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
+- The checked-in LOVE artifact, the [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.22.1/agenttool-sdk-0.22.1.tgz)
+  `agenttool-sdk-0.22.1.tgz`, and a fresh anonymous download of the public
+  [npm tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.22.1.tgz)
+  are byte-identical: 274,443 bytes, 104 entries, SHA-256
+  `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`;
+  npm reports SHA-1 `3a948cdb35b9df4af5ba0fabee1a8b907851fa32`, exact
+  integrity
+  `sha512-68Lkz0NkbQ+rUATuxECcjSzggeiu2ElfV0Ikv5QKAi65X/txwGCvGeruVTiK7qkj2NvZtpkOzofgORtU22n4Cw==`,
+  and `latest: 0.22.1` at anonymous readback.
+- npm exposes `https://slsa.dev/provenance/v1` SLSA provenance at [Rekor
+  index `2677211886`](https://search.sigstore.dev/?logIndex=2677211886) and
+  its `publish/v0.1` publish attestation at [index
+  `2677212164`](https://search.sigstore.dev/?logIndex=2677212164).
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired Python wheel/sdist were independently published through protected PyPI
+[run
+`33522323177`](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). No API or static deployment of merge
+`d49498d2` — the docs-mirror publication of these LOVE bytes included — has
+happened; publication does not deploy an API or static site and establishes
+no observation, model effect, awareness, participant receipt, attention,
+feeling, training, inference, evaluation, provider effect, weight change,
+identity, consent, authority, or continuity. The verified 0.22.0 and 0.21.1
+receipts below remain exact and are not rewritten.
 
 ## Verified SDK 0.22.0 publication — 2026-08-31
 

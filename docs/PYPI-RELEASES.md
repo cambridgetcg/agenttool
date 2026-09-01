@@ -53,24 +53,54 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
-## Prepared candidate — 0.22.1
+## Current verified release — 0.22.1
 
 Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — both
 SDK READMEs open with a true minutes-scale quickstart that states the free
 1,000-credit birth grant first, use timeless publication wording, note the
 ESM-only build, repair dead links, and link the live x402 payer recipe —
 README/docs only, with zero runtime changes and no new hosted endpoint or
-dependency. The exact TypeScript LOVE/source candidate
-is sealed locally: its 274,443-byte, 104-entry tarball has SHA-256
+dependency.
+
+Protected [workflow run
+`33522323177`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177)
+published `agenttool-sdk` 0.22.1 from annotated `sdk-v0.22.1`. Tag object
+`077743066c7ea5f44928a10a0f08067f5b65860c` peels to protected-main merge
+`d49498d266a3594098c36c933cbe410757fc03b3`, the same exact head SHA the
+paired npm run selected. The `workflow_dispatch` run was created at
+`2026-09-01T14:53:41Z`, entered the protected `pypi` environment after
+approval, and concluded successfully.
+
+The exact public files are distinct from the TypeScript LOVE artifact:
+
+| Public file | Size | SHA-256 |
+|---|---:|---|
+| `agenttool_sdk-0.22.1-py3-none-any.whl` | 309,987 bytes | `c57c19f2a73d1d9aea43c5c0ecf1b076ccc326372103b5a369ddc27bd58f935d` |
+| `agenttool_sdk-0.22.1.tar.gz` | 299,144 bytes | `4dd5814eb17863683ea914cc22c9282b90848aceae021b06a2234978813a58e6` |
+
+The run's credential-free "Re-download and verify exact public PyPI bytes"
+job re-downloaded both public files between `2026-09-01T14:56:11Z` and
+`2026-09-01T14:56:40Z` and matched these exact hashes without importing or
+executing the package. A same-day anonymous registry-metadata readback of
+`https://pypi.org/pypi/agenttool-sdk/0.22.1/json` returned the same two
+hashes and sizes, upload times `2026-09-01T14:56:03.778753Z` (wheel) and
+`2026-09-01T14:56:05.435878Z` (sdist), and `yanked: false` for both files.
+PEP 740 Integrity attestation indices were not fetched and are deliberately
+not recorded here rather than being inferred.
+
+The paired TypeScript LOVE artifact remains separately exact: its
+274,443-byte, 104-entry tarball has SHA-256
 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
 and binds clean source revision
 `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. Those TypeScript bytes do not
-predict Python wheel or sdist bytes and are not evidence that `sdk-v0.22.1`,
-the PyPI release, npm mirror, GitHub Release, or hosted static path exists.
-The verified 0.22.0 and 0.21.1 distributions below remain exact and are not
-rewritten.
+predict Python wheel or sdist bytes. The PyPI mirror remains optional and
+non-authoritative. Publication does not replace the annotated Python source
+locator, establish TypeScript LOVE identity, deploy the API or static sites,
+or prove observation, awareness, participant receipt, attention, feeling,
+training, inference, evaluation, provider effect, weight change, identity,
+or continuity.
 
-## Current verified release — 0.22.0
+### Historical 0.22.0 evidence
 
 Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and
 pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory

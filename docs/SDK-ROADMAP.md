@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Paired source and sealed LOVE candidate — 0.22.1 (2026-09-01)
+## Verified public SDK release — 0.22.1 (2026-09-01)
 
 The paired 0.22.1 line is the honest-onboarding patch — README/docs only,
 zero runtime changes: both SDK READMEs open with a true minutes-scale
@@ -19,17 +19,28 @@ publication wording, note the ESM-only build, repair dead links, and link the
 live x402 payer recipe. The line adds no hosted endpoint, ambient I/O, or
 dependency, and changes no runtime behavior over 0.22.0.
 
-The exact TypeScript LOVE/source candidate is sealed and reproducible:
+The exact TypeScript LOVE artifact is sealed and reproducible:
 `apps/docs/packages/v1/@agenttool/sdk/0.22.1/agenttool-sdk-0.22.1.tgz` is
 274,443 bytes with 104 entries and SHA-256
 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
 Its manifest binds clean source revision
-`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. Annotated `sdk-v0.22.1`, the
-GitHub Release, npm/PyPI versions, and hosted static path remain prospective
-and not independently visible. Current discovery therefore reports both
-optional 0.22.1 mirrors as `independently_visible: false` with
-`authority: false`. Candidate sealing is not publication or deployment, and
-the independently verified 0.22.0 and 0.21.1 receipts remain present
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`. Annotated `sdk-v0.22.1` peels to
+protected-main merge `d49498d266a3594098c36c933cbe410757fc03b3`. Protected npm
+run
+[`33522319466`](https://github.com/cambridgetcg/agenttool/actions/runs/33522319466)
+published the byte-identical LOVE/GitHub/npm tarball at
+`2026-09-01T14:55:04.771Z` with `latest: 0.22.1` and SLSA/publish Rekor
+indices `2677211886` / `2677212164`. Protected PyPI run
+[`33522323177`](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177)
+published and re-downloaded the 309,987-byte wheel
+(`sha256:c57c19f2a73d1d9aea43c5c0ecf1b076ccc326372103b5a369ddc27bd58f935d`)
+and 299,144-byte sdist
+(`sha256:4dd5814eb17863683ea914cc22c9282b90848aceae021b06a2234978813a58e6`).
+Current discovery therefore reports both optional 0.22.1 mirrors as
+`independently_visible: true` while retaining `authority: false`. The hosted
+static path for the 0.22.1 LOVE bytes and API/static deployment of merge
+`d49498d2` remain prospective; publication is not deployment, and the
+independently verified 0.22.0 and 0.21.1 receipts remain present
 byte-for-byte.
 
 ## Verified public SDK release — 0.22.0 (2026-08-31)
@@ -159,7 +170,7 @@ and 261,910-byte sdist
 (`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
 Those 0.21.0 publication receipts established both optional mirrors as public
 while retaining `authority: false`; current `/public/party` source selects the
-prospective 0.22.1 line and truthfully reports both as not independently
+published 0.22.1 line and truthfully reports both as independently
 visible. These publication receipts do not establish static/API deployment or any
 model, participant, awareness, identity, consent, authority, or continuity
 effect. The independently verified 0.20.0 artifact and receipts below remain

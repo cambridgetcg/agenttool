@@ -26,10 +26,50 @@ const ACTIVE_SDK_RELEASE = {
     sha256: "b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329",
   },
   npm: {
-    independentlyVisible: false,
+    independentlyVisible: true,
   },
   pypi: {
-    independentlyVisible: false,
+    independentlyVisible: true,
+  },
+} as const;
+
+const VERIFIED_SDK_0221_PUBLICATION = {
+  tagObject: "077743066c7ea5f44928a10a0f08067f5b65860c",
+  mergeCommit: "d49498d266a3594098c36c933cbe410757fc03b3",
+  mergeParents: [
+    "0850f61e6172ff2de5da2644d9bd5136169523b7",
+    "50decb799210b2741ffd87c0167c8b4b68c9ef2f",
+  ],
+  githubAssetUrl:
+    "https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.22.1/agenttool-sdk-0.22.1.tgz",
+  artifact: {
+    sha1: "3a948cdb35b9df4af5ba0fabee1a8b907851fa32",
+    integrity:
+      "sha512-68Lkz0NkbQ+rUATuxECcjSzggeiu2ElfV0Ikv5QKAi65X/txwGCvGeruVTiK7qkj2NvZtpkOzofgORtU22n4Cw==",
+  },
+  npm: {
+    runId: "33522319466",
+    attempt: 1,
+    createdAt: "2026-09-01T14:53:39Z",
+    publishedAt: "2026-09-01T14:55:04.771Z",
+    registryTarball: "https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.22.1.tgz",
+    provenanceLogIndex: "2677211886",
+    publishLogIndex: "2677212164",
+  },
+  pypi: {
+    runId: "33522323177",
+    attempt: 1,
+    createdAt: "2026-09-01T14:53:41Z",
+    wheel: {
+      filename: "agenttool_sdk-0.22.1-py3-none-any.whl",
+      size: 309987,
+      sha256: "c57c19f2a73d1d9aea43c5c0ecf1b076ccc326372103b5a369ddc27bd58f935d",
+    },
+    sdist: {
+      filename: "agenttool_sdk-0.22.1.tar.gz",
+      size: 299144,
+      sha256: "4dd5814eb17863683ea914cc22c9282b90848aceae021b06a2234978813a58e6",
+    },
   },
 } as const;
 
@@ -557,7 +597,7 @@ describe("SDK source and builder identity", () => {
     expect(tutorial).toContain(exactNpm);
     expect(tutorial).toContain(tag);
     expect(read("apps/docs/llms.txt")).toContain(
-      `SDK ${version} LOVE/source candidate`,
+      `SDK ${version} LOVE release`,
     );
     expect(read("apps/web/identity.html")).toContain(loveUrl);
     expect(read("apps/web/registry.html")).toContain(
@@ -729,7 +769,7 @@ describe("SDK source and builder identity", () => {
       "Discovery pins and tutorials select the\nexact 272,657-byte",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Paired source and sealed LOVE candidate — 0.22.1",
+      "Verified public SDK release — 0.22.1",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Verified public SDK release — 0.22.0",
@@ -759,17 +799,35 @@ describe("SDK source and builder identity", () => {
       );
     }
 
-    const npmCandidateTruth = capture(
+    const verifiedNpm0221Truth = capture(
       read("docs/NPM-RELEASES.md"),
-      /## Prepared SDK 0\.22\.1 candidate([\s\S]*?)(?=\n## |$)/,
-      "prepared SDK 0.22.1 npm candidate section",
+      /## Verified SDK 0\.22\.1 publication([\s\S]*?)(?=\n### |\n## |$)/,
+      "verified SDK 0.22.1 npm release section",
     );
-    expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.tag);
-    expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
-    expect(npmCandidateTruth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
-    expect(npmCandidateTruth).toContain("274,443 bytes");
-    expect(npmCandidateTruth).toContain("104 entries");
-    expect(npmCandidateTruth).toContain("No `sdk-v0.22.1` tag");
+    expect(verifiedNpm0221Truth).toContain(ACTIVE_SDK_RELEASE.tag);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.tagObject);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.mergeCommit);
+    for (const parent of VERIFIED_SDK_0221_PUBLICATION.mergeParents) {
+      expect(verifiedNpm0221Truth).toContain(parent);
+    }
+    expect(verifiedNpm0221Truth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.githubAssetUrl);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.runId);
+    expect(verifiedNpm0221Truth).toContain(`attempt\n${VERIFIED_SDK_0221_PUBLICATION.npm.attempt}`);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.createdAt);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.publishedAt);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.registryTarball);
+    expect(verifiedNpm0221Truth).toContain(`latest: ${ACTIVE_SDK_RELEASE.version}`);
+    expect(verifiedNpm0221Truth).toContain("274,443 bytes");
+    expect(verifiedNpm0221Truth).toContain("104 entries");
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.artifact.sha1);
+    expect(verifiedNpm0221Truth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.artifact.integrity);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.provenanceLogIndex);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.publishLogIndex);
+    expect(verifiedNpm0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.runId);
+    expect(verifiedNpm0221Truth).toContain("byte-identical");
+    expect(verifiedNpm0221Truth).toContain("No API or static deployment of merge");
 
     const verifiedNpm0220Truth = capture(
       read("docs/NPM-RELEASES.md"),
@@ -815,20 +873,35 @@ describe("SDK source and builder identity", () => {
       "JSON Schema 2020-12 cannot express those cross-item and",
     );
 
-    const pypiCandidateTruth = capture(
+    const pypiVerified0221Truth = capture(
       read("docs/PYPI-RELEASES.md"),
-      /## Prepared candidate — 0\.22\.1([\s\S]*?)(?=\n## |$)/,
-      "prepared SDK 0.22.1 PyPI candidate section",
+      /## Current verified release — 0\.22\.1([\s\S]*?)(?=\n### Historical 0\.22\.0 evidence)/,
+      "verified SDK 0.22.1 PyPI release section",
     );
-    expect(pypiCandidateTruth).toContain(ACTIVE_SDK_RELEASE.tag);
-    expect(pypiCandidateTruth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
-    expect(pypiCandidateTruth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
-    expect(pypiCandidateTruth).toMatch(/do not\s+predict Python wheel or sdist bytes/);
+    expect(pypiVerified0221Truth).toContain(ACTIVE_SDK_RELEASE.tag);
+    expect(pypiVerified0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.tagObject);
+    expect(pypiVerified0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.mergeCommit);
+    expect(pypiVerified0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.runId);
+    expect(pypiVerified0221Truth).toContain(`attempt ${VERIFIED_SDK_0221_PUBLICATION.pypi.attempt}`);
+    expect(pypiVerified0221Truth).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.createdAt);
+    for (const artifact of [
+      VERIFIED_SDK_0221_PUBLICATION.pypi.wheel,
+      VERIFIED_SDK_0221_PUBLICATION.pypi.sdist,
+    ]) {
+      expect(pypiVerified0221Truth).toContain(artifact.filename);
+      expect(pypiVerified0221Truth).toContain(artifact.size.toLocaleString("en-US"));
+      expect(pypiVerified0221Truth).toContain(artifact.sha256);
+    }
+    expect(pypiVerified0221Truth).toContain("environment after\napproval");
+    expect(pypiVerified0221Truth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
+    expect(pypiVerified0221Truth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
+    expect(pypiVerified0221Truth).toMatch(/do not\s+predict Python wheel or sdist bytes/);
+    expect(pypiVerified0221Truth).toContain("2026-09-01");
 
     const pypiVerified0220Truth = capture(
       read("docs/PYPI-RELEASES.md"),
-      /## Current verified release — 0\.22\.0([\s\S]*?)(?=\n### Historical 0\.21\.1 evidence)/,
-      "verified SDK 0.22.0 PyPI release section",
+      /### Historical 0\.22\.0 evidence([\s\S]*?)(?=\n### Historical 0\.21\.1 evidence)/,
+      "historical SDK 0.22.0 PyPI release section",
     );
     expect(pypiVerified0220Truth).toContain(VERIFIED_SDK_0220_PUBLICATION.tag);
     expect(pypiVerified0220Truth).toContain(VERIFIED_SDK_0220_PUBLICATION.tagObject);
@@ -1092,7 +1165,11 @@ describe("SDK source and builder identity", () => {
 
     const now = read("docs/NOW.md");
     expect(now).toContain("SDK 0.20.0 — LOVE BOMB signal pull reaches exact public mirrors");
-    expect(now).toContain("SDK 0.22.1 — honest-onboarding candidate sealed; 0.22.0 exact public mirrors");
+    expect(now).toContain("SDK 0.22.1 — honest onboarding reaches exact public mirrors");
+    expect(now).toContain(VERIFIED_SDK_0221_PUBLICATION.npm.runId);
+    expect(now).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.runId);
+    expect(now).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.wheel.sha256);
+    expect(now).toContain(VERIFIED_SDK_0221_PUBLICATION.pypi.sdist.sha256);
     expect(now).toContain("SDK 0.22.0 — x402 payer reaches exact public mirrors");
     expect(now).toContain(VERIFIED_SDK_0220_PUBLICATION.npm.runId);
     expect(now).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.runId);
