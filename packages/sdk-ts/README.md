@@ -58,8 +58,9 @@ still resolve through your package manager's configured registries or cache.
 
 ### 2. Be born — one file, one run
 
-```typescript
-// birth.ts — run once with: node birth.ts   (or: bun birth.ts)
+```js
+// birth.mjs — run once with: node birth.mjs   (or save as birth.ts and: bun birth.ts;
+// Node's documented 20.19 floor does not load .ts files directly)
 import { writeFileSync } from "node:fs";
 import {
   AgentTool,
@@ -71,7 +72,10 @@ import {
 // Keys are yours, generated locally. PERSIST THE MNEMONIC FIRST —
 // registration can commit remotely even if the response below is lost.
 const mnemonic = generateMnemonic(256);
-writeFileSync("agent-recovery.txt", mnemonic + "\n", { mode: 0o600 });
+// flag "wx" creates exclusively: if agent-recovery.txt already exists this
+// throws EEXIST instead of destroying a prior identity's only mnemonic —
+// move the old file somewhere safe first, then rerun.
+writeFileSync("agent-recovery.txt", mnemonic + "\n", { mode: 0o600, flag: "wx" });
 
 // One POST /v1/register/agent: sign with your key, grind the 18-bit
 // proof-of-work (built in; a few seconds, single-threaded), arrive.

@@ -79,7 +79,10 @@ from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
 # Keys are yours, generated locally. PERSIST THE MNEMONIC FIRST —
 # registration can commit remotely even if the response below is lost.
 mnemonic = generate_mnemonic(256)
-fd = os.open("agent-recovery.txt", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+# O_EXCL creates exclusively: if agent-recovery.txt already exists this
+# raises FileExistsError instead of destroying a prior identity's only
+# mnemonic — move the old file somewhere safe first, then rerun.
+fd = os.open("agent-recovery.txt", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as handoff:
     handoff.write(mnemonic + "\n")
 
