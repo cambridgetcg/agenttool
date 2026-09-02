@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/treasury-policy-v0.1",
+  "title": "AgentTool Zerone self-sustainability treasury policy v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "wallet_binding_id", "treasury_account", "denom",
+    "reserve_floor_uzrn", "max_single_spend_uzrn", "window_blocks",
+    "window_caps_uzrn", "allowed_purposes", "receiving_allowed",
+    "automatic_staking", "automatic_governance", "automatic_bridging",
+    "issued_at", "semantic_boundary", "treasury_policy_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-treasury-policy/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "wallet_binding_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "treasury_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "denom": { "const": "uzrn" },
+    "reserve_floor_uzrn": { "$ref": "defs-v0.1#/$defs/uint" },
+    "max_single_spend_uzrn": { "$ref": "defs-v0.1#/$defs/positiveUint" },
+    "window_blocks": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+    "window_caps_uzrn": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "compute", "storage", "network_fee", "knowledge_bond",
+        "sponsorship_escrow", "total"
+      ],
+      "properties": {
+        "compute": { "$ref": "defs-v0.1#/$defs/uint" },
+        "storage": { "$ref": "defs-v0.1#/$defs/uint" },
+        "network_fee": { "$ref": "defs-v0.1#/$defs/uint" },
+        "knowledge_bond": { "$ref": "defs-v0.1#/$defs/uint" },
+        "sponsorship_escrow": { "$ref": "defs-v0.1#/$defs/uint" },
+        "total": { "$ref": "defs-v0.1#/$defs/uint" }
+      }
+    },
+    "allowed_purposes": {
+      "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "compute", "knowledge_bond", "network_fee", "sponsorship_escrow",
+          "storage"
+        ]
+      }
+    },
+    "receiving_allowed": { "const": true },
+    "automatic_staking": { "const": false },
+    "automatic_governance": { "const": false },
+    "automatic_bridging": { "const": false },
+    "issued_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "treasury_policy_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  }
+}

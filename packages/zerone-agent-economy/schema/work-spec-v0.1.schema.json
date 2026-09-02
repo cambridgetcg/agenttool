@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/work-spec-v0.1",
+  "title": "AgentTool Zerone work specification v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "sponsor_account", "worker_account", "knowledge_domain",
+    "target_tree", "input_root", "environment_root", "acceptance_hash",
+    "resource_limits", "settlement", "created_at", "semantic_boundary",
+    "work_spec_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-work-spec/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "sponsor_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "worker_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "knowledge_domain": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "target_tree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_id", "base_root", "parent_fact_ids", "transition_kind", "output_contract_hash"],
+      "properties": {
+        "tree_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+        "base_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "parent_fact_ids": {
+          "type": "array", "maxItems": 16, "uniqueItems": true,
+          "items": { "$ref": "defs-v0.1#/$defs/factId" }
+        },
+        "transition_kind": { "const": "add_fact" },
+        "output_contract_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+      }
+    },
+    "input_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "environment_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "acceptance_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "resource_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_compute_millis", "max_accelerator_millis", "max_memory_byte_millis", "max_input_bytes", "max_output_bytes"],
+      "properties": {
+        "max_compute_millis": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "max_accelerator_millis": { "$ref": "defs-v0.1#/$defs/uint64" },
+        "max_memory_byte_millis": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "max_input_bytes": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "max_output_bytes": { "$ref": "defs-v0.1#/$defs/positiveUint64" }
+      }
+    },
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["denom", "price_per_artifact_uzrn", "target_count", "duration_blocks", "min_corroborations"],
+      "properties": {
+        "denom": { "const": "uzrn" },
+        "price_per_artifact_uzrn": { "$ref": "defs-v0.1#/$defs/positiveUint" },
+        "target_count": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "duration_blocks": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "min_corroborations": { "$ref": "defs-v0.1#/$defs/uint64" }
+      }
+    },
+    "created_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "work_spec_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  }
+}

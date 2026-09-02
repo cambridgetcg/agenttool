@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/unsigned-message-projection-v0.1",
+  "title": "AgentTool Zerone unsigned canonical protobuf message projection v0.1",
+  "$defs": {
+    "workContract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["work_spec_hash", "acceptance_hash", "input_root", "environment_root", "min_corroborations", "worker_address"],
+      "properties": {
+        "work_spec_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "acceptance_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "input_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "environment_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "min_corroborations": { "$ref": "defs-v0.1#/$defs/uint64" },
+        "worker_address": { "$ref": "defs-v0.1#/$defs/address" }
+      }
+    },
+    "commitment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["work_spec_hash", "acceptance_hash", "input_root", "environment_root", "artifact_root", "evidence_root", "work_receipt_hash"],
+      "properties": {
+        "work_spec_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "acceptance_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "input_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "environment_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "artifact_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "evidence_root": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+        "work_receipt_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" }
+      }
+    },
+    "requiresRelation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["target_fact_id", "relation", "inference", "inference_strength_bps", "method_id"],
+      "properties": {
+        "target_fact_id": { "$ref": "defs-v0.1#/$defs/factId" },
+        "relation": { "const": 3 },
+        "inference": { "const": 0 },
+        "inference_strength_bps": { "const": "0" },
+        "method_id": { "const": "" }
+      }
+    },
+    "createBounty": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sponsor", "domain", "price_per_artifact", "target_count", "duration_blocks", "work_contract"],
+      "properties": {
+        "sponsor": { "$ref": "defs-v0.1#/$defs/address" },
+        "domain": { "$ref": "defs-v0.1#/$defs/identifier" },
+        "price_per_artifact": { "$ref": "defs-v0.1#/$defs/positiveUint" },
+        "target_count": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "duration_blocks": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "work_contract": { "$ref": "#/$defs/workContract" }
+      }
+    },
+    "submitClaim": {
+      "type": "object", "additionalProperties": false,
+      "required": ["submitter", "fact_content", "domain", "category", "stake", "references", "partnership_id", "claim_type", "relations", "structure", "canonical_form", "sponsored", "method_id", "reasoning_trace", "computational_commitment"],
+      "properties": {
+        "submitter": { "$ref": "defs-v0.1#/$defs/address" },
+        "fact_content": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "domain": { "$ref": "defs-v0.1#/$defs/identifier" },
+        "category": { "const": "computational" },
+        "stake": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "references": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "defs-v0.1#/$defs/identifier" } },
+        "partnership_id": { "const": "" },
+        "claim_type": { "const": 7 },
+        "relations": {
+          "type": "array", "maxItems": 16, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/requiresRelation" }
+        },
+        "structure": { "type": "null" },
+        "canonical_form": { "const": "" },
+        "sponsored": { "const": false },
+        "method_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+        "reasoning_trace": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "computational_commitment": { "$ref": "#/$defs/commitment" }
+      }
+    },
+    "fulfillBounty": {
+      "type": "object", "additionalProperties": false,
+      "required": ["caller", "bounty_id", "fact_id"],
+      "properties": {
+        "caller": { "$ref": "defs-v0.1#/$defs/address" },
+        "bounty_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+        "fact_id": { "$ref": "defs-v0.1#/$defs/identifier" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "chain_id", "source_account", "type_url",
+    "wallet_method", "value", "projection_bytes_b64u", "projection_hash",
+    "protobuf_value_b64u", "protobuf_value_hash", "compatibility",
+    "semantic_boundary"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-unsigned-message-projection/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "chain_id": { "enum": ["cosmos:zerone-1", "cosmos:zerone-testnet-1"] },
+    "source_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "type_url": {
+      "enum": [
+        "/zerone.sponsorship.v1.MsgCreateBountyOrder",
+        "/zerone.knowledge.v1.MsgSubmitClaim",
+        "/zerone.sponsorship.v1.MsgFulfillBounty"
+      ]
+    },
+    "wallet_method": {
+      "enum": [
+        "zerone.sponsorship.v1.MsgCreateBountyOrder",
+        "zerone.knowledge.v1.MsgSubmitClaim",
+        "zerone.sponsorship.v1.MsgFulfillBounty"
+      ]
+    },
+    "value": {
+      "oneOf": [
+        { "$ref": "#/$defs/createBounty" },
+        { "$ref": "#/$defs/submitClaim" },
+        { "$ref": "#/$defs/fulfillBounty" }
+      ]
+    },
+    "projection_bytes_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "projection_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "protobuf_value_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "protobuf_value_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "compatibility": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "agent_wallet_core", "wallet_zerone_version", "wallet_zerone_message_support",
+        "payload_encoding", "protobuf_encoder_required", "signer_required",
+        "simulation_required", "durable_reservation_required",
+        "sticky_unknown_accounting_required", "broadcast_required", "effects_performed"
+      ],
+      "properties": {
+        "agent_wallet_core": { "const": "record_shape_requires_host_authorization" },
+        "wallet_zerone_version": { "const": "0.1.2" },
+        "wallet_zerone_message_support": { "const": "unsupported" },
+        "payload_encoding": { "const": "canonical_protobuf_value_available" },
+        "protobuf_encoder_required": { "const": false },
+        "signer_required": { "const": true },
+        "simulation_required": { "const": true },
+        "durable_reservation_required": { "const": true },
+        "sticky_unknown_accounting_required": { "const": true },
+        "broadcast_required": { "const": true },
+        "effects_performed": { "const": false }
+      }
+    },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" }
+  }
+}
