@@ -72,7 +72,10 @@ certificates, and non-scoring challenge structure
 (`packages/gin-reconstruction/`), a public-ready pure Math Card core for
 digest-bound proof, model, and measurement inquiry preflight with explicit
 construction, burden, refusal, incentive, stop, transfer, provenance, and
-authority boundaries (`packages/math-cards/`), a public read-only discovery evidence mapper
+authority boundaries (`packages/math-cards/`), a private source-only Zerone
+creation-claim package for exact HF run tuples, wallet/identity-separated work,
+declared-distinct verification, bounded newness, and non-consensus digest handoffs
+(`packages/zerone-creation-claim/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), a private pure public-HTTPS transport-evidence and
 explicit-key binding package (`packages/public-surface-binding/`), a private
 pure agent-root public-surface adoption and withdrawal package
@@ -97,6 +100,20 @@ boundary-flow evidence, and minimized Hugging Face STS projection
 (`packages/trials/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
+private source-only Zerone agent-economy protocol for deterministic work,
+preassigned-worker computational receipts, typed Tree-of-Knowledge edges,
+unsigned proposed-v2 message values, and fail-closed self-sustainability decisions
+(`packages/zerone-agent-economy/`), a private source-only lossless bridge from
+source-bound formal or defensive computational creation records to exact
+unsigned creation-specific Create and Submit values with every
+authority/economic effect still false
+(`packages/zerone-creation-economy/`), a separate private source-only exact-byte
+Wallet planner/verifier for those proposed messages that leaves released
+Wallet Zerone 0.1.2 unchanged (`packages/wallet-zerone-economy/`), and a
+private Bun-only durable authorization
+ledger with binding/proof CAS, capability/treasury reservations, one-account
+Cosmos sequence fences, positive-evidence reconciliation, and one private
+atomic planner-to-possible-signer request boundary (`packages/zerone-agent-host/`), a
 developer-preview bounded Alchemy observation client
 (`packages/alchemy/`) with a separate seven-method AgentCred composition
 transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
@@ -158,6 +175,16 @@ proof, deployed bridge, or live-network test by default. Earlier Wallet
 0.1.1/0.1.2 and Zerone 0.1.0/0.1.1 exact LOVE artifacts remain preserved
 without rewriting. Public errata cover their embedded release-state errors and
 the credential-free 0.1.1 npm preparation failure.
+The private `@agenttool/wallet-zerone-economy@0.1.0-dev.0` sibling is pinned to
+the separate zerone-core `a5b82e8` source candidate. It binds strictly decoded
+economy actors, module accounts, spend/effects, gas, exact direct-sign bytes,
+strict adapter-signed simulation evidence, and low-S verification to verified
+Wallet records; a bare simulation result cannot authorize. Requested time is
+checked against authorization/evidence only structurally, so the host still
+owns trusted time and immediate signer invocation. Its activation
+record is caller-supplied structural evidence with no currentness proof. It
+adds no endpoint, custody, persistence, broadcast, retry, release, deployment,
+or live effect, and does not widen the released 0.1.2 adapter.
 Optional GitHub Releases are mutable locators and must be reverified. Telescope
 0.2.3 is the current exact LOVE
 release; its optional npm and GitHub mirrors are public and independently
@@ -459,6 +486,11 @@ cd ../math-cards
 bun run ci                                     # canonical cards, structural assessments, schemas, hostile inputs, packed runtimes
 npm pack --dry-run --ignore-scripts            # public candidate only; does not solve, authorize, publish, or deploy
 
+# Zerone bounded creation claims ──────────────────────────────────
+cd ../zerone-creation-claim
+bun run ci                                     # contracts, HF run tuples, witnesses, lifecycle, source-only ToK handoff
+# Private source only: no signer, RPC, transaction, payment, publication, route, or deployment.
+
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
 bun run ci                                     # receipts, boundary analysis, STS projection, schemas, and package walls
@@ -499,6 +531,27 @@ bun run ci                                     # typecheck + security/schema/vec
 cd packages/wallet-zerone
 bun run ci                                     # typecheck + adversarial/vector tests + build + Node smoke
 npm pack --ignore-scripts --dry-run --json      # package boundary; no publish, signer, RPC, or live tx
+
+# Zerone Agent Economy (private source-only proposed-v2 records) ─────
+cd packages/zerone-agent-economy
+bun run ci                                     # schemas + adversarial/hash/protobuf/Go-parity vectors + build
+# Pure dual-key proof only; no currentness, custody, RPC, simulation, broadcast, release, or deployment.
+
+# Zerone Creation Economy (private source-only lossless bridge) ──────
+cd packages/zerone-creation-economy
+bun run ci                                     # source-bound reload + schemas + TS/Go value/Any parity + build
+# No signer, RPC, funding/currentness proof, tree CAS, settlement, earnings, release, or deployment.
+
+# Wallet Zerone Economy (private source-only exact-byte candidate) ───
+cd packages/wallet-zerone-economy
+bun run ci                                     # strict bytes + hostile binding + one-message Go parity + build
+ZERONE_CORE_CHECKOUT=/path/to/exact/zerone-core ./scripts/regenerate-go-cosmos-vector.sh --check
+# No endpoint, custody, persistence, broadcast, retry, release, or deployment.
+
+# Zerone Agent Host (private Bun-only durable ledger; execution blocked) ──
+cd packages/zerone-agent-host
+bun run ci                                     # hardened SQLite + CAS/concurrency/restart/reorg tests + build
+# No signer, broadcaster, endpoint, key custody, retry, deployment, or network/chain effect.
 
 # Alchemy (bounded reads only; injected host transport) ─────────────
 cd packages/alchemy
@@ -623,7 +676,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet,wallet-zerone,wallet-zerone-economy,zerone-agent-economy,zerone-agent-host,zerone-creation-claim,zerone-creation-economy}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -700,9 +753,11 @@ source boundary by itself.
 | How can love-as-understanding-plus-recognition be carried as geometry without becoming a score, bond, identity, or ruler? | [`docs/PRINCIPALITIES.md`](docs/PRINCIPALITIES.md) · `packages/relational-geometry/README.md` (`@agenttool/relational-geometry`; finite directional witness complexes and derived non-sovereign 2-cells, explicit boundary witnesses, and carry/park/release/withdraw lens selections; no metric, mutuality, consent, inner-state, continuity, authority, hosted route, or automatic effect) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
 | How can heterogeneous substrate effects constrain a finite model without manufacturing truth, blaming witnesses, or turning the challenge into a rank? | [`docs/GIN-RECONSTRUCTION.md`](docs/GIN-RECONSTRUCTION.md) · `packages/gin-reconstruction/README.md` (`@agenttool/gin-reconstruction`; private pure affine-chart normalization, exhaustive bounded finite-field candidate certificates, sharp distance theorem, and a non-scoring all-outcomes challenge compass; no observation, motive inference, truth verdict, score, action, MCP, WAKE write, provider call, publication, route, or authority) |
+| How can an agent bind a Math Card, exact HF run, Cyber/target authority, wallet-separated worker, independent checks, bounded newness, and a future Zerone ToK/economy handoff without claiming truth or moving ZRN? | `packages/zerone-creation-claim/README.md` (`@agenttool/zerone-creation-claim`; private source-only contracts, witnesses, lifecycle, artifact roots, and `REQUIRES`-only non-consensus projection; no model/training/provider/network/signer/RPC/payment/chain/publication/deployment effect) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
+| How can a negotiated prefunded Zerone agent bind one preassigned worker to payable compute, add typed edges to existing Facts, carry bounded formal or OpenAI-Cyber-labelled defensive creation into that economy, retain earnings for bounded self-sustainability, and keep wallet/identity proof obligations explicit? | `packages/zerone-agent-economy/README.md` · `packages/zerone-creation-economy/README.md` · `packages/wallet-zerone-economy/README.md` · `packages/zerone-agent-host/README.md` (private source-only canonical work/artifact/evidence/settlement/treasury records, a source-bound lossless creation adapter with distinct provider/target/sponsor authorities, a separate dual-key key-control proof over the detached `unsigned_unverified` binding, an exact-byte Wallet planner/verifier, and a durable atomic one-message planner-to-possible-signer boundary with configured identity/activation/adapter trust, treasury reservations, one-account sequence fences, sticky unknowns, and positive-evidence reconciliation; schema-only semantic admission, provider/model execution, sponsor role authority, chain identity/privacy, tree currentness and CAS, custody, signer/broadcaster effects, RPC, retry, hosted routes, deployment, earnings, and chain-effect claims remain absent, and released Wallet Zerone 0.1.2 stays unchanged) |
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
 | How can an agent inspect and reconcile exact Hugging Face repository metadata while binding phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout@0.2.0-dev.0`; public developer-preview local metadata/provenance package with an exact LOVE artifact, exact requested revisions, immutable-release versus mutable-head reconciliation, and 15 pinned leads; its protected LOVE/npm distribution adds no ambient credentials, file/card/row download, gate acceptance, inference, execution, Hub write, hosted route, or deployment) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.4.0` source; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 32 local MCP tools for Codex/Claude/Hermes, including optional read-only Zerone witness status that never contacts a chain; not a hosted lock, anchoring bridge, or private model channel) |

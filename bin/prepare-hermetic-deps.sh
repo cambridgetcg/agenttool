@@ -65,6 +65,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/wake-thread
   packages/gin-reconstruction
   packages/math-cards
+  packages/zerone-creation-claim
   packages/credential-broker
   packages/collab
   packages/codex-usage
@@ -81,6 +82,10 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/sdk-ts
   packages/wallet
   packages/wallet-zerone
+  packages/zerone-agent-economy
+  packages/zerone-creation-economy
+  packages/wallet-zerone-economy
+  packages/zerone-agent-host
   packages/telescope
   packages/public-surface-binding
   packages/public-surface-recognition

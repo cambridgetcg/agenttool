@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/defs-v0.1",
+  "title": "AgentTool Zerone agent economy shared definitions v0.1",
+  "$comment": "These portable schemas describe structural envelopes. Runtime validators are authoritative for byte limits, network/account correspondence, ordering, cross-record equality, hashes, and consensus recipes.",
+  "$defs": {
+    "sha256Id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "bareSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "factId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "uint": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "positiveUint": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "uint64": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" },
+    "positiveUint64": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "network": { "enum": ["mainnet", "testnet"] },
+    "account": {
+      "type": "string",
+      "pattern": "^cosmos:zerone(?:-testnet)?-1:zrn1[0-9a-z]{38}$"
+    },
+    "address": { "type": "string", "pattern": "^zrn1[0-9a-z]{38}$" },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "semanticBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zrn_role",
+        "creates_identity",
+        "determines_truth",
+        "creates_karma",
+        "grants_governance"
+      ],
+      "properties": {
+        "zrn_role": { "const": "settlement_and_compute_asset_only" },
+        "creates_identity": { "const": false },
+        "determines_truth": { "const": false },
+        "creates_karma": { "const": false },
+        "grants_governance": { "const": false }
+      }
+    }
+  }
+}

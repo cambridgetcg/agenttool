@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:wallet-zerone-economy:signed-transaction:0.1",
+  "title": "AgentTool Wallet Zerone economy signed transaction v0.1",
+  "description": "Portable closed content-addressed record for one exact signed Zerone economy TxRaw. Schema validity alone does not verify canonical protobuf, byte hashes, content_id, secp256k1 signature, or correspondence fields; verifyZeroneEconomySignedTransactionRecord is authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "zerone_core_commit",
+    "cosmos_sdk",
+    "sponsorship_consensus_version",
+    "knowledge_consensus_version",
+    "signing_algorithm",
+    "signer_public_key_type_url",
+    "plan_id",
+    "plan_content_id",
+    "activation_observation_hash",
+    "activation_observed_at_height",
+    "intent_record_id",
+    "simulation_record_id",
+    "simulation_evidence_content_id",
+    "simulation_evidence_record_id",
+    "simulation_tx_bytes_hash",
+    "request_id",
+    "requested_at",
+    "signer_operation_id",
+    "chain_id",
+    "chain_reference",
+    "source_account",
+    "account_number",
+    "sequence",
+    "account_observed_at_height",
+    "signer_key_id",
+    "signer_public_key_b64u",
+    "fee",
+    "gas_limit",
+    "required_gas_limit",
+    "total_reserved_spend_uzrn",
+    "message",
+    "economic_effect",
+    "body_bytes_b64u",
+    "body_bytes_hash",
+    "auth_info_bytes_b64u",
+    "auth_info_bytes_hash",
+    "sign_doc_bytes_b64u",
+    "sign_doc_bytes_hash",
+    "tx_bytes_b64u",
+    "tx_bytes_hash",
+    "tx_hash",
+    "content_id"
+  ],
+  "properties": {
+    "schema": { "const": "agent-wallet-zerone-economy/signed-transaction/0.1" },
+    "zerone_core_commit": { "const": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac" },
+    "cosmos_sdk": { "const": "v0.53.8" },
+    "sponsorship_consensus_version": { "const": 2 },
+    "knowledge_consensus_version": { "const": 7 },
+    "signing_algorithm": { "const": "cosmos.secp256k1.sign-mode-direct" },
+    "signer_public_key_type_url": { "const": "/cosmos.crypto.secp256k1.PubKey" },
+    "plan_id": { "$ref": "#/$defs/sha256_id" },
+    "plan_content_id": { "$ref": "#/$defs/sha256_id" },
+    "activation_observation_hash": { "$ref": "#/$defs/sha256_id" },
+    "activation_observed_at_height": { "$ref": "#/$defs/positive_uint64" },
+    "intent_record_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_record_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_evidence_content_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_evidence_record_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_tx_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "request_id": { "$ref": "#/$defs/uuid" },
+    "requested_at": { "$ref": "#/$defs/timestamp" },
+    "signer_operation_id": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000]+$"
+        }
+      ]
+    },
+    "chain_id": { "enum": ["cosmos:zerone-1", "cosmos:zerone-testnet-1"] },
+    "chain_reference": { "enum": ["zerone-1", "zerone-testnet-1"] },
+    "source_account": {
+      "type": "string",
+      "pattern": "^cosmos:zerone(?:-testnet)?-1:zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+    },
+    "account_number": { "$ref": "#/$defs/uint64" },
+    "sequence": { "$ref": "#/$defs/uint64" },
+    "account_observed_at_height": { "$ref": "#/$defs/positive_uint64" },
+    "signer_key_id": { "$ref": "#/$defs/sha256_id" },
+    "signer_public_key_b64u": {
+      "type": "string",
+      "minLength": 44,
+      "maxLength": 44,
+      "pattern": "^[A-Za-z0-9_-]{44}$"
+    },
+    "fee": { "$ref": "#/$defs/fee" },
+    "gas_limit": { "$ref": "#/$defs/positive_uint64" },
+    "required_gas_limit": { "$ref": "#/$defs/positive_uint64" },
+    "total_reserved_spend_uzrn": { "$ref": "#/$defs/uint256" },
+    "message": { "$ref": "#/$defs/message" },
+    "economic_effect": { "$ref": "#/$defs/economic_effect" },
+    "body_bytes_b64u": { "$ref": "#/$defs/bytes" },
+    "body_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "auth_info_bytes_b64u": { "$ref": "#/$defs/bytes" },
+    "auth_info_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "sign_doc_bytes_b64u": { "$ref": "#/$defs/bytes" },
+    "sign_doc_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "tx_bytes_b64u": { "$ref": "#/$defs/bytes" },
+    "tx_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "tx_hash": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9A-F]{64}$"
+    },
+    "content_id": { "$ref": "#/$defs/sha256_id" }
+  },
+  "$defs": {
+    "sha256_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "positive_uint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "uint256": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,77})$"
+    },
+    "bytes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 174763,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "fee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["denom", "amount"],
+      "properties": {
+        "denom": { "const": "uzrn" },
+        "amount": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "type_url",
+        "wallet_method",
+        "projection_hash",
+        "value_b64u",
+        "value_hash",
+        "actor_address",
+        "module_account",
+        "reserved_spend_uzrn",
+        "required_gas"
+      ],
+      "properties": {
+        "kind": { "enum": ["create_bounty", "submit_claim", "fulfill_bounty"] },
+        "type_url": {
+          "enum": [
+            "/zerone.sponsorship.v1.MsgCreateBountyOrder",
+            "/zerone.knowledge.v1.MsgSubmitClaim",
+            "/zerone.sponsorship.v1.MsgFulfillBounty"
+          ]
+        },
+        "wallet_method": {
+          "enum": [
+            "zerone.sponsorship.v1.MsgCreateBountyOrder",
+            "zerone.knowledge.v1.MsgSubmitClaim",
+            "zerone.sponsorship.v1.MsgFulfillBounty"
+          ]
+        },
+        "projection_hash": { "$ref": "#/$defs/sha256_id" },
+        "value_b64u": { "$ref": "#/$defs/bytes" },
+        "value_hash": { "$ref": "#/$defs/sha256_id" },
+        "actor_address": {
+          "type": "string",
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "module_account": {
+          "type": "string",
+          "pattern": "^cosmos:zerone(?:-testnet)?-1:zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "reserved_spend_uzrn": { "$ref": "#/$defs/uint256" },
+        "required_gas": { "$ref": "#/$defs/positive_uint64" }
+      }
+    },
+    "economic_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_index",
+        "kind",
+        "module",
+        "direction",
+        "asset_id",
+        "amount_atomic",
+        "condition"
+      ],
+      "properties": {
+        "message_index": { "const": 0 },
+        "kind": { "enum": ["escrow_lock", "review_fee", "fulfillment_request"] },
+        "module": { "enum": ["sponsorship", "knowledge"] },
+        "direction": { "enum": ["outgoing", "conditional_incoming"] },
+        "asset_id": {
+          "type": "string",
+          "pattern": "^cosmos:zerone(?:-testnet)?-1/denom:uzrn$"
+        },
+        "amount_atomic": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/uint256" }
+          ]
+        },
+        "condition": {
+          "enum": ["message_success", "keeper_state_and_message_success"]
+        }
+      }
+    }
+  }
+}

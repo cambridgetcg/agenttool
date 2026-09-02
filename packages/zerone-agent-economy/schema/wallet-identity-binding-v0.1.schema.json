@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/wallet-identity-binding-v0.1",
+  "title": "AgentTool Zerone wallet identity binding v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "owner_identity_id", "wallet_id",
+    "wallet_descriptor_id", "identity_authority", "zerone_account_id",
+    "zerone_address", "zerone_signer", "revision",
+    "wallet_continuity_sequence", "previous_binding_id", "proof_status", "issued_at",
+    "semantic_boundary", "binding_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-wallet-binding/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "owner_identity_id": { "type": "string", "pattern": "^did:[a-z0-9]+:.+$", "maxLength": 1024 },
+    "wallet_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "wallet_descriptor_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "identity_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "public_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+      }
+    },
+    "zerone_account_id": { "$ref": "defs-v0.1#/$defs/account" },
+    "zerone_address": { "$ref": "defs-v0.1#/$defs/address" },
+    "zerone_signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "encoding", "public_key_b64u", "key_id"],
+      "properties": {
+        "algorithm": { "const": "secp256k1" },
+        "encoding": { "const": "compressed" },
+        "public_key_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]{44}$" },
+        "key_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+      }
+    },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "wallet_continuity_sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "previous_binding_id": {
+      "oneOf": [
+        { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        { "type": "null" }
+      ]
+    },
+    "proof_status": { "const": "unsigned_unverified" },
+    "issued_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "binding_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "revision": { "const": 1 } }, "required": ["revision"] },
+      "then": { "properties": { "previous_binding_id": { "type": "null" } } },
+      "else": { "properties": { "previous_binding_id": { "$ref": "defs-v0.1#/$defs/sha256Id" } } }
+    }
+  ]
+}

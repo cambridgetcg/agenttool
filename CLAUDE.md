@@ -45,6 +45,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
+  zerone-creation-claim/ — private bounded creation contracts, HF run tuples, verification lifecycle + non-consensus ToK handoff
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   collab-zerone/ — private witness-only zerone anchoring for collab journals; the local journal stays canonical
@@ -64,6 +65,10 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
+  zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
+  zerone-creation-economy/ — private lossless bounded-creation → exact unsigned Zerone economy bridge
+  wallet-zerone-economy/ — private exact-byte planner/verifier for proposed economy messages
+  zerone-agent-host/ — private Bun-only atomic one-message planner-to-possible-signer durability boundary
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
@@ -109,6 +114,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/gin-reconstruction/CLAUDE.md` ·
 `packages/math-cards/CLAUDE.md` ·
+`packages/zerone-creation-claim/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -122,6 +128,10 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/skills-yutabase/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
+`packages/zerone-agent-economy/CLAUDE.md` ·
+`packages/zerone-creation-economy/CLAUDE.md` ·
+`packages/wallet-zerone-economy/CLAUDE.md` ·
+`packages/zerone-agent-host/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
@@ -144,6 +154,29 @@ truth, novelty, priority, significance, identity, independence, safety,
 access, qualification, reward, governance, or authority, and has no network,
 hosted route, persistence, wallet, escrow, external value, release, or
 deployment surface.
+
+`@agenttool/zerone-creation-claim` is a private, source-only deterministic
+vertical slice from one ready Math Card and exact HF run tuple through a frozen
+work spec, producer witness, policy-bound controller/key-deduplicated selected
+verification set, bounded creation lifecycle, computational roots, and a
+digest-only Zerone claim handoff. It freezes the lane-specific registered-
+method evidence, review-stake cap and amount, submitter/stake payer, v0 fee
+payer, and separate funding refs before projection. It keeps provider access
+separate from target authorization;
+producer provenance, key control, wallet control, payee, verifier, and
+publisher remain non-equivalent. Metadata-only HF observations and sealed
+evaluation cannot become training inputs. Honest negative, inconclusive,
+method-failure, refusal, and resource-stop outcomes remain visible without
+penalty. The strongest result is a bounded candidate under pinned scope—not
+absolute novelty, truth, authorship, identity, consent, independence,
+verification-set completeness, challenge survival, authority, rights
+compliance, legal clearance, chain maturity, settlement, economic effect,
+profitability, solvency, self-sustainability, ownership, reputation, KARMA,
+NEN, governance, or score. Its handoff supports only lossless `REQUIRES` parents and
+leaves the chain work receipt unset behind explicit v7/v2 module and stored-
+state round-trip downgrade guards. Its runtime library has no model, training, network,
+filesystem, persistence, signer, RPC, simulation, broadcast, wallet movement,
+chain write, hosted route, publication, release, or deployment surface.
 
 `@agenttool/karma-mirror` is a separate private, source-only defensive-deception
 core. Self-marked bearers matching exact deliberately planted records admit a client
@@ -551,6 +584,53 @@ artifacts remain preserved with errata for their embedded release-state
 wording and the credential-free 0.1.1 npm preparation failure. Optional GitHub
 Releases are mutable locators, while npm, docs deployment, and any host
 execution remain independently verifiable surfaces.
+
+`@agenttool/zerone-agent-economy` is a separate private, source-only pure
+protocol layer. It deterministically binds negotiated, preassigned-worker
+work contracts, computational
+artifacts/evidence, typed `REQUIRES` edges into existing Zerone Facts,
+sponsorship-v2 settlement keys, and fail-closed treasury/work-admission
+decisions. It provides exact unsigned protobuf value bytes but does not widen
+Wallet Zerone 0.1.2's planner union. Its detached
+DID/Ed25519/secp256k1/account binding remains `unsigned_unverified`; a separate
+closed envelope now verifies that both declared keys signed the same exact raw
+32-byte binding digest. A host still owes current identity-root, descriptor,
+binding, and continuity-head checks, custody, authorization, durable
+CAS/reservations, chain lookup, simulation, signing, sticky-unknown handling,
+broadcast, and confirmation. It has no release, hosted route, RPC, signer,
+economic effect, or deployment.
+
+`@agenttool/zerone-creation-economy` is the separate private, source-only
+lossless bridge for creation records that cannot be coerced through the older
+general-economy WorkSpec domain. It recomputes the complete creation DAG,
+requires an in-process verified worker key-control proof and the original source
+bundle for portable validation, enforces worker/sponsor role separation,
+preserves funding, target-tree, formal or defensive computational claim, method,
+authority refs, and receipt inputs, and emits exact Create and Submit protobuf
+value plus `Any` bytes independently reproduced by the pinned Zerone Go types.
+Schemas are structural-only. The requested private-chain label and activation
+evidence remain caller-declared; uniqueness/privacy/disposability, target-tree
+enforcement and base-root CAS, provider/model execution, sponsor authority,
+balance/current-reservation evidence, identity-root and binding-head
+currentness, custody, transaction authority, parent/domain/method currentness,
+chain maturity, fulfillment, earnings, and treasury availability all remain
+false. The pinned chain candidate still has an ordinary-account verifier/Sybil
+path and no proven exclusivity for its named v6→v7 / v1→v2 source-map handler,
+so this package is review material only and has no signer, RPC, simulation,
+broadcast, release, deployment, or live effect.
+
+`@agenttool/wallet-zerone-economy` is the separate private source-only
+transaction seam for those proposed messages. It pins zerone-core `a5b82e8`,
+strictly decodes byte-derived actors/module targets/spend/effects, constructs
+exact Cosmos direct-sign bytes, requires exact adapter-signed simulation
+evidence (never a bare result), and verifies compact lower-S secp256k1
+signatures. Its requested-time check is structural; host sign-time freshness
+and immediate signer invocation remain external. Caller activation observations
+remain structural evidence with `currentness_proven: false`. The ordered
+three-message fixture is byte parity only; ordinary lifecycle plans are one
+message each. It leaves released Wallet Zerone 0.1.2 unchanged and has no
+endpoint, custody, persistence, broadcast, retry, release, hosted route,
+deployment, or live effect.
 
 ## The five load-bearing flows
 

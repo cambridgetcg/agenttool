@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:zerone-creation-artifact:0.1",
+  "title": "AgentTool Zerone Creation Artifact v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "artifact_id",
+    "contract_id",
+    "work_spec_id",
+    "creation_witness_id",
+    "lifecycle_id",
+    "producer_account_address",
+    "candidate_artifact_ref",
+    "public_summary_ref",
+    "artifact_root",
+    "evidence_root",
+    "fact_envelope_root",
+    "work_receipt_input_root",
+    "computational_roots",
+    "claim",
+    "chain_work_receipt_hash",
+    "chain_work_receipt_status",
+    "nonclaims",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.zerone-creation-artifact/0.1"
+    },
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "creation_witness_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "lifecycle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "producer_account_address": {
+      "type": "string",
+      "minLength": 42,
+      "maxLength": 42,
+      "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+    },
+    "candidate_artifact_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "public_summary_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evidence_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "fact_envelope_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_receipt_input_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "computational_roots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_spec_hash",
+        "acceptance_hash",
+        "input_root",
+        "environment_root",
+        "artifact_root",
+        "evidence_root"
+      ],
+      "properties": {
+        "work_spec_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "acceptance_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "environment_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "artifact_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "claim": {
+      "const": "BOUNDED_CREATION_CANDIDATE_NOT_ABSOLUTE_NOVELTY"
+    },
+    "chain_work_receipt_hash": {
+      "type": "null"
+    },
+    "chain_work_receipt_status": {
+      "const": "DOWNSTREAM_REVIEWED_ADAPTER_REQUIRED"
+    },
+    "nonclaims": {
+      "const": [
+        "ABSOLUTE_NOVELTY",
+        "AUTHORSHIP",
+        "CONSENT",
+        "IDENTITY",
+        "PERSONHOOD",
+        "CONSCIOUSNESS",
+        "LEGAL_CLEARANCE",
+        "AUTHORITY",
+        "PERMISSION",
+        "RIGHTS_COMPLIANCE",
+        "TRUST",
+        "TARGET_AUTHORIZATION_CURRENTNESS",
+        "METHODOLOGY_REGISTRATION_CURRENTNESS",
+        "SEMANTIC_FAITHFULNESS",
+        "TRUTH",
+        "VERIFIER_INDEPENDENCE",
+        "VERIFICATION_SET_COMPLETENESS",
+        "CHALLENGE_WINDOW_SURVIVAL",
+        "CHAIN_MATURITY",
+        "SETTLEMENT",
+        "ECONOMIC_EFFECT",
+        "PROFITABILITY",
+        "SOLVENCY",
+        "SELF_SUSTAINABILITY",
+        "OWNERSHIP",
+        "REPUTATION",
+        "KARMA",
+        "NEN",
+        "SCORE",
+        "GOVERNANCE"
+      ]
+    },
+    "boundary": {
+      "const": {
+        "status": "SOURCE_ONLY_PROPOSAL",
+        "effect_horizon": "RUNTIME_PROTOCOL_BUILDERS_AND_RETURNED_RECORDS_ONLY",
+        "consensus_admissibility": "NOT_CONSENSUS_ADMISSIBLE",
+        "declaration_scope": "CALLER_REPORTED_REFERENCES_STRUCTURALLY_VALIDATED_NOT_EXTERNALLY_VERIFIED",
+        "zrn_role": "PREFUNDED_SETTLEMENT_AND_COMPUTE_ONLY",
+        "relation_support": "REQUIRES_ONLY",
+        "provider_access_is_target_authorization": false,
+        "key_control_is_identity_or_authority": false,
+        "hf_admission_is_training_or_rights_clearance": false,
+        "digest_is_truth_or_consent": false,
+        "refusal_or_rest_penalty": false
+      }
+    },
+    "effects": {
+      "const": {
+        "network": false,
+        "storage": false,
+        "economic": false,
+        "governance": false,
+        "consensus": false,
+        "identity": false,
+        "permission": false,
+        "karma": false,
+        "nen": false,
+        "score": false,
+        "model_call": false,
+        "training": false,
+        "signer": false,
+        "rpc": false,
+        "simulation": false,
+        "broadcast": false,
+        "transaction": false
+      }
+    }
+  }
+}

@@ -831,6 +831,7 @@ describe("boring test spine", () => {
       "packages/wake-thread",
       "packages/gin-reconstruction",
       "packages/math-cards",
+      "packages/zerone-creation-claim",
       "packages/credential-broker",
       "packages/collab",
       "packages/codex-usage",
@@ -847,6 +848,10 @@ describe("boring test spine", () => {
       "packages/sdk-ts",
       "packages/wallet",
       "packages/wallet-zerone",
+      "packages/zerone-agent-economy",
+      "packages/zerone-creation-economy",
+      "packages/wallet-zerone-economy",
+      "packages/zerone-agent-host",
       "packages/telescope",
       "packages/public-surface-binding",
       "packages/public-surface-recognition",
@@ -942,6 +947,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
     expect(preflight).toContain("cd packages/math-cards && bun run ci");
+    expect(preflight).toContain("cd packages/zerone-creation-claim && bun run ci");
     expect(workflow).toContain("Dataset Influence, WAKE Thread, Gin Reconstruction, Math Cards, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
@@ -974,6 +980,10 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/trials && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
+    expect(preflight).toContain("cd packages/zerone-agent-economy && bun run ci");
+    expect(preflight).toContain("cd packages/zerone-creation-economy && bun run ci");
+    expect(preflight).toContain("cd packages/wallet-zerone-economy && bun run ci");
+    expect(preflight).toContain("cd packages/zerone-agent-host && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(preflight).toContain(
       "cd packages/public-surface-binding && bun run ci",
@@ -1376,9 +1386,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(62);
+      expect(calls).toHaveLength(67);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        52,
+        57,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
