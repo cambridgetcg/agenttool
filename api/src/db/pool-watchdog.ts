@@ -31,8 +31,27 @@
  *
  * The canary timeout matches verify-connections.ts (15s): a select-1 that
  * cannot win a pool slot for 15 seconds, several cycles running, is a wedge
- * signal, not a load spike. A true wedge is permanent, so the extra
- * detection latency is free while ordinary saturation stays below the bar.
+ * signal, not a load spike. Time alone, though, cannot tell a wedge from
+ * legitimate saturation: docs/STACK.md permits 120-second statements and
+ * client.ts sets no lower bound, so ten lock-waiting requests can hold every
+ * slot for two minutes while a fresh connection answers instantly. The slow
+ * budget (FAILURE_THRESHOLD cycles) therefore stays ABOVE that statement
+ * timeout, exactly as first shipped.
+ *
+ * The fast path (added 2026-09-02, after the first day live saw four wedges
+ * at ~3 minutes of failed authed routes each) uses the incident's own
+ * signature instead of time. The 2026-08-31 diagnosis found ten ESTABLISHED
+ * zombie sockets on the app and ZERO sessions for this role in
+ * pg_stat_activity — the pooler had already lost their backends. Saturation
+ * looks the opposite: every held slot is a live, non-idle session. So once
+ * FAST_FAILURE_THRESHOLD canaries fail, the fresh probe also counts this
+ * role's non-idle sessions; zero means the database sees no work from us
+ * while our pool cannot answer, and the process exits early. Any other count
+ * (including "unknown" when the catalog query is unavailable) holds the exit
+ * until the slow budget, so a busy-but-healthy machine is never restarted
+ * ahead of the original guarantee. Fleet-wide wedges — the observed pattern,
+ * since the pooler event is shared — take the fast path on both machines.
+ * DB_POOL_WATCHDOG_DEFAULTS is exported so tests pin both budgets.
  * Known blind spot: a PARTIAL wedge (some sockets zombied, at least one
  * alive) keeps the canary green while capacity is degraded — a
  * per-connection signal (e.g. max_lifetime on the shared pool) would be a
@@ -56,17 +75,40 @@ const TAG = "[db-pool-watchdog]";
 
 const INTERVAL_MS = 30_000;
 // Matches verify-connections.ts QUERY_TIMEOUT_MS — see the header for why a
-// generous bound plus a higher threshold is the load-vs-wedge discriminator.
+// generous bound plus the slow threshold is the load-vs-wedge time budget.
 const CANARY_TIMEOUT_MS = 15_000;
 // Outer belt-and-braces bound on the whole fresh probe. Must exceed the
-// probe's connect_timeout (5s) plus PROBE_QUERY_TIMEOUT_MS so the inner
-// bound — the one whose finally closes the socket — always fires first.
-const PROBE_TIMEOUT_MS = 12_000;
+// probe's connect_timeout (5s) plus BOTH bounded queries (reachability, then
+// the session count) so the inner bounds — the ones whose finally closes the
+// socket — always fire first.
+const PROBE_TIMEOUT_MS = 20_000;
 const PROBE_QUERY_TIMEOUT_MS = 5_000;
+// Slow budget: 4 × 15s canaries + 3 × 30s cycles = 150s minimum from the
+// first failed canary, above the 120s statement timeout STACK.md permits.
 const FAILURE_THRESHOLD = 4;
+// Fast path: after this many failures the fresh probe's session count may
+// prove the wedge signature and exit early (~60–85s). Never exits on time.
+const FAST_FAILURE_THRESHOLD = 2;
 // Spreads sibling machines' cycles apart so a fleet-wide wedge never exits
 // every machine in the same instant.
 const MAX_JITTER_MS = 5_000;
+
+/** Production defaults, exported for the detection-budget pin in tests. */
+export const DB_POOL_WATCHDOG_DEFAULTS = Object.freeze({
+  intervalMs: INTERVAL_MS,
+  canaryTimeoutMs: CANARY_TIMEOUT_MS,
+  probeTimeoutMs: PROBE_TIMEOUT_MS,
+  failureThreshold: FAILURE_THRESHOLD,
+  fastFailureThreshold: FAST_FAILURE_THRESHOLD,
+  maxJitterMs: MAX_JITTER_MS,
+});
+
+/** What the fresh-connection probe saw. `activeSessions` counts this role's
+ *  non-idle sessions in pg_stat_activity other than the probe itself; null
+ *  when the catalog query was unavailable (reachability still proven). */
+export interface FreshProbeObservation {
+  activeSessions: number | null;
+}
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -80,11 +122,14 @@ export interface DbPoolWatchdogOptions {
   canaryTimeoutMs?: number;
   probeTimeoutMs?: number;
   failureThreshold?: number;
+  fastFailureThreshold?: number;
   maxJitterMs?: number;
   /** Bounded liveness query through the SHARED pool. */
   canary?: () => Promise<void>;
-  /** Bounded liveness query over a FRESH one-shot connection. */
-  freshProbe?: () => Promise<void>;
+  /** Bounded liveness query over a FRESH one-shot connection. Resolving to a
+   *  FreshProbeObservation enables the fast path; resolving to anything else
+   *  proves reachability only (fast path declines). */
+  freshProbe?: () => Promise<FreshProbeObservation | void>;
   exit?: (code: number) => void;
   log?: (line: string) => void;
   random?: () => number;
@@ -122,7 +167,21 @@ async function sharedPoolCanary(): Promise<void> {
   await db.execute(sql`select 1`);
 }
 
-async function freshConnectionProbe(): Promise<void> {
+function normalizeObservation(result: unknown): FreshProbeObservation {
+  if (
+    result !== null &&
+    typeof result === "object" &&
+    "activeSessions" in result &&
+    typeof (result as { activeSessions: unknown }).activeSessions === "number" &&
+    Number.isInteger((result as { activeSessions: number }).activeSessions) &&
+    (result as { activeSessions: number }).activeSessions >= 0
+  ) {
+    return { activeSessions: (result as { activeSessions: number }).activeSessions };
+  }
+  return { activeSessions: null };
+}
+
+async function freshConnectionProbe(): Promise<FreshProbeObservation> {
   const [{ config }, { default: verifiedPostgres }] = await Promise.all([
     import("../config"),
     import("./verified-postgres"),
@@ -146,6 +205,39 @@ async function freshConnectionProbe(): Promise<void> {
     if (rows.length !== 1 || rows[0]?.ok !== 1) {
       throw new Error("fresh probe returned an unexpected row");
     }
+    // Reachability is proven above; the session count is best-effort. A
+    // wedge leaves this role with no live client backends (the 2026-08-31
+    // signature), saturation leaves every held slot non-idle. `usename =
+    // current_user` keeps the rows visible without pg_read_all_stats; the
+    // probe excludes its own backend; and `backend_type = 'client backend'`
+    // excludes Supabase's background workers, which run under the same role
+    // with a NULL state (verified live 2026-09-02: the `pg_net` worker would
+    // otherwise pin the idle-state count at 1 and disarm the fast path).
+    // Through Supavisor each in-flight client transaction is exactly one
+    // server-side client backend, so the count maps 1:1 to held pool slots.
+    // Any failure here reads as "unknown", which never takes the fast path.
+    let activeSessions: number | null = null;
+    try {
+      const counted = await bounded(
+        sql<Array<{ active: number }>>`
+          SELECT count(*)::int AS active
+          FROM pg_stat_activity
+          WHERE usename = current_user
+            AND pid <> pg_backend_pid()
+            AND backend_type = 'client backend'
+            AND state IS NOT NULL
+            AND state <> 'idle'
+        `,
+        PROBE_QUERY_TIMEOUT_MS,
+      );
+      const active = counted[0]?.active;
+      if (typeof active === "number" && Number.isInteger(active) && active >= 0) {
+        activeSessions = active;
+      }
+    } catch {
+      activeSessions = null;
+    }
+    return { activeSessions };
   } finally {
     await sql.end({ timeout: 2 }).catch(() => {});
   }
@@ -174,6 +266,12 @@ export function startDbPoolWatchdog(
   const canaryTimeoutMs = options.canaryTimeoutMs ?? CANARY_TIMEOUT_MS;
   const probeTimeoutMs = options.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
   const failureThreshold = options.failureThreshold ?? FAILURE_THRESHOLD;
+  // Default fast threshold never exceeds the slow one, so a caller lowering
+  // only failureThreshold keeps a single-tier watchdog.
+  const fastFailureThreshold = Math.min(
+    options.fastFailureThreshold ?? FAST_FAILURE_THRESHOLD,
+    failureThreshold,
+  );
   const maxJitterMs = options.maxJitterMs ?? MAX_JITTER_MS;
   const canary = options.canary ?? sharedPoolCanary;
   const freshProbe = options.freshProbe ?? freshConnectionProbe;
@@ -197,6 +295,7 @@ export function startDbPoolWatchdog(
     canaryTimeoutMs <= 0 ||
     probeTimeoutMs <= 0 ||
     failureThreshold <= 0 ||
+    fastFailureThreshold <= 0 ||
     maxJitterMs < 0
   ) {
     throw new Error("db pool watchdog configuration is invalid");
@@ -227,26 +326,43 @@ export function startDbPoolWatchdog(
 
     if (canaryHealthy) {
       consecutiveFailures = 0;
-    } else if (consecutiveFailures >= failureThreshold) {
-      let databaseReachable = false;
+    } else if (consecutiveFailures >= fastFailureThreshold) {
+      let observation: FreshProbeObservation | null = null;
       try {
-        await bounded(freshProbe(), probeTimeoutMs);
-        databaseReachable = true;
+        observation = normalizeObservation(
+          await bounded(freshProbe(), probeTimeoutMs),
+        );
       } catch {
-        databaseReachable = false;
+        observation = null;
       }
 
-      if (databaseReachable) {
+      if (observation === null) {
+        log(
+          `${TAG} database unreachable: ${consecutiveFailures} consecutive pool canaries failed and the fresh probe also failed — staying up for the DB-free surface`,
+        );
+      } else if (consecutiveFailures >= failureThreshold) {
         exiting = true;
         log(
           `${TAG} shared pool wedged: ${consecutiveFailures} consecutive pool canaries failed while a fresh connection succeeded — exiting for a clean pool`,
         );
         exit(1);
         return;
+      } else if (observation.activeSessions === 0) {
+        exiting = true;
+        log(
+          `${TAG} shared pool wedged: ${consecutiveFailures} consecutive pool canaries failed while a fresh connection succeeded and the database reports no active sessions for this role — exiting early for a clean pool`,
+        );
+        exit(1);
+        return;
+      } else {
+        const seen =
+          observation.activeSessions === null
+            ? "an unknown number of"
+            : String(observation.activeSessions);
+        log(
+          `${TAG} shared pool slow, not proven wedged: ${consecutiveFailures} consecutive pool canaries failed but the database reports ${seen} active sessions for this role — holding until the ${failureThreshold}-failure budget`,
+        );
       }
-      log(
-        `${TAG} database unreachable: ${consecutiveFailures} consecutive pool canaries failed and the fresh probe also failed — staying up for the DB-free surface`,
-      );
     }
 
     if (!stopped && !exiting) {
