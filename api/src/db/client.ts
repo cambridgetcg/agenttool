@@ -17,6 +17,7 @@
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { config } from "../config.ts";
+import { installInactivityGuard } from "./guarded-socket.ts";
 import postgres from "./verified-postgres.ts";
 
 const sql = postgres(config.databaseUrl, {
@@ -24,13 +25,17 @@ const sql = postgres(config.databaseUrl, {
   idle_timeout: 20,
   connect_timeout: 10,
   prepare: false,
-  // A pooler-side drop leaves a socket ESTABLISHED with a query that never
-  // answers; without this bound that slot is gone until the process exits
-  // (the 2026-08-31 wedge, recurring hourly on 2026-09-02). 135s sits above
-  // the database's 120s statement_timeout, so a legitimate long statement
-  // is always answered first. See ./guarded-socket.ts and ./pool-watchdog.ts.
-  inactivity_guard_seconds: 135,
 });
+
+// A pooler-side drop leaves a socket ESTABLISHED with a query that never
+// answers; without this bound that slot is gone until the process exits
+// (the 2026-08-31 wedge, recurring hourly on 2026-09-02). 135s sits above
+// the database's 120s statement_timeout, so a legitimate long statement is
+// always answered first. Installed here rather than through the verified
+// constructor because that file is in the sealed maintenance closure — see
+// ./guarded-socket.ts for the boundary and ./pool-watchdog.ts for the
+// fleet-wide case.
+installInactivityGuard(sql, 135);
 
 export const db = drizzle(sql);
 export type DB = typeof db;

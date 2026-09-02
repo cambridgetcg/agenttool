@@ -12,6 +12,7 @@ import net from "node:net";
 import {
   GuardedSocket,
   guardedSocketFactory,
+  installInactivityGuard,
   reportGuardedSocket,
   type GuardedSocketReport,
 } from "../src/db/guarded-socket";
@@ -122,16 +123,22 @@ describe("guarded pool socket", () => {
   });
 });
 
-describe("verified constructor wiring", () => {
+describe("guard installation on a verified pool", () => {
   // The transport verifier only admits the production pooler; use its shape.
   const url = "postgresql://postgres." + AGENTTOOL_PRODUCTION_SUPABASE_PROJECT_REF + ":secret@aws-1-eu-west-2.pooler.supabase.com:6543/postgres";
 
-  test("installs the guarded socket factory only when a caller opts in", async () => {
-    const guarded = verifiedPostgres(url, { max: 1, inactivity_guard_seconds: 135 });
-    expect(typeof guarded.options.socket).toBe("function");
+  test("installs the factory on the constructor-resolved transport and leaves ssl alone", async () => {
+    const sql = verifiedPostgres(url, { max: 1 });
+    expect(sql.options.socket).toBeUndefined();
+    const sslBefore = sql.options.ssl;
+    expect(installInactivityGuard(sql, 135)).toBe(sql);
+    expect(typeof sql.options.socket).toBe("function");
+    expect(sql.options.ssl).toBe(sslBefore);
+    expect(sql.options.host).toEqual(["aws-1-eu-west-2.pooler.supabase.com"]);
+    expect(sql.options.port).toEqual([6543]);
     // Exercise the installed factory against a local target, not the pooler.
     const server = await silentServer();
-    const produced = await (guarded.options.socket as (t: unknown) => Promise<unknown>)({
+    const produced = await (sql.options.socket as (t: unknown) => Promise<unknown>)({
       host: ["127.0.0.1"],
       port: [server.port],
       connect_timeout: 5,
@@ -139,21 +146,17 @@ describe("verified constructor wiring", () => {
     expect(produced).toBeInstanceOf(GuardedSocket);
     (produced as GuardedSocket).destroy();
     await server.close();
-    // The wrapper's own option never reaches postgres.js.
-    expect("inactivity_guard_seconds" in guarded.options).toBe(false);
-
-    const plain = verifiedPostgres(url, { max: 1, idle_timeout: 0 });
-    expect(plain.options.socket).toBeUndefined();
   });
 
-  test("callers still cannot choose the socket, and the bound must be positive", () => {
+  test("refuses a second factory, a non-positive bound, and the constructor still rejects a caller socket", () => {
+    const sql = verifiedPostgres(url, { max: 1 });
+    installInactivityGuard(sql, 135);
+    expect(() => installInactivityGuard(sql, 135)).toThrow("already has a transport factory");
+    for (const bad of [0, -5, Number.NaN]) {
+      expect(() => installInactivityGuard(verifiedPostgres(url, { max: 1 }), bad)).toThrow("positive");
+    }
     expect(() => verifiedPostgres(url, { socket: () => new net.Socket() } as never)).toThrow(
       "may not override target or transport",
     );
-    for (const bad of [0, -5, Number.NaN, "135"]) {
-      expect(() =>
-        verifiedPostgres(url, { inactivity_guard_seconds: bad } as never),
-      ).toThrow("inactivity_guard_seconds must be a positive number");
-    }
   });
 });

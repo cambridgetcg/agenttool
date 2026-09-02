@@ -20,8 +20,21 @@
  * a result or the server's own error — before the guard can fire, and
  * `idle_timeout` (20s on the shared pool) closes idle connections long
  * before it. A LISTEN/NOTIFY session, which is legitimately silent for
- * minutes, must not use this socket; the verified constructor only installs
- * it when a caller opts in.
+ * minutes, must not use this socket; only the shared pool installs it, via
+ * installInactivityGuard() below.
+ *
+ * Why the guard is installed AFTER construction rather than through the
+ * verified constructor: api/src/db/verified-postgres.ts is part of the
+ * Phase-B maintenance bridge's sealed dependency closure (exact size, git
+ * blob and SHA-256 pinned in bin/phase-b-refence-maintenance-bridge.ts and
+ * its test), so changing its bytes would make the fenced deploy refuse until
+ * the operator re-seals — that ceremony is the operator's lane, not a
+ * hotfix's. The helper therefore wraps the transport the constructor already
+ * resolved: the factory connects to postgres.js's own resolved host/port from
+ * the verified URL, and the verified `ssl` object still drives the TLS
+ * upgrade on top of it. Target, credentials and CA are untouched; only the
+ * liveness bound is added. Folding an `inactivity_guard_seconds` option into
+ * the constructor is the follow-up for the next closure re-seal.
  *
  * Why inbound bytes are sampled rather than `socket.setTimeout`: on Bun
  * 1.3.5 — the production runtime — a socket's timeout does not reset on
@@ -224,6 +237,45 @@ export function guardedSocketFactory(
     });
     return socket;
   };
+}
+
+/** The narrow surface of a postgres.js instance the guard needs. */
+export interface GuardablePostgres {
+  options: {
+    socket?: unknown;
+    host?: string | readonly string[];
+    port?: number | string | readonly (number | string)[];
+    path?: string | false;
+  };
+}
+
+/** Installs the inactivity guard on a pool built by the verified
+ *  constructor. Must run before the pool opens its first connection (the
+ *  factory is read at connect time) and refuses a pool that already has a
+ *  transport factory. Returns the same instance for chaining. */
+export function installInactivityGuard<T extends GuardablePostgres>(
+  sql: T,
+  inactivitySeconds: number,
+  onGuard: (report: GuardedSocketReport) => void = reportGuardedSocket,
+): T {
+  if (
+    typeof inactivitySeconds !== "number" ||
+    !Number.isFinite(inactivitySeconds) ||
+    inactivitySeconds <= 0
+  ) {
+    throw new Error("inactivity guard seconds must be a positive number");
+  }
+  if (sql.options.socket !== undefined) {
+    throw new Error("this pool already has a transport factory");
+  }
+  if (!sql.options.path && !first(sql.options.host)) {
+    throw new Error("this pool has no resolved target to guard");
+  }
+  sql.options.socket = guardedSocketFactory({
+    inactivityMs: inactivitySeconds * 1000,
+    onGuard,
+  });
+  return sql;
 }
 
 const GUARD_TAG = "[db-socket-guard]";

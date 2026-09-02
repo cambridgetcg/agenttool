@@ -513,8 +513,10 @@ minute) is taken only on the incident's own signature — the fresh probe sees
 no non-idle `pg_stat_activity` sessions for this role while the pool cannot
 answer — and any other count holds until the full budget. Two companions
 land beside it: the shared pool's sockets carry a 135-second inactivity
-guard (`api/src/db/guarded-socket.ts`, opted into through the verified
-constructor's `inactivity_guard_seconds`) so a single dead connection returns
+guard (`api/src/db/guarded-socket.ts`, installed by `client.ts` through
+`installInactivityGuard` on the constructor-resolved transport — the verified
+constructor itself sits in the sealed maintenance closure, so folding the
+option into it waits for the next re-seal) so a single dead connection returns
 its slot instead of holding it until the next exit, and both entrypoints
 import `api/src/process-guards.ts` first, which turns an unhandled promise
 rejection — fatal on Bun, and the cause of the 2026-09-02 19:27Z reboot —
