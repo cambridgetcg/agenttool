@@ -217,10 +217,13 @@ replay nullifier, and challenge-maturity binding, so any suitable post-start
 verified Fact in a domain may consume an order. It is not safe for this
 creation contract.
 
-The v2 protobuf additions reuse the old type URLs. Older generated messages can
-retain unknown fields while older handlers silently ignore them. A transaction
-may therefore simulate and succeed while discarding `WorkContract` or the
-computational commitment. Before any downstream signing, a fresh private
+The v2 protobuf additions reuse the old type URLs, so type-URL recognition is
+not version evidence. The standard Cosmos SDK decoder in the pinned candidate
+recursively rejects the newly introduced nested messages when an old descriptor
+cannot resolve them; an ordinary standards-compliant decode is therefore not
+known to accept and silently discard these additions. The persisted-state
+downgrade remains unsafe: a v6/v1 binary can interpret post-v7/v2 state without
+the new settlement semantics. Before any downstream signing, a fresh private
 disposable chain must prove:
 
 1. knowledge module version `7` and sponsorship module version `2`;
@@ -233,6 +236,14 @@ disposable chain must prove:
    bounty-escrow, review-stake, and transaction-fee funding observations,
    broadcast-once/sticky-unknown handling, maturity observation, and explicit
    operator activation.
+
+The pinned v7/v2 candidate is also not yet economically admissible. Its
+ordinary `SubmitCommitment` transaction path can add funded non-validator
+accounts to the selected verifier set, so agent-controlled accounts can form a
+payable quorum. Its intended 6/1→7/2 upgrade carrier has a complete source-map
+preflight, but unrelated registered handlers can still call generic migrations
+without that exact guard. Both defects must close before any value-bearing or
+economic-security testnet claim.
 
 The released `@agenttool/wallet-zerone@0.1.2` does not support these messages.
 The projection therefore leaves `chain_work_receipt_hash: null` and cannot be
