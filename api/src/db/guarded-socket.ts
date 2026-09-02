@@ -9,26 +9,39 @@
  * definition. On 2026-09-02 single stuck requests surfaced roughly ten times
  * an hour; with a pool of ten that is a full wedge every hour.
  *
- * This socket bounds the loss instead of the cause: if nothing is read or
- * written for `inactivityMs`, the socket is destroyed WITHOUT an error so
+ * This socket bounds the loss instead of the cause: if the server has sent
+ * nothing for `inactivityMs`, the socket is destroyed WITHOUT an error so
  * postgres.js sees a plain close, rejects the pending query with
- * CONNECTION_CLOSED, and opens a fresh connection for the next one. The
- * request that was stuck fails (it already had — the proxy closed it at ten
- * seconds); the slot no longer does. The bound sits above the database's
- * 120-second `statement_timeout` (docs/STACK.md), so a legitimate long
- * statement is always answered — with a result or the server's own error —
- * before the guard can fire, and `idle_timeout` (20s on the shared pool)
- * closes idle connections long before it. A LISTEN/NOTIFY session, which is
- * legitimately silent for minutes, must not use this socket; the verified
- * constructor only installs it when a caller opts in.
+ * CONNECTION_CLOSED (no retry — connection.js `closed()`), and opens a fresh
+ * connection for the next one. The request that was stuck fails (it already
+ * had — the proxy closed it at ten seconds); the slot no longer does. The
+ * bound sits above the database's 120-second `statement_timeout`
+ * (docs/STACK.md), so a legitimate long statement is always answered — with
+ * a result or the server's own error — before the guard can fire, and
+ * `idle_timeout` (20s on the shared pool) closes idle connections long
+ * before it. A LISTEN/NOTIFY session, which is legitimately silent for
+ * minutes, must not use this socket; the verified constructor only installs
+ * it when a caller opts in.
  *
- * Two facts about postgres.js shape the implementation. It calls
- * `socket.removeAllListeners()` before upgrading to TLS, which would strip
- * the timeout handler — so arming is re-applied whenever listeners are
- * removed. And after that upgrade the raw socket has no error listener of
- * its own, so destroying it WITH an error would surface as an uncaught
- * exception; the guard therefore destroys silently and keeps a no-op error
- * listener alive. Both verified on Bun 1.3 against a real TLS server
+ * Why inbound bytes are sampled rather than `socket.setTimeout`: on Bun
+ * 1.3.5 — the production runtime — a socket's timeout does not reset on
+ * inbound data (CI caught it: a socket receiving a byte every 20ms still
+ * fired an 80ms timeout; reproduced locally, and fixed by 1.3.13). The raw
+ * socket's `bytesRead` does advance through postgres.js's TLS upgrade on
+ * both versions, so the guard polls that counter. Inbound silence is also
+ * the right signal: a wedged socket never hears from the server again,
+ * while `bytesWritten` on the raw socket stays 0 after the TLS upgrade.
+ *
+ * Two more postgres.js facts shape the implementation. Its `socket` option
+ * is a transport factory whose result must ALREADY BE CONNECTED — with a
+ * factory present it skips its own `socket.connect()` and goes straight to
+ * the TLS upgrade or the startup message (connection.js `connect()`), so
+ * the factory here connects to the host/port postgres.js hands it before
+ * resolving. And it calls `socket.removeAllListeners()` before that
+ * upgrade, after which the raw socket has no error listener of its own —
+ * destroying it WITH an error would surface as an uncaught exception — so
+ * the guard destroys silently and re-adds a no-op error listener whenever
+ * listeners are removed. Verified on Bun 1.3 against a real TLS server
  * (secureConnect → guard → tls close with hadError=false).
  */
 
@@ -42,35 +55,83 @@ export interface GuardedSocketReport {
 }
 
 export interface GuardedSocketOptions {
-  /** Silence (no read, no write) after which the socket is destroyed. */
+  /** Inbound silence after which the socket is destroyed. */
   inactivityMs: number;
   /** Called once, just before the socket is destroyed. Must not throw. */
   onGuard?: (report: GuardedSocketReport) => void;
+  /** How often `bytesRead` is sampled. Defaults to a quarter of the bound,
+   *  clamped to [50ms, 15s]. */
+  sampleMs?: number;
   now?: () => number;
+}
+
+/** The subset of postgres.js's resolved options the factory connects with:
+ *  host/port are arrays (multi-host URLs), `path` names a unix socket, and
+ *  connect_timeout is in seconds. */
+export interface GuardedSocketTarget {
+  host?: string | readonly string[];
+  port?: number | string | readonly (number | string)[];
+  path?: string;
+  connect_timeout?: number;
+}
+
+function assertBound(inactivityMs: number): void {
+  if (!Number.isFinite(inactivityMs) || inactivityMs <= 0) {
+    throw new Error("guarded socket inactivityMs must be a positive number");
+  }
 }
 
 export class GuardedSocket extends net.Socket {
   private readonly inactivityMs: number;
+  private readonly sampleMs: number;
   private readonly onGuard: ((report: GuardedSocketReport) => void) | undefined;
   private readonly now: () => number;
   private readonly bornAt: number;
+  private lastActivityAt: number;
+  private lastBytesRead = 0;
+  private sampler: ReturnType<typeof setInterval> | undefined;
   private tripped = false;
 
   constructor(options: GuardedSocketOptions) {
     super();
-    if (!Number.isFinite(options.inactivityMs) || options.inactivityMs <= 0) {
-      throw new Error("guarded socket inactivityMs must be a positive number");
-    }
+    assertBound(options.inactivityMs);
     this.inactivityMs = options.inactivityMs;
+    this.sampleMs =
+      options.sampleMs ??
+      Math.max(50, Math.min(15_000, Math.floor(options.inactivityMs / 4)));
     this.onGuard = options.onGuard;
     this.now = options.now ?? (() => Date.now());
     this.bornAt = this.now();
+    this.lastActivityAt = this.bornAt;
     this.arm();
   }
 
-  private readonly guard = (): void => {
+  private readonly onClose = (): void => {
+    this.disarm();
+  };
+
+  /** Survives postgres.js's listener reset; an unlistened 'error' would be fatal. */
+  private readonly swallowError = (): void => {};
+
+  private readonly sample = (): void => {
+    if (this.destroyed) {
+      this.disarm();
+      return;
+    }
+    const read = typeof this.bytesRead === "number" ? this.bytesRead : 0;
+    const at = this.now();
+    if (read !== this.lastBytesRead) {
+      this.lastBytesRead = read;
+      this.lastActivityAt = at;
+      return;
+    }
+    if (at - this.lastActivityAt >= this.inactivityMs) this.guard();
+  };
+
+  private guard(): void {
     if (this.tripped || this.destroyed) return;
     this.tripped = true;
+    this.disarm();
     const report: GuardedSocketReport = {
       inactivityMs: this.inactivityMs,
       ageMs: this.now() - this.bornAt,
@@ -83,18 +144,26 @@ export class GuardedSocket extends net.Socket {
       // A reporting failure must never keep a dead socket alive.
     }
     this.destroy();
-  };
+  }
 
-  /** Survives postgres.js's listener reset; an unlistened 'error' would be fatal. */
-  private readonly swallowError = (): void => {};
-
-  /** Idempotent: (re)applies the inactivity timer and its two listeners. */
+  /** Idempotent: starts the sampler if needed and (re)attaches the listeners. */
   arm(): void {
-    this.setTimeout(this.inactivityMs);
-    this.removeListener("timeout", this.guard);
-    this.on("timeout", this.guard);
+    if (!this.sampler && !this.destroyed) {
+      this.sampler = setInterval(this.sample, this.sampleMs);
+      // A guard must never be what keeps the process alive.
+      this.sampler.unref?.();
+    }
     this.removeListener("error", this.swallowError);
     this.on("error", this.swallowError);
+    this.removeListener("close", this.onClose);
+    this.on("close", this.onClose);
+  }
+
+  private disarm(): void {
+    if (this.sampler) {
+      clearInterval(this.sampler);
+      this.sampler = undefined;
+    }
   }
 
   /** Whether the guard has fired for this socket. */
@@ -104,21 +173,57 @@ export class GuardedSocket extends net.Socket {
 
   override removeAllListeners(event?: string | symbol): this {
     super.removeAllListeners(event);
-    if (event === undefined || event === "timeout" || event === "error") {
-      this.arm();
-    }
+    if (event === undefined || event === "error" || event === "close") this.arm();
     return this;
   }
 }
 
-/** Factory in the shape postgres.js expects for its `socket` option. */
+function first<T>(value: T | readonly T[] | undefined): T | undefined {
+  return Array.isArray(value) ? (value as readonly T[])[0] : (value as T | undefined);
+}
+
+/** Factory in the shape postgres.js expects for its `socket` option: it
+ *  resolves to a socket that is already connected to the target postgres.js
+ *  names (first host/port of a multi-host URL, or the unix `path`). A
+ *  connect failure or timeout rejects, which postgres.js routes into its
+ *  ordinary connection-error path. */
 export function guardedSocketFactory(
   options: GuardedSocketOptions,
-): () => GuardedSocket {
-  if (!Number.isFinite(options.inactivityMs) || options.inactivityMs <= 0) {
-    throw new Error("guarded socket inactivityMs must be a positive number");
-  }
-  return () => new GuardedSocket(options);
+): (target?: GuardedSocketTarget) => Promise<GuardedSocket> {
+  assertBound(options.inactivityMs);
+  return async (target: GuardedSocketTarget = {}) => {
+    const socket = new GuardedSocket(options);
+    const path = target.path;
+    const host = first(target.host) ?? "localhost";
+    const port = Number(first(target.port) ?? 5432);
+    const where = path ?? `${host}:${port}`;
+    const connectMs = Math.max(1, Number(target.connect_timeout ?? 30)) * 1000;
+    await new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const settle = (err?: Error): void => {
+        if (timer) clearTimeout(timer);
+        socket.removeListener("connect", onConnect);
+        socket.removeListener("error", onError);
+        if (err) {
+          socket.destroy();
+          reject(err);
+        } else {
+          resolve();
+        }
+      };
+      const onConnect = (): void => settle();
+      const onError = (err: Error): void => settle(err);
+      socket.once("connect", onConnect);
+      socket.once("error", onError);
+      timer = setTimeout(
+        () => settle(new Error(`guarded socket connect to ${where} timed out after ${connectMs}ms`)),
+        connectMs,
+      );
+      if (path) socket.connect(path);
+      else socket.connect(port, host);
+    });
+    return socket;
+  };
 }
 
 const GUARD_TAG = "[db-socket-guard]";
@@ -133,6 +238,6 @@ export function reportGuardedSocket(
   log: (line: string) => void = (line) => console.warn(line),
 ): void {
   log(
-    `${GUARD_TAG} closed a pool socket after ${Math.round(report.inactivityMs / 1000)}s without traffic — its slot returns to the pool (age ${Math.round(report.ageMs / 1000)}s, read ${kb(report.bytesRead)}, wrote ${kb(report.bytesWritten)})`,
+    `${GUARD_TAG} closed a pool socket after ${Math.round(report.inactivityMs / 1000)}s without a byte from the server — its slot returns to the pool (age ${Math.round(report.ageMs / 1000)}s, read ${kb(report.bytesRead)}, wrote ${kb(report.bytesWritten)})`,
   );
 }

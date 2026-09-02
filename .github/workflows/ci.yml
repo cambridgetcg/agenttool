@@ -70,7 +70,7 @@ jobs:
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
       - name: Prove the durable generation hold
         working-directory: api
-        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts tests/integration/guarded-pool-postgres.test.ts
 
   native-macos-secret:
     name: Native macOS secret helper
