@@ -139,6 +139,8 @@ packages_gate() {
     bash -c 'cd packages/gin-reconstruction && bun run ci'
   run "Math Cards bounded proof, model, and measurement inquiry" \
     bash -c 'cd packages/math-cards && bun run ci'
+  run "source-only Zerone creation contract and bounded ToK handoff" \
+    bash -c 'cd packages/zerone-creation-claim && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \

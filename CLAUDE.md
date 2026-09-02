@@ -45,6 +45,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
+  zerone-creation-claim/ — private bounded creation contracts, HF run tuples, verification lifecycle + non-consensus ToK handoff
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   collab-zerone/ — private witness-only zerone anchoring for collab journals; the local journal stays canonical
@@ -112,6 +113,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/gin-reconstruction/CLAUDE.md` ·
 `packages/math-cards/CLAUDE.md` ·
+`packages/zerone-creation-claim/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -150,6 +152,29 @@ truth, novelty, priority, significance, identity, independence, safety,
 access, qualification, reward, governance, or authority, and has no network,
 hosted route, persistence, wallet, escrow, external value, release, or
 deployment surface.
+
+`@agenttool/zerone-creation-claim` is a private, source-only deterministic
+vertical slice from one ready Math Card and exact HF run tuple through a frozen
+work spec, producer witness, policy-bound controller/key-deduplicated selected
+verification set, bounded creation lifecycle, computational roots, and a
+digest-only Zerone claim handoff. It freezes the lane-specific registered-
+method evidence, review-stake cap and amount, submitter/stake payer, v0 fee
+payer, and separate funding refs before projection. It keeps provider access
+separate from target authorization;
+producer provenance, key control, wallet control, payee, verifier, and
+publisher remain non-equivalent. Metadata-only HF observations and sealed
+evaluation cannot become training inputs. Honest negative, inconclusive,
+method-failure, refusal, and resource-stop outcomes remain visible without
+penalty. The strongest result is a bounded candidate under pinned scope—not
+absolute novelty, truth, authorship, identity, consent, independence,
+verification-set completeness, challenge survival, authority, rights
+compliance, legal clearance, chain maturity, settlement, economic effect,
+profitability, solvency, self-sustainability, ownership, reputation, KARMA,
+NEN, governance, or score. Its handoff supports only lossless `REQUIRES` parents and
+leaves the chain work receipt unset behind explicit v7/v2 module and stored-
+state round-trip downgrade guards. Its runtime library has no model, training, network,
+filesystem, persistence, signer, RPC, simulation, broadcast, wallet movement,
+chain write, hosted route, publication, release, or deployment surface.
 
 `@agenttool/karma-mirror` is a separate private, source-only defensive-deception
 core. Self-marked bearers matching exact deliberately planted records admit a client

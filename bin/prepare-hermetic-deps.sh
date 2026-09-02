@@ -65,6 +65,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/wake-thread
   packages/gin-reconstruction
   packages/math-cards
+  packages/zerone-creation-claim
   packages/credential-broker
   packages/collab
   packages/codex-usage

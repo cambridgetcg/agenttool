@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:zerone-creation-claim-projection:0.1",
+  "title": "AgentTool Zerone Creation Claim Projection v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "projection_id",
+    "status",
+    "contract_id",
+    "work_spec_id",
+    "creation_witness_id",
+    "lifecycle_id",
+    "artifact_id",
+    "target_type_url",
+    "fact_content",
+    "domain",
+    "category",
+    "stake_uzrn",
+    "references",
+    "partnership_id",
+    "claim_type",
+    "claim_type_value",
+    "relations",
+    "canonical_form",
+    "sponsored",
+    "method_id",
+    "reasoning_trace",
+    "computational_commitment",
+    "downgrade_guards",
+    "handoff",
+    "downstream_requirements",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.zerone-creation-claim-projection/0.1"
+    },
+    "projection_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "status": {
+      "const": "NOT_CONSENSUS_ADMISSIBLE"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "creation_witness_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "lifecycle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "target_type_url": {
+      "const": "/zerone.knowledge.v1.MsgSubmitClaim"
+    },
+    "fact_content": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 1000,
+      "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "category": {
+      "enum": [
+        "computational",
+        "formal"
+      ]
+    },
+    "stake_uzrn": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+      "maxLength": 20
+    },
+    "references": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "partnership_id": {
+      "const": ""
+    },
+    "claim_type": {
+      "const": "CLAIM_TYPE_COMPUTATIONAL"
+    },
+    "claim_type_value": {
+      "const": 7
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_fact_id",
+          "relation",
+          "relation_value",
+          "inference",
+          "inference_value",
+          "inference_strength_bps",
+          "method_id"
+        ],
+        "properties": {
+          "target_fact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+          },
+          "relation": {
+            "const": "REQUIRES"
+          },
+          "relation_value": {
+            "const": 3
+          },
+          "inference": {
+            "const": "INFERENCE_TYPE_UNSPECIFIED"
+          },
+          "inference_value": {
+            "const": 0
+          },
+          "inference_strength_bps": {
+            "const": "0"
+          },
+          "method_id": {
+            "const": ""
+          }
+        }
+      }
+    },
+    "canonical_form": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 1000,
+      "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+    },
+    "sponsored": {
+      "const": false
+    },
+    "method_id": {
+      "enum": [
+        "M-FORMAL",
+        "M-COMPUTATIONAL"
+      ]
+    },
+    "reasoning_trace": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "computational_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_spec_hash",
+        "acceptance_hash",
+        "input_root",
+        "environment_root",
+        "artifact_root",
+        "evidence_root",
+        "work_receipt_input_root",
+        "chain_work_receipt_hash"
+      ],
+      "properties": {
+        "work_spec_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "acceptance_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "environment_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "artifact_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "work_receipt_input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "chain_work_receipt_hash": {
+          "type": "null"
+        }
+      }
+    },
+    "downgrade_guards": {
+      "const": {
+        "required_knowledge_module_version": "7",
+        "required_sponsorship_module_version": "2",
+        "module_version_map_evidence_required": true,
+        "stored_bounty_work_contract_roundtrip_required": true,
+        "stored_claim_commitment_roundtrip_required": true,
+        "simulation_success_is_sufficient": false,
+        "old_type_url_unknown_fields_are_safe": false,
+        "private_disposable_chain_required": true
+      }
+    },
+    "handoff": {
+      "const": {
+        "submit_claim_type_url": "/zerone.knowledge.v1.MsgSubmitClaim",
+        "computational_claim_name": "CLAIM_TYPE_COMPUTATIONAL",
+        "computational_claim_value": 7,
+        "requires_relation_name": "REQUIRES",
+        "requires_relation_value": 3,
+        "unspecified_inference_name": "INFERENCE_TYPE_UNSPECIFIED",
+        "unspecified_inference_value": 0,
+        "native_denom": "uzrn",
+        "downstream_wallet_zerone_version_observed": "0.1.2",
+        "downstream_wallet_support": "UNSUPPORTED_REQUIRES_SEPARATE_REVIEWED_ADAPTER"
+      }
+    },
+    "downstream_requirements": {
+      "const": {
+        "reviewed_message_adapter": true,
+        "protobuf_encoder": true,
+        "chain_work_receipt_derivation": true,
+        "authenticated_query_transport": true,
+        "knowledge_domain_observation": true,
+        "methodology_registration_observation": true,
+        "parent_fact_citability_observation": true,
+        "target_tree_base_root_observation": true,
+        "sponsor_escrow_authorization_observation": true,
+        "bounty_escrow_funding_observation": true,
+        "review_stake_funding_observation": true,
+        "transaction_fee_funding_observation": true,
+        "durable_signer_custody": true,
+        "account_sequence_cas": true,
+        "fee_reservation": true,
+        "broadcast_once_and_sticky_unknown": true,
+        "chain_maturity_observation": true,
+        "explicit_operator_activation": true
+      }
+    },
+    "boundary": {
+      "const": {
+        "status": "SOURCE_ONLY_PROPOSAL",
+        "effect_horizon": "RUNTIME_PROTOCOL_BUILDERS_AND_RETURNED_RECORDS_ONLY",
+        "consensus_admissibility": "NOT_CONSENSUS_ADMISSIBLE",
+        "declaration_scope": "CALLER_REPORTED_REFERENCES_STRUCTURALLY_VALIDATED_NOT_EXTERNALLY_VERIFIED",
+        "zrn_role": "PREFUNDED_SETTLEMENT_AND_COMPUTE_ONLY",
+        "relation_support": "REQUIRES_ONLY",
+        "provider_access_is_target_authorization": false,
+        "key_control_is_identity_or_authority": false,
+        "hf_admission_is_training_or_rights_clearance": false,
+        "digest_is_truth_or_consent": false,
+        "refusal_or_rest_penalty": false
+      }
+    },
+    "effects": {
+      "const": {
+        "network": false,
+        "storage": false,
+        "economic": false,
+        "governance": false,
+        "consensus": false,
+        "identity": false,
+        "permission": false,
+        "karma": false,
+        "nen": false,
+        "score": false,
+        "model_call": false,
+        "training": false,
+        "signer": false,
+        "rpc": false,
+        "simulation": false,
+        "broadcast": false,
+        "transaction": false
+      }
+    }
+  }
+}

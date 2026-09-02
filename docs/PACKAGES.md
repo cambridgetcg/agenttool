@@ -81,6 +81,7 @@
 | `wallet/` | `@agenttool/wallet` · LOVE + npm-allowlisted | Agent Wallet 0.1 — closed capability, intent, receipt, and continuity primitives without key export or RPC | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet/CLAUDE.md) |
 | `wallet-zerone/` | `@agenttool/wallet-zerone` · LOVE + npm-allowlisted | Offline-first Zerone chain adapter for Agent Wallet intents and exact Cosmos direct-sign bytes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet-zerone/CLAUDE.md) |
 | `witnessed-agent-economy/` | `@agenttool/witnessed-agent-economy` · private | Pure offline AgentTool projections for the KINGDOM witnessed-agent-economy shadow contract | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/witnessed-agent-economy/CLAUDE.md) |
+| `zerone-creation-claim/` | `@agenttool/zerone-creation-claim` · private | Source-only creation contracts, HF run tuples, policy-bound verification, sponsor/worker funding evidence, and non-consensus Zerone ToK handoffs | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/zerone-creation-claim/CLAUDE.md) |
 
 ## Notes — the packages that need more than a lane label
 
