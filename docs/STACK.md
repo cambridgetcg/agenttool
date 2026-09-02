@@ -511,7 +511,16 @@ Its time budget stays above the 120-second statement timeout below, because
 time alone cannot tell a wedge from saturation; a faster exit (about a
 minute) is taken only on the incident's own signature — the fresh probe sees
 no non-idle `pg_stat_activity` sessions for this role while the pool cannot
-answer — and any other count holds until the full budget
+answer — and any other count holds until the full budget. Two companions
+land beside it: the shared pool's sockets carry a 135-second inactivity
+guard (`api/src/db/guarded-socket.ts`, installed by `client.ts` through
+`installInactivityGuard` on the constructor-resolved transport — the verified
+constructor itself sits in the sealed maintenance closure, so folding the
+option into it waits for the next re-seal) so a single dead connection returns
+its slot instead of holding it until the next exit, and both entrypoints
+import `api/src/process-guards.ts` first, which turns an unhandled promise
+rejection — fatal on Bun, and the cause of the 2026-09-02 19:27Z reboot —
+into one loud log line while the process keeps serving
 (the fleet currently runs Fly's default — on-failure, 10 retries — and the
 app group also revives on traffic via fly-proxy `auto_start`; pinning
 stronger policies is deferred because the Phase-B deploy guard and refence

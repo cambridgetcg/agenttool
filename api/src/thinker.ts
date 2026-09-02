@@ -10,6 +10,9 @@
  * payout, or other co-located workers.
  * Doctrine: docs/RUNTIME.md · docs/AUTONOMOUS-MODE.md. */
 
+// Must stay the first import — see ./process-guards.ts.
+import "./process-guards";
+
 import { startDbPoolWatchdog } from "./db/pool-watchdog";
 import { validateFlyDatabaseTargets } from "./db/supabase-target";
 

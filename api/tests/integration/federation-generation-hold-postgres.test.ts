@@ -486,3 +486,13 @@ describe("covenant-v2 generation hold — real PostgreSQL", () => {
     });
   }, 30_000);
 });
+
+// The same disposable-PostgreSQL job proves the shared pool's inactivity
+// guard end to end; that file skips itself without the database URL. Kept as
+// an import rather than a workflow edit: the job's exact command is pinned by
+// bin/tests/boring-spine-gate.test.ts and read by the Phase-B refence tests.
+// Dynamic, and never in probe mode: this file re-executes itself as the PATCH
+// probe child, which must not load bun:test suites outside the runner.
+if (!PATCH_PROBE_MODE) {
+  await import("./guarded-pool-postgres.test");
+}
