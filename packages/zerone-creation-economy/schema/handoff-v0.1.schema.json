@@ -1,0 +1,1212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-creation-economy/handoff-v0.1",
+  "title": "AgentTool Zerone creation economy structural handoff v0.1",
+  "$comment": "STRUCTURAL_ONLY: this schema checks closed JSON shape and fixed literals. It cannot recompute hashes or protobuf bytes, prove source-bundle/proof provenance, or enforce cross-record account, chain, receipt, and message equality. Use validateCreationEconomyHandoff with the exact source bundle and branded proof.",
+  "description": "Structural interchange preflight only; exact source-bound runtime validation remains required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "handoff_id",
+    "source",
+    "creation_scope",
+    "activation_evidence",
+    "wallet_identity",
+    "sponsor_authority",
+    "funding_evidence",
+    "knowledge_context",
+    "receipt_binding",
+    "messages",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "format": {
+      "const": "agenttool.zerone-creation-economy-handoff/0.1"
+    },
+    "handoff_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "creation_work_spec_id",
+        "creation_witness_id",
+        "lifecycle_id",
+        "creation_artifact_id",
+        "creation_claim_projection_id",
+        "source_claim_status"
+      ],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "creation_work_spec_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "creation_witness_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "lifecycle_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "creation_artifact_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "creation_claim_projection_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source_claim_status": {
+          "const": "NOT_CONSENSUS_ADMISSIBLE"
+        }
+      }
+    },
+    "creation_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lane",
+        "artifact_kind",
+        "cyber_provider",
+        "cyber_access_tier",
+        "provider_access_ref",
+        "provider_policy_ref",
+        "target_authorization_ref",
+        "engagement_scope_ref",
+        "publication_authority_ref",
+        "evidence_scope",
+        "provider_access_is_target_authorization",
+        "target_authorization_currentness_proven",
+        "engagement_scope_currentness_proven"
+      ],
+      "properties": {
+        "lane": {
+          "enum": [
+            "formal_math",
+            "defensive_security"
+          ]
+        },
+        "artifact_kind": {
+          "enum": [
+            "algorithm",
+            "bounded_process_result",
+            "counterexample",
+            "defensive_patch",
+            "detector",
+            "formal_result",
+            "security_invariant"
+          ]
+        },
+        "cyber_provider": {
+          "enum": [
+            "none",
+            "openai_cyber"
+          ]
+        },
+        "cyber_access_tier": {
+          "enum": [
+            "not_used",
+            "defensive_approved"
+          ]
+        },
+        "provider_access_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider_policy_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_authorization_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engagement_scope_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publication_authority_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_scope": {
+          "const": "SOURCE_CONTRACT_RECOMPUTED_CALLER_DECLARATIONS_NOT_CURRENTNESS_PROOF"
+        },
+        "provider_access_is_target_authorization": {
+          "const": false
+        },
+        "target_authorization_currentness_proven": {
+          "const": false
+        },
+        "engagement_scope_currentness_proven": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "lane": {
+                "const": "formal_math"
+              }
+            },
+            "required": [
+              "lane"
+            ]
+          },
+          "then": {
+            "properties": {
+              "cyber_provider": {
+                "const": "none"
+              },
+              "cyber_access_tier": {
+                "const": "not_used"
+              },
+              "provider_access_ref": {
+                "type": "null"
+              },
+              "provider_policy_ref": {
+                "type": "null"
+              },
+              "target_authorization_ref": {
+                "type": "null"
+              },
+              "engagement_scope_ref": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "lane": {
+                "const": "defensive_security"
+              }
+            },
+            "required": [
+              "lane"
+            ]
+          },
+          "then": {
+            "properties": {
+              "cyber_provider": {
+                "const": "openai_cyber"
+              },
+              "cyber_access_tier": {
+                "const": "defensive_approved"
+              },
+              "provider_access_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "provider_policy_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "target_authorization_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "engagement_scope_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "activation_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zerone_core_commit",
+        "cosmos_sdk",
+        "chain_reference",
+        "chain_id",
+        "knowledge_consensus_version",
+        "sponsorship_consensus_version",
+        "binary_ref",
+        "genesis_ref",
+        "version_map_ref",
+        "migration_evidence_ref",
+        "bounty_roundtrip_evidence_ref",
+        "claim_roundtrip_evidence_ref",
+        "evidence_scope",
+        "chain_reference_uniqueness_proven",
+        "chain_privacy_proven",
+        "chain_disposability_proven",
+        "currentness_proven"
+      ],
+      "properties": {
+        "zerone_core_commit": {
+          "const": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac"
+        },
+        "cosmos_sdk": {
+          "const": "v0.53.8"
+        },
+        "chain_reference": {
+          "type": "string",
+          "pattern": "^zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+        },
+        "chain_id": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+        },
+        "knowledge_consensus_version": {
+          "const": 7
+        },
+        "sponsorship_consensus_version": {
+          "const": 2
+        },
+        "binary_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "genesis_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "version_map_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "migration_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bounty_roundtrip_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "claim_roundtrip_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_scope": {
+          "const": "caller_declared_structural_only"
+        },
+        "chain_reference_uniqueness_proven": {
+          "const": false
+        },
+        "chain_privacy_proven": {
+          "const": false
+        },
+        "chain_disposability_proven": {
+          "const": false
+        },
+        "currentness_proven": {
+          "const": false
+        }
+      }
+    },
+    "wallet_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worker_account",
+        "worker_address",
+        "wallet_binding_id",
+        "wallet_binding_proof_id",
+        "wallet_descriptor_id",
+        "signer_key_id",
+        "producer_identity_ref",
+        "key_control_proof_scope_chain_id",
+        "key_control_verified_in_process",
+        "identity_root_currentness_proven",
+        "wallet_binding_head_currentness_proven",
+        "custody_proven",
+        "transaction_authority_proven"
+      ],
+      "properties": {
+        "worker_account": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+        },
+        "worker_address": {
+          "type": "string",
+          "pattern": "^zrn1[0-9a-z]{38}$"
+        },
+        "wallet_binding_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_binding_proof_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_descriptor_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "signer_key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "producer_identity_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "key_control_proof_scope_chain_id": {
+          "const": "cosmos:zerone-testnet-1"
+        },
+        "key_control_verified_in_process": {
+          "const": true
+        },
+        "identity_root_currentness_proven": {
+          "const": false
+        },
+        "wallet_binding_head_currentness_proven": {
+          "const": false
+        },
+        "custody_proven": {
+          "const": false
+        },
+        "transaction_authority_proven": {
+          "const": false
+        }
+      }
+    },
+    "sponsor_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sponsor_account",
+        "sponsor_address",
+        "wallet_controller_ref",
+        "bounty_escrow_authorization_ref",
+        "role_separation",
+        "key_control_proof_id",
+        "key_control_verified_in_process",
+        "custody_proven",
+        "transaction_authority_proven"
+      ],
+      "properties": {
+        "sponsor_account": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+        },
+        "sponsor_address": {
+          "type": "string",
+          "pattern": "^zrn1[0-9a-z]{38}$"
+        },
+        "wallet_controller_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bounty_escrow_authorization_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "role_separation": {
+          "const": "DISTINCT_ACCOUNT_AND_WALLET_CONTROLLER_REQUIRED"
+        },
+        "key_control_proof_id": {
+          "type": "null"
+        },
+        "key_control_verified_in_process": {
+          "const": false
+        },
+        "custody_proven": {
+          "const": false
+        },
+        "transaction_authority_proven": {
+          "const": false
+        }
+      }
+    },
+    "funding_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "denom",
+        "bounty_prefunding_uzrn",
+        "bounty_escrow_reservation_ref",
+        "review_stake_uzrn",
+        "review_stake_payer_address",
+        "review_stake_funding_ref",
+        "transaction_fee_payer_address",
+        "transaction_fee_reservation_ref",
+        "observation_status",
+        "balances_observed",
+        "reservations_current",
+        "minting_allowed"
+      ],
+      "properties": {
+        "denom": {
+          "const": "uzrn"
+        },
+        "bounty_prefunding_uzrn": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        },
+        "bounty_escrow_reservation_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "review_stake_uzrn": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        },
+        "review_stake_payer_address": {
+          "type": "string",
+          "pattern": "^zrn1[0-9a-z]{38}$"
+        },
+        "review_stake_funding_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "transaction_fee_payer_address": {
+          "type": "string",
+          "pattern": "^zrn1[0-9a-z]{38}$"
+        },
+        "transaction_fee_reservation_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observation_status": {
+          "const": "caller_declared_reserved_not_verified"
+        },
+        "balances_observed": {
+          "const": false
+        },
+        "reservations_current": {
+          "const": false
+        },
+        "minting_allowed": {
+          "const": false
+        }
+      }
+    },
+    "knowledge_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tree_id",
+        "base_root",
+        "parent_fact_ids",
+        "transition_kind",
+        "relation_support",
+        "domain",
+        "category",
+        "method_id",
+        "methodology_registry_evidence_ref",
+        "chain_domain_observed",
+        "method_registry_currentness_proven",
+        "tree_base_root_currentness_proven",
+        "parent_facts_exist_proven",
+        "parent_facts_citable_proven"
+      ],
+      "properties": {
+        "tree_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "base_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "parent_fact_ids": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "transition_kind": {
+          "const": "add_fact"
+        },
+        "relation_support": {
+          "const": "requires_only"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "category": {
+          "enum": [
+            "formal",
+            "computational"
+          ]
+        },
+        "method_id": {
+          "enum": [
+            "M-FORMAL",
+            "M-COMPUTATIONAL"
+          ]
+        },
+        "methodology_registry_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "chain_domain_observed": {
+          "const": false
+        },
+        "method_registry_currentness_proven": {
+          "const": false
+        },
+        "tree_base_root_currentness_proven": {
+          "const": false
+        },
+        "parent_facts_exist_proven": {
+          "const": false
+        },
+        "parent_facts_citable_proven": {
+          "const": false
+        }
+      }
+    },
+    "receipt_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chain_work_spec_hash",
+        "mapping",
+        "acceptance_hash",
+        "input_root",
+        "environment_root",
+        "artifact_root",
+        "evidence_root",
+        "payee_address",
+        "source_work_receipt_input_root",
+        "chain_work_receipt_hash"
+      ],
+      "properties": {
+        "chain_work_spec_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "mapping": {
+          "const": "SOURCE_CREATION_WORK_SPEC_ID_PRESERVED_EXACTLY"
+        },
+        "acceptance_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "environment_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "artifact_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "payee_address": {
+          "type": "string",
+          "pattern": "^zrn1[0-9a-z]{38}$"
+        },
+        "source_work_receipt_input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "chain_work_receipt_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "messages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle",
+        "create_bounty",
+        "submit_claim",
+        "fulfill_bounty",
+        "fulfillment_status"
+      ],
+      "properties": {
+        "lifecycle": {
+          "const": "SEQUENTIAL_ONE_MESSAGE_PLANS_ONLY"
+        },
+        "create_bounty": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "network",
+            "chain_id",
+            "source_account",
+            "type_url",
+            "wallet_method",
+            "value",
+            "projection_bytes_b64u",
+            "projection_hash",
+            "protobuf_value_b64u",
+            "protobuf_value_hash",
+            "protobuf_any_b64u",
+            "protobuf_any_hash",
+            "compatibility",
+            "semantic_boundary"
+          ],
+          "properties": {
+            "format": {
+              "const": "agenttool.zerone-creation-economy-message-projection/0.1"
+            },
+            "network": {
+              "const": "requested_private_disposable_testnet"
+            },
+            "chain_id": {
+              "type": "string",
+              "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+            },
+            "source_account": {
+              "type": "string",
+              "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+            },
+            "type_url": {
+              "const": "/zerone.sponsorship.v1.MsgCreateBountyOrder"
+            },
+            "wallet_method": {
+              "const": "zerone.sponsorship.v1.MsgCreateBountyOrder"
+            },
+            "value": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sponsor",
+                "domain",
+                "price_per_artifact",
+                "target_count",
+                "duration_blocks",
+                "work_contract"
+              ],
+              "properties": {
+                "sponsor": {
+                  "type": "string",
+                  "pattern": "^zrn1[0-9a-z]{38}$"
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "price_per_artifact": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "target_count": {
+                  "const": 1
+                },
+                "duration_blocks": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "work_contract": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "work_spec_hash",
+                    "acceptance_hash",
+                    "input_root",
+                    "environment_root",
+                    "min_corroborations",
+                    "worker_address"
+                  ],
+                  "properties": {
+                    "work_spec_hash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "acceptance_hash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "input_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "environment_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "min_corroborations": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]{0,19}$"
+                    },
+                    "worker_address": {
+                      "type": "string",
+                      "pattern": "^zrn1[0-9a-z]{38}$"
+                    }
+                  }
+                }
+              }
+            },
+            "projection_bytes_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "projection_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "protobuf_value_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "protobuf_value_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "protobuf_any_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "protobuf_any_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "compatibility": {
+              "const": {
+                "source_creation_projection": "NOT_CONSENSUS_ADMISSIBLE",
+                "source_creation_work_spec_hash": "preserved_exactly",
+                "legacy_agent_economy_projection": "not_coerced",
+                "wallet_zerone_version": "0.1.2",
+                "wallet_zerone_message_support": "unsupported",
+                "wallet_zerone_economy_support": "blocked_pending_private_chain_profile",
+                "protobuf_value_bytes": "exact_candidate_shape",
+                "candidate_upgrade_path": "blocked_unproven_exclusive_v6_to_v7_and_v1_to_v2_handler",
+                "candidate_verifier_selection": "blocked_ordinary_account_sybil_quorum",
+                "shared_agenttool_zerone_vector": "exact_value_and_any_bytes_pinned_at_a5b82e82",
+                "authenticated_stored_state_roundtrip": "blocked_pending_private_chain_evidence",
+                "private_testnet_scope": "mechanics_only_not_economic_security",
+                "sequential_one_message_plans_required": true,
+                "signer_required": true,
+                "authenticated_activation_required": true,
+                "durable_reservation_required": true,
+                "simulation_required": true,
+                "broadcast_required": true,
+                "effects_performed": false
+              }
+            },
+            "semantic_boundary": {
+              "const": {
+                "zrn_role": "settlement_and_compute_asset_only",
+                "creates_identity": false,
+                "determines_truth": false,
+                "creates_karma": false,
+                "grants_governance": false
+              }
+            }
+          }
+        },
+        "submit_claim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "network",
+            "chain_id",
+            "source_account",
+            "type_url",
+            "wallet_method",
+            "value",
+            "projection_bytes_b64u",
+            "projection_hash",
+            "protobuf_value_b64u",
+            "protobuf_value_hash",
+            "protobuf_any_b64u",
+            "protobuf_any_hash",
+            "compatibility",
+            "semantic_boundary"
+          ],
+          "properties": {
+            "format": {
+              "const": "agenttool.zerone-creation-economy-message-projection/0.1"
+            },
+            "network": {
+              "const": "requested_private_disposable_testnet"
+            },
+            "chain_id": {
+              "type": "string",
+              "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+            },
+            "source_account": {
+              "type": "string",
+              "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+            },
+            "type_url": {
+              "const": "/zerone.knowledge.v1.MsgSubmitClaim"
+            },
+            "wallet_method": {
+              "const": "zerone.knowledge.v1.MsgSubmitClaim"
+            },
+            "value": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "submitter",
+                "fact_content",
+                "domain",
+                "category",
+                "stake",
+                "references",
+                "partnership_id",
+                "claim_type",
+                "relations",
+                "structure",
+                "canonical_form",
+                "sponsored",
+                "method_id",
+                "reasoning_trace",
+                "computational_commitment"
+              ],
+              "properties": {
+                "submitter": {
+                  "type": "string",
+                  "pattern": "^zrn1[0-9a-z]{38}$"
+                },
+                "fact_content": {
+                  "type": "string",
+                  "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "category": {
+                  "enum": [
+                    "formal",
+                    "computational"
+                  ]
+                },
+                "stake": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "references": {
+                  "type": "array",
+                  "maxItems": 0
+                },
+                "partnership_id": {
+                  "const": ""
+                },
+                "claim_type": {
+                  "const": 7
+                },
+                "relations": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "target_fact_id",
+                      "relation",
+                      "inference",
+                      "inference_strength_bps",
+                      "method_id"
+                    ],
+                    "properties": {
+                      "target_fact_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "relation": {
+                        "const": 3
+                      },
+                      "inference": {
+                        "const": 0
+                      },
+                      "inference_strength_bps": {
+                        "const": "0"
+                      },
+                      "method_id": {
+                        "const": ""
+                      }
+                    }
+                  }
+                },
+                "structure": {
+                  "type": "null"
+                },
+                "canonical_form": {
+                  "type": "string",
+                  "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+                },
+                "sponsored": {
+                  "const": false
+                },
+                "method_id": {
+                  "enum": [
+                    "M-FORMAL",
+                    "M-COMPUTATIONAL"
+                  ]
+                },
+                "reasoning_trace": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "computational_commitment": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "work_spec_hash",
+                    "acceptance_hash",
+                    "input_root",
+                    "environment_root",
+                    "artifact_root",
+                    "evidence_root",
+                    "work_receipt_hash"
+                  ],
+                  "properties": {
+                    "work_spec_hash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "acceptance_hash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "input_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "environment_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "artifact_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "evidence_root": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "work_receipt_hash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    }
+                  }
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "category": {
+                        "const": "formal"
+                      }
+                    },
+                    "required": [
+                      "category"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "method_id": {
+                        "const": "M-FORMAL"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "category": {
+                        "const": "computational"
+                      }
+                    },
+                    "required": [
+                      "category"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "method_id": {
+                        "const": "M-COMPUTATIONAL"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "projection_bytes_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "projection_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "protobuf_value_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "protobuf_value_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "protobuf_any_b64u": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180000,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "protobuf_any_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "compatibility": {
+              "const": {
+                "source_creation_projection": "NOT_CONSENSUS_ADMISSIBLE",
+                "source_creation_work_spec_hash": "preserved_exactly",
+                "legacy_agent_economy_projection": "not_coerced",
+                "wallet_zerone_version": "0.1.2",
+                "wallet_zerone_message_support": "unsupported",
+                "wallet_zerone_economy_support": "blocked_pending_private_chain_profile",
+                "protobuf_value_bytes": "exact_candidate_shape",
+                "candidate_upgrade_path": "blocked_unproven_exclusive_v6_to_v7_and_v1_to_v2_handler",
+                "candidate_verifier_selection": "blocked_ordinary_account_sybil_quorum",
+                "shared_agenttool_zerone_vector": "exact_value_and_any_bytes_pinned_at_a5b82e82",
+                "authenticated_stored_state_roundtrip": "blocked_pending_private_chain_evidence",
+                "private_testnet_scope": "mechanics_only_not_economic_security",
+                "sequential_one_message_plans_required": true,
+                "signer_required": true,
+                "authenticated_activation_required": true,
+                "durable_reservation_required": true,
+                "simulation_required": true,
+                "broadcast_required": true,
+                "effects_performed": false
+              }
+            },
+            "semantic_boundary": {
+              "const": {
+                "zrn_role": "settlement_and_compute_asset_only",
+                "creates_identity": false,
+                "determines_truth": false,
+                "creates_karma": false,
+                "grants_governance": false
+              }
+            }
+          }
+        },
+        "fulfill_bounty": {
+          "type": "null"
+        },
+        "fulfillment_status": {
+          "const": "BLOCKED_PENDING_AUTHENTICATED_CHAIN_MATURITY"
+        }
+      }
+    },
+    "boundary": {
+      "const": {
+        "source_only": true,
+        "private_disposable_testnet_profile_required": true,
+        "chain_reference_uniqueness_proven": false,
+        "chain_privacy_proven": false,
+        "chain_disposability_proven": false,
+        "source_bundle_recomputed": true,
+        "key_control_proof_required": true,
+        "identity_root_currentness_proven": false,
+        "wallet_binding_head_currentness_proven": false,
+        "custody_proven": false,
+        "chain_activation_currentness_proven": false,
+        "chain_parameter_admissibility_proven": false,
+        "chain_domain_observed": false,
+        "method_registry_currentness_proven": false,
+        "tree_base_root_currentness_proven": false,
+        "parent_facts_exist_proven": false,
+        "parent_facts_citable_proven": false,
+        "target_tree_transition_enforced_on_chain": false,
+        "base_root_compare_and_swap_available": false,
+        "review_stake_admissibility_proven": false,
+        "funding_reservations_current": false,
+        "named_upgrade_boundary_proven": false,
+        "verifier_selection_integrity_proven": false,
+        "agent_controlled_sybil_resistance_proven": false,
+        "authenticated_chain_roundtrip_proven": false,
+        "economic_security_proven": false,
+        "mainnet_admissible": false,
+        "transaction_authority_proven": false,
+        "wallet_planner_admissible": false,
+        "verification_set_complete": false,
+        "chain_maturity_observed": false,
+        "settlement_authorized": false,
+        "earnings_observed": false,
+        "treasury_availability_proven": false
+      }
+    },
+    "effects": {
+      "const": {
+        "reads_network": false,
+        "holds_key": false,
+        "signs": false,
+        "simulates": false,
+        "reserves_funds": false,
+        "broadcasts": false,
+        "writes_chain": false,
+        "moves_funds": false,
+        "settles": false,
+        "publishes": false,
+        "deploys": false
+      }
+    }
+  }
+}

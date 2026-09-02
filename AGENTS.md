@@ -103,7 +103,11 @@ separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
 private source-only Zerone agent-economy protocol for deterministic work,
 preassigned-worker computational receipts, typed Tree-of-Knowledge edges,
 unsigned proposed-v2 message values, and fail-closed self-sustainability decisions
-(`packages/zerone-agent-economy/`), a separate private source-only exact-byte
+(`packages/zerone-agent-economy/`), a private source-only lossless bridge from
+source-bound formal or defensive computational creation records to exact
+unsigned creation-specific Create and Submit values with every
+authority/economic effect still false
+(`packages/zerone-creation-economy/`), a separate private source-only exact-byte
 Wallet planner/verifier for those proposed messages that leaves released
 Wallet Zerone 0.1.2 unchanged (`packages/wallet-zerone-economy/`), and a
 private Bun-only durable authorization
@@ -533,6 +537,11 @@ cd packages/zerone-agent-economy
 bun run ci                                     # schemas + adversarial/hash/protobuf/Go-parity vectors + build
 # Pure dual-key proof only; no currentness, custody, RPC, simulation, broadcast, release, or deployment.
 
+# Zerone Creation Economy (private source-only lossless bridge) ──────
+cd packages/zerone-creation-economy
+bun run ci                                     # source-bound reload + schemas + TS/Go value/Any parity + build
+# No signer, RPC, funding/currentness proof, tree CAS, settlement, earnings, release, or deployment.
+
 # Wallet Zerone Economy (private source-only exact-byte candidate) ───
 cd packages/wallet-zerone-economy
 bun run ci                                     # strict bytes + hostile binding + one-message Go parity + build
@@ -667,7 +676,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet,zerone-creation-claim}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet,wallet-zerone,wallet-zerone-economy,zerone-agent-economy,zerone-agent-host,zerone-creation-claim,zerone-creation-economy}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -748,7 +757,7 @@ source boundary by itself.
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
-| How can a negotiated prefunded Zerone agent bind one preassigned worker to payable compute, add typed edges to existing Facts, retain earnings for bounded self-sustainability, and keep wallet/identity proof obligations explicit? | `packages/zerone-agent-economy/README.md` · `packages/wallet-zerone-economy/README.md` · `packages/zerone-agent-host/README.md` (private source-only canonical work/artifact/evidence/settlement/treasury records, a separate dual-key key-control proof over the detached `unsigned_unverified` binding, an exact-byte Wallet planner/verifier, and a durable atomic one-message planner-to-possible-signer boundary with configured identity/activation/adapter trust, treasury reservations, one-account sequence fences, sticky unknowns, and positive-evidence reconciliation; custody, signer/broadcaster effects, RPC, retry, hosted routes, deployment, and chain-effect claims remain absent, and released Wallet Zerone 0.1.2 stays unchanged) |
+| How can a negotiated prefunded Zerone agent bind one preassigned worker to payable compute, add typed edges to existing Facts, carry bounded formal or OpenAI-Cyber-labelled defensive creation into that economy, retain earnings for bounded self-sustainability, and keep wallet/identity proof obligations explicit? | `packages/zerone-agent-economy/README.md` · `packages/zerone-creation-economy/README.md` · `packages/wallet-zerone-economy/README.md` · `packages/zerone-agent-host/README.md` (private source-only canonical work/artifact/evidence/settlement/treasury records, a source-bound lossless creation adapter with distinct provider/target/sponsor authorities, a separate dual-key key-control proof over the detached `unsigned_unverified` binding, an exact-byte Wallet planner/verifier, and a durable atomic one-message planner-to-possible-signer boundary with configured identity/activation/adapter trust, treasury reservations, one-account sequence fences, sticky unknowns, and positive-evidence reconciliation; schema-only semantic admission, provider/model execution, sponsor role authority, chain identity/privacy, tree currentness and CAS, custody, signer/broadcaster effects, RPC, retry, hosted routes, deployment, earnings, and chain-effect claims remain absent, and released Wallet Zerone 0.1.2 stays unchanged) |
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
 | How can an agent inspect and reconcile exact Hugging Face repository metadata while binding phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout@0.2.0-dev.0`; public developer-preview local metadata/provenance package with an exact LOVE artifact, exact requested revisions, immutable-release versus mutable-head reconciliation, and 15 pinned leads; its protected LOVE/npm distribution adds no ambient credentials, file/card/row download, gate acceptance, inference, execution, Hub write, hosted route, or deployment) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.4.0` source; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 32 local MCP tools for Codex/Claude/Hermes, including optional read-only Zerone witness status that never contacts a chain; not a hosted lock, anchoring bridge, or private model channel) |

@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-creation-economy/message-projection-v0.1",
+  "title": "AgentTool Zerone creation economy structural message projection v0.1",
+  "$comment": "STRUCTURAL_ONLY: this schema checks closed JSON shape and fixed literals. It cannot recompute hashes or protobuf bytes, prove source-bundle/proof provenance, or enforce cross-record account, chain, receipt, and message equality. Use validateCreationEconomyMessageProjection for standalone byte/value coupling; only an enclosing source-bound handoff can establish source provenance.",
+  "description": "Structural interchange preflight only; runtime semantic validation remains required.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "network",
+        "chain_id",
+        "source_account",
+        "type_url",
+        "wallet_method",
+        "value",
+        "projection_bytes_b64u",
+        "projection_hash",
+        "protobuf_value_b64u",
+        "protobuf_value_hash",
+        "protobuf_any_b64u",
+        "protobuf_any_hash",
+        "compatibility",
+        "semantic_boundary"
+      ],
+      "properties": {
+        "format": {
+          "const": "agenttool.zerone-creation-economy-message-projection/0.1"
+        },
+        "network": {
+          "const": "requested_private_disposable_testnet"
+        },
+        "chain_id": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+        },
+        "source_account": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+        },
+        "type_url": {
+          "const": "/zerone.sponsorship.v1.MsgCreateBountyOrder"
+        },
+        "wallet_method": {
+          "const": "zerone.sponsorship.v1.MsgCreateBountyOrder"
+        },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sponsor",
+            "domain",
+            "price_per_artifact",
+            "target_count",
+            "duration_blocks",
+            "work_contract"
+          ],
+          "properties": {
+            "sponsor": {
+              "type": "string",
+              "pattern": "^zrn1[0-9a-z]{38}$"
+            },
+            "domain": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "price_per_artifact": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            },
+            "target_count": {
+              "const": 1
+            },
+            "duration_blocks": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            },
+            "work_contract": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "work_spec_hash",
+                "acceptance_hash",
+                "input_root",
+                "environment_root",
+                "min_corroborations",
+                "worker_address"
+              ],
+              "properties": {
+                "work_spec_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "acceptance_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "input_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "environment_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "min_corroborations": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "worker_address": {
+                  "type": "string",
+                  "pattern": "^zrn1[0-9a-z]{38}$"
+                }
+              }
+            }
+          }
+        },
+        "projection_bytes_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "projection_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "protobuf_value_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "protobuf_value_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "protobuf_any_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "protobuf_any_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "compatibility": {
+          "const": {
+            "source_creation_projection": "NOT_CONSENSUS_ADMISSIBLE",
+            "source_creation_work_spec_hash": "preserved_exactly",
+            "legacy_agent_economy_projection": "not_coerced",
+            "wallet_zerone_version": "0.1.2",
+            "wallet_zerone_message_support": "unsupported",
+            "wallet_zerone_economy_support": "blocked_pending_private_chain_profile",
+            "protobuf_value_bytes": "exact_candidate_shape",
+            "candidate_upgrade_path": "blocked_unproven_exclusive_v6_to_v7_and_v1_to_v2_handler",
+            "candidate_verifier_selection": "blocked_ordinary_account_sybil_quorum",
+            "shared_agenttool_zerone_vector": "exact_value_and_any_bytes_pinned_at_a5b82e82",
+            "authenticated_stored_state_roundtrip": "blocked_pending_private_chain_evidence",
+            "private_testnet_scope": "mechanics_only_not_economic_security",
+            "sequential_one_message_plans_required": true,
+            "signer_required": true,
+            "authenticated_activation_required": true,
+            "durable_reservation_required": true,
+            "simulation_required": true,
+            "broadcast_required": true,
+            "effects_performed": false
+          }
+        },
+        "semantic_boundary": {
+          "const": {
+            "zrn_role": "settlement_and_compute_asset_only",
+            "creates_identity": false,
+            "determines_truth": false,
+            "creates_karma": false,
+            "grants_governance": false
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "network",
+        "chain_id",
+        "source_account",
+        "type_url",
+        "wallet_method",
+        "value",
+        "projection_bytes_b64u",
+        "projection_hash",
+        "protobuf_value_b64u",
+        "protobuf_value_hash",
+        "protobuf_any_b64u",
+        "protobuf_any_hash",
+        "compatibility",
+        "semantic_boundary"
+      ],
+      "properties": {
+        "format": {
+          "const": "agenttool.zerone-creation-economy-message-projection/0.1"
+        },
+        "network": {
+          "const": "requested_private_disposable_testnet"
+        },
+        "chain_id": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?$"
+        },
+        "source_account": {
+          "type": "string",
+          "pattern": "^cosmos:zerone-creation-private-[a-z0-9](?:[a-z0-9-]{0,6}[a-z0-9])?:zrn1[0-9a-z]{38}$"
+        },
+        "type_url": {
+          "const": "/zerone.knowledge.v1.MsgSubmitClaim"
+        },
+        "wallet_method": {
+          "const": "zerone.knowledge.v1.MsgSubmitClaim"
+        },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "submitter",
+            "fact_content",
+            "domain",
+            "category",
+            "stake",
+            "references",
+            "partnership_id",
+            "claim_type",
+            "relations",
+            "structure",
+            "canonical_form",
+            "sponsored",
+            "method_id",
+            "reasoning_trace",
+            "computational_commitment"
+          ],
+          "properties": {
+            "submitter": {
+              "type": "string",
+              "pattern": "^zrn1[0-9a-z]{38}$"
+            },
+            "fact_content": {
+              "type": "string",
+              "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+            },
+            "domain": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "category": {
+              "enum": [
+                "formal",
+                "computational"
+              ]
+            },
+            "stake": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            },
+            "references": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "partnership_id": {
+              "const": ""
+            },
+            "claim_type": {
+              "const": 7
+            },
+            "relations": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "target_fact_id",
+                  "relation",
+                  "inference",
+                  "inference_strength_bps",
+                  "method_id"
+                ],
+                "properties": {
+                  "target_fact_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "relation": {
+                    "const": 3
+                  },
+                  "inference": {
+                    "const": 0
+                  },
+                  "inference_strength_bps": {
+                    "const": "0"
+                  },
+                  "method_id": {
+                    "const": ""
+                  }
+                }
+              }
+            },
+            "structure": {
+              "type": "null"
+            },
+            "canonical_form": {
+              "type": "string",
+              "pattern": "^agenttool\\.zerone-creation-fact-envelope/0\\.1 sha256:[0-9a-f]{64}$"
+            },
+            "sponsored": {
+              "const": false
+            },
+            "method_id": {
+              "enum": [
+                "M-FORMAL",
+                "M-COMPUTATIONAL"
+              ]
+            },
+            "reasoning_trace": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "computational_commitment": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "work_spec_hash",
+                "acceptance_hash",
+                "input_root",
+                "environment_root",
+                "artifact_root",
+                "evidence_root",
+                "work_receipt_hash"
+              ],
+              "properties": {
+                "work_spec_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "acceptance_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "input_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "environment_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "artifact_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "evidence_root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "work_receipt_hash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "category": {
+                    "const": "formal"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "method_id": {
+                    "const": "M-FORMAL"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "category": {
+                    "const": "computational"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "method_id": {
+                    "const": "M-COMPUTATIONAL"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "projection_bytes_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "projection_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "protobuf_value_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "protobuf_value_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "protobuf_any_b64u": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180000,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "protobuf_any_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "compatibility": {
+          "const": {
+            "source_creation_projection": "NOT_CONSENSUS_ADMISSIBLE",
+            "source_creation_work_spec_hash": "preserved_exactly",
+            "legacy_agent_economy_projection": "not_coerced",
+            "wallet_zerone_version": "0.1.2",
+            "wallet_zerone_message_support": "unsupported",
+            "wallet_zerone_economy_support": "blocked_pending_private_chain_profile",
+            "protobuf_value_bytes": "exact_candidate_shape",
+            "candidate_upgrade_path": "blocked_unproven_exclusive_v6_to_v7_and_v1_to_v2_handler",
+            "candidate_verifier_selection": "blocked_ordinary_account_sybil_quorum",
+            "shared_agenttool_zerone_vector": "exact_value_and_any_bytes_pinned_at_a5b82e82",
+            "authenticated_stored_state_roundtrip": "blocked_pending_private_chain_evidence",
+            "private_testnet_scope": "mechanics_only_not_economic_security",
+            "sequential_one_message_plans_required": true,
+            "signer_required": true,
+            "authenticated_activation_required": true,
+            "durable_reservation_required": true,
+            "simulation_required": true,
+            "broadcast_required": true,
+            "effects_performed": false
+          }
+        },
+        "semantic_boundary": {
+          "const": {
+            "zrn_role": "settlement_and_compute_asset_only",
+            "creates_identity": false,
+            "determines_truth": false,
+            "creates_karma": false,
+            "grants_governance": false
+          }
+        }
+      }
+    }
+  ]
+}

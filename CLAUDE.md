@@ -66,6 +66,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
+  zerone-creation-economy/ — private lossless bounded-creation → exact unsigned Zerone economy bridge
   wallet-zerone-economy/ — private exact-byte planner/verifier for proposed economy messages
   zerone-agent-host/ — private Bun-only atomic one-message planner-to-possible-signer durability boundary
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
@@ -128,6 +129,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/zerone-agent-economy/CLAUDE.md` ·
+`packages/zerone-creation-economy/CLAUDE.md` ·
 `packages/wallet-zerone-economy/CLAUDE.md` ·
 `packages/zerone-agent-host/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
@@ -597,6 +599,25 @@ binding, and continuity-head checks, custody, authorization, durable
 CAS/reservations, chain lookup, simulation, signing, sticky-unknown handling,
 broadcast, and confirmation. It has no release, hosted route, RPC, signer,
 economic effect, or deployment.
+
+`@agenttool/zerone-creation-economy` is the separate private, source-only
+lossless bridge for creation records that cannot be coerced through the older
+general-economy WorkSpec domain. It recomputes the complete creation DAG,
+requires an in-process verified worker key-control proof and the original source
+bundle for portable validation, enforces worker/sponsor role separation,
+preserves funding, target-tree, formal or defensive computational claim, method,
+authority refs, and receipt inputs, and emits exact Create and Submit protobuf
+value plus `Any` bytes independently reproduced by the pinned Zerone Go types.
+Schemas are structural-only. The requested private-chain label and activation
+evidence remain caller-declared; uniqueness/privacy/disposability, target-tree
+enforcement and base-root CAS, provider/model execution, sponsor authority,
+balance/current-reservation evidence, identity-root and binding-head
+currentness, custody, transaction authority, parent/domain/method currentness,
+chain maturity, fulfillment, earnings, and treasury availability all remain
+false. The pinned chain candidate still has an ordinary-account verifier/Sybil
+path and no proven exclusivity for its named v6→v7 / v1→v2 source-map handler,
+so this package is review material only and has no signer, RPC, simulation,
+broadcast, release, deployment, or live effect.
 
 `@agenttool/wallet-zerone-economy` is the separate private source-only
 transaction seam for those proposed messages. It pins zerone-core `a5b82e8`,

@@ -83,6 +83,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/wallet
   packages/wallet-zerone
   packages/zerone-agent-economy
+  packages/zerone-creation-economy
   packages/wallet-zerone-economy
   packages/zerone-agent-host
   packages/telescope
