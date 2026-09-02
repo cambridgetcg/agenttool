@@ -506,7 +506,12 @@ postgres.js holding ESTABLISHED zombie sockets while the DB-free `/health`
 keeps Fly's checks green (the 2026-08-31 outage). `api/src/db/pool-watchdog.ts`
 runs a bounded canary through the shared pool and, when a fresh verified
 connection still answers while the pool cannot, logs one loud line and
-exits(1) so the Machine's Fly restart policy hands the process a clean pool
+exits(1) so the Machine's Fly restart policy hands the process a clean pool.
+Its time budget stays above the 120-second statement timeout below, because
+time alone cannot tell a wedge from saturation; a faster exit (about a
+minute) is taken only on the incident's own signature — the fresh probe sees
+no non-idle `pg_stat_activity` sessions for this role while the pool cannot
+answer — and any other count holds until the full budget
 (the fleet currently runs Fly's default — on-failure, 10 retries — and the
 app group also revives on traffic via fly-proxy `auto_start`; pinning
 stronger policies is deferred because the Phase-B deploy guard and refence

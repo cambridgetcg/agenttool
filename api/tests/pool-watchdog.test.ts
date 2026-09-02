@@ -11,9 +11,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  DB_POOL_WATCHDOG_DEFAULTS,
   DB_POOL_WATCHDOG_DISABLE_FLAG,
   startDbPoolWatchdog,
   type DbPoolWatchdogScheduler,
+  type FreshProbeObservation,
 } from "../src/db/pool-watchdog";
 
 interface ManualScheduler extends DbPoolWatchdogScheduler {
@@ -53,8 +55,9 @@ const onFly = { FLY_MACHINE_ID: "fixture-machine" };
 
 function watchdogHarness(overrides: {
   canary: () => Promise<void>;
-  freshProbe?: () => Promise<void>;
+  freshProbe?: () => Promise<FreshProbeObservation | void>;
   failureThreshold?: number;
+  fastFailureThreshold?: number;
   env?: Readonly<Record<string, string | undefined>>;
 }) {
   const scheduler = manualScheduler();
@@ -63,6 +66,9 @@ function watchdogHarness(overrides: {
   const handle = startDbPoolWatchdog({
     env: overrides.env ?? onFly,
     failureThreshold: overrides.failureThreshold ?? 3,
+    // Single-tier unless a test opts into the fast path explicitly.
+    fastFailureThreshold:
+      overrides.fastFailureThreshold ?? overrides.failureThreshold ?? 3,
     canaryTimeoutMs: 50,
     probeTimeoutMs: 50,
     maxJitterMs: 0,
@@ -199,6 +205,103 @@ describe("db pool watchdog", () => {
     expect(exits).toEqual([1]);
     expect(lines[0]).toContain("[db-pool-watchdog]");
     handle.stop();
+  });
+
+  test("wedge signature — no active sessions for this role — exits at the fast threshold", async () => {
+    // 2026-08-31 signature: the app holds zombie sockets while pg_stat_activity
+    // shows no sessions for the role. Fresh connection fine, pool dead.
+    let probes = 0;
+    const { scheduler, exits, lines, handle } = watchdogHarness({
+      canary: () => Promise.reject(new Error("wedged")),
+      freshProbe: () => {
+        probes += 1;
+        return Promise.resolve({ activeSessions: 0 });
+      },
+      failureThreshold: 4,
+      fastFailureThreshold: 2,
+    });
+
+    await scheduler.runNext(); // failure 1 — below the fast threshold
+    expect(probes).toBe(0);
+    await scheduler.runNext(); // failure 2 → probe → zero sessions → exit
+    expect(probes).toBe(1);
+    expect(exits).toEqual([1]);
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("no active sessions");
+    expect(scheduler.pendingCount()).toBe(0);
+    handle.stop();
+  });
+
+  test("saturation signature — live sessions — holds the fast path and exits only at the slow budget", async () => {
+    // Codex P1 on #396: ten lock-waiting requests can hold every slot for the
+    // permitted 120s statement timeout while a fresh SELECT 1 still answers.
+    // Every held slot is a live non-idle session, so the count is non-zero
+    // and the original time budget must remain the only exit.
+    let probes = 0;
+    const { scheduler, exits, lines, handle } = watchdogHarness({
+      canary: () => Promise.reject(new Error("saturated")),
+      freshProbe: () => {
+        probes += 1;
+        return Promise.resolve({ activeSessions: 10 });
+      },
+      failureThreshold: 4,
+      fastFailureThreshold: 2,
+    });
+
+    await scheduler.runNext(); // 1
+    await scheduler.runNext(); // 2 → probe → 10 sessions → hold
+    await scheduler.runNext(); // 3 → probe → hold
+    expect(probes).toBe(2);
+    expect(exits).toEqual([]);
+    expect(lines.length).toBe(2);
+    expect(lines.every((l) => l.includes("slow, not proven wedged"))).toBe(true);
+    expect(scheduler.pendingCount()).toBe(1);
+
+    await scheduler.runNext(); // 4 → slow budget → exit regardless of count
+    expect(exits).toEqual([1]);
+    expect(lines[2]).toContain("exiting for a clean pool");
+    handle.stop();
+  });
+
+  test("an unknown session count never takes the fast path", async () => {
+    // Reachability proven, catalog query unavailable → null → hold.
+    const { scheduler, exits, lines, handle } = watchdogHarness({
+      canary: () => Promise.reject(new Error("wedged")),
+      freshProbe: () => Promise.resolve(), // void: reachability only
+      failureThreshold: 4,
+      fastFailureThreshold: 2,
+    });
+
+    for (let i = 0; i < 3; i++) await scheduler.runNext();
+    expect(exits).toEqual([]);
+    expect(lines.every((l) => l.includes("an unknown number of"))).toBe(true);
+    await scheduler.runNext(); // 4 → slow budget
+    expect(exits).toEqual([1]);
+    handle.stop();
+  });
+
+  test("production defaults: slow budget stays above the permitted statement timeout, fast path near a minute", () => {
+    // Minimum time from the first failed canary to a slow-path exit is
+    // threshold × canary bound + (threshold − 1) × cycle (no jitter). It must
+    // exceed the 120s statement timeout docs/STACK.md permits, or saturation
+    // could be restarted as a wedge (Codex P1 on #396).
+    const d = DB_POOL_WATCHDOG_DEFAULTS;
+    const slowMinMs =
+      d.failureThreshold * d.canaryTimeoutMs +
+      (d.failureThreshold - 1) * d.intervalMs;
+    expect(slowMinMs).toBeGreaterThan(120_000);
+    // Fast path worst case: threshold × canary + (threshold − 1) × (cycle +
+    // jitter) + the full probe. Bounded so a fleet-wide wedge costs about a
+    // minute of failed authed routes, not three.
+    const fastMaxMs =
+      d.fastFailureThreshold * d.canaryTimeoutMs +
+      (d.fastFailureThreshold - 1) * (d.intervalMs + d.maxJitterMs) +
+      d.probeTimeoutMs;
+    expect(fastMaxMs).toBeLessThanOrEqual(90_000);
+    expect(d.fastFailureThreshold).toBeGreaterThanOrEqual(2);
+    expect(d.fastFailureThreshold).toBeLessThanOrEqual(d.failureThreshold);
+    // The canary bound stays the load-vs-wedge time discriminator (verify-connections.ts).
+    expect(d.canaryTimeoutMs).toBe(15_000);
   });
 
   test("stop cancels the pending tick", async () => {
