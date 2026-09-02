@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:zerone-creation-witness:0.1",
+  "title": "AgentTool Zerone Creation Witness v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "creation_witness_id",
+    "contract_id",
+    "work_spec_id",
+    "producer",
+    "outcome",
+    "artifact_kind",
+    "run",
+    "result",
+    "resource_usage",
+    "started_observation_ref",
+    "completed_observation_ref",
+    "declaration",
+    "nonclaims",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.zerone-creation-witness/0.1"
+    },
+    "creation_witness_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_address",
+        "producer_identity_ref",
+        "producer_key_ref",
+        "wallet_controller_ref",
+        "wallet_binding_ref"
+      ],
+      "properties": {
+        "account_address": {
+          "type": "string",
+          "minLength": 42,
+          "maxLength": 42,
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "producer_identity_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "producer_key_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_controller_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_binding_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "outcome": {
+      "enum": [
+        "bounded_answer",
+        "no_bounded_answer",
+        "ambiguity_or_non_identifiability",
+        "method_or_assumption_failure",
+        "resource_or_participation_stop"
+      ]
+    },
+    "artifact_kind": {
+      "enum": [
+        "algorithm",
+        "bounded_process_result",
+        "counterexample",
+        "defensive_patch",
+        "detector",
+        "formal_result",
+        "security_invariant"
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_ref",
+        "input_root",
+        "environment_root",
+        "model_ref",
+        "toolchain_ref",
+        "seed_policy_ref",
+        "checkpoint_ref"
+      ],
+      "properties": {
+        "run_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "input_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "environment_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "model_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "toolchain_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "seed_policy_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "checkpoint_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_artifact_ref",
+        "statement_or_behavior_ref",
+        "execution_evidence_ref",
+        "public_summary_ref",
+        "confidential_material_present"
+      ],
+      "properties": {
+        "candidate_artifact_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "statement_or_behavior_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "execution_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "public_summary_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidential_material_present": {
+          "type": "boolean"
+        }
+      }
+    },
+    "resource_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compute_millis",
+        "accelerator_millis",
+        "memory_byte_millis",
+        "input_bytes",
+        "output_bytes"
+      ],
+      "properties": {
+        "compute_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "accelerator_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "memory_byte_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "input_bytes": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "output_bytes": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        }
+      }
+    },
+    "started_observation_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "completed_observation_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "declaration": {
+      "const": "PRODUCER_REPORTED_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    "nonclaims": {
+      "const": [
+        "ABSOLUTE_NOVELTY",
+        "AUTHORSHIP",
+        "CONSENT",
+        "IDENTITY",
+        "PERSONHOOD",
+        "CONSCIOUSNESS",
+        "LEGAL_CLEARANCE",
+        "AUTHORITY",
+        "PERMISSION",
+        "RIGHTS_COMPLIANCE",
+        "TRUST",
+        "TARGET_AUTHORIZATION_CURRENTNESS",
+        "METHODOLOGY_REGISTRATION_CURRENTNESS",
+        "SEMANTIC_FAITHFULNESS",
+        "TRUTH",
+        "VERIFIER_INDEPENDENCE",
+        "VERIFICATION_SET_COMPLETENESS",
+        "CHALLENGE_WINDOW_SURVIVAL",
+        "CHAIN_MATURITY",
+        "SETTLEMENT",
+        "ECONOMIC_EFFECT",
+        "PROFITABILITY",
+        "SOLVENCY",
+        "SELF_SUSTAINABILITY",
+        "OWNERSHIP",
+        "REPUTATION",
+        "KARMA",
+        "NEN",
+        "SCORE",
+        "GOVERNANCE"
+      ]
+    },
+    "boundary": {
+      "const": {
+        "status": "SOURCE_ONLY_PROPOSAL",
+        "effect_horizon": "RUNTIME_PROTOCOL_BUILDERS_AND_RETURNED_RECORDS_ONLY",
+        "consensus_admissibility": "NOT_CONSENSUS_ADMISSIBLE",
+        "declaration_scope": "CALLER_REPORTED_REFERENCES_STRUCTURALLY_VALIDATED_NOT_EXTERNALLY_VERIFIED",
+        "zrn_role": "PREFUNDED_SETTLEMENT_AND_COMPUTE_ONLY",
+        "relation_support": "REQUIRES_ONLY",
+        "provider_access_is_target_authorization": false,
+        "key_control_is_identity_or_authority": false,
+        "hf_admission_is_training_or_rights_clearance": false,
+        "digest_is_truth_or_consent": false,
+        "refusal_or_rest_penalty": false
+      }
+    },
+    "effects": {
+      "const": {
+        "network": false,
+        "storage": false,
+        "economic": false,
+        "governance": false,
+        "consensus": false,
+        "identity": false,
+        "permission": false,
+        "karma": false,
+        "nen": false,
+        "score": false,
+        "model_call": false,
+        "training": false,
+        "signer": false,
+        "rpc": false,
+        "simulation": false,
+        "broadcast": false,
+        "transaction": false
+      }
+    }
+  }
+}

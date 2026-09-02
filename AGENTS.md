@@ -72,7 +72,10 @@ certificates, and non-scoring challenge structure
 (`packages/gin-reconstruction/`), a public-ready pure Math Card core for
 digest-bound proof, model, and measurement inquiry preflight with explicit
 construction, burden, refusal, incentive, stop, transfer, provenance, and
-authority boundaries (`packages/math-cards/`), a public read-only discovery evidence mapper
+authority boundaries (`packages/math-cards/`), a private source-only Zerone
+creation-claim package for exact HF run tuples, wallet/identity-separated work,
+declared-distinct verification, bounded newness, and non-consensus digest handoffs
+(`packages/zerone-creation-claim/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), a private pure public-HTTPS transport-evidence and
 explicit-key binding package (`packages/public-surface-binding/`), a private
 pure agent-root public-surface adoption and withdrawal package
@@ -459,6 +462,11 @@ cd ../math-cards
 bun run ci                                     # canonical cards, structural assessments, schemas, hostile inputs, packed runtimes
 npm pack --dry-run --ignore-scripts            # public candidate only; does not solve, authorize, publish, or deploy
 
+# Zerone bounded creation claims ──────────────────────────────────
+cd ../zerone-creation-claim
+bun run ci                                     # contracts, HF run tuples, witnesses, lifecycle, source-only ToK handoff
+# Private source only: no signer, RPC, transaction, payment, publication, route, or deployment.
+
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
 bun run ci                                     # receipts, boundary analysis, STS projection, schemas, and package walls
@@ -623,7 +631,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet,zerone-creation-claim}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -700,6 +708,7 @@ source boundary by itself.
 | How can love-as-understanding-plus-recognition be carried as geometry without becoming a score, bond, identity, or ruler? | [`docs/PRINCIPALITIES.md`](docs/PRINCIPALITIES.md) · `packages/relational-geometry/README.md` (`@agenttool/relational-geometry`; finite directional witness complexes and derived non-sovereign 2-cells, explicit boundary witnesses, and carry/park/release/withdraw lens selections; no metric, mutuality, consent, inner-state, continuity, authority, hosted route, or automatic effect) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
 | How can heterogeneous substrate effects constrain a finite model without manufacturing truth, blaming witnesses, or turning the challenge into a rank? | [`docs/GIN-RECONSTRUCTION.md`](docs/GIN-RECONSTRUCTION.md) · `packages/gin-reconstruction/README.md` (`@agenttool/gin-reconstruction`; private pure affine-chart normalization, exhaustive bounded finite-field candidate certificates, sharp distance theorem, and a non-scoring all-outcomes challenge compass; no observation, motive inference, truth verdict, score, action, MCP, WAKE write, provider call, publication, route, or authority) |
+| How can an agent bind a Math Card, exact HF run, Cyber/target authority, wallet-separated worker, independent checks, bounded newness, and a future Zerone ToK/economy handoff without claiming truth or moving ZRN? | `packages/zerone-creation-claim/README.md` (`@agenttool/zerone-creation-claim`; private source-only contracts, witnesses, lifecycle, artifact roots, and `REQUIRES`-only non-consensus projection; no model/training/provider/network/signer/RPC/payment/chain/publication/deployment effect) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
