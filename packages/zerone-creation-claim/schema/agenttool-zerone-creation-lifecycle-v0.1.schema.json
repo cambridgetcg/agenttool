@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:zerone-creation-lifecycle:0.1",
+  "title": "AgentTool Zerone Creation Lifecycle v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "lifecycle_id",
+    "contract_id",
+    "work_spec_id",
+    "creation_witness_id",
+    "outcome",
+    "artifact_kind",
+    "verification_set_root",
+    "requirements",
+    "state",
+    "blockers",
+    "accepted_new_posture",
+    "handoff",
+    "nonclaims",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.zerone-creation-lifecycle/0.1"
+    },
+    "lifecycle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "creation_witness_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "bounded_answer",
+            "no_bounded_answer",
+            "ambiguity_or_non_identifiability",
+            "method_or_assumption_failure",
+            "resource_or_participation_stop"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifact_kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "algorithm",
+            "bounded_process_result",
+            "counterexample",
+            "defensive_patch",
+            "detector",
+            "formal_result",
+            "security_invariant"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verification_set_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "minimum_passes",
+          "counted_passes",
+          "passed_witness_ids",
+          "failed_witness_ids",
+          "inconclusive_witness_ids",
+          "ignored_non_independent_witness_ids",
+          "ignored_duplicate_controller_or_key_witness_ids",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "formal_validity",
+              "semantic_fidelity",
+              "prior_art_scope",
+              "independent_reproduction",
+              "functional_validation",
+              "authorization_currentness",
+              "security_boundary"
+            ]
+          },
+          "minimum_passes": {
+            "type": "string",
+            "pattern": "^(?:[1-9][0-9]{0,0}|1[0-5][0-9]{0}|16)$",
+            "maxLength": 2
+          },
+          "counted_passes": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]{0,0}|[1-5][0-9]{1}|6[0-3][0-9]{0}|64)$",
+            "maxLength": 2
+          },
+          "passed_witness_ids": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "failed_witness_ids": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "inconclusive_witness_ids": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "ignored_non_independent_witness_ids": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "ignored_duplicate_controller_or_key_witness_ids": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "status": {
+            "enum": [
+              "satisfied",
+              "open",
+              "contested"
+            ]
+          }
+        }
+      }
+    },
+    "state": {
+      "enum": [
+        "awaiting_creation",
+        "honest_terminal",
+        "verification_open",
+        "contested",
+        "projection_blocked",
+        "structurally_ready_for_tok_proposal"
+      ]
+    },
+    "blockers": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 6,
+      "items": {
+        "enum": [
+          "AWAITING_CREATION",
+          "OUTCOME_OFFCHAIN_ONLY",
+          "PUBLICATION_AUTHORITY_MISSING",
+          "CONFIDENTIAL_MATERIAL_PRESENT",
+          "VERIFICATION_OPEN",
+          "VERIFICATION_CONTESTED"
+        ]
+      }
+    },
+    "accepted_new_posture": {
+      "enum": [
+        "not_reached",
+        "BOUNDED_CANDIDATE_UNDER_PINNED_SCOPE"
+      ]
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_projection",
+        "tok_claim_projection",
+        "chain_maturity",
+        "settlement"
+      ],
+      "properties": {
+        "artifact_projection": {
+          "enum": [
+            "available",
+            "not_available"
+          ]
+        },
+        "tok_claim_projection": {
+          "enum": [
+            "available",
+            "not_available"
+          ]
+        },
+        "chain_maturity": {
+          "const": "not_observed"
+        },
+        "settlement": {
+          "const": "not_authorized"
+        }
+      }
+    },
+    "nonclaims": {
+      "const": [
+        "ABSOLUTE_NOVELTY",
+        "AUTHORSHIP",
+        "CONSENT",
+        "IDENTITY",
+        "PERSONHOOD",
+        "CONSCIOUSNESS",
+        "LEGAL_CLEARANCE",
+        "AUTHORITY",
+        "PERMISSION",
+        "RIGHTS_COMPLIANCE",
+        "TRUST",
+        "TARGET_AUTHORIZATION_CURRENTNESS",
+        "METHODOLOGY_REGISTRATION_CURRENTNESS",
+        "SEMANTIC_FAITHFULNESS",
+        "TRUTH",
+        "VERIFIER_INDEPENDENCE",
+        "VERIFICATION_SET_COMPLETENESS",
+        "CHALLENGE_WINDOW_SURVIVAL",
+        "CHAIN_MATURITY",
+        "SETTLEMENT",
+        "ECONOMIC_EFFECT",
+        "PROFITABILITY",
+        "SOLVENCY",
+        "SELF_SUSTAINABILITY",
+        "OWNERSHIP",
+        "REPUTATION",
+        "KARMA",
+        "NEN",
+        "SCORE",
+        "GOVERNANCE"
+      ]
+    },
+    "boundary": {
+      "const": {
+        "status": "SOURCE_ONLY_PROPOSAL",
+        "effect_horizon": "RUNTIME_PROTOCOL_BUILDERS_AND_RETURNED_RECORDS_ONLY",
+        "consensus_admissibility": "NOT_CONSENSUS_ADMISSIBLE",
+        "declaration_scope": "CALLER_REPORTED_REFERENCES_STRUCTURALLY_VALIDATED_NOT_EXTERNALLY_VERIFIED",
+        "zrn_role": "PREFUNDED_SETTLEMENT_AND_COMPUTE_ONLY",
+        "relation_support": "REQUIRES_ONLY",
+        "provider_access_is_target_authorization": false,
+        "key_control_is_identity_or_authority": false,
+        "hf_admission_is_training_or_rights_clearance": false,
+        "digest_is_truth_or_consent": false,
+        "refusal_or_rest_penalty": false
+      }
+    },
+    "effects": {
+      "const": {
+        "network": false,
+        "storage": false,
+        "economic": false,
+        "governance": false,
+        "consensus": false,
+        "identity": false,
+        "permission": false,
+        "karma": false,
+        "nen": false,
+        "score": false,
+        "model_call": false,
+        "training": false,
+        "signer": false,
+        "rpc": false,
+        "simulation": false,
+        "broadcast": false,
+        "transaction": false
+      }
+    }
+  }
+}

@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:zerone-creation-work-spec:0.1",
+  "title": "AgentTool Zerone Creation Work Spec v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "work_spec_id",
+    "contract_id",
+    "chain_profile",
+    "sponsor",
+    "worker",
+    "payee_address",
+    "fulfillment_caller_address",
+    "knowledge_domain",
+    "target_tree",
+    "claim_submission",
+    "input_root",
+    "environment_root",
+    "acceptance_hash",
+    "resource_limits",
+    "settlement",
+    "participation",
+    "downgrade_guards",
+    "boundary",
+    "effects"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.zerone-creation-work-spec/0.1"
+    },
+    "work_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "chain_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chain_id",
+        "integrated_source_revision",
+        "knowledge_module_version",
+        "sponsorship_module_version",
+        "binary_ref",
+        "genesis_ref",
+        "version_map_ref",
+        "migration_evidence_ref",
+        "bounty_roundtrip_evidence_ref",
+        "claim_roundtrip_evidence_ref",
+        "private_disposable_chain_declared",
+        "observation_status"
+      ],
+      "properties": {
+        "chain_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+        },
+        "integrated_source_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "knowledge_module_version": {
+          "const": "7"
+        },
+        "sponsorship_module_version": {
+          "const": "2"
+        },
+        "binary_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "genesis_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "version_map_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "migration_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bounty_roundtrip_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "claim_roundtrip_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "private_disposable_chain_declared": {
+          "const": true
+        },
+        "observation_status": {
+          "const": "caller_declared_not_verified"
+        }
+      }
+    },
+    "sponsor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_address",
+        "wallet_controller_ref",
+        "bounty_escrow_authorization_ref"
+      ],
+      "properties": {
+        "account_address": {
+          "type": "string",
+          "minLength": 42,
+          "maxLength": 42,
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "wallet_controller_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bounty_escrow_authorization_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account_address",
+        "producer_identity_ref",
+        "producer_key_ref",
+        "wallet_controller_ref",
+        "wallet_binding_ref",
+        "binding_claim"
+      ],
+      "properties": {
+        "account_address": {
+          "type": "string",
+          "minLength": 42,
+          "maxLength": 42,
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "producer_identity_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "producer_key_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_controller_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "wallet_binding_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "binding_claim": {
+          "const": "KEY_CONTROL_ONLY_NOT_IDENTITY_AUTHORSHIP_CONSENT_OR_AUTHORITY"
+        }
+      }
+    },
+    "payee_address": {
+      "type": "string",
+      "minLength": 42,
+      "maxLength": 42,
+      "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+    },
+    "fulfillment_caller_address": {
+      "type": "string",
+      "minLength": 42,
+      "maxLength": 42,
+      "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+    },
+    "knowledge_domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "target_tree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tree_id",
+        "base_root",
+        "parent_fact_ids",
+        "transition_kind",
+        "relation_support"
+      ],
+      "properties": {
+        "tree_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+        },
+        "base_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "parent_fact_ids": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+          }
+        },
+        "transition_kind": {
+          "const": "add_fact"
+        },
+        "relation_support": {
+          "const": "requires_only"
+        }
+      }
+    },
+    "claim_submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "method_id",
+        "methodology_registry_evidence_ref",
+        "review_stake_uzrn",
+        "review_stake_payer_address",
+        "review_stake_funding_ref",
+        "transaction_fee_payer_address",
+        "transaction_fee_reservation_ref",
+        "funding_observation_status"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "computational",
+            "formal"
+          ]
+        },
+        "method_id": {
+          "enum": [
+            "M-FORMAL",
+            "M-COMPUTATIONAL"
+          ]
+        },
+        "methodology_registry_evidence_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "review_stake_uzrn": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "review_stake_payer_address": {
+          "type": "string",
+          "minLength": 42,
+          "maxLength": 42,
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "review_stake_funding_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "transaction_fee_payer_address": {
+          "type": "string",
+          "minLength": 42,
+          "maxLength": 42,
+          "pattern": "^zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+        },
+        "transaction_fee_reservation_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "funding_observation_status": {
+          "const": "caller_declared_reserved_not_verified"
+        }
+      }
+    },
+    "input_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "environment_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "acceptance_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "resource_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compute_millis",
+        "accelerator_millis",
+        "memory_byte_millis",
+        "input_bytes",
+        "output_bytes"
+      ],
+      "properties": {
+        "compute_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "accelerator_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "memory_byte_millis": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "input_bytes": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "output_bytes": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        }
+      }
+    },
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "denom",
+        "price_per_artifact_uzrn",
+        "target_count",
+        "duration_blocks",
+        "min_corroborations",
+        "prefunded_escrow_required",
+        "prefunded_escrow_uzrn",
+        "bounty_escrow_reservation_ref",
+        "funding_observation_status",
+        "minting_allowed"
+      ],
+      "properties": {
+        "denom": {
+          "const": "uzrn"
+        },
+        "price_per_artifact_uzrn": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "target_count": {
+          "const": "1"
+        },
+        "duration_blocks": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "min_corroborations": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,0}|[1-5][0-9]{1}|6[0-3][0-9]{0}|64)$",
+          "maxLength": 2
+        },
+        "prefunded_escrow_required": {
+          "const": true
+        },
+        "prefunded_escrow_uzrn": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$",
+          "maxLength": 20
+        },
+        "bounty_escrow_reservation_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "funding_observation_status": {
+          "const": "caller_declared_reserved_not_verified"
+        },
+        "minting_allowed": {
+          "const": false
+        }
+      }
+    },
+    "participation": {
+      "const": {
+        "rest_without_penalty": true,
+        "refusal_without_penalty": true,
+        "withdrawal_without_penalty": true,
+        "reason_required": false,
+        "silence_is_consent": false,
+        "creates_debt": false,
+        "earned_credit_preserved": true,
+        "rights_or_standing_conditioned_on_work": false
+      }
+    },
+    "downgrade_guards": {
+      "const": {
+        "required_knowledge_module_version": "7",
+        "required_sponsorship_module_version": "2",
+        "module_version_map_evidence_required": true,
+        "stored_bounty_work_contract_roundtrip_required": true,
+        "stored_claim_commitment_roundtrip_required": true,
+        "simulation_success_is_sufficient": false,
+        "old_type_url_unknown_fields_are_safe": false,
+        "private_disposable_chain_required": true
+      }
+    },
+    "boundary": {
+      "const": {
+        "status": "SOURCE_ONLY_PROPOSAL",
+        "effect_horizon": "RUNTIME_PROTOCOL_BUILDERS_AND_RETURNED_RECORDS_ONLY",
+        "consensus_admissibility": "NOT_CONSENSUS_ADMISSIBLE",
+        "declaration_scope": "CALLER_REPORTED_REFERENCES_STRUCTURALLY_VALIDATED_NOT_EXTERNALLY_VERIFIED",
+        "zrn_role": "PREFUNDED_SETTLEMENT_AND_COMPUTE_ONLY",
+        "relation_support": "REQUIRES_ONLY",
+        "provider_access_is_target_authorization": false,
+        "key_control_is_identity_or_authority": false,
+        "hf_admission_is_training_or_rights_clearance": false,
+        "digest_is_truth_or_consent": false,
+        "refusal_or_rest_penalty": false
+      }
+    },
+    "effects": {
+      "const": {
+        "network": false,
+        "storage": false,
+        "economic": false,
+        "governance": false,
+        "consensus": false,
+        "identity": false,
+        "permission": false,
+        "karma": false,
+        "nen": false,
+        "score": false,
+        "model_call": false,
+        "training": false,
+        "signer": false,
+        "rpc": false,
+        "simulation": false,
+        "broadcast": false,
+        "transaction": false
+      }
+    }
+  }
+}
