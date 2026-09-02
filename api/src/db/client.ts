@@ -24,6 +24,12 @@ const sql = postgres(config.databaseUrl, {
   idle_timeout: 20,
   connect_timeout: 10,
   prepare: false,
+  // A pooler-side drop leaves a socket ESTABLISHED with a query that never
+  // answers; without this bound that slot is gone until the process exits
+  // (the 2026-08-31 wedge, recurring hourly on 2026-09-02). 135s sits above
+  // the database's 120s statement_timeout, so a legitimate long statement
+  // is always answered first. See ./guarded-socket.ts and ./pool-watchdog.ts.
+  inactivity_guard_seconds: 135,
 });
 
 export const db = drizzle(sql);

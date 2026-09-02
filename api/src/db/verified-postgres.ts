@@ -7,6 +7,7 @@
 
 import postgres from "postgres";
 
+import { guardedSocketFactory, reportGuardedSocket } from "./guarded-socket";
 import { postgresSslForDatabaseUrl } from "./supabase-target";
 
 export type VerifiedPostgresTransactionSql = postgres.TransactionSql;
@@ -28,9 +29,13 @@ type TargetOrTransportOption =
 
 export type VerifiedPostgresOptions = Omit<
   postgres.Options<{}>,
-  TargetOrTransportOption
+  TargetOrTransportOption | "socket"
 > & {
   connection?: { application_name?: string };
+  /** Destroy any pool socket silent for this many seconds so a dead
+   *  connection returns its slot (see ./guarded-socket.ts). Opt-in: pools
+   *  that are legitimately silent (LISTEN/NOTIFY sessions) must not set it. */
+  inactivity_guard_seconds?: number;
 };
 
 const OPERATIONAL_OPTION_KEYS = new Set([
@@ -40,6 +45,7 @@ const OPERATIONAL_OPTION_KEYS = new Set([
   "debug",
   "fetch_types",
   "idle_timeout",
+  "inactivity_guard_seconds",
   "keep_alive",
   "max",
   "max_lifetime",
@@ -62,6 +68,14 @@ function assertOperationalOptions(options: VerifiedPostgresOptions): void {
     throw new Error("Postgres caller options may not override target or transport");
   }
 
+  const guard = options.inactivity_guard_seconds;
+  if (
+    guard !== undefined &&
+    (typeof guard !== "number" || !Number.isFinite(guard) || guard <= 0)
+  ) {
+    throw new Error("Postgres inactivity_guard_seconds must be a positive number");
+  }
+
   const connection = options.connection;
   if (connection === undefined) return;
   if (
@@ -78,11 +92,23 @@ function assertOperationalOptions(options: VerifiedPostgresOptions): void {
 
 export default function verifiedPostgres(
   url: string,
-  options: VerifiedPostgresOptions = {},
+  callerOptions: VerifiedPostgresOptions = {},
 ): ReturnType<typeof postgres> {
-  assertOperationalOptions(options);
+  assertOperationalOptions(callerOptions);
+  // The guard is this module's own option, never a postgres.js one: strip it
+  // here and turn it into the socket factory, which is transport and so is
+  // chosen by this constructor alone.
+  const { inactivity_guard_seconds, ...options } = callerOptions;
+  const socket =
+    inactivity_guard_seconds === undefined
+      ? undefined
+      : guardedSocketFactory({
+          inactivityMs: inactivity_guard_seconds * 1000,
+          onGuard: reportGuardedSocket,
+        });
   return postgres(url, {
     ...options,
+    ...(socket ? { socket } : {}),
     ssl: postgresSslForDatabaseUrl(url),
   });
 }

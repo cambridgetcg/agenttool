@@ -13,6 +13,10 @@
  * take-rate; never per-agent monthly fees).
  */
 
+// Must stay the first import: installs the unhandled-rejection net before any
+// other module can orphan a promise. See ./process-guards.ts.
+import "./process-guards";
+
 import { randomUUID } from "node:crypto";
 
 import type { Server } from "bun";

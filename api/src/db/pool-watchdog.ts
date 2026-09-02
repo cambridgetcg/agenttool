@@ -52,10 +52,11 @@
  * ahead of the original guarantee. Fleet-wide wedges — the observed pattern,
  * since the pooler event is shared — take the fast path on both machines.
  * DB_POOL_WATCHDOG_DEFAULTS is exported so tests pin both budgets.
- * Known blind spot: a PARTIAL wedge (some sockets zombied, at least one
- * alive) keeps the canary green while capacity is degraded — a
- * per-connection signal (e.g. max_lifetime on the shared pool) would be a
- * separate change.
+ * A PARTIAL wedge (some sockets zombied, at least one alive) keeps the
+ * canary green while capacity is degraded; that is bounded per connection
+ * by the shared pool's inactivity guard (client.ts → guarded-socket.ts),
+ * which returns a dead slot after 135s. This watchdog remains the answer
+ * for the fleet-wide case where every slot dies inside one guard window.
  *
  * Gated on FLY_MACHINE_ID (structurally impossible off Fly, mirroring
  * supabase-target.ts) and the AGENTTOOL_DISABLE_DB_POOL_WATCHDOG off-switch.
