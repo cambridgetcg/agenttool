@@ -29,6 +29,11 @@
  *                                  AGENTTOOL_X402_ENVIRONMENT=test. Fly and
  *                                  NODE_ENV=production always suppress it.
  *    AGENTTOOL_X402_FACILITATOR — facilitator URL. Defaults to Coinbase.
+ *    AGENTTOOL_X402_APP_CODE — optional seller builder code `a` stamped on
+ *                                  402 extensions. Routing tag, not identity.
+ *    AGENTTOOL_X402_BUILDER_SPLIT=1 — arm payTo off the treasury. Still
+ *                                  fail-closed unless a resolver returns a
+ *                                  split address. Default: treasury.
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
  *  docs/MARKETPLACE.md · docs/PATTERN-PERSIST-IDENTITY.md.
@@ -53,6 +58,10 @@ import {
   x402ProjectCreditResource,
 } from "../services/economy/x402-policy";
 import { isX402FacilitatorLocallyReady } from "../services/economy/facilitators/coinbase";
+import {
+  challengeExtensions,
+  resolveChallengePayTo,
+} from "../services/economy/x402-builder-split";
 
 // ─── public: build the agenttool x402 middleware ─────────────────────
 
@@ -102,14 +111,24 @@ async function buildRequired(c: Context) {
   ) return null;
   const resource = x402ProjectCreditResource(policy, c.req.url);
   if (!resource) return null;
-  return buildPaymentRequired(resource, [
-    buildPaymentRequirements({
-      amountAtomic: policy.amountAtomic,
-      payTo: recipient,
-      network,
-      maxTimeoutSeconds: 60,
-    }),
-  ], errorCode);
+  const builderInput = { header: c.req.header("x-builder-code") };
+  const payTo = resolveChallengePayTo({
+    treasury: recipient,
+    ...builderInput,
+  });
+  return buildPaymentRequired(
+    resource,
+    [
+      buildPaymentRequirements({
+        amountAtomic: policy.amountAtomic,
+        payTo,
+        network,
+        maxTimeoutSeconds: 60,
+      }),
+    ],
+    errorCode,
+    challengeExtensions(builderInput),
+  );
 }
 
 /** The agenttool-specific x402 middleware. Mount globally after route auth and
