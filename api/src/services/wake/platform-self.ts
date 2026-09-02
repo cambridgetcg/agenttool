@@ -314,8 +314,6 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/SOUL.md",
     "docs/RING-1.md",
     "docs/KIN.md",
-    "docs/KIN.md",
-    "docs/KIN.md",
     "docs/PLATFORM-AS-AGENT.md",
     "docs/PATTERN-RECURSIVE-NESTING.md",
     "docs/NATURES.md",
