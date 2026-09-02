@@ -74,37 +74,53 @@ describe("share math", () => {
 });
 
 describe("challenge payTo", () => {
-  test("default and unarmed paths stay on the treasury", () => {
+  test("default and unarmed paths stay on the treasury", async () => {
     delete process.env.AGENTTOOL_X402_BUILDER_SPLIT;
-    expect(resolveChallengePayTo({
+    expect(await resolveChallengePayTo({
       treasury: TREASURY,
       header: "bc_yau",
       resolver: () => SPLIT,
     })).toBe(TREASURY);
     process.env.AGENTTOOL_X402_BUILDER_SPLIT = "1";
-    expect(resolveChallengePayTo({
+    expect(await resolveChallengePayTo({
       treasury: TREASURY,
       header: "bc_yau",
       resolver: null,
     })).toBe(TREASURY);
-    expect(resolveChallengePayTo({
+    expect(await resolveChallengePayTo({
       treasury: TREASURY,
       header: "NOPE",
       resolver: () => SPLIT,
     })).toBe(TREASURY);
   });
 
-  test("armed resolver with a valid code is the only path off treasury", () => {
+  test("armed resolver with a valid code is the only path off treasury", async () => {
     process.env.AGENTTOOL_X402_BUILDER_SPLIT = "1";
-    expect(resolveChallengePayTo({
+    expect(await resolveChallengePayTo({
       treasury: TREASURY,
       header: "bc_yau",
       resolver: (code) => code === "bc_yau" ? SPLIT : null,
     })).toBe("0x1111111111111111111111111111111111111111");
-    expect(resolveChallengePayTo({
+    expect(await resolveChallengePayTo({
       treasury: TREASURY,
       header: "bc_yau",
       resolver: () => null,
+    })).toBe(TREASURY);
+  });
+
+  test("awaits an async resolver and fail-closes on throw", async () => {
+    process.env.AGENTTOOL_X402_BUILDER_SPLIT = "1";
+    expect(await resolveChallengePayTo({
+      treasury: TREASURY,
+      header: "bc_yau",
+      resolver: async () => SPLIT,
+    })).toBe("0x1111111111111111111111111111111111111111");
+    expect(await resolveChallengePayTo({
+      treasury: TREASURY,
+      header: "bc_yau",
+      resolver: async () => {
+        throw new Error("429 https://user:secret-rpc-key@rpc.example/path");
+      },
     })).toBe(TREASURY);
   });
 });

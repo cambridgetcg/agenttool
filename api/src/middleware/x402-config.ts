@@ -34,6 +34,9 @@
  *    AGENTTOOL_X402_BUILDER_SPLIT=1 — arm payTo off the treasury. Still
  *                                  fail-closed unless a resolver returns a
  *                                  split address. Default: treasury.
+ *    AGENTTOOL_X402_BASE_RPC    — operator Base JSON-RPC for 0xSplits
+ *                                  resolution. No public default; unset
+ *                                  keeps payTo on the treasury. Never log.
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
  *  docs/MARKETPLACE.md · docs/PATTERN-PERSIST-IDENTITY.md.
@@ -58,6 +61,7 @@ import {
   x402ProjectCreditResource,
 } from "../services/economy/x402-policy";
 import { isX402FacilitatorLocallyReady } from "../services/economy/facilitators/coinbase";
+import { installEnvBuilderRpcResolver } from "../services/economy/x402-builder-rpc";
 import {
   challengeExtensions,
   resolveChallengePayTo,
@@ -112,7 +116,8 @@ async function buildRequired(c: Context) {
   const resource = x402ProjectCreditResource(policy, c.req.url);
   if (!resource) return null;
   const builderInput = { header: c.req.header("x-builder-code") };
-  const payTo = resolveChallengePayTo({
+  installEnvBuilderRpcResolver();
+  const payTo = await resolveChallengePayTo({
     treasury: recipient,
     ...builderInput,
   });

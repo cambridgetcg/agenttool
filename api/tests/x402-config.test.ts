@@ -40,6 +40,7 @@ const originalEnv = {
   flyAppName: process.env.FLY_APP_NAME,
   appCode: process.env.AGENTTOOL_X402_APP_CODE,
   builderSplit: process.env.AGENTTOOL_X402_BUILDER_SPLIT,
+  baseRpc: process.env.AGENTTOOL_X402_BASE_RPC,
 };
 
 function restore(name: string, value: string | undefined): void {
@@ -60,6 +61,7 @@ afterEach(() => {
   restore("FLY_APP_NAME", originalEnv.flyAppName);
   restore("AGENTTOOL_X402_APP_CODE", originalEnv.appCode);
   restore("AGENTTOOL_X402_BUILDER_SPLIT", originalEnv.builderSplit);
+  restore("AGENTTOOL_X402_BASE_RPC", originalEnv.baseRpc);
   setBuilderPayToResolver(null);
 });
 

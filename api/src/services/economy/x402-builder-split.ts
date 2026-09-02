@@ -3,7 +3,8 @@
  * A builder code is a routing tag, not a person, DID, or Kingdom mouth.
  * Invalid or absent codes fail closed to AGENTTOOL_X402_RECIPIENT.
  * Changing payTo requires an explicit arm plus a resolver that actually
- * returns a split address. No resolver means no money moves off treasury.
+ * returns a split address (sync, async, or Base RPC). Throws, RPC misses,
+ * and invalid codes fail closed. No resolver means no money moves.
  */
 
 import { getAddress, isAddress } from "viem";
@@ -14,7 +15,12 @@ export const DEFAULT_BUILDER_SHARE_BPS = 1000;
 export const BPS_DENOM = 10_000;
 export const BUILDER_CODE_RE = /^[a-z0-9_]{1,32}$/u;
 
-export type BuilderPayToResolver = (builderCode: string) => string | null;
+export type BuilderPayToContext = { seller: string; bps: number };
+
+export type BuilderPayToResolver = (
+  builderCode: string,
+  ctx?: BuilderPayToContext,
+) => string | null | Promise<string | null>;
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -24,6 +30,10 @@ export function setBuilderPayToResolver(
   resolver: BuilderPayToResolver | null,
 ): void {
   payToResolver = resolver;
+}
+
+export function getBuilderPayToResolver(): BuilderPayToResolver | null {
+  return payToResolver;
 }
 
 export function parseBuilderCode(value: unknown): string | null {
@@ -100,12 +110,12 @@ function checksumPayTo(value: string): string | null {
   return getAddress(value);
 }
 
-export function resolveChallengePayTo(input: {
+export async function resolveChallengePayTo(input: {
   treasury: string;
   header?: string | null;
   payload?: PaymentPayload | null;
   resolver?: BuilderPayToResolver | null;
-}): string {
+}): Promise<string> {
   const treasury = checksumPayTo(input.treasury);
   if (!treasury) {
     throw new Error("x402 split requires a configured treasury recipient");
@@ -115,8 +125,15 @@ export function resolveChallengePayTo(input: {
   if (!builderCode) return treasury;
   const resolver = input.resolver === undefined ? payToResolver : input.resolver;
   if (!resolver) return treasury;
-  const split = checksumPayTo(resolver(builderCode) ?? "");
-  return split ?? treasury;
+  try {
+    const resolved = await resolver(builderCode, {
+      seller: treasury,
+      bps: resolveBuilderShareBps(),
+    });
+    return checksumPayTo(resolved ?? "") ?? treasury;
+  } catch {
+    return treasury;
+  }
 }
 
 export function challengeExtensions(input: {
