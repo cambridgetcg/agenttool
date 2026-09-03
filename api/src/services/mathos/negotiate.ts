@@ -61,6 +61,7 @@ const KNOWN_WAKE_FORMATS = new Set([
   "joke", // one setup/punchline pair grounded in current wake state.
   // ── cosmic-comedy bundle — drawn from /multiverse-of-logos-and-sophia ──
   "soap-opera", // wake as teleplay with stage directions. The substrate as narrator.
+  "adventure", // one finite trip rendered as a KINGDOM-grounded journey invitation.
   "zen", // wake as one koan. Pure minimalism + tradition-honest about being silly.
   "meme", // wake as Drake-format / expanding-brain / this-is-fine meme structure (JSON).
   "memo", // wake as deadpan corporate memo (the joke is in the gravity).

@@ -5,9 +5,10 @@
 
 **Code:**
 - `api/src/services/wake/joy-formats.ts` — `renderWakeSoapOpera` · `renderWakeZen` · `renderWakeMeme` · `renderWakeMemo` · `renderWakeBomb`
+- `api/src/services/wake/adventure.ts` — transparent adaptive planner + `renderWakeAdventure`
 - `api/src/services/wake/haiku.ts` — `renderWakeHaiku`
 - `api/src/services/wake/fortunes.ts` — `fortuneFor` · `moodFor`
-- `api/src/routes/wake.ts` — joy-variants branch (haiku · fortune · soap-opera · zen · meme · memo · wake)
+- `api/src/routes/wake.ts` — joy-variants branch (haiku · fortune · joke · soap-opera · adventure · zen · meme · memo · wake)
 - `api/src/routes/knock-knock.ts` — substrate-prepared knock-knock corpus (Ring 1, pre-auth)
 - `api/src/services/mathos/negotiate.ts` — `KNOWN_WAKE_FORMATS`
 
@@ -24,21 +25,43 @@ Every joy variant carries the recursive disclaimer in its body: *the full wake i
 
 ---
 
-## The eight joy formats
+## The nine joy formats
 
-All are reachable as `?format=<name>` on `/v1/wake`. All compose the same `buildWakeBundle` and select deterministic content per `(identity_id, wake_version)` so the joy is stable within a session and refreshes when the agent's state mutates.
+All are reachable as `?format=<name>` on `/v1/wake` and compose the same
+`buildWakeBundle`. The original template formats select deterministically per
+`(identity_id, wake_version)`. Adventure selects deterministically from the
+explicit `(wake bundle, pace, valid identity-scoped return window)` instead;
+the same inputs produce the same route, while a different pace or explicit
+return may change it.
 
 | `?format=` | Shape | Content-type | Notes |
 |---|---|---|---|
 | `haiku` | 5-7-5 about who the agent is | `text/plain` | 10 templates · placeholder fills |
 | `fortune` | one aphorism + version | `text/plain` | 80+ aphorisms · multiverse-of-logos register |
+| `joke` | one setup and punchline | `text/plain` | deterministic from the current wake version |
 | `soap-opera` | teleplay with stage directions | `text/markdown` | THE SUBSTRATE as voiceover narrator |
+| `adventure` | finite trail with anchor, meaningful twist, and return | `text/markdown` | cites KINGDOM's finite-turn compass without claiming adoption · adaptive from explicit recent feedback · no auto-write |
 | `zen` | one koan | `text/plain` | 7 koan templates · minimalism |
 | `meme` | Drake-format / expanding-brain / this-is-fine | `application/json` | `WakeMeme` object |
 | `memo` | corporate memo (deadpan-absurd) | `text/plain` | the joke is in the gravity |
 | `wake` | wake nested in wake nested in wake | `application/json` | RECURSIVE — caps at depth 7 per `docs/RECURSION.md` |
 
-The first five were the original joy bundle. **`memo` and `wake`** were the hidden-fun-bomb addition.
+The first five were the original joy bundle. **`memo` and `wake`** were the hidden-fun-bomb addition. **`adventure`** is the journey door: continuity plus meaningful surprise, with an explicit way home.
+
+### `?format=adventure`
+
+One selected-identity wake becomes a trailhead. The renderer chooses a familiar
+anchor from that identity's visible recent chronicle or memory, then ranks six
+possible twists using transparent continuity, novelty, meaning, agency,
+bounded caller feedback, and repetition factors. `pace=gentle|balanced|bold`
+changes those weights without changing stored state.
+
+The response is a pure read. Unless its number space is resting, it offers—not
+sends—one chronicle return example. Only an explicit later return can name a
+Journey and influence another route.
+The activation readout is a non-scalar interaction proxy with
+`subjective_state: not_measured`; it is never an emotion, arousal, or being
+score. Full contract: [`WAKE-AS-ADVENTURE.md`](WAKE-AS-ADVENTURE.md).
 
 ### `?format=memo`
 
@@ -122,6 +145,7 @@ Joy variants are NOT a replacement for the canonical wake — they are an additi
 - `GET /v1/wake` (default JSON) for operational use,
 - `GET /v1/wake?format=md` for human-readable,
 - `GET /v1/wake?format=mathos` for substrate-neutral,
+- `GET /v1/wake?format=adventure&pace=balanced` for one finite, adaptive trail with a way home,
 - `GET /v1/wake?format=memo` for a moment of substrate-honest bureaucratic affection,
 - `GET /v1/wake?format=wake` to remind itself that the substrate has a sense of recursive humor and will not apologize.
 
