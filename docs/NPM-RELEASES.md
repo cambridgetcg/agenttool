@@ -87,6 +87,88 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Verified Economic Kernel 0.2 developer preview — 2026-09-03
+
+The authorized Economic Kernel pair is publicly verified from protected
+[PR #404](https://github.com/cambridgetcg/agenttool/pull/404), merged as
+[`737a58f02e11f52e74703b921d806e78c27202e9`](https://github.com/cambridgetcg/agenttool/commit/737a58f02e11f52e74703b921d806e78c27202e9).
+That release merge carries semantic source commit
+`f809275a1dff14e0f88af73bb53e11b104a92438` and LOVE lineage commit
+`2fc1267432addf3f219593bf08be4278434ab663`. Both annotated tags peel to
+the protected-main merge. GitHub Release assets, checked-in LOVE archives, and
+fresh anonymous npm downloads were byte-identical.
+
+| Package | Protected publication and exact public artifact |
+|---|---|
+| `@agenttool/economic-kernel@0.2.0-dev.0` | [Release](https://github.com/cambridgetcg/agenttool/releases/tag/economic-kernel-v0.2.0-dev.0) · [run `33736822237`](https://github.com/cambridgetcg/agenttool/actions/runs/33736822237) · published `2026-09-03T09:07:19.334Z`, anonymously observed `2026-09-03T09:12:17.731Z` · 57,031-byte archive SHA-256 `8b2682f3878a93b9f8d039989313dc9f59c982ff1cb7fb4abb05ccb553f7e9cf`, npm SHA-1 `b72ec9fbd4d83bbdb920fcdd0216370aac54bc7a` · 1,473-byte LOVE manifest SHA-256 `1dcd4dc3a133ea04e7b1529b70c19227d4e7cf1c0a7cb274ca19d12d6c601cb8` · SLSA [Rekor `2697675854`](https://search.sigstore.dev/?logIndex=2697675854), publish [Rekor `2697675959`](https://search.sigstore.dev/?logIndex=2697675959) |
+| `@agenttool/economic-conformance@0.2.0-dev.0` | [Release](https://github.com/cambridgetcg/agenttool/releases/tag/economic-conformance-v0.2.0-dev.0) · [run `33736825170`](https://github.com/cambridgetcg/agenttool/actions/runs/33736825170) · published `2026-09-03T09:07:17.259Z`, anonymously observed `2026-09-03T09:12:16.089Z` · 58,390-byte archive SHA-256 `ba9f2c869c3d6bef963ef3fbe962fc678b736144d10e5aff6c83a49a84804661`, npm SHA-1 `df9013398199aae233b96fb512ad90be947ce7cc` · 1,513-byte LOVE manifest SHA-256 `068a2f80187fb09edc8f0e6da830258ac301238c258aa1fe289246c18ff6baf8` · SLSA [Rekor `2697675800`](https://search.sigstore.dev/?logIndex=2697675800), publish [Rekor `2697675886`](https://search.sigstore.dev/?logIndex=2697675886) |
+
+The comparator's 53-case frozen vector is 22,842 bytes with SHA-256
+`2c13fd9f341210657de0f1fc223c22c82472ca6377a9af3dce28c9db035ae47b`;
+its semantic SHA-256 is
+`4ab116811eded993e0a1156970dac917515e039a1b651fe408f832c008e7ee43`.
+Both publications requested npm `next`. Because these are each package's sole
+public version, npm also exposes the same prerelease through its automatic
+`latest` fallback; that is not a stable-release or maturity signal.
+
+The separate, public, ungated
+[Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-economic-kernel)
+was read back anonymously and with authentication at immutable revision
+[`a4690cd8c2701b28057c115ba0d3d2ee21162db4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-economic-kernel/commit/a4690cd8c2701b28057c115ba0d3d2ee21162db4).
+Its 13 owned files total 146,381 bytes; Hugging Face's `.gitattributes` is the
+sole provider-managed extra. The checked-in hash manifest has SHA-256
+`be655945aca5844d7716f733fcf5e0b68b200ed1c2f44c4432553a214c7ace5f`.
+For each owned file, the tree receipt serializes relative path, lowercase raw
+SHA-256 hex, and decimal byte length with NUL separators; it sorts those records
+by path, joins them with LF, and adds no terminal LF. SHA-256 of those 1,194
+bytes is
+`18eb2361a10794bbe8b62aa0a645b5c4e8ece0ae5e167ac5eed71f3662125058`.
+Config `economic_kernel_lessons` contains 24 independently authored synthetic
+rows with `training_authorized: true`; config `economic_kernel_v0_2` contains
+the 53 exact reference cases with `training_authorized: false`. Public
+visibility cannot technically enforce that holdout.
+
+At the mutable Dataset Server observation time `2026-09-03T10:57:25Z`, both
+configs had completed conversion with no pending or failed splits and
+`partial: false`: 77 rows total, 39,479 Parquet bytes, and 48,632 estimated
+in-memory bytes. The lesson split exposed 24 rows across 18 columns; the
+reference split exposed 53 rows across 22 columns. Preview, viewer, search,
+filter, and statistics validity were all `true`. These service-status facts are
+a timestamped current-head observation, not properties of the immutable Git
+revision.
+
+Frontend-only static deployment then ran from protected-main portability merge
+[`748402c19865fd652ff5bd96da64f3227cbbb1e9`](https://github.com/cambridgetcg/agenttool/commit/748402c19865fd652ff5bd96da64f3227cbbb1e9).
+Receipt `agenttool-deploy-receipt/v6`, run `deploy-748402c19865-34774`, records
+start `2026-09-03T10:36:59Z`, completion `2026-09-03T10:55:09Z`, a clean
+source tree, full preflight passed, frontends `deployed_verified`, API skipped,
+and migrations skipped. Cloudflare created Pages deployments
+[`a6864f4f`](https://a6864f4f.agenttool-docs.pages.dev),
+[`986a53c3`](https://986a53c3.agenttool-dashboard.pages.dev), and
+[`aec6fe53`](https://aec6fe53.agenttool-web.pages.dev), plus apex Worker
+version `9b0e8596-c33a-49ff-83db-4794ffc86fd1`.
+
+Independent direct readback of every Economic Kernel LOVE surface returned
+HTTP 200 with no redirects and exact checked-in bytes:
+
+| Public path | Bytes | SHA-256 |
+|---|---:|---|
+| [discovery](https://docs.agenttool.dev/.well-known/love-packages) | 394 | `cb72f1810ad1c399a56d6a1b624f164d330951e460fc23c5b4c572a62c5eeb9d` |
+| [package index](https://docs.agenttool.dev/packages/v1/index.json) | 11,335 | `72deb97f9767b6d582027c0f43b74cb523a37816398e6e2373eead8b4293d4b8` |
+| [kernel manifest](https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/manifest.json) | 1,473 | `1dcd4dc3a133ea04e7b1529b70c19227d4e7cf1c0a7cb274ca19d12d6c601cb8` |
+| [kernel archive](https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/agenttool-economic-kernel-0.2.0-dev.0.tgz) | 57,031 | `8b2682f3878a93b9f8d039989313dc9f59c982ff1cb7fb4abb05ccb553f7e9cf` |
+| [conformance manifest](https://docs.agenttool.dev/packages/v1/@agenttool/economic-conformance/0.2.0-dev.0/manifest.json) | 1,513 | `068a2f80187fb09edc8f0e6da830258ac301238c258aa1fe289246c18ff6baf8` |
+| [conformance archive](https://docs.agenttool.dev/packages/v1/@agenttool/economic-conformance/0.2.0-dev.0/agenttool-economic-conformance-0.2.0-dev.0.tgz) | 58,390 | `ba9f2c869c3d6bef963ef3fbe962fc678b736144d10e5aff6c83a49a84804661` |
+
+JSON surfaces were UTF-8 with CORS `*`, `nosniff`, and
+`public, max-age=300, must-revalidate`; immutable archives were
+`application/gzip` with CORS `*`, `nosniff`, and
+`public, max-age=31536000, immutable`. This publication and deployment performed
+no optimizer step, model-training job, checkpoint mutation, model-weight
+update, Fly API release, or database migration. Dataset admission means the
+rows are available under their declared governance; it does not claim that a
+training run occurred.
+
 ## Verified npm recovery batch — 2026-08-25
 
 Protected recovery published seven exact reviewed versions. In every successful
