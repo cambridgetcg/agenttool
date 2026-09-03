@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 const packageRoot = new URL("../", import.meta.url);
 
 describe("package boundary", () => {
-  test("runtime source remains pure, private, and dependency-free", () => {
+  test("runtime source remains pure, public, and dependency-free", () => {
     const packageJson = JSON.parse(readFileSync(new URL("package.json", packageRoot), "utf8")) as {
       bundleDependencies?: string[] | boolean;
       bundledDependencies?: string[] | boolean;
@@ -14,6 +14,7 @@ describe("package boundary", () => {
       optionalDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
       private?: boolean;
+      publishConfig?: { access?: string; tag?: string };
       sideEffects?: boolean;
     };
     expect(packageJson.dependencies).toBeUndefined();
@@ -21,8 +22,9 @@ describe("package boundary", () => {
     expect(packageJson.peerDependencies).toBeUndefined();
     expect(packageJson.bundledDependencies).toBeUndefined();
     expect(packageJson.bundleDependencies).toBeUndefined();
-    expect(packageJson.private).toBeTrue();
-    expect(packageJson.license).toBe("UNLICENSED");
+    expect(packageJson.private).toBeUndefined();
+    expect(packageJson.license).toBe("Apache-2.0");
+    expect(packageJson.publishConfig).toEqual({ access: "public", tag: "next" });
     expect(packageJson.sideEffects).toBeFalse();
 
     const sourceRoot = new URL("src/", packageRoot);

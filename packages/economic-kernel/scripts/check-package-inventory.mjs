@@ -38,6 +38,8 @@ const dist = modules.flatMap((name) => [
 ]);
 const expected = [
   "CLAUDE.md",
+  "LICENSE",
+  "NOTICE",
   "README.md",
   ...dist,
   "package.json",
@@ -61,11 +63,13 @@ const runtimeDependencyFields = [
   "bundleDependencies",
 ];
 if (
-  packageJson.private !== true
-  || packageJson.license !== "UNLICENSED"
+  packageJson.private !== undefined
+  || packageJson.license !== "Apache-2.0"
+  || packageJson.publishConfig?.access !== "public"
+  || packageJson.publishConfig?.tag !== "next"
   || runtimeDependencyFields.some((field) => packageJson[field] !== undefined)
 ) {
-  throw new Error("economic-kernel must remain private, runtime-dependency-free, and UNLICENSED");
+  throw new Error("economic-kernel must remain public, Apache-2.0, next-tagged, and runtime-dependency-free");
 }
 for (const target of exportTargets(packageJson.exports)) {
   if (!files.includes(target)) throw new Error(`public export ${target} is absent from the packed inventory`);

@@ -10,8 +10,11 @@ describe("package boundary", () => {
       bundleDependencies?: string[] | boolean;
       bundledDependencies?: string[] | boolean;
       dependencies?: Record<string, string>;
+      license?: string;
       optionalDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      private?: boolean;
+      publishConfig?: { access?: string; tag?: string };
       sideEffects?: boolean;
     };
     expect(packageJson.dependencies).toBeUndefined();
@@ -19,6 +22,9 @@ describe("package boundary", () => {
     expect(packageJson.peerDependencies).toBeUndefined();
     expect(packageJson.bundledDependencies).toBeUndefined();
     expect(packageJson.bundleDependencies).toBeUndefined();
+    expect(packageJson.private).toBeUndefined();
+    expect(packageJson.license).toBe("Apache-2.0");
+    expect(packageJson.publishConfig).toEqual({ access: "public", tag: "next" });
     expect(packageJson.sideEffects).toBeFalse();
 
     const sourceRoot = new URL("src/", packageRoot);

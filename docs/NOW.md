@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-01 (the paired SDK 0.22.1 honest-onboarding npm and PyPI publications are verified — protected npm run 33522319466 and PyPI run 33522323177 on annotated `sdk-v0.22.1` at merge `d49498d2` matched the exact public bytes; API/static deployment of that merge remains prospective; verified 0.22.0, 0.21.1, and 0.21.0 receipts remain immutable public history)
+> Updated: 2026-09-03 (Economic Kernel and independent conformance/Hugging Face companion are sealed as public-release candidates; LOVE, GitHub, npm, Hub, and static deployment remain prospective until their exact readbacks are recorded below)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-09-03)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **ECONOMIC KERNEL 0.1 — exact value movement below the hard gates** | Source candidate `@agenttool/economic-kernel@0.1.0-dev.0` plus `@agenttool/economic-conformance@0.1.0-dev.0`; publication receipts pending | The pure kernel distinguishes units before arithmetic, pins immutable reduced-rational prices and quotes, conserves every ledger domain/unit pair, repairs by append-only compensation, separates payment from effect attempts, and makes ambiguous I/O reconcile-only. Authority, safety, and participation/refusal gates precede economic readiness, so payment cannot buy through a hard denial and standing rights never become a price input. The independent package compares inert traces against 34 frozen cases without importing an implementation or certifying a host. Its deterministic Hub candidate admits 24 independently authored synthetic lessons for training while marking the exact public conformance config non-training; that transparent split cannot guarantee downstream holdout behavior. Source bytes perform no payment, settlement, persistence, provider action, optimizer step, model-weight change, hosted API mutation, or deployment. Exact LOVE/GitHub/npm/Hub/static receipts replace the pending statement only after public readback. |
 
 ## Just landed (2026-09-01)
 

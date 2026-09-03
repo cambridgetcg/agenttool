@@ -31,6 +31,12 @@ the economic kernel and free of runtime dependencies.
   explicitly expected-invalid amount-validation cases.
 - Vector changes create a new suite revision; do not silently rewrite a pinned
   conformance surface.
+- Keep independently authored training lessons separate from exact conformance
+  inputs and expected observations. A public holdout is publisher intent, not
+  secrecy or technical prevention of downstream training.
+- Hugging Face publication, model training, and provider execution are separate
+  external effects. The static candidate and package runtime perform none of
+  them.
 
 ## Verification
 

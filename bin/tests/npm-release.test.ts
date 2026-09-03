@@ -205,7 +205,56 @@ describe("standard npm release policy", () => {
     });
   });
 
-  test("allowlists thirty-six reviewed release identities", () => {
+  test("keeps both economic packages on the protected LOVE prerelease lane", async () => {
+    const workflow = await readFile(
+      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      "utf8",
+    );
+    for (const key of ["economic-kernel", "economic-conformance"] as const) {
+      expect(workflow.match(new RegExp(`^\\s+- ${key}$`, "gm"))).toEqual([`          - ${key}`]);
+
+      const packageJson = JSON.parse(
+        await readFile(
+          join(import.meta.dir, "..", "..", "packages", key, "package.json"),
+          "utf8",
+        ),
+      ) as {
+        name?: unknown;
+        version?: unknown;
+        private?: unknown;
+        license?: unknown;
+        dependencies?: unknown;
+        publishConfig?: { access?: unknown; tag?: unknown };
+        scripts?: { prepack?: unknown };
+      };
+      expect({
+        name: packageJson.name,
+        version: packageJson.version,
+        private: packageJson.private,
+        license: packageJson.license,
+        dependencies: packageJson.dependencies,
+        publishConfig: packageJson.publishConfig,
+        prepack: packageJson.scripts?.prepack,
+      }).toEqual({
+        name: `@agenttool/${key}`,
+        version: "0.1.0-dev.0",
+        private: undefined,
+        license: "Apache-2.0",
+        dependencies: undefined,
+        publishConfig: { access: "public", tag: "next" },
+        prepack: "bun run ci",
+      });
+      expect(releaseSpec(key)).toEqual({
+        key,
+        name: `@agenttool/${key}`,
+        packagePath: `packages/${key}`,
+        tagPrefix: key,
+        artifactKind: "love",
+      });
+    }
+  });
+
+  test("allowlists thirty-eight reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -221,6 +270,8 @@ describe("standard npm release policy", () => {
       "data-sync",
       "dataset-influence",
       "deepseek-kingdom",
+      "economic-conformance",
+      "economic-kernel",
       "heaven",
       "hf-scout",
       "kingdom",
@@ -600,10 +651,55 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/wallet-zerone", "0.1.2")).toBe(
       "agenttool-wallet-zerone-0.1.2.tgz",
     );
+    expect(expectedTag(releaseSpec("economic-kernel"), "0.1.0-dev.0")).toBe(
+      "economic-kernel-v0.1.0-dev.0",
+    );
+    expect(expectedTag(releaseSpec("economic-conformance"), "0.1.0-dev.0")).toBe(
+      "economic-conformance-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/economic-kernel", "0.1.0-dev.0")).toBe(
+      "agenttool-economic-kernel-0.1.0-dev.0.tgz",
+    );
+    expect(packedFilename("@agenttool/economic-conformance", "0.1.0-dev.0")).toBe(
+      "agenttool-economic-conformance-0.1.0-dev.0.tgz",
+    );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 
   test("requires package-specific runtime and protocol artifacts", () => {
+    expect(requiredArchiveEntries(releaseSpec("economic-kernel"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    ]);
+    expect(requiredArchiveEntries(releaseSpec("economic-conformance"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/vectors/economic-kernel-v0.1.json",
+      "package/vectors/manifest.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/conformance-reference.jsonl",
+      "package/hf/dataset/data/training-lessons.jsonl",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/reference/CONFORMANCE.md",
+      "package/hf/dataset/reference/KERNEL.md",
+      "package/hf/dataset/reference/economic-kernel-v0.1.json",
+      "package/hf/dataset/reference/manifest.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/training-authorization.json",
+      "package/hf/dataset/verification/verify.py",
+    ]);
     expect(requiredArchiveEntries(releaseSpec("collab"))).toEqual(expect.arrayContaining([
       "package/dist/agenttool-collab-mcp.js",
       "package/.codex-plugin/plugin.json",

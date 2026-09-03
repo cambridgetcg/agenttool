@@ -1,11 +1,14 @@
 {
   "name": "@agenttool/economic-kernel",
   "version": "0.1.0-dev.0",
-  "private": true,
   "description": "Pure typed economic transitions, exact price conversion, conserved ledgers, and non-purchasable hard gates",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -17,7 +20,9 @@
   "files": [
     "dist",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=20.19.0",
@@ -43,5 +48,13 @@
     "type": "git",
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/economic-kernel"
-  }
+  },
+  "homepage": "https://docs.agenttool.dev/packages",
+  "keywords": [
+    "accounting",
+    "agents",
+    "economics",
+    "idempotency",
+    "ledger"
+  ]
 }

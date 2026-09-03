@@ -33,8 +33,23 @@ const dist = modules.flatMap((name) => [
 ]);
 const expected = [
   "CLAUDE.md",
+  "LICENSE",
+  "NOTICE",
   "README.md",
   ...dist,
+  "hf/dataset/LICENSE",
+  "hf/dataset/NOTICE",
+  "hf/dataset/README.md",
+  "hf/dataset/data/conformance-reference.jsonl",
+  "hf/dataset/data/training-lessons.jsonl",
+  "hf/dataset/hash-manifest.json",
+  "hf/dataset/reference/CONFORMANCE.md",
+  "hf/dataset/reference/KERNEL.md",
+  "hf/dataset/reference/economic-kernel-v0.1.json",
+  "hf/dataset/reference/manifest.json",
+  "hf/dataset/source-manifest.json",
+  "hf/dataset/training-authorization.json",
+  "hf/dataset/verification/verify.py",
   "package.json",
   "vectors/economic-kernel-v0.1.json",
   "vectors/manifest.json",
@@ -57,12 +72,14 @@ const runtimeDependencyFields = [
   "bundleDependencies",
 ];
 if (
-  packageJson.private !== true
-  || packageJson.license !== "UNLICENSED"
+  packageJson.private !== undefined
+  || packageJson.license !== "Apache-2.0"
+  || packageJson.publishConfig?.access !== "public"
+  || packageJson.publishConfig?.tag !== "next"
   || packageJson.sideEffects !== false
   || runtimeDependencyFields.some((field) => packageJson[field] !== undefined)
 ) {
-  throw new Error("package must remain private, dependency-free, side-effect-free, and UNLICENSED");
+  throw new Error("package must remain public, Apache-2.0, next-tagged, dependency-free, and side-effect-free");
 }
 for (const target of exportTargets(packageJson.exports)) {
   if (!files.includes(target)) throw new Error(`public export ${target} is absent from the package`);

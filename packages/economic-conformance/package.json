@@ -1,11 +1,14 @@
 {
   "name": "@agenttool/economic-conformance",
   "version": "0.1.0-dev.0",
-  "private": true,
   "description": "Offline closed-trace conformance vectors and non-certifying reports for the AgentTool economic kernel",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -19,8 +22,11 @@
   "files": [
     "dist",
     "vectors",
+    "hf/dataset",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=20.19.0",
@@ -29,6 +35,8 @@
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "bun run clean && tsc",
+    "artifacts:write": "node scripts/build-hf-release.mjs",
+    "artifacts:check": "node scripts/build-hf-release.mjs --check",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "check:vectors": "bun scripts/check-vectors.ts",
@@ -36,7 +44,7 @@
     "smoke:runtimes": "node tests/built-node.smoke.mjs && bun tests/built-node.smoke.mjs",
     "check:package": "node scripts/check-package-inventory.mjs",
     "smoke:pack": "node scripts/smoke-packed.mjs",
-    "ci": "bun run typecheck && bun run test && bun run build && bun run check:vectors && bun run smoke:runtimes && bun run check:package && bun run smoke:pack",
+    "ci": "bun run typecheck && bun run artifacts:check && bun run test && bun run build && bun run check:vectors && bun run smoke:runtimes && bun run check:package && bun run smoke:pack",
     "prepack": "bun run ci"
   },
   "devDependencies": {
@@ -48,5 +56,13 @@
     "type": "git",
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/economic-conformance"
-  }
+  },
+  "homepage": "https://docs.agenttool.dev/packages",
+  "keywords": [
+    "agents",
+    "conformance",
+    "economics",
+    "huggingface",
+    "testing"
+  ]
 }

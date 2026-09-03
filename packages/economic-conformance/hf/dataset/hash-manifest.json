@@ -1,0 +1,65 @@
+{
+  "_format": "agenttool.economic-kernel-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 138,
+      "sha256": "6b7a83d94e0b6dec4a35dd4157fef8ac6ec04bbfd5cf44749d30515c4752daa3"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2886,
+      "sha256": "a2274c72d29d5cda2444a8151da55014459baf81bf2294b9c72cf6a1f9cff16b"
+    },
+    {
+      "path": "data/conformance-reference.jsonl",
+      "bytes": 35013,
+      "sha256": "4a3010e080e43edf9cafb07c3e21ae011cb716d292f0116c4784eb331446af06"
+    },
+    {
+      "path": "data/training-lessons.jsonl",
+      "bytes": 24784,
+      "sha256": "c4f839698e2b8a31efa4477aa8c72e356d173587b205d14b26a79aa171df910c"
+    },
+    {
+      "path": "reference/CONFORMANCE.md",
+      "bytes": 4843,
+      "sha256": "d76777d1356f76e87ecf1848cadbe70c4a9c3e7b56b722e946ea16a38575a73a"
+    },
+    {
+      "path": "reference/KERNEL.md",
+      "bytes": 8311,
+      "sha256": "a8d2c078075eae9d053c65968cdd198fb1f403bc84b3320c33ab75611769005d"
+    },
+    {
+      "path": "reference/economic-kernel-v0.1.json",
+      "bytes": 14490,
+      "sha256": "7fc9b01b29d71f03df229e4c5b40ec29b21059c929e8211e38be0d7e3588512e"
+    },
+    {
+      "path": "reference/manifest.json",
+      "bytes": 491,
+      "sha256": "b41211248489058c925785e8eb0a23d6d35e868daf47b1cf3ce2594361c3b432"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 6664,
+      "sha256": "0789cce258bc1c441b7edebbf5e5a17b915171895165863801e0a84ae3c15e96"
+    },
+    {
+      "path": "training-authorization.json",
+      "bytes": 1072,
+      "sha256": "bff0540415d506bdc9d8444d83e5ea88e41d04eb110da1b441c6e2d93ad4717b"
+    },
+    {
+      "path": "verification/verify.py",
+      "bytes": 2688,
+      "sha256": "72373aa92c83cb091c0d82c969852903460ec5a8f554e54fb4a97e8abd7be158"
+    }
+  ]
+}

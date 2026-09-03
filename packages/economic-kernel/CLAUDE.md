@@ -39,8 +39,8 @@ reference. Read `README.md` before changing semantics.
   claims. This pure package cannot prove storage durability, external
   settlement, authority, safety, consent, identity, or finality.
 - Any semantic change requires a new protocol version and corresponding
-  conformance vectors. Keep this package private until a separate release
-  review explicitly changes that boundary.
+  conformance vectors. Publication metadata may change only through the
+  protected release path and must not widen the pure runtime boundary.
 
 Run `bun install --frozen-lockfile && bun run ci` after changes. The CI path
 must verify exact packed inventory and import the installed tarball under both

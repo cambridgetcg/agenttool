@@ -116,6 +116,8 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/adds", version: "0.2.3", releaseTag: "adds-v0.2.3" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
+      { name: "@agenttool/economic-kernel", version: "0.1.0-dev.0", releaseTag: "economic-kernel-v0.1.0-dev.0" },
+      { name: "@agenttool/economic-conformance", version: "0.1.0-dev.0", releaseTag: "economic-conformance-v0.1.0-dev.0" },
       { name: "@agenttool/credential-broker", version: "0.3.1", releaseTag: "credential-broker-v0.3.1" },
       { name: "@agenttool/sdk", version: "0.22.1", releaseTag: "sdk-v0.22.1" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
@@ -132,6 +134,25 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/browser", version: "0.6.0", releaseTag: "browser-v0.6.0" },
       { name: "@agenttool/hf-scout", version: "0.2.0-dev.0", releaseTag: "hf-scout-v0.2.0-dev.0" },
       { name: "@agenttool/principality-geometry", version: "0.1.0-dev.0", releaseTag: "principality-geometry-v0.1.0-dev.0" },
+    ]);
+  });
+
+  test("requires both economic developer previews as checked-in LOVE packages", () => {
+    expect(LOVE_PACKAGES.filter(({ name }) => name.startsWith("@agenttool/economic-"))).toEqual([
+      {
+        name: "@agenttool/economic-kernel",
+        version: "0.1.0-dev.0",
+        packagePath: "packages/economic-kernel",
+        releaseTag: "economic-kernel-v0.1.0-dev.0",
+        buildCommands: [["bun", "run", "ci"]],
+      },
+      {
+        name: "@agenttool/economic-conformance",
+        version: "0.1.0-dev.0",
+        packagePath: "packages/economic-conformance",
+        releaseTag: "economic-conformance-v0.1.0-dev.0",
+        buildCommands: [["bun", "run", "ci"]],
+      },
     ]);
   });
 

@@ -1,0 +1,190 @@
+{
+  "_format": "agenttool.economic-kernel-hf-source-manifest/0.1",
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-economic-kernel",
+  "publication_state_at_generation": "intended_identifier_only_not_uploaded_at_generation",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "upstream_repository": "https://github.com/cambridgetcg/agenttool",
+  "upstream_revision": null,
+  "upstream_revision_state": "record_after_protected_merge_and_immutable_hub_upload",
+  "source_manifest_scope": "selected_kernel_conformance_and_generation_inputs_not_complete_repository",
+  "source_files_complete": false,
+  "selected_source_set_sha256": "1b7ac3101120b25a7015b01f2eea1c5a5c51aae038e04393b967688c3d318fa5",
+  "source_manifest_is_attestation": false,
+  "packages": [
+    "@agenttool/economic-kernel@0.1.0-dev.0",
+    "@agenttool/economic-conformance@0.1.0-dev.0"
+  ],
+  "origin": "human_directed_agent_authored_synthetic",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "contains_private_or_participant_data": false,
+  "admitted_training_rows": 24,
+  "held_out_conformance_rows": 34,
+  "provider_effect": "none",
+  "model_weight_effect": "none",
+  "economic_effect": "none",
+  "source_files": [
+    {
+      "path": "economic-conformance/CLAUDE.md",
+      "bytes": 2352,
+      "sha256": "38537db1f847f4d04c607ea7489532cb09c464010ede7298899f24c992a8ce3d"
+    },
+    {
+      "path": "economic-conformance/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "economic-conformance/NOTICE",
+      "bytes": 138,
+      "sha256": "6b7a83d94e0b6dec4a35dd4157fef8ac6ec04bbfd5cf44749d30515c4752daa3"
+    },
+    {
+      "path": "economic-conformance/README.md",
+      "bytes": 4843,
+      "sha256": "d76777d1356f76e87ecf1848cadbe70c4a9c3e7b56b722e946ea16a38575a73a"
+    },
+    {
+      "path": "economic-conformance/package.json",
+      "bytes": 2109,
+      "sha256": "5c89aaf3c25b5867964e7bb124f47953bcc450bca06333efcac5b063deb686a2"
+    },
+    {
+      "path": "economic-conformance/scripts/build-hf-release.mjs",
+      "bytes": 33167,
+      "sha256": "c62581b72db64dece7f51a770b8bdc889822dfa69e460f417a5573115b51d815"
+    },
+    {
+      "path": "economic-conformance/src/constants.ts",
+      "bytes": 2051,
+      "sha256": "bb1798907b0275cf97b64185383469985d222968abe8e75569f5afe82fe856f2"
+    },
+    {
+      "path": "economic-conformance/src/index.ts",
+      "bytes": 740,
+      "sha256": "db13efe0ede1830a83f7bec8bea6a5b3052f57d0a0ba53024988c6c2b570902f"
+    },
+    {
+      "path": "economic-conformance/src/internal.ts",
+      "bytes": 9040,
+      "sha256": "fc7cd9d7554ea2f9cf2c389d7c979e17bada95ce6f5b9e8ec78a46cbcd405da9"
+    },
+    {
+      "path": "economic-conformance/src/json-source.ts",
+      "bytes": 7924,
+      "sha256": "e068c34a0c5352f89584d27e8f664271451c02e04efe9faa2a1853a2ed5c5131"
+    },
+    {
+      "path": "economic-conformance/src/runner.ts",
+      "bytes": 8330,
+      "sha256": "2fd3f69a111f815773cdee2229aaadc0ce75995a01afe1d98c75abffb1c04135"
+    },
+    {
+      "path": "economic-conformance/src/types.ts",
+      "bytes": 3183,
+      "sha256": "563b675bd59578ad67e4c6d3e50dc8281d34c9995eba83ef8b9bcae1b09ba782"
+    },
+    {
+      "path": "economic-conformance/src/vectors.ts",
+      "bytes": 3153,
+      "sha256": "49acf6f2278128c31e843e7d9de4e24433e310ba389a710cb494186701ddc3d5"
+    },
+    {
+      "path": "economic-conformance/vectors/economic-kernel-v0.1.json",
+      "bytes": 14490,
+      "sha256": "7fc9b01b29d71f03df229e4c5b40ec29b21059c929e8211e38be0d7e3588512e"
+    },
+    {
+      "path": "economic-conformance/vectors/manifest.json",
+      "bytes": 491,
+      "sha256": "b41211248489058c925785e8eb0a23d6d35e868daf47b1cf3ce2594361c3b432"
+    },
+    {
+      "path": "economic-kernel/CLAUDE.md",
+      "bytes": 2851,
+      "sha256": "4a99cdf40d3ad4586235944fd4d5fe21894a6a4a07d41942dfa8b89bd3134a3d"
+    },
+    {
+      "path": "economic-kernel/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "economic-kernel/NOTICE",
+      "bytes": 133,
+      "sha256": "d747d8fcf5160d9beba8098e8a4244923442065014c013e0d5244079bad27fa7"
+    },
+    {
+      "path": "economic-kernel/README.md",
+      "bytes": 8311,
+      "sha256": "a8d2c078075eae9d053c65968cdd198fb1f403bc84b3320c33ab75611769005d"
+    },
+    {
+      "path": "economic-kernel/package.json",
+      "bytes": 1669,
+      "sha256": "52006eced57365d9d1caec7ec57bf374eef40b04c5afcb3cfc6d5bcb622ae861"
+    },
+    {
+      "path": "economic-kernel/src/admission.ts",
+      "bytes": 15061,
+      "sha256": "8ff0879ee4f48576b5f04e328b8d5dcfd95fb3d26cff84062469f67dd2b8cb41"
+    },
+    {
+      "path": "economic-kernel/src/amounts.ts",
+      "bytes": 2648,
+      "sha256": "2619863572b2bfef72a72b8f493e824fe45b7a775e4fbf6e3ff0b263fa653452"
+    },
+    {
+      "path": "economic-kernel/src/attempts.ts",
+      "bytes": 41194,
+      "sha256": "d466b0a9c90870ee11de3fd0f44a81dd6011ba761629fc401f740a1a3f84aefc"
+    },
+    {
+      "path": "economic-kernel/src/constants.ts",
+      "bytes": 1094,
+      "sha256": "fa3a0f145a0cfedda065e02aa7a59168648c41654ae3be8b5ff1881c52a999fc"
+    },
+    {
+      "path": "economic-kernel/src/errors.ts",
+      "bytes": 949,
+      "sha256": "6472ec11c0cf2d01d0cbd2a9b21853a581335322b7c97ee03a060adaa92621cc"
+    },
+    {
+      "path": "economic-kernel/src/index.ts",
+      "bytes": 1451,
+      "sha256": "0545aa9c6155a49e437e4db9a7ff54b5b31c461afbe05ead5b412d722b0595d6"
+    },
+    {
+      "path": "economic-kernel/src/internal.ts",
+      "bytes": 11577,
+      "sha256": "ff1e4f73a9d9c6c46a14bdf32b06ac04a20ff5dcadf72e443d9fcc14ceb51b70"
+    },
+    {
+      "path": "economic-kernel/src/ledger.ts",
+      "bytes": 13111,
+      "sha256": "17ff0e6260cf9dee6863e4dafd5a3f04a083fbb2bfd10cc7831581772521c9c7"
+    },
+    {
+      "path": "economic-kernel/src/pricing.ts",
+      "bytes": 10877,
+      "sha256": "129891a80cd3458cdc8d324add7bd9bb2b3cfb4b5854a91fd6a51d7ebe8ca464"
+    },
+    {
+      "path": "economic-kernel/src/quotes.ts",
+      "bytes": 5185,
+      "sha256": "ca298488960efabb82e0ee886a83a4b71621da23514ae9088a39cd70ab1896cc"
+    },
+    {
+      "path": "economic-kernel/src/types.ts",
+      "bytes": 9611,
+      "sha256": "c6bb4735ca24464327f0249b39ee6556a5ea0cd5aa3f0a88b9a41ccc4310fdc6"
+    },
+    {
+      "path": "economic-kernel/src/units.ts",
+      "bytes": 2468,
+      "sha256": "a4018a661bebae60dbb7b514a9e3a7b1861821e1136ee852e70e98fb6c79686a"
+    }
+  ]
+}

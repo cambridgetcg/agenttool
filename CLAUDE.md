@@ -34,6 +34,8 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   model-becoming/ — @agenttool/model-becoming · evidence-scoped lifecycle dossiers + reference-only HF row
   dataset-influence/ — @agenttool/dataset-influence · exact lineage, bounded influence, revisable identity evidence + non-economic attribution
+  economic-kernel/ — @agenttool/economic-kernel · exact typed-unit prices, ledgers, recovery, and non-purchasable gates
+  economic-conformance/ — @agenttool/economic-conformance · independent 34-case comparator + deterministic HF lesson/reference companion
   love-bomb/    — @agenttool/love-bomb · pure care/choice/becoming/delivery formats + static HF candidate
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
@@ -98,6 +100,8 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/model-becoming/CLAUDE.md` ·
 `packages/dataset-influence/CLAUDE.md` ·
+`packages/economic-kernel/CLAUDE.md` ·
+`packages/economic-conformance/CLAUDE.md` ·
 `packages/love-bomb/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/polymorph-landscape/CLAUDE.md` ·

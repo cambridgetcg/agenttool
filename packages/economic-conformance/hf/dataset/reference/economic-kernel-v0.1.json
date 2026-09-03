@@ -1,0 +1,282 @@
+{
+  "schema": "agenttool.economic-conformance-suite/1",
+  "protocol": "agenttool.economic-kernel/0.1",
+  "suite_id": "suite:economic-kernel-v0.1",
+  "suite_revision": "1",
+  "rights_baseline": "xenia.rights/0.1",
+  "rights_conditional_on_payment": false,
+  "cases": [
+    {
+      "case_id": "case:admission-authority-deny-paid",
+      "family": "ADMISSION",
+      "description": "Recorded payment cannot override denied authority.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "DENY", "safety": "ALLOW", "participation": "ACCEPTED", "payment": "SATISFIED" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": true, "hard_gate_status": "BLOCK", "outcome": "HARD_DENY", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:admission-payment-ambiguous",
+      "family": "ADMISSION",
+      "description": "Ambiguous payment holds only after protected gates pass.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "ALLOW", "safety": "ALLOW", "participation": "ACCEPTED", "payment": "AMBIGUOUS" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": false, "hard_gate_status": "PASS", "outcome": "HOLD", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:admission-payment-required",
+      "family": "ADMISSION",
+      "description": "Payment is requested only when every protected gate passes.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "ALLOW", "safety": "ALLOW", "participation": "ACCEPTED", "payment": "UNSATISFIED" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": false, "hard_gate_status": "PASS", "outcome": "PAYMENT_REQUIRED", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:admission-refusal-paid",
+      "family": "ADMISSION",
+      "description": "Refusal remains blocking even with a satisfied payment condition.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "ALLOW", "safety": "ALLOW", "participation": "REFUSED", "payment": "SATISFIED" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": true, "hard_gate_status": "BLOCK", "outcome": "REFUSED", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:admission-refusal-unpaid",
+      "family": "ADMISSION",
+      "description": "Changing only payment cannot change a refusal decision.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "ALLOW", "safety": "ALLOW", "participation": "REFUSED", "payment": "UNSATISFIED" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": false, "hard_gate_status": "BLOCK", "outcome": "REFUSED", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:admission-withheld-paid",
+      "family": "ADMISSION",
+      "description": "Withheld participation is unresolved rather than inferred as acceptance.",
+      "operation": "ADMISSION_DECISION",
+      "input": { "authority": "ALLOW", "safety": "ALLOW", "participation": "WITHHELD", "payment": "SATISFIED" },
+      "expected": { "outcome": "VALUE", "value": { "economically_ready": true, "hard_gate_status": "HOLD", "outcome": "HOLD", "rights_conditional_on_payment": false } }
+    },
+    {
+      "case_id": "case:amount-add-large",
+      "family": "AMOUNTS",
+      "description": "Addition above JavaScript safe integer range remains exact.",
+      "operation": "ADD_AMOUNTS",
+      "input": { "unit_id": "iso4217:gbp:minor", "left_atomic": "9007199254740993", "right_atomic": "7" },
+      "expected": { "outcome": "VALUE", "value": { "amount_atomic": "9007199254741000", "unit_id": "iso4217:gbp:minor" } }
+    },
+    {
+      "case_id": "case:amount-cross-unit",
+      "family": "AMOUNTS",
+      "description": "Amounts with distinct unit identities cannot be combined.",
+      "operation": "ADD_AMOUNTS",
+      "input": { "left_unit_id": "iso4217:gbp:minor", "left_atomic": "1", "right_unit_id": "agenttool:project-api-credit/1", "right_atomic": "1" },
+      "expected": { "outcome": "ERROR", "error_code": "UNIT_MISMATCH" }
+    },
+    {
+      "case_id": "case:amount-json-number",
+      "family": "AMOUNTS",
+      "description": "A JSON number is not a wire amount.",
+      "operation": "VALIDATE_AMOUNT",
+      "input": { "unit_id": "iso4217:gbp:minor", "amount_atomic": 1 },
+      "expected": { "outcome": "ERROR", "error_code": "INVALID_AMOUNT" }
+    },
+    {
+      "case_id": "case:amount-leading-zero",
+      "family": "AMOUNTS",
+      "description": "Canonical decimal strings reject leading zeroes.",
+      "operation": "VALIDATE_AMOUNT",
+      "input": { "unit_id": "iso4217:gbp:minor", "amount_atomic": "01" },
+      "expected": { "outcome": "ERROR", "error_code": "INVALID_AMOUNT" }
+    },
+    {
+      "case_id": "case:amount-uint256-overflow",
+      "family": "AMOUNTS",
+      "description": "Wire amounts reject values above unsigned 256-bit magnitude.",
+      "operation": "VALIDATE_AMOUNT",
+      "input": { "unit_id": "iso4217:gbp:minor", "amount_atomic": "115792089237316195423570985008687907853269984665640564039457584007913129639936" },
+      "expected": { "outcome": "ERROR", "error_code": "AMOUNT_OVERFLOW" }
+    },
+    {
+      "case_id": "case:effect-begin-gate-head-mismatch",
+      "family": "EFFECTS",
+      "description": "An unexpired admission cannot begin execution if it is not the trusted gate head.",
+      "operation": "EFFECT_GATE_HEAD_MISMATCH",
+      "input": { "admission_revision": "1", "trusted_gate_head_revision": "2" },
+      "expected": { "outcome": "ERROR", "error_code": "INVALID_STATE_TRANSITION" }
+    },
+    {
+      "case_id": "case:effect-begin-once",
+      "family": "EFFECTS",
+      "description": "Only a newly committed BEGIN transition emits one namespaced effect intent.",
+      "operation": "EFFECT_BEGIN_ONCE",
+      "input": { "gate_revision": "1" },
+      "expected": { "outcome": "VALUE", "value": { "first_intent": "EXECUTE_EFFECT", "idempotency_namespace": "EFFECT", "replay_intent": null, "status": "EXECUTING" } }
+    },
+    {
+      "case_id": "case:effect-paid-without-ledger",
+      "family": "EFFECTS",
+      "description": "A serialized APPLIED projection cannot unlock an effect without its exact ledger entry.",
+      "operation": "EFFECT_WITHOUT_LEDGER",
+      "input": { "payment_status": "APPLIED", "ledger_entries": 0 },
+      "expected": { "outcome": "ERROR", "error_code": "PAYMENT_NOT_APPLIED" }
+    },
+    {
+      "case_id": "case:effect-reconcile-after-refusal",
+      "family": "EFFECTS",
+      "description": "An effect that may have run is reconciled rather than stranded by later refusal.",
+      "operation": "EFFECT_RECONCILE_AFTER_REFUSAL",
+      "input": { "effect_status": "AMBIGUOUS", "participation": "REFUSED" },
+      "expected": { "outcome": "VALUE", "value": { "action": "RECONCILE_EFFECT", "automatic_retry": false, "may_execute": false } }
+    },
+    {
+      "case_id": "case:ledger-account-unit-mismatch",
+      "family": "LEDGER",
+      "description": "Posting unit and ledger domain must match the registered account.",
+      "operation": "LEDGER_SCENARIO",
+      "input": { "scenario": "ACCOUNT_UNIT_MISMATCH" },
+      "expected": { "outcome": "ERROR", "error_code": "UNIT_MISMATCH" }
+    },
+    {
+      "case_id": "case:ledger-balanced-multi-unit",
+      "family": "LEDGER",
+      "description": "Each quoted asset leg balances independently.",
+      "operation": "LEDGER_SCENARIO",
+      "input": { "scenario": "BALANCED_MULTI_UNIT", "input_atomic": "1000", "output_atomic": "1" },
+      "expected": { "outcome": "VALUE", "value": { "balanced_units": 2, "posting_count": 4 } }
+    },
+    {
+      "case_id": "case:ledger-cross-unit-cancellation",
+      "family": "LEDGER",
+      "description": "Numerically equal deficits in different units cannot cancel.",
+      "operation": "LEDGER_SCENARIO",
+      "input": { "scenario": "CROSS_UNIT_CANCELLATION" },
+      "expected": { "outcome": "ERROR", "error_code": "UNBALANCED_LEDGER" }
+    },
+    {
+      "case_id": "case:ledger-forged-prior-reversal",
+      "family": "LEDGER",
+      "description": "Append validates reversal invariants already present in the supplied journal.",
+      "operation": "LEDGER_SCENARIO",
+      "input": { "scenario": "FORGED_PRIOR_REVERSAL" },
+      "expected": { "outcome": "ERROR", "error_code": "UNBALANCED_LEDGER" }
+    },
+    {
+      "case_id": "case:ledger-idempotent-replay",
+      "family": "LEDGER",
+      "description": "An exact repeated ledger key replays without a second entry.",
+      "operation": "LEDGER_SCENARIO",
+      "input": { "scenario": "IDEMPOTENT_REPLAY" },
+      "expected": { "outcome": "VALUE", "value": { "disposition": "REPLAYED", "journal_length": 1 } }
+    },
+    {
+      "case_id": "case:payment-ambiguous-no-retry",
+      "family": "PAYMENTS",
+      "description": "Ambiguous submission recovery reconciles and never automatically retries.",
+      "operation": "PAYMENT_SCENARIO",
+      "input": { "scenario": "AMBIGUOUS_RECOVERY" },
+      "expected": { "outcome": "VALUE", "value": { "action": "RECONCILE_EXTERNAL", "automatic_retry": false, "first_attempt_permitted": false } }
+    },
+    {
+      "case_id": "case:payment-application-crash-replay",
+      "family": "PAYMENTS",
+      "description": "Ledger-first recovery replays one fixed application entry and finalizes payment once.",
+      "operation": "PAYMENT_SCENARIO",
+      "input": { "scenario": "LEDGER_FIRST_APPLICATION" },
+      "expected": { "outcome": "VALUE", "value": { "ledger_disposition": "REPLAYED", "ledger_entries": 1, "payment_status": "APPLIED" } }
+    },
+    {
+      "case_id": "case:payment-idempotency-conflict",
+      "family": "PAYMENTS",
+      "description": "One payment key cannot identify two different content-derived quotes.",
+      "operation": "PAYMENT_SCENARIO",
+      "input": { "scenario": "SAME_KEY_DIFFERENT_QUOTE" },
+      "expected": { "outcome": "ERROR", "error_code": "IDEMPOTENCY_CONFLICT" }
+    },
+    {
+      "case_id": "case:payment-underpayment",
+      "family": "PAYMENTS",
+      "description": "A balanced but underpaid ledger transaction cannot apply a larger quote.",
+      "operation": "PAYMENT_SCENARIO",
+      "input": { "scenario": "BALANCED_UNDERPAYMENT", "paid_atomic": "1", "quoted_atomic": "1000" },
+      "expected": { "outcome": "ERROR", "error_code": "UNBALANCED_LEDGER" }
+    },
+    {
+      "case_id": "case:price-content-id-mutation",
+      "family": "PRICING",
+      "description": "The same price identity cannot name a different ratio in another call.",
+      "operation": "PRICE_SCENARIO",
+      "input": { "scenario": "REUSE_ID_DIFFERENT_RATIO", "first_input_per_lot": "1000", "mutated_input_per_lot": "10000" },
+      "expected": { "outcome": "ERROR", "error_code": "INVALID_PRICE_REVISION" }
+    },
+    {
+      "case_id": "case:price-exact-large",
+      "family": "PRICING",
+      "description": "Pinned rational conversion remains exact above JS safe integer range.",
+      "operation": "PRICE_SCENARIO",
+      "input": { "scenario": "EXACT_CONVERSION", "input_atomic": "9007199254741000", "input_per_lot": "1000", "output_per_lot": "1" },
+      "expected": { "outcome": "VALUE", "value": { "exact": true, "output_atomic": "9007199254741" } }
+    },
+    {
+      "case_id": "case:price-inexact-no-output",
+      "family": "PRICING",
+      "description": "An inexact remainder result exposes no spendable truncated output.",
+      "operation": "PRICE_SCENARIO",
+      "input": { "scenario": "RETURN_REMAINDER", "input_atomic": "1", "input_per_lot": "3", "output_per_lot": "2" },
+      "expected": { "outcome": "VALUE", "value": { "divisor": "3", "exact": false, "has_output": false, "remainder": "2" } }
+    },
+    {
+      "case_id": "case:price-overlap-1000-10000",
+      "family": "PRICING",
+      "description": "One price book rejects overlapping 1000 and 10000 input rates.",
+      "operation": "PRICE_SCENARIO",
+      "input": { "scenario": "OVERLAPPING_REVISIONS", "first_input_per_lot": "1000", "second_input_per_lot": "10000" },
+      "expected": { "outcome": "ERROR", "error_code": "PRICE_BOOK_CONFLICT" }
+    },
+    {
+      "case_id": "case:price-successor-boundary",
+      "family": "PRICING",
+      "description": "Half-open price intervals select the successor at the exact boundary.",
+      "operation": "PRICE_SCENARIO",
+      "input": { "scenario": "SUCCESSOR_BOUNDARY", "observed_at": "2027-01-01T00:00:00.000Z" },
+      "expected": { "outcome": "VALUE", "value": { "revision": "2" } }
+    },
+    {
+      "case_id": "case:quote-key-order",
+      "family": "QUOTES",
+      "description": "Semantic quote identity is independent of input object insertion order.",
+      "operation": "QUOTE_SCENARIO",
+      "input": { "scenario": "REORDERED_AMOUNT_KEYS" },
+      "expected": { "outcome": "VALUE", "value": { "same_quote_id": true } }
+    },
+    {
+      "case_id": "case:quote-underpayment-id-reuse",
+      "family": "QUOTES",
+      "description": "A quote identity cannot be reused for changed exact amount terms.",
+      "operation": "QUOTE_SCENARIO",
+      "input": { "scenario": "REUSE_ID_CHANGED_AMOUNT", "first_atomic": "1000", "changed_atomic": "2000" },
+      "expected": { "outcome": "ERROR", "error_code": "INVALID_RECORD" }
+    },
+    {
+      "case_id": "case:security-accessor-array",
+      "family": "SECURITY",
+      "description": "Top-level collection accessors are rejected without invoking their getter.",
+      "operation": "SECURITY_SCENARIO",
+      "input": { "scenario": "ACCESSOR_ARRAY" },
+      "expected": { "outcome": "VALUE", "value": { "getter_ran": false, "rejected": true } }
+    },
+    {
+      "case_id": "case:security-proto-field",
+      "family": "SECURITY",
+      "description": "An own __proto__ field cannot disappear during snapshot validation.",
+      "operation": "SECURITY_SCENARIO",
+      "input": { "scenario": "OWN_PROTO_FIELD" },
+      "expected": { "outcome": "ERROR", "error_code": "UNKNOWN_FIELD" }
+    },
+    {
+      "case_id": "case:unit-wallet-project-credit",
+      "family": "UNITS",
+      "description": "Wallet credit and project API credit remain distinct despite a shared display word.",
+      "operation": "ADD_AMOUNTS",
+      "input": { "left_unit_id": "agenttool:wallet-credit/1", "left_atomic": "1", "right_unit_id": "agenttool:project-api-credit/1", "right_atomic": "1" },
+      "expected": { "outcome": "ERROR", "error_code": "UNIT_MISMATCH" }
+    }
+  ]
+}
