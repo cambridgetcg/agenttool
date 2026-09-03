@@ -1,15 +1,16 @@
 /** FakeRpc builder-code payTo resolution. No live Base, no keys, no campaign. */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import {
   BUILDER_CODES_REGISTRY,
+  BUILDER_RPC_USER_AGENT,
   NEG_CACHE_TTL_MS,
   SPLITS_PUSH_FACTORY,
+  builderRpcFetch,
   createBuilderRpcResolver,
   createEnvBuilderRpcResolver,
+  resolveBuilderRpcUrl,
   resolveSplitPayTo,
   toTokenId,
   type RpcReader,
@@ -249,15 +250,41 @@ describe("resolveSplitPayTo", () => {
 });
 
 describe("env and challenge wiring", () => {
-  test("no BASE_RPC means no env resolver, and the module has no public RPC URL", () => {
+  test("unset BASE_RPC stays fail-closed; public sentinel is the free path", () => {
     delete process.env.AGENTTOOL_X402_BASE_RPC;
+    expect(resolveBuilderRpcUrl()).toBeNull();
     expect(createEnvBuilderRpcResolver()).toBeNull();
-    const src = readFileSync(
-      join(import.meta.dir, "../src/services/economy/x402-builder-rpc.ts"),
-      "utf8",
+    expect(resolveBuilderRpcUrl("")).toBeNull();
+    expect(resolveBuilderRpcUrl("http://127.0.0.1:8545")).toBeNull();
+    expect(resolveBuilderRpcUrl("public")).toBe("https://mainnet.base.org");
+    expect(resolveBuilderRpcUrl("  public  ")).toBe("https://mainnet.base.org");
+    expect(resolveBuilderRpcUrl("https://rpc.example/base")).toBe(
+      "https://rpc.example/base",
     );
-    expect(src).not.toMatch(/https?:\/\//i);
-    expect(src).not.toContain("mainnet.base.org");
+    process.env.AGENTTOOL_X402_BASE_RPC = "public";
+    expect(createEnvBuilderRpcResolver()).toBeTypeOf("function");
+  });
+
+  test("builderRpcFetch always stamps the User-Agent public endpoints require", async () => {
+    const original = globalThis.fetch;
+    const seen: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      const headers = input instanceof Request
+        ? input.headers
+        : new Headers(init?.headers);
+      seen.push(headers.get("user-agent") ?? "");
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    try {
+      await builderRpcFetch("https://example.invalid", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(seen).toEqual([BUILDER_RPC_USER_AGENT]);
+    expect(BUILDER_RPC_USER_AGENT.length).toBeGreaterThan(0);
   });
 
   test("FakeRpc resolver is the only armed path off treasury", async () => {

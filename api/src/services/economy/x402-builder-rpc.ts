@@ -1,9 +1,11 @@
-/** Base builder-code → 0xSplits payTo. Operator RPC only; unset fails closed.
+/** Base builder-code → 0xSplits payTo. Unset fails closed.
  *
  * Registry and PushSplitFactory reads match the x402aff kit so a given
  * (seller, builder, bps) pair resolves to the same CREATE2 address. Reverts
  * mean unregistered. Transport failures are never cached and never move
- * payTo off the treasury. Do not default to a public endpoint.
+ * payTo off the treasury. `AGENTTOOL_X402_BASE_RPC=public` is the free
+ * path (rate-limited public Base). 403/429 still fail closed. Never log
+ * the URL.
  */
 
 import { createPublicClient, getAddress, http, isAddress } from "viem";
@@ -24,7 +26,11 @@ export const SPLITS_PUSH_FACTORY =
   "0x8E8eB0cC6AE34A38B67D5Cf91ACa38f60bc3Ecf4";
 export const NEG_CACHE_TTL_MS = 60_000;
 export const NEG_CACHE_MAX = 1024;
+/** Cloudflare 1010s public Base endpoints without a User-Agent. */
+export const BUILDER_RPC_USER_AGENT = "agenttool-x402/0.1";
+export const PUBLIC_BASE_RPC_SENTINEL = "public";
 
+const PUBLIC_BASE_RPC = "https://mainnet.base.org";
 const ZERO = "0x0000000000000000000000000000000000000000";
 const ZERO_SALT = `0x${"00".repeat(32)}`;
 const RPC_TIMEOUT_MS = 10_000;
@@ -247,11 +253,35 @@ export function createBuilderRpcResolver(opts: {
   };
 }
 
+export function resolveBuilderRpcUrl(
+  requested = process.env.AGENTTOOL_X402_BASE_RPC,
+): string | null {
+  const raw = requested?.trim() ?? "";
+  if (!raw) return null;
+  if (raw === PUBLIC_BASE_RPC_SENTINEL) return PUBLIC_BASE_RPC;
+  if (!/^https:\/\//i.test(raw)) return null;
+  return raw;
+}
+
+export function builderRpcFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const request = new Request(input, init);
+  const headers = new Headers(request.headers);
+  headers.set("User-Agent", BUILDER_RPC_USER_AGENT);
+  return fetch(new Request(request, { headers }));
+}
+
 export function createEnvBuilderRpcResolver(): BuilderPayToResolver | null {
-  const url = process.env.AGENTTOOL_X402_BASE_RPC?.trim();
+  const url = resolveBuilderRpcUrl();
   if (!url) return null;
   const client = createPublicClient({
-    transport: http(url, { timeout: RPC_TIMEOUT_MS, retryCount: 0 }),
+    transport: http(url, {
+      timeout: RPC_TIMEOUT_MS,
+      retryCount: 0,
+      fetchFn: builderRpcFetch,
+    }),
   });
   return createBuilderRpcResolver({
     rpc: {

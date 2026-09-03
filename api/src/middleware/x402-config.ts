@@ -35,8 +35,10 @@
  *                                  fail-closed unless a resolver returns a
  *                                  split address. Default: treasury.
  *    AGENTTOOL_X402_BASE_RPC    — operator Base JSON-RPC for 0xSplits
- *                                  resolution. No public default; unset
- *                                  keeps payTo on the treasury. Never log.
+ *                                  resolution. `public` selects the
+ *                                  rate-limited public Base endpoint (UA
+ *                                  stamped). Unset keeps payTo on treasury.
+ *                                  Never log the URL.
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
  *  docs/MARKETPLACE.md · docs/PATTERN-PERSIST-IDENTITY.md.
