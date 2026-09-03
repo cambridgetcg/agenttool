@@ -33,6 +33,7 @@ export {
 } from "./ledger.js";
 export {
   applySettledPayment,
+  compensateOrphanedApplication,
   paymentReversalRequestFingerprint,
   planEffectRecovery,
   planPaymentRecovery,

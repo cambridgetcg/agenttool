@@ -279,11 +279,18 @@ export interface PaymentLedgerTransitionResult {
   ledger: Readonly<LedgerAppendResult>;
 }
 
+export interface OrphanedApplicationCompensationResult {
+  attempt: Readonly<PaymentAttempt>;
+  payment_journal: readonly Readonly<PaymentAttempt>[];
+  ledger: Readonly<LedgerAppendResult>;
+}
+
 export interface PaymentLedgerState {
   payment: Readonly<PaymentAttempt>;
   ledger_journal: readonly Readonly<LedgerTransaction>[];
   application_transaction: Readonly<LedgerTransaction> | null;
   reversal_transaction: Readonly<LedgerTransaction> | null;
+  compensation_required: boolean;
   economically_applied: boolean;
 }
 
@@ -294,6 +301,7 @@ export type PaymentRecoveryAction =
   | "RECONCILE_EXTERNAL"
   | "APPLY_INTERNAL"
   | "FINALIZE_REVERSAL"
+  | "COMPENSATE_ORPHANED_APPLICATION"
   | "COMPLETE"
   | "STOP";
 

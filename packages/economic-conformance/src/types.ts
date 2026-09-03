@@ -24,7 +24,7 @@ export interface ConformanceCase {
 
 export interface ConformanceSuite {
   schema: "agenttool.economic-conformance-suite/1";
-  protocol: "agenttool.economic-kernel/0.1";
+  protocol: "agenttool.economic-kernel/0.2";
   suite_id: string;
   suite_revision: string;
   rights_baseline: "xenia.rights/0.1";
@@ -89,8 +89,8 @@ export interface ConformanceBoundaries {
 
 export interface OfficialVectorManifest {
   schema: "agenttool.economic-conformance-vector-manifest/1";
-  conformance_protocol: "agenttool.economic-conformance/0.1";
-  vector_path: "economic-kernel-v0.1.json";
+  conformance_protocol: "agenttool.economic-conformance/0.2";
+  vector_path: "economic-kernel-v0.2.json";
   vector_bytes: number;
   vector_raw_sha256: Sha256Digest;
   suite_semantic_sha256: Sha256Digest;

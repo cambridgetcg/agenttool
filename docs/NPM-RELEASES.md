@@ -35,7 +35,7 @@ different artifact and Hub surfaces:
 | `@agenttool/wake-continuity` | one credential-free zero-I/O developer-preview tarball containing deterministic functional-access record validation and AFTERGLOW digest references | none; npm/GitHub publication performs no model measurement, awareness test, continuity proof, or hosted deployment |
 | `@agenttool/hf-scout` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | none; the package is a local read-only Hub metadata client, not a Hub dataset, Space, model, hosted proxy, or deployment |
 | `@agenttool/economic-kernel` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | shared public dataset `Yu-and-Ai/agenttool-economic-kernel`; only the independently authored lesson config is training-authorized |
-| `@agenttool/economic-conformance` | one exact checked-in LOVE tarball containing the independent comparator, all 34 vectors, and the deterministic Hub source tree | the same dataset's public conformance config is explicitly excluded from training; public visibility is not a sealed holdout |
+| `@agenttool/economic-conformance` | one exact checked-in LOVE tarball containing the independent comparator, all 53 vectors, and the deterministic Hub source tree | the same dataset's public conformance config is explicitly excluded from training; public visibility is not a sealed holdout |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a

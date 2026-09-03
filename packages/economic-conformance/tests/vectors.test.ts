@@ -61,8 +61,8 @@ describe("official vector pins", () => {
   test("duplicate raw object keys are rejected before hash comparison", () => {
     const duplicate = Buffer.from(
       vectorBytes.toString("utf8").replace(
-        '  "suite_id": "suite:economic-kernel-v0.1",',
-        '  "suite_id": "suite:economic-kernel-v0.1",\n  "\\u0073uite_id": "suite:economic-kernel-v0.1",',
+        '  "suite_id": "suite:economic-kernel-v0.2",',
+        '  "suite_id": "suite:economic-kernel-v0.2",\n  "\\u0073uite_id": "suite:economic-kernel-v0.2",',
       ),
       "utf8",
     );
@@ -97,7 +97,7 @@ describe("official vector pins", () => {
         throw new Error("own byteLength must not be consulted");
       },
     });
-    expect(verifyOfficialVectorSources(decorated, manifestBytes).cases).toHaveLength(34);
+    expect(verifyOfficialVectorSources(decorated, manifestBytes).cases).toHaveLength(53);
 
     if (typeof SharedArrayBuffer !== "undefined") {
       const shared = new Uint8Array(new SharedArrayBuffer(vectorBytes.byteLength));

@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/economic-conformance",
-  "version": "0.1.0-dev.0",
+  "version": "0.2.0-dev.0",
   "description": "Offline closed-trace conformance vectors and non-certifying reports for the AgentTool economic kernel",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,7 +16,7 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./vectors/v0.1": "./vectors/economic-kernel-v0.1.json",
+    "./vectors/v0.2": "./vectors/economic-kernel-v0.2.json",
     "./vectors/manifest": "./vectors/manifest.json"
   },
   "files": [

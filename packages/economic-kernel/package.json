@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/economic-kernel",
-  "version": "0.1.0-dev.0",
+  "version": "0.2.0-dev.0",
   "description": "Pure typed economic transitions, exact price conversion, conserved ledgers, and non-purchasable hard gates",
   "license": "Apache-2.0",
   "type": "module",

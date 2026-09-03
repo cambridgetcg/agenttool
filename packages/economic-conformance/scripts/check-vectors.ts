@@ -8,7 +8,7 @@ import {
 
 const packageRoot = new URL("../", import.meta.url);
 const suite = verifyOfficialVectorSources(
-  readFileSync(new URL("vectors/economic-kernel-v0.1.json", packageRoot)),
+  readFileSync(new URL("vectors/economic-kernel-v0.2.json", packageRoot)),
   readFileSync(new URL("vectors/manifest.json", packageRoot)),
 );
 if (suite.cases.length !== OFFICIAL_VECTOR_CASE_COUNT) {

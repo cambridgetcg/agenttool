@@ -13,53 +13,53 @@
     },
     {
       "path": "README.md",
-      "bytes": 2886,
-      "sha256": "a2274c72d29d5cda2444a8151da55014459baf81bf2294b9c72cf6a1f9cff16b"
+      "bytes": 2926,
+      "sha256": "96aaac9cb5574079ef1da634c1707944f6c8aaf7dfcc4bbe81737febe78140d2"
     },
     {
       "path": "data/conformance-reference.jsonl",
-      "bytes": 35013,
-      "sha256": "4a3010e080e43edf9cafb07c3e21ae011cb716d292f0116c4784eb331446af06"
+      "bytes": 55200,
+      "sha256": "59ca42ac8d1dab117a9f9f00103df9c94e06ae5d31304d010ebb2697b8a93551"
     },
     {
       "path": "data/training-lessons.jsonl",
-      "bytes": 24784,
-      "sha256": "c4f839698e2b8a31efa4477aa8c72e356d173587b205d14b26a79aa171df910c"
+      "bytes": 25051,
+      "sha256": "a957243071bf191e9c41a8dc6a033eaaa84c6bdb6ba29104afac858b32d971c0"
     },
     {
       "path": "reference/CONFORMANCE.md",
-      "bytes": 4843,
-      "sha256": "d76777d1356f76e87ecf1848cadbe70c4a9c3e7b56b722e946ea16a38575a73a"
+      "bytes": 4887,
+      "sha256": "ba001ce2536b8092d709dc1ffb4fa74b0db7fffe7949899329c5fe6ef732f1b5"
     },
     {
       "path": "reference/KERNEL.md",
-      "bytes": 8311,
-      "sha256": "a8d2c078075eae9d053c65968cdd198fb1f403bc84b3320c33ab75611769005d"
+      "bytes": 11106,
+      "sha256": "9b90edbd1cd8045d4a00eb57f6ca7c7257dfd9185a0e88d42bf8bac386e610be"
     },
     {
-      "path": "reference/economic-kernel-v0.1.json",
-      "bytes": 14490,
-      "sha256": "7fc9b01b29d71f03df229e4c5b40ec29b21059c929e8211e38be0d7e3588512e"
+      "path": "reference/economic-kernel-v0.2.json",
+      "bytes": 22842,
+      "sha256": "2c13fd9f341210657de0f1fc223c22c82472ca6377a9af3dce28c9db035ae47b"
     },
     {
       "path": "reference/manifest.json",
       "bytes": 491,
-      "sha256": "b41211248489058c925785e8eb0a23d6d35e868daf47b1cf3ce2594361c3b432"
+      "sha256": "905479c1ff530892c4930b59b03af586846b43c9f7043b58e0706a8764e25fc7"
     },
     {
       "path": "source-manifest.json",
-      "bytes": 6664,
-      "sha256": "9eaed67f80674c89bf2c40a6ac83450372409b6ca9a072f92b22e94974284492"
+      "bytes": 6665,
+      "sha256": "64fb9035c6b06e7c53b17cce20214a7dca3029b88f0e8b9a792f2d071bf2d797"
     },
     {
       "path": "training-authorization.json",
       "bytes": 1072,
-      "sha256": "bff0540415d506bdc9d8444d83e5ea88e41d04eb110da1b441c6e2d93ad4717b"
+      "sha256": "6415b38f6606be2910b4a42d77ab786d018b7320000b3955a11a0f8acdea97c0"
     },
     {
       "path": "verification/verify.py",
       "bytes": 2688,
-      "sha256": "72373aa92c83cb091c0d82c969852903460ec5a8f554e54fb4a97e8abd7be158"
+      "sha256": "7d0ede32f874040f0bd284eb29f949db42b4ca82b4f8e4fc3358449d846fd12c"
     }
   ]
 }

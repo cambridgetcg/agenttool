@@ -1,4 +1,4 @@
-import { LIMITS, SCHEMAS } from "./constants.js";
+import { LIMITS, SCHEMAS, UINT256_MAX } from "./constants.js";
 import { fail } from "./errors.js";
 import {
   compareText,
@@ -21,11 +21,13 @@ import type {
   LedgerBalance,
   LedgerPosting,
   LedgerTransaction,
+  UnitDefinition,
 } from "./types.js";
 import { UnitRegistry } from "./units.js";
 
 const ACCOUNT_KINDS: readonly LedgerAccountKind[] = ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"];
 const SIDES = ["DEBIT", "CREDIT"] as const;
+const ACCOUNT_UNIT_DEFINITIONS = new WeakMap<LedgerAccountRegistry, ReadonlyMap<string, Readonly<UnitDefinition>>>();
 
 export function validateLedgerAccount(
   value: unknown,
@@ -66,6 +68,9 @@ export class LedgerAccountRegistry {
     }
     this.#accounts = map;
     this.#snapshot = deepFreeze([...accounts].sort((left, right) => compareText(left.account_id, right.account_id)));
+    const unitDefinitions = new Map<string, Readonly<UnitDefinition>>();
+    for (const account of accounts) unitDefinitions.set(account.unit_id, units.get(account.unit_id));
+    ACCOUNT_UNIT_DEFINITIONS.set(this, unitDefinitions);
     Object.freeze(this);
   }
 
@@ -78,6 +83,27 @@ export class LedgerAccountRegistry {
 
   list(): readonly Readonly<LedgerAccount>[] {
     return this.#snapshot;
+  }
+}
+
+export function assertLedgerAccountUnitCompatibility(
+  accounts: LedgerAccountRegistry,
+  units: UnitRegistry,
+  unitIds: readonly string[],
+): void {
+  const pinned = ACCOUNT_UNIT_DEFINITIONS.get(accounts);
+  if (!pinned) {
+    fail("INVALID_RECORD", "Ledger account registry was not constructed by this kernel.", "ledger_accounts");
+  }
+  for (const unitId of new Set(unitIds)) {
+    const accountDefinition = pinned.get(unitId);
+    if (!accountDefinition || !sameJson(accountDefinition, units.get(unitId))) {
+      fail(
+        "UNIT_MISMATCH",
+        "Ledger account and payment registries disagree on the exact unit definition.",
+        "ledger_accounts",
+      );
+    }
   }
 }
 
@@ -167,8 +193,17 @@ export function validateLedgerTransaction(
     const key = `${entry.ledger_domain}\u0000${entry.unit_id}`;
     const total = totals.get(key) ?? { debit: 0n, credit: 0n, count: 0, accounts: new Set<string>() };
     const amount = BigInt(entry.amount_atomic);
-    if (entry.side === "DEBIT") total.debit += amount;
-    else total.credit += amount;
+    if (entry.side === "DEBIT") {
+      total.debit += amount;
+      if (total.debit > UINT256_MAX) {
+        fail("AMOUNT_OVERFLOW", "Ledger debit total exceeds uint256.", "ledger_transaction.postings");
+      }
+    } else {
+      total.credit += amount;
+      if (total.credit > UINT256_MAX) {
+        fail("AMOUNT_OVERFLOW", "Ledger credit total exceeds uint256.", "ledger_transaction.postings");
+      }
+    }
     total.count += 1;
     total.accounts.add(entry.account_id);
     totals.set(key, total);
@@ -220,7 +255,7 @@ export function validateLedgerJournal(
 ): readonly Readonly<LedgerTransaction>[] {
   const snapshot = snapshotJson(value);
   if (!Array.isArray(snapshot) || snapshot.length > LIMITS.maxArrayItems) {
-    fail("LIMIT_EXCEEDED", "Ledger journal exceeds the bounded v0.1 history.", "journal");
+    fail("LIMIT_EXCEEDED", "Ledger journal exceeds the bounded v0.2 history.", "journal");
   }
   const journal = snapshot.map((entry) => validateLedgerTransaction(entry, accounts).transaction);
   const byTransactionId = new Map<string, Readonly<LedgerTransaction>>();

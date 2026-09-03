@@ -29,8 +29,8 @@ the economic kernel and free of runtime dependencies.
   locale-sensitive comparison.
 - Keep amount-like values in vectors as canonical decimal strings except for
   explicitly expected-invalid amount-validation cases.
-- Vector changes create a new suite revision; do not silently rewrite a pinned
-  conformance surface.
+- Vector changes create a new suite revision or suite identity; do not silently
+  rewrite an already published or publicly pinned conformance surface.
 - Keep independently authored training lessons separate from exact conformance
   inputs and expected observations. A public holdout is publisher intent, not
   secrecy or technical prevention of downstream training.

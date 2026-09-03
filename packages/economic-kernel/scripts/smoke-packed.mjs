@@ -67,7 +67,7 @@ try {
       payment: "NOT_REQUIRED",
     });
     if (
-      ECONOMIC_KERNEL_PROTOCOL !== "agenttool.economic-kernel/0.1" ||
+      ECONOMIC_KERNEL_PROTOCOL !== "agenttool.economic-kernel/0.2" ||
       exact.amount_atomic !== "9007199254740993" ||
       admission.outcome !== "ADMIT" ||
       admission.rights_conditional_on_payment !== false

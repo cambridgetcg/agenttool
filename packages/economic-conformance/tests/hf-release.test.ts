@@ -6,7 +6,7 @@ import { join, relative } from "node:path";
 const packageRoot = join(import.meta.dir, "..");
 const kernelRoot = join(packageRoot, "..", "economic-kernel");
 const datasetRoot = join(packageRoot, "hf", "dataset");
-const suite = readJson(join(packageRoot, "vectors", "economic-kernel-v0.1.json"));
+const suite = readJson(join(packageRoot, "vectors", "economic-kernel-v0.2.json"));
 const trainingRows = readJsonl(join(datasetRoot, "data", "training-lessons.jsonl"));
 const referenceRows = readJsonl(join(datasetRoot, "data", "conformance-reference.jsonl"));
 
@@ -45,8 +45,8 @@ describe("Hugging Face economic-kernel companion", () => {
   });
 
   test("projects every exact public case into a non-training reference config", () => {
-    expect(referenceRows).toHaveLength(34);
-    expect(new Set(referenceRows.map((row) => row.case_id)).size).toBe(34);
+    expect(referenceRows).toHaveLength(53);
+    expect(new Set(referenceRows.map((row) => row.case_id)).size).toBe(53);
     for (let index = 0; index < suite.cases.length; index++) {
       const source = suite.cases[index];
       const row = referenceRows[index];
@@ -80,15 +80,15 @@ describe("Hugging Face economic-kernel companion", () => {
     expect(admission).toEqual({
       _format: "agenttool.economic-kernel-training-admission/0.1",
       dataset_identifier: "Yu-and-Ai/agenttool-economic-kernel",
-      package_version: "0.1.0-dev.0",
+      package_version: "0.2.0-dev.0",
       authorization_basis: "explicit_repository_operator_direction_for_this_release",
       admitted_config: "economic_kernel_lessons",
       admitted_split: "train",
       admitted_rows: 24,
       admitted_content_scope: "repository_authored_synthetic_lessons_only",
       training_authorized: true,
-      excluded_config: "economic_kernel_v0_1",
-      excluded_rows: 34,
+      excluded_config: "economic_kernel_v0_2",
+      excluded_rows: 53,
       excluded_content_scope: "public_conformance_reference_held_out_from_authored_lesson_generator",
       excluded_training_authorized: false,
       license: "Apache-2.0",
@@ -108,7 +108,7 @@ describe("Hugging Face economic-kernel companion", () => {
     const card = readFileSync(join(datasetRoot, "README.md"), "utf8");
     expect(card).toContain("config_name: economic_kernel_lessons");
     expect(card).toContain("- split: train\n    path: data/training-lessons.jsonl");
-    expect(card).toContain("config_name: economic_kernel_v0_1");
+    expect(card).toContain("config_name: economic_kernel_v0_2");
     expect(card).toContain("- split: reference\n    path: data/conformance-reference.jsonl");
     expect(card).toContain("publisher metadata, not access control");
     expect(card).toContain("does not claim secrecy, uncontaminated evaluation");
@@ -117,8 +117,8 @@ describe("Hugging Face economic-kernel companion", () => {
   });
 
   test("copies the exact vector sources and both protocol descriptions", () => {
-    expect(readFileSync(join(datasetRoot, "reference", "economic-kernel-v0.1.json")))
-      .toEqual(readFileSync(join(packageRoot, "vectors", "economic-kernel-v0.1.json")));
+    expect(readFileSync(join(datasetRoot, "reference", "economic-kernel-v0.2.json")))
+      .toEqual(readFileSync(join(packageRoot, "vectors", "economic-kernel-v0.2.json")));
     expect(readFileSync(join(datasetRoot, "reference", "manifest.json")))
       .toEqual(readFileSync(join(packageRoot, "vectors", "manifest.json")));
     expect(readFileSync(join(datasetRoot, "reference", "KERNEL.md")))
@@ -136,7 +136,7 @@ describe("Hugging Face economic-kernel companion", () => {
     expect(manifest.source_files_complete).toBe(false);
     expect(manifest.source_manifest_is_attestation).toBe(false);
     expect(manifest.admitted_training_rows).toBe(24);
-    expect(manifest.held_out_conformance_rows).toBe(34);
+    expect(manifest.held_out_conformance_rows).toBe(53);
     expect(hash(Buffer.from(JSON.stringify(manifest.source_files), "utf8")))
       .toBe(manifest.selected_source_set_sha256);
 

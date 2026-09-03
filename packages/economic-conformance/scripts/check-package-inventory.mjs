@@ -45,13 +45,13 @@ const expected = [
   "hf/dataset/hash-manifest.json",
   "hf/dataset/reference/CONFORMANCE.md",
   "hf/dataset/reference/KERNEL.md",
-  "hf/dataset/reference/economic-kernel-v0.1.json",
+  "hf/dataset/reference/economic-kernel-v0.2.json",
   "hf/dataset/reference/manifest.json",
   "hf/dataset/source-manifest.json",
   "hf/dataset/training-authorization.json",
   "hf/dataset/verification/verify.py",
   "package.json",
-  "vectors/economic-kernel-v0.1.json",
+  "vectors/economic-kernel-v0.2.json",
   "vectors/manifest.json",
 ].sort();
 const files = report.files.map(({ path }) => path).sort();

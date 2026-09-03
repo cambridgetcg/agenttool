@@ -15,18 +15,22 @@ import {
   amount,
   appendLedgerTransaction,
   applySettledPayment,
+  compensateOrphanedApplication,
   convertAmount,
   evaluateEconomicAdmission,
+  paymentReversalRequestFingerprint,
   planPaidEffect,
   planPaymentRecovery,
   registerEffectAttempt,
   registerPaymentAttempt,
+  reverseAppliedPayment,
   selectEffectivePriceRevision,
   transitionEffectAttempt,
   transitionPaymentAttempt,
   validateAmount,
   validateEconomicQuote,
   validateLedgerTransaction,
+  validatePaymentLedgerState,
   validatePriceBookTimeline,
   validatePriceRevision,
   type AdmissionInput,
@@ -214,6 +218,63 @@ function applicationTransaction(
     price_revision_id: payment.quote.price_revision.price_revision_id,
     reverses_transaction_id: null,
   };
+}
+
+function reversalTransaction(
+  payment: Readonly<PaymentAttempt>,
+  overrides: Partial<LedgerTransaction> = {},
+): LedgerTransaction {
+  const units = makeUnits();
+  return {
+    schema: SCHEMAS.ledgerTransaction,
+    transaction_id: payment.reversal_transaction_id,
+    idempotency_key: payment.reversal_idempotency_key,
+    request_fingerprint: paymentReversalRequestFingerprint(payment as PaymentAttempt, units),
+    causation_ref: payment.attempt_id,
+    recorded_at: nextTime(9),
+    postings: [
+      posting("posting:conformance-reverse-usdc-credit", "account:usdc-user", "ledger:base-usdc", BASE_USDC, "CREDIT", payment.quote.input.amount_atomic),
+      posting("posting:conformance-reverse-usdc-debit", "account:usdc-clearing", "ledger:base-usdc", BASE_USDC, "DEBIT", payment.quote.input.amount_atomic),
+      posting("posting:conformance-reverse-credit-credit", "account:project-issuer", "ledger:project-credit", PROJECT_CREDIT, "CREDIT", payment.quote.output.amount_atomic),
+      posting("posting:conformance-reverse-credit-debit", "account:project-user", "ledger:project-credit", PROJECT_CREDIT, "DEBIT", payment.quote.output.amount_atomic),
+    ],
+    evidence_refs: ["evidence:conformance-provider-reversal-1"],
+    conversion_refs: [payment.quote.quote_id],
+    price_revision_id: payment.quote.price_revision.price_revision_id,
+    reverses_transaction_id: payment.application_transaction_id,
+    ...overrides,
+  };
+}
+
+function reversalOfReversalTransaction(payment: Readonly<PaymentAttempt>): LedgerTransaction {
+  return {
+    ...applicationTransaction(payment),
+    transaction_id: "ledger:conformance-payment-reversal-of-reversal-1",
+    idempotency_key: "ledger-key:conformance-payment-reversal-of-reversal-1",
+    request_fingerprint: "request:conformance-payment-reversal-of-reversal-1",
+    recorded_at: nextTime(10),
+    evidence_refs: ["evidence:conformance-payment-reversal-of-reversal-1"],
+    reverses_transaction_id: payment.reversal_transaction_id,
+  };
+}
+
+function unrelatedTransaction(
+  recordedAt: string,
+  overrides: Partial<LedgerTransaction> = {},
+): LedgerTransaction {
+  return ledgerTransaction({
+    transaction_id: "ledger:conformance-unrelated-gbp-1",
+    idempotency_key: "ledger-key:conformance-unrelated-gbp-1",
+    request_fingerprint: "request:conformance-unrelated-gbp-1",
+    causation_ref: "cause:conformance-unrelated-gbp-1",
+    recorded_at: recordedAt,
+    postings: [
+      posting("posting:conformance-unrelated-gbp-debit", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", "1"),
+      posting("posting:conformance-unrelated-gbp-credit", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", "1"),
+    ],
+    evidence_refs: ["evidence:conformance-unrelated-gbp-1"],
+    ...overrides,
+  });
 }
 
 function appliedPayment(): AppliedPaymentState {
@@ -441,6 +502,13 @@ function runQuoteScenario(input: JsonObject): JsonValue {
       validateEconomicQuote({ ...changed, quote_id: original.quote_id }, units);
       return null;
     }
+    case "ZERO_PAYMENT": {
+      quote({
+        input: amount(BASE_USDC, stringField(input, "input_atomic"), units),
+        output: amount(PROJECT_CREDIT, stringField(input, "output_atomic"), units),
+      });
+      return null;
+    }
     default:
       throw new Error("Unsupported quote conformance scenario.");
   }
@@ -529,6 +597,41 @@ function runLedgerScenario(input: JsonObject): JsonValue {
       const replay = appendLedgerTransaction(first.journal, ledgerTransaction(), accounts);
       return { disposition: replay.disposition, journal_length: replay.journal.length };
     }
+    case "SPLIT_TOTAL_OVERFLOW": {
+      const maximum = stringField(input, "amount_atomic");
+      validateLedgerTransaction(ledgerTransaction({
+        transaction_id: "transaction:conformance-split-total-overflow",
+        idempotency_key: "ledger-key:conformance-split-total-overflow",
+        request_fingerprint: "sha256:conformance-split-total-overflow",
+        postings: [
+          posting("posting:conformance-split-debit-1", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", maximum),
+          posting("posting:conformance-split-debit-2", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", maximum),
+          posting("posting:conformance-split-credit-1", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", maximum),
+          posting("posting:conformance-split-credit-2", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", maximum),
+        ],
+      }), accounts);
+      return null;
+    }
+    case "SPLIT_TOTAL_MAXIMUM": {
+      const first = stringField(input, "first_atomic");
+      const second = stringField(input, "second_atomic");
+      const validated = validateLedgerTransaction(ledgerTransaction({
+        transaction_id: "transaction:conformance-split-total-maximum",
+        idempotency_key: "ledger-key:conformance-split-total-maximum",
+        request_fingerprint: "sha256:conformance-split-total-maximum",
+        postings: [
+          posting("posting:conformance-maximum-debit-1", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", first),
+          posting("posting:conformance-maximum-debit-2", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", second),
+          posting("posting:conformance-maximum-credit-1", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", first),
+          posting("posting:conformance-maximum-credit-2", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", second),
+        ],
+      }), accounts);
+      return {
+        credit_atomic: validated.balances[0]!.credit_atomic,
+        debit_atomic: validated.balances[0]!.debit_atomic,
+        posting_count: validated.balances[0]!.posting_count,
+      };
+    }
     default:
       throw new Error("Unsupported ledger conformance scenario.");
   }
@@ -552,6 +655,38 @@ function runPaymentScenario(input: JsonObject): JsonValue {
         first_attempt_permitted: plan.first_attempt_permitted,
       };
     }
+    case "RESERVED_APPLICATION_TRANSITION_ID": {
+      const registered = registerPaymentAttempt([], paymentSeed(), units);
+      transitionPaymentAttempt(
+        registered.journal,
+        registered.attempt.attempt_id,
+        {
+          ...paymentCommand("RECORD_AUTHORIZATION", 1),
+          transition_id: registered.attempt.application_transition_id,
+        },
+        units,
+      );
+      return null;
+    }
+    case "RESERVED_REVERSAL_TRANSITION_ID": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      transitionPaymentAttempt(
+        settled.journal,
+        settled.attempt.attempt_id,
+        {
+          ...paymentCommand("REVERSE", 5),
+          transition_id: settled.attempt.reversal_transition_id,
+          evidence_ref: settled.attempt.reversal_transaction_id,
+        },
+        units,
+      );
+      return null;
+    }
     case "LEDGER_FIRST_APPLICATION": {
       const settled = advancePayment([
         "RECORD_AUTHORIZATION",
@@ -561,10 +696,15 @@ function runPaymentScenario(input: JsonObject): JsonValue {
       ]);
       const transaction = applicationTransaction(settled.attempt);
       const ledgerOnly = appendLedgerTransaction([], transaction, accounts);
+      const withLaterEntry = appendLedgerTransaction(
+        ledgerOnly.journal,
+        unrelatedTransaction(nextTime(6)),
+        accounts,
+      );
       const recovered = applySettledPayment(
         settled.journal,
         settled.attempt.attempt_id,
-        ledgerOnly.journal,
+        withLaterEntry.journal,
         transaction,
         accounts,
         units,
@@ -575,6 +715,92 @@ function runPaymentScenario(input: JsonObject): JsonValue {
         payment_status: recovered.attempt.status,
       };
     }
+    case "PROJECTION_FIRST_APPLICATION": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const composed = applySettledPayment(
+        settled.journal,
+        settled.attempt.attempt_id,
+        [],
+        applicationTransaction(settled.attempt),
+        accounts,
+        units,
+      );
+      validatePaymentLedgerState(composed.attempt, [], accounts, units);
+      return null;
+    }
+    case "APPLICATION_TRANSITION_TIME_MISMATCH": {
+      const applied = appliedPayment();
+      validatePaymentLedgerState(applied.attempt, [{
+        ...applied.ledger[0]!,
+        recorded_at: nextTime(6),
+      }], accounts, units);
+      return null;
+    }
+    case "LEDGER_FIRST_APPLICATION_TIME_REGRESSION": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const early = appendLedgerTransaction([], {
+        ...applicationTransaction(settled.attempt),
+        recorded_at: nextTime(3),
+      }, accounts);
+      validatePaymentLedgerState(settled.attempt, early.journal, accounts, units);
+      return null;
+    }
+    case "APPLICATION_IDENTITY_CONFLICT": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const collisionField = stringField(input, "collision_field");
+      if (collisionField !== "idempotency_key" && collisionField !== "request_fingerprint") {
+        throw new Error("Unsupported application identity collision field.");
+      }
+      const base = applicationTransaction(settled.attempt);
+      const collision = {
+        ...base,
+        transaction_id: `ledger:conformance-application-${collisionField}-conflict`,
+        idempotency_key: collisionField === "idempotency_key"
+          ? settled.attempt.application_idempotency_key
+          : `ledger-key:conformance-application-${collisionField}-conflict`,
+        request_fingerprint: collisionField === "request_fingerprint"
+          ? settled.attempt.request_fingerprint
+          : `request:conformance-application-${collisionField}-conflict`,
+      };
+      const collisionJournal = appendLedgerTransaction([], collision, accounts);
+      planPaymentRecovery(settled.attempt as PaymentAttempt, collisionJournal.journal, accounts, units);
+      return null;
+    }
+    case "COMPOSITE_PREFLIGHT_POISON": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const poisoned = appendLedgerTransaction([], unrelatedTransaction(nextTime(5), {
+        transaction_id: settled.attempt.reversal_transaction_id,
+      }), accounts);
+      applySettledPayment(
+        settled.journal,
+        settled.attempt.attempt_id,
+        poisoned.journal,
+        { ...applicationTransaction(settled.attempt), recorded_at: nextTime(6) },
+        accounts,
+        units,
+      );
+      return null;
+    }
     case "SAME_KEY_DIFFERENT_QUOTE": {
       const first = registerPaymentAttempt([], paymentSeed(), units);
       const largerQuote = quoteForInput("2000");
@@ -582,6 +808,197 @@ function runPaymentScenario(input: JsonObject): JsonValue {
         attempt_id: "payment:conformance-attempt-2",
         quote: largerQuote,
       }), units);
+      return null;
+    }
+    case "REVERSAL_DESCENDANT": {
+      const applied = appliedPayment();
+      const reversed = reverseAppliedPayment(
+        applied.journal,
+        applied.attempt.attempt_id,
+        applied.ledger,
+        reversalTransaction(applied.attempt),
+        accounts,
+        units,
+      );
+      const reactivated = appendLedgerTransaction(
+        reversed.ledger.journal,
+        reversalOfReversalTransaction(applied.attempt),
+        accounts,
+      );
+      validatePaymentLedgerState(reversed.attempt, reactivated.journal, accounts, units);
+      return null;
+    }
+    case "LEDGER_FIRST_REVERSAL": {
+      const applied = appliedPayment();
+      const reversal = reversalTransaction(applied.attempt);
+      const ledgerFirst = appendLedgerTransaction(applied.ledger, reversal, accounts);
+      const withLaterEntry = appendLedgerTransaction(
+        ledgerFirst.journal,
+        unrelatedTransaction(nextTime(10)),
+        accounts,
+      );
+      const recovered = reverseAppliedPayment(
+        applied.journal,
+        applied.attempt.attempt_id,
+        withLaterEntry.journal,
+        reversal,
+        accounts,
+        units,
+      );
+      return {
+        ledger_disposition: recovered.ledger.disposition,
+        ledger_entries: recovered.ledger.journal.length,
+        payment_status: recovered.attempt.status,
+      };
+    }
+    case "PROJECTION_FIRST_REVERSAL": {
+      const applied = appliedPayment();
+      const reversed = reverseAppliedPayment(
+        applied.journal,
+        applied.attempt.attempt_id,
+        applied.ledger,
+        reversalTransaction(applied.attempt),
+        accounts,
+        units,
+      );
+      validatePaymentLedgerState(reversed.attempt, applied.ledger, accounts, units);
+      return null;
+    }
+    case "REVERSAL_TRANSITION_TIME_MISMATCH": {
+      const applied = appliedPayment();
+      const reversed = reverseAppliedPayment(
+        applied.journal,
+        applied.attempt.attempt_id,
+        applied.ledger,
+        reversalTransaction(applied.attempt),
+        accounts,
+        units,
+      );
+      validatePaymentLedgerState(reversed.attempt, [
+        reversed.ledger.journal[0]!,
+        { ...reversed.ledger.journal[1]!, recorded_at: nextTime(10) },
+      ], accounts, units);
+      return null;
+    }
+    case "ORPHANED_APPLICATION_COMPENSATION": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const externallyReversed = transitionPaymentAttempt(
+        settled.journal,
+        settled.attempt.attempt_id,
+        paymentCommand("REVERSE", 6),
+        units,
+      );
+      const application = appendLedgerTransaction([], {
+        ...applicationTransaction(externallyReversed.attempt),
+        recorded_at: nextTime(7),
+      }, accounts);
+      const initialAction = planPaymentRecovery(
+        externallyReversed.attempt as PaymentAttempt,
+        application.journal,
+        accounts,
+        units,
+      ).action;
+      const reversal = reversalTransaction(externallyReversed.attempt, { recorded_at: nextTime(8) });
+      const compensated = compensateOrphanedApplication(
+        externallyReversed.journal,
+        externallyReversed.attempt.attempt_id,
+        application.journal,
+        reversal,
+        accounts,
+        units,
+      );
+      const later = appendLedgerTransaction(
+        compensated.ledger.journal,
+        unrelatedTransaction(nextTime(9)),
+        accounts,
+      );
+      const replayed = compensateOrphanedApplication(
+        compensated.payment_journal,
+        compensated.attempt.attempt_id,
+        later.journal,
+        reversal,
+        accounts,
+        units,
+      );
+      const final = validatePaymentLedgerState(
+        replayed.attempt,
+        replayed.ledger.journal,
+        accounts,
+        units,
+      );
+      return {
+        append_disposition: compensated.ledger.disposition,
+        compensation_required: final.compensation_required,
+        economically_applied: final.economically_applied,
+        initial_action: initialAction,
+        ledger_entries: replayed.ledger.journal.length,
+        payment_status: replayed.attempt.status,
+        replay_disposition: replayed.ledger.disposition,
+      };
+    }
+    case "ORPHANED_APPLICATION_EARLY_COMPENSATION": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const application = appendLedgerTransaction([], applicationTransaction(settled.attempt), accounts);
+      const externallyReversed = transitionPaymentAttempt(
+        settled.journal,
+        settled.attempt.attempt_id,
+        paymentCommand("REVERSE", 6),
+        units,
+      );
+      compensateOrphanedApplication(
+        externallyReversed.journal,
+        externallyReversed.attempt.attempt_id,
+        application.journal,
+        reversalTransaction(externallyReversed.attempt, { recorded_at: nextTime(5) }),
+        accounts,
+        units,
+      );
+      return null;
+    }
+    case "REGISTRY_DEFINITION_MISMATCH": {
+      const alternateUnits = new UnitRegistry(units.list().map((unit) => (
+        unit.unit_id === BASE_USDC ? { ...unit, decimals: unit.decimals + 1 } : unit
+      )));
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      applySettledPayment(
+        settled.journal,
+        settled.attempt.attempt_id,
+        [],
+        applicationTransaction(settled.attempt),
+        makeAccounts(alternateUnits),
+        units,
+      );
+      return null;
+    }
+    case "REVERSAL_WITHOUT_TRANSITIONS": {
+      const settled = advancePayment([
+        "RECORD_AUTHORIZATION",
+        "PERSIST_SUBMISSION_INTENT",
+        "BEGIN_SUBMISSION",
+        "OBSERVE_SETTLED",
+      ]);
+      const application = appendLedgerTransaction([], applicationTransaction(settled.attempt), accounts);
+      const reversal = appendLedgerTransaction(
+        application.journal,
+        reversalTransaction(settled.attempt),
+        accounts,
+      );
+      validatePaymentLedgerState(settled.attempt, reversal.journal, accounts, units);
       return null;
     }
     case "BALANCED_UNDERPAYMENT": {
@@ -816,9 +1233,9 @@ function observe(request: Readonly<AdapterRequest>): ConformanceObservation {
   }
 }
 
-test("reference adapter passes every frozen economic-conformance v0.1 vector", () => {
+test("reference adapter passes every frozen economic-conformance v0.2 vector", () => {
   const vectorSource = readFileSync(
-    new URL("../../economic-conformance/vectors/economic-kernel-v0.1.json", import.meta.url),
+    new URL("../../economic-conformance/vectors/economic-kernel-v0.2.json", import.meta.url),
   );
   const manifestSource = readFileSync(
     new URL("../../economic-conformance/vectors/manifest.json", import.meta.url),
@@ -830,9 +1247,9 @@ test("reference adapter passes every frozen economic-conformance v0.1 vector", (
     input: entry.input,
   }));
 
-  expect(suite.cases).toHaveLength(34);
-  expect(requests).toHaveLength(34);
-  expect(new Set(requests.map(({ case_id }) => case_id)).size).toBe(34);
+  expect(suite.cases).toHaveLength(53);
+  expect(requests).toHaveLength(53);
+  expect(new Set(requests.map(({ case_id }) => case_id)).size).toBe(53);
   expect(requests.every((request) => (
     Object.keys(request).sort().join(",") === "case_id,input,operation"
   ))).toBe(true);
@@ -851,7 +1268,7 @@ test("reference adapter passes every frozen economic-conformance v0.1 vector", (
 
   expect(report.cases.filter(({ status }) => status !== "PASS").map(({ case_id }) => case_id)).toEqual([]);
   expect(report.status).toBe("PASS");
-  expect(report.counts).toEqual({ total: 34, pass: 34, fail: 0, inconclusive: 0 });
-  expect(report.cases).toHaveLength(34);
+  expect(report.counts).toEqual({ total: 53, pass: 53, fail: 0, inconclusive: 0 });
+  expect(report.cases).toHaveLength(53);
   expect(report.cases.every(({ status }) => status === "PASS")).toBe(true);
 });

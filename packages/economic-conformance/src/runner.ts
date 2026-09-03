@@ -77,7 +77,7 @@ export function validateConformanceSuite(value: unknown): Readonly<ConformanceSu
   if (item.schema !== "agenttool.economic-conformance-suite/1") {
     fail("Unsupported suite schema.", "suite.schema", "UNSUPPORTED_SCHEMA");
   }
-  if (item.protocol !== "agenttool.economic-kernel/0.1") {
+  if (item.protocol !== "agenttool.economic-kernel/0.2") {
     fail("Unsupported economic protocol.", "suite.protocol", "UNSUPPORTED_SCHEMA");
   }
   if (item.rights_baseline !== "xenia.rights/0.1" || item.rights_conditional_on_payment !== false) {
@@ -161,7 +161,7 @@ export function evaluateConformance(suiteValue: unknown, traceValue: unknown): R
     || suiteDigest !== OFFICIAL_SUITE_SEMANTIC_SHA256
   ) {
     fail(
-      "evaluateConformance accepts only the exact pinned official v0.1 suite semantics.",
+      "evaluateConformance accepts only the exact pinned official v0.2 suite semantics.",
       "suite",
       "UNPINNED_SUITE",
     );

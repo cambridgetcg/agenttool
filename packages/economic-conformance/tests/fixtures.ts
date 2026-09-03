@@ -10,7 +10,7 @@ import type {
 } from "../src/index.js";
 
 export const packageRoot = new URL("../", import.meta.url);
-export const vectorBytes = readFileSync(new URL("vectors/economic-kernel-v0.1.json", packageRoot));
+export const vectorBytes = readFileSync(new URL("vectors/economic-kernel-v0.2.json", packageRoot));
 export const manifestBytes = readFileSync(new URL("vectors/manifest.json", packageRoot));
 export const suite: Readonly<ConformanceSuite> = verifyOfficialVectorSources(vectorBytes, manifestBytes);
 

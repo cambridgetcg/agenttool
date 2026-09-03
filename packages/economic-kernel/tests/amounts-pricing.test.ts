@@ -144,4 +144,12 @@ describe("content-derived quote terms", () => {
     });
     expect(() => validateEconomicQuote({ ...changed, quote_id: original.quote_id }, units)).toThrow();
   });
+
+  test("rejects a zero-value payment quote instead of creating an unreachable application", () => {
+    const units = makeUnits();
+    expect(() => quote({
+      input: amount(BASE_USDC, "0", units),
+      output: amount(PROJECT_CREDIT, "0", units),
+    })).toThrow(EconomicKernelError);
+  });
 });

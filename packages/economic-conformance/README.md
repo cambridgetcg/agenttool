@@ -3,7 +3,7 @@
 > **Compass:** Make economic implementations comparable without converting a
 > finite test result into authority, certification, or truth.
 > **Implements:** A public developer-preview
-> `agenttool.economic-conformance/0.1` closed-trace
+> `agenttool.economic-conformance/0.2` closed-trace
 > format, deterministic comparator, machine-readable vectors, and explicit
 > report boundaries.
 
@@ -32,11 +32,11 @@ invocation itself, and states that it does not prove external finality, host
 durability, adapter truthfulness, producer authentication, XENIA
 certification, or future behavior.
 
-The v0.1 suite covers canonical arithmetic, exact/inexact conversion, typed
+The v0.2 suite covers canonical arithmetic, exact/inexact conversion, typed
 unit separation, immutable price timelines, per-unit ledger conservation,
-idempotent reversals, payment/effect crash states, and counterfactual XENIA
-hard gates. Rights are a fixed standing baseline, never an input that payment
-can toggle.
+idempotent reversals, projection/ledger crash states, externally reversed
+orphan compensation, and counterfactual XENIA hard gates. Rights are a fixed
+standing baseline, never an input that payment can toggle.
 
 The source code independently pins the exact manifest bytes, vector bytes,
 case count, and canonical suite semantics. The byte verifier uses fatal UTF-8
@@ -82,7 +82,7 @@ ungated `Yu-and-Ai/agenttool-economic-kernel` dataset.
 
 That dataset keeps two configs separate. `economic_kernel_lessons` contains
 independently authored synthetic lessons admitted for training by this release.
-`economic_kernel_v0_1` exposes these 34 exact cases as public conformance
+`economic_kernel_v0_2` exposes these 53 exact cases as public conformance
 reference and marks them held out from the lesson generator. This is
 transparent publisher metadata rather than DRM or a secrecy claim: publication
 cannot guarantee that another trainer will preserve the holdout. Dataset

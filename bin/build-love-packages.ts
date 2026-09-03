@@ -102,10 +102,24 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     buildCommands: [["bun", "run", "ci"]],
   },
   {
+    name: "@agenttool/economic-kernel",
+    version: "0.2.0-dev.0",
+    packagePath: "packages/economic-kernel",
+    releaseTag: "economic-kernel-v0.2.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/economic-conformance",
     version: "0.1.0-dev.0",
     packagePath: "packages/economic-conformance",
     releaseTag: "economic-conformance-v0.1.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
+    name: "@agenttool/economic-conformance",
+    version: "0.2.0-dev.0",
+    packagePath: "packages/economic-conformance",
+    releaseTag: "economic-conformance-v0.2.0-dev.0",
     buildCommands: [["bun", "run", "ci"]],
   },
   {

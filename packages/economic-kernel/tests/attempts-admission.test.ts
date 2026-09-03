@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 import {
   EconomicKernelError,
   SCHEMAS,
+  UnitRegistry,
   amount,
   appendLedgerTransaction,
   applySettledPayment,
+  compensateOrphanedApplication,
   evaluateEconomicAdmission,
   planEffectRecovery,
   planPaidEffect,
@@ -30,6 +32,7 @@ import {
 import {
   ACTION_DIGEST,
   BASE_USDC,
+  GBP,
   PROJECT_CREDIT,
   START,
   effectSeed,
@@ -142,7 +145,10 @@ function applicationTransaction(payment: Readonly<PaymentAttempt>, overrides: Pa
   };
 }
 
-function reversalTransaction(payment: Readonly<PaymentAttempt>): LedgerTransaction {
+function reversalTransaction(
+  payment: Readonly<PaymentAttempt>,
+  overrides: Partial<LedgerTransaction> = {},
+): LedgerTransaction {
   const units = makeUnits();
   return {
     schema: SCHEMAS.ledgerTransaction,
@@ -161,6 +167,42 @@ function reversalTransaction(payment: Readonly<PaymentAttempt>): LedgerTransacti
     conversion_refs: [payment.quote.quote_id],
     price_revision_id: payment.quote.price_revision.price_revision_id,
     reverses_transaction_id: payment.application_transaction_id,
+    ...overrides,
+  };
+}
+
+function reversalOfReversalTransaction(payment: Readonly<PaymentAttempt>): LedgerTransaction {
+  return {
+    ...applicationTransaction(payment),
+    transaction_id: "ledger:payment-reversal-of-reversal-1",
+    idempotency_key: "ledger-key:payment-reversal-of-reversal-1",
+    request_fingerprint: "request:payment-reversal-of-reversal-1",
+    recorded_at: nextTime(10),
+    evidence_refs: ["evidence:payment-reversal-of-reversal-1"],
+    reverses_transaction_id: payment.reversal_transaction_id,
+  };
+}
+
+function unrelatedTransaction(
+  recordedAt: string,
+  overrides: Partial<LedgerTransaction> = {},
+): LedgerTransaction {
+  return {
+    schema: SCHEMAS.ledgerTransaction,
+    transaction_id: "ledger:unrelated-gbp-1",
+    idempotency_key: "ledger-key:unrelated-gbp-1",
+    request_fingerprint: "request:unrelated-gbp-1",
+    causation_ref: "cause:unrelated-gbp-1",
+    recorded_at: recordedAt,
+    postings: [
+      posting("posting:unrelated-gbp-debit", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", "1"),
+      posting("posting:unrelated-gbp-credit", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", "1"),
+    ],
+    evidence_refs: ["evidence:unrelated-gbp-1"],
+    conversion_refs: [],
+    price_revision_id: null,
+    reverses_transaction_id: null,
+    ...overrides,
   };
 }
 
@@ -293,7 +335,40 @@ describe("payment attempt journal and crash recovery", () => {
     )).toThrow();
   });
 
-  test("replays a fixed ledger application after either crash boundary without double credit", () => {
+  test("reserves derived application and reversal transition identities for their exact operations", () => {
+    const units = makeUnits();
+    const registered = registerPaymentAttempt([], paymentSeed(), units);
+    for (const reservedId of [
+      registered.attempt.application_transition_id,
+      registered.attempt.reversal_transition_id,
+    ]) {
+      expect(() => transitionPaymentAttempt(
+        registered.journal,
+        registered.attempt.attempt_id,
+        { ...paymentCommand("RECORD_AUTHORIZATION", 1), transition_id: reservedId },
+        units,
+      )).toThrow(EconomicKernelError);
+    }
+
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    expect(() => transitionPaymentAttempt(
+      settled.journal,
+      settled.attempt.attempt_id,
+      {
+        ...paymentCommand("REVERSE", 5),
+        transition_id: settled.attempt.reversal_transition_id,
+        evidence_ref: settled.attempt.reversal_transaction_id,
+      },
+      units,
+    )).toThrow(EconomicKernelError);
+  });
+
+  test("replays a ledger-first application without double credit", () => {
     const units = makeUnits();
     const accounts = makeAccounts(units);
     const settled = advancePayment([
@@ -304,16 +379,22 @@ describe("payment attempt journal and crash recovery", () => {
     ]);
     const transaction = applicationTransaction(settled.attempt);
     const ledgerOnly = appendLedgerTransaction([], transaction, accounts);
+    const withLaterEntry = appendLedgerTransaction(
+      ledgerOnly.journal,
+      unrelatedTransaction(nextTime(6)),
+      accounts,
+    );
     const recovered = applySettledPayment(
       settled.journal,
       settled.attempt.attempt_id,
-      ledgerOnly.journal,
+      withLaterEntry.journal,
       transaction,
       accounts,
       units,
     );
     expect(recovered.ledger.disposition).toBe("REPLAYED");
     expect(recovered.attempt.status).toBe("APPLIED");
+    expect(recovered.ledger.journal).toHaveLength(2);
     const replay = applySettledPayment(
       recovered.payment_journal,
       recovered.attempt.attempt_id,
@@ -323,7 +404,48 @@ describe("payment attempt journal and crash recovery", () => {
       units,
     );
     expect(replay.disposition).toBe("REPLAYED");
-    expect(replay.ledger.journal).toHaveLength(1);
+    expect(replay.ledger.journal).toHaveLength(2);
+  });
+
+  test("rejects projection-first application under the ledger-first persistence contract", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const transaction = applicationTransaction(settled.attempt);
+    const composed = applySettledPayment(
+      settled.journal,
+      settled.attempt.attempt_id,
+      [],
+      transaction,
+      accounts,
+      units,
+    );
+
+    expect(() => validatePaymentLedgerState(composed.attempt, [], accounts, units)).toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(composed.attempt as PaymentAttempt, [], accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => applySettledPayment(
+      composed.payment_journal,
+      composed.attempt.attempt_id,
+      [],
+      applicationTransaction(settled.attempt, {
+        recorded_at: nextTime(7),
+        evidence_refs: ["evidence:alternate-reconstruction"],
+        postings: [
+          posting("posting:alternate-usdc-debit", "account:usdc-clearing", "ledger:base-usdc", BASE_USDC, "DEBIT", "1000"),
+          posting("posting:alternate-usdc-credit", "account:usdc-user", "ledger:base-usdc", BASE_USDC, "CREDIT", "1000"),
+          posting("posting:alternate-credit-debit", "account:project-user", "ledger:project-credit", PROJECT_CREDIT, "DEBIT", "1"),
+          posting("posting:alternate-credit-credit", "account:project-issuer", "ledger:project-credit", PROJECT_CREDIT, "CREDIT", "1"),
+        ],
+      }),
+      accounts,
+      units,
+    )).toThrow(EconomicKernelError);
   });
 
   test("rejects underpayment even when its supplied ledger balances", () => {
@@ -344,42 +466,399 @@ describe("payment attempt journal and crash recovery", () => {
     expect(() => applySettledPayment(settled.journal, settled.attempt.attempt_id, [], underpaid, accounts, units)).toThrow();
   });
 
-  test("finishes a ledger-first reversal and rejects an uncompensated reversed projection", () => {
+  test("rejects a ledger entry that occupies an application identity under another transaction", () => {
     const units = makeUnits();
     const accounts = makeAccounts(units);
-    const applied = appliedPayment();
-    const reversal = reversalTransaction(applied.attempt);
-    const ledgerFirst = appendLedgerTransaction(applied.ledger, reversal, accounts);
-    expect(planPaymentRecovery(applied.attempt as PaymentAttempt, ledgerFirst.journal, accounts, units).action)
-      .toBe("FINALIZE_REVERSAL");
-    const finalized = reverseAppliedPayment(
-      applied.journal,
-      applied.attempt.attempt_id,
-      ledgerFirst.journal,
-      reversal,
-      accounts,
-      units,
-    );
-    expect(finalized.ledger.disposition).toBe("REPLAYED");
-    expect(finalized.attempt.status).toBe("REVERSED");
-    expect(planPaymentRecovery(finalized.attempt as PaymentAttempt, finalized.ledger.journal, accounts, units).action)
-      .toBe("COMPLETE");
-
     const settled = advancePayment([
       "RECORD_AUTHORIZATION",
       "PERSIST_SUBMISSION_INTENT",
       "BEGIN_SUBMISSION",
       "OBSERVE_SETTLED",
     ]);
-    const application = applicationTransaction(settled.attempt);
-    const ledgerOnly = appendLedgerTransaction([], application, accounts);
-    const reversedWithoutRepair = transitionPaymentAttempt(
+    const collisions = [
+      applicationTransaction(settled.attempt, {
+        transaction_id: "ledger:poisoned-application-key",
+        request_fingerprint: "request:poisoned-application-key",
+      }),
+      applicationTransaction(settled.attempt, {
+        transaction_id: "ledger:poisoned-application-request",
+        idempotency_key: "ledger-key:poisoned-application-request",
+      }),
+    ];
+
+    for (const collision of collisions) {
+      const occupied = appendLedgerTransaction([], collision, accounts);
+      expect(() => validatePaymentLedgerState(settled.attempt, occupied.journal, accounts, units))
+        .toThrow(EconomicKernelError);
+      expect(() => planPaymentRecovery(settled.attempt as PaymentAttempt, occupied.journal, accounts, units))
+        .toThrow(EconomicKernelError);
+    }
+  });
+
+  test("composed application rejects a pre-existing future reversal identity", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const poisoned = appendLedgerTransaction([], unrelatedTransaction(nextTime(5), {
+      transaction_id: settled.attempt.reversal_transaction_id,
+    }), accounts);
+
+    expect(() => applySettledPayment(
+      settled.journal,
+      settled.attempt.attempt_id,
+      poisoned.journal,
+      applicationTransaction(settled.attempt, { recorded_at: nextTime(6) }),
+      accounts,
+      units,
+    )).toThrow(EconomicKernelError);
+  });
+
+  test("rejects account and payment registries that redefine the same unit identity", () => {
+    const units = makeUnits();
+    const alternateUnits = new UnitRegistry(units.list().map((unit) => (
+      unit.unit_id === BASE_USDC ? { ...unit, decimals: unit.decimals + 1 } : unit
+    )));
+    const alternateAccounts = makeAccounts(alternateUnits);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+
+    expect(() => applySettledPayment(
+      settled.journal,
+      settled.attempt.attempt_id,
+      [],
+      applicationTransaction(settled.attempt),
+      alternateAccounts,
+      units,
+    )).toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(settled.attempt as PaymentAttempt, [], alternateAccounts, units))
+      .toThrow(EconomicKernelError);
+  });
+
+  test("binds composed ledger times to their derived transition times", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const applied = appliedPayment();
+    const applicationAtAnotherTime = [{
+      ...applied.ledger[0]!,
+      recorded_at: nextTime(6),
+    }];
+    expect(() => validatePaymentLedgerState(applied.attempt, applicationAtAnotherTime, accounts, units))
+      .toThrow(EconomicKernelError);
+
+    const reversed = reverseAppliedPayment(
+      applied.journal,
+      applied.attempt.attempt_id,
+      applied.ledger,
+      reversalTransaction(applied.attempt),
+      accounts,
+      units,
+    );
+    const reversalAtAnotherTime = [
+      reversed.ledger.journal[0]!,
+      { ...reversed.ledger.journal[1]!, recorded_at: nextTime(10) },
+    ];
+    expect(() => validatePaymentLedgerState(reversed.attempt, reversalAtAnotherTime, accounts, units))
+      .toThrow(EconomicKernelError);
+  });
+
+  test("rejects a ledger-first application that predates the settled payment head", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const earlyApplication = appendLedgerTransaction([], applicationTransaction(settled.attempt, {
+      recorded_at: nextTime(3),
+    }), accounts);
+
+    expect(() => validatePaymentLedgerState(settled.attempt, earlyApplication.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(settled.attempt as PaymentAttempt, earlyApplication.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+  });
+
+  test("compensates an orphaned ledger-first application after an external reversal", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const application = appendLedgerTransaction([], applicationTransaction(settled.attempt), accounts);
+    const externallyReversed = transitionPaymentAttempt(
       settled.journal,
       settled.attempt.attempt_id,
       paymentCommand("REVERSE", 6),
       units,
     );
-    expect(() => validatePaymentLedgerState(reversedWithoutRepair.attempt, ledgerOnly.journal, accounts, units)).toThrow();
+    const partial = validatePaymentLedgerState(externallyReversed.attempt, application.journal, accounts, units);
+    expect(partial.compensation_required).toBeTrue();
+    expect(partial.economically_applied).toBeFalse();
+    expect(planPaymentRecovery(
+      externallyReversed.attempt as PaymentAttempt,
+      application.journal,
+      accounts,
+      units,
+    ).action).toBe("COMPENSATE_ORPHANED_APPLICATION");
+
+    const reversal = reversalTransaction(externallyReversed.attempt, { recorded_at: nextTime(7) });
+    const compensated = compensateOrphanedApplication(
+      externallyReversed.journal,
+      externallyReversed.attempt.attempt_id,
+      application.journal,
+      reversal,
+      accounts,
+      units,
+    );
+    expect(compensated.ledger.disposition).toBe("APPENDED");
+    expect(compensated.ledger.journal).toHaveLength(2);
+    expect(compensated.attempt.status).toBe("REVERSED");
+    expect(validatePaymentLedgerState(
+      compensated.attempt,
+      compensated.ledger.journal,
+      accounts,
+      units,
+    ).compensation_required).toBeFalse();
+    expect(planPaymentRecovery(
+      compensated.attempt as PaymentAttempt,
+      compensated.ledger.journal,
+      accounts,
+      units,
+    ).action).toBe("COMPLETE");
+
+    const replay = compensateOrphanedApplication(
+      compensated.payment_journal,
+      compensated.attempt.attempt_id,
+      compensated.ledger.journal,
+      reversal,
+      accounts,
+      units,
+    );
+    expect(replay.ledger.disposition).toBe("REPLAYED");
+    expect(replay.ledger.journal).toHaveLength(2);
+
+    const withLaterEntry = appendLedgerTransaction(
+      replay.ledger.journal,
+      unrelatedTransaction(nextTime(8)),
+      accounts,
+    );
+    const lateReplay = compensateOrphanedApplication(
+      replay.payment_journal,
+      replay.attempt.attempt_id,
+      withLaterEntry.journal,
+      reversal,
+      accounts,
+      units,
+    );
+    expect(lateReplay.ledger.disposition).toBe("REPLAYED");
+    expect(lateReplay.ledger.journal).toHaveLength(3);
+  });
+
+  test("compensates a stale application appended after the external reversal and rejects early compensation", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const applicationBeforeReversal = appendLedgerTransaction(
+      [],
+      applicationTransaction(settled.attempt),
+      accounts,
+    );
+    const externallyReversed = transitionPaymentAttempt(
+      settled.journal,
+      settled.attempt.attempt_id,
+      paymentCommand("REVERSE", 6),
+      units,
+    );
+    expect(planPaymentRecovery(externallyReversed.attempt as PaymentAttempt, [], accounts, units).action)
+      .toBe("COMPLETE");
+
+    try {
+      compensateOrphanedApplication(
+        externallyReversed.journal,
+        externallyReversed.attempt.attempt_id,
+        applicationBeforeReversal.journal,
+        reversalTransaction(externallyReversed.attempt, { recorded_at: nextTime(5) }),
+        accounts,
+        units,
+      );
+      throw new Error("Expected early orphan compensation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(EconomicKernelError);
+      expect((error as EconomicKernelError).code).toBe("INVALID_STATE_TRANSITION");
+      expect((error as EconomicKernelError).path).toBe("ledger_transaction.recorded_at");
+    }
+
+    const lateApplication = appendLedgerTransaction([], applicationTransaction(externallyReversed.attempt, {
+      recorded_at: nextTime(7),
+    }), accounts);
+    expect(validatePaymentLedgerState(
+      externallyReversed.attempt,
+      lateApplication.journal,
+      accounts,
+      units,
+    ).compensation_required).toBeTrue();
+
+    const compensated = compensateOrphanedApplication(
+      externallyReversed.journal,
+      externallyReversed.attempt.attempt_id,
+      lateApplication.journal,
+      reversalTransaction(externallyReversed.attempt, { recorded_at: nextTime(8) }),
+      accounts,
+      units,
+    );
+    expect(compensated.ledger.disposition).toBe("APPENDED");
+    expect(compensated.ledger.journal).toHaveLength(2);
+    expect(validatePaymentLedgerState(
+      compensated.attempt,
+      compensated.ledger.journal,
+      accounts,
+      units,
+    ).economically_applied).toBeFalse();
+  });
+
+  test("finishes a ledger-first applied reversal", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const applied = appliedPayment();
+    const reversal = reversalTransaction(applied.attempt);
+    const ledgerFirst = appendLedgerTransaction(applied.ledger, reversal, accounts);
+    const withLaterEntry = appendLedgerTransaction(
+      ledgerFirst.journal,
+      unrelatedTransaction(nextTime(10)),
+      accounts,
+    );
+    expect(planPaymentRecovery(applied.attempt as PaymentAttempt, withLaterEntry.journal, accounts, units).action)
+      .toBe("FINALIZE_REVERSAL");
+    const finalized = reverseAppliedPayment(
+      applied.journal,
+      applied.attempt.attempt_id,
+      withLaterEntry.journal,
+      reversal,
+      accounts,
+      units,
+    );
+    expect(finalized.ledger.disposition).toBe("REPLAYED");
+    expect(finalized.attempt.status).toBe("REVERSED");
+    expect(finalized.ledger.journal).toHaveLength(3);
+    expect(planPaymentRecovery(finalized.attempt as PaymentAttempt, finalized.ledger.journal, accounts, units).action)
+      .toBe("COMPLETE");
+    const replay = reverseAppliedPayment(
+      finalized.payment_journal,
+      finalized.attempt.attempt_id,
+      finalized.ledger.journal,
+      reversal,
+      accounts,
+      units,
+    );
+    expect(replay.disposition).toBe("REPLAYED");
+    expect(replay.ledger.disposition).toBe("REPLAYED");
+    expect(replay.ledger.journal).toHaveLength(3);
+  });
+
+  test("rejects a fixed ledger reversal without the derived application history", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const settled = advancePayment([
+      "RECORD_AUTHORIZATION",
+      "PERSIST_SUBMISSION_INTENT",
+      "BEGIN_SUBMISSION",
+      "OBSERVE_SETTLED",
+    ]);
+    const application = appendLedgerTransaction([], applicationTransaction(settled.attempt), accounts);
+    const reversal = reversalTransaction(settled.attempt);
+    const ledgerOnly = appendLedgerTransaction(application.journal, reversal, accounts);
+
+    expect(() => validatePaymentLedgerState(settled.attempt, ledgerOnly.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(settled.attempt as PaymentAttempt, ledgerOnly.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => reverseAppliedPayment(
+      settled.journal,
+      settled.attempt.attempt_id,
+      application.journal,
+      reversal,
+      accounts,
+      units,
+    )).toThrow(EconomicKernelError);
+  });
+
+  test("rejects projection-first applied reversal under the ledger-first persistence contract", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const applied = appliedPayment();
+    const reversal = reversalTransaction(applied.attempt);
+    const composed = reverseAppliedPayment(
+      applied.journal,
+      applied.attempt.attempt_id,
+      applied.ledger,
+      reversal,
+      accounts,
+      units,
+    );
+
+    expect(() => validatePaymentLedgerState(composed.attempt, applied.ledger, accounts, units)).toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(composed.attempt as PaymentAttempt, applied.ledger, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => reverseAppliedPayment(
+      composed.payment_journal,
+      composed.attempt.attempt_id,
+      applied.ledger,
+      reversalTransaction(applied.attempt, { recorded_at: nextTime(11) }),
+      accounts,
+      units,
+    )).toThrow(EconomicKernelError);
+  });
+
+  test("rejects a generic reversal of the fixed payment reversal", () => {
+    const units = makeUnits();
+    const accounts = makeAccounts(units);
+    const applied = appliedPayment();
+    const reversed = reverseAppliedPayment(
+      applied.journal,
+      applied.attempt.attempt_id,
+      applied.ledger,
+      reversalTransaction(applied.attempt),
+      accounts,
+      units,
+    );
+    const reactivated = appendLedgerTransaction(
+      reversed.ledger.journal,
+      reversalOfReversalTransaction(applied.attempt),
+      accounts,
+    );
+
+    expect(reactivated.journal).toHaveLength(3);
+    expect(() => validatePaymentLedgerState(reversed.attempt, reactivated.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => planPaymentRecovery(reversed.attempt as PaymentAttempt, reactivated.journal, accounts, units))
+      .toThrow(EconomicKernelError);
+    expect(() => reverseAppliedPayment(
+      reversed.payment_journal,
+      reversed.attempt.attempt_id,
+      reactivated.journal,
+      reversalTransaction(applied.attempt),
+      accounts,
+      units,
+    )).toThrow(EconomicKernelError);
   });
 
   test("rejects an exact generic reversal that bypasses the payment-derived identity", () => {

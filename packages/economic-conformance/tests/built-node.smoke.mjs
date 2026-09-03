@@ -9,10 +9,10 @@ import {
 
 const packageRoot = new URL("../", import.meta.url);
 const suite = verifyOfficialVectorSources(
-  readFileSync(new URL("vectors/economic-kernel-v0.1.json", packageRoot)),
+  readFileSync(new URL("vectors/economic-kernel-v0.2.json", packageRoot)),
   readFileSync(new URL("vectors/manifest.json", packageRoot)),
 );
-if (suite.cases.length !== 34) throw new Error("official vector count mismatch");
+if (suite.cases.length !== 53) throw new Error("official vector count mismatch");
 
 const report = evaluateConformance(suite, {
   schema: "agenttool.economic-conformance-trace/1",
@@ -21,7 +21,7 @@ const report = evaluateConformance(suite, {
   producer_declared_ref: "adapter:node-smoke",
   entries: [{ case_id: suite.cases[0].case_id, observed: suite.cases[0].expected }],
 });
-if (report.status !== "INCONCLUSIVE" || report.counts.pass !== 1 || report.counts.inconclusive !== 33) {
+if (report.status !== "INCONCLUSIVE" || report.counts.pass !== 1 || report.counts.inconclusive !== 52) {
   throw new Error("closed status semantics failed");
 }
 if (report.suite_semantic_sha256 !== OFFICIAL_SUITE_SEMANTIC_SHA256) {

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  EconomicKernelError,
   SCHEMAS,
+  UINT256_MAX,
   appendLedgerTransaction,
   validateLedgerTransaction,
   type LedgerPosting,
@@ -95,6 +97,47 @@ describe("conserved per-unit ledger", () => {
       price_revision_id: price().price_revision_id,
     });
     expect(() => validateLedgerTransaction(globallyEqual, makeAccounts(units))).toThrow();
+  });
+
+  test("rejects per-unit totals that overflow uint256 across valid postings", () => {
+    const units = makeUnits();
+    const maximum = UINT256_MAX.toString();
+    const split = transaction({
+      transaction_id: "transaction:split-total-overflow",
+      idempotency_key: "ledger-key:split-total-overflow",
+      request_fingerprint: "sha256:split-total-overflow",
+      postings: [
+        posting("posting:split-debit-1", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", maximum),
+        posting("posting:split-debit-2", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", maximum),
+        posting("posting:split-credit-1", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", maximum),
+        posting("posting:split-credit-2", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", maximum),
+      ],
+    });
+    expect(() => validateLedgerTransaction(split, makeAccounts(units))).toThrow(EconomicKernelError);
+  });
+
+  test("accepts split per-unit totals exactly at the uint256 boundary", () => {
+    const units = makeUnits();
+    const maximum = UINT256_MAX.toString();
+    const almostMaximum = (UINT256_MAX - 1n).toString();
+    const split = transaction({
+      transaction_id: "transaction:split-total-maximum",
+      idempotency_key: "ledger-key:split-total-maximum",
+      request_fingerprint: "sha256:split-total-maximum",
+      postings: [
+        posting("posting:maximum-debit-1", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", almostMaximum),
+        posting("posting:maximum-debit-2", "account:gbp-user", "ledger:gbp", GBP, "DEBIT", "1"),
+        posting("posting:maximum-credit-1", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", almostMaximum),
+        posting("posting:maximum-credit-2", "account:gbp-clearing", "ledger:gbp", GBP, "CREDIT", "1"),
+      ],
+    });
+    expect(validateLedgerTransaction(split, makeAccounts(units)).balances).toEqual([{
+      ledger_domain: "ledger:gbp",
+      unit_id: GBP,
+      debit_atomic: maximum,
+      credit_atomic: maximum,
+      posting_count: 4,
+    }]);
   });
 
   test("binds posting unit and domain to an account registry", () => {

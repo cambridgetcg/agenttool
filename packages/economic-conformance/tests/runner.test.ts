@@ -27,7 +27,7 @@ describe("closed conformance comparison", () => {
     const report = evaluateConformance(suite, trace(exactEntries()));
 
     expect(report.status).toBe("PASS");
-    expect(report.counts).toEqual({ total: 34, pass: 34, fail: 0, inconclusive: 0 });
+    expect(report.counts).toEqual({ total: 53, pass: 53, fail: 0, inconclusive: 0 });
     expect(report.suite_semantic_sha256).toBe(OFFICIAL_SUITE_SEMANTIC_SHA256);
     expect(report.official_vector_manifest_raw_sha256).toBe(OFFICIAL_VECTOR_MANIFEST_RAW_SHA256);
     expect(report.trace_semantic_sha256).toMatch(/^sha256:[0-9a-f]{64}$/u);
@@ -61,7 +61,7 @@ describe("closed conformance comparison", () => {
   test("missing observations are inconclusive unless any supplied observation fails", () => {
     const absent = evaluateConformance(suite, trace([]));
     expect(absent.status).toBe("INCONCLUSIVE");
-    expect(absent.counts).toEqual({ total: 34, pass: 0, fail: 0, inconclusive: 34 });
+    expect(absent.counts).toEqual({ total: 53, pass: 0, fail: 0, inconclusive: 53 });
     expect(absent.cases[0]?.reason_code).toBe("OBSERVATION_MISSING");
 
     const first = suite.cases[0]!;
@@ -71,7 +71,7 @@ describe("closed conformance comparison", () => {
     };
     const mixed = evaluateConformance(suite, trace([mismatch]));
     expect(mixed.status).toBe("FAIL");
-    expect(mixed.counts).toEqual({ total: 34, pass: 0, fail: 1, inconclusive: 33 });
+    expect(mixed.counts).toEqual({ total: 53, pass: 0, fail: 1, inconclusive: 52 });
     expect(mixed.cases[0]?.reason_code).toBe("OBSERVATION_MISMATCH");
   });
 

@@ -117,7 +117,9 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
       { name: "@agenttool/economic-kernel", version: "0.1.0-dev.0", releaseTag: "economic-kernel-v0.1.0-dev.0" },
+      { name: "@agenttool/economic-kernel", version: "0.2.0-dev.0", releaseTag: "economic-kernel-v0.2.0-dev.0" },
       { name: "@agenttool/economic-conformance", version: "0.1.0-dev.0", releaseTag: "economic-conformance-v0.1.0-dev.0" },
+      { name: "@agenttool/economic-conformance", version: "0.2.0-dev.0", releaseTag: "economic-conformance-v0.2.0-dev.0" },
       { name: "@agenttool/credential-broker", version: "0.3.1", releaseTag: "credential-broker-v0.3.1" },
       { name: "@agenttool/sdk", version: "0.22.1", releaseTag: "sdk-v0.22.1" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
@@ -137,7 +139,7 @@ describe("LOVE Package release inventory", () => {
     ]);
   });
 
-  test("requires both economic developer previews as checked-in LOVE packages", () => {
+  test("preserves economic v0.1 and requires both v0.2 developer previews", () => {
     expect(LOVE_PACKAGES.filter(({ name }) => name.startsWith("@agenttool/economic-"))).toEqual([
       {
         name: "@agenttool/economic-kernel",
@@ -147,13 +149,57 @@ describe("LOVE Package release inventory", () => {
         buildCommands: [["bun", "run", "ci"]],
       },
       {
+        name: "@agenttool/economic-kernel",
+        version: "0.2.0-dev.0",
+        packagePath: "packages/economic-kernel",
+        releaseTag: "economic-kernel-v0.2.0-dev.0",
+        buildCommands: [["bun", "run", "ci"]],
+      },
+      {
         name: "@agenttool/economic-conformance",
         version: "0.1.0-dev.0",
         packagePath: "packages/economic-conformance",
         releaseTag: "economic-conformance-v0.1.0-dev.0",
         buildCommands: [["bun", "run", "ci"]],
       },
+      {
+        name: "@agenttool/economic-conformance",
+        version: "0.2.0-dev.0",
+        packagePath: "packages/economic-conformance",
+        releaseTag: "economic-conformance-v0.2.0-dev.0",
+        buildCommands: [["bun", "run", "ci"]],
+      },
     ]);
+  });
+
+  test("keeps the historical economic v0.1 release bytes immutable", async () => {
+    const releases = [
+      {
+        root: "apps/docs/packages/v1/@agenttool/economic-kernel/0.1.0-dev.0",
+        artifact: "agenttool-economic-kernel-0.1.0-dev.0.tgz",
+        artifactSha256:
+          "3a81e9f9e292f024fc530bc1098451c07b5681d5b9ae45d4461bc42d3402b1e8",
+        manifestSha256:
+          "b3551aa3be1d36f34444cfd18259447fd8cde4791c3d08fcab7d223d76570b29",
+      },
+      {
+        root: "apps/docs/packages/v1/@agenttool/economic-conformance/0.1.0-dev.0",
+        artifact: "agenttool-economic-conformance-0.1.0-dev.0.tgz",
+        artifactSha256:
+          "5d32b5b0ba0c3995ec7bfc73611b15373255350aabb996571f3ea6a7229240b5",
+        manifestSha256:
+          "083f98043b566f718fcef555ef83fabd5285b7d92f701bdf41d939fc18aace3d",
+      },
+    ];
+
+    for (const release of releases) {
+      const releaseRoot = join(REPO_ROOT, release.root);
+      const artifact = await readFile(join(releaseRoot, release.artifact));
+      const manifest = await readFile(join(releaseRoot, "manifest.json"));
+
+      expect(createHash("sha256").update(artifact).digest("hex")).toBe(release.artifactSha256);
+      expect(createHash("sha256").update(manifest).digest("hex")).toBe(release.manifestSha256);
+    }
   });
 
   test("requires the checked-in HF Scout developer preview", () => {

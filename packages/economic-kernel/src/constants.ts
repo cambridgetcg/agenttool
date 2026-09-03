@@ -1,6 +1,6 @@
 export const PACKAGE_NAME = "@agenttool/economic-kernel" as const;
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
-export const ECONOMIC_KERNEL_PROTOCOL = "agenttool.economic-kernel/0.1" as const;
+export const PACKAGE_VERSION = "0.2.0-dev.0" as const;
+export const ECONOMIC_KERNEL_PROTOCOL = "agenttool.economic-kernel/0.2" as const;
 
 export const SCHEMAS = Object.freeze({
   unit: "agenttool.economic-unit/1",

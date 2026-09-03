@@ -1,6 +1,6 @@
 # Economic Kernel contributor contract
 
-This package is the pure, protocol-neutral `agenttool.economic-kernel/0.1`
+This package is the pure, protocol-neutral `agenttool.economic-kernel/0.2`
 reference. Read `README.md` before changing semantics.
 
 - Keep every amount attached to one exact `unit_id`; bare `credit`, untyped
@@ -8,7 +8,7 @@ reference. Read `README.md` before changing semantics.
   forbidden.
 - Do not treat declared unit transferability, dimension, or account kind as
   proof that a transfer, issuance, mint, revocation, or balance policy was
-  authorized; those policies remain host responsibilities in v0.1.
+  authorized; those policies remain host responsibilities in v0.2.
 - Keep price revisions immutable and time-bounded. Conversions are integer
   arithmetic under one exact revision and either succeed exactly or return an
   explicit fractional remainder; nothing silently rounds.
@@ -18,7 +18,7 @@ reference. Read `README.md` before changing semantics.
   `(ledger_domain, unit_id)` pair. A conversion never excuses an unbalanced
   asset leg.
 - Treat ledger accounts and their relationship to quote participants as
-  caller-supplied host policy. V0.1 validates unit/domain membership but does
+  caller-supplied host policy. V0.2 validates unit/domain membership but does
   not authenticate account ownership or control.
 - Keep payment settlement and business effect as independent attempts with
   separate journals, request fingerprints, idempotency keys, and histories.

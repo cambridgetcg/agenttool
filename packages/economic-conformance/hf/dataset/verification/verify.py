@@ -46,7 +46,7 @@ def main() -> None:
     reference = read_jsonl(ROOT / "data" / "conformance-reference.jsonl")
     if len(training) != 24 or any(row.get('training_authorized') is not True for row in training):
         raise SystemExit("training admission split is invalid")
-    if len(reference) != 34 or any(row.get('training_authorized') is not False for row in reference):
+    if len(reference) != 53 or any(row.get('training_authorized') is not False for row in reference):
         raise SystemExit("conformance holdout split is invalid")
     if set(row['row_id'] for row in training) & set(row['row_id'] for row in reference):
         raise SystemExit("train/reference row identities overlap")

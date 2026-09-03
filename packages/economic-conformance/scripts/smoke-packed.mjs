@@ -58,7 +58,7 @@ try {
       "economic-conformance",
     );
     const suite = verifyOfficialVectorSources(
-      readFileSync(join(root, "vectors", "economic-kernel-v0.1.json")),
+      readFileSync(join(root, "vectors", "economic-kernel-v0.2.json")),
       readFileSync(join(root, "vectors", "manifest.json")),
     );
     const report = evaluateConformance(suite, {
@@ -69,7 +69,7 @@ try {
       entries: [],
     });
     if (
-      suite.cases.length !== 34
+      suite.cases.length !== 53
       || report.status !== "INCONCLUSIVE"
       || report.boundaries.producer_authenticated !== false
       || Object.hasOwn(report.cases[0], "expected")

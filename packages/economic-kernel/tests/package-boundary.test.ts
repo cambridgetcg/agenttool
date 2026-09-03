@@ -9,6 +9,7 @@ const packageRoot = new URL("../", import.meta.url);
 describe("package boundary", () => {
   test("does not expose helpers that require an already validated price revision", () => {
     expect("priceIsEffective" in publicApi).toBeFalse();
+    expect("assertLedgerAccountUnitCompatibility" in publicApi).toBeFalse();
   });
 
   test("runtime source remains pure, public, and dependency-free", () => {

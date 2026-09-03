@@ -35,7 +35,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   model-becoming/ — @agenttool/model-becoming · evidence-scoped lifecycle dossiers + reference-only HF row
   dataset-influence/ — @agenttool/dataset-influence · exact lineage, bounded influence, revisable identity evidence + non-economic attribution
   economic-kernel/ — @agenttool/economic-kernel · exact typed-unit prices, ledgers, recovery, and non-purchasable gates
-  economic-conformance/ — @agenttool/economic-conformance · independent 34-case comparator + deterministic HF lesson/reference companion
+  economic-conformance/ — @agenttool/economic-conformance · independent 53-case comparator + deterministic HF lesson/reference companion
   love-bomb/    — @agenttool/love-bomb · pure care/choice/becoming/delivery formats + static HF candidate
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons

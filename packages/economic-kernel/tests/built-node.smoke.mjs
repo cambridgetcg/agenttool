@@ -15,7 +15,7 @@ const units = new UnitRegistry([{
   transferability: "TRANSFERABLE",
 }]);
 
-if (ECONOMIC_KERNEL_PROTOCOL !== "agenttool.economic-kernel/0.1") throw new Error("protocol mismatch");
+if (ECONOMIC_KERNEL_PROTOCOL !== "agenttool.economic-kernel/0.2") throw new Error("protocol mismatch");
 if (amount("iso4217:gbp:minor", "9007199254740993", units).amount_atomic !== "9007199254740993") {
   throw new Error("exact amount smoke failed");
 }

@@ -16,7 +16,7 @@ configs:
   data_files:
   - split: train
     path: data/training-lessons.jsonl
-- config_name: economic_kernel_v0_1
+- config_name: economic_kernel_v0_2
   data_files:
   - split: reference
     path: data/conformance-reference.jsonl
@@ -30,7 +30,7 @@ This public, ungated Apache-2.0 companion separates two different jobs:
   synthetic lessons about exact units, rational prices, conserved ledgers,
   feedforward intent, feedback under ambiguity, recovery, and non-purchasable
   XENIA hard gates. The publisher admits only these rows for training.
-- **economic_kernel_v0_1 / reference** exposes 34 exact public
+- **economic_kernel_v0_2 / reference** exposes 53 exact public
   conformance cases. They are held out from the authored lesson generator and
   marked training_authorized=false so evaluation and teaching stay distinct.
 
@@ -52,11 +52,11 @@ gates before external I/O. Payment can satisfy only an economic condition after
 authority, safety, and participation gates pass; rights remain unconditional.
 
 The reference directory carries the exact kernel and conformance descriptions,
-the source-pinned vector manifest, and all 34 vector cases. A finite exact match
+the source-pinned vector manifest, and all 53 vector cases. A finite exact match
 is not certification and proves no external settlement, persistence, adapter
 honesty, producer identity, future behavior, consent, or XENIA conformance.
 
-Run python3 -I verification/verify.py from any downloaded snapshot to verify
+Run python3 -I verification/verify.py from a regular-file archive/export containing only the dataset files to verify
 the repository-authored file inventory and the train/reference admission split.
 The verifier permits Hugging Face's provider-managed .gitattributes as the sole
 extra path. Hash agreement detects byte drift; it is not authorship or truth proof.

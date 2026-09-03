@@ -27,6 +27,9 @@ function validateQuoteSeed(value: unknown, units: UnitRegistry): Readonly<Econom
   reference(item.payee_ref, "quote_seed.payee_ref");
   const input = validateAmount(item.input, units);
   const output = validateAmount(item.output, units);
+  if (input.amount_atomic === "0" || output.amount_atomic === "0") {
+    fail("INVALID_RECORD", "A payment quote must exchange positive input and output amounts.", "quote_seed");
+  }
   const revision = validatePriceRevision(item.price_revision, units);
   const issuedAt = timestamp(item.issued_at, "quote_seed.issued_at");
   const expiresAt = timestamp(item.expires_at, "quote_seed.expires_at");

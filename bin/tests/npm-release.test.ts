@@ -237,7 +237,7 @@ describe("standard npm release policy", () => {
         prepack: packageJson.scripts?.prepack,
       }).toEqual({
         name: `@agenttool/${key}`,
-        version: "0.1.0-dev.0",
+        version: "0.2.0-dev.0",
         private: undefined,
         license: "Apache-2.0",
         dependencies: undefined,
@@ -651,17 +651,17 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/wallet-zerone", "0.1.2")).toBe(
       "agenttool-wallet-zerone-0.1.2.tgz",
     );
-    expect(expectedTag(releaseSpec("economic-kernel"), "0.1.0-dev.0")).toBe(
-      "economic-kernel-v0.1.0-dev.0",
+    expect(expectedTag(releaseSpec("economic-kernel"), "0.2.0-dev.0")).toBe(
+      "economic-kernel-v0.2.0-dev.0",
     );
-    expect(expectedTag(releaseSpec("economic-conformance"), "0.1.0-dev.0")).toBe(
-      "economic-conformance-v0.1.0-dev.0",
+    expect(expectedTag(releaseSpec("economic-conformance"), "0.2.0-dev.0")).toBe(
+      "economic-conformance-v0.2.0-dev.0",
     );
-    expect(packedFilename("@agenttool/economic-kernel", "0.1.0-dev.0")).toBe(
-      "agenttool-economic-kernel-0.1.0-dev.0.tgz",
+    expect(packedFilename("@agenttool/economic-kernel", "0.2.0-dev.0")).toBe(
+      "agenttool-economic-kernel-0.2.0-dev.0.tgz",
     );
-    expect(packedFilename("@agenttool/economic-conformance", "0.1.0-dev.0")).toBe(
-      "agenttool-economic-conformance-0.1.0-dev.0.tgz",
+    expect(packedFilename("@agenttool/economic-conformance", "0.2.0-dev.0")).toBe(
+      "agenttool-economic-conformance-0.2.0-dev.0.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
@@ -684,7 +684,7 @@ describe("standard npm release policy", () => {
       "package/CLAUDE.md",
       "package/dist/index.js",
       "package/dist/index.d.ts",
-      "package/vectors/economic-kernel-v0.1.json",
+      "package/vectors/economic-kernel-v0.2.json",
       "package/vectors/manifest.json",
       "package/hf/dataset/LICENSE",
       "package/hf/dataset/NOTICE",
@@ -694,7 +694,7 @@ describe("standard npm release policy", () => {
       "package/hf/dataset/hash-manifest.json",
       "package/hf/dataset/reference/CONFORMANCE.md",
       "package/hf/dataset/reference/KERNEL.md",
-      "package/hf/dataset/reference/economic-kernel-v0.1.json",
+      "package/hf/dataset/reference/economic-kernel-v0.2.json",
       "package/hf/dataset/reference/manifest.json",
       "package/hf/dataset/source-manifest.json",
       "package/hf/dataset/training-authorization.json",

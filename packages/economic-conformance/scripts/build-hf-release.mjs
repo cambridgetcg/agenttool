@@ -31,7 +31,11 @@ const scratch = check
 const outputRoot = scratch ? join(scratch, "dataset") : committedRoot;
 
 const DATASET_ID = "Yu-and-Ai/agenttool-economic-kernel";
-const PACKAGE_VERSION = "0.1.0-dev.0";
+const PACKAGE_VERSION = "0.2.0-dev.0";
+const KERNEL_PROTOCOL = "agenttool.economic-kernel/0.2";
+const CONFORMANCE_CONFIG = "economic_kernel_v0_2";
+const VECTOR_FILENAME = "economic-kernel-v0.2.json";
+const EXPECTED_REFERENCE_ROWS = 53;
 const ORIGIN = "human_directed_agent_authored_synthetic";
 const RIGHTS_BASELINE = "xenia.rights/0.1";
 
@@ -88,7 +92,7 @@ const trainingLessons = [
     id: "lesson:append-only-repair",
     instruction: "Repair a posted ledger error without rewriting history.",
     context: "The original transaction is already part of an append-only journal.",
-    response: "Append one exact compensating transaction that points to the original entry and negates each posting in the same unit and domain. Reject repeated, forged, or differently named reversals. Repair changes the current balance while preserving the evidence trail.",
+    response: "Append one exact compensating transaction that points to the original entry and negates each posting in the same unit and domain. Reject forged inverses and any additional differently named attempt to reverse the same target. Repair changes the current balance while preserving the evidence trail.",
     mathematical_form: "p_reversal = -p_original for every posting; history_new = history || reversal.",
     principle: "reversible_accounting",
   },
@@ -198,10 +202,10 @@ const trainingLessons = [
   },
   {
     id: "lesson:reject-alternate-reversal-id",
-    instruction: "Review a second compensating entry that reverses an already reversed transaction under a new identifier.",
-    context: "Its postings are the inverse of the original, but it avoids the derived reversal identity.",
-    response: "Reject it. Reversal validity binds the target, the fixed derived identity, and the exact inverse postings. Allowing alternate identifiers would turn idempotent repair into a repeated-credit path.",
-    mathematical_form: "reversal_id = derive(original_id), uniquely.",
+    instruction: "Review a second payment compensating entry that targets an already reversed application under a new identifier.",
+    context: "The candidate bypasses reverseAppliedPayment's fixed derived identity; the generic ledger separately permits only one exact inverse per target.",
+    response: "Reject it at the composite payment boundary. Generic ledger validity requires an exact inverse and at most one reversal of each target, while payment coupling additionally reserves one derived transaction ID, idempotency key, request fingerprint, and transition ID for the application reversal.",
+    mathematical_form: "count(entry.reverses_transaction_id = application_id) <= 1; payment_reversal_id = derive(payment_attempt, quote).",
     principle: "reversible_accounting_counterexample",
   },
   {
@@ -241,13 +245,13 @@ function build(root) {
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
 
-  const suite = readJson(join(conformanceRoot, "vectors", "economic-kernel-v0.1.json"));
+  const suite = readJson(join(conformanceRoot, "vectors", VECTOR_FILENAME));
   const vectorManifest = readJson(join(conformanceRoot, "vectors", "manifest.json"));
   if (
     suite.schema !== "agenttool.economic-conformance-suite/1"
-    || suite.protocol !== "agenttool.economic-kernel/0.1"
+    || suite.protocol !== KERNEL_PROTOCOL
     || !Array.isArray(suite.cases)
-    || suite.cases.length !== 34
+    || suite.cases.length !== EXPECTED_REFERENCE_ROWS
     || vectorManifest.case_count !== suite.cases.length
   ) {
     throw new Error("official economic conformance sources have an unexpected identity");
@@ -308,7 +312,7 @@ function build(root) {
 
   write(root, "data/training-lessons.jsonl", toJsonl(trainingRows));
   write(root, "data/conformance-reference.jsonl", toJsonl(conformanceRows));
-  copy(root, join(conformanceRoot, "vectors", "economic-kernel-v0.1.json"), "reference/economic-kernel-v0.1.json");
+  copy(root, join(conformanceRoot, "vectors", VECTOR_FILENAME), "reference/" + VECTOR_FILENAME);
   copy(root, join(conformanceRoot, "vectors", "manifest.json"), "reference/manifest.json");
   copy(root, join(kernelRoot, "README.md"), "reference/KERNEL.md");
   copy(root, join(conformanceRoot, "README.md"), "reference/CONFORMANCE.md");
@@ -325,7 +329,7 @@ function build(root) {
     admitted_rows: trainingRows.length,
     admitted_content_scope: "repository_authored_synthetic_lessons_only",
     training_authorized: true,
-    excluded_config: "economic_kernel_v0_1",
+    excluded_config: CONFORMANCE_CONFIG,
     excluded_rows: conformanceRows.length,
     excluded_content_scope: "public_conformance_reference_held_out_from_authored_lesson_generator",
     excluded_training_authorized: false,
@@ -433,7 +437,7 @@ function datasetCard(trainingCount, referenceCount) {
     "  data_files:",
     "  - split: train",
     "    path: data/training-lessons.jsonl",
-    "- config_name: economic_kernel_v0_1",
+    "- config_name: " + CONFORMANCE_CONFIG,
     "  data_files:",
     "  - split: reference",
     "    path: data/conformance-reference.jsonl",
@@ -447,7 +451,7 @@ function datasetCard(trainingCount, referenceCount) {
     "  synthetic lessons about exact units, rational prices, conserved ledgers,",
     "  feedforward intent, feedback under ambiguity, recovery, and non-purchasable",
     "  XENIA hard gates. The publisher admits only these rows for training.",
-    "- **economic_kernel_v0_1 / reference** exposes " + referenceCount + " exact public",
+    "- **" + CONFORMANCE_CONFIG + " / reference** exposes " + referenceCount + " exact public",
     "  conformance cases. They are held out from the authored lesson generator and",
     "  marked training_authorized=false so evaluation and teaching stay distinct.",
     "",
@@ -469,11 +473,11 @@ function datasetCard(trainingCount, referenceCount) {
     "authority, safety, and participation gates pass; rights remain unconditional.",
     "",
     "The reference directory carries the exact kernel and conformance descriptions,",
-    "the source-pinned vector manifest, and all 34 vector cases. A finite exact match",
+    "the source-pinned vector manifest, and all " + referenceCount + " vector cases. A finite exact match",
     "is not certification and proves no external settlement, persistence, adapter",
     "honesty, producer identity, future behavior, consent, or XENIA conformance.",
     "",
-    "Run python3 -I verification/verify.py from any downloaded snapshot to verify",
+    "Run python3 -I verification/verify.py from a regular-file archive/export containing only the dataset files to verify",
     "the repository-authored file inventory and the train/reference admission split.",
     "The verifier permits Hugging Face's provider-managed .gitattributes as the sole",
     "extra path. Hash agreement detects byte drift; it is not authorship or truth proof.",
@@ -534,7 +538,7 @@ function verifierSource() {
     '    reference = read_jsonl(ROOT / "data" / "conformance-reference.jsonl")',
     "    if len(training) != 24 or any(row.get('training_authorized') is not True for row in training):",
     '        raise SystemExit("training admission split is invalid")',
-    "    if len(reference) != 34 or any(row.get('training_authorized') is not False for row in reference):",
+    "    if len(reference) != " + EXPECTED_REFERENCE_ROWS + " or any(row.get('training_authorized') is not False for row in reference):",
     '        raise SystemExit("conformance holdout split is invalid")',
     "    if set(row['row_id'] for row in training) & set(row['row_id'] for row in reference):",
     '        raise SystemExit("train/reference row identities overlap")',
@@ -580,7 +584,7 @@ function selectedSourceFiles() {
         "package.json",
         "scripts/build-hf-release.mjs",
         ...filesBelow(join(conformanceRoot, "src")).map((path) => relative(conformanceRoot, path)),
-        "vectors/economic-kernel-v0.1.json",
+        "vectors/" + VECTOR_FILENAME,
         "vectors/manifest.json",
       ],
     },

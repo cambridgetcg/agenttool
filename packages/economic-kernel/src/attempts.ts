@@ -17,6 +17,7 @@ import {
 } from "./internal.js";
 import {
   appendLedgerTransaction,
+  assertLedgerAccountUnitCompatibility,
   LedgerAccountRegistry,
   validateLedgerJournal,
   validateLedgerTransaction,
@@ -34,6 +35,7 @@ import type {
   EffectStatus,
   EffectTransitionCommand,
   ExternalIntent,
+  OrphanedApplicationCompensationResult,
   PaymentAttempt,
   PaymentAttemptSeed,
   PaymentLedgerState,
@@ -201,7 +203,7 @@ function replayPaymentHistory(
   units: UnitRegistry,
 ): { status: PaymentStatus; updatedAt: string; transitions: readonly AttemptTransition<PaymentStatus, PaymentOperation>[] } {
   if (!Array.isArray(value) || value.length > LIMITS.maxTransitions) {
-    fail("LIMIT_EXCEEDED", "Payment transition history exceeds the v0.1 bound.", "payment_attempt.transitions");
+    fail("LIMIT_EXCEEDED", "Payment transition history exceeds the v0.2 bound.", "payment_attempt.transitions");
   }
   let status: PaymentStatus = "CREATED";
   let updatedAt = seed.created_at;
@@ -226,12 +228,20 @@ function replayPaymentHistory(
     if (transition.operation === "EXPIRE" && Date.parse(transition.observed_at) < Date.parse(seed.quote.expires_at)) {
       fail("INVALID_STATE_TRANSITION", "Persisted payment expired before its quote.", `payment_attempt.transitions[${String(index)}].observed_at`);
     }
-    if (transition.operation === "APPLY_INTERNAL"
-      && (transition.transition_id !== seed.application_transition_id || transition.evidence_ref !== seed.application_transaction_id)) {
+    const applicationTransition = transition.operation === "APPLY_INTERNAL";
+    const occupiesApplicationTransitionId = transition.transition_id === seed.application_transition_id;
+    if (
+      applicationTransition !== occupiesApplicationTransitionId
+      || (applicationTransition && transition.evidence_ref !== seed.application_transaction_id)
+    ) {
       fail("INVALID_STATE_TRANSITION", "Persisted application transition is not bound to its derived ledger identity.", `payment_attempt.transitions[${String(index)}]`);
     }
-    if (transition.operation === "REVERSE" && status === "APPLIED"
-      && (transition.transition_id !== seed.reversal_transition_id || transition.evidence_ref !== seed.reversal_transaction_id)) {
+    const appliedReversalTransition = transition.operation === "REVERSE" && status === "APPLIED";
+    const occupiesReversalTransitionId = transition.transition_id === seed.reversal_transition_id;
+    if (
+      appliedReversalTransition !== occupiesReversalTransitionId
+      || (appliedReversalTransition && transition.evidence_ref !== seed.reversal_transaction_id)
+    ) {
       fail("INVALID_STATE_TRANSITION", "Persisted reversal transition is not bound to its derived ledger identity.", `payment_attempt.transitions[${String(index)}]`);
     }
     status = target;
@@ -246,7 +256,7 @@ function replayEffectHistory(
   createdAt: string,
 ): { status: EffectStatus; updatedAt: string; transitions: readonly EffectAttemptTransition[] } {
   if (!Array.isArray(value) || value.length > LIMITS.maxTransitions) {
-    fail("LIMIT_EXCEEDED", "Effect transition history exceeds the v0.1 bound.", "effect_attempt.transitions");
+    fail("LIMIT_EXCEEDED", "Effect transition history exceeds the v0.2 bound.", "effect_attempt.transitions");
   }
   let status: EffectStatus = "CREATED";
   let updatedAt = createdAt;
@@ -358,7 +368,7 @@ export function validatePaymentAttempt(value: unknown, units: UnitRegistry): Rea
 export function validatePaymentAttemptJournal(value: unknown, units: UnitRegistry): readonly Readonly<PaymentAttempt>[] {
   const snapshot = snapshotJson(value);
   if (!Array.isArray(snapshot) || snapshot.length > LIMITS.maxArrayItems) {
-    fail("LIMIT_EXCEEDED", "Payment journal exceeds the bounded v0.1 history.", "payment_journal");
+    fail("LIMIT_EXCEEDED", "Payment journal exceeds the bounded v0.2 history.", "payment_journal");
   }
   const attempts = snapshot.map((entry) => validatePaymentAttempt(entry, units));
   const ids = new Set<string>();
@@ -496,7 +506,13 @@ export function transitionPaymentAttempt(
   return deepFreeze({ ...result, journal: next });
 }
 
-function assertApplicationLedger(payment: PaymentAttempt, transactionValue: unknown, accounts: LedgerAccountRegistry) {
+function assertApplicationLedger(
+  payment: PaymentAttempt,
+  transactionValue: unknown,
+  accounts: LedgerAccountRegistry,
+  units: UnitRegistry,
+) {
+  assertLedgerAccountUnitCompatibility(accounts, units, [payment.quote.input.unit_id, payment.quote.output.unit_id]);
   const validated = validateLedgerTransaction(transactionValue, accounts);
   const transaction = validated.transaction;
   if (
@@ -511,6 +527,9 @@ function assertApplicationLedger(payment: PaymentAttempt, transactionValue: unkn
   ) {
     fail("INVALID_RECORD", "Payment application ledger identity is not bound to the exact attempt and quote.", "ledger_transaction");
   }
+  if (validated.balances.some((balance) => units.get(balance.unit_id).ledger_domain !== balance.ledger_domain)) {
+    fail("UNIT_MISMATCH", "Payment application ledger domains do not match the supplied unit registry.", "ledger_transaction.postings");
+  }
   const expected = new Map([
     [payment.quote.input.unit_id, payment.quote.input.amount_atomic],
     [payment.quote.output.unit_id, payment.quote.output.amount_atomic],
@@ -522,8 +541,18 @@ function assertApplicationLedger(payment: PaymentAttempt, transactionValue: unkn
   return transaction;
 }
 
-function assertReversalLedger(payment: PaymentAttempt, transactionValue: unknown, accounts: LedgerAccountRegistry) {
-  const transaction = validateLedgerTransaction(transactionValue, accounts).transaction;
+function assertReversalLedger(
+  payment: PaymentAttempt,
+  transactionValue: unknown,
+  accounts: LedgerAccountRegistry,
+  units: UnitRegistry,
+) {
+  assertLedgerAccountUnitCompatibility(accounts, units, [payment.quote.input.unit_id, payment.quote.output.unit_id]);
+  const validated = validateLedgerTransaction(transactionValue, accounts);
+  const transaction = validated.transaction;
+  if (validated.balances.some((balance) => units.get(balance.unit_id).ledger_domain !== balance.ledger_domain)) {
+    fail("UNIT_MISMATCH", "Payment reversal ledger domains do not match the supplied unit registry.", "ledger_transaction.postings");
+  }
   if (
     transaction.transaction_id !== payment.reversal_transaction_id
     || transaction.idempotency_key !== payment.reversal_idempotency_key
@@ -539,15 +568,27 @@ function assertReversalLedger(payment: PaymentAttempt, transactionValue: unknown
   return transaction;
 }
 
-export function validatePaymentLedgerState(
+function paymentLedgerState(
   paymentValue: unknown,
   ledgerJournalValue: unknown,
   accounts: LedgerAccountRegistry,
   units: UnitRegistry,
 ): Readonly<PaymentLedgerState> {
   const payment = validatePaymentAttempt(paymentValue, units);
+  assertLedgerAccountUnitCompatibility(accounts, units, [payment.quote.input.unit_id, payment.quote.output.unit_id]);
   const ledgerJournal = validateLedgerJournal(ledgerJournalValue, accounts);
-  const applicationCandidate = ledgerJournal.find((entry) => entry.transaction_id === payment.application_transaction_id) ?? null;
+  const applicationCandidates = ledgerJournal.filter((entry) =>
+    entry.transaction_id === payment.application_transaction_id
+    || entry.idempotency_key === payment.application_idempotency_key
+    || entry.request_fingerprint === payment.request_fingerprint);
+  if (applicationCandidates.length > 1) {
+    fail(
+      "IDEMPOTENCY_CONFLICT",
+      "Payment application identities appear in multiple ledger entries.",
+      "ledger_journal",
+    );
+  }
+  const applicationCandidate = applicationCandidates[0] ?? null;
   const expectedReversalFingerprint = reversalFingerprint(payment);
   const reversalCandidates = ledgerJournal.filter((entry) =>
     entry.transaction_id === payment.reversal_transaction_id
@@ -562,29 +603,116 @@ export function validatePaymentLedgerState(
     );
   }
   const reversalCandidate = reversalCandidates[0] ?? null;
-  const application = applicationCandidate === null ? null : assertApplicationLedger(payment, applicationCandidate, accounts);
-  const reversal = reversalCandidate === null ? null : assertReversalLedger(payment, reversalCandidate, accounts);
-  const appliedTransition = payment.transitions.some((entry) => entry.operation === "APPLY_INTERNAL");
+  const application = applicationCandidate === null ? null : assertApplicationLedger(payment, applicationCandidate, accounts, units);
+  const reversal = reversalCandidate === null ? null : assertReversalLedger(payment, reversalCandidate, accounts, units);
+  const settlementTransition = payment.transitions.find((entry) =>
+    entry.operation === "OBSERVE_SETTLED" || entry.operation === "RECONCILE_SETTLED") ?? null;
+  const applicationTransition = payment.transitions.find((entry) => entry.operation === "APPLY_INTERNAL") ?? null;
+  const appliedReversalTransition = payment.transitions.find((entry) =>
+    entry.operation === "REVERSE" && entry.from === "APPLIED") ?? null;
+  const externalReversalTransition = payment.transitions.find((entry) =>
+    entry.operation === "REVERSE" && entry.from === "EXTERNALLY_SETTLED") ?? null;
+  const appliedTransition = applicationTransition !== null;
+  const orphanedApplication = payment.status === "REVERSED"
+    && externalReversalTransition !== null
+    && applicationTransition === null
+    && application !== null;
   const ledgerEligibleStatus = payment.status === "EXTERNALLY_SETTLED" || payment.status === "APPLIED" || payment.status === "REVERSED";
   if (application !== null && !ledgerEligibleStatus) {
     fail("INVALID_STATE_TRANSITION", "Application ledger entry precedes an eligible payment state.", "payment_attempt.status");
   }
+  if (application !== null && applicationTransition === null && settlementTransition === null) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Ledger-first payment application requires an observed settled payment head.",
+      "payment_attempt.transitions",
+    );
+  }
+  if (application !== null && applicationTransition === null && settlementTransition !== null
+    && Date.parse(application.recorded_at) < Date.parse(settlementTransition.observed_at)) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Ledger-first payment application cannot predate the settled payment head.",
+      "ledger_transaction.recorded_at",
+    );
+  }
   if (appliedTransition && application === null) {
     fail("PAYMENT_NOT_APPLIED", "Applied payment projection is missing its exact ledger transaction.", "ledger_journal");
+  }
+  if (application !== null && applicationTransition !== null
+    && application.recorded_at !== applicationTransition.observed_at) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Payment application ledger time must equal its derived transition time.",
+      "payment_attempt.transitions",
+    );
   }
   if (reversal !== null && application === null) {
     fail("INVALID_STATE_TRANSITION", "Payment reversal exists without its application transaction.", "ledger_journal");
   }
-  if (payment.status === "REVERSED" && application !== null && reversal === null) {
+  if (reversal !== null && !appliedTransition && !orphanedApplication) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "A fixed payment reversal requires either the derived application transition or an orphaned ledger-first application.",
+      "ledger_journal",
+    );
+  }
+  if (reversal !== null && externalReversalTransition !== null && !appliedTransition
+    && Date.parse(reversal.recorded_at) < Date.parse(externalReversalTransition.observed_at)) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Orphaned application compensation cannot predate the external reversal.",
+      "ledger_transaction.recorded_at",
+    );
+  }
+  if (payment.status === "REVERSED" && reversal !== null
+    && appliedReversalTransition === null && !orphanedApplication) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "A persisted fixed payment reversal requires its derived transition or an external-reversal compensation path.",
+      "payment_attempt.transitions",
+    );
+  }
+  if (reversal !== null && appliedReversalTransition !== null
+    && reversal.recorded_at !== appliedReversalTransition.observed_at) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Payment reversal ledger time must equal its derived transition time.",
+      "payment_attempt.transitions",
+    );
+  }
+  if (
+    payment.status === "REVERSED"
+    && application !== null
+    && reversal === null
+    && !orphanedApplication
+  ) {
     fail("PAYMENT_NOT_APPLIED", "Reversed applied payment is missing its exact compensating transaction.", "ledger_journal");
+  }
+  if (ledgerJournal.some((entry) => entry.reverses_transaction_id === payment.reversal_transaction_id)) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "A payment reversal cannot itself be reversed outside the fixed payment state machine.",
+      "ledger_journal",
+    );
   }
   return deepFreeze({
     payment,
     ledger_journal: ledgerJournal,
     application_transaction: application,
     reversal_transaction: reversal,
+    compensation_required: orphanedApplication && reversal === null,
     economically_applied: payment.status === "APPLIED" && application !== null && reversal === null,
   });
+}
+
+export function validatePaymentLedgerState(
+  paymentValue: unknown,
+  ledgerJournalValue: unknown,
+  accounts: LedgerAccountRegistry,
+  units: UnitRegistry,
+): Readonly<PaymentLedgerState> {
+  return paymentLedgerState(paymentValue, ledgerJournalValue, accounts, units);
 }
 
 export function applySettledPayment(
@@ -599,7 +727,8 @@ export function applySettledPayment(
   const attemptId = identifier(attemptIdValue, "attempt_id");
   const current = paymentJournal.find((entry) => entry.attempt_id === attemptId);
   if (!current) fail("INVALID_RECORD", "Payment attempt is absent from the supplied journal.", "attempt_id");
-  const transaction = assertApplicationLedger(current, transactionValue, accounts);
+  paymentLedgerState(current, ledgerJournalValue, accounts, units);
+  const transaction = assertApplicationLedger(current, transactionValue, accounts, units);
   const ledger = appendLedgerTransaction(ledgerJournalValue, transaction, accounts);
   const transition = applyPaymentRecord(current, {
     transition_id: current.application_transition_id,
@@ -610,6 +739,7 @@ export function applySettledPayment(
   const next = transition.disposition === "REPLAYED"
     ? paymentJournal
     : validatePaymentAttemptJournal(replaceAttempt(paymentJournal, transition.attempt), units);
+  paymentLedgerState(transition.attempt, ledger.journal, accounts, units);
   return deepFreeze({ attempt: transition.attempt, disposition: transition.disposition, payment_journal: next, ledger });
 }
 
@@ -625,7 +755,17 @@ export function reverseAppliedPayment(
   const attemptId = identifier(attemptIdValue, "attempt_id");
   const current = paymentJournal.find((entry) => entry.attempt_id === attemptId);
   if (!current) fail("INVALID_RECORD", "Payment attempt is absent from the supplied journal.", "attempt_id");
-  const transaction = assertReversalLedger(current, transactionValue, accounts);
+  const appliedReversalTransition = current.transitions.some((entry) =>
+    entry.operation === "REVERSE" && entry.from === "APPLIED");
+  if (current.status !== "APPLIED" && !(current.status === "REVERSED" && appliedReversalTransition)) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "The composed reversal API requires an applied payment or replay of its derived reversal.",
+      "payment_attempt.status",
+    );
+  }
+  paymentLedgerState(current, ledgerJournalValue, accounts, units);
+  const transaction = assertReversalLedger(current, transactionValue, accounts, units);
   const ledger = appendLedgerTransaction(ledgerJournalValue, transaction, accounts);
   const transition = applyPaymentRecord(current, {
     transition_id: current.reversal_transition_id,
@@ -636,7 +776,40 @@ export function reverseAppliedPayment(
   const next = transition.disposition === "REPLAYED"
     ? paymentJournal
     : validatePaymentAttemptJournal(replaceAttempt(paymentJournal, transition.attempt), units);
+  paymentLedgerState(transition.attempt, ledger.journal, accounts, units);
   return deepFreeze({ attempt: transition.attempt, disposition: transition.disposition, payment_journal: next, ledger });
+}
+
+export function compensateOrphanedApplication(
+  paymentJournalValue: unknown,
+  attemptIdValue: string,
+  ledgerJournalValue: unknown,
+  transactionValue: unknown,
+  accounts: LedgerAccountRegistry,
+  units: UnitRegistry,
+): Readonly<OrphanedApplicationCompensationResult> {
+  const paymentJournal = validatePaymentAttemptJournal(paymentJournalValue, units);
+  const attemptId = identifier(attemptIdValue, "attempt_id");
+  const current = paymentJournal.find((entry) => entry.attempt_id === attemptId);
+  if (!current) fail("INVALID_RECORD", "Payment attempt is absent from the supplied journal.", "attempt_id");
+  const externalReversalTransition = current.transitions.some((entry) =>
+    entry.operation === "REVERSE" && entry.from === "EXTERNALLY_SETTLED");
+  const appliedTransition = current.transitions.some((entry) => entry.operation === "APPLY_INTERNAL");
+  if (current.status !== "REVERSED" || !externalReversalTransition || appliedTransition) {
+    fail(
+      "INVALID_STATE_TRANSITION",
+      "Orphaned application compensation requires an external reversal after a ledger-first application.",
+      "payment_attempt.status",
+    );
+  }
+  const state = paymentLedgerState(current, ledgerJournalValue, accounts, units);
+  if (state.application_transaction === null) {
+    fail("INVALID_STATE_TRANSITION", "There is no orphaned application transaction to compensate.", "ledger_journal");
+  }
+  const transaction = assertReversalLedger(current, transactionValue, accounts, units);
+  const ledger = appendLedgerTransaction(ledgerJournalValue, transaction, accounts);
+  paymentLedgerState(current, ledger.journal, accounts, units);
+  return deepFreeze({ attempt: current, payment_journal: paymentJournal, ledger });
 }
 
 export function planPaymentRecovery(
@@ -645,7 +818,7 @@ export function planPaymentRecovery(
   accounts: LedgerAccountRegistry,
   units: UnitRegistry,
 ): Readonly<RecoveryPlan<PaymentRecoveryAction>> {
-  const state = validatePaymentLedgerState(value, ledgerJournalValue, accounts, units);
+  const state = paymentLedgerState(value, ledgerJournalValue, accounts, units);
   const attempt = state.payment;
   let action: PaymentRecoveryAction;
   switch (attempt.status) {
@@ -656,7 +829,7 @@ export function planPaymentRecovery(
     case "AMBIGUOUS": action = "RECONCILE_EXTERNAL"; break;
     case "EXTERNALLY_SETTLED": action = "APPLY_INTERNAL"; break;
     case "APPLIED": action = state.reversal_transaction === null ? "COMPLETE" : "FINALIZE_REVERSAL"; break;
-    case "REVERSED": action = "COMPLETE"; break;
+    case "REVERSED": action = state.compensation_required ? "COMPENSATE_ORPHANED_APPLICATION" : "COMPLETE"; break;
     case "DEFINITIVELY_FAILED":
     case "CANCELLED":
     case "EXPIRED": action = "STOP"; break;
@@ -740,7 +913,7 @@ export function validateEffectAttempt(value: unknown): Readonly<EffectAttempt> {
 export function validateEffectAttemptJournal(value: unknown): readonly Readonly<EffectAttempt>[] {
   const snapshot = snapshotJson(value);
   if (!Array.isArray(snapshot) || snapshot.length > LIMITS.maxArrayItems) {
-    fail("LIMIT_EXCEEDED", "Effect journal exceeds the bounded v0.1 history.", "effect_journal");
+    fail("LIMIT_EXCEEDED", "Effect journal exceeds the bounded v0.2 history.", "effect_journal");
   }
   const attempts = snapshot.map((entry) => validateEffectAttempt(entry));
   const ids = new Set<string>();
