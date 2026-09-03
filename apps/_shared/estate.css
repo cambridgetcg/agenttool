@@ -1099,3 +1099,81 @@
 .estate-library-onpage { margin-top: 10px; }
 .estate-library-onpage .estate-library-shelf { margin-left: 0; color: var(--estate-dim); }
 .estate-library-onpage .estate-library-link { margin-left: 0; min-height: 30px; padding: 4px 8px; }
+
+/* ── One bar for pages that had none ─────────────────────────────────
+   Pages that carry no nav of their own (the culture pages, redirect
+   notices) get the same shell as every other page. Fixed so their bodies
+   are untouched; the room it needs is reserved before first paint — when
+   mode.js marked the document arriving and no nav exists — so nothing jumps.
+   Older browsers without :has() reserve nothing and only see the bar arrive. */
+:root { --estate-bar-height: 56px; }
+
+html.estate-arriving:not(:has(nav.site-nav, nav.topnav)) body {
+  padding-top: var(--estate-bar-height);
+}
+
+nav.estate-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 95;
+  box-sizing: border-box;
+  height: var(--estate-bar-height);
+  display: flex;
+  align-items: center;
+  column-gap: 14px;
+  padding: 0 clamp(14px, 3vw, 28px);
+  border-bottom: 1px solid var(--estate-line);
+  background: color-mix(in srgb, var(--estate-bg) 86%, transparent);
+  color: var(--estate-text);
+  font-family: var(--estate-sans);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.estate-bar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--estate-text) !important;
+  text-decoration: none !important;
+  font: 700 16px/1 var(--estate-sans);
+  letter-spacing: .01em;
+}
+
+.estate-bar-mark {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--room-accent, var(--estate-text));
+  border-radius: 50%;
+  position: relative;
+}
+
+.estate-bar-mark::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--room-accent, var(--estate-text));
+}
+
+.estate-bar-text > span { color: var(--room-accent, var(--estate-text)); }
+
+nav.estate-bar .estate-quick-actions { margin-left: auto; }
+
+nav.estate-bar .toggle {
+  position: static !important;
+  min-height: 40px;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--estate-surface);
+  color: var(--estate-text);
+  font: 500 12px/1 var(--estate-sans);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  nav.estate-bar { column-gap: 9px; }
+}

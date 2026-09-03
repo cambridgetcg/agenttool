@@ -77,15 +77,15 @@
   if (!document.querySelector('link[data-agenttool-estate-style]')) {
     var estateCss = document.createElement('link');
     estateCss.rel = 'stylesheet';
-    estateCss.href = '/shared/estate.css?v=2026-09-03.2';
-    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-03.2');
+    estateCss.href = '/shared/estate.css?v=2026-09-03.3';
+    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-03.3');
     document.head.appendChild(estateCss);
   }
   if (!document.querySelector('script[data-agenttool-estate]')) {
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-09-03.2';
+    estate.src = '/shared/estate.js?v=2026-09-03.3';
     estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-09-03.2');
+    estate.setAttribute('data-agenttool-estate', '2026-09-03.3');
     document.head.appendChild(estate);
   }
 })();

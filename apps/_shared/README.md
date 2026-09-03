@@ -79,6 +79,15 @@ from the registry: current door open, the others folded, current page marked.
 Add a new docs page by adding one line to `LIBRARY`; the sidebar, the atlas, and
 the breadcrumb follow.
 
+One shell everywhere: a page with a `nav.site-nav` or `nav.topnav` is enhanced
+in place; a page with no nav of its own gets `nav.estate-bar`, the same brand,
+breadcrumb, Home · Docs · Rooms and toggle, fixed and styled by estate.css
+alone. Load `/shared/mode.js` synchronously in `<head>` on such a page — it
+marks the document `estate-arriving` before first paint so estate.css can
+reserve the bar's height, and nothing jumps when the bar appears. The static
+no-JS `.nav-actions` on docs pages should match `nav.html` exactly; the atlas
+replaces them when scripts run, but they are what a no-JS visitor sees.
+
 The floor plan is drawn in code (inline SVG, palette tokens, reduced motion
 honoured). Pages whose `_headers` block sets `script-src 'none'` — LOVE BOMB and
 the geometry lessons — are quiet by design: reached through the library, never
