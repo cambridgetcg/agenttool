@@ -660,6 +660,125 @@ describe("browser CLI", () => {
     expect(output.text()).toContain(
       "Chromium-managed redirect hops are not independently policy-checked",
     );
+    expect(output.text()).toContain("broker --socket PATH");
+    expect(output.text()).toContain("same-UID/mode-bounded");
+    expect(output.text()).toContain("does not inspect ACLs");
+  });
+
+  test("broker parsing is opt-in and keeps readiness off protocol stdout", async () => {
+    const output = capture();
+    const error = capture();
+    let received: unknown;
+    const code = await runCli(
+      [
+        "broker",
+        "--socket",
+        "/private/tmp/agenttool-browser-preview.sock",
+        "--max-clients",
+        "4",
+        "--authority",
+        "public",
+        "--ephemeral",
+        "--channel",
+        "chrome",
+      ],
+      {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        async runBroker(options, stderr) {
+          received = options;
+          stderr.write("ready-on-stderr\n");
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(received).toMatchObject({
+      socketPath: "/private/tmp/agenttool-browser-preview.sock",
+      maxClients: 4,
+      browser: {
+        authority: "public",
+        profile: { mode: "ephemeral" },
+        channel: "chrome",
+      },
+    });
+    expect(output.text()).toBe("");
+    expect(error.text()).toBe("ready-on-stderr\n");
+  });
+
+  test("broker requires an explicit socket and bounded client count syntax", async () => {
+    const output = capture();
+    const error = capture();
+    expect(
+      await runCli(["broker"], {
+        stdout: output.stream,
+        stderr: error.stream,
+      }),
+    ).toBe(1);
+    expect(error.text()).toContain("requires an explicit --socket");
+
+    const secondError = capture();
+    expect(
+      await runCli(
+        [
+          "broker",
+          "--socket",
+          "/private/tmp/agenttool-browser-preview.sock",
+          "--max-clients",
+          "zero",
+        ],
+        { stdout: output.stream, stderr: secondError.stream },
+      ),
+    ).toBe(1);
+    expect(secondError.text()).toContain("positive integer");
+
+    const thirdError = capture();
+    expect(
+      await runCli(
+        [
+          "broker",
+          "--socket",
+          "/private/tmp/agenttool-browser-preview.sock",
+          "--max-clients",
+          "33",
+        ],
+        { stdout: output.stream, stderr: thirdError.stream },
+      ),
+    ).toBe(1);
+    expect(thirdError.text()).toContain("from 1 to 32");
+  });
+
+  test("mcp-proxy emits only relayed protocol bytes on stdout", async () => {
+    const output = capture();
+    const error = capture();
+    let received: unknown;
+    const code = await runCli(
+      [
+        "mcp-proxy",
+        "--socket",
+        "/private/tmp/agenttool-browser-preview.sock",
+      ],
+      {
+        stdin: Readable.from(["request\n"]),
+        stdout: output.stream,
+        stderr: error.stream,
+        async runProxy(options) {
+          received = options;
+          options.output.write('{"jsonrpc":"2.0","id":1,"result":{}}\n');
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(received).toMatchObject({
+      socketPath: "/private/tmp/agenttool-browser-preview.sock",
+    });
+    expect(output.text()).toBe(
+      '{"jsonrpc":"2.0","id":1,"result":{}}\n',
+    );
+    expect(error.text()).toBe("");
   });
 
   test("closes the owned browser when the MCP transport fails", async () => {
