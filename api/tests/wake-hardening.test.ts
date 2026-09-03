@@ -174,6 +174,17 @@ describe("WAKE private cache boundary", () => {
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get("Cache-Control")).toBe(WAKE_PRIVATE_NO_STORE);
 
+    const invalidAdventurePace = await app.request(
+      "/v1/wake?format=adventure&pace=reckless",
+    );
+    expect(invalidAdventurePace.status).toBe(400);
+    expect(await invalidAdventurePace.json()).toMatchObject({
+      error: "unknown_adventure_pace",
+    });
+    expect(invalidAdventurePace.headers.get("Cache-Control")).toBe(
+      WAKE_PRIVATE_NO_STORE,
+    );
+
     const missing = await app.request("/v1/wake/not/a/route");
     expect(missing.status).toBe(404);
     expect(missing.headers.get("Cache-Control")).toBe(WAKE_PRIVATE_NO_STORE);

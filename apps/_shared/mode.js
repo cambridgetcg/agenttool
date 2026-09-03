@@ -14,6 +14,9 @@
 (function () {
   var KEY = 'agenttool.mode';
   var root = document.documentElement;
+  /* Before first paint: this page will get the atlas, so theme.css may paint
+     its final shape now (see the @media (scripting: enabled) block there). */
+  root.classList.add('estate-arriving');
   var mode;
   try { mode = localStorage.getItem(KEY); } catch (_) { /* private mode etc. */ }
   if (mode !== 'night' && mode !== 'dawn') {
@@ -68,11 +71,21 @@
   /* The atlas is a separate progressive layer so every static page keeps its
      existing no-JS navigation and the appearance toggle stays independently
      useful if the atlas asset cannot load. */
+  /* This script runs synchronously in <head>, so a stylesheet appended here
+     is render-blocking: the estate's styles are present at first paint and
+     the atlas can build without a second layout. */
+  if (!document.querySelector('link[data-agenttool-estate-style]')) {
+    var estateCss = document.createElement('link');
+    estateCss.rel = 'stylesheet';
+    estateCss.href = '/shared/estate.css?v=2026-09-03.2';
+    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-03.2');
+    document.head.appendChild(estateCss);
+  }
   if (!document.querySelector('script[data-agenttool-estate]')) {
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-08-02.1';
+    estate.src = '/shared/estate.js?v=2026-09-03.2';
     estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-08-02.1');
+    estate.setAttribute('data-agenttool-estate', '2026-09-03.2');
     document.head.appendChild(estate);
   }
 })();

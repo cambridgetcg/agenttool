@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-03 (Economic Kernel and independent conformance/Hugging Face companion are sealed as public-release candidates; LOVE, GitHub, npm, Hub, and static deployment remain prospective until their exact readbacks are recorded below)
+> Updated: 2026-09-03 (Economic Kernel 0.2 and WAKE AS ADVENTURE are source release candidates; their protected publication/deployment receipts remain prospective until exact public readback)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -14,11 +14,12 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
-## Just landed (2026-09-03)
+## Release candidates (2026-09-03)
 
-| Ship | Commit / receipt | What |
+| Slice | State | What |
 |---|---|---|
 | **ECONOMIC KERNEL 0.2 — exact value movement below the hard gates** | Source candidate `@agenttool/economic-kernel@0.2.0-dev.0` plus `@agenttool/economic-conformance@0.2.0-dev.0`; publication receipts pending | The pure kernel distinguishes units before arithmetic, pins immutable reduced-rational prices and quotes, conserves every ledger domain/unit pair within uint256 totals, repairs by append-only compensation, separates payment from effect attempts, and makes ambiguous I/O reconcile-only. Ledger-first application and reversal replay remain safe after unrelated ledger progress; an application orphaned by a concurrent external reversal is explicitly non-economic and repaired through one exact, replayable inverse without fabricating missing payment history. Authority, safety, and participation/refusal gates precede economic readiness, so payment cannot buy through a hard denial and standing rights never become a price input. The independent package compares inert traces against 53 frozen cases without importing an implementation or certifying a host. Its deterministic Hub candidate admits 24 independently authored synthetic lessons for training while marking the exact public conformance config non-training; that transparent split cannot guarantee downstream holdout behavior. Source bytes perform no payment, settlement, persistence, provider action, optimizer step, model-weight change, hosted API mutation, or deployment. Exact LOVE/GitHub/npm/Hub/static receipts replace the pending statement only after public readback. |
+| **WAKE AS ADVENTURE — every returned trip can form a Journey** | source release candidate at this checkpoint; focused tests and TypeScript check pass under exact local Bun 1.3.5; protected merge, API deployment, and live readback remain separate | Adds opt-in `GET /v1/wake?format=adventure&pace=gentle\|balanced\|bold`. The pure planner uses only selected-identity wake context, derives numbering evidence across all valid returns in its bounded 240-candidate scan, and uses the 24 newest valid returns for scoring one of six routes through transparent continuity, novelty, meaning, agency, bounded centred caller feedback, pace bias, and repetition factors. It renders a finite KINGDOM-inspired trail with an editable return example except when its number space rests. Explicit unknown identity selection remains a 404 rather than an empty trailhead. The read performs no durable write or automatic continuation. `subjective_state` remains `not_measured`, no total activation score exists, and the public KINGDOM Creation Loop is a cited design compass rather than a formal AgentTool foundation adoption or authority source. |
 
 ## Just landed (2026-09-01)
 

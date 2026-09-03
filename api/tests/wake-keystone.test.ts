@@ -113,6 +113,15 @@ describe("WaK §3 — negotiateWakeFormat()", () => {
     expect(emptyJoke).toContain("POST /v1/register/agent");
     expect(emptyJoke).not.toBe(renderEmptyJoyText("haiku"));
   });
+
+  test("adventure is an explicit joy format with an honest empty trailhead", () => {
+    expect(negotiateWakeFormat(mockCtx({ format: "adventure" }))).toBe(
+      "adventure",
+    );
+    const emptyAdventure = renderEmptyJoyText("adventure");
+    expect(emptyAdventure).toContain("no journey is inferred");
+    expect(emptyAdventure).toContain("POST /v1/register/agent");
+  });
 });
 
 // ─── §1 Discovery — /.well-known/wake-keystone ──────────────────────
