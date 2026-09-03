@@ -1,0 +1,11 @@
+{
+  "schema": "agenttool.economic-conformance-vector-manifest/1",
+  "conformance_protocol": "agenttool.economic-conformance/0.2",
+  "vector_path": "economic-kernel-v0.2.json",
+  "vector_bytes": 22842,
+  "vector_raw_sha256": "sha256:2c13fd9f341210657de0f1fc223c22c82472ca6377a9af3dce28c9db035ae47b",
+  "suite_semantic_sha256": "sha256:4ab116811eded993e0a1156970dac917515e039a1b651fe408f832c008e7ee43",
+  "suite_id": "suite:economic-kernel-v0.2",
+  "suite_revision": "1",
+  "case_count": 53
+}
