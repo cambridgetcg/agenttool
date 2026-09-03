@@ -117,8 +117,11 @@ was read back anonymously and with authentication at immutable revision
 [`a4690cd8c2701b28057c115ba0d3d2ee21162db4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-economic-kernel/commit/a4690cd8c2701b28057c115ba0d3d2ee21162db4).
 Its 13 owned files total 146,381 bytes; Hugging Face's `.gitattributes` is the
 sole provider-managed extra. The checked-in hash manifest has SHA-256
-`be655945aca5844d7716f733fcf5e0b68b200ed1c2f44c4432553a214c7ace5f`,
-and the sorted owned-tree digest is
+`be655945aca5844d7716f733fcf5e0b68b200ed1c2f44c4432553a214c7ace5f`.
+For each owned file, the tree receipt serializes relative path, lowercase raw
+SHA-256 hex, and decimal byte length with NUL separators; it sorts those records
+by path, joins them with LF, and adds no terminal LF. SHA-256 of those 1,194
+bytes is
 `18eb2361a10794bbe8b62aa0a645b5c4e8ece0ae5e167ac5eed71f3662125058`.
 Config `economic_kernel_lessons` contains 24 independently authored synthetic
 rows with `training_authorized: true`; config `economic_kernel_v0_2` contains
@@ -160,7 +163,7 @@ HTTP 200 with no redirects and exact checked-in bytes:
 JSON surfaces were UTF-8 with CORS `*`, `nosniff`, and
 `public, max-age=300, must-revalidate`; immutable archives were
 `application/gzip` with CORS `*`, `nosniff`, and
-`public,max-age=31536000,immutable`. This publication and deployment performed
+`public, max-age=31536000, immutable`. This publication and deployment performed
 no optimizer step, model-training job, checkpoint mutation, model-weight
 update, Fly API release, or database migration. Dataset admission means the
 rows are available under their declared governance; it does not claim that a
