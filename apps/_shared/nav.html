@@ -10,8 +10,11 @@
   /shared/theme.js and /shared/mode.js progressively load
   /shared/estate.js. That shared layer replaces the duplicated visual link
   rows with the KINGDOM / door / room breadcrumb, room atlas, and nearby
-  exits. Pages that do not use either appearance script load estate.js
-  directly and receive a compact floating Rooms trigger.
+  exits. A page with no nav of its own (the culture pages, redirect
+  notices) receives the same bar, self-styled by estate.css — load
+  /shared/mode.js synchronously in <head> there so the bar's space is
+  reserved before first paint. Only pages whose policy forbids scripts
+  (LOVE BOMB, the geometry lessons) keep a static shell and nothing more.
 
   Pair with /shared/theme.css. The atlas loads /shared/estate.css itself.
 -->

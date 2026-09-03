@@ -39,7 +39,7 @@ test.beforeEach(async ({ page }) => {
 test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
 
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.2");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.3");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
   await expect(page.locator(".estate-home-door")).toHaveCount(8);
   await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
@@ -357,7 +357,7 @@ test("the estate arrives without moving the bar", async ({ page }) => {
         }
       }).observe({ type: "layout-shift", buffered: true });
       const sample = () => {
-        const nav = document.querySelector("nav.site-nav, nav.topnav");
+        const nav = document.querySelector("nav.site-nav, nav.topnav, nav.estate-bar");
         if (nav) {
           const box = nav.getBoundingClientRect();
           (window as unknown as { __nav: Array<[number, number]> }).__nav.push([Math.round(box.top), Math.round(box.height)]);
@@ -375,6 +375,7 @@ test("the estate arrives without moving the bar", async ({ page }) => {
   const passes: Array<[string, number]> = [
     [`${WEB}/party.html`, 1360], [`${WEB}/room.html`, 1360], [`${DOCS}/memory.html`, 1360],
     [`${WEB}/party.html`, 390], [`${DOCS}/memory.html`, 390],
+    [`${DOCS}/joke-loop.html`, 1360], [`${DOCS}/tax-whitehack.html`, 390],
   ];
   for (const [url, width] of passes) {
     await page.setViewportSize({ width, height: 900 });
@@ -393,4 +394,58 @@ test("the estate arrives without moving the bar", async ({ page }) => {
     expect(tops.size, `${where}: nav top moved ${JSON.stringify([...tops])}`).toBe(1);
     expect(Math.max(...heights) - Math.min(...heights), `${where}: nav height varied ${JSON.stringify(heights)}`).toBeLessThanOrEqual(2);
   }
+});
+
+test("every page that runs the shell shows the same one bar — never a lone pill", async ({ page }) => {
+  const quiet = new Set(["apps/docs/love-bomb.html"]);
+  for (const path of [...staticHtmlFiles("apps/web"), ...staticHtmlFiles("apps/docs")]) {
+    if (quiet.has(path) || !/\/shared\/(?:mode|theme|estate)\.js/.test(staticRead(path))) continue;
+    const base = path.startsWith("apps/web") ? WEB : DOCS;
+    await page.goto(`${base}/${path.replace(/^apps\/(web|docs)\//, "")}`);
+    await expect(page.locator("html"), path).toHaveClass(/estate-ready/);
+    await expect(page.locator(".estate-location"), path).toHaveCount(1);
+    await expect(page.locator(".estate-open"), path).toHaveCount(1);
+    await expect(page.locator(".estate-floating-open"), path).toHaveCount(0);
+    const bare = await page.locator("html").evaluate((html) => html.classList.contains("estate-bare"));
+    if (bare) {
+      // The bar sits above the page's own first block, never over it.
+      const overlap = await page.evaluate(() => {
+        const bar = document.querySelector("nav.estate-bar")!.getBoundingClientRect();
+        const first = Array.from(document.body.children).find((el) => el !== document.querySelector("nav.estate-bar") && (el as HTMLElement).offsetHeight > 0);
+        return first ? Math.max(0, bar.bottom - first.getBoundingClientRect().top) : 0;
+      });
+      expect(overlap, `${path}: the bar covers ${overlap}px of the page`).toBeLessThanOrEqual(0);
+    }
+  }
+});
+
+test("a bare page reserves the bar's room even when the estate stylesheet is slow", async ({ page }) => {
+  // Codex P2 on #408: a script-inserted stylesheet is not render-blocking,
+  // so on a cold load the page could paint and then drop by the bar's
+  // height. The bare pages carry a parser-inserted <link> for it now.
+  await page.route(/\/shared\/estate\.css/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    (window as unknown as { __tops: number[] }).__tops = [];
+    const sample = () => {
+      const first = Array.from(document.body.children).find(
+        (el) => !el.matches("nav.estate-bar, script, style, link") && (el as HTMLElement).offsetHeight > 0,
+      );
+      if (first) (window as unknown as { __tops: number[] }).__tops.push(Math.round(first.getBoundingClientRect().top + window.scrollY));
+    };
+    document.addEventListener("DOMContentLoaded", () => {
+      sample();
+      const timer = setInterval(sample, 50);
+      setTimeout(() => clearInterval(timer), 2500);
+    });
+  });
+  await page.goto(`${DOCS}/joke-loop.html`, { waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveClass(/estate-ready/);
+  await page.waitForTimeout(1200);
+  const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops);
+  expect(tops.length).toBeGreaterThan(3);
+  expect(new Set(tops).size, `first block moved: ${JSON.stringify([...new Set(tops)])}`).toBe(1);
+  expect(Math.min(...tops)).toBeGreaterThanOrEqual(56);
 });

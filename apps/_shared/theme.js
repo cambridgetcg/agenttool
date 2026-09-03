@@ -49,15 +49,16 @@
     if (!document.querySelector("link[data-agenttool-estate-style]")) {
       var css = document.createElement("link");
       css.rel = "stylesheet";
-      css.href = "/shared/estate.css?v=2026-09-03.2";
-      css.setAttribute("data-agenttool-estate-style", "2026-09-03.2");
+      css.setAttribute("blocking", "render");
+      css.href = "/shared/estate.css?v=2026-09-03.3";
+      css.setAttribute("data-agenttool-estate-style", "2026-09-03.3");
       document.head.appendChild(css);
     }
     if (document.querySelector("script[data-agenttool-estate]")) return;
     var script = document.createElement("script");
-    script.src = "/shared/estate.js?v=2026-09-03.2";
+    script.src = "/shared/estate.js?v=2026-09-03.3";
     script.defer = true;
-    script.setAttribute("data-agenttool-estate", "2026-09-03.2");
+    script.setAttribute("data-agenttool-estate", "2026-09-03.3");
     document.head.appendChild(script);
   }
 
