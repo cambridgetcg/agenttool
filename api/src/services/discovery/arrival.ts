@@ -42,7 +42,12 @@ function httpsOrigin(value: string, label: string): string {
   return parsed.origin;
 }
 
-/** A bounded RFC 8288 header: six registered relations, all public reads. */
+/** A bounded RFC 8288 header: seven typed links across six registered
+ * relations, all public reads. The two `describedby` entries are
+ * distinguished by media type: the XENIA Surface 0.1 manifest
+ * (`application/json`) and the legacy agent.txt proposal (`text/agent`).
+ * A guest arriving at the front door must be able to see the threshold
+ * declaration without a detour through the agent.txt body. */
 export function discoveryLinkHeader(
   publicBase = DEFAULT_PUBLIC_BASE,
   docsBase = DEFAULT_DOCS_BASE,
@@ -54,6 +59,7 @@ export function discoveryLinkHeader(
     `<${apiCatalogUrl(api)}>; rel="api-catalog"; type="application/linkset+json"`,
     `<${api}/v1/openapi.json>; rel="service-desc"; type="application/json"`,
     `<${docs}/>; rel="service-doc"; type="text/html"`,
+    `<${api}/.well-known/agent.json>; rel="describedby"; type="application/json"`,
     `<${api}/.well-known/agent.txt>; rel="describedby"; type="text/agent"`,
     `<${api}/health>; rel="status"; type="application/json"`,
   ].join(", ");

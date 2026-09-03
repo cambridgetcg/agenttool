@@ -147,9 +147,9 @@ describe("agenttool-discovery/v1 document", () => {
     expect(JSON.stringify(JSON.parse(body))).toBe(body);
   });
 
-  test("publishes exactly six registered typed links", () => {
+  test("publishes exactly seven typed links across six registered relations", () => {
     const header = discoveryLinkHeader(API, DOCS);
-    expect(header.split(", ")).toHaveLength(6);
+    expect(header.split(", ")).toHaveLength(7);
     expect(header).toStartWith(
       `<${API}/public/discovery>; rel="service-meta"; type="${DISCOVERY_MEDIA_TYPE}"`,
     );
@@ -163,6 +163,14 @@ describe("agenttool-discovery/v1 document", () => {
     ]) {
       expect(header).toContain(`rel="${relation}"`);
     }
+    // The two describedby entries are distinguished by media type: the XENIA
+    // Surface manifest must be visible from the front door itself.
+    expect(header).toContain(
+      `<${API}/.well-known/agent.json>; rel="describedby"; type="application/json"`,
+    );
+    expect(header).toContain(
+      `<${API}/.well-known/agent.txt>; rel="describedby"; type="text/agent"`,
+    );
     expect(header).not.toContain("agent-card.json");
   });
 });
