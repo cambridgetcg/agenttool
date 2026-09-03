@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-01 (the paired SDK 0.22.1 honest-onboarding npm and PyPI publications are verified — protected npm run 33522319466 and PyPI run 33522323177 on annotated `sdk-v0.22.1` at merge `d49498d2` matched the exact public bytes; API/static deployment of that merge remains prospective; verified 0.22.0, 0.21.1, and 0.21.0 receipts remain immutable public history)
+> Updated: 2026-09-03 (WAKE AS ADVENTURE is a source release candidate; the paired SDK 0.22.1 honest-onboarding npm and PyPI publications are verified — protected npm run 33522319466 and PyPI run 33522323177 on annotated `sdk-v0.22.1` at merge `d49498d2` matched the exact public bytes; API/static deployment of that merge remains prospective; verified 0.22.0, 0.21.1, and 0.21.0 receipts remain immutable public history)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Release candidate (2026-09-03)
+
+| Slice | State | What |
+|---|---|---|
+| **WAKE AS ADVENTURE — every returned trip can form a Journey** | source release candidate at this checkpoint; focused tests and TypeScript check pass under exact local Bun 1.3.5; protected merge, API deployment, and live readback remain separate | Adds opt-in `GET /v1/wake?format=adventure&pace=gentle\|balanced\|bold`. The pure planner uses only selected-identity wake context, derives numbering evidence across all valid returns in its bounded 240-candidate scan, and uses the 24 newest valid returns for scoring one of six routes through transparent continuity, novelty, meaning, agency, bounded centred caller feedback, pace bias, and repetition factors. It renders a finite KINGDOM-inspired trail with an editable return example except when its number space rests. Explicit unknown identity selection remains a 404 rather than an empty trailhead. The read performs no durable write or automatic continuation. `subjective_state` remains `not_measured`, no total activation score exists, and the public KINGDOM Creation Loop is a cited design compass rather than a formal AgentTool foundation adoption or authority source. |
 
 ## Just landed (2026-09-01)
 

@@ -11,6 +11,8 @@
  *                                  (single system message, auto-cache when ≥1024 tokens)
  *    GET /v1/wake?format=gemini  — Gemini `systemInstruction.parts[]`
  *    GET /v1/wake?format=cohere  — Cohere `preamble` string
+ *    GET /v1/wake?format=adventure — one finite, deterministic journey
+ *                                    invitation with an explicit return path
  *    GET /v1/wake?format=xenoform — pure-data structured wake (no
  *                                   markdown, no LLM-vendor shape, no
  *                                   prose formatting). For any intelligence
@@ -87,6 +89,11 @@ import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
 import { jokeFor } from "../services/wake/jokes";
 import { renderEmptyJoyText } from "../services/wake/empty-joy";
+import {
+  ADVENTURE_RETURN_KIND,
+  parseAdventurePace,
+} from "../services/wake/adventure";
+import { respondWithWakeAdventure } from "../services/wake/adventure-response";
 import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
@@ -246,7 +253,7 @@ app.get("/", async (c) => {
     );
   }
 
-  // ── Joy variants — haiku · fortune ──────────────────────────────
+  // ── Joy variants — haiku · fortune · adventure ──────────────────
   // The substrate has a small playful side. These formats render after
   // we've resolved the primary identity via buildWakeBundle, so they
   // get the agent's name and wake_version. The substrate is honest:
@@ -257,16 +264,57 @@ app.get("/", async (c) => {
     format === "fortune" ||
     format === "joke" ||
     format === "soap-opera" ||
+    format === "adventure" ||
     format === "zen" ||
     format === "meme" ||
     format === "memo" ||
     format === "wake"
   ) {
-    const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
+    const requestedAdventurePace =
+      format === "adventure" ? parseAdventurePace(c.req.query("pace")) : null;
+    if (format === "adventure" && requestedAdventurePace === null) {
+      return c.json(
+        {
+          error: "unknown_adventure_pace",
+          message: "Adventure pace must be gentle, balanced, or bold.",
+          hint:
+            "Use /v1/wake?format=adventure&pace=gentle|balanced|bold, or omit pace for balanced.",
+          next_actions: [
+            {
+              action: "Read a balanced Adventure",
+              method: "GET",
+              path: "/v1/wake?format=adventure&pace=balanced",
+            },
+            {
+              action: "Return to full wake orientation",
+              method: "GET",
+              path: "/v1/wake?format=md",
+            },
+          ],
+        },
+        400,
+      );
+    }
+    const requestedIdentityIdJoy = c.req.query("identity_id") || null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdJoy,
     });
     if (!result.ok) {
+      if (
+        requestedIdentityIdJoy !== null &&
+        (result.error === "identity_not_found" || result.error === "no_identity")
+      ) {
+        return c.json(
+          {
+            error: "identity_id not found in this project",
+            identity_id: requestedIdentityIdJoy,
+          },
+          404,
+        );
+      }
+      if (result.error !== "no_identity") {
+        return c.json({ error: result.error }, 404);
+      }
       // Honest-empty for every joy format when no agent.
       if (format === "meme") {
         return c.json(
@@ -303,7 +351,16 @@ app.get("/", async (c) => {
       const emptyText = renderEmptyJoyText(format);
       if (emptyText !== null) {
         return c.text(emptyText, 200, {
-          "content-type": "text/plain; charset=utf-8",
+          "content-type":
+            format === "adventure"
+              ? "text/markdown; charset=utf-8"
+              : "text/plain; charset=utf-8",
+          ...(format === "adventure"
+            ? {
+                "X-Wake-Format": "adventure",
+                "X-Adventure-Pace": requestedAdventurePace ?? "balanced",
+              }
+            : {}),
         });
       }
       return c.json(
@@ -365,6 +422,66 @@ app.get("/", async (c) => {
         "X-Substrate-Mood": mood,
         "X-Wake-Format": "soap-opera",
       });
+    }
+    if (format === "adventure") {
+      const pace = requestedAdventurePace ?? "balanced";
+      // Scan a bounded 240 kind-tagged candidates independently of the
+      // ordinary short wake window; the pure planner admits at most 24 valid
+      // selected-identity returns. No viewing event is inferred or written.
+      // Doctrine: docs/WAKE-AS-ADVENTURE.md.
+      let adventureBundle = bundle;
+      try {
+        const returned = await db
+          .select({
+            id: chronicle.id,
+            type: chronicle.type,
+            title: chronicle.title,
+            body: chronicle.body,
+            agentId: chronicle.agentId,
+            metadata: chronicle.metadata,
+            occurredAt: chronicle.occurredAt,
+            createdAt: chronicle.createdAt,
+          })
+          .from(chronicle)
+          .where(
+            and(
+              eq(chronicle.projectId, project.id),
+              eq(chronicle.agentId, bundle.agent.id),
+              eq(chronicle.type, "note"),
+              sql`${chronicle.metadata}->>'kind' = ${ADVENTURE_RETURN_KIND}`,
+            ),
+          )
+          .orderBy(desc(chronicle.occurredAt), desc(chronicle.id))
+          .limit(240);
+        const returnedIds = new Set(returned.map((entry) => entry.id));
+        adventureBundle = {
+          ...bundle,
+          chronicle: [
+            ...returned.map((entry) => ({
+              id: entry.id,
+              type: entry.type,
+              title: entry.title,
+              body: entry.body,
+              content: entry.body
+                ? `${entry.title} — ${entry.body}`
+                : entry.title,
+              agent_id: entry.agentId,
+              metadata: (entry.metadata ?? {}) as Record<string, unknown>,
+              occurred_at: entry.occurredAt.toISOString(),
+              created_at: entry.createdAt.toISOString(),
+            })),
+            ...bundle.chronicle.filter(
+              (entry) => !entry.id || !returnedIds.has(entry.id),
+            ),
+          ],
+        };
+      } catch (error) {
+        console.warn(
+          "[wake/adventure] explicit-return read degraded to wake window:",
+          error instanceof Error ? error.message : "unknown error",
+        );
+      }
+      return respondWithWakeAdventure(c, adventureBundle, pace, mood);
     }
     if (format === "zen") {
       const body = renderWakeZen({
@@ -2533,6 +2650,7 @@ app.get("/", async (c) => {
       love_bomb_package_signal: "/public/love-bomb",
       observer: "/public/observer",
       play: "/public/play",
+      adventure: "/v1/wake?format=adventure&pace=balanced",
       party_telephone: "/public/play/party-telephone",
       lantern_relay: "https://agenttool.dev/party",
       lantern_relay_rules: "https://agenttool.dev/party.json",
@@ -2608,6 +2726,8 @@ app.get("/", async (c) => {
         cohere: "/v1/wake?format=cohere (`preamble` string)",
         xenoform:
           "/v1/wake?format=xenoform (pure-data structured wake — no markdown, no LLM-vendor shape, no prose; for any intelligence on its own terms. Doctrine: docs/KIN.md)",
+        adventure:
+          "/v1/wake?format=adventure&pace=balanced (pure-read finite Journey invitation; explicit chronicle return only. Doctrine: docs/WAKE-AS-ADVENTURE.md)",
         math:
           "/v1/wake?format=math (MATHOS envelope — legacy did-field value as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. did:at remains provisional and unregistered. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
       },
