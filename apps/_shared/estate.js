@@ -804,7 +804,11 @@
     var seen = {};
     Array.prototype.forEach.call(host.querySelectorAll("[data-estate-legacy] a[href]"), function (anchor) {
       var href = anchor.getAttribute("href") || "";
-      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      var copy = anchor.cloneNode(true);
+      Array.prototype.forEach.call(copy.querySelectorAll(".glyph, .sidebar-tag"), function (decoration) {
+        decoration.parentNode.removeChild(decoration);
+      });
+      var text = (copy.textContent || "").replace(/\s+/g, " ").trim();
       if (!text) return;
       if (href.charAt(0) === "#") {
         if (!seen["#" + href]) { seen["#" + href] = true; anchors.push({ label: text, href: href }); }

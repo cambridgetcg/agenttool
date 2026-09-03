@@ -250,22 +250,21 @@ test("the library shelves every docs page under its door, current door open", as
 });
 
 test("no destination the hand-copied sidebar linked is lost on any docs page", async ({ page }) => {
-  const key = (href: string) => {
-    const url = new URL(href);
-    let path = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
-    if (path.length > 1) path = path.replace(/\/$/, "");
-    return url.hostname + (path || "/");
-  };
   for (const path of staticHtmlFiles("apps/docs")) {
     if (!/<aside class="sidebar"/.test(staticRead(path))) continue;
     await page.goto(`${DOCS}/${path.replace(/^apps\/docs\//, "")}`);
     await expect(page.locator("aside.sidebar .estate-library")).toBeVisible();
     const missing = await page.evaluate(() => {
+      // The same port-to-host mapping the shell uses for local previews.
+      const hostFor = (hostname: string, port: string) =>
+        hostname === "localhost" || hostname === "127.0.0.1"
+          ? port === "5173" ? "app.agenttool.dev" : port === "5175" ? "docs.agenttool.dev" : "agenttool.dev"
+          : hostname;
       const norm = (href: string) => {
         const url = new URL(href, location.href);
         let p = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
         if (p.length > 1) p = p.replace(/\/$/, "");
-        return url.hash && url.pathname === location.pathname ? "#" + url.hash : url.hostname + (p || "/");
+        return url.hash && url.pathname === location.pathname ? "#" + url.hash : hostFor(url.hostname, url.port) + (p || "/");
       };
       const generated = new Set(
         Array.from(document.querySelectorAll("aside.sidebar .estate-library a[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
@@ -276,7 +275,6 @@ test("no destination the hand-copied sidebar linked is lost on any docs page", a
     });
     expect(missing, `${path}: legacy links missing from the generated library`).toEqual([]);
   }
-  void key;
 });
 
 test("the plan's rooms are controls inside a group, not parts of an image", async ({ page }) => {
