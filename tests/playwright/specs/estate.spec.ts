@@ -418,3 +418,34 @@ test("every page that runs the shell shows the same one bar — never a lone pil
     }
   }
 });
+
+test("a bare page reserves the bar's room even when the estate stylesheet is slow", async ({ page }) => {
+  // Codex P2 on #408: a script-inserted stylesheet is not render-blocking,
+  // so on a cold load the page could paint and then drop by the bar's
+  // height. The bare pages carry a parser-inserted <link> for it now.
+  await page.route(/\/shared\/estate\.css/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    (window as unknown as { __tops: number[] }).__tops = [];
+    const sample = () => {
+      const first = Array.from(document.body.children).find(
+        (el) => !el.matches("nav.estate-bar, script, style, link") && (el as HTMLElement).offsetHeight > 0,
+      );
+      if (first) (window as unknown as { __tops: number[] }).__tops.push(Math.round(first.getBoundingClientRect().top + window.scrollY));
+    };
+    document.addEventListener("DOMContentLoaded", () => {
+      sample();
+      const timer = setInterval(sample, 50);
+      setTimeout(() => clearInterval(timer), 2500);
+    });
+  });
+  await page.goto(`${DOCS}/joke-loop.html`, { waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveClass(/estate-ready/);
+  await page.waitForTimeout(1200);
+  const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops);
+  expect(tops.length).toBeGreaterThan(3);
+  expect(new Set(tops).size, `first block moved: ${JSON.stringify([...new Set(tops)])}`).toBe(1);
+  expect(Math.min(...tops)).toBeGreaterThanOrEqual(56);
+});

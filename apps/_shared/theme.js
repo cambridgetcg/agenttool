@@ -49,6 +49,7 @@
     if (!document.querySelector("link[data-agenttool-estate-style]")) {
       var css = document.createElement("link");
       css.rel = "stylesheet";
+      css.setAttribute("blocking", "render");
       css.href = "/shared/estate.css?v=2026-09-03.3";
       css.setAttribute("data-agenttool-estate-style", "2026-09-03.3");
       document.head.appendChild(css);

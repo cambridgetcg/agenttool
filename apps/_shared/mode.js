@@ -77,6 +77,10 @@
   if (!document.querySelector('link[data-agenttool-estate-style]')) {
     var estateCss = document.createElement('link');
     estateCss.rel = 'stylesheet';
+    /* A script-inserted stylesheet is not render-blocking by default; ask
+       for it where the browser understands the request. Pages that need the
+       reservation at first paint also carry a parser-inserted <link>. */
+    estateCss.setAttribute('blocking', 'render');
     estateCss.href = '/shared/estate.css?v=2026-09-03.3';
     estateCss.setAttribute('data-agenttool-estate-style', '2026-09-03.3');
     document.head.appendChild(estateCss);
