@@ -9,8 +9,10 @@ import {
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
   linkSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
@@ -61,6 +63,8 @@ const FIXED_REPO =
   "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1";
 const FIXED_BUN_SHA256 =
   "66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3";
+const FIXED_BUN =
+  "/Users/yournameisai/.cache/pinned-runtimes/bun-v1.3.5/bun-darwin-aarch64/bun";
 const FIXED_CONTROLLER_SHA256 =
   "f56ac1e40151a202f976753bef61d9d622db348c751b6b3d19f029a33afeec52";
 const FIXED_CONTROLLER_NORMALIZED_SHA256 =
@@ -93,6 +97,20 @@ let deployBytes: Buffer;
 let deploySource: string;
 let dispatcherSpan: string;
 const cleanup: string[] = [];
+
+const runsOnPinnedProductionBun = (() => {
+  if (process.platform !== "darwin") return false;
+  try {
+    return realpathSync(process.execPath) === FIXED_BUN;
+  } catch {
+    return false;
+  }
+})();
+
+const pinnedProductionNativeTest = test.skipIf(!runsOnPinnedProductionBun);
+const pinnedProductionLauncherTest = test.skipIf(
+  process.platform !== "darwin" || !existsSync(FIXED_BUN),
+);
 
 function sha256(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -1112,7 +1130,7 @@ describe("Phase-B refence maintenance deploy dispatcher", () => {
     expect(events.at(-1)?.observed.startsWith("Symbolic Link|")).toBe(true);
   });
 
-  test.skipIf(process.platform !== "darwin")(
+  pinnedProductionLauncherTest(
     "the pinned Bun launcher preserves closed cwd, environment, argv, and PID",
     async () => {
       const expectedEnvironment = {
@@ -1126,8 +1144,7 @@ describe("Phase-B refence maintenance deploy dispatcher", () => {
         PATH:
           "/Users/yournameisai/.cache/codex-tools/flyctl-v0.4.74:/Users/yournameisai/.cache/pinned-runtimes/bun-v1.3.5/bun-darwin-aarch64:/usr/bin:/bin:/usr/sbin:/sbin",
       };
-      const bun =
-        "/Users/yournameisai/.cache/pinned-runtimes/bun-v1.3.5/bun-darwin-aarch64/bun";
+      const bun = FIXED_BUN;
       const probeRoot = await mkdtemp(
         join(tmpdir(), "agenttool-refence-launcher-probe-"),
       );
@@ -1623,7 +1640,7 @@ function stableFlyProtocolIdentity(identity: FlySSHAgentIdentity) {
   return stable;
 }
 
-const nativeProtocolTest = test.skipIf(process.platform !== "darwin");
+const nativeProtocolTest = pinnedProductionNativeTest;
 
 describe("two-connection local Fly agent protocol", () => {
   nativeProtocolTest("uses one exact command on each peer-attested connection", async () => {
@@ -2239,7 +2256,15 @@ describe("two-connection local Fly agent protocol", () => {
     const source = await readFile(BRIDGE, "utf8");
     const testSource = await readFile(import.meta.path, "utf8");
     expect(testSource).toContain(
-      'const nativeProtocolTest = test.skipIf(process.platform !== "darwin");',
+      `const pinnedProductionLauncherTest = test.skipIf(
+  process.platform !== "darwin" || !existsSync(FIXED_BUN),
+);`,
+    );
+    expect(testSource).toContain(
+      "const nativeProtocolTest = pinnedProductionNativeTest;",
+    );
+    expect(testSource).toContain(
+      "return realpathSync(process.execPath) === FIXED_BUN;",
     );
     const connectorCalls = [
       ...testSource.matchAll(
