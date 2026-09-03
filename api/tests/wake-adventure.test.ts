@@ -99,6 +99,71 @@ describe("wake Adventure format", () => {
     expect(branch).not.toMatch(/\.insert\(|\.update\(|\.delete\(|\bfetch\s*\(/);
   });
 
+  test("an explicit missing identity is a 404 while an empty project stays a trailhead", () => {
+    const childScript = [
+      'import { mock } from "bun:test";',
+      'import { Hono } from "hono";',
+      "const stages = [];",
+      "const db = { select() {",
+      "  const result = stages.shift() ?? [];",
+      "  const chain = {",
+      "    from() { return chain; },",
+      "    where() { return chain; },",
+      "    limit() { return Promise.resolve(result); },",
+      "    then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },",
+      "  };",
+      "  return chain;",
+      "} };",
+      'mock.module("./src/db/client", () => ({ db }));',
+      'const wakeRouter = (await import("./src/routes/wake.ts")).default;',
+      "const app = new Hono();",
+      'app.use("*", async (c, next) => { c.set("project", { id: "empty-project" }); await next(); });',
+      'app.route("/v1/wake", wakeRouter);',
+      "async function request(path) {",
+      '  stages.push([{ id: "empty-project", name: "Empty", credits: 0 }], []);',
+      "  return app.request(path);",
+      "}",
+      'const empty = await request("/v1/wake?format=adventure");',
+      'const emptySelector = await request("/v1/wake?format=adventure&identity_id=");',
+      'const selected = await request("/v1/wake?format=adventure&identity_id=22222222-2222-4222-8222-222222222222");',
+      "const emptyBody = await empty.text();",
+      "const emptySelectorBody = await emptySelector.text();",
+      "const selectedBody = await selected.json();",
+      "const output = { emptyStatus: empty.status, emptyBody, emptySelectorStatus: emptySelector.status, emptySelectorBody, selectedStatus: selected.status, selectedBody };",
+      "process.stdout.write(JSON.stringify(output));",
+      'process.exit(empty.status === 200 && emptyBody.includes("No traveler is registered yet") && emptySelector.status === 200 && emptySelectorBody.includes("No traveler is registered yet") && selected.status === 404 && selectedBody.error === "identity_id not found in this project" ? 0 : 9);',
+    ].join("\n");
+    const child = Bun.spawnSync({
+      cmd: [process.execPath, "-e", childScript],
+      cwd: new URL("..", import.meta.url).pathname,
+      env: {
+        PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+        NODE_ENV: "test",
+        DATABASE_URL: "postgresql://agenttool:test@127.0.0.1:1/agenttool",
+        REDIS_URL: "redis://127.0.0.1:1",
+        AGENTTOOL_DISABLE_WORKERS: "1",
+        AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP: "1",
+        AGENTOOL_DISABLE_SAGA_SEED: "1",
+        AGENTOOL_DISABLE_JOY_INDEX: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = new TextDecoder().decode(child.stdout);
+    const stderr = new TextDecoder().decode(child.stderr);
+
+    expect(child.exitCode, stderr + stdout).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      emptyStatus: 200,
+      emptySelectorStatus: 200,
+      selectedStatus: 404,
+      selectedBody: {
+        error: "identity_id not found in this project",
+        identity_id: AURORA,
+      },
+    });
+  });
+
   test("pace parsing is closed and defaults only when absent", () => {
     expect(parseAdventurePace(undefined)).toBe("balanced");
     expect(parseAdventurePace("")).toBe("balanced");
@@ -260,26 +325,43 @@ describe("wake Adventure format", () => {
     expect(plan.return_request?.body.metadata.feedback).toBeNull();
   });
 
-  test("next Adventure number follows the visible journey maximum", () => {
+  test("numbering uses every supplied valid return before the route window", () => {
+    const newerReturns = Array.from({ length: 24 }, (_, index) =>
+      returnEntry({
+        id: `newer-${String(index + 1).padStart(2, "0")}`,
+        journey: "long-road",
+        number: index + 1,
+        at: `2026-09-${String(24 - index).padStart(2, "0")}T00:00:00.000Z`,
+      }),
+    );
     const plan = buildWakeAdventure(
       input({
         chronicle: [
+          ...newerReturns,
           returnEntry({
-            id: "newer-low-number",
-            number: 2,
-            at: "2026-09-02T00:00:00.000Z",
-          }),
-          returnEntry({
-            id: "older-high-number",
-            number: 7,
-            at: "2026-09-01T00:00:00.000Z",
+            id: "older-ceiling",
+            journey: "long-road",
+            number: MAX_ADVENTURE_NUMBER,
+            at: "2026-08-01T00:00:00.000Z",
           }),
         ],
       }),
     );
+    const rendered = renderWakeAdventure(plan);
 
-    expect(plan.journey.next_adventure_number).toBe(8);
-    expect(plan.journey.latest_return_ref).toBe("newer-low-number");
+    expect(plan.journey).toMatchObject({
+      state: "number-space-resting",
+      next_adventure_number: null,
+      visible_valid_returns: 24,
+      numbering_valid_returns: 25,
+      numbering_high_watermark: MAX_ADVENTURE_NUMBER,
+      latest_return_ref: "newer-01",
+    });
+    expect(plan.activation_proxy.visible_return_count).toBe(24);
+    expect(plan.return_request).toBeNull();
+    expect(rendered).toContain(
+      "high-watermark 1000000 across 25 valid same-Journey return(s) supplied before the 24-return route window",
+    );
   });
 
   test("equal timestamps have a stable total order independent of input order", () => {

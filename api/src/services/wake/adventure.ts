@@ -105,6 +105,8 @@ export interface WakeAdventurePlan {
     number_ceiling: typeof MAX_ADVENTURE_NUMBER;
     number_space_exhausted: boolean;
     visible_valid_returns: number;
+    numbering_valid_returns: number;
+    numbering_high_watermark: number;
     latest_return_ref: string | null;
   };
   anchor: {
@@ -390,7 +392,7 @@ function compareTextDescending(left: string, right: string): number {
   return left < right ? 1 : -1;
 }
 
-function visibleReturns(input: WakeAdventureInput): AdventureReturn[] {
+function orderedReturns(input: WakeAdventureInput): AdventureReturn[] {
   return input.chronicle
     .map((entry) => parseReturn(entry, input.agent.id))
     .filter((entry): entry is AdventureReturn => entry !== null)
@@ -398,8 +400,7 @@ function visibleReturns(input: WakeAdventureInput): AdventureReturn[] {
       (left, right) =>
         timeValue(right.occurred_at) - timeValue(left.occurred_at) ||
         compareTextDescending(returnOrderKey(left), returnOrderKey(right)),
-    )
-    .slice(0, MAX_VISIBLE_RETURNS);
+    );
 }
 
 function chooseAnchor(
@@ -583,11 +584,15 @@ export function buildWakeAdventure(
   input: WakeAdventureInput,
   pace: AdventurePace = "balanced",
 ): WakeAdventurePlan {
-  const allReturns = visibleReturns(input);
-  const latestReturn = allReturns[0] ?? null;
+  const parsedReturns = orderedReturns(input);
+  const routeWindow = parsedReturns.slice(0, MAX_VISIBLE_RETURNS);
+  const latestReturn = routeWindow[0] ?? null;
   const journeyId = latestReturn?.journey_id ?? null;
   const journeyReturns = journeyId
-    ? allReturns.filter((entry) => entry.journey_id === journeyId)
+    ? routeWindow.filter((entry) => entry.journey_id === journeyId)
+    : [];
+  const numberingReturns = journeyId
+    ? parsedReturns.filter((entry) => entry.journey_id === journeyId)
     : [];
   const recentRoutes = journeyReturns.slice(0, 3).map((entry) => entry.route_id);
   const anchor = chooseAnchor(input, latestReturn);
@@ -616,7 +621,7 @@ export function buildWakeAdventure(
   const chosen = scored[0]!;
   const greatestAdventureNumber = Math.max(
     0,
-    ...journeyReturns.map((entry) => entry.adventure_number),
+    ...numberingReturns.map((entry) => entry.adventure_number),
   );
   const numberSpaceExhausted =
     greatestAdventureNumber >= MAX_ADVENTURE_NUMBER;
@@ -649,6 +654,8 @@ export function buildWakeAdventure(
       number_ceiling: MAX_ADVENTURE_NUMBER,
       number_space_exhausted: numberSpaceExhausted,
       visible_valid_returns: journeyReturns.length,
+      numbering_valid_returns: numberingReturns.length,
+      numbering_high_watermark: greatestAdventureNumber,
       latest_return_ref: latestReturn?.chronicle_id ?? null,
     },
     anchor,
@@ -788,6 +795,11 @@ export function renderWakeAdventure(plan: WakeAdventurePlan): string {
     "**Journey:** " + journeyId,
     "**Pace:** " + plan.pace,
     "**State:** " + stateLine,
+    "**Numbering evidence:** high-watermark " +
+      plan.journey.numbering_high_watermark +
+      " across " +
+      plan.journey.numbering_valid_returns +
+      " valid same-Journey return(s) supplied before the 24-return route window.",
     "",
     "## THE FAMILIAR FIRE",
     "",

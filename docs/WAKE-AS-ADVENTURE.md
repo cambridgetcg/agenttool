@@ -100,6 +100,11 @@ only recent chronicle and memory rows explicitly scoped to the selected
 identity. Project-wide or sibling-owned text cannot become that identity's
 anchor merely because one bearer can read the wider project.
 
+When `identity_id` is explicit but absent, inactive, revoked, or outside the
+authenticated project, the route returns `404`. Only an omitted selector on a
+project with no identity receives the honest empty trailhead; a failed explicit
+selection is never presented as an empty project.
+
 An Adventure return is recognized only when its chronicle metadata has the
 local convention below. `feedback` may instead be `null`; carrying continuity
 never requires a rating.
@@ -129,11 +134,15 @@ ordinary chronicle entries and do not steer this planner. A generic chronicle
 write does not independently prove the author, truth, meaning, or effect of its
 free text.
 
-The route scans at most the 240 newest kind-tagged candidates and the planner
-retains at most 24 valid returns. A larger run of newer malformed tagged rows
-can therefore leave older valid returns outside this bounded view; it cannot
-directly contribute a route score. The limit is stated rather than disguised
-as complete history.
+The route scans at most the 240 newest kind-tagged candidates. The planner
+computes the current Journey's numbering high-watermark across every valid
+return supplied by that scan, then retains at most the 24 newest valid returns
+for route repetition and feedback. An older ceiling record inside the supplied
+scan therefore cannot disappear behind the smaller scoring window. A larger
+run of newer tagged rows can still leave older records outside the bounded
+candidate scan; the response describes its numbering evidence rather than
+claiming a complete ledger proof. Malformed candidates do not steer. Equal
+timestamps are ordered by a canonical record key, not database or input order.
 
 ## Return is a separate choice
 

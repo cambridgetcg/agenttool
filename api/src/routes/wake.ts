@@ -295,11 +295,26 @@ app.get("/", async (c) => {
         400,
       );
     }
-    const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
+    const requestedIdentityIdJoy = c.req.query("identity_id") || null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdJoy,
     });
     if (!result.ok) {
+      if (
+        requestedIdentityIdJoy !== null &&
+        (result.error === "identity_not_found" || result.error === "no_identity")
+      ) {
+        return c.json(
+          {
+            error: "identity_id not found in this project",
+            identity_id: requestedIdentityIdJoy,
+          },
+          404,
+        );
+      }
+      if (result.error !== "no_identity") {
+        return c.json({ error: result.error }, 404);
+      }
       // Honest-empty for every joy format when no agent.
       if (format === "meme") {
         return c.json(

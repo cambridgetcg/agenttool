@@ -151,6 +151,12 @@ describe("wake OpenAPI contract", () => {
                 headers: Record<string, { $ref?: string }>;
               };
               "400": { description: string };
+              "404": {
+                description: string;
+                content: {
+                  "application/json": { schema: { $ref: string } };
+                };
+              };
               "425": {
                 headers: Record<string, {
                   $ref?: string;
@@ -186,6 +192,12 @@ describe("wake OpenAPI contract", () => {
     });
     expect(params.get("pace")?.description).toMatch(/format=adventure.*route-factor.*never.*feeling/is);
     expect(wake.responses["400"].description).toMatch(/invalid Adventure pace/i);
+    expect(wake.responses["404"].description).toMatch(
+      /explicitly selected identity.*outside.*project.*never.*empty-project.*trailhead/is,
+    );
+    expect(wake.responses["404"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/Error",
+    });
     expect(params.get("profile")?.schema).toMatchObject({
       enum: ["full", "brief"],
       default: "full",

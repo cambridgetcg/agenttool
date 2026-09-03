@@ -4154,6 +4154,12 @@ function spec() {
               },
             },
             "400": { description: "Unknown profile, invalid Adventure pace, or brief requested with an incompatible joy/MATHOS format." },
+            "404": {
+              description: "An explicitly selected identity is absent, inactive, revoked, or outside the authenticated project. Explicit selection is never rewritten as an empty-project Adventure trailhead.",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+              },
+            },
             "425": {
               description: "Replayable TLS early data is refused before authentication or WAKE handling; retry after the handshake.",
               headers: {
