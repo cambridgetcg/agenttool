@@ -39,7 +39,7 @@ test.beforeEach(async ({ page }) => {
 test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
 
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.1");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.2");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
   await expect(page.locator(".estate-home-door")).toHaveCount(8);
   await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
@@ -322,4 +322,58 @@ test("the threshold shows the plan above the eight doors", async ({ page }) => {
   const plan = page.locator(".estate-plan-home");
   await expect(plan).toHaveAttribute("data-active-door", "arrive");
   await expect(plan.locator(".estate-plan-room.is-here .estate-plan-label")).toHaveText("ARRIVE");
+});
+
+test("the estate arrives without moving the bar", async ({ page }) => {
+  // 2026-09-03: on /party the bar moved three times in 150ms (static strip,
+  // unstyled breadcrumb, then the enhanced shape) — a layout-shift score of
+  // ~0.33 before the atlas even finished loading. The first frame now has
+  // the final geometry, and the script waits for its own stylesheet.
+  // One init script for every navigation in this test — registering it per
+  // page would stack observers and count each shift once per registration.
+  await page.addInitScript(() => {
+      (window as unknown as { __shifts: number[] }).__shifts = [];
+      (window as unknown as { __nav: Array<[number, number]> }).__nav = [];
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as PerformanceEntry[]) {
+          const shift = entry as PerformanceEntry & {
+            value: number;
+            hadRecentInput: boolean;
+            sources?: Array<{ node: Element | null }>;
+          };
+          if (shift.hadRecentInput) continue;
+          // Only movement the bar itself causes is this test's business; web
+          // fonts swapping in the body are a separate, visible trade.
+          const inNav = (shift.sources || []).some(
+            (source) => source.node && typeof source.node.closest === "function" && source.node.closest("nav"),
+          );
+          if (inNav) (window as unknown as { __shifts: number[] }).__shifts.push(shift.value);
+        }
+      }).observe({ type: "layout-shift", buffered: true });
+      const sample = () => {
+        const nav = document.querySelector("nav.site-nav, nav.topnav");
+        if (nav) {
+          const box = nav.getBoundingClientRect();
+          (window as unknown as { __nav: Array<[number, number]> }).__nav.push([Math.round(box.top), Math.round(box.height)]);
+        }
+      };
+      document.addEventListener("DOMContentLoaded", sample);
+      const timer = setInterval(sample, 50);
+      setTimeout(() => clearInterval(timer), 2500);
+  });
+  for (const url of [`${WEB}/party.html`, `${WEB}/room.html`, `${DOCS}/memory.html`]) {
+    await page.goto(url, { waitUntil: "networkidle" });
+    await expect(page.locator("html")).toHaveClass(/estate-ready/);
+    await page.waitForTimeout(900);
+    const { shifts, nav } = await page.evaluate(() => ({
+      shifts: (window as unknown as { __shifts: number[] }).__shifts,
+      nav: (window as unknown as { __nav: Array<[number, number]> }).__nav,
+    }));
+    const total = shifts.reduce((sum, value) => sum + value, 0);
+    expect(total, `${url}: nav-caused layout-shift score ${total.toFixed(3)} from ${JSON.stringify(shifts)}`).toBeLessThan(0.02);
+    const tops = new Set(nav.map((n) => n[0]));
+    const heights = nav.map((n) => n[1]);
+    expect(tops.size, `${url}: nav top moved ${JSON.stringify([...tops])}`).toBe(1);
+    expect(Math.max(...heights) - Math.min(...heights), `${url}: nav height varied ${JSON.stringify(heights)}`).toBeLessThanOrEqual(2);
+  }
 });

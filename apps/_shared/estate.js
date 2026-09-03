@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-03.1";
+  var VERSION = "2026-09-03.2";
   var DOORS = [
     {
       id: "arrive",
@@ -324,12 +324,33 @@
   }
 
   function installStyle() {
-    if (document.querySelector('link[data-agenttool-estate-style]')) return;
+    var existing = document.querySelector('link[data-agenttool-estate-style]');
+    if (existing) return existing;
     var link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "/shared/estate.css?v=" + VERSION;
     link.setAttribute("data-agenttool-estate-style", VERSION);
     document.head.appendChild(link);
+    return link;
+  }
+
+  /* Never mutate the document before the estate's own stylesheet can style
+   * the result — an unstyled breadcrumb and button row grew the bar by 30px
+   * for one frame. The first-paint geometry is owned by the page stylesheets
+   * (@media (scripting: enabled)); this only guarantees the atlas dresses
+   * in the same frame it appears. Bounded so a lost stylesheet still yields
+   * a usable, if plainer, shell. */
+  function whenStyleReady(link, callback) {
+    if (!link || link.sheet) return callback();
+    var done = false;
+    var finish = function () {
+      if (done) return;
+      done = true;
+      callback();
+    };
+    link.addEventListener("load", finish);
+    link.addEventListener("error", finish);
+    window.setTimeout(finish, 1500);
   }
 
   function makeLink(room, className) {
@@ -942,7 +963,7 @@
     document.addEventListener("keydown", onGlobalKey);
   }
 
-  installStyle();
+  var styleLink = installStyle();
   window.AgentToolEstate = {
     version: VERSION,
     doors: DOORS,
@@ -951,6 +972,8 @@
     close: closeAtlas
   };
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-  else init();
+  whenStyleReady(styleLink, function () {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+    else init();
+  });
 })();

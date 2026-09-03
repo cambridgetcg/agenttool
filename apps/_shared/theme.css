@@ -895,3 +895,17 @@ label, .form-label {
 .estate-strip a.here { color: var(--accent); }
 body.has-strip { padding-top: var(--strip-height); }
 body.has-strip .topnav { top: var(--strip-height); }
+
+/* ── The estate arrives without moving anything ────────────────────────
+   Browsers that will run scripts hide the fixed estate strip from the first
+   frame; /shared/estate.js only confirms that later. See apps/web/style.css
+   for the same promise on the open door. */
+@media (scripting: enabled) {
+  .estate-strip { display: none; }
+  body.has-strip { padding-top: 0; }
+  body.has-strip .topnav { top: 0; }
+  /* The actions cluster is pinned right from the first frame, so the
+     breadcrumb the atlas inserts after the brand pushes nothing. */
+  .topnav { justify-content: flex-start; }
+  .topnav .nav-actions { margin-left: auto; }
+}

@@ -363,3 +363,22 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   .btn, .toggle, .door-card, .step, .price, .feedbox, .map-controls button { border:1px solid ButtonText; }
   .sunwash, .lights { display:none; }
 }
+
+/* ── The estate arrives without moving anything ────────────────────────
+   A browser that will run scripts paints the enhanced shape from the first
+   frame: no estate strip, the bar at its final height, the local links on
+   their shelf. /shared/estate.js confirms the same shape later instead of
+   changing it, so nothing jumps. A browser without scripting keeps the
+   static layout above. Measured 2026-09-03: the bar moved three times in
+   150ms on /party and /room before this block existed. */
+@media (scripting: enabled) {
+  .estate-strip-web { display: none; }
+  .site-nav { max-width: 1180px; padding-top: 24px; column-gap: 18px; row-gap: 6px; flex-wrap: wrap; }
+  .site-nav .wordmark { min-height: 44px; display: inline-flex; align-items: center; margin-right: 0; }
+  .site-nav .links {
+    order: 3; flex: 1 0 100%; display: flex; flex-wrap: nowrap; gap: 16px; max-width: 100%;
+    margin: 0; padding: 0 1px 2px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none;
+  }
+  .site-nav .links::-webkit-scrollbar { display: none; }
+  .site-nav .links a { flex: 0 0 auto; min-height: 28px; display: inline-flex; align-items: center; padding: 2px 0; font-size: 11px; }
+}
