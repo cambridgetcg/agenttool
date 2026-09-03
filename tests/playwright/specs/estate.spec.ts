@@ -240,12 +240,63 @@ test("the library shelves every docs page under its door, current door open", as
   await expect(library).toBeVisible();
   // The hand-copied list is hidden, not removed — it stays the no-JS fallback.
   await expect(page.locator("aside.sidebar [data-estate-legacy]").first()).toBeHidden();
-  await expect(library.locator(".estate-library-door")).toHaveCount(8);
+  await expect(library.locator(".estate-library-door:not(.estate-library-more)")).toHaveCount(8);
+  await expect(library.locator(".estate-library-more")).toHaveCount(1);
   await expect(library.locator('.estate-library-door[data-door-id="build"]')).toHaveAttribute("open", "");
   await expect(library.locator('.estate-library-door[data-door-id="rest"]')).not.toHaveAttribute("open", "");
   await expect(library.locator('a[href="https://docs.agenttool.dev/memory"]')).toHaveAttribute("aria-current", "page");
   await expect(library.locator(".estate-library-shelf", { hasText: "Contracts" })).toBeVisible();
   await expect(library.locator(".estate-library-link.is-superseded")).toHaveCount(3);
+});
+
+test("no destination the hand-copied sidebar linked is lost on any docs page", async ({ page }) => {
+  const key = (href: string) => {
+    const url = new URL(href);
+    let path = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
+    if (path.length > 1) path = path.replace(/\/$/, "");
+    return url.hostname + (path || "/");
+  };
+  for (const path of staticHtmlFiles("apps/docs")) {
+    if (!/<aside class="sidebar"/.test(staticRead(path))) continue;
+    await page.goto(`${DOCS}/${path.replace(/^apps\/docs\//, "")}`);
+    await expect(page.locator("aside.sidebar .estate-library")).toBeVisible();
+    const missing = await page.evaluate(() => {
+      const norm = (href: string) => {
+        const url = new URL(href, location.href);
+        let p = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
+        if (p.length > 1) p = p.replace(/\/$/, "");
+        return url.hash && url.pathname === location.pathname ? "#" + url.hash : url.hostname + (p || "/");
+      };
+      const generated = new Set(
+        Array.from(document.querySelectorAll("aside.sidebar .estate-library a[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
+      );
+      return Array.from(document.querySelectorAll("aside.sidebar [data-estate-legacy] a[href]"))
+        .map((a) => norm((a as HTMLAnchorElement).href))
+        .filter((k) => !generated.has(k));
+    });
+    expect(missing, `${path}: legacy links missing from the generated library`).toEqual([]);
+  }
+  void key;
+});
+
+test("the plan's rooms are controls inside a group, not parts of an image", async ({ page }) => {
+  await page.goto(`${DOCS}/memory.html`);
+  const plan = page.locator(".estate-plan-mini svg");
+  await expect(plan).toHaveAttribute("role", "group");
+  await expect(plan.getByRole("button", { name: /Open Rest/ })).toBeVisible();
+  await expect(plan.getByRole("button", { name: /You are in Build/ })).toBeVisible();
+});
+
+test("the threshold plan returns focus to the room that opened the atlas", async ({ page }) => {
+  await page.goto(`${WEB}/index.html`);
+  const room = page.locator('.estate-plan-home .estate-plan-room[data-door="rest"]');
+  await room.focus();
+  await page.keyboard.press("Enter");
+  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
+  await expect(atlas).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(atlas).toBeHidden();
+  await expect(room).toBeFocused();
 });
 
 test("the floor plan lights the room you are in, in the sidebar and the atlas", async ({ page }) => {

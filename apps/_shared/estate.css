@@ -1094,3 +1094,8 @@
   .estate-plan-lamp-glow { animation: none; opacity: .34; }
   .estate-plan-room rect:first-of-type { transition: none; }
 }
+
+.estate-library-more .estate-library-link { margin-left: 25px; }
+.estate-library-onpage { margin-top: 10px; }
+.estate-library-onpage .estate-library-shelf { margin-left: 0; color: var(--estate-dim); }
+.estate-library-onpage .estate-library-link { margin-left: 0; min-height: 30px; padding: 4px 8px; }

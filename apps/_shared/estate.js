@@ -358,7 +358,9 @@
     var active = doorById(activeDoorId);
     figure.style.setProperty("--door-accent", active.accent);
 
-    var image = svg("svg", { viewBox: "0 0 300 300", role: "img", "aria-labelledby": "estate-plan-title-" + size });
+    // A group, not an image: the eight rooms inside are real controls and
+    // must stay exposed to assistive technology as such.
+    var image = svg("svg", { viewBox: "0 0 300 300", role: "group", "aria-labelledby": "estate-plan-title-" + size });
     var title = svg("title", { id: "estate-plan-title-" + size });
     title.textContent = "Floor plan of the house: eight doors around one courtyard. You are in " + active.label + ".";
     image.appendChild(title);
@@ -717,7 +719,7 @@
     var host = document.querySelector("[data-estate-home]");
     if (!host || host.getAttribute("data-estate-rendered") === VERSION) return;
     host.textContent = "";
-    host.appendChild(buildPlan(currentEntry().door.id, "home", function (doorId) { openAtlas(host, doorId); }));
+    host.appendChild(buildPlan(currentEntry().door.id, "home", function (doorId, room) { openAtlas(room, doorId); }));
     DOORS.forEach(function (door) { host.appendChild(homeDoorCard(door)); });
     host.setAttribute("data-estate-rendered", VERSION);
   }
@@ -786,11 +788,78 @@
       library.appendChild(section);
     });
 
+    // Nothing the hand-copied list linked may vanish. Destinations the
+    // registry does not name (doctrine .md files, /about, in-page anchors)
+    // keep a shelf of their own, in the order the page listed them.
+    var covered = {};
+    allRooms().forEach(function (item) { covered[destinationKey(item.room.href)] = true; });
+    var extras = [];
+    var anchors = [];
+    var seen = {};
+    Array.prototype.forEach.call(host.querySelectorAll("[data-estate-legacy] a[href]"), function (anchor) {
+      var href = anchor.getAttribute("href") || "";
+      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) return;
+      if (href.charAt(0) === "#") {
+        if (!seen["#" + href]) { seen["#" + href] = true; anchors.push({ label: text, href: href }); }
+        return;
+      }
+      var key = destinationKey(anchor.href);
+      if (covered[key] || seen[key]) return;
+      seen[key] = true;
+      extras.push({ label: text, href: anchor.href, key: key });
+    });
+    var hereKey = destinationKey(window.location.href);
+    if (extras.length) {
+      var more = element("details", "estate-library-door estate-library-more");
+      more.setAttribute("data-door-id", "more");
+      more.style.setProperty("--door-accent", entry.door.accent);
+      var moreSummary = element("summary", "estate-library-summary");
+      var moreMark = element("span", "estate-library-mark", "…");
+      moreMark.setAttribute("aria-hidden", "true");
+      append(moreSummary, moreMark, element("span", "estate-library-name", "Also in the library"), element("span", "estate-library-count", String(extras.length)));
+      more.appendChild(moreSummary);
+      var moreList = element("ul", "estate-library-list");
+      extras.forEach(function (extra) {
+        var item = element("li");
+        var link = element("a", "estate-library-link");
+        link.href = extra.href;
+        link.appendChild(element("span", "estate-library-label", extra.label));
+        if (extra.key === hereKey) { link.setAttribute("aria-current", "page"); more.open = true; }
+        item.appendChild(link);
+        moreList.appendChild(item);
+      });
+      more.appendChild(moreList);
+      library.appendChild(more);
+    }
+    if (anchors.length) {
+      var onPage = element("div", "estate-library-onpage");
+      onPage.appendChild(element("div", "estate-library-shelf", "On this page"));
+      var anchorList = element("ul", "estate-library-list");
+      anchors.forEach(function (anchor) {
+        var item = element("li");
+        var link = element("a", "estate-library-link");
+        link.href = anchor.href;
+        link.appendChild(element("span", "estate-library-label", anchor.label));
+        item.appendChild(link);
+        anchorList.appendChild(item);
+      });
+      onPage.appendChild(anchorList);
+      library.appendChild(onPage);
+    }
+
     var all = element("button", "estate-library-all", "Every room");
     all.type = "button";
     all.addEventListener("click", function () { openAtlas(all, entry.door.id); });
     library.appendChild(all);
     host.appendChild(library);
+  }
+
+  /* One key per destination: host + path, .html and trailing slash dropped,
+   * query and fragment ignored — the same rule currentEntry() matches by. */
+  function destinationKey(href) {
+    var where = roomLocation(href);
+    return where.host + where.path;
   }
 
   function renderNearby(entry) {
