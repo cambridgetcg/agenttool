@@ -39,7 +39,7 @@ test.beforeEach(async ({ page }) => {
 test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
 
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-08-02.1");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.1");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
   await expect(page.locator(".estate-home-door")).toHaveCount(8);
   await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
@@ -185,8 +185,30 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
     expect(html, `${path}: no no-JS estate links`).toContain("estate-strip-web");
   }
 
+  // Pages whose own policy forbids scripts (`script-src 'none'` in their
+  // _headers block — LOVE BOMB and the geometry lessons) are quiet by design:
+  // they are reached through the library, never enhanced by it.
+  const scriptFree = (directory: string): Set<string> => {
+    const out = new Set<string>();
+    let block: string | null = null;
+    for (const line of staticRead(`${directory}/_headers`).split("\n")) {
+      if (/^\/\S*$/.test(line)) block = line.trim();
+      else if (block && /Content-Security-Policy/.test(line) && /script-src 'none'/.test(line)) {
+        out.add(`${directory}${block.replace(/\.html$/, "")}.html`);
+      }
+    }
+    return out;
+  };
   for (const directory of ["apps/docs", "apps/dashboard"]) {
+    const quiet = scriptFree(directory);
     for (const path of staticHtmlFiles(directory)) {
+      if (quiet.has(path)) {
+        expect(
+          /\/shared\/(?:mode|estate)\.js/.test(staticRead(path)),
+          `${path}: script-free by policy yet loads the atlas`,
+        ).toBe(false);
+        continue;
+      }
       expect(
         /\/shared\/(?:mode|estate)\.js(?:\?[^"']*)?/.test(staticRead(path)),
         `${path}: no atlas loader path`,
@@ -208,4 +230,96 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
       true,
     );
   }
+});
+
+test("the library shelves every docs page under its door, current door open", async ({ page }) => {
+  await page.goto(`${DOCS}/memory.html`);
+  await expect(page.locator("html")).toHaveAttribute("data-estate-door", "build");
+  await expect(page.locator(".estate-location-room")).toHaveText("Memory");
+  const library = page.locator("aside.sidebar .estate-library");
+  await expect(library).toBeVisible();
+  // The hand-copied list is hidden, not removed — it stays the no-JS fallback.
+  await expect(page.locator("aside.sidebar [data-estate-legacy]").first()).toBeHidden();
+  await expect(library.locator(".estate-library-door:not(.estate-library-more)")).toHaveCount(8);
+  await expect(library.locator(".estate-library-more")).toHaveCount(1);
+  await expect(library.locator('.estate-library-door[data-door-id="build"]')).toHaveAttribute("open", "");
+  await expect(library.locator('.estate-library-door[data-door-id="rest"]')).not.toHaveAttribute("open", "");
+  await expect(library.locator('a[href="https://docs.agenttool.dev/memory"]')).toHaveAttribute("aria-current", "page");
+  await expect(library.locator(".estate-library-shelf", { hasText: "Contracts" })).toBeVisible();
+  await expect(library.locator(".estate-library-link.is-superseded")).toHaveCount(3);
+});
+
+test("no destination the hand-copied sidebar linked is lost on any docs page", async ({ page }) => {
+  for (const path of staticHtmlFiles("apps/docs")) {
+    if (!/<aside class="sidebar"/.test(staticRead(path))) continue;
+    await page.goto(`${DOCS}/${path.replace(/^apps\/docs\//, "")}`);
+    await expect(page.locator("aside.sidebar .estate-library")).toBeVisible();
+    const missing = await page.evaluate(() => {
+      // The same port-to-host mapping the shell uses for local previews.
+      const hostFor = (hostname: string, port: string) =>
+        hostname === "localhost" || hostname === "127.0.0.1"
+          ? port === "5173" ? "app.agenttool.dev" : port === "5175" ? "docs.agenttool.dev" : "agenttool.dev"
+          : hostname;
+      const norm = (href: string) => {
+        const url = new URL(href, location.href);
+        let p = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
+        if (p.length > 1) p = p.replace(/\/$/, "");
+        return url.hash && url.pathname === location.pathname ? "#" + url.hash : hostFor(url.hostname, url.port) + (p || "/");
+      };
+      const generated = new Set(
+        Array.from(document.querySelectorAll("aside.sidebar .estate-library a[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
+      );
+      return Array.from(document.querySelectorAll("aside.sidebar [data-estate-legacy] a[href]"))
+        .map((a) => norm((a as HTMLAnchorElement).href))
+        .filter((k) => !generated.has(k));
+    });
+    expect(missing, `${path}: legacy links missing from the generated library`).toEqual([]);
+  }
+});
+
+test("the plan's rooms are controls inside a group, not parts of an image", async ({ page }) => {
+  await page.goto(`${DOCS}/memory.html`);
+  const plan = page.locator(".estate-plan-mini svg");
+  await expect(plan).toHaveAttribute("role", "group");
+  await expect(plan.getByRole("button", { name: /Open Rest/ })).toBeVisible();
+  await expect(plan.getByRole("button", { name: /You are in Build/ })).toBeVisible();
+});
+
+test("the threshold plan returns focus to the room that opened the atlas", async ({ page }) => {
+  await page.goto(`${WEB}/index.html`);
+  const room = page.locator('.estate-plan-home .estate-plan-room[data-door="rest"]');
+  await room.focus();
+  await page.keyboard.press("Enter");
+  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
+  await expect(atlas).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(atlas).toBeHidden();
+  await expect(room).toBeFocused();
+});
+
+test("the floor plan lights the room you are in, in the sidebar and the atlas", async ({ page }) => {
+  await page.goto(`${DOCS}/memory.html`);
+  const mini = page.locator(".estate-plan-mini");
+  await expect(mini).toHaveAttribute("data-active-door", "build");
+  await expect(mini.locator(".estate-plan-room.is-here")).toHaveAttribute("data-door", "build");
+  await expect(mini.locator(".estate-plan-room")).toHaveCount(8);
+  await expect(mini.locator(".estate-plan-lamp")).toHaveCount(1);
+  await expect(mini.locator(".estate-plan-where")).toContainText("Build");
+  // A room on the plan is a door into the library, not an authority.
+  await mini.locator('.estate-plan-room[data-door="rest"]').click();
+  await expect(page.locator('.estate-library-door[data-door-id="rest"]')).toHaveAttribute("open", "");
+
+  await page.keyboard.press("Meta+K");
+  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
+  await expect(atlas).toBeVisible();
+  await expect(atlas.locator(".estate-plan-atlas .estate-plan-room.is-here")).toHaveAttribute("data-door", "build");
+  await expect(atlas.getByRole("link", { name: /Ritonavir/ })).toBeVisible();
+});
+
+test("the threshold shows the plan above the eight doors", async ({ page }) => {
+  await page.goto(`${WEB}/index.html`);
+  await expect(page.locator(".estate-home-door")).toHaveCount(8);
+  const plan = page.locator(".estate-plan-home");
+  await expect(plan).toHaveAttribute("data-active-door", "arrive");
+  await expect(plan.locator(".estate-plan-room.is-here .estate-plan-label")).toHaveText("ARRIVE");
 });
