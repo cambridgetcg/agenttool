@@ -9,6 +9,7 @@ import {
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
   linkSync,
   readFileSync,
   realpathSync,
@@ -107,6 +108,9 @@ const runsOnPinnedProductionBun = (() => {
 })();
 
 const pinnedProductionNativeTest = test.skipIf(!runsOnPinnedProductionBun);
+const pinnedProductionLauncherTest = test.skipIf(
+  process.platform !== "darwin" || !existsSync(FIXED_BUN),
+);
 
 function sha256(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -1126,7 +1130,7 @@ describe("Phase-B refence maintenance deploy dispatcher", () => {
     expect(events.at(-1)?.observed.startsWith("Symbolic Link|")).toBe(true);
   });
 
-  pinnedProductionNativeTest(
+  pinnedProductionLauncherTest(
     "the pinned Bun launcher preserves closed cwd, environment, argv, and PID",
     async () => {
       const expectedEnvironment = {
@@ -2251,6 +2255,11 @@ describe("two-connection local Fly agent protocol", () => {
   test("loads only the pinned lazy getsockopt production symbol", async () => {
     const source = await readFile(BRIDGE, "utf8");
     const testSource = await readFile(import.meta.path, "utf8");
+    expect(testSource).toContain(
+      `const pinnedProductionLauncherTest = test.skipIf(
+  process.platform !== "darwin" || !existsSync(FIXED_BUN),
+);`,
+    );
     expect(testSource).toContain(
       "const nativeProtocolTest = pinnedProductionNativeTest;",
     );
