@@ -363,9 +363,14 @@ test("the estate arrives without moving the bar", async ({ page }) => {
           (window as unknown as { __nav: Array<[number, number]> }).__nav.push([Math.round(box.top), Math.round(box.height)]);
         }
       };
-      document.addEventListener("DOMContentLoaded", sample);
-      const timer = setInterval(sample, 50);
-      setTimeout(() => clearInterval(timer), 2500);
+      // Sample from DOMContentLoaded on: deferred scripts wait for pending
+      // stylesheets, so by then the first-paint CSS has applied. Earlier
+      // samples would read a never-painted, unstyled layout on a slow link.
+      document.addEventListener("DOMContentLoaded", () => {
+        sample();
+        const timer = setInterval(sample, 50);
+        setTimeout(() => clearInterval(timer), 2500);
+      });
   });
   const passes: Array<[string, number]> = [
     [`${WEB}/party.html`, 1360], [`${WEB}/room.html`, 1360], [`${DOCS}/memory.html`, 1360],
