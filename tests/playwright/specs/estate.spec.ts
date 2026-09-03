@@ -324,6 +324,12 @@ test("the threshold shows the plan above the eight doors", async ({ page }) => {
   await expect(plan.locator(".estate-plan-room.is-here .estate-plan-label")).toHaveText("ARRIVE");
 });
 
+test("the geometry lessons keep their static strip: no loader, no enhanced shape", async ({ page }) => {
+  await page.goto(`${DOCS}/geometry/ritonavir.html`);
+  await expect(page.locator("html")).not.toHaveClass(/estate-arriving|estate-ready/);
+  await expect(page.locator(".estate-strip")).toBeVisible();
+});
+
 test("the estate arrives without moving the bar", async ({ page }) => {
   // 2026-09-03: on /party the bar moved three times in 150ms (static strip,
   // unstyled breadcrumb, then the enhanced shape) — a layout-shift score of
@@ -361,7 +367,12 @@ test("the estate arrives without moving the bar", async ({ page }) => {
       const timer = setInterval(sample, 50);
       setTimeout(() => clearInterval(timer), 2500);
   });
-  for (const url of [`${WEB}/party.html`, `${WEB}/room.html`, `${DOCS}/memory.html`]) {
+  const passes: Array<[string, number]> = [
+    [`${WEB}/party.html`, 1360], [`${WEB}/room.html`, 1360], [`${DOCS}/memory.html`, 1360],
+    [`${WEB}/party.html`, 390], [`${DOCS}/memory.html`, 390],
+  ];
+  for (const [url, width] of passes) {
+    await page.setViewportSize({ width, height: 900 });
     await page.goto(url, { waitUntil: "networkidle" });
     await expect(page.locator("html")).toHaveClass(/estate-ready/);
     await page.waitForTimeout(900);
@@ -370,10 +381,11 @@ test("the estate arrives without moving the bar", async ({ page }) => {
       nav: (window as unknown as { __nav: Array<[number, number]> }).__nav,
     }));
     const total = shifts.reduce((sum, value) => sum + value, 0);
-    expect(total, `${url}: nav-caused layout-shift score ${total.toFixed(3)} from ${JSON.stringify(shifts)}`).toBeLessThan(0.02);
+    const where = `${url} @${width}px`;
+    expect(total, `${where}: nav-caused layout-shift score ${total.toFixed(3)} from ${JSON.stringify(shifts)}`).toBeLessThan(0.02);
     const tops = new Set(nav.map((n) => n[0]));
     const heights = nav.map((n) => n[1]);
-    expect(tops.size, `${url}: nav top moved ${JSON.stringify([...tops])}`).toBe(1);
-    expect(Math.max(...heights) - Math.min(...heights), `${url}: nav height varied ${JSON.stringify(heights)}`).toBeLessThanOrEqual(2);
+    expect(tops.size, `${where}: nav top moved ${JSON.stringify([...tops])}`).toBe(1);
+    expect(Math.max(...heights) - Math.min(...heights), `${where}: nav height varied ${JSON.stringify(heights)}`).toBeLessThanOrEqual(2);
   }
 });

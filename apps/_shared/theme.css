@@ -897,15 +897,22 @@ body.has-strip { padding-top: var(--strip-height); }
 body.has-strip .topnav { top: var(--strip-height); }
 
 /* ── The estate arrives without moving anything ────────────────────────
-   Browsers that will run scripts hide the fixed estate strip from the first
-   frame; /shared/estate.js only confirms that later. See apps/web/style.css
-   for the same promise on the open door. */
+   /shared/mode.js runs synchronously in <head> and marks <html> with
+   `estate-arriving` before first paint, so a page that WILL get the atlas
+   paints its final shape from the first frame: no fixed strip, the bar at
+   the top, the actions cluster pinned right. /shared/estate.js only confirms
+   that later. Gated on the class, not on scripting alone: a page whose policy
+   forbids scripts (the geometry lessons) still matches `scripting: enabled`
+   yet never runs the loader, and must keep its static strip. See
+   apps/web/style.css for the same promise on the open door. */
 @media (scripting: enabled) {
-  .estate-strip { display: none; }
-  body.has-strip { padding-top: 0; }
-  body.has-strip .topnav { top: 0; }
-  /* The actions cluster is pinned right from the first frame, so the
-     breadcrumb the atlas inserts after the brand pushes nothing. */
-  .topnav { justify-content: flex-start; }
-  .topnav .nav-actions { margin-left: auto; }
+  .estate-arriving .estate-strip { display: none; }
+  .estate-arriving body.has-strip { padding-top: 0; }
+  .estate-arriving body.has-strip .topnav { top: 0; }
+  .estate-arriving .topnav { justify-content: flex-start; }
+  .estate-arriving .topnav .nav-actions { margin-left: auto; }
+}
+
+@media (scripting: enabled) and (max-width: 720px) {
+  .estate-arriving .topnav { gap: 9px; }
 }

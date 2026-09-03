@@ -382,3 +382,10 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   .site-nav .links::-webkit-scrollbar { display: none; }
   .site-nav .links a { flex: 0 0 auto; min-height: 28px; display: inline-flex; align-items: center; padding: 2px 0; font-size: 11px; }
 }
+/* The same values /shared/estate.css applies at these widths once ready. */
+@media (scripting: enabled) and (max-width: 720px) {
+  .site-nav { padding-top: 14px; flex-wrap: wrap; }
+}
+@media (scripting: enabled) and (max-width: 420px) {
+  .site-nav { column-gap: 8px; row-gap: 4px; }
+}

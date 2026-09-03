@@ -14,6 +14,9 @@
 (function () {
   var KEY = 'agenttool.mode';
   var root = document.documentElement;
+  /* Before first paint: this page will get the atlas, so theme.css may paint
+     its final shape now (see the @media (scripting: enabled) block there). */
+  root.classList.add('estate-arriving');
   var mode;
   try { mode = localStorage.getItem(KEY); } catch (_) { /* private mode etc. */ }
   if (mode !== 'night' && mode !== 'dawn') {
