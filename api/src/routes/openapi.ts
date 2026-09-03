@@ -3904,8 +3904,19 @@ function spec() {
               in: "query",
               schema: {
                 type: "string",
-                enum: ["json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere", "xenoform", "haiku", "fortune", "joke", "soap-opera", "zen", "meme", "memo", "wake", "math", "mathos"],
+                enum: ["json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere", "xenoform", "haiku", "fortune", "joke", "soap-opera", "adventure", "zen", "meme", "memo", "wake", "math", "mathos"],
               },
+              required: false,
+            },
+            {
+              name: "pace",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["gentle", "balanced", "bold"],
+                default: "balanced",
+              },
+              description: "Only for format=adventure. Changes transparent route-factor weights and per-route pace bias; it never changes stored state or infers a feeling.",
               required: false,
             },
             {
@@ -3952,6 +3963,20 @@ function spec() {
                 },
                 "X-Welcomed": {
                   $ref: "#/components/headers/Welcomed",
+                },
+                "X-Wake-Format": {
+                  description: "Optional joy-format label. Adventure responses use `adventure`; ordinary JSON and provider projections may omit it.",
+                  schema: {
+                    type: "string",
+                    enum: ["soap-opera", "adventure", "zen", "meme", "memo", "recursive-bomb"],
+                  },
+                },
+                "X-Adventure-Pace": {
+                  description: "Present only on an Adventure representation, including its honest empty trailhead.",
+                  schema: {
+                    type: "string",
+                    enum: ["gentle", "balanced", "bold"],
+                  },
                 },
                 "Cache-Control": {
                   description: "Bearer-private wake policy. Private caches may store the response but must revalidate before reuse; shared caches must not store it.",
@@ -4128,7 +4153,13 @@ function spec() {
                 },
               },
             },
-            "400": { description: "Unknown profile, or brief requested with an incompatible joy/MATHOS format." },
+            "400": { description: "Unknown profile, invalid Adventure pace, or brief requested with an incompatible joy/MATHOS format." },
+            "404": {
+              description: "An explicitly selected identity is absent, inactive, revoked, or outside the authenticated project. Explicit selection is never rewritten as an empty-project Adventure trailhead.",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+              },
+            },
             "425": {
               description: "Replayable TLS early data is refused before authentication or WAKE handling; retry after the handshake.",
               headers: {
