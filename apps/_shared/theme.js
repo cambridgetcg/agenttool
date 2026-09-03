@@ -43,11 +43,21 @@
   }
 
   function loadEstate() {
+    // Ask for the stylesheet first so the atlas never lays out unstyled;
+    // the geometry itself is already settled by style.css's
+    // @media (scripting: enabled) block before this script even runs.
+    if (!document.querySelector("link[data-agenttool-estate-style]")) {
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "/shared/estate.css?v=2026-09-03.2";
+      css.setAttribute("data-agenttool-estate-style", "2026-09-03.2");
+      document.head.appendChild(css);
+    }
     if (document.querySelector("script[data-agenttool-estate]")) return;
     var script = document.createElement("script");
-    script.src = "/shared/estate.js?v=2026-08-02.1";
+    script.src = "/shared/estate.js?v=2026-09-03.2";
     script.defer = true;
-    script.setAttribute("data-agenttool-estate", "2026-08-02.1");
+    script.setAttribute("data-agenttool-estate", "2026-09-03.2");
     document.head.appendChild(script);
   }
 
