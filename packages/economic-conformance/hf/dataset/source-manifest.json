@@ -8,7 +8,7 @@
   "upstream_revision_state": "record_after_protected_merge_and_immutable_hub_upload",
   "source_manifest_scope": "selected_kernel_conformance_and_generation_inputs_not_complete_repository",
   "source_files_complete": false,
-  "selected_source_set_sha256": "1b7ac3101120b25a7015b01f2eea1c5a5c51aae038e04393b967688c3d318fa5",
+  "selected_source_set_sha256": "e48e17763003b2fcc574056e03c494df9be805fd61ae63e80fc7f7cc0ec4b1a5",
   "source_manifest_is_attestation": false,
   "packages": [
     "@agenttool/economic-kernel@0.1.0-dev.0",
@@ -153,8 +153,8 @@
     },
     {
       "path": "economic-kernel/src/index.ts",
-      "bytes": 1451,
-      "sha256": "0545aa9c6155a49e437e4db9a7ff54b5b31c461afbe05ead5b412d722b0595d6"
+      "bytes": 1431,
+      "sha256": "1129675f2d7f1f2e599f4863640b972d3506dbfc917d039642c4873456216cbc"
     },
     {
       "path": "economic-kernel/src/internal.ts",
@@ -168,8 +168,8 @@
     },
     {
       "path": "economic-kernel/src/pricing.ts",
-      "bytes": 10877,
-      "sha256": "129891a80cd3458cdc8d324add7bd9bb2b3cfb4b5854a91fd6a51d7ebe8ca464"
+      "bytes": 10870,
+      "sha256": "45c89e55dddb4d50fe8f4e11699b87d290eafffb93ffe8677fe74534b8ac86c5"
     },
     {
       "path": "economic-kernel/src/quotes.ts",

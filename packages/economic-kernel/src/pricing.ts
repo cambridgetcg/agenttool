@@ -204,7 +204,7 @@ export function validatePriceBookTimeline(
   return deepFreeze(revisions);
 }
 
-export function priceIsEffective(revision: PriceRevision, observedAt: string): boolean {
+function priceIsEffective(revision: PriceRevision, observedAt: string): boolean {
   const at = timestamp(observedAt, "observed_at");
   const instant = Date.parse(at);
   return instant >= Date.parse(revision.effective_from)

@@ -2,9 +2,15 @@ import { readFileSync, readdirSync } from "node:fs";
 
 import { describe, expect, test } from "bun:test";
 
+import * as publicApi from "../src/index.js";
+
 const packageRoot = new URL("../", import.meta.url);
 
 describe("package boundary", () => {
+  test("does not expose helpers that require an already validated price revision", () => {
+    expect("priceIsEffective" in publicApi).toBeFalse();
+  });
+
   test("runtime source remains pure, public, and dependency-free", () => {
     const packageJson = JSON.parse(readFileSync(new URL("package.json", packageRoot), "utf8")) as {
       bundleDependencies?: string[] | boolean;

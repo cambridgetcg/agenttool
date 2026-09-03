@@ -14,7 +14,6 @@ export {
   convertAmount,
   createPriceRevision,
   derivePriceRevisionId,
-  priceIsEffective,
   selectEffectivePriceRevision,
   validatePriceBookTimeline,
   validatePriceRevision,

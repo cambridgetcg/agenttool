@@ -49,7 +49,7 @@
     {
       "path": "source-manifest.json",
       "bytes": 6664,
-      "sha256": "0789cce258bc1c441b7edebbf5e5a17b915171895165863801e0a84ae3c15e96"
+      "sha256": "9eaed67f80674c89bf2c40a6ac83450372409b6ca9a072f92b22e94974284492"
     },
     {
       "path": "training-authorization.json",
