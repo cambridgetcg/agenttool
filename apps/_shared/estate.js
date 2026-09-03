@@ -271,14 +271,20 @@
     return path || "/";
   }
 
-  function effectiveHost() {
-    var host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      if (window.location.port === "5173") return "app.agenttool.dev";
-      if (window.location.port === "5175") return "docs.agenttool.dev";
+  /* Local previews serve each surface from a port; map them to the host
+   * they stand for so every comparison — the current page, a legacy link,
+   * a registry room — speaks the same name. */
+  function hostFor(hostname, port) {
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      if (port === "5173") return "app.agenttool.dev";
+      if (port === "5175") return "docs.agenttool.dev";
       return "agenttool.dev";
     }
-    return host;
+    return hostname;
+  }
+
+  function effectiveHost() {
+    return hostFor(window.location.hostname, window.location.port);
   }
 
   function currentLocation() {
@@ -290,7 +296,7 @@
 
   function roomLocation(href) {
     var url = new URL(href, window.location.href);
-    return { host: url.hostname, path: normalizedPath(url.pathname) };
+    return { host: hostFor(url.hostname, url.port), path: normalizedPath(url.pathname) };
   }
 
   function currentEntry() {
