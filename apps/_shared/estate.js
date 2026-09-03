@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-03.2";
+  var VERSION = "2026-09-03.3";
   var DOORS = [
     {
       id: "arrive",
@@ -706,13 +706,29 @@
   function enhanceNavigation(entry) {
     var nav = document.querySelector("nav.site-nav, nav.topnav");
     if (!nav) {
-      var floating = element("button", "estate-floating-open", "Rooms");
-      floating.type = "button";
-      floating.setAttribute("aria-haspopup", "dialog");
-      floating.setAttribute("aria-controls", "agenttool-estate-atlas");
-      floating.addEventListener("click", function () { openAtlas(floating); });
-      document.body.appendChild(floating);
-      return;
+      // A page with no bar of its own gets the same bar as every other:
+      // brand, KINGDOM breadcrumb, Home · Docs · Rooms, appearance toggle.
+      // Fixed and self-styled, so the page's own body is untouched; the
+      // space it needs is reserved before first paint by estate.css when
+      // mode.js ran (html.estate-arriving without a nav).
+      nav = element("nav", "estate-bar");
+      nav.setAttribute("aria-label", "agenttool estate");
+      var brand = element("a", "brand estate-bar-brand");
+      brand.href = "https://agenttool.dev/";
+      brand.setAttribute("aria-label", "agenttool — welcome");
+      var mark = element("span", "estate-bar-mark");
+      mark.setAttribute("aria-hidden", "true");
+      var text = element("span", "estate-bar-text", "agent");
+      var accent = element("span", "", "tool");
+      text.appendChild(accent);
+      append(brand, mark, text);
+      nav.appendChild(brand);
+      document.body.insertBefore(nav, document.body.firstChild);
+      addClass(document.documentElement, "estate-bare");
+      // The appearance toggle only means something where the shared theme
+      // is what paints the page; a self-styled culture page ignores it.
+      var toggle = document.getElementById("tg");
+      if (toggle && !document.querySelector('link[href*="/shared/theme.css"]')) toggle.hidden = true;
     }
     buildLocation(nav, entry);
     buildQuickActions(nav);
