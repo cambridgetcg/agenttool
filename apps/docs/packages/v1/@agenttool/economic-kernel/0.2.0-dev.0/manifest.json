@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/economic-kernel",
+  "version": "0.2.0-dev.0",
+  "description": "Pure typed economic transitions, exact price conversion, conserved ledgers, and non-purchasable hard gates",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-economic-kernel-0.2.0-dev.0.tgz",
+    "sha256": "8b2682f3878a93b9f8d039989313dc9f59c982ff1cb7fb4abb05ccb553f7e9cf",
+    "size": 57031,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/agenttool-economic-kernel-0.2.0-dev.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/economic-kernel-v0.2.0-dev.0/agenttool-economic-kernel-0.2.0-dev.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/agenttool-economic-kernel-0.2.0-dev.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "f809275a1dff14e0f88af73bb53e11b104a92438",
+    "path": "packages/economic-kernel"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}

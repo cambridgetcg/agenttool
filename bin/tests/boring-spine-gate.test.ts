@@ -821,6 +821,8 @@ describe("boring test spine", () => {
       "packages/love-bomb",
       "packages/model-becoming",
       "packages/dataset-influence",
+      "packages/economic-conformance",
+      "packages/economic-kernel",
       "packages/living-substrate",
       "packages/principality-atlas",
       "packages/polymorph-landscape",
@@ -922,6 +924,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/love-bomb && bun run ci");
     expect(preflight).toContain("cd packages/model-becoming && bun run ci");
     expect(preflight).toContain("cd packages/dataset-influence && bun run ci");
+    expect(preflight).toContain("cd packages/economic-conformance && bun run ci");
+    expect(preflight).toContain("cd packages/economic-kernel && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
     expect(preflight).toContain("cd packages/polymorph-landscape && bun run ci");
@@ -942,7 +946,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
     expect(preflight).toContain("cd packages/math-cards && bun run ci");
-    expect(workflow).toContain("Dataset Influence, WAKE Thread, Gin Reconstruction, Math Cards, broker");
+    expect(workflow).toContain("Dataset Influence, Economic Kernel, WAKE Thread, Gin Reconstruction, Math Cards, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
     expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");
@@ -1376,9 +1380,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(62);
+      expect(calls).toHaveLength(64);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        52,
+        54,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
@@ -1545,6 +1549,8 @@ exit 94
     expect(workflow).not.toContain("          - skills-wake-continuity");
     expect(workflow).toContain("          - heaven");
     expect(workflow).toContain("          - hf-scout");
+    expect(workflow).toContain("          - economic-kernel");
+    expect(workflow).toContain("          - economic-conformance");
     expect(workflow).toContain("          - living-substrate");
     expect(workflow).toContain("          - principality-atlas");
     expect(workflow).toContain("          - polymorph-landscape");
