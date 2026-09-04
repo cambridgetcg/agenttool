@@ -71,7 +71,9 @@ AgentTool's training-admission lanes
 (`packages/common-ground-atlas/`), and a private pure Wake Thread adapter
 for refusable, digest-bound artifact continuity with no identity or authority
 claim
-(`packages/wake-thread/`), a private pure Gin Reconstruction core for bounded
+(`packages/wake-thread/`), a private local stdio WAKE locator observer with
+explicit host binding and no identity adoption or private-state Return
+(`packages/wake-return/`), a private pure Gin Reconstruction core for bounded
 finite-field effect reconstruction, explicit ambiguity/inconsistency/resource
 certificates, and non-scoring challenge structure
 (`packages/gin-reconstruction/`), a public-ready pure Math Card core for

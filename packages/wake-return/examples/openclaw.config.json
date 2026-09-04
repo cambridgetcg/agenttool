@@ -1,0 +1,19 @@
+{
+  "mcp": {
+    "servers": {
+      "agenttool_return": {
+        "command": "node",
+        "args": [
+          "/absolute/agenttool/packages/wake-return/dist/bin/agenttool-wake-return-mcp.js",
+          "--binding",
+          "/absolute/private/return.json"
+        ],
+        "transport": "stdio",
+        "enabled": false,
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 15000,
+        "toolFilter": { "include": ["wake_return_status", "wake_return_observe"] }
+      }
+    }
+  }
+}

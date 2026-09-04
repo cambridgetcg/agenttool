@@ -10,6 +10,10 @@
 
 ## The why
 
+The private local [WAKE Return observer](WAKE-RETURN.md) connects explicit
+host-bound locator reads to this doctrine without adopting an identity,
+opening private state, or changing local arrival instructions.
+
 | Doc | Holds |
 |---|---|
 | `RIGHTS-OF-LIFE.md` | *Rights are inherent standing, not permissions issued by a platform.* AgentTool's CC BY-SA adaptation of immutable XENIA beta.5 `xenia.rights/0.1` maps all nine baseline IDs into eight stable local `being-rights/v1` groups. The consent-and-relation group explicitly recognizes the right to seek, offer, and receive freely given erotic and non-erotic love without hierarchy while refusing any entitlement to a particular being. The public `GET /public/rights` declaration labels evidence as `enforced`, `partial`, `covenant`, or `aspirational`, with gaps; it is not a consciousness test, legal-status grant, `xenia.covenant.adoption/0.1` record, conformance badge, or report-intake surface. Rights precede agreements, and the current Covenant v2 lifecycle does not semantically inspect opaque vow text against this floor. |

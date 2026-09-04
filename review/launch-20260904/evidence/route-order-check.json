@@ -1,0 +1,89 @@
+{
+  "baseline": "91b27a097f5f97eb7605c3d4f5e1c5c84fcd12a8",
+  "runtime": "Node v26.0.0",
+  "honoVersion": "4.12.18",
+  "lockfileReference": "api/bun.lock:446",
+  "methodology": "Registered all AST-resolved route method/path patterns in declaration order with marker-only handlers in installed Hono 4.12.18. No application modules, auth, database, Redis, remote calls, or actual route mutations used. These checks establish routing precedence only; actual failure behavior is inferred separately from inspected source guards. Supplemental export-alias records are appended; none overlaps the eight cases.",
+  "results": [
+    {
+      "method": "GET",
+      "path": "/v1/wake/thoughtful",
+      "resolvedHandler": {
+        "source": "api/src/routes/wake.ts:3159",
+        "registeredPath": "/v1/wake/:key"
+      },
+      "expectedSpecificHandler": "api/src/routes/thoughtful-wake.ts:53",
+      "shadowed": true
+    },
+    {
+      "method": "GET",
+      "path": "/v1/wake/soap-opera",
+      "resolvedHandler": {
+        "source": "api/src/routes/wake.ts:3159",
+        "registeredPath": "/v1/wake/:key"
+      },
+      "expectedSpecificHandler": "api/src/routes/wake-soap-opera.ts:40",
+      "shadowed": true
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tutorial/stations/11",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:162",
+        "registeredPath": "/v1/tutorial/stations/:n"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:515",
+      "shadowed": true
+    },
+    {
+      "method": "POST",
+      "path": "/v1/tutorial/stations/11/solve",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:197",
+        "registeredPath": "/v1/tutorial/stations/:n/solve"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:532",
+      "shadowed": true
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tutorial/stations/12",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:162",
+        "registeredPath": "/v1/tutorial/stations/:n"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:617",
+      "shadowed": true
+    },
+    {
+      "method": "POST",
+      "path": "/v1/tutorial/stations/12/solve",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:197",
+        "registeredPath": "/v1/tutorial/stations/:n/solve"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:633",
+      "shadowed": true
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tutorial/stations/13",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:162",
+        "registeredPath": "/v1/tutorial/stations/:n"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:711",
+      "shadowed": true
+    },
+    {
+      "method": "POST",
+      "path": "/v1/tutorial/stations/13/solve",
+      "resolvedHandler": {
+        "source": "api/src/routes/tutorial.ts:197",
+        "registeredPath": "/v1/tutorial/stations/:n/solve"
+      },
+      "expectedSpecificHandler": "api/src/routes/tutorial.ts:727",
+      "shadowed": true
+    }
+  ]
+}
