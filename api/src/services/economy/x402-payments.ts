@@ -43,8 +43,16 @@ import {
   x402ProjectCreditPolicy,
   x402ProjectCreditResource,
 } from "./x402-policy";
+import { installEnvBuilderRpcResolver } from "./x402-builder-rpc";
+import { resolveChallengePayTo } from "./x402-builder-split";
 
 export { ATOMIC_PER_CREDIT };
+
+function requestBuilderCodeHeader(c: Context): string | undefined {
+  const req = c.req as { header?: (name: string) => string | undefined } | undefined;
+  if (typeof req?.header !== "function") return undefined;
+  return req.header("x-builder-code") ?? undefined;
+}
 export const X402_ATTEMPT_WINDOW_SECONDS = 10 * 60;
 export const X402_ATTEMPT_LIMIT_PER_PROJECT = 5;
 
@@ -580,16 +588,22 @@ export function createX402Verifier(deps: X402VerifierDeps) {
         if (!recipient || !network) return false;
         const currentResource = x402ProjectCreditResource(policy, c.req.url);
         if (!currentResource) return false;
+        installEnvBuilderRpcResolver();
+        const payTo = await resolveChallengePayTo({
+          treasury: recipient,
+          header: requestBuilderCodeHeader(c),
+          payload: payment,
+        });
         const expected = buildPaymentRequirements({
           amountAtomic: policy.amountAtomic,
-          payTo: recipient,
+          payTo,
           network,
           maxTimeoutSeconds: 60,
         });
         if (
           !requirementMatches(payment.accepted, expected) ||
           !resourceMatches(payment.resource, currentResource) ||
-          exact.authorization.to.toLowerCase() !== recipient.toLowerCase() ||
+          exact.authorization.to.toLowerCase() !== payTo.toLowerCase() ||
           exact.authorization.value !== policy.amountAtomic ||
           !authorizationWindowIsSane(
             exact,

@@ -303,12 +303,14 @@ export function buildPaymentRequired(
   resource: ResourceInfo,
   accepts: PaymentRequirements[],
   error?: string,
+  extensions?: Record<string, unknown>,
 ): PaymentRequired {
   return {
     x402Version: X402_VERSION,
     ...(error ? { error } : {}),
     resource,
     accepts,
+    ...(extensions && Object.keys(extensions).length > 0 ? { extensions } : {}),
   };
 }
 
