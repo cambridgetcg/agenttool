@@ -35,4 +35,4 @@ RUN git init /tmp/pg_cron \
 COPY init.sql /docker-entrypoint-initdb.d/10-launch-platform.sql
 COPY verify.sql /opt/agenttool-launch/verify.sql
 
-CMD ["postgres", "-c", "shared_preload_libraries=pg_cron,pg_net", "-c", "cron.database_name=agenttool_launch_core", "-c", "cron.launch_active_jobs=off", "-c", "pg_net.database_name=agenttool_launch_core"]
+CMD ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=56268", "-c", "shared_preload_libraries=pg_cron,pg_net", "-c", "cron.database_name=agenttool_launch_core", "-c", "cron.launch_active_jobs=off", "-c", "pg_net.database_name=agenttool_launch_core"]

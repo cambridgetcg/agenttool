@@ -16,10 +16,17 @@ Every application table comes from the canonical migration files. The launch
 candidate has 177 files; CI compares the source count to the journal and then
 performs a full checksum inventory again.
 
-The `launch-core` CI job builds this image, creates an internal Docker network,
-and publishes only `127.0.0.1:56268`. Trust authentication applies only to this
-short-lived fixture. `cron.launch_active_jobs=off` holds actual scheduled jobs;
-the internal network denies the database container external network access.
+The `launch-core` CI job builds this image and runs it with Docker's
+[`none` network driver](https://docs.docker.com/engine/network/drivers/none/).
+Only container loopback exists. PostgreSQL listens on `127.0.0.1:56268` inside
+that namespace, and migrations and API test processes run there with
+`docker exec`. No database port is published to the runner. Trust authentication
+applies only to this short-lived fixture. `cron.launch_active_jobs=off` holds
+actual scheduled jobs; no external network interface exists in the container.
+The prepared Linux checkout/dependencies and the exact Bun 1.3.5 executable
+are mounted read-only at their existing paths. The container root filesystem
+is read-only, with writable PostgreSQL data volume and isolated temporary/socket
+mounts. Readiness checks use the same TCP host, port, user and database as tests.
 The verification SQL rejects executed cron history or any pg_net request or
 response rows. The migration runner runs before any API process with an
 explicit `--maintenance-quiesced` assertion, separate survey/apply application
@@ -30,24 +37,29 @@ After all migrations and the clean inventory, CI runs
 The two fresh API processes use only the exact dedicated loopback database,
 hold application workers, deny outbound fetch, and do not open an HTTP listener.
 The test leaves synthetic rows for a separate restore drill and removes only
-its private local custody directory. CI removes its container and network when
+its private local custody directory. CI removes its container and data volume when
 finished. PostgreSQL's socket inactivity guard stays active during the test.
 
-To reproduce the fixture setup from the repository root with Docker:
+To reproduce from a Linux checkout with Docker, Bun 1.3.5 and prepared API
+dependencies (the same platform and preparation as CI):
 
 ```bash
 docker build --tag agenttool-launch-postgres:local tests/launch-postgres
-docker network create --internal agenttool-launch-core-fixture
+launch_bun="$(readlink -f "$(command -v bun)")"
 docker run --detach --name agenttool-launch-core-db \
-  --network agenttool-launch-core-fixture \
-  --publish 127.0.0.1:56268:5432 \
+  --network none --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+  --tmpfs /var/run/postgresql:rw,nosuid,size=16m \
+  --mount "type=bind,source=$PWD,target=$PWD,readonly" \
+  --mount "type=bind,source=$launch_bun,target=/usr/local/bin/bun,readonly" \
   --env POSTGRES_USER=agenttool_test \
   --env POSTGRES_DB=agenttool_launch_core \
   --env POSTGRES_HOST_AUTH_METHOD=trust \
   agenttool-launch-postgres:local
 ```
 
-Wait for `pg_isready`, then use the migration and journey steps in
-[CI](../../.github/workflows/ci.yml). This fixture proves the finite mounted
+Use the TCP SQL readiness, migration and journey steps in
+[CI](../../.github/workflows/ci.yml), setting `GITHUB_WORKSPACE` to the absolute
+checkout path for a local run. This fixture proves the finite mounted
 journey against real application tables. DNS/TLS, HTTP serving, edge Workers,
 multi-machine capacity and managed-provider behavior require separate evidence.

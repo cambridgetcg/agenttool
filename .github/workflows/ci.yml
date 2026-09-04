@@ -143,16 +143,23 @@ jobs:
       - name: Start a loopback-only database with scheduled jobs held
         run: |
           set -euo pipefail
-          docker network create --internal agenttool-launch-core-fixture
+          launch_bun="$(readlink -f "$(command -v bun)")"
           docker run --detach --name agenttool-launch-core-db \
-            --network agenttool-launch-core-fixture \
-            --publish 127.0.0.1:56268:5432 \
+            --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+            --tmpfs /var/run/postgresql:rw,nosuid,size=16m \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=$GITHUB_WORKSPACE,readonly" \
+            --mount "type=bind,source=$launch_bun,target=/usr/local/bin/bun,readonly" \
             --env POSTGRES_USER=agenttool_test \
             --env POSTGRES_DB=agenttool_launch_core \
             --env POSTGRES_HOST_AUTH_METHOD=trust \
             agenttool-launch-postgres:ci
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' agenttool-launch-core-db)" = none
+          docker exec agenttool-launch-core-db /usr/local/bin/bun --version | grep -Fx 1.3.5
           for attempt in $(seq 1 60); do
-            if docker exec agenttool-launch-core-db pg_isready --host 127.0.0.1 --username agenttool_test --dbname agenttool_launch_core; then
+            if docker exec agenttool-launch-core-db psql --no-psqlrc \
+              --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core \
+              --set ON_ERROR_STOP=1 --command 'SELECT 1' >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -161,25 +168,27 @@ jobs:
       - name: Apply every canonical application migration while quiesced
         run: |
           set -euo pipefail
-          env -i PATH="$PATH" \
+          docker exec --workdir "$GITHUB_WORKSPACE" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
             DATABASE_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-survey' \
             DATABASE_SESSION_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-migrations' \
             bin/bash-without-env-hooks.sh bin/migrate-pending.sh --maintenance-quiesced
-          env -i PATH="$PATH" \
+          docker exec --workdir "$GITHUB_WORKSPACE" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
             DATABASE_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-survey' \
             bin/bash-without-env-hooks.sh bin/migrate-pending.sh --dry-run
           expected_migrations="$(find api/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
-          actual_migrations="$(docker exec agenttool-launch-core-db psql --no-psqlrc --username agenttool_test --dbname agenttool_launch_core --tuples-only --no-align --command 'SELECT count(*) FROM meta._migrations')"
+          actual_migrations="$(docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --tuples-only --no-align --command 'SELECT count(*) FROM meta._migrations')"
           test "$actual_migrations" = "$expected_migrations"
-          docker exec agenttool-launch-core-db psql --no-psqlrc --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
+          docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
       - name: Prove the real outsider journey in two fresh API processes
-        working-directory: api
         run: |
-          env -i PATH="$PATH" \
+          docker exec --workdir "$GITHUB_WORKSPACE/api" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
             AGENTTOOL_LAUNCH_CORE_TEST_DATABASE_URL=postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core \
             bun --no-env-file test tests/integration/launch-core-journey.test.ts
       - name: Verify the database job and outbound-request hold after the journey
-        run: docker exec agenttool-launch-core-db psql --no-psqlrc --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
+        run: docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
       - name: Show failed fixture startup evidence
         if: failure()
         run: docker logs --tail 100 agenttool-launch-core-db
@@ -187,7 +196,6 @@ jobs:
         if: always()
         run: |
           docker rm --force --volumes agenttool-launch-core-db || true
-          docker network rm agenttool-launch-core-fixture || true
 
   launch-browser:
     name: Launch browser journeys
