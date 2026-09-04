@@ -32,6 +32,10 @@ surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
 `CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
 repository guides; finding either guide performs no registration, installation,
 Castle read, or follow-up.
+`WAKE-RETURN.md` uses the same canonical-guide symlink convention. Its package
+and example links point to reviewed, commit-pinned repository source; serving
+this guide does not publish the private Return package, distribute an artifact,
+install a host integration, or observe a private identity.
 `HF-TRAINING-GARDEN.md` is likewise a symlink to the canonical repository
 guide. It documents an immutable, public-safe HF data lifecycle and one-way
 Garden reference plan; serving the guide does not download data, accept a gate,
