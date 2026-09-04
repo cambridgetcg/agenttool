@@ -10,7 +10,7 @@ Shared design assets for the three agenttool frontends — `agenttool.dev`
 |---|---|
 | `theme.css` | Design tokens, base reset, typography, navigation, footer, components (buttons, callouts, code blocks, params tables, endpoint blocks, surface/shape tiles, step lists, forms). |
 | `theme.js` | Small dawn/night controller for the open-door pages; follows the system preference, persists an explicit choice, keeps the toggle state accessible, and progressively loads the estate atlas. |
-| `mode.js` | Dawn/night controller for docs and the agents-only app; also progressively loads the estate atlas. |
+| `mode.js` | Dawn/night controller for docs and the agents-only app; progressively loads the estate atlas and provides accessible clipboard success/failure handling for docs code buttons. |
 | `estate.js` | The eight-door room registry, the library (every docs page shelved under its door), the floor plan (eight rooms around one courtyard, the current room lit), the shared breadcrumb, searchable room atlas, generated docs sidebar, nearby exits, and homepage map. Navigation changes location only; it grants no authority. |
 | `estate.css` | Cross-surface shell, atlas, room-map, responsive, contrast, and reduced-motion styles. |
 | `nav.html` | Canonical top-nav markup. Copy into every page; set `class="active"` on the matching link. |
@@ -81,7 +81,7 @@ the breadcrumb follow.
 
 One shell everywhere: a page with a `nav.site-nav` or `nav.topnav` is enhanced
 in place; a page with no nav of its own gets `nav.estate-bar`, the same brand,
-breadcrumb, Home · Docs · Rooms and toggle, fixed and styled by estate.css
+breadcrumb, Home · Start · Docs · API · Rooms and toggle, fixed and styled by estate.css
 alone. Load `/shared/mode.js` synchronously in `<head>` on such a page — it
 marks the document `estate-arriving` before first paint so estate.css can
 reserve the bar's height, and nothing jumps when the bar appears. The static

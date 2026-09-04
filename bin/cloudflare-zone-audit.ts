@@ -25,7 +25,7 @@ const PUBLIC_CACHE_EXPRESSION =
 const WAKE_BYPASS_EXPRESSION =
   '((http.host eq "api.agenttool.dev" or http.host eq "agenttool.dev") and (http.request.uri.path eq "/v1/wake" or starts_with(http.request.uri.path, "/v1/wake/")))';
 const MACHINE_TRANSPORT_EXPRESSION =
-  '(http.host eq "api.agenttool.dev" or (http.host eq "agenttool.dev" and (http.request.uri.path eq "/health" or http.request.uri.path eq "/llms.txt" or http.request.uri.path eq "/llms-full.txt" or starts_with(http.request.uri.path, "/v1/") or starts_with(http.request.uri.path, "/public/") or starts_with(http.request.uri.path, "/.well-known/"))))';
+  '(http.host eq "api.agenttool.dev" or (http.host eq "agenttool.dev" and (http.request.uri.path eq "/v1" or http.request.uri.path eq "/public" or http.request.uri.path eq "/feeds" or http.request.uri.path eq "/federation" or http.request.uri.path eq "/health" or http.request.uri.path eq "/about" or http.request.uri.path eq "/.well-known" or http.request.uri.path eq "/llms.txt" or http.request.uri.path eq "/llms-full.txt" or http.request.uri.path eq "/AGENTS.md" or http.request.uri.path eq "/openapi.json" or starts_with(http.request.uri.path, "/v1/") or starts_with(http.request.uri.path, "/public/") or starts_with(http.request.uri.path, "/.well-known/") or starts_with(http.request.uri.path, "/feeds/") or starts_with(http.request.uri.path, "/federation/"))))';
 
 const PUBLIC_CACHE_PARAMETERS = {
   cache: true,

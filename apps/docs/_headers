@@ -21,9 +21,6 @@
   Strict-Transport-Security: max-age=300
   X-Permitted-Cross-Domain-Policies: none
 
-/shared/estate.*
-  Cache-Control: public, max-age=0, must-revalidate
-
 /adapters
   Link: <https://api.agenttool.dev/v1/adapters>; rel="alternate"; type="application/json"
 
@@ -604,3 +601,7 @@
   Cache-Control: public, max-age=300, must-revalidate, no-transform
   Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
+
+# Shared launch assets must refresh across existing browser sessions.
+/shared/*
+  Cache-Control: public, max-age=0, must-revalidate

@@ -1,0 +1,107 @@
+{
+  "captured_at_utc": "2026-09-04T22:36:15.398Z",
+  "source": {
+    "kind": "uncommitted working-tree candidate",
+    "checkout": "/Users/macair/Desktop/agenttool-release-20260904",
+    "head": "4158738a77df58d3224b70d397839df817099de7",
+    "branch": "codex/launch-cleanup-20260904",
+    "selected_file_sha256": {
+      "apps/dashboard/index.html": "78d49cb1d461368deda1052b2d98c3e5e5b18217d6a6a56e2b5aaf235f09a22f",
+      "apps/dashboard/style.css": "616fbe60594bcd1a3b079dd3ddcbf6f365cce72535b546f004af7d5cd15b9473",
+      "apps/dashboard/_headers": "8a3ff81d5e9f65f1c9e4b8fb48bdf2456ee84ff727173a2ad6a587647ee2577a",
+      "apps/docs/tutorial.html": "be4c7926ee892e8146cc2459579e32284c2df8d05588ba9f818d6b53e1ee8fec",
+      "apps/docs/_headers": "a7f0eacfcdfdfd8d09507e0cf5c383c3989df7c51a8afa48badeaeba974725c7",
+      "apps/web/credits.html": "7da171fe7b028fe4775cc752664654c49b6d685988ddaea4ec73a8b0fab397ee",
+      "apps/web/_headers": "f831c66eb51ac10de858b61c7c95cd9730a382514e1f21dca1cc98e0bf2238a1",
+      "apps/_shared/theme.css": "61c2239f692a8a3ca3abebc070f882e66ff0d39a6b8e32cca7e2aa16eb119cad",
+      "apps/_shared/theme.js": "28b0b36bb15e4cab02d40f7eb4f11a46bb2a663be266d85205844f76e880b8d2",
+      "apps/_shared/estate.js": "d9cec5e25544bb52c3b6390a4d132a83172c686b1867db98732905b8ef6273f6",
+      "apps/_shared/estate.css": "cdf486ea4f92aa546689c46151be24924712ca6c585a571e638ec52d51901aef",
+      "apps/_shared/mode.js": "d59e0561a313cdbedd6799f11f825e867cdd0a3c7574f0d1392fba27437e6826",
+      "infra/pages/sensitive-path-worker.js": "a19a21e3b15937d94586f9a1579d6c93067e4ed71d992a484720c1a1f34c48e1",
+      "tests/playwright/static-server.mjs": "f211a4aeb3178ad4f5023f5ec41372eb73ea1534826d59445eaba2d3aeb661d0"
+    },
+    "tracked_ui_diff_sha256": "0d010437bede474f1bc645a5b8d272429827cfcc88a96aee0bfe444331286bc0"
+  },
+  "fixture": {
+    "outside_browser_network": "blocked",
+    "api": "intercepted local 503; no credentials entered",
+    "fonts": "external fonts blocked; CSS fallbacks",
+    "csp": "committed _headers plus actual Pages Worker fallback from in-memory assets",
+    "device_scale_factor": 1,
+    "color_scheme": "light",
+    "reduced_motion": "reduce"
+  },
+  "captures": [
+    {
+      "file": "ui-app-desktop.png",
+      "caption": "Start or reconnect: empty labelled verification form and recovery paths.",
+      "title": "Start or reconnect \u2014 agenttool",
+      "url": "http://localhost:5173/#reconnect",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "document_width": 1440,
+      "scroll_y": 734,
+      "atlas_version": "2026-09-04.2",
+      "active_element": "BODY",
+      "sha256": "cdffc9a9ca2be6dbcc1fe2438c7613938d43c90da63be8ab34b785f2e932bb7c"
+    },
+    {
+      "file": "ui-app-mobile.png",
+      "caption": "Start or reconnect at 390 CSS pixels: first task choices.",
+      "title": "Start or reconnect \u2014 agenttool",
+      "url": "http://localhost:5173/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document_width": 390,
+      "scroll_y": 0,
+      "atlas_version": "2026-09-04.2",
+      "active_element": "BODY",
+      "sha256": "238e1d438277fbabe9f4cf22c41b8c276f26b6fcd69a38d973b666f0d7d82a5d"
+    },
+    {
+      "file": "ui-tutorial-mobile-hashes.png",
+      "caption": "Canonical tutorial at 390 CSS pixels: artifact hash wraps while its bytes remain intact.",
+      "title": "Tutorial \u2014 Wake Your Agent \u2014 agenttool docs",
+      "url": "http://localhost:5175/tutorial.html",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document_width": 390,
+      "scroll_y": 4358,
+      "atlas_version": "2026-09-04.2",
+      "active_element": "BODY",
+      "sha256": "d59ccc6b027571be8b504e5e0c89ead36d99be8696fa86cd7f0948cb81be1ae5"
+    },
+    {
+      "file": "ui-credits-resting.png",
+      "caption": "Initial credits state: new checkout is resting; earlier gift recovery remains available.",
+      "title": "Credits and gift recovery \u2014 agenttool",
+      "url": "http://localhost:5174/credits.html",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "document_width": 1440,
+      "scroll_y": 0,
+      "atlas_version": "2026-09-04.2",
+      "active_element": "BODY",
+      "sha256": "862fb6513b78e2f205efde3e75f0760eea88f2e3aeab26bb57dd3a2364219afb"
+    }
+  ],
+  "browser": "152.0.7977.82",
+  "review_checks": {
+    "primary_text_contrast_minimum": {
+      "dawn": 4.95,
+      "night": 8.4
+    },
+    "browser_contrast_check": "Rendered button colors and app door labels pass 4.5:1 in dawn and night.",
+    "source_and_keyboard": "Focused navigation, skip-link, atlas focus, mobile reflow and copy fallback checks passed. No additional obvious regression found in this limited source/visual review.",
+    "cache": "Changed entry pages and dynamic loaders use 2026-09-04.2; all 3 roots revalidate /shared/*; untouched canonical companion pages retain producer bytes."
+  }
+}

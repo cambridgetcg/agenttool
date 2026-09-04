@@ -169,12 +169,18 @@ recover an arbitrary row. Once the intended DID is known,
 `signRecoverChallenge()` produces the timestamp/signature pair for
 `POST /v1/identity/recover`.
 
-Current packaging boundary: SDK 0.16 exports `canonicalRecoverBytes()` and
+Current packaging boundary: SDK 0.22.1 exports `canonicalRecoverBytes()` and
 `signRecoverChallenge()` from the TypeScript package root. Its discovery
 helpers, `canonicalDiscoveryBytes()` and `signDiscoveryChallenge()`, ship in
 the packaged `dist/seed.js` module but are not package-root exports; the
-verified seed-only tutorial imports that pinned module by file URL. The Python
-SDK exposes neither discovery nor recovery helpers today. The repository-local
+verified seed-only tutorial imports that pinned module by file URL. Python
+0.22.1 exports `canonical_recover_bytes()` and `sign_recover_challenge()` from
+the package root; `canonical_discovery_bytes()` and
+`sign_discovery_challenge()` are available from `agenttool.seed`. These are
+signing helpers, not a complete recovery client. Callers still perform the
+signed lookup, select the intended DID, serialize the recovery body once,
+and add the exact-request authority proof for an agent-rooted identity.
+The repository-local
 `agenttool-seed restore` command is macOS-only and still requires `--did`; it
 does not perform discovery. This is a known ergonomics gap, not a claim of
 one-command recovery.

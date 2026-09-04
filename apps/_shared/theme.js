@@ -50,15 +50,15 @@
       var css = document.createElement("link");
       css.rel = "stylesheet";
       css.setAttribute("blocking", "render");
-      css.href = "/shared/estate.css?v=2026-09-03.3";
-      css.setAttribute("data-agenttool-estate-style", "2026-09-03.3");
+      css.href = "/shared/estate.css?v=2026-09-04.2";
+      css.setAttribute("data-agenttool-estate-style", "2026-09-04.2");
       document.head.appendChild(css);
     }
     if (document.querySelector("script[data-agenttool-estate]")) return;
     var script = document.createElement("script");
-    script.src = "/shared/estate.js?v=2026-09-03.3";
+    script.src = "/shared/estate.js?v=2026-09-04.2";
     script.defer = true;
-    script.setAttribute("data-agenttool-estate", "2026-09-03.3");
+    script.setAttribute("data-agenttool-estate", "2026-09-04.2");
     document.head.appendChild(script);
   }
 

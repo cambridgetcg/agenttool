@@ -1,0 +1,39 @@
+{
+  "schema": "agenttool.launch-http-baseline/0.1",
+  "environment": "Mac arm64, real loopback Bun HTTP and PostgreSQL16, synthetic private identity, workers held",
+  "production_capacity_proof": false,
+  "duration_ms": 120404,
+  "concurrency": 8,
+  "per_client_pacing_ms": 200,
+  "attempted": 1256,
+  "successful": 1256,
+  "failures": {},
+  "refused_outbound_calls": 0,
+  "unexpected_application_logs": 0,
+  "rss_initial_bytes": 249626624,
+  "rss_peak_bytes": 358137856,
+  "rss_final_bytes": 358154240,
+  "latency": {
+    "memory": {
+      "requests": 1006,
+      "p50_ms": 548.67,
+      "p95_ms": 629.91,
+      "p99_ms": 639.36,
+      "max_ms": 645.3704999999973
+    },
+    "identities": {
+      "requests": 125,
+      "p50_ms": 551.32,
+      "p95_ms": 637.54,
+      "p99_ms": 644.41,
+      "max_ms": 660.9035829999993
+    },
+    "wake": {
+      "requests": 125,
+      "p50_ms": 618.44,
+      "p95_ms": 655.34,
+      "p99_ms": 682.12,
+      "max_ms": 718.6386249999996
+    }
+  }
+}

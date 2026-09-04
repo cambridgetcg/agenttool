@@ -1,0 +1,17 @@
+id,priority,area,work,depends_on,acceptance
+R01,P1,Routing,Repair literal routes shadowed by dynamic handlers,,Named wake routes and intended tutorial handlers dispatch correctly in regression checks
+R02,P1,Routing,Define canonical API origin and supported aliases,R01,Feeds and federation links resolve on the declared origin; no implied universal apex mirror
+R03,P1,Discovery,Reconcile promoted routes with OpenAPI and capability states,R01,Every promoted operation declares schema authentication cost availability and retry semantics
+U01,P1,Navigation,Align Home Start-or-reconnect Docs and API labels,,Remove raw-apex and working-workspace mislabels; one canonical complete first-agent guide
+U02,P1,Checkout,Render one accurate checkout availability state,,All new-card entrypoints agree with backend availability before purchase attempt; paid returns remain recoverable
+U03,P1,Recovery,Fix verification labels failure states and request lifecycle,,401 versus 403 or 404 versus 429 versus 5xx and network errors receive correct guidance; bounded requests; no stale result or bearer persistence
+U04,P1,Mobile,Fix tutorial inline digest overflow,,No full-page horizontal scrolling at 320 390 and 768 CSS pixels; code blocks may scroll internally
+U05,P2,Observation,Separate public activity from platform observation and show freshness,,Timestamp retry and unavailable states; no liveness claim from one stale snapshot
+B01,P0 core,Backend,Review pending wake degradation and search billing receipts,,Required identity failure preserved; optional unavailable distinct from zero; failed admitted recall records failure
+B02,P0 paid expansion,Marketplace,Validate current terms and wallets within settlement transactions,,Real PostgreSQL race tests; conserved balances; refusal has no unintended charge or settlement
+Q01,P1,Release gates,Replace false-green legacy checks and repair retired browser tests,B01,Strict failure propagation; deterministic browser CI; read-only production smoke; isolated mutation suite
+Q02,P0 core,End-to-end,Prove outsider arrival memory reconnect and recovery,R01 U01 U03 B01 Q01,TS Python and raw HTTP core journeys run on exact candidate with isolated test data; retained credentials survive restart
+O01,P1 global,Admission,Decouple request limits from held worker startup,,Shared limiter enforced on replicas; documented tested outage policy; workers remain independently controlled
+O02,P1 global,Operations,Prove database-dependent alerts backups and compatible recovery,,Delivered alert test; isolated restore receipt; measured recovery and data loss; correct protected-schema recovery
+O03,P1 global,Capacity,Measure geographic latency and sustained core workload,Q02 O01,EU NA APAC measurements and explicit concurrency latency and error budgets with no production load test
+G01,Launch gate,Rollout,Canary exact release then expand global discovery,R03 U02 U04 B01 B02 Q02 O01 O02 O03,Exact API Pages Worker receipts and successful first-day canary; stop expansion on core correctness or recovery failure

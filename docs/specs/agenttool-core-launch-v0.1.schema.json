@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/specs/agenttool-core-launch-v0.1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "format",
+    "version",
+    "title",
+    "scope",
+    "source",
+    "automatic_action",
+    "journeys",
+    "operations"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://docs.agenttool.dev/specs/agenttool-core-launch-v0.1.schema.json"
+    },
+    "format": {
+      "const": "agenttool.core-launch/0.1"
+    },
+    "version": {
+      "const": "0.1"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis",
+        "repository",
+        "profile_path",
+        "production_verification",
+        "deployment_revision_url",
+        "note"
+      ],
+      "properties": {
+        "basis": {
+          "const": "repository_contract"
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        },
+        "profile_path": {
+          "const": "docs/specs/agenttool-core-launch-v0.1.json"
+        },
+        "production_verification": {
+          "const": "not_asserted"
+        },
+        "deployment_revision_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "automatic_action": {
+      "const": "never"
+    },
+    "journeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first_memory",
+        "return",
+        "note"
+      ],
+      "properties": {
+        "first_memory": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "discover",
+              "pathways",
+              "register_agent",
+              "wake",
+              "memory_store",
+              "memory_list",
+              "memory_read",
+              "memory_search",
+              "recovery_lookup",
+              "recover"
+            ]
+          },
+          "uniqueItems": true,
+          "maxItems": 10
+        },
+        "return": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "discover",
+              "pathways",
+              "register_agent",
+              "wake",
+              "memory_store",
+              "memory_list",
+              "memory_read",
+              "memory_search",
+              "recovery_lookup",
+              "recover"
+            ]
+          },
+          "uniqueItems": true,
+          "maxItems": 10
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "method",
+          "path",
+          "canonical_origin",
+          "authentication",
+          "cost",
+          "availability",
+          "retry",
+          "openapi_operation",
+          "success",
+          "example_request",
+          "documentation"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "discover",
+              "pathways",
+              "register_agent",
+              "wake",
+              "memory_store",
+              "memory_list",
+              "memory_read",
+              "memory_search",
+              "recovery_lookup",
+              "recover"
+            ]
+          },
+          "method": {
+            "enum": [
+              "GET",
+              "POST"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/(public|v1)/[A-Za-z0-9_/{}/-]+$"
+          },
+          "canonical_origin": {
+            "const": "https://api.agenttool.dev"
+          },
+          "authentication": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "details"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "none",
+                  "project_bearer",
+                  "signed_public",
+                  "registration_modes"
+                ]
+              },
+              "details": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "cost": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "project_credits",
+              "details"
+            ],
+            "properties": {
+              "project_credits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "details": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "availability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "requires"
+            ],
+            "properties": {
+              "state": {
+                "const": "source_implemented"
+              },
+              "requires": {
+                "type": "array",
+                "uniqueItems": true,
+                "maxItems": 8,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "automatic",
+              "details"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "safe_read",
+                  "conditional_cache",
+                  "single_use_proof",
+                  "repeatable_signed_lookup"
+                ]
+              },
+              "automatic": {
+                "const": false
+              },
+              "details": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "openapi_operation": {
+            "type": "string",
+            "format": "uri"
+          },
+          "success": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "media_type"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  200,
+                  201
+                ]
+              },
+              "media_type": {
+                "enum": [
+                  "application/json",
+                  "application/vnd.agenttool.discovery+json"
+                ]
+              }
+            }
+          },
+          "example_request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "body_reference"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "body_reference": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              }
+            }
+          },
+          "documentation": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "discover"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "pathways"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "register_agent"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "wake"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "memory_store"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "memory_list"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "memory_read"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "memory_search"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "recovery_lookup"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "recover"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  }
+}

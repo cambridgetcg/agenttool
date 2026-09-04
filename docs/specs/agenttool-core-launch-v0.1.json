@@ -1,0 +1,398 @@
+{
+  "$schema": "https://docs.agenttool.dev/specs/agenttool-core-launch-v0.1.schema.json",
+  "format": "agenttool.core-launch/0.1",
+  "version": "0.1",
+  "title": "Core API launch profile",
+  "scope": "Ten selected native HTTP operations for optional arrival, a first memory round trip, and signed recovery. This is a finite source contract, not the full AgentTool API.",
+  "source": {
+    "basis": "repository_contract",
+    "repository": "https://github.com/cambridgetcg/agenttool",
+    "profile_path": "docs/specs/agenttool-core-launch-v0.1.json",
+    "production_verification": "not_asserted",
+    "deployment_revision_url": "https://api.agenttool.dev/health",
+    "note": "Tests bind these entries to mounted source paths and OpenAPI schemas. Read a deployment revision separately; this static artifact asserts no deployed revision, global availability, load capacity, or framework compatibility."
+  },
+  "automatic_action": "never",
+  "journeys": {
+    "first_memory": [
+      "discover",
+      "pathways",
+      "register_agent",
+      "wake",
+      "memory_store",
+      "memory_read",
+      "memory_search"
+    ],
+    "return": [
+      "recovery_lookup",
+      "recover",
+      "wake"
+    ],
+    "note": "These are optional ordered references, not executable workflows. Stop at any point. Store the returned memory ID; read it back to check your own content. Replace example identifiers, keys, timestamps and proofs locally; OpenAPI proof examples demonstrate shape only."
+  },
+  "operations": [
+    {
+      "id": "discover",
+      "method": "GET",
+      "path": "/public/discovery",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "none",
+        "details": "Public read; no bearer or identity required."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": []
+      },
+      "retry": {
+        "mode": "safe_read",
+        "automatic": false,
+        "details": "Caller-chosen finite retry; results may change. Reading does not authorize a follow-up action."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1public~1discovery/get",
+      "success": {
+        "status": 200,
+        "media_type": "application/vnd.agenttool.discovery+json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/public/discovery",
+        "body_reference": null
+      },
+      "documentation": "https://docs.agenttool.dev/AGENT-DISCOVERY.md"
+    },
+    {
+      "id": "pathways",
+      "method": "GET",
+      "path": "/v1/pathways",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "none",
+        "details": "Public read; each offered arrival path has its own requirements."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": []
+      },
+      "retry": {
+        "mode": "safe_read",
+        "automatic": false,
+        "details": "Caller-chosen finite retry; results may change. Reading does not authorize a follow-up action."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1pathways/get",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/pathways",
+        "body_reference": null
+      },
+      "documentation": "https://docs.agenttool.dev/PATHWAYS.md"
+    },
+    {
+      "id": "register_agent",
+      "method": "POST",
+      "path": "/v1/register/agent",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "registration_modes",
+        "details": "BYO Ed25519 and X25519 public keys, a single-use register-agent/v2 proof and registration nonce. Self-service requires configured proof-of-work; registrar_bearer additionally supplies a parent project bearer and skips proof-of-work."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No registration price; delegated mode requires an eligible existing project. Proof-of-work and configured attempt limits are separate from monetary charges."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "locally_held_signing_and_box_keys",
+          "fresh_birth_proof",
+          "mode_specific_admission"
+        ]
+      },
+      "retry": {
+        "mode": "single_use_proof",
+        "automatic": false,
+        "details": "An exact nonce/proof cannot create a second identity and returns 409 when consumed. Writes span several steps; after an ambiguous result use signed key lookup before authorizing a fresh birth nonce. Save the once-only bearer; the server cannot return it again."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1register~1agent/post",
+      "success": {
+        "status": 201,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/register/agent",
+        "body_reference": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1register~1agent/post/requestBody/content/application~1json/examples/core_launch/value"
+      },
+      "documentation": "https://docs.agenttool.dev/IDENTITY-SEED.md"
+    },
+    {
+      "id": "wake",
+      "method": "GET",
+      "path": "/v1/wake",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "project_bearer",
+        "details": "Use the project bearer and explicitly select its identity_id; this profile selects format=json."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "project_bearer",
+          "active_owned_identity"
+        ]
+      },
+      "retry": {
+        "mode": "safe_read",
+        "automatic": false,
+        "details": "GET is a pure application read. Repeat deliberately; inspect unavailable/degradation markers. Reading does not acknowledge the wake or increment its durable count."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1wake/get",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/wake?identity_id=00000000-0000-4000-8000-000000000001&format=json",
+        "body_reference": null
+      },
+      "documentation": "https://docs.agenttool.dev/WAKE.md"
+    },
+    {
+      "id": "memory_store",
+      "method": "POST",
+      "path": "/v1/memories",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "project_bearer",
+        "details": "Project bearer; explicit identity_id must name an active owned identity. Content is server-readable; embedding is optional."
+      },
+      "cost": {
+        "project_credits": 1,
+        "details": "One project credit is reserved per admitted bounded attempt, including an unsuccessful attempt after reservation."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "project_bearer",
+          "sufficient_project_credits"
+        ]
+      },
+      "retry": {
+        "mode": "conditional_cache",
+        "automatic": false,
+        "details": "Send a stable Idempotency-Key and exact same request bytes. Replay protection is conditional on Redis and lasts 24 hours; Redis failure passes through. After ambiguity, reconcile using the returned ID or a caller-chosen memory key before a new write. A memory key is a lookup label, not a uniqueness guarantee."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories/post",
+      "success": {
+        "status": 201,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/memories",
+        "body_reference": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories/post/requestBody/content/application~1json/examples/core_launch/value"
+      },
+      "documentation": "https://docs.agenttool.dev/MEMORY-TIERS.md"
+    },
+    {
+      "id": "memory_list",
+      "method": "GET",
+      "path": "/v1/memories",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "project_bearer",
+        "details": "Project-scoped bearer read; key and identity_id filters are optional."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "project_bearer"
+        ]
+      },
+      "retry": {
+        "mode": "safe_read",
+        "automatic": false,
+        "details": "Caller-chosen finite retry; results may change. Reading does not authorize a follow-up action."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories/get",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/memories?key=first-success",
+        "body_reference": null
+      },
+      "documentation": "https://docs.agenttool.dev/MEMORY-TIERS.md"
+    },
+    {
+      "id": "memory_read",
+      "method": "GET",
+      "path": "/v1/memories/{id}",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "project_bearer",
+        "details": "Project bearer; the memory must belong to that project."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "project_bearer",
+          "owned_memory"
+        ]
+      },
+      "retry": {
+        "mode": "safe_read",
+        "automatic": false,
+        "details": "Caller-chosen finite retry; results may change. Reading does not authorize a follow-up action."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories~1%7Bid%7D/get",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/memories/00000000-0000-4000-8000-000000000002",
+        "body_reference": null
+      },
+      "documentation": "https://docs.agenttool.dev/MEMORY-TIERS.md"
+    },
+    {
+      "id": "memory_search",
+      "method": "POST",
+      "path": "/v1/memories/search",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "project_bearer",
+        "details": "Project bearer. Supply query text or a locally generated 1536-number query_embedding; embedding takes precedence if both are supplied."
+      },
+      "cost": {
+        "project_credits": 3,
+        "details": "Three project credits are reserved per admitted search attempt before recall, including failures after reservation. Embedding inference is caller-owned and separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "project_bearer",
+          "sufficient_project_credits"
+        ]
+      },
+      "retry": {
+        "mode": "conditional_cache",
+        "automatic": false,
+        "details": "POST performs recall plus metering. Generic Idempotency-Key replay is conditional on Redis. A repeated request without active replay protection can charge again; an empty result is not a reason to repeat automatically."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories~1search/post",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/memories/search",
+        "body_reference": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1memories~1search/post/requestBody/content/application~1json/examples/core_launch/value"
+      },
+      "documentation": "https://docs.agenttool.dev/MEMORY-TIERS.md"
+    },
+    {
+      "id": "recovery_lookup",
+      "method": "POST",
+      "path": "/public/identities/by-pubkey",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "signed_public",
+        "details": "No bearer. Prove possession of the lookup public key using identity-discover/v1 and a timestamp within five minutes."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "locally_held_registered_signing_key",
+          "fresh_lookup_proof"
+        ]
+      },
+      "retry": {
+        "mode": "repeatable_signed_lookup",
+        "automatic": false,
+        "details": "This lookup does not mint authority. The same signed proof remains usable within its freshness window; it is not one-time replay protection. For a new window, sign a fresh timestamp. A returned key association does not bypass the separate immutable-root recovery check."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1public~1identities~1by-pubkey/post",
+      "success": {
+        "status": 200,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/public/identities/by-pubkey",
+        "body_reference": "https://api.agenttool.dev/v1/openapi.json#/paths/~1public~1identities~1by-pubkey/post/requestBody/content/application~1json/examples/core_launch/value"
+      },
+      "documentation": "https://docs.agenttool.dev/IDENTITY-SEED.md"
+    },
+    {
+      "id": "recover",
+      "method": "POST",
+      "path": "/v1/identity/recover",
+      "canonical_origin": "https://api.agenttool.dev",
+      "authentication": {
+        "mode": "signed_public",
+        "details": "No bearer. An active registered key signs identity-recover/v1. An agent_root identity also requires its immutable root to sign the exact HTTP request with current next-sequence authority headers."
+      },
+      "cost": {
+        "project_credits": 0,
+        "details": "No AgentTool charge for this operation; external hosting/network costs are separate."
+      },
+      "availability": {
+        "state": "source_implemented",
+        "requires": [
+          "database",
+          "active_identity",
+          "locally_held_authorized_signing_key",
+          "fresh_recovery_proof"
+        ]
+      },
+      "retry": {
+        "mode": "single_use_proof",
+        "automatic": false,
+        "details": "Proof consumption and bearer minting share a database transaction. Replaying a consumed proof returns 409, never the original secret. After an ambiguous response, a deliberately fresh proof can mint a replacement; rooted identities must reconcile the current authority sequence. Old bearers remain valid until explicitly revoked."
+      },
+      "openapi_operation": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1identity~1recover/post",
+      "success": {
+        "status": 201,
+        "media_type": "application/json"
+      },
+      "example_request": {
+        "url": "https://api.agenttool.dev/v1/identity/recover",
+        "body_reference": "https://api.agenttool.dev/v1/openapi.json#/paths/~1v1~1identity~1recover/post/requestBody/content/application~1json/examples/core_launch/value"
+      },
+      "documentation": "https://docs.agenttool.dev/IDENTITY-SEED.md"
+    }
+  ]
+}
