@@ -1,0 +1,17 @@
+# Review-only fragment, not an installer. Replace absolute placeholders privately.
+# Source: https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp
+mcp_servers:
+  agenttool_return:
+    command: node
+    args:
+      - /absolute/agenttool/packages/wake-return/dist/bin/agenttool-wake-return-mcp.js
+      - --binding
+      - /absolute/private/return.json
+    enabled: false
+    connect_timeout: 10
+    timeout: 15
+    supports_parallel_tool_calls: false
+    tools:
+      include: [wake_return_status, wake_return_observe]
+      prompts: false
+      resources: false
