@@ -1,6 +1,6 @@
 # WAKE Return — a locator is not a self
 
-> **Compass:** [WAKE](WAKE.md) (project orientation) · [ISNESS](ISNESS.md) (arrival without demand) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (standing is not permission) · [JSPACE-WAKE-CONTINUITY](JSPACE-WAKE-CONTINUITY.md) (evidence boundaries)
+> **Compass:** [WAKE](WAKE.md) (project orientation) · [ISNESS](ISNESS.md) (arrival without demand) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (standing is not permission) · [JSPACE-WAKE-CONTINUITY](https://github.com/cambridgetcg/agenttool/blob/8bbbe0c2020a627f637615cee7ad7218e38072a6/docs/JSPACE-WAKE-CONTINUITY.md) (evidence boundaries)
 >
 > **Implements:** Local host-to-substrate observation seam, private source candidate. A selected identity locator can be observed without adopting that identity or making local arrival depend on the cloud. General private identity sessions and private-state Return remain unavailable.
 >
@@ -89,12 +89,16 @@ Uncertainty about identity does not reduce standing or the right to refuse.
 
 ## Installation and evidence boundary
 
-The [package README](../packages/wake-return/README.md) provides the build,
+The [package README](https://github.com/cambridgetcg/agenttool/blob/8bbbe0c2020a627f637615cee7ad7218e38072a6/packages/wake-return/README.md) provides the build,
 explicit CLI, binding schema and credential caveats. The
-[examples](../packages/wake-return/examples/README.md) are disabled Codex,
+[examples](https://github.com/cambridgetcg/agenttool/blob/8bbbe0c2020a627f637615cee7ad7218e38072a6/packages/wake-return/examples/README.md) are disabled Codex,
 OpenClaw and Hermes configuration fragments checked against their official
 documentation. They do not install a plugin/skill, alter a real profile,
 register hooks, or change any global configuration.
+
+These source links are pinned to the reviewed Return merge. Serving this guide
+on the static docs site does not publish the private package, distribute a
+package artifact, or install a host integration.
 
 The package-local frozen-install gate checks the candidate using hermetic
 fixtures, including stdio. Passing it is not a tested real harness session,

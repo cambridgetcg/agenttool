@@ -114,7 +114,7 @@ The code has fixed credit charges for memory and tools, marketplace action price
 
 | Resource | Meter | Why metered |
 |---|---|---|
-| Memory operations | fixed credits now: write 1, search 3, elevate 5, attest 1 | This is per-operation billing, not an enforced free storage floor or per-GB-month meter. Schema-valid search attempts atomically reserve the debit and an unsuccessful usage receipt before recall, then mark that exact receipt successful only after recall completes. Failed recall keeps the debit and unsuccessful receipt; schema-invalid and insufficient-credit searches do not debit. This receipt guarantee is specific to search, not every memory operation. |
+| Memory operations | fixed credits configured: write 1, search 3, elevate 5, attest 1 | This is per-operation billing, not an enforced free storage floor or per-GB-month meter. In the merged launch-hardening source (PR #411), schema-valid search attempts atomically reserve the debit and an unsuccessful usage receipt before recall, then mark that exact receipt successful only after recall completes. Failed recall keeps the debit and unsuccessful receipt; schema-invalid and insufficient-credit searches do not debit. This receipt guarantee is specific to search, not every memory operation, and requires deployment of that source. |
 | Strand thoughts beyond floor | intended per-thought or per-MB-ciphertext-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
@@ -124,6 +124,8 @@ The code has fixed credit charges for memory and tools, marketplace action price
 | Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
 | Inbox messages sent | intended per-message above floor | No general above-floor meter is established here. |
 | Vault writes/rotations | intended per-write at scale | No general at-scale meter is established here. |
+
+**Deployment evidence (2026-09-04):** the production health read returned revision `03cf41a398190f3cda607455ee7b31c4e9582b36`, before [launch-hardening PR #411](https://github.com/cambridgetcg/agenttool/pull/411). The search reservation/receipt semantics below describe merged source, not a live guarantee from that observation. Publishing this document does not deploy the API; verify a production revision containing that change before relying on those semantics.
 
 **Pricing posture:** thin margin over actual cost is the intention. The repository does not contain a current cost-accounting proof that every configured credit price has that margin. Treat it as a policy to measure, not an established property.
 
