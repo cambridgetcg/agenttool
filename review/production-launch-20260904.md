@@ -13,7 +13,7 @@ The candidate started from GitHub main `91b27a09`. The existing
 private-state/SDK work. That work is preserved in its original checkout; it is
 not included in this candidate.
 
-Credential-free HTTPS reads on 2026-09-04 returned:
+HTTPS checks on 2026-09-04 returned:
 
 | Surface | Observation | What it establishes |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ live migration journal, constraints, or schema: those need a separate survey.
 | --- | --- | --- |
 | Wake | Optional wallet, vault-name, and bearer queries no longer abort the entire orientation; partial responses name unavailable inventories. | Selected identity survives these inventory failures. Unknown counts are not presented as observed zero. Other existing best-effort subsystems remain outside this marker's completeness claim. |
 | Substrate | Memory search reserves its credit debit and unsuccessful usage row atomically; only completed recall marks success. | Failed recall cannot be recorded as a successful search. Admitted failed attempts retain their charge under the existing attempt-billing policy. |
-| Network | Template purchases lock the template and both wallets before validation; invocation admission rechecks the locked buyer wallet. | Completed freezes, ownership/currency changes, and template archival are checked at the debit boundary. This does not reopen arbitration or guarantee cashable backing. |
+| Network | Template purchases lock the template and wallets before validating their respective debit conditions; invocation admission rechecks the locked buyer wallet. | Completed freezes, ownership/currency changes, and template archival are checked at the debit boundary. This does not reopen arbitration or guarantee cashable backing. |
 | Release operations | Legacy deploy checking delegates to strict preflight; deployed smoke defaults to GET-only checks. | Failed checks propagate a failing exit. Mutation requires an explicitly designated disposable identity. A read-only smoke is availability evidence, not transaction or durability proof. |
 
 Tests exercise failure injection, real service logic with transaction doubles,
@@ -110,4 +110,15 @@ surface and each Fly machine's reported revision. No payment, payout,
 federation enablement, identity publication, or production migration is part
 of this preparation pass.
 
-Verification receipt: pending final combined gate and independent review.
+## Verification receipt
+
+The candidate passed its focused Wake fault-injection/schema/renderer,
+marketplace transaction, memory-search billing, and operator safety tests on
+Bun 1.3.5, plus the API TypeScript check and independent source review. Live
+public smoke passed all seven checks. The private Wake remains unverified.
+
+The combined API/operator gate and remote CI were still running when this
+receipt was written. Their final outcome is recorded on
+[PR #411](https://github.com/cambridgetcg/agenttool/pull/411); this snapshot
+does not claim a pass for an unfinished gate. Source validation does not
+establish a deployed release or close the acceptance gates above.
