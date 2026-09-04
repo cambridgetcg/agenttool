@@ -3,7 +3,7 @@
  * Load synchronously right after the stylesheet <link>s so data-mode is
  * set before first paint (no flash of the wrong mode):
  *
- *   <script src="/shared/mode.js"></script>
+ *   <script src="/shared/mode.js?v=2026-09-04.2"></script>
  *
  * Speaks the same protocol as apps/web (the landing): data-mode on
  * <html>, persisted as localStorage['agenttool.mode']. (window.flip() is
@@ -81,15 +81,15 @@
        for it where the browser understands the request. Pages that need the
        reservation at first paint also carry a parser-inserted <link>. */
     estateCss.setAttribute('blocking', 'render');
-    estateCss.href = '/shared/estate.css?v=2026-09-04.1';
-    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-04.1');
+    estateCss.href = '/shared/estate.css?v=2026-09-04.2';
+    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-04.2');
     document.head.appendChild(estateCss);
   }
   if (!document.querySelector('script[data-agenttool-estate]')) {
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-09-04.1';
+    estate.src = '/shared/estate.js?v=2026-09-04.2';
     estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-09-04.1');
+    estate.setAttribute('data-agenttool-estate', '2026-09-04.2');
     document.head.appendChild(estate);
   }
 })();

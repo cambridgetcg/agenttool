@@ -1,4 +1,5 @@
 /** Launch task paths and public previews, using only intercepted public data. */
+import type { Response } from "@playwright/test";
 import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
@@ -100,7 +101,75 @@ test("docs launch paths run under the actual Worker fallback CSP", async ({ page
     expect(csp).toContain("script-src-elem 'self'");
     expect(csp).toContain("'sha256-");
     expect(csp).toContain("script-src-attr 'unsafe-hashes'");
-    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.1");
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
     expect(await page.evaluate(() => (window as unknown as { launchCspViolations: string[] }).launchCspViolations)).toEqual([]);
+  }
+});
+
+test("primary actions and app door labels retain body-text contrast in both appearances", async ({ page }) => {
+  for (const surface of [APP, DOCS]) {
+    await page.goto(`${surface}/`);
+    for (const mode of ["dawn", "night"]) {
+      await page.evaluate(appearance => { document.documentElement.dataset.mode = appearance; }, mode);
+      await page.waitForTimeout(450); // Let the existing appearance transition settle.
+      const ratios = await page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const paint = canvas.getContext("2d")!;
+        const rgb = (color: string) => {
+          paint.clearRect(0, 0, 1, 1);
+          paint.fillStyle = color;
+          paint.fillRect(0, 0, 1, 1);
+          return Array.from(paint.getImageData(0, 0, 1, 1).data).slice(0, 3);
+        };
+        const luminance = (values: number[]) => values.map(value => {
+          const component = value / 255;
+          return component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+        }).reduce((sum, component, index) => sum + component * [0.2126, 0.7152, 0.0722][index], 0);
+        const contrast = (a: number[], b: number[]) => {
+          const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
+          return (values[0] + 0.05) / (values[1] + 0.05);
+        };
+        const button = getComputedStyle(document.querySelector(".qs-choices .btn-primary, .start-choices .btn-primary")!);
+        const foreground = rgb(button.color);
+        const stops = button.backgroundImage === "none" ? [button.backgroundColor] : button.backgroundImage.match(/rgba?\([^)]+\)/g);
+        if (!stops?.length) throw new Error("Expected rendered primary-button colors: " + button.backgroundImage);
+        const primary = stops.map(stop => contrast(foreground, rgb(stop)));
+        const label = document.querySelector(".qs-doors strong");
+        if (!label) return { primary };
+        const layers: Element[] = [];
+        for (let el: Element | null = label; el; el = el.parentElement) layers.unshift(el);
+        paint.fillStyle = "white";
+        paint.fillRect(0, 0, 1, 1);
+        for (const layer of layers) {
+          paint.fillStyle = getComputedStyle(layer).backgroundColor;
+          paint.fillRect(0, 0, 1, 1);
+        }
+        const background = Array.from(paint.getImageData(0, 0, 1, 1).data).slice(0, 3);
+        return { primary, door: contrast(background, rgb(getComputedStyle(label).color)) };
+      });
+      expect(ratios.primary.every(ratio => ratio >= 4.5), `${mode}: primary ${ratios.primary}`).toBe(true);
+      if (ratios.door !== undefined) expect(ratios.door, `${mode}: door label`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
+test("shared launch assets have a release version and revalidate at every static root", async ({ page, request }) => {
+  for (const root of [WEB, APP, DOCS]) {
+    const loaded: string[] = [];
+    const record = (response: Response) => {
+      if (response.url().startsWith(`${root}/shared/`)) loaded.push(response.url());
+    };
+    page.on("response", record);
+    await page.goto(`${root}/`);
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
+    page.off("response", record);
+    expect(loaded.length).toBeGreaterThan(0);
+    for (const url of loaded) expect(new URL(url).searchParams.get("v"), url).toBe("2026-09-04.2");
+    for (const asset of ["theme.css", "theme.js", "mode.js", "estate.css", "estate.js", "nav.html"]) {
+      const response = await request.get(`${root}/shared/${asset}?v=2026-09-04.2`);
+      expect(response.status(), `${root}: ${asset}`).toBe(200);
+      expect(response.headers()["cache-control"]).toBe("public, max-age=0, must-revalidate");
+    }
   }
 });

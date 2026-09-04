@@ -358,7 +358,7 @@ nav.topnav {
   color: var(--accent);
 }
 .nav-cta {
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
   color: var(--accent-ink) !important;
   padding: 0.45rem 1rem;
   border-radius: var(--r-pill);
@@ -462,7 +462,7 @@ footer.site-footer .dot {
   white-space: nowrap;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
   color: var(--accent-ink);
   box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--accent) 50%, transparent);
 }

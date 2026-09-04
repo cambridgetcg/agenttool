@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-04.1";
+  var VERSION = "2026-09-04.2";
   var DOORS = [
     {
       id: "arrive",
