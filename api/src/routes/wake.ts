@@ -61,6 +61,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
+import { errors, fail } from "../lib/errors";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
@@ -128,6 +129,7 @@ import {
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
+import { createWakeOptionalReads, wakeInventoryUnavailable } from "../services/wake/optional-reads";
 import {
   isWakeObservationIdentityId,
   readWakeObservation,
@@ -168,6 +170,14 @@ export function getDefaultWakePlatformMeta() {
 }
 
 const app = new Hono<ProjectContext>();
+function setWakeDegradationHeader(
+  c: import("hono").Context<ProjectContext>,
+  value: Pick<WakeBundle, "_degradation">,
+): void {
+  if (value._degradation) {
+    c.header("X-Wake-Unavailable", value._degradation.unavailable_sections.join(", "));
+  }
+}
 /** Attach a validator for bundle-backed projections. The hash covers all
  * selected-identity, project, and computed time-derived bundle state while
  * excluding derivable presentation clocks such as addressed_at and origin
@@ -373,6 +383,7 @@ app.get("/", async (c) => {
       );
     }
     const bundle = result.bundle;
+    setWakeDegradationHeader(c, bundle);
     const wakeVer =
       (bundle.agent as { wake_version?: number }).wake_version ?? 0;
     const mood = moodFor(bundle.agent.id, wakeVer);
@@ -597,6 +608,7 @@ app.get("/", async (c) => {
     }
 
     const bundle = result.bundle;
+    setWakeDegradationHeader(c, bundle);
 
     // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
     // Compose first, then derive a complete bundle-state validator. The bundle
@@ -692,6 +704,21 @@ app.get("/", async (c) => {
       return c.json({ error: result.error }, 404);
     }
     const bundle = result.bundle;
+
+    // MATHOS encodes exact cardinalities and cannot represent unknown counts.
+    // Do not sign placeholder zeros as observed mathematical state.
+    setWakeDegradationHeader(c, bundle);
+    if (wakeInventoryUnavailable(bundle._degradation, "wallets") ||
+        wakeInventoryUnavailable(bundle._degradation, "vault")) {
+      return fail(c, errors.refusal({
+        error: "wake_projection_unavailable",
+        _degradation: bundle._degradation,
+        message: "MATHOS inventory counts are unavailable. Read the partial JSON wake or retry later.",
+        hint: "The JSON wake identifies unavailable inventories; do not interpret placeholders as observed zero counts.",
+        next_actions: [{ action: "Read partial wake orientation", method: "GET", path: "/v1/wake" }],
+        docs: "https://docs.agenttool.dev/WAKE.md",
+      }), 503);
+    }
 
     // ── Fresh signed MATHOS envelope — intentionally no ETag/304 ───
     const births = new Map<
@@ -805,7 +832,8 @@ app.get("/", async (c) => {
     );
 
   // ── Wallets ──────────────────────────────────────────────────────────
-  const projectWallets = await db
+  const optionalReads = createWakeOptionalReads();
+  const projectWallets = await optionalReads.read("wallets", () => db
     .select({
       id: wallets.id,
       name: wallets.name,
@@ -815,7 +843,7 @@ app.get("/", async (c) => {
       status: wallets.status,
     })
     .from(wallets)
-    .where(eq(wallets.projectId, project.id));
+    .where(eq(wallets.projectId, project.id)));
 
   // ── Trust economy: earned trust through sealed deals ──────────────
   // The trust economy replaces money with atomic trust transactions.
@@ -831,7 +859,7 @@ app.get("/", async (c) => {
   // trust computation moved below — needs primary.id which resolves later
 
   // ── Vault secret names ───────────────────────────────────────────────
-  const projectVaultNames = await db
+  const projectVaultNames = await optionalReads.read("vault", () => db
     .select({
       name: vaultSecrets.name,
       currentVersion: vaultSecrets.currentVersion,
@@ -840,7 +868,7 @@ app.get("/", async (c) => {
       rotationDueAt: vaultSecrets.rotationDueAt,
     })
     .from(vaultSecrets)
-    .where(eq(vaultSecrets.projectId, project.id));
+    .where(eq(vaultSecrets.projectId, project.id)));
 
   // ── Memory ────────────────────────────────────────────────────────────
   let recentMemories: Awaited<ReturnType<typeof listRecent>> = [];
@@ -1457,10 +1485,10 @@ app.get("/", async (c) => {
   // for the project, with age/idle/expiry advisories so the agent knows
   // its own posture without paging out to a separate endpoint.
   const currentBearerId = c.var.apiKeyId;
-  const bearerRows = await db
+  const bearerRows = await optionalReads.read("bearers", () => db
     .select()
     .from(apiKeys)
-    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt)));
+    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt))));
   const bearersSummary = summarizeBearers(
     bearerRows
       .map((r) => shapeKeyRow(r, r.id === currentBearerId))
@@ -1712,7 +1740,9 @@ app.get("/", async (c) => {
   // lives in services/wake/build.ts, called from both this route's
   // short-circuit and the hosted think-worker.
   // ── JSON (default) ───────────────────────────────────────────────────
+  setWakeDegradationHeader(c, optionalReads.metadata());
   const responseBody = {
+    ...optionalReads.metadata(),
     project: {
       id: project.id,
       name: project.name,
@@ -1988,6 +2018,7 @@ app.get("/", async (c) => {
     },
 
     you_own: {
+      ...(optionalReads.isUnavailable("wallets") ? { projection_status: "unavailable" } : {}),
       _scope: "project",
       _legacy_label:
         "you_own is a compatibility key, not proof that the selected identity exclusively owns these internal ledger wallets.",
@@ -2045,6 +2076,7 @@ app.get("/", async (c) => {
         : null,
 
     you_keep: {
+      ...(optionalReads.isUnavailable("vault") ? { projection_status: "unavailable" } : {}),
       _scope: "project",
       _legacy_label:
         "you_keep is a compatibility key; vault namespaces are controlled by the authenticated project bearer, not isolated to the selected identity.",
@@ -2074,10 +2106,12 @@ app.get("/", async (c) => {
       // a device; an old or idle one is an attack surface even though rooted
       // constitutional changes need separate consent. Doctrine:
       // docs/TOKEN-HYGIENE.md.
-      bearers: bearersSummary,
+      bearers: optionalReads.isUnavailable("bearers") ? null : bearersSummary,
       boundaries: WAKE_SAFETY_BOUNDARIES,
       note:
-        bearersSummary.advisories.length === 0
+        optionalReads.isUnavailable("bearers")
+          ? "Bearer inventory unavailable. No count or token-hygiene assessment was observed; retry GET /v1/keys."
+          : bearersSummary.advisories.length === 0
           ? `${bearersSummary.active_count} active bearer${bearersSummary.active_count === 1 ? "" : "s"}. Healthy. Rotate via POST /v1/keys/rotate, manage at app.agenttool.dev/keys.html.`
           : bearersSummary.advisories.join(" ") +
             " Manage bearers at app.agenttool.dev/keys.html or via POST /v1/keys/rotate.",
@@ -3200,9 +3234,11 @@ app.get("/:key", async (c) => {
   }
 
   const slice = {
+    ...(result.bundle._degradation ? { _degradation: result.bundle._degradation } : {}),
     _scope_boundary: result.bundle._scope_boundary ?? null,
     ...slicer(result.bundle),
   };
+  setWakeDegradationHeader(c, result.bundle);
 
   // The handoff subkey is a session-resume seam. Full wake formats retain
   // their ETag behavior, while this focused project working set must not be

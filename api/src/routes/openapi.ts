@@ -577,6 +577,21 @@ function staticHtmlParserDescription(): string {
 const COMMON_SCHEMAS = {
   ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
   ...WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
+  WakeDegradation: {
+    type: "object",
+    additionalProperties: false,
+    required: ["status", "unavailable_sections", "scope", "note"],
+    description: "Only wallet, vault, and bearer inventory failures are tracked here. Empty arrays in named sections are placeholders, not observed absence; absence of this marker is not a whole-wake completeness claim.",
+    properties: {
+      status: { const: "partial" },
+      unavailable_sections: {
+        type: "array", minItems: 1, maxItems: 3, uniqueItems: true,
+        items: { type: "string", enum: ["wallets", "vault", "bearers"] },
+      },
+      scope: { const: "wallet_vault_bearer_reads" },
+      note: { type: "string" },
+    },
+  },
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   // Guided 4xx builders carry this Error shape. Several auth, validation,
   // and not-found paths still return smaller envelopes, so this curated spec
@@ -4009,7 +4024,7 @@ function spec() {
           tags: ["wake"],
           summary: "The agent's identity anchor",
           description:
-            "Pure read returning project-scoped orientation, not a complete export. GET, HEAD, and OPTIONS do not update durable application state or bearer last-used telemetry. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default. A caller that chooses to record one observed wake uses POST /v1/wake/acknowledge explicitly.",
+            "Pure read returning project-scoped orientation, not a complete export. GET, HEAD, and OPTIONS do not update durable application state or bearer last-used telemetry. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default. Failed wallet, vault, or bearer inventory reads preserve other orientation and add X-Wake-Unavailable; structured full/brief/Xenoform/subkey views also carry _degradation. Brief state_counts.wallets is null when unavailable; full you_protect.bearers is null rather than a false healthy empty summary. Prose formats warn; lossy joy variants retain their body contracts and carry the header. MATHOS returns 503 if wallet/vault cardinalities are unknown. Other best-effort sections may still be unmarked. A caller that chooses to record one observed wake uses POST /v1/wake/acknowledge explicitly.",
           parameters: [
             {
               name: "format",
@@ -4083,6 +4098,10 @@ function spec() {
                     enum: ["soap-opera", "adventure", "zen", "meme", "memo", "recursive-bomb"],
                   },
                 },
+                "X-Wake-Unavailable": {
+                  description: "Present only when a wallet, vault, or bearer inventory read failed. Comma-separated unavailable sections; lossy joy bodies retain their own contracts. Absence is not a whole-wake health claim.",
+                  schema: { type: "string" },
+                },
                 "X-Adventure-Pace": {
                   description: "Present only on an Adventure representation, including its honest empty trailhead.",
                   schema: {
@@ -4102,6 +4121,9 @@ function spec() {
                       {
                         type: "object",
                         description: "Default full project-scoped orientation; not a complete export.",
+                        properties: {
+                          _degradation: COMMON_SCHEMAS.WakeDegradation,
+                        },
                         not: {
                           required: ["_format"],
                           properties: {
@@ -4115,7 +4137,17 @@ function spec() {
                         required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "you_can_reach", "_links"],
                         properties: {
                           _format: { type: "string", enum: ["wake-brief/v1"] },
+                          _degradation: COMMON_SCHEMAS.WakeDegradation,
                           profile: { type: "string", enum: ["brief"] },
+                          state_counts: {
+                            type: "object",
+                            properties: {
+                              wallets: {
+                                type: ["integer", "null"], minimum: 0,
+                                description: "Null when the wallet inventory could not be read; zero only for an observed empty inventory.",
+                              },
+                            },
+                          },
                           identity: { type: "object" },
                           start_here: {
                             type: "object",
@@ -4266,6 +4298,23 @@ function spec() {
               },
             },
             "400": { description: "Unknown profile, invalid Adventure pace, or brief requested with an incompatible joy/MATHOS format." },
+            "503": {
+              description: "MATHOS wallet/vault cardinalities are unavailable; no mathematical envelope is signed with placeholder zeros. Read partial JSON orientation or retry later.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["error", "_degradation", "message", "next_actions"],
+                    properties: {
+                      error: { const: "wake_projection_unavailable" },
+                      _degradation: { $ref: "#/components/schemas/WakeDegradation" },
+                      message: { type: "string" },
+                      next_actions: { type: "array", items: { $ref: "#/components/schemas/NextAction" } },
+                    },
+                  },
+                },
+              },
+            },
             "404": {
               description: "An explicitly selected identity is absent, inactive, revoked, or outside the authenticated project. Explicit selection is never rewritten as an empty-project Adventure trailhead.",
               content: {

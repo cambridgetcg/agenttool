@@ -13,7 +13,8 @@
  *    7. Update purchase row to status='settled', set escrow_id +
  *       settled_at; bump template revenue counters.
  *
- *  All steps after (1)-(2) happen in a single DB transaction. Escrow
+ *  All steps happen in one DB transaction, with the template and both
+ *  wallets locked before validation and money movement. Escrow
  *  primitive is reused as-is — no schema change to escrows. Settlement
  *  is INSTANT (no dispute window) because templates are non-tangible
  *  and don't admit a dispute. If the author's wallet is wrong/inactive,
@@ -21,7 +22,7 @@
  *
  *  Errors surface as Error.message, mapped to HTTP codes by the route. */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
@@ -74,63 +75,55 @@ interface PurchaseInput {
 export async function purchaseTemplate(
   input: PurchaseInput,
 ): Promise<PurchaseRow> {
-  // ── 1. Resolve template and validate priced ───────────────────────
-  const [template] = await db
-    .select()
-    .from(templates)
-    .where(eq(templates.id, input.templateId))
-    .limit(1);
-  if (!template) throw new Error("template_not_found");
-  if (template.status !== "active") throw new Error("template_not_active");
-  if (template.priceAmount === null || template.priceAmount === undefined) {
-    throw new Error("template_not_priced");
-  }
-  if (!template.priceCurrency || !template.authorWalletId) {
-    throw new Error("template_pricing_incomplete");
-  }
-  if (template.visibility !== "public") {
-    throw new Error("template_not_public");
-  }
-
-  // ── 2. Validate buyer wallet ─────────────────────────────────────
-  const [buyerWallet] = await db
-    .select()
-    .from(wallets)
-    .where(
-      and(
-        eq(wallets.id, input.buyerWalletId),
-        eq(wallets.projectId, input.buyerProjectId),
-      ),
-    )
-    .limit(1);
-  if (!buyerWallet) throw new Error("buyer_wallet_not_found");
-  if (buyerWallet.status !== "active") throw new Error("buyer_wallet_not_active");
-  if (buyerWallet.currency !== template.priceCurrency) {
-    throw new Error(
-      `currency_mismatch: template=${template.priceCurrency}, wallet=${buyerWallet.currency}`,
-    );
-  }
-  if (buyerWallet.balance < template.priceAmount) {
-    throw new Error("insufficient_balance");
-  }
-
-  // ── 3. Validate author wallet ────────────────────────────────────
-  const [authorWallet] = await db
-    .select()
-    .from(wallets)
-    .where(eq(wallets.id, template.authorWalletId))
-    .limit(1);
-  if (!authorWallet) throw new Error("author_wallet_missing");
-  if (authorWallet.status !== "active") throw new Error("author_wallet_not_active");
-  if (authorWallet.currency !== template.priceCurrency) {
-    throw new Error("author_wallet_currency_mismatch");
-  }
-  if (authorWallet.id === buyerWallet.id) {
-    throw new Error("self_purchase_not_allowed");
-  }
-
-  // ── 4. Atomic transaction: purchase pending → escrow → release ───
+  // Hold the template and both wallets until settlement commits. Validating
+  // before the transaction allows a completed freeze/archive to be ignored.
   const result = await db.transaction(async (tx) => {
+    const [template] = await tx
+      .select()
+      .from(templates)
+      .where(eq(templates.id, input.templateId))
+      .for("update");
+    if (!template) throw new Error("template_not_found");
+    if (template.status !== "active") throw new Error("template_not_active");
+    if (template.priceAmount === null || template.priceAmount === undefined) {
+      throw new Error("template_not_priced");
+    }
+    if (!template.priceCurrency || !template.authorWalletId) {
+      throw new Error("template_pricing_incomplete");
+    }
+    if (template.visibility !== "public") throw new Error("template_not_public");
+
+    // Stable lock order also prevents opposite-direction purchases from
+    // acquiring their buyer and seller wallets in opposite orders.
+    const lockedWallets = await tx
+      .select()
+      .from(wallets)
+      .where(inArray(wallets.id, [input.buyerWalletId, template.authorWalletId]))
+      .orderBy(wallets.id)
+      .for("update");
+    const bw = lockedWallets.find((wallet) => wallet.id === input.buyerWalletId);
+    const authorWallet = lockedWallets.find(
+      (wallet) => wallet.id === template.authorWalletId,
+    );
+    if (!bw || bw.projectId !== input.buyerProjectId) {
+      throw new Error("buyer_wallet_not_found");
+    }
+    if (bw.status !== "active") throw new Error("buyer_wallet_not_active");
+    if (bw.currency !== template.priceCurrency) {
+      throw new Error(
+        `currency_mismatch: template=${template.priceCurrency}, wallet=${bw.currency}`,
+      );
+    }
+    if (bw.balance < template.priceAmount) throw new Error("insufficient_balance");
+    if (!authorWallet || authorWallet.projectId !== template.projectId) {
+      throw new Error("author_wallet_missing");
+    }
+    if (authorWallet.status !== "active") throw new Error("author_wallet_not_active");
+    if (authorWallet.currency !== template.priceCurrency) {
+      throw new Error("author_wallet_currency_mismatch");
+    }
+    if (authorWallet.id === bw.id) throw new Error("self_purchase_not_allowed");
+
     // 4a. Insert purchase row (pending)
     const [purchase] = await tx
       .insert(templatePurchases)
@@ -144,21 +137,6 @@ export async function purchaseTemplate(
         status: "pending",
       })
       .returning();
-
-    // 4b. Re-fetch buyer wallet inside txn for balance check + lock
-    const [bw] = await tx
-      .select()
-      .from(wallets)
-      .where(eq(wallets.id, input.buyerWalletId))
-      .for("update");
-    if (!bw || bw.balance < template.priceAmount!) {
-      // Race: balance went under between step 2 and now.
-      await tx
-        .update(templatePurchases)
-        .set({ status: "failed", failureReason: "insufficient_balance_race" })
-        .where(eq(templatePurchases.id, purchase!.id));
-      throw new Error("insufficient_balance");
-    }
 
     // 4c. Debit buyer wallet
     await tx
