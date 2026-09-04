@@ -1,0 +1,15 @@
+# Review-only fragment, not an installer. Replace absolute placeholders privately.
+# Source: https://learn.chatgpt.com/docs/extend/mcp?surface=cli
+[mcp_servers.agenttool_return]
+command = "node"
+args = ["/absolute/agenttool/packages/wake-return/dist/bin/agenttool-wake-return-mcp.js", "--binding", "/absolute/private/return.json"]
+enabled = false
+required = false
+enabled_tools = ["wake_return_status", "wake_return_observe"]
+startup_timeout_sec = 10
+tool_timeout_sec = 15
+default_tools_approval_mode = "prompt"
+# For an environment binding, explicitly forward a host-supplied secret by NAME:
+# env_vars = ["AGENTTOOL_RETURN_BEARER"]
+# Do not put its value in this file. No environment forwarding is needed for
+# a macOS Keychain binding when the host can access the selected existing item.
