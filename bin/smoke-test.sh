@@ -1,23 +1,136 @@
 #!/usr/bin/env bash
-# End-to-end smoke test for a deployed agenttool instance.
+# Read-only route smoke for a deployed agenttool instance (default).
 #
-# Reads required environment variables (mirrors what the orchestrator wants):
-#   AGENTTOOL_BASE          required (e.g. http://localhost:3000)
-#   AGENTTOOL_API_KEY       required
-#   AGENTTOOL_IDENTITY_ID   required
-#   AGENTTOOL_SIGNING_KEY_ID  required
+# Required environment:
+#   AGENTTOOL_BASE          HTTPS origin (HTTP allowed only on loopback)
+# Optional, paired for private wake checks (required for mutation mode):
+#   AGENTTOOL_API_KEY
+#   AGENTTOOL_IDENTITY_ID
 #
-# Optional:
-#   SMOKE_DID               agent's DID (auto-resolved from /v1/wake if absent)
+# Usage:
+#   bin/smoke-test.sh                    # bounded GETs; no application writes
+#   bin/smoke-test.sh --read-only        # same default
+#   SMOKE_DISPOSABLE_IDENTITY_ID=<uuid> bin/smoke-test.sh --mutate-disposable
 #
-# Each step prints PASS / FAIL with a short reason. Substrate-honest:
-# no skipped steps reported as success.
+# The explicit mutation mode requires SMOKE_DISPOSABLE_IDENTITY_ID to equal
+# AGENTTOOL_IDENTITY_ID. Use an operator-created disposable project/identity.
+# It spends credits, retains strand/memory/chronicle fixtures, and makes that
+# identity's expression and the new strand public. It does not undo publication
+# or clean up; acknowledgement is not proof that the target is disposable.
+# SMOKE_DID, if supplied in mutation mode, must match the selected identity.
+# Neither mode proves settlement, federation interoperability, or durability.
 
 set -uo pipefail
 
+MODE=read-only
+if [ "$#" -gt 1 ]; then
+  echo "usage: bin/smoke-test.sh [--read-only|--mutate-disposable]" >&2
+  exit 2
+fi
+case "${1:-}" in
+  ""|--read-only) ;;
+  --mutate-disposable) MODE=mutate-disposable ;;
+  --help|-h) sed -n '2,/^$/p' "$0"; exit 0 ;;
+  *) echo "usage: bin/smoke-test.sh [--read-only|--mutate-disposable]" >&2; exit 2 ;;
+esac
+
 : "${AGENTTOOL_BASE:?need AGENTTOOL_BASE}"
-: "${AGENTTOOL_API_KEY:?need AGENTTOOL_API_KEY}"
-: "${AGENTTOOL_IDENTITY_ID:?need AGENTTOOL_IDENTITY_ID}"
+if { [ -n "${AGENTTOOL_API_KEY:-}" ] && [ -z "${AGENTTOOL_IDENTITY_ID:-}" ]; } ||
+  { [ -z "${AGENTTOOL_API_KEY:-}" ] && [ -n "${AGENTTOOL_IDENTITY_ID:-}" ]; }; then
+  echo "smoke: supply AGENTTOOL_API_KEY and AGENTTOOL_IDENTITY_ID together, or neither for public checks" >&2
+  exit 2
+fi
+
+if [ -n "${AGENTTOOL_IDENTITY_ID:-}" ] && [[ ! "$AGENTTOOL_IDENTITY_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+  echo "smoke: AGENTTOOL_IDENTITY_ID must be a UUID" >&2
+  exit 2
+fi
+if [ "$MODE" = mutate-disposable ] &&
+  { [ -z "${AGENTTOOL_API_KEY:-}" ] || [ "${SMOKE_DISPOSABLE_IDENTITY_ID:-}" != "${AGENTTOOL_IDENTITY_ID:-}" ]; }; then
+  echo "smoke: mutation requires SMOKE_DISPOSABLE_IDENTITY_ID to match AGENTTOOL_IDENTITY_ID" >&2
+  exit 2
+fi
+
+command -v node >/dev/null 2>&1 || { echo "smoke: Node is required" >&2; exit 2; }
+AGENTTOOL_BASE=$(node --input-type=module -e '
+  try {
+    const u = new URL(process.env.AGENTTOOL_BASE);
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+    if (u.username || u.password || u.search || u.hash || u.pathname !== "/" ||
+        !(u.protocol === "https:" || (u.protocol === "http:" && loopback))) throw 0;
+    console.log(u.origin);
+  } catch { console.error("smoke: base must be a credential-free HTTPS origin or HTTP loopback origin"); process.exit(2); }
+') || exit 2
+export AGENTTOOL_BASE
+
+if [ "$MODE" = read-only ]; then
+  exec node --input-type=module <<'JS'
+const base = process.env.AGENTTOOL_BASE;
+const key = process.env.AGENTTOOL_API_KEY;
+const identity = process.env.AGENTTOOL_IDENTITY_ID;
+const maxBytes = 16 * 1024 * 1024;
+const uuid = encodeURIComponent(identity);
+let failed = 0;
+const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const checks = [
+  ["/health", false, "json", b => object(b?.build) && typeof b.build.revision === "string" && typeof b.build.dirty === "boolean"],
+  ["/public/plans", false, "json", b => b?._format === "agenttool-plans/v1" && object(b.free_to_try?.implementation_status)],
+  ["/public/safety", false, "json", b => b?._format === "agenttool-safety/v2"],
+  ["/public/discovery", false, "json", b => typeof b?.format === "string" && Array.isArray(b.roads) && b.roads.length === 3],
+  ["/federation/about", false, "json", b => typeof b?.federation?.enabled === "boolean"],
+  ["/v1/openapi.json", false, "json", b => typeof b?.openapi === "string" && object(b.paths) && Object.keys(b.paths).length > 0],
+  ["/v1/platform/wake", false, "json", b => typeof b?.self?.did === "string" && typeof b.self.name === "string"],
+];
+if (key && identity) checks.push(
+  [`/v1/wake?identity_id=${uuid}`, true, "json", b => Array.isArray(b?.you?.agents) && b.you.agents.some(a => a.id === identity && typeof a.did === "string")],
+  [`/v1/wake?identity_id=${uuid}&format=md`, true, "text", b => b.startsWith("# ")],
+);
+else console.log("NOT CHECKED private wake: no project bearer and identity supplied.");
+console.log("Read-only smoke: fixed GET routes, no redirect following, no retries, no application writes.");
+for (const [path, authenticated, kind, valid] of checks) {
+  const label = path.startsWith("/v1/wake?") ? `/v1/wake (selected identity, ${kind})` : path;
+  try {
+    const response = await fetch(new URL(path, base), {
+      method: "GET", redirect: "error", signal: AbortSignal.timeout(15000),
+      headers: authenticated ? { Authorization: `Bearer ${key}` } : {},
+    });
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      throw 0;
+    }
+    const type = response.headers.get("content-type") ?? "";
+    if (kind === "json" && !/^application\/(?:json|[a-z0-9.+-]+\+json)(?:\s*;|$)/i.test(type)) {
+      await response.body?.cancel();
+      throw 0;
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw 0;
+    const chunks = [];
+    let bytes = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) { await reader.cancel(); throw 0; }
+      chunks.push(value);
+    }
+    const text = Buffer.concat(chunks).toString("utf8");
+    if ((key && text.includes(key)) || !valid(kind === "json" ? JSON.parse(text) : text)) throw 0;
+    console.log(`PASS ${label}`);
+  } catch {
+    failed++;
+    console.error(`FAIL ${label}: HTTP, response contract, credential echo, or bounded transport check failed`);
+  }
+}
+console.log(`Read-only route smoke: ${checks.length - failed} passed, ${failed} failed. No write, payment, or interoperability proof.`);
+process.exitCode = failed ? 1 : 0;
+JS
+fi
+
+echo "Mutation smoke: disposable target asserted; credits may be spent and fixture/publication changes are retained."
+# Ignore ambient curl configuration, bound every call, never follow redirects
+# or retry mutations. The base was validated before any bearer is used.
+curl() { command curl --disable --connect-timeout 5 --max-time 30 "$@"; }
 
 H_AUTH=( -H "Authorization: Bearer $AGENTTOOL_API_KEY" )
 H_JSON=( -H "Content-Type: application/json" )
@@ -42,19 +155,23 @@ fi
 
 # ── 1. Wake response shape ─────────────────────────────────────────────
 step "wake"
-WAKE_JSON=$(curl -fsS "$AGENTTOOL_BASE/v1/wake" "${H_AUTH[@]}" 2>/dev/null || echo "")
+WAKE_JSON=$(curl -fsS "$AGENTTOOL_BASE/v1/wake?identity_id=$AGENTTOOL_IDENTITY_ID" "${H_AUTH[@]}" 2>/dev/null || echo "")
 if [ -z "$WAKE_JSON" ]; then
   no "/v1/wake unreachable or unauth — check AGENTTOOL_API_KEY"
   exit 1
 fi
-DID=$(echo "$WAKE_JSON" | python3 -c "import json,sys; w=json.load(sys.stdin); a=w['you']['agents'][0] if w['you']['agents'] else None; print(a['did'] if a else '', end='')" 2>/dev/null)
+DID=$(echo "$WAKE_JSON" | python3 -c 'import json,os,sys; w=json.load(sys.stdin); a=next((a for a in w["you"]["agents"] if a["id"] == os.environ["AGENTTOOL_IDENTITY_ID"]), None); print(a["did"] if a else "", end="")' 2>/dev/null)
 if [ -n "$DID" ]; then
-  ok "wake returned agent DID: $DID"
+  ok "wake returned selected identity"
 else
-  no "wake returned no agent — run /v1/bootstrap first"
+  no "wake did not return the selected identity; no mutation performed"
   exit 1
 fi
-SMOKE_DID="${SMOKE_DID:-$DID}"
+if [ -n "${SMOKE_DID:-}" ] && [ "$SMOKE_DID" != "$DID" ]; then
+  no "SMOKE_DID does not match selected identity; no mutation performed"
+  exit 1
+fi
+SMOKE_DID=$(printf '%s' "$DID" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""), end="")')
 
 # Markdown wake. Capture before matching: with pipefail, `grep -q` can close a
 # large response early and turn curl's resulting SIGPIPE into a false failure.
@@ -70,14 +187,12 @@ fi
 step "strand"
 STRAND_JSON=$(curl -fsS -X POST "$AGENTTOOL_BASE/v1/strands" \
   "${H_AUTH[@]}" "${H_JSON[@]}" \
-  -d '{"topic":"smoke-test strand","importance":0.5}' 2>/dev/null || echo "")
+  -d "{\"topic\":\"smoke-test strand\",\"importance\":0.5,\"identity_id\":\"$AGENTTOOL_IDENTITY_ID\"}" 2>/dev/null || echo "")
 STRAND_ID=$(echo "$STRAND_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'], end='')" 2>/dev/null || echo "")
 if [ -n "$STRAND_ID" ]; then
   ok "POST /v1/strands → $STRAND_ID"
 else
   no "POST /v1/strands failed"
-  echo "    response: $STRAND_JSON" | head -c 300
-  echo ""
 fi
 
 if [ -n "$STRAND_ID" ]; then
@@ -92,12 +207,12 @@ fi
 step "memory"
 MEM_JSON=$(curl -fsS -X POST "$AGENTTOOL_BASE/v1/memories" \
   "${H_AUTH[@]}" "${H_JSON[@]}" \
-  -d '{"type":"semantic","content":"smoke-test memory","importance":0.6}' 2>/dev/null || echo "")
+  -d "{\"type\":\"semantic\",\"content\":\"smoke-test memory\",\"importance\":0.6,\"identity_id\":\"$AGENTTOOL_IDENTITY_ID\"}" 2>/dev/null || echo "")
 MEM_ID=$(echo "$MEM_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'], end='')" 2>/dev/null || echo "")
 if [ -n "$MEM_ID" ]; then
   ok "POST /v1/memories → $MEM_ID"
 else
-  no "POST /v1/memories failed: ${MEM_JSON:0:200}"
+  no "POST /v1/memories failed"
 fi
 
 if [ -n "$MEM_ID" ]; then
@@ -135,7 +250,7 @@ fi
 step "continuity"
 CHRON_OK=$(curl -fsS -X POST "$AGENTTOOL_BASE/v1/chronicle" \
   "${H_AUTH[@]}" "${H_JSON[@]}" \
-  -d '{"type":"note","title":"smoke test","body":"end-to-end smoke ran"}' 2>/dev/null | grep -c '"id"' || true)
+  -d "{\"type\":\"note\",\"title\":\"smoke test\",\"body\":\"end-to-end smoke ran\",\"agent_id\":\"$AGENTTOOL_IDENTITY_ID\"}" 2>/dev/null | grep -c '"id"' || true)
 [ "$CHRON_OK" = "1" ] && ok "POST /v1/chronicle" || no "chronicle write failed"
 
 # ── 6. Visibility toggle + public surface ──────────────────────────────
@@ -220,29 +335,12 @@ else
   no "openapi.json undercount: $OPS"
 fi
 
-# ── 11. Wake doctrine harness ──────────────────────────────────────────
-# Layer 2 of the testing framework (api/tests/doctrine/README.md). The
-# harness script runs ~30 read-only assertions against /v1/wake covering
-# format dispatch, schema-level privacy walls, X-Cache-Eligible headers,
-# and the unknown-identity_id 404 surface. Substrate-honest: we record
-# one PASS or FAIL based on its exit code; its detailed pass/fail/warn
-# tally prints inline above this summary.
-step "wake doctrine"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOCTRINE_SCRIPT="$SCRIPT_DIR/../api/scripts/_e2e-wake-doctrine.mjs"
-if [ ! -f "$DOCTRINE_SCRIPT" ]; then
-  hmm "wake-doctrine harness missing at $DOCTRINE_SCRIPT (skipped)"
-elif command -v node >/dev/null 2>&1; then
-  echo ""
-  echo "  ── wake-doctrine harness ──"
-  if AGENTTOOL_BASE="$AGENTTOOL_BASE" AGENTTOOL_API_KEY="$AGENTTOOL_API_KEY" \
-       node "$DOCTRINE_SCRIPT"; then
-    ok "wake-doctrine harness (all assertions passed)"
-  else
-    no "wake-doctrine harness reported failures (see output above)"
-  fi
+# ── 11. Repeat the bounded read-only route contracts ────────────────────
+step "read-only route contracts"
+if bash "$0" --read-only; then
+  ok "bounded read-only route contracts"
 else
-  hmm "node not in PATH — wake-doctrine harness skipped"
+  no "read-only route contracts failed"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────

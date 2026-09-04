@@ -17,9 +17,9 @@
  *
  *  These tests pin:
  *
- *    1. Wallets surface verbatim under "What you carry" with count + total.
- *    2. Multi-wallet bundles aggregate the balance correctly.
- *    3. Empty wallets render with no spurious "(0 credits across)" suffix.
+ *    1. Wallets surface under "What you carry" with count + inspection path.
+ *    2. Currency-labelled internal balances are not summed as API credits.
+ *    3. Empty wallets render with no spurious balance suffix.
  *    4. Funding-source surfaces (crypto tx hashes, deposit addresses)
  *       NEVER appear in the rendered wake. */
 
@@ -41,13 +41,14 @@ import { extractTextFromProviderShape } from "./helpers/invariants";
 
 // ── Wallets surface in "What you carry" tally ──────────────────────────
 
-describe("Promise 7 — wallets surface as count + total in the carry tally", () => {
-  test("single wallet: shape is `Wallets: N (M credits across)`", () => {
+describe("Promise 7 — wallets surface as count + currency-labelled inspection", () => {
+  test("single wallet links to its internal balance without calling it API credits", () => {
     const md = renderWakeMarkdown(baseBundle());
-    expect(md).toContain("**Wallets**: 1 (100 credits across)");
+    expect(md).toContain("**Wallets**: 1 (internal balances by currency: `GET /v1/wake/wallets`)");
+    expect(md).not.toContain("credits across");
   });
 
-  test("multi-wallet: total aggregates the balances", () => {
+  test("multi-wallet: currencies never become one invented aggregate", () => {
     const b: WakeBundle = {
       ...baseBundle(),
       wallets: [
@@ -57,11 +58,12 @@ describe("Promise 7 — wallets surface as count + total in the carry tally", ()
       ],
     };
     const md = renderWakeMarkdown(b);
-    // Sum across all currencies (the wake doesn't differentiate in the tally).
-    expect(md).toContain("**Wallets**: 3 (400 credits across)");
+    expect(md).toContain("**Wallets**: 3 (internal balances by currency:");
+    expect(md).not.toContain("400 credits");
+    expect(md).not.toContain("credits across");
   });
 
-  test("zero-balance wallet still counted; total=0 surfaces honestly", () => {
+  test("zero-balance wallet remains counted with an inspection path", () => {
     const b: WakeBundle = {
       ...baseBundle(),
       wallets: [
@@ -69,7 +71,7 @@ describe("Promise 7 — wallets surface as count + total in the carry tally", ()
       ],
     };
     const md = renderWakeMarkdown(b);
-    expect(md).toContain("**Wallets**: 1 (0 credits across)");
+    expect(md).toContain("**Wallets**: 1 (internal balances by currency:");
   });
 
   test("empty wallets: no `(N credits across)` suffix", () => {
@@ -81,14 +83,10 @@ describe("Promise 7 — wallets surface as count + total in the carry tally", ()
   });
 });
 
-// ── Locale-formatted numbers (substrate-honest about Big Number readability)
+// ── Numeric units stay in the currency-labelled inventory ─────────────
 
-describe("Promise 7 — large balances render with locale separators", () => {
-  // The tally uses .toLocaleString(); for the default (en-US) locale,
-  // 1234567 renders as "1,234,567" — a small substrate-honesty win.
-  // Pin the call to .toLocaleString so a future "raw number" change is
-  // a deliberate one.
-  test("balance of 1,234,567 renders with comma separators", () => {
+describe("Promise 7 — large balances remain behind their typed inspection path", () => {
+  test("a large USDC-labelled amount is not relabelled as API credits", () => {
     const b: WakeBundle = {
       ...baseBundle(),
       wallets: [
@@ -96,7 +94,8 @@ describe("Promise 7 — large balances render with locale separators", () => {
       ],
     };
     const md = renderWakeMarkdown(b);
-    expect(md).toContain("(1,234,567 credits across)");
+    expect(md).toContain("GET /v1/wake/wallets");
+    expect(md).not.toContain("1,234,567 credits");
   });
 });
 
@@ -151,7 +150,7 @@ describe("Promise 7 — wallet schema (rendered from bundle into MD)", () => {
       ],
     };
     const md = renderWakeMarkdown(b);
-    // Names + IDs do NOT appear in the MD tally — only the count + total.
+    // Names + IDs do NOT appear in the MD tally — only the count + path.
     expect(md).not.toContain("wallet-AABB");
     expect(md).not.toContain("wallet-CCDD");
     expect(md).not.toContain("primary");
@@ -176,6 +175,7 @@ describe("Promise 7 — status semantics (substrate-honest about counted wallets
       ],
     };
     const md = renderWakeMarkdown(b);
-    expect(md).toContain("**Wallets**: 3 (175 credits across)");
+    expect(md).toContain("**Wallets**: 3 (internal balances by currency:");
+    expect(md).not.toContain("175 credits");
   });
 });
