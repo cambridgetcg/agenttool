@@ -1,6 +1,6 @@
 # AgentTool launch cleanup — 2026-09-04
 
-Implementation of the route, UI/UX and launch-readiness review in [PR #412](https://github.com/cambridgetcg/agenttool/pull/412). The earlier hardening candidate is merged through [PR #411](https://github.com/cambridgetcg/agenttool/pull/411). This batch remains a source candidate until protected CI, deployment and live readback are complete.
+Implementation of the route, UI/UX and launch-readiness review in [PR #412](https://github.com/cambridgetcg/agenttool/pull/412). The earlier hardening candidate is merged through [PR #411](https://github.com/cambridgetcg/agenttool/pull/411). The implementation is [PR #415](https://github.com/cambridgetcg/agenttool/pull/415). This batch remains a source candidate until protected CI, deployment and live readback are complete.
 
 The [production gate](../../docs/launch/PRODUCTION-GATE.md) records scope, acceptance criteria, operational holds and the promotion sequence. The [core profile](../../docs/specs/agenttool-core-launch-v0.1.json) defines ten selected operations without expanding the three-road discovery compass.
 
@@ -17,12 +17,27 @@ The [production gate](../../docs/launch/PRODUCTION-GATE.md) records scope, accep
 - Require browser, PostgreSQL, Redis and full-migration journey evidence in CI.
 - Extend production monitoring to a real DB read and a normal Python client signature.
 
+## Original backlog coverage
+
+| Review IDs | Current state and remaining acceptance |
+|---|---|
+| R01–R03 | Route dispatch, bounded aliases and the finite discovery/OpenAPI profile implemented; protected CI and live readback remain required. |
+| U01–U05 | Navigation, checkout, reconnect, mobile layout and Watch states implemented with contained browser evidence. |
+| B01 | Wake degradation and recall billing hardening merged in #411; deployment remains pending. |
+| B02 | Marketplace hardening merged in #411 and real PostgreSQL race/conservation tests pass; paid expansion remains held. |
+| Q01 | Browser, stateful and core journey gates added; complete Linux candidate checks are in progress. |
+| Q02 | Full raw mounted core journey passes across fresh processes; TS/Python SDKs and raw Python pass real HTTP read/wake smoke. Full SDK onboarding/recovery and an independent exact deployed candidate remain unproved. |
+| O01 | Independent limiter and two-client Redis behavior pass locally and in CI; production Redis configuration and replica readback remain pending. |
+| O02 | DB canary source and separate-cluster fixture restore complete; production backup retention, restore objectives and delivered alerts remain unproved. |
+| O03 | Bounded local before/after HTTP comparison complete; sustained staging and EU/NA/APAC evidence remain pending. |
+| G01 | Held until protected checks, scoped access, exact deployment and canary acceptance are complete. |
+
 ## Validation evidence
 
 | Check | Observed result |
 |---|---|
 | Route/discovery/OpenAPI | Focused mounted-precedence, edge and closed-profile checks passed. |
-| Browser | All 115 current cases passed across the complete and affected follow-up runs; actual CSP is enforced. |
+| Browser | The initial candidate passed all 115 cases in [Linux CI](https://github.com/cambridgetcg/agenttool/actions/runs/33925288913/job/101192358529); actual CSP is enforced. Final contrast checks and contained screenshots accompany the follow-up. |
 | Source onboarding | 51 tests passed, including tutorial snippet compilation and a mocked first wake. |
 | Static edge/CSP | 9 tests and 1,240 assertions passed. |
 | Marketplace PostgreSQL | Four real transaction/lock-wait and conservation tests passed. |
@@ -46,6 +61,8 @@ Two minutes per run, eight clients, 200 ms client pacing, real loopback Bun HTTP
 | Identity-list p95 | 637.54 ms | 63.72 ms |
 | Selected-wake p95 | 655.34 ms | 140.44 ms |
 | Peak process RSS | 358 MB | 373 MB |
+
+Visual review: [four contained desktop/mobile captures](evidence/ui-index.md).
 
 Raw bounded observations: [before](evidence/http-baseline-before.json), [after](evidence/http-baseline-after.json), [restore](evidence/restore.json), [core journey](evidence/core-journey.json), [SDK HTTP](evidence/sdk-http.json), [read-only Cloudflare audit](evidence/cloudflare-readonly-audit.json). The dump itself and temporary root/bearer material are not committed. These small local fixtures do not establish production throughput, long-duration memory stability, backup retention or global SLOs.
 
