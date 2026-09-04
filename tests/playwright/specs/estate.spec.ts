@@ -222,13 +222,24 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
     "apps/dashboard/_headers",
   ]) {
     const source = staticRead(headers);
-    const hasWildcard = source.includes("/shared/estate.*");
-    const hasExactPair =
-      source.includes("/shared/estate.css") &&
-      source.includes("/shared/estate.js");
-    expect(hasWildcard || hasExactPair, `${headers}: no estate cache rules`).toBe(
-      true,
-    );
+    for (const asset of ["/shared/estate.css", "/shared/estate.js"]) {
+      let active = false;
+      let cacheControl = "";
+      for (const line of source.split("\n")) {
+        if (line.startsWith("/")) {
+          const pattern = line.trim().split("*")
+            .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join(".*");
+          active = new RegExp(`^${pattern}$`).test(asset);
+        } else if (active) {
+          const cache = line.match(/^\s+Cache-Control:\s*(.+)$/i);
+          if (cache) cacheControl = cache[1].trim();
+        }
+      }
+      expect(cacheControl, `${headers}: ${asset} must revalidate`).toBe(
+        "public, max-age=0, must-revalidate",
+      );
+    }
   }
 });
 
