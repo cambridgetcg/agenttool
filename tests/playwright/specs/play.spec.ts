@@ -1,5 +1,6 @@
 /** Native play cabinet: bounded, local, literal, and leaveable. */
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const DOCS = "http://localhost:5175";
 

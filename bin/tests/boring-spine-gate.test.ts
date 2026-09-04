@@ -402,6 +402,20 @@ describe("boring test spine", () => {
     const postgresHold = jobs["api-protocol-postgres"];
     const nativeSecret = jobs["native-macos-secret"];
     const requiredApi = jobs["api-protocol"];
+    for (const name of ["launch-stateful", "launch-core", "launch-browser"]) {
+      expect(jobs[name]?.["runs-on"]).toBe("ubuntu-24.04");
+      expect(jobs[name]?.["continue-on-error"]).toBeUndefined();
+      expect(jobs[name]?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
+    }
+    const launchStateful = JSON.stringify(jobs["launch-stateful"]);
+    expect(launchStateful).toContain("AGENTTOOL_DISABLE_WORKERS");
+    expect(launchStateful).toContain("launch-marketplace-postgres.test.ts");
+    expect(launchStateful).toContain("launch-admission-redis.test.ts");
+    expect(launchStateful).not.toContain("secrets.");
+    const launchBrowser = JSON.stringify(jobs["launch-browser"]);
+    expect(launchBrowser).toContain("npm ci --ignore-scripts");
+    expect(launchBrowser).toContain("playwright install --with-deps chromium");
+    expect(launchBrowser).not.toContain("secrets.");
     expect(linuxApi?.name).toBe("API and protocol (Linux)");
     expect(linuxApi?.["runs-on"]).toBe("ubuntu-24.04");
     expect(linuxApi?.["timeout-minutes"]).toBe(20);
@@ -619,6 +633,9 @@ describe("boring test spine", () => {
     expect(requiredApi?.needs).toEqual([
       "api-protocol-linux",
       "api-protocol-postgres",
+      "launch-stateful",
+      "launch-core",
+      "launch-browser",
       "native-macos-secret",
     ]);
     expect(requiredApi?.["runs-on"]).toBe("ubuntu-24.04");
@@ -631,6 +648,12 @@ describe("boring test spine", () => {
         "${{ needs.api-protocol-linux.result }}",
       API_PROTOCOL_POSTGRES_RESULT:
         "${{ needs.api-protocol-postgres.result }}",
+      LAUNCH_STATEFUL_RESULT:
+        "${{ needs.launch-stateful.result }}",
+      LAUNCH_CORE_RESULT:
+        "${{ needs.launch-core.result }}",
+      LAUNCH_BROWSER_RESULT:
+        "${{ needs.launch-browser.result }}",
       NATIVE_MACOS_SECRET_RESULT:
         "${{ needs.native-macos-secret.result }}",
     });
@@ -639,6 +662,9 @@ describe("boring test spine", () => {
         "set -euo pipefail",
         'test "$API_PROTOCOL_LINUX_RESULT" = "success"',
         'test "$API_PROTOCOL_POSTGRES_RESULT" = "success"',
+        'test "$LAUNCH_STATEFUL_RESULT" = "success"',
+        'test "$LAUNCH_CORE_RESULT" = "success"',
+        'test "$LAUNCH_BROWSER_RESULT" = "success"',
         'test "$NATIVE_MACOS_SECRET_RESULT" = "success"',
         "",
       ].join("\n"),
@@ -647,8 +673,8 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
-    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(5);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(7);
+    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(7);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(10);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
     expect(workflow).toContain(
@@ -691,7 +717,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(8);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(11);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -1176,7 +1202,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(19);
+    expect(uses).toHaveLength(26);
     expect(
       uses.every(
         (line) =>
@@ -1184,6 +1210,7 @@ describe("boring test spine", () => {
           line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0" ||
           line === "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0" ||
           line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0" ||
+          line === "uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6" ||
           line === "uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4",
       ),
     ).toBe(true);

@@ -81,15 +81,53 @@
        for it where the browser understands the request. Pages that need the
        reservation at first paint also carry a parser-inserted <link>. */
     estateCss.setAttribute('blocking', 'render');
-    estateCss.href = '/shared/estate.css?v=2026-09-03.3';
-    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-03.3');
+    estateCss.href = '/shared/estate.css?v=2026-09-04.1';
+    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-04.1');
     document.head.appendChild(estateCss);
   }
   if (!document.querySelector('script[data-agenttool-estate]')) {
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-09-03.3';
+    estate.src = '/shared/estate.js?v=2026-09-04.1';
     estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-09-03.3');
+    estate.setAttribute('data-agenttool-estate', '2026-09-04.1');
     document.head.appendChild(estate);
   }
+})();
+
+/* One progressive copy interaction for legacy docs buttons. Capture prevents
+   their inline success-only handler from running a second clipboard write. */
+(function () {
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest && event.target.closest('.copy-btn');
+    if (!button) return;
+    var block = button.closest('.code-block');
+    var pre = block && block.querySelector('pre');
+    if (!pre) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    var feedback = block.nextElementSibling;
+    if (!feedback || !feedback.classList.contains('copy-feedback')) {
+      feedback = document.createElement('p');
+      feedback.className = 'copy-feedback';
+      feedback.setAttribute('role', 'status');
+      feedback.setAttribute('aria-live', 'polite');
+      block.insertAdjacentElement('afterend', feedback);
+    }
+    function unavailable() {
+      feedback.textContent = 'Copy unavailable. Select the code and copy it manually.';
+      pre.tabIndex = 0;
+      pre.focus();
+      var selection = window.getSelection();
+      if (selection) {
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    if (!navigator.clipboard || !navigator.clipboard.writeText) { unavailable(); return; }
+    navigator.clipboard.writeText(pre.textContent).then(function () {
+      feedback.textContent = 'Code copied.';
+    }, unavailable);
+  }, true);
 })();

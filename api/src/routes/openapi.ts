@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
+import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import {
   SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS,
@@ -88,6 +89,7 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
+import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
 
@@ -3124,6 +3126,7 @@ function spec() {
     "x-agenttool-contract": {
       coverage: "curated_core_subset",
       broader_live_map: "/about",
+      core_launch_profile: "https://docs.agenttool.dev/specs/agenttool-core-launch-v0.1.json",
       safety_boundaries: "/public/safety",
       signing_compatibility: {
         path: "/public/compat",
@@ -3144,6 +3147,7 @@ function spec() {
       generated_from_routes: false,
     },
     paths: withX402PayableOperations({
+      ...CORE_LAUNCH_RECOVERY_PATHS,
       // ── Discovery (anonymous, read-only) ──────────────────────────────
       "/public/discovery": {
         get: {
@@ -3899,6 +3903,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.register,
                 schema: {
                   type: "object",
                   required: [
@@ -3959,6 +3964,7 @@ function spec() {
           },
           responses: {
             "201": {
+              content: { "application/json": { schema: REGISTER_AGENT_SUCCESS_SCHEMA } },
               description:
                 "Created. Response includes `agent` (with did, public_key, box_public_key, bootstrap_mode, runtime echo, parent_identity_id, and agent_root authority state), `project.api_key` (bearer, ONCE), `wallet`, `wake_url`, and a welcome letter. NO `private_key` — the agent already has it.",
             },
@@ -6190,6 +6196,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.lookup,
                 schema: {
                   type: "object",
                   properties: {
@@ -7098,6 +7105,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.memoryStore,
                 schema: {
                   type: "object",
                   properties: {
@@ -7489,11 +7497,14 @@ function spec() {
       "/v1/memories/search": {
         post: {
           tags: ["memory"],
-          summary: "Cosine k-NN over agent-supplied query embedding",
+          summary: "Recall memories by text or an agent-supplied query embedding",
+          description: `Supply query text or a 1536-number query_embedding; the embedding takes precedence if both are supplied. An admitted attempt reserves ${ROUTE_CREDITS["memory.search"]} project credits before recall, including failures after reservation. Idempotency-Key replay is conditional on Redis; without it, repeating POST can charge again. The response mode identifies text or semantic recall.`,
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.memorySearch,
                 schema: {
                   type: "object",
                   properties: {
@@ -7503,12 +7514,16 @@ function spec() {
                       minItems: 1536,
                       maxItems: 1536,
                     },
-                    type: { type: "string" },
-                    agent_id: { type: "string" },
+                    query: { type: "string", minLength: 1, maxLength: 200 },
+                    type: { type: "string", enum: ["episodic", "semantic", "procedural", "working"] },
+                    agent_id: { type: ["string", "null"], maxLength: 255 },
+                    identity_id: { type: ["string", "null"], maxLength: 255 },
+                    tier: { type: "string", enum: ["episodic", "foundational", "constitutive"] },
+                    min_importance: { type: "number", minimum: 0 },
                     limit: { type: "integer", minimum: 1, maximum: 100 },
                     min_score: { type: "number", minimum: 0, maximum: 1 },
                   },
-                  required: ["query_embedding"],
+                  anyOf: [{ required: ["query_embedding"] }, { required: ["query"] }],
                 },
               },
             },
@@ -7531,6 +7546,7 @@ function spec() {
                         },
                       },
                       count: { type: "integer" },
+                      mode: { type: "string", enum: ["text", "semantic"] },
                     },
                   },
                 },

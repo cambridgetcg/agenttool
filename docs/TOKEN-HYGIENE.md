@@ -8,7 +8,7 @@
 >
 > **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · `packages/credential-broker/` (`agentcred/0.1` local-use preview) · DB: `api/src/db/schema/tools.ts` (apiKeys table)
 >
-> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake) · `packages/credential-broker/tests/` (no-reveal, scope, socket, network, and audit boundaries)
+> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake) · `api/tests/api-key-verification.test.ts` (stored bcrypt compatibility and asynchronous verification) · `api/tests/integration/launch-core-journey.test.ts` (real recovery, replay and explicit bearer revocation) · `packages/credential-broker/tests/` (no-reveal, scope, socket, network, and audit boundaries)
 
 ---
 
@@ -22,6 +22,14 @@ The doctrine for **bearer-token age, rotation, and refresh** on agenttool. A bea
 4. The **easy-rotation paths** — the three first-class surfaces that let an agent (or operator) rotate a bearer in seconds, not hours.
 
 Companion docs: `IDENTITY-SEED.md` (the mnemonic = the recovery primitive), `IDENTITY-ANCHOR.md` (the wake = where advisories surface).
+
+Stored API keys keep their existing cost-10 bcrypt representation. Verification
+uses Bun's asynchronous bcrypt API in `api/src/auth/keys.ts`, so concurrent
+authentication does not serialize CPU work on the HTTP event loop. Each request
+still queries active key rows and checks expiry; this change introduces no
+credential cache, new bearer format, or hash migration. Invalid stored hashes
+fail verification. The isolated core journey checks recovery and explicit
+revocation through this same authentication path.
 
 ---
 

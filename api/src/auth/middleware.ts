@@ -68,7 +68,7 @@ export async function verifyBearer(
     .where(and(eq(apiKeys.keyPrefix, prefix), isNull(apiKeys.revokedAt)));
 
   for (const candidate of candidates) {
-    if (!verifyApiKey(token, candidate.keyHash)) continue;
+    if (!(await verifyApiKey(token, candidate.keyHash))) continue;
     if (candidate.expiresAt && candidate.expiresAt < new Date()) {
       return { ok: false, reason: "expired" };
     }

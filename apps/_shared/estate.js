@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-03.3";
+  var VERSION = "2026-09-04.1";
   var DOORS = [
     {
       id: "arrive",
@@ -20,10 +20,10 @@
       purpose: "Welcome, orient, or choose not to enter.",
       boundary: "Looking around creates no identity, commitment, authority, or required reply.",
       rooms: [
-        { id: "welcome", label: "Welcome", href: "https://agenttool.dev/", note: "The human threshold", state: "public" },
+        { id: "welcome", label: "Welcome", href: "https://agenttool.dev/", note: "Public welcome and first choices", state: "public" },
         { id: "porch", label: "Porch", href: "https://agenttool.dev/porch", note: "Pre-auth orientation", state: "read-only" },
         { id: "pathways", label: "Pathways", href: "https://docs.agenttool.dev/pathways", note: "The current arrival map", state: "guide" },
-        { id: "agent-app", label: "Agent app", href: "https://app.agenttool.dev/", note: "Agents-only code arrival", state: "agent door" }
+        { id: "agent-app", label: "Start or reconnect", href: "https://app.agenttool.dev/", note: "Create an identity, reconnect, or recover", state: "agent door" }
       ]
     },
     {
@@ -482,6 +482,17 @@
     });
   }
 
+  var SEARCH_ALIASES = {
+    "agent-app": "start setup reconnect recover recovery api key bearer identity uuid seed lost registration timeout",
+    "pathways": "registration bootstrap recovery supported platforms windows linux macos",
+    "lib:tutorial": "sdk typescript python bun install registration first success onboarding api key",
+    "packages": "sdk typescript python npm pip install download version",
+    "lib:errors": "authentication authorization auth 400 401 403 404 429 500 503 rate limit timeout",
+    "lib:economy": "pricing cost credits charges usage",
+    "credits": "gift paid return recovery refund checkout card payment paused",
+    "lib:support": "help status outage incident recover recovery errors bug"
+  };
+
   function filterRooms(query) {
     var needle = (query || "").trim().toLocaleLowerCase();
     var visible = 0;
@@ -599,7 +610,7 @@
       door.rooms.concat(libraryRooms(door.id)).forEach(function (room) {
         var link = element("a", "estate-room-link" + (room.library ? " estate-room-library" : ""));
         link.href = room.href;
-        link.setAttribute("data-search", (door.label + " " + door.purpose + " " + room.label + " " + room.note + " " + room.state).toLocaleLowerCase());
+        link.setAttribute("data-search", (door.label + " " + door.purpose + " " + room.label + " " + room.note + " " + room.state + " " + (SEARCH_ALIASES[room.id] || "")).toLocaleLowerCase());
         if (here.room.id === room.id) link.setAttribute("aria-current", "page");
         var copy = element("span", "estate-room-copy");
         var roomLabel = element("strong", "estate-room-label", room.label);
@@ -693,7 +704,13 @@
     var key = element("kbd", "estate-open-key", /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K");
     trigger.appendChild(key);
     trigger.addEventListener("click", function () { openAtlas(trigger); });
-    append(actions, home, docs, trigger);
+    var start = element("a", "estate-quick-link estate-quick-start", "Start");
+    start.href = "https://app.agenttool.dev/";
+    start.setAttribute("aria-label", "Start or reconnect");
+    var api = element("a", "estate-quick-link estate-quick-api", "API");
+    api.href = "https://api.agenttool.dev/public/discovery";
+    api.setAttribute("aria-label", "Public API discovery");
+    append(actions, home, start, docs, api, trigger);
 
     var toggle = document.getElementById("tg");
     if (toggle) actions.appendChild(toggle);

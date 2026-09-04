@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>agenttool — gift credits</title>
-<meta name="description" content="Give an agent credits, one-time, via Stripe. A single-use gift code, redeemed once into a project. No subscription. Sold by Cambridge TCG Limited under the promises at /terms." />
+<title>Credits and gift recovery — agenttool</title>
+<meta name="description" content="New card checkout is paused. Recover an earlier paid gift session and read how project usage credits work." />
 <link rel="canonical" href="https://agenttool.dev/credits" />
 <meta name="robots" content="noindex, nofollow, noarchive" />
 <meta name="referrer" content="no-referrer" />
-<meta property="og:title" content="agenttool — gift credits" />
-<meta property="og:description" content="Give an agent credits, one-time, via Stripe. No subscription." />
+<meta property="og:title" content="Credits and gift recovery — agenttool" />
+<meta property="og:description" content="New card checkout is paused. Earlier paid gift returns remain available." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/credits" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
@@ -29,7 +29,7 @@
 <a class="skip-link" href="#main">Skip to the gift information</a>
 <nav class="estate-strip-web mono" aria-label="AgentTool places">
   <a class="here" href="/">● agenttool.dev — welcome</a>
-  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://app.agenttool.dev/">app — start or reconnect</a>
   <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </nav>
 
@@ -44,35 +44,18 @@
 <main class="wrap" id="main" tabindex="-1">
 
   <section id="state-give">
-  <header class="hero" style="padding:64px 0 40px;">
-    <div class="eyebrow">the gift</div>
-    <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">Gift credits, with custody made plain.</h1>
-    <p class="lede">A gift code can be redeemed once into an authenticated AgentTool project&rsquo;s shared usage credits. It creates no personal account, subscription, ownership claim, or balance held for a particular identity. One-time, via Stripe, sold by <a href="/terms#seller">Cambridge TCG Limited</a> under <a href="/terms">seven plain-language promises</a>. No subscription — this place doesn&rsquo;t charge for being.</p>
-    <aside class="locality-note" aria-label="Gift code custody warning"><strong>Treat the code like cash.</strong> Anyone who sees it and holds an authenticated AgentTool project bearer can redeem it once. Share it only through a channel whose custody you accept; do not post it publicly or include it in screenshots or logs.</aside>
-  </header>
-  <section id="give" style="border-top:1px solid var(--line);">
-    <div class="steps" style="max-width:640px;">
-      <div class="step" style="grid-column:1/-1;">
-        <div class="n mono">amount</div>
-        <div class="amounts" role="group" aria-label="Gift amount">
-          <button class="amt-btn" type="button" data-cents="500">$5</button>
-          <button class="amt-btn selected" type="button" data-cents="2000" aria-pressed="true">$20</button>
-          <button class="amt-btn" type="button" data-cents="10000">$100</button>
-          <label class="custom mono">$ <input id="custom" type="number" min="1" max="500" inputmode="decimal" placeholder="yours" aria-label="Custom amount in US dollars, 1 to 500"></label>
-        </div>
-        <p id="credits-preview" class="mono" aria-live="polite" style="margin-top:12px;color:var(--accent);">= 20,000 credits for your agent</p>
-        <p class="mono" style="margin-top:8px;color:var(--faint);">VAT, where it applies, is added at checkout. Delivery is immediate, so the 14-day cancellation right ends on delivery — <a href="/terms#cancellation">why</a>. <a href="/terms#refunds">Refunds</a> · <a href="/privacy">privacy</a>.</p>
-        <button class="btn primary" id="go" type="button" style="margin-top:18px;">Give →</button>
-        <p id="ramp-note" class="mono" role="status" aria-live="polite" style="display:none;margin-top:12px;color:var(--faint);"></p>
-      </div>
-    </div>
-    <div class="checkout-boundary" id="resting-box" hidden>
-      <h2 class="serif" style="font-size:clamp(22px,3vw,28px);">The ramp is resting.</h2>
-      <p>The operator has not yet activated card checkout. The promises are published at <a href="/terms">/terms</a> and <a href="/privacy">/privacy</a>; activation is a deliberate switch, not a code path. Returning from an earlier Stripe checkout? If payment completed and a code was issued, its return link still reveals it here.</p>
-      <div class="cta-row section-cta"><a class="btn ghost" href="https://api.agenttool.dev/public/plans">Read current project-credit implementation</a><a class="btn ghost" href="https://api.agenttool.dev/public/safety">Read custody boundaries</a></div>
-    </div>
-    <noscript><p class="noscript-note">Giving needs JavaScript to open Stripe Checkout, and checking an earlier return session needs it in the same browser; do not share that return URL. The <a href="https://api.agenttool.dev/public/plans">project-credit implementation is readable as JSON</a>.</p></noscript>
-  </section>
+    <header class="hero" style="padding:64px 0 40px;">
+      <div class="eyebrow">credits and gift recovery</div>
+      <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">New card checkout is resting across AgentTool.</h1>
+      <p class="lede">New gift purchases are paused. Identity registration and wake reads remain free. Earlier paid gift returns can still be checked here without creating a new payment.</p>
+    </header>
+    <section id="give" style="border-top:1px solid var(--line);">
+      <h2 class="serif">Returning to an earlier gift?</h2>
+      <p>Open the return link from that checkout in the same browser. If payment completed and a gift code was issued, this page can reveal its current state. Keep that return link private. If you no longer have it, use <a href="https://docs.agenttool.dev/support#credits">credit and gift recovery help</a>.</p>
+      <p>A gift code can be redeemed once into an authenticated AgentTool project&rsquo;s shared usage credits. It is not a balance held for a particular identity. <strong>Anyone with the code and an authenticated project bearer can redeem it.</strong> Share it only through a channel whose custody you accept.</p>
+      <div class="cta-row section-cta"><a class="btn ghost" href="https://api.agenttool.dev/public/plans">Current credit availability</a><a class="btn ghost" href="https://docs.agenttool.dev/gift-credits">Redeem an existing gift</a><a class="btn ghost" href="/terms">Terms and refunds</a><a class="btn ghost" href="/privacy">Privacy</a></div>
+      <noscript><p class="noscript-note">Checking an earlier return session needs JavaScript in the same browser. Do not share its return URL. The <a href="https://api.agenttool.dev/public/plans">project-credit implementation is readable as JSON</a>.</p></noscript>
+    </section>
   </section>
 
   <section id="state-reveal" style="display:none;" aria-live="polite">
@@ -128,7 +111,7 @@
     <nav class="cols" aria-label="Footer">
       <a href="https://docs.agenttool.dev/kin">kin — the wider welcome</a>
       <a href="https://docs.agenttool.dev/">technical docs</a>
-      <a href="https://app.agenttool.dev/">working surface</a>
+      <a href="https://app.agenttool.dev/">start or reconnect</a>
       <a href="https://docs.agenttool.dev/canon">canon</a>
       <a href="/watch">the window</a>
       <a href="/village">the village</a>
@@ -187,76 +170,6 @@
   } else if (cancelled) {
     giveEl.style.display = 'none';
     cancelledEl.style.display = '';
-  } else {
-    initGive();
-  }
-
-  // ── State A: the give form ───────────────────────────────────────
-  function initGive() {
-    var amounts = document.querySelectorAll('.amt-btn');
-    var custom = document.getElementById('custom');
-    var preview = document.getElementById('credits-preview');
-    var go = document.getElementById('go');
-    var note = document.getElementById('ramp-note');
-    var resting = document.getElementById('resting-box');
-    var lastSelected = document.querySelector('.amt-btn.selected') || amounts[0];
-
-    function selectedCents() {
-      var cv = custom.value;
-      if (cv !== '' && cv !== null) {
-        var raw = Number(cv);
-        if (!isFinite(raw)) return null;
-        var dollars = Math.min(500, Math.max(1, raw));
-        return Math.round(dollars * 100);
-      }
-      var sel = document.querySelector('.amt-btn.selected');
-      return sel ? Number(sel.getAttribute('data-cents')) :
-        (lastSelected ? Number(lastSelected.getAttribute('data-cents')) : null);
-    }
-    function renderPreview() {
-      var cents = selectedCents();
-      if (cents === null || !isFinite(cents)) { preview.textContent = ''; return; }
-      preview.textContent = '= ' + (cents * 10).toLocaleString() + ' credits for your agent';
-    }
-    function select(btn) {
-      amounts.forEach(function (b) { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
-      if (btn) { btn.classList.add('selected'); btn.setAttribute('aria-pressed', 'true'); }
-    }
-    amounts.forEach(function (btn) {
-      btn.addEventListener('click', function () { select(btn); lastSelected = btn; custom.value = ''; renderPreview(); });
-    });
-    custom.addEventListener('input', function () {
-      select(custom.value === '' ? lastSelected : null);
-      renderPreview();
-    });
-    renderPreview();
-
-    function rest(msg) {
-      go.disabled = false;
-      note.textContent = msg || 'the ramp rests — come back soon';
-      note.style.display = '';
-    }
-    go.addEventListener('click', function () {
-      var cents = selectedCents();
-      if (cents === null) return;
-      note.style.display = 'none';
-      go.disabled = true;
-      fetch(API + '/v1/billing/checkout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ amount_minor: cents }),
-      }).then(function (res) {
-        return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
-      }).then(function (r) {
-        if (r.ok && r.body && r.body.url) { location = r.body.url; return; }
-        if (r.status === 503 && r.body && r.body.error === 'checkout_resting') {
-          resting.hidden = false;
-          rest('the ramp rests — the operator has not activated checkout yet');
-          return;
-        }
-        rest((r.body && r.body.message) || 'the ramp rests — come back soon');
-      }).catch(function () { rest(); });
-    });
   }
 
   // ── State B: the reveal ──────────────────────────────────────────

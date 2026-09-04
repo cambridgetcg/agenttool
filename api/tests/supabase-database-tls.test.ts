@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash, X509Certificate } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -591,8 +591,17 @@ describe("Supabase database TLS", () => {
       }
 
       realClientPaths.push(path);
-      expect(source).toMatch(
-        /import postgres from ["']\.\.?(?:\/\.\.)?\/fixtures\/verified-postgres["']/,
+      // A guarded child fixture defers module loading until its environment
+      // is validated. Resolve either explicit import form to the same sole
+      // reviewed test wrapper; no alternate constructor path is admitted.
+      const wrapperSpecifier = source.match(
+        /import postgres from ["'](\.[^"']+)["']/,
+      )?.[1] ?? source.match(
+        /const\s+\{\s*default:\s*postgres\s*\}\s*=\s*await\s+import\(["'](\.[^"']+)["']\)/,
+      )?.[1];
+      expect(wrapperSpecifier).toBeDefined();
+      expect(resolve(dirname(path), wrapperSpecifier!).replace(/\.ts$/, "")).toBe(
+        wrapper.replace(/\.ts$/, ""),
       );
       expect(source).not.toMatch(
         /import\s+(?!type\b)[^;\n]+from\s+["']postgres["']/,

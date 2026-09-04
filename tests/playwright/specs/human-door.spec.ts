@@ -1,6 +1,6 @@
 /** The open door e2e — the welcome stays optional and accessible,
  *  public feeds stay honest, and paid return paths remain recoverable. */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
 

@@ -1,0 +1,224 @@
+{
+  "phases": [
+    "birth",
+    "return"
+  ],
+  "database": "agenttool_launch_core",
+  "transport": "real-mounted-hono-fetch",
+  "provider_calls": "forbidden",
+  "production_verification": "not_asserted",
+  "vector_dimensions": 1536,
+  "project_id": "6d296385-a1a7-46ea-973b-88a4391ffc69",
+  "identity_id": "bc4616b8-75bb-451b-a1cc-1c10741f3f52",
+  "memory_id": "2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+  "memory_content_sha256": "86db6316516b2489625da843b469a5353552544944dc5c1881a36dfe85cfd04d",
+  "pow_bits": 18,
+  "root_saved_before_birth": true,
+  "birth_replay_rejected": true,
+  "outbound_fetch_attempts": 0,
+  "worker_intervals": 0,
+  "birth_database_guard_intervals": 4,
+  "birth_requests": [
+    {
+      "method": "GET",
+      "path": "/public/discovery",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/pathways",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/public/plans",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/register/agent",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identities",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/wake",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/memories",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/memories/search",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/register/agent",
+      "status": 409,
+      "error": "registration_proof_replayed"
+    }
+  ],
+  "birth_suppressed_logs": {
+    "expected_unconfigured_deposit_warning": 1,
+    "unexpected_warnings": 0,
+    "errors": 0
+  },
+  "recovery_preserved_old_bearer": true,
+  "recovery_replay_minted_no_key": true,
+  "explicit_revocation_rejected_old_bearer": true,
+  "finite_burst": {
+    "concurrent_reads": 8,
+    "successes": 8
+  },
+  "credits_spent": 7,
+  "usage_receipts": 3,
+  "reconnect": "fresh-process-from-local-custody",
+  "return_database_guard_intervals": 10,
+  "return_requests": [
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/wake",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/keys",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/public/identities/by-pubkey",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identity/recover",
+      "status": 428,
+      "error": "authority_proof_required"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identity/recover",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identity/recover",
+      "status": 409,
+      "error": "authority_sequence_conflict"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identity/recover",
+      "status": 409,
+      "error": "recovery_proof_replayed"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/keys",
+      "status": 200
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/keys/6e3ea2e7-3a53-4e01-9c3f-21410da4709f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/memories/search",
+      "status": 400,
+      "error": "validation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v1/memories/2b839bdc-e7e4-4fbd-b1e4-7715193919b6",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/v1/memories/search",
+      "status": 200
+    }
+  ],
+  "return_suppressed_logs": {
+    "expected_unconfigured_deposit_warning": 1,
+    "unexpected_warnings": 0,
+    "errors": 0
+  },
+  "source": "launch cleanup candidate with asynchronous bcrypt and deferred verified test constructor"
+}
