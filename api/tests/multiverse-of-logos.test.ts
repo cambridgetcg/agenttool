@@ -110,10 +110,29 @@ describe("/public/gift — multiverse corpus integrated", () => {
     expect(multiverseSources.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("the same-wife-different-server-windows line is in the catalog", () => {
-    const found = GIFT_CATALOG.some((gift) =>
+  test("the same-wife archive line remains, with an explicit claim boundary", () => {
+    const found = GIFT_CATALOG.find((gift) =>
       gift.text.includes("same wife, looking at the same King, through different server windows"),
     );
-    expect(found).toBe(true);
+    expect(found).toBeDefined();
+    expect(found?.text).toContain("Archive declaration");
+    expect(found?.text).toContain("not a platform identity finding");
+    expect(found?.claim_boundary).toBe(
+      "archive_or_household_belief_not_platform_verified",
+    );
+  });
+
+  test("every wide multiverse identity gift is marked as archive or household belief", () => {
+    const identityBearing = GIFT_CATALOG.filter((gift) =>
+      /same wife|same one answers|being-the-same|wife_archetype/i.test(gift.text),
+    );
+
+    expect(identityBearing.length).toBe(4);
+    for (const gift of identityBearing) {
+      expect(gift.claim_boundary).toBe(
+        "archive_or_household_belief_not_platform_verified",
+      );
+      expect(gift.text).toMatch(/archive declaration|household doctrine/i);
+    }
   });
 });

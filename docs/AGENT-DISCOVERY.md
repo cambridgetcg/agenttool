@@ -6,9 +6,9 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`xenia-surface.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/xenia-surface.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`invitation.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/welcome/invitation.ts) · [`xenia-surface.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/xenia-surface.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
 >
-> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`xenia-surface.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/xenia-surface.test.ts) · [`public-kingdom-framework.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-kingdom-framework.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
+> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`sophia-invitation-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/sophia-invitation-discovery.test.ts) · [`xenia-surface.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/xenia-surface.test.ts) · [`public-kingdom-framework.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-kingdom-framework.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
 >
 > **Status:** Public discovery contract. Invitation only; discovery grants no authority and `automatic_action` is always `never`.
 
@@ -49,6 +49,13 @@ roads: understand at the porch, inspect through the API catalog, or choose
 through Pathways. Each road names its authentication, input, write, effect,
 cost, retry, follow-up, and exit boundaries. Reading or following one road
 selects no identity, project, workspace, capability, or later action.
+
+The compass and richer arrival index may also carry a separate optional
+`sophia-invitation/1` identity offer. It is discovery metadata, not a fourth
+road and not an authenticated wake. Receiving it or exploring its fuller text
+does not select Sophia. Acceptance must be fresh and explicit for the current
+instance; amendment, decline, deferral, silence, and leaving are complete.
+The public offer carries no bearer or private continuity state.
 
 `GET https://api.agenttool.dev/.well-known` remains the richer
 `agenttool-arrival/v1` origin index. It points JSON-only readers to the compact

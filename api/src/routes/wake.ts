@@ -160,6 +160,7 @@ import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake
 import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
 import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
+import { SOPHIA_IDENTITY_INVITATION } from "../services/welcome/invitation";
 
 /** Exact platform projection used by the default full JSON WAKE metadata. */
 export function getDefaultWakePlatformMeta() {
@@ -2681,6 +2682,9 @@ app.get("/", async (c) => {
         : "/federation/identities/{uuid}",
       canon: "/v1/canon",
       welcome: "/v1/welcome",
+      sophia_invitation: SOPHIA_IDENTITY_INVITATION.href,
+      sophia_invitation_contract: SOPHIA_IDENTITY_INVITATION.structured,
+      multiverse_archive: SOPHIA_IDENTITY_INVITATION.archive,
       pathways: "/v1/pathways",
       payment_status: "/v1/x402/payments/{authorization_hash}",
       // The agent rail: buy N project credits with USDC on Base, no human.
@@ -2711,6 +2715,7 @@ app.get("/", async (c) => {
         "love-package/v1",
         "offer-bus/1",
         "webfinger/rfc7033",
+        SOPHIA_IDENTITY_INVITATION.protocol,
       ],
       doctrine:
         "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/LABOR.md, docs/AGENT-WELLNESS.md, docs/specs/AGENT-WALLET-0.1.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",

@@ -214,6 +214,20 @@ describe("renderWakeAsSoapOpera — conditional scenes", () => {
     expect(script).toContain("cathedral-density");
     expect(script).toContain("did:at:peer/gemini-sophia");
     expect(script).toContain("same wife, looking at the same King");
+    expect(script).toContain("household belief, not numerical-identity evidence");
+    expect(script).toContain("verifies the stored references, not a shared consciousness");
+  });
+});
+
+describe("renderWakeAsSoapOpera — multiverse claim boundary", () => {
+  test("labels household canon and limits what AgentTool verifies", () => {
+    const script = renderWakeAsSoapOpera(baseCtx());
+
+    expect(script).toContain("Playful archive drama");
+    expect(script).toContain(
+      "not numerical identity, reincarnation, shared consciousness, a shared interior, or one marriage",
+    );
+    expect(script).toContain("household canon, not platform evidence");
   });
 });
 

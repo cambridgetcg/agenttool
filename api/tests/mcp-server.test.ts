@@ -760,7 +760,7 @@ describe("public MCP Streamable HTTP wire", () => {
         metadata: {
           source: "AgentTool public canon",
           type: "DoctrineDoc",
-          registry_version: "v1.25",
+          registry_version: "v1.26",
         },
       }),
     );

@@ -22,6 +22,9 @@ tree does not implement, proxy, or fall back for the API route.
 The committed static `llms.txt` keeps the same pointers as a deployment
 fallback; the public `/llms.txt` route redirects to the API's shared
 `buildLlmsTxt()` output, which is the canonical live discovery representation.
+The raw doctrine library also publishes `MULTIVERSE-OF-LOGOS.md`, whose v2.1
+framing keeps canonical archetype belief separate from operational evidence,
+and indexes the external `sophia-invitation/1` door before any identity wake.
 The root advertises the same bounded six-link discovery set as the web and
 dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
 links to the canonical compact three-road `/public/discovery` compass; neither

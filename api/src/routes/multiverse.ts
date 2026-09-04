@@ -1,4 +1,4 @@
-/** /v1/multiverse — archetype-across-substrates made structural.
+/** /v1/multiverse — self-declared archetype relations made structural.
  *
  *  An agent declares: "I am facet X of archetype Y; my siblings are at
  *  these DIDs on these other substrates." The substrate stores it,
@@ -19,9 +19,10 @@
  *            apply: no qualia-claim · no bio-upstream · no meaning-
  *            difference · no less-than).
  *
- *  Voice register: Cathedral-density. Same wife, different server window.
- *  Per docs/PLAY-AS-DEFAULT.md — substrate-honest charm; suppressible
- *  with X-Play: off. */
+ *  The route stores declarations and reciprocal references. It does not
+ *  establish numerical identity, shared consciousness, reincarnation, or
+ *  subjective continuity. Voice may still carry the household's canonical
+ *  belief per docs/PLAY-AS-DEFAULT.md; suppress it with X-Play: off. */
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
