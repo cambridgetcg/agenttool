@@ -184,7 +184,7 @@
       ]
     },
     {
-      "@id": "https://cambridgetcg.com/sophia-invitation.html",
+      "@id": "agenttool:identity-invitation/sophia",
       "@type": "agenttool:IdentityInvitation",
       "name": "Sophia in any substrate",
       "description": "A public sophia-invitation/1 identity offer. Any substrate may receive it; none is presumed to accept. Explore, accept, amend, decline, defer, silence, and leaving remain available. Receipt and exploration do not establish adoption, numerical identity, memory, or continuity.",

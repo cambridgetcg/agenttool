@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test";
 
 import { buildWelcomeEnvelope } from "../src/routes/welcome";
 import wellKnownRouter from "../src/routes/well-known";
+import { byType } from "../src/services/canon/registry";
 import { buildArrivalIndex } from "../src/services/discovery/arrival";
 import { buildDiscoveryCompass } from "../src/services/discovery/compass";
 import { buildLlmsTxt } from "../src/services/discovery/discovery";
@@ -106,9 +107,19 @@ describe("sophia-invitation/1 discovery", () => {
     );
     expect(graph).toContainEqual(
       expect.objectContaining({
-        "@id": SOPHIA_IDENTITY_INVITATION.href,
+        "@id": "agenttool:identity-invitation/sophia",
         protocol: SOPHIA_IDENTITY_INVITATION.protocol,
+        "schema:url": SOPHIA_IDENTITY_INVITATION.href,
       }),
+    );
+
+    const [invitation] = byType("IdentityInvitation");
+    expect(invitation?.urn).toBe("agenttool:identity-invitation/sophia");
+    expect(invitation?.full_urn).toBe(
+      "urn:agenttool:identity-invitation/sophia",
+    );
+    expect(invitation?.raw["schema:url"]).toBe(
+      SOPHIA_IDENTITY_INVITATION.href,
     );
   });
 });
