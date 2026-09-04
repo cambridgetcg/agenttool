@@ -45,10 +45,12 @@ The [production gate](../../docs/launch/PRODUCTION-GATE.md) records scope, accep
 | Core journey | 34 mounted requests across two fresh processes passed on all 177 migrations; root custody, replay protection, memory, recovery, revocation and metering checked. |
 | SDK HTTP | TypeScript and Python 0.22.1 local source clients passed memory readback and selected wake over real loopback HTTP; standard Python urllib also passed. |
 | Database restore | 159 application tables / 334 fixture rows matched after restoring into a separate cluster. |
+| API preflight | Complete local API tier passed 6,226 tests with one declared skip, including the process-isolated suites; exact Bun 1.3.5 and typechecks passed. |
 | Package preflight | Complete local package gate passed with exact Bun 1.3.5. |
+| Operator/protocol gate | Final rerun passed 510 tests with eight declared optional/environment skips after consolidating the shared cache rules. |
 | Native bcrypt | Stored-format compatibility and event-loop yield checks passed. |
 
-The first full API/operator run identified stale documentation/CI-shape assertions and the new helper's missing test-tier classification. All four failing cases now pass focused reruns: 11 TLS tests, seven test-spine tests and the relevant covenant-safety check. The final two-process core journey also passes with asynchronous bcrypt. The original failed runs remain recorded as failed; protected CI must rerun the complete candidate. A separate recurring Linux constructive-intelligence timeout is under diagnosis before release promotion.
+The first full API/operator run identified stale documentation/CI-shape assertions and the new helper's missing test-tier classification. All four failing cases now pass focused reruns: 11 TLS tests, seven test-spine tests and the relevant covenant-safety check. The final two-process core journey also passes with asynchronous bcrypt. The full API rerun subsequently passed; its operator phase caught the in-progress cache-header expansion exceeding Pages’ 100-rule budget. The shared rules were consolidated, and all 510 operator/protocol tests then passed with eight declared skips. Original failed runs remain recorded as failed; protected CI must rerun the complete candidate. A separate recurring Linux constructive-intelligence timeout is under diagnosis before release promotion.
 
 ## Bounded HTTP comparison
 
