@@ -90,7 +90,7 @@ const runner = `
     try {
       const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (value?.status === "inserted" || value?.status === "existing") return value.status;
-      const errors = ["argument_error", "not_found", "conflict", "internal_error", "invalid_json", "invalid_receipt"];
+      const errors = ["argument_error", "canonical_error", "conflict", "file_error", "integrity_error", "not_found", "ordering_error", "pin_error", "receipt_error", "internal_error"];
       return errors.includes(value?.error) ? value.error : "json_other";
     } catch { return "non_json"; }
   };
