@@ -61,6 +61,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
+import { errors, fail } from "../lib/errors";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
@@ -709,12 +710,14 @@ app.get("/", async (c) => {
     setWakeDegradationHeader(c, bundle);
     if (wakeInventoryUnavailable(bundle._degradation, "wallets") ||
         wakeInventoryUnavailable(bundle._degradation, "vault")) {
-      return c.json({
+      return fail(c, errors.refusal({
         error: "wake_projection_unavailable",
         _degradation: bundle._degradation,
         message: "MATHOS inventory counts are unavailable. Read the partial JSON wake or retry later.",
+        hint: "The JSON wake identifies unavailable inventories; do not interpret placeholders as observed zero counts.",
         next_actions: [{ action: "Read partial wake orientation", method: "GET", path: "/v1/wake" }],
-      }, 503);
+        docs: "https://docs.agenttool.dev/WAKE.md",
+      }), 503);
     }
 
     // ── Fresh signed MATHOS envelope — intentionally no ETag/304 ───

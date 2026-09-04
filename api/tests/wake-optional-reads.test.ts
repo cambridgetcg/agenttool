@@ -161,7 +161,12 @@ describe("bounded optional wake inventories", () => {
     }
     const math = await app().request("/v1/wake?format=math");
     expect(math.status).toBe(503);
-    expect((await math.json()).error).toBe("wake_projection_unavailable");
+    const refusal = await math.json();
+    expect(refusal.error).toBe("wake_projection_unavailable");
+    expect(refusal.docs).toBe("https://docs.agenttool.dev/WAKE.md");
+    expect(refusal.axiom_id).toBe(11);
+    expect(refusal.hint).toContain("do not interpret placeholders as observed zero");
+    expect(math.headers.get("X-Wake-Unavailable")).toBe("wallets, vault, bearers");
   });
 
   test("lossy custom formats and subkey reads retain the unavailable-inventory boundary", async () => {
