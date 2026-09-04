@@ -4,7 +4,7 @@ Reviewed 4 September 2026. Source: GitHub `main` at `91b27a097f5f97eb7605c3d4f5e
 
 **Recommendation: finish a focused launch candidate before expanding global promotion.** AgentTool has a coherent visual identity, working public discovery, substantial capabilities, and strong deployment machinery. The immediate work is to make its routes, promises, first-agent journey, and release evidence agree. The review does not establish readiness for unrestricted worldwide traffic.
 
-This branch contains review artifacts only. It preserves the two existing working checkouts, including pending launch fixes. No registration, credential recovery, purchase, payment, live data write, migration, or deployment was performed.
+The initial review contained review artifacts only and preserved both existing working checkouts, including pending launch fixes. No registration, credential recovery, purchase, payment, live data write, migration, or deployment was performed during that audit. Subsequent implementation and validation are recorded in the [launch cleanup](../launch-cleanup-20260904/README.md); the observations below retain their original scope.
 
 ## Read the review
 
