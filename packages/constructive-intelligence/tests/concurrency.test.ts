@@ -78,7 +78,6 @@ const runner = `
   const outputSettlements = [];
   const childProgress = [];
   const streamCaptures = [];
-  const childMarkers = [];
   const startedAt = performance.now();
   let readyCount = 0;
   let totalOutputBytes = 0;
@@ -109,13 +108,6 @@ const runner = `
     }
     return { exists, state, wait_channel };
   };
-  const readStage = (path) => {
-    if (!path) return null;
-    try {
-      const stage = JSON.parse(readFileSync(path, "utf8")).stage;
-      return ["entrypoint_importing", "store_close_entered", "store_close_returned", "store_close_threw", "entrypoint_completed"].includes(stage) ? stage : "invalid";
-    } catch { return "unavailable"; }
-  };
 
   const settle = (exitCode, reason) => {
     if (settlementPromise !== undefined) return settlementPromise;
@@ -134,7 +126,6 @@ const runner = `
             stdout_kind: classifyOutput(stdout), stderr_kind: classifyOutput(stderr),
           })),
           processes: processes.map(({ pid }) => observeProcess(pid)),
-          cli_stages: childMarkers.map(readStage),
         });
       } catch {
         // Diagnostics must not interfere with ownership settlement.
@@ -230,10 +221,9 @@ const runner = `
   };
 
   const main = async () => {
-    const recordCommand = (marker) => [
+    const recordCommand = [
       process.execPath,
-      "tests/fixtures/concurrency-cli-probe.ts",
-      marker,
+      "src/bin.ts",
       "record",
       "--db",
       database,
@@ -247,10 +237,9 @@ const runner = `
     ];
 
     for (let index = 0; index < 2; index += 1) {
-      const marker = settlementPath + ".child-" + index + ".json";
       const child = Bun.spawn(
         mode === "record" || mode === "record-race"
-          ? recordCommand(marker)
+          ? recordCommand
           : hangCommand,
         {
         stdin: "ignore",
@@ -264,7 +253,6 @@ const runner = `
       const progress = { exited: false, exit_code: null, stdout_done: false, stderr_done: false };
       childProgress.push(progress);
       streamCaptures.push({ stdout: [], stderr: [] });
-      childMarkers.push(mode === "record" || mode === "record-race" ? marker : null);
       void child.exited.then((exitCode) => {
         progress.exited = true;
         progress.exit_code = exitCode;
@@ -365,7 +353,6 @@ type RunnerDiagnostics = {
   children: Array<{ exited: boolean; exit_code: number | null; stdout_done: boolean; stderr_done: boolean }>;
   child_io: Array<{ stdout_bytes: number; stderr_bytes: number; stdout_kind: string; stderr_kind: string }>;
   processes: Array<{ exists: boolean | null; state: string | null; wait_channel: string | null }>;
-  cli_stages: Array<string | null>;
 };
 
 function readJson<T>(path: string): T {
@@ -496,7 +483,10 @@ function expectBoundedEmptyOutput(
   expect(run.stderr.byteLength).toBe(0);
 }
 
-test("concurrent exact CLI retries create one chain event", () => {
+// Independent samples, each with its own database and original deadline.
+// The real executable is launched directly: no preload, wrapper, or retry.
+test.each(Array.from({ length: 10 }, (_, index) => index + 1))(
+  "concurrent exact CLI retries create one chain event (case %i/10)", () => {
   const root = join(import.meta.dir, "..");
   const directory = mkdtempSync(join(tmpdir(), "constructive-concurrent-"));
   const database = join(directory, "pilot.sqlite");
@@ -622,7 +612,6 @@ test("post-results settlement cannot publish a timeout as success", () => {
     { exited: true, exit_code: 0, stdout_done: true, stderr_done: true },
     { exited: true, exit_code: 0, stdout_done: true, stderr_done: true },
   ]);
-  expect(diagnostics.cli_stages).toEqual(["entrypoint_completed", "entrypoint_completed"]);
   expect(diagnostics.child_io.map(({ stdout_kind }) => stdout_kind).sort()).toEqual(["existing", "inserted"]);
   expect(diagnostics.child_io.every(({ stderr_bytes, stderr_kind }) => stderr_bytes === 0 && stderr_kind === "empty")).toBe(true);
   expect(diagnostics.child_io.reduce((sum, io) => sum + io.stdout_bytes + io.stderr_bytes, 0)).toBe(diagnostics.output_bytes);
@@ -671,7 +660,6 @@ test("bounded concurrent runner force-kills and reaps two ready children", () =>
     { exited: false, exit_code: null, stdout_done: false, stderr_done: false },
     { exited: false, exit_code: null, stdout_done: false, stderr_done: false },
   ]);
-  expect(diagnostics.cli_stages).toEqual([null, null]);
   expect(diagnostics.processes.map(({ exists }) => exists)).toEqual([true, true]);
   expectProcessesAbsentTwice(pidLedger.pids);
 }, TEST_TIMEOUT_MS);
