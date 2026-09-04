@@ -35,7 +35,7 @@ bin/preflight.sh                          # API + data + ADDS + SDK; no service 
 bin/preflight.sh api                      # API/typecheck/operator slice
 bin/preflight.sh packages                 # data + ADDS + SDK slice
 bin/preflight.sh database                 # requires DATABASE_URL
-bin/preflight.sh smoke                    # requires deployed-smoke environment
+bin/preflight.sh smoke                    # public GET smoke; requires AGENTTOOL_BASE
 RUN_CONTRACT=1 bin/preflight.sh contracts # requires an Anthropic, OpenAI, or Ollama key
 bin/preflight.sh quarantine               # diagnostic; known failures remain non-zero
 bin/preflight.sh database-quarantine      # diagnostic; requires DATABASE_URL
@@ -46,6 +46,13 @@ bin/run-test-tier.sh list                 # exact file → tier inventory
 To run one focused file, use `cd api && bun test tests/<file>.test.ts`. Raw
 `cd api && bun test` recursively mixes external-state and known-red files; it
 is a diagnostic sweep, not the required gate.
+
+The smoke tier performs no application writes. Paired
+`AGENTTOOL_API_KEY`/`AGENTTOOL_IDENTITY_ID` add exact-identity wake reads;
+without them, private wake is explicitly not checked. The older fixture-write
+exercise requires `bin/smoke-test.sh --mutate-disposable` plus a matching
+`SMOKE_DISPOSABLE_IDENTITY_ID`; it spends credits and retains publication and
+fixture changes. See [`DEPLOYMENT.md`](../../docs/DEPLOYMENT.md#7-read-only-launch-smoke-and-disposable-write-exercise).
 
 ## What each tier proves
 

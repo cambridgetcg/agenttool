@@ -75,7 +75,7 @@ describe("wake representation validators", () => {
       makeWakeSemanticEtag(base, { ...representation, tutor: true }),
     );
     expect(makeWakeSemanticEtag(base, representation)).toMatch(
-      /^W\/"r4-sha256-[0-9a-f]{64}"$/,
+      /^W\/"r5-sha256-[0-9a-f]{64}"$/,
     );
   });
 

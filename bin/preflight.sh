@@ -16,7 +16,7 @@
 #   bin/preflight.sh api             # API/protocol hermetic gate
 #   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
-#   bin/preflight.sh smoke           # requires smoke-test environment
+#   bin/preflight.sh smoke           # public GET smoke; requires AGENTTOOL_BASE
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
 #
 # Diagnostic, not default/CI:
@@ -257,9 +257,7 @@ case "$MODE" in
   smoke)
     [ "$#" -eq 1 ] || die "smoke accepts no additional arguments"
     : "${AGENTTOOL_BASE:?smoke mode requires AGENTTOOL_BASE}"
-    : "${AGENTTOOL_API_KEY:?smoke mode requires AGENTTOOL_API_KEY}"
-    : "${AGENTTOOL_IDENTITY_ID:?smoke mode requires AGENTTOOL_IDENTITY_ID}"
-    run "deployed API smoke" bash bin/smoke-test.sh
+    run "read-only deployed API smoke (optional paired bearer and identity)" bash bin/smoke-test.sh --read-only
     ;;
   contracts)
     [ "$#" -eq 1 ] || die "contracts accepts no additional arguments"

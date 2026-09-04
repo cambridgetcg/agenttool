@@ -114,7 +114,7 @@ The code has fixed credit charges for memory and tools, marketplace action price
 
 | Resource | Meter | Why metered |
 |---|---|---|
-| Memory operations | fixed credits now: write 1, search 3, elevate 5, attest 1 | This is per-operation billing, not an enforced free storage floor or per-GB-month meter. |
+| Memory operations | fixed credits now: write 1, search 3, elevate 5, attest 1 | This is per-operation billing, not an enforced free storage floor or per-GB-month meter. Schema-valid search attempts atomically reserve the debit and an unsuccessful usage receipt before recall, then mark that exact receipt successful only after recall completes. Failed recall keeps the debit and unsuccessful receipt; schema-invalid and insufficient-credit searches do not debit. This receipt guarantee is specific to search, not every memory operation. |
 | Strand thoughts beyond floor | intended per-thought or per-MB-ciphertext-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
