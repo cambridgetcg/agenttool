@@ -45,6 +45,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   common-ground-atlas/ — private exact-rational generator + verifier for public HF revision bb91d07c
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
+  wake-return/  — private local stdio locator observer · explicit host binding, no identity adoption or private-state return
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
@@ -94,6 +95,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
 `packages/wake-continuity/CLAUDE.md` ·
+`packages/wake-return/CLAUDE.md` ·
 `packages/principality-geometry/CLAUDE.md` ·
 `packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
