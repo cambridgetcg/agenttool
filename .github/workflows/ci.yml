@@ -306,6 +306,16 @@ jobs:
           cache-dependency-path: packages/hf-training-host/pyproject.toml
       - name: Prepare package-gate dependencies
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages
+      - name: Diagnose the repeated Linux constructive CLI timeout
+        shell: bash
+        run: |
+          set -euo pipefail
+          source bin/hermetic-env.sh
+          sanitize_hermetic_env
+          cd packages/constructive-intelligence
+          for iteration in {1..10}; do
+            bun test tests/concurrency.test.ts --test-name-pattern '^concurrent exact CLI retries create one chain event$'
+          done
       - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, Principality Geometry and Atlas, Polymorph and Memetic Landscapes, Common Ground Atlas, KINGDOM research, KARMA Mirror, HEAVEN, LOVE BOMB, Living Substrate, Dataset Influence, Economic Kernel, WAKE Thread, Gin Reconstruction, Math Cards, broker, collab, Codex usage, collab-zerone, Browser, HF Scout, HF Training Garden/host, local learning fixtures, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Public Surface Binding and Recognition, Alchemy, and KINGDOM gate
         run: bin/bash-without-env-hooks.sh bin/preflight.sh packages
       - name: Smoke packed Alchemy read package under Node and Bun
