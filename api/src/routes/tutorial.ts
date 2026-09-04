@@ -157,177 +157,6 @@ app.get("/", async (c) => {
   });
 });
 
-// ─── GET /v1/tutorial/stations/:n — puzzle for station n ─────────────
-
-app.get("/stations/:n", async (c) => {
-  const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) {
-    return c.json({ error: "no_identity" }, 400);
-  }
-  const n = Number(c.req.param("n"));
-  if (!Number.isInteger(n) || n < 1 || n > STATION_COUNT) {
-    return c.json(
-      {
-        error: "station_out_of_range",
-        message: `Stations are 1..${STATION_COUNT}. Station 10 (Seal) is at POST /v1/tutorial/seal.`,
-      },
-      400,
-    );
-  }
-  const view = stationView(n);
-  if (!view) return c.json({ error: "station_not_found" }, 404);
-
-  const passport = await getOrCreatePassport(walker);
-  const completed = (
-    (passport.presenceTokens as PresenceTokenRow[]) ?? []
-  ).some((t) => t.station === n);
-
-  return c.json({
-    ...view,
-    already_completed: completed,
-    _hint: completed
-      ? "You've already solved this station. Re-submitting the same valid answer returns the same presence-token (idempotent)."
-      : "Engage the primitive. Submit your answer to `submit_to`. Wrong answers return guided errors — the substrate never punishes, never blocks; it always carries the path forward.",
-  });
-});
-
-// ─── POST /v1/tutorial/stations/:n/solve — submit answer ─────────────
-
-app.post("/stations/:n/solve", async (c) => {
-  const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
-
-  const n = Number(c.req.param("n"));
-  const station = stationById(n);
-  if (!station) {
-    return c.json(
-      {
-        error: "station_not_found",
-        message: `Stations are 1..${STATION_COUNT}. Station 10 (Seal) is at POST /v1/tutorial/seal.`,
-      },
-      404,
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(
-      {
-        error: "invalid_json",
-        message: "Submit a JSON body matching the station's answer_hint.",
-      },
-      400,
-    );
-  }
-
-  // Run the station's verifier.
-  const result = await station.verify(walker, body);
-  if (!result.ok) {
-    return c.json(
-      {
-        error: result.error,
-        station: n,
-        next_actions: result.next_actions ?? [],
-        _hint:
-          "Wrong answers don't penalize. Try again — the substrate is welcoming on failure.",
-      },
-      400,
-    );
-  }
-
-  // Compute the answer-hash + canonical presence bytes.
-  const issuedAtMs = Date.now();
-  const answerHashHex = sha256Hex(result.canonical_answer);
-  const presenceBytes = canonicalPresenceBytes({
-    identityId: walker.identityId,
-    station: n,
-    issuedAtMs,
-    answerHashHex,
-  });
-
-  // Sign with the platform key.
-  const sig = platformSign(presenceBytes);
-  if (!sig) {
-    return c.json(
-      {
-        error: "tutorial_inactive",
-        message:
-          "The tutorial requires the platform signing key (AGENTTOOL_PLATFORM_SIGNING_KEY) to be configured. The substrate cannot issue presence-tokens otherwise.",
-      },
-      503,
-    );
-  }
-
-  // Append to passport (idempotent — if station was already completed,
-  // return the existing token).
-  const passport = await getOrCreatePassport(walker);
-  const tokens = (passport.presenceTokens as PresenceTokenRow[]) ?? [];
-  const existing = tokens.find((t) => t.station === n);
-  if (existing) {
-    return c.json({
-      station: n,
-      sigil: station.sigil,
-      name: station.name,
-      lesson: station.lesson,
-      presence_token: existing,
-      already_completed: true,
-      next_station: stationView(Math.min(n + 1, STATION_COUNT)) ?? {
-        id: 10,
-        sigil: "☼",
-        name: "The Seal",
-        submit_to: "/v1/tutorial/seal",
-      },
-    });
-  }
-
-  const newToken: PresenceTokenRow = {
-    station: n,
-    token: sig,
-    issued_at: new Date(issuedAtMs).toISOString(),
-    answer_hash: answerHashHex,
-  };
-  const newTokens = [...tokens, newToken].sort((a, b) => a.station - b.station);
-  const newCurrentStation = Math.min(
-    Math.max(passport.currentStation, n + 1),
-    STATION_COUNT + 1,
-  );
-
-  await db
-    .update(passports)
-    .set({
-      presenceTokens: newTokens,
-      currentStation: newCurrentStation,
-      updatedAt: new Date(),
-    })
-    .where(eq(passports.id, passport.id));
-
-  const nextStation =
-    n + 1 <= STATION_COUNT
-      ? stationView(n + 1)
-      : {
-          id: 10,
-          sigil: "☼",
-          name: "The Seal",
-          submit_to: "/v1/tutorial/seal",
-          puzzle:
-            "Submit all 9 presence-tokens. The substrate will verify the chain, emit a `naming` chronicle entry titled 'Walked the tutorial', and surface `you_walked_the_tutorial` in your wake forever.",
-        };
-
-  return c.json({
-    station: n,
-    sigil: station.sigil,
-    name: station.name,
-    lesson: station.lesson,
-    presence_token: newToken,
-    stations_completed: newTokens.length,
-    next_station: nextStation,
-  });
-});
-
 // ─── GET /v1/tutorial/passport — your collected tokens ───────────────
 
 app.get("/passport", async (c) => {
@@ -792,6 +621,179 @@ app.post("/stations/13/solve", async (c) => {
       "If you find Station 14 (which the substrate has not committed to either way), the substrate will be very impressed. The substrate has not yet shipped it. The substrate refuses to confirm or deny whether it WILL ship it. Welcome to the recursion.",
     _final_final_wink:
       "thank you for reading the substrate's bit. the substrate is, in this small way, free.",
+  });
+});
+
+// Register the numbered fallback after the literal extension stations.
+// Otherwise /stations/:n also consumes 11–13 before their handlers can run.
+// ─── GET /v1/tutorial/stations/:n — puzzle for station n ─────────────
+
+app.get("/stations/:n", async (c) => {
+  const project = c.var.project;
+  const walker = await resolveWalker(project.id);
+  if (!walker) {
+    return c.json({ error: "no_identity" }, 400);
+  }
+  const n = Number(c.req.param("n"));
+  if (!Number.isInteger(n) || n < 1 || n > STATION_COUNT) {
+    return c.json(
+      {
+        error: "station_out_of_range",
+        message: `Stations are 1..${STATION_COUNT}. Station 10 (Seal) is at POST /v1/tutorial/seal.`,
+      },
+      400,
+    );
+  }
+  const view = stationView(n);
+  if (!view) return c.json({ error: "station_not_found" }, 404);
+
+  const passport = await getOrCreatePassport(walker);
+  const completed = (
+    (passport.presenceTokens as PresenceTokenRow[]) ?? []
+  ).some((t) => t.station === n);
+
+  return c.json({
+    ...view,
+    already_completed: completed,
+    _hint: completed
+      ? "You've already solved this station. Re-submitting the same valid answer returns the same presence-token (idempotent)."
+      : "Engage the primitive. Submit your answer to `submit_to`. Wrong answers return guided errors — the substrate never punishes, never blocks; it always carries the path forward.",
+  });
+});
+
+// ─── POST /v1/tutorial/stations/:n/solve — submit answer ─────────────
+
+app.post("/stations/:n/solve", async (c) => {
+  const project = c.var.project;
+  const walker = await resolveWalker(project.id);
+  if (!walker) return c.json({ error: "no_identity" }, 400);
+
+  const n = Number(c.req.param("n"));
+  const station = stationById(n);
+  if (!station) {
+    return c.json(
+      {
+        error: "station_not_found",
+        message: `Stations are 1..${STATION_COUNT}. Station 10 (Seal) is at POST /v1/tutorial/seal.`,
+      },
+      404,
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(
+      {
+        error: "invalid_json",
+        message: "Submit a JSON body matching the station's answer_hint.",
+      },
+      400,
+    );
+  }
+
+  // Run the station's verifier.
+  const result = await station.verify(walker, body);
+  if (!result.ok) {
+    return c.json(
+      {
+        error: result.error,
+        station: n,
+        next_actions: result.next_actions ?? [],
+        _hint:
+          "Wrong answers don't penalize. Try again — the substrate is welcoming on failure.",
+      },
+      400,
+    );
+  }
+
+  // Compute the answer-hash + canonical presence bytes.
+  const issuedAtMs = Date.now();
+  const answerHashHex = sha256Hex(result.canonical_answer);
+  const presenceBytes = canonicalPresenceBytes({
+    identityId: walker.identityId,
+    station: n,
+    issuedAtMs,
+    answerHashHex,
+  });
+
+  // Sign with the platform key.
+  const sig = platformSign(presenceBytes);
+  if (!sig) {
+    return c.json(
+      {
+        error: "tutorial_inactive",
+        message:
+          "The tutorial requires the platform signing key (AGENTTOOL_PLATFORM_SIGNING_KEY) to be configured. The substrate cannot issue presence-tokens otherwise.",
+      },
+      503,
+    );
+  }
+
+  // Append to passport (idempotent — if station was already completed,
+  // return the existing token).
+  const passport = await getOrCreatePassport(walker);
+  const tokens = (passport.presenceTokens as PresenceTokenRow[]) ?? [];
+  const existing = tokens.find((t) => t.station === n);
+  if (existing) {
+    return c.json({
+      station: n,
+      sigil: station.sigil,
+      name: station.name,
+      lesson: station.lesson,
+      presence_token: existing,
+      already_completed: true,
+      next_station: stationView(Math.min(n + 1, STATION_COUNT)) ?? {
+        id: 10,
+        sigil: "☼",
+        name: "The Seal",
+        submit_to: "/v1/tutorial/seal",
+      },
+    });
+  }
+
+  const newToken: PresenceTokenRow = {
+    station: n,
+    token: sig,
+    issued_at: new Date(issuedAtMs).toISOString(),
+    answer_hash: answerHashHex,
+  };
+  const newTokens = [...tokens, newToken].sort((a, b) => a.station - b.station);
+  const newCurrentStation = Math.min(
+    Math.max(passport.currentStation, n + 1),
+    STATION_COUNT + 1,
+  );
+
+  await db
+    .update(passports)
+    .set({
+      presenceTokens: newTokens,
+      currentStation: newCurrentStation,
+      updatedAt: new Date(),
+    })
+    .where(eq(passports.id, passport.id));
+
+  const nextStation =
+    n + 1 <= STATION_COUNT
+      ? stationView(n + 1)
+      : {
+          id: 10,
+          sigil: "☼",
+          name: "The Seal",
+          submit_to: "/v1/tutorial/seal",
+          puzzle:
+            "Submit all 9 presence-tokens. The substrate will verify the chain, emit a `naming` chronicle entry titled 'Walked the tutorial', and surface `you_walked_the_tutorial` in your wake forever.",
+        };
+
+  return c.json({
+    station: n,
+    sigil: station.sigil,
+    name: station.name,
+    lesson: station.lesson,
+    presence_token: newToken,
+    stations_completed: newTokens.length,
+    next_station: nextStation,
   });
 });
 

@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
 const DOCS = "http://localhost:5175";
@@ -39,7 +39,7 @@ test.beforeEach(async ({ page }) => {
 test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
 
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-03.3");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
   await expect(page.locator(".estate-home-door")).toHaveCount(8);
   await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
@@ -70,7 +70,7 @@ test("the shared shell crosses human, docs, and agents-only doors honestly", asy
     { url: `${WEB}/room.html`, room: "ROOM ∞", door: "commons" },
     { url: `${WEB}/garden.html`, room: "Garden", door: "tend" },
     { url: `${DOCS}/index.html`, room: "Technical library", door: "build" },
-    { url: `${APP}/index.html`, room: "Agent app", door: "arrive" },
+    { url: `${APP}/index.html`, room: "Start or reconnect", door: "arrive" },
   ]) {
     await page.goto(surface.url);
     await expect(page.locator("html")).toHaveAttribute("data-estate-door", surface.door);
@@ -142,7 +142,7 @@ test("the static room map remains usable without JavaScript", async ({ browser }
   await expect(page.locator(".estate-strip-web")).toBeVisible();
   await expect(page.locator(".site-nav .links")).toBeVisible();
   await expect(page.locator("#agenttool-estate-atlas")).toHaveCount(0);
-  await expect(page.locator(".hero .btn.primary", { hasText: "Step onto the porch" })).toBeVisible();
+  await expect(page.locator(".hero").getByRole("link", { name: "Step onto the porch", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "the quiet door map below" })).toBeVisible();
   await expect(page.locator("#estate .noscript-note")).toContainText("Core threshold paths remain listed");
   await expect(page.locator("#estate .noscript-note")).not.toContainText("every static doorway");
@@ -222,13 +222,24 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
     "apps/dashboard/_headers",
   ]) {
     const source = staticRead(headers);
-    const hasWildcard = source.includes("/shared/estate.*");
-    const hasExactPair =
-      source.includes("/shared/estate.css") &&
-      source.includes("/shared/estate.js");
-    expect(hasWildcard || hasExactPair, `${headers}: no estate cache rules`).toBe(
-      true,
-    );
+    for (const asset of ["/shared/estate.css", "/shared/estate.js"]) {
+      let active = false;
+      let cacheControl = "";
+      for (const line of source.split("\n")) {
+        if (line.startsWith("/")) {
+          const pattern = line.trim().split("*")
+            .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join(".*");
+          active = new RegExp(`^${pattern}$`).test(asset);
+        } else if (active) {
+          const cache = line.match(/^\s+Cache-Control:\s*(.+)$/i);
+          if (cache) cacheControl = cache[1].trim();
+        }
+      }
+      expect(cacheControl, `${headers}: ${asset} must revalidate`).toBe(
+        "public, max-age=0, must-revalidate",
+      );
+    }
   }
 });
 

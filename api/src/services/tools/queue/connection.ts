@@ -1,4 +1,4 @@
-/** Shared IORedis connection for BullMQ + idempotency cache.
+/** Worker-associated IORedis connection for BullMQ + idempotency cache.
  *
  *  When AGENTTOOL_DISABLE_WORKERS=1 (the standard "no Redis available"
  *  posture for dev / staging / single-machine prod) we never instantiate
@@ -6,7 +6,9 @@
  *  that import this file at startup (browse-queue, idempotency) get
  *  null and gate their own usage. Prevents the runaway-reconnection
  *  storm that otherwise saturates the Bun event loop when localhost
- *  Redis isn't reachable. */
+ *  Redis isn't reachable. Registration may independently opt into the bounded
+ *  request-only client in admission.ts; that cannot instantiate this client
+ *  or start any worker while the global switch is set. */
 
 import IORedis from "ioredis";
 

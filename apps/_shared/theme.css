@@ -358,7 +358,7 @@ nav.topnav {
   color: var(--accent);
 }
 .nav-cta {
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
   color: var(--accent-ink) !important;
   padding: 0.45rem 1rem;
   border-radius: var(--r-pill);
@@ -462,7 +462,7 @@ footer.site-footer .dot {
   white-space: nowrap;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
   color: var(--accent-ink);
   box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--accent) 50%, transparent);
 }
@@ -916,3 +916,17 @@ body.has-strip .topnav { top: var(--strip-height); }
 @media (scripting: enabled) and (max-width: 720px) {
   .estate-arriving .topnav { gap: 9px; }
 }
+
+/* The connection and reference doors share a usable keyboard bypass. */
+.skip-link {
+  position: fixed; top: .5rem; left: .5rem; z-index: 1000;
+  padding: .65rem 1rem; background: var(--surface); color: var(--text);
+  border: 2px solid var(--accent); border-radius: 6px;
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: translateY(0); }
+.start-choices { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.5rem 0; }
+/* Wrap identifiers in prose without changing their text or copied bytes. */
+p code, li > code, td code { overflow-wrap: anywhere; }
+pre code { overflow-wrap: normal; }
+.copy-feedback { margin: .4rem 0; font-size: .85rem; color: var(--text-muted); }

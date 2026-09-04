@@ -698,7 +698,8 @@
   .estate-location-slash { display: none; }
   .estate-location-room { max-width: 28vw; font-size: 10px; }
   .estate-quick-home,
-  .estate-quick-docs { display: none; }
+  .estate-quick-docs,
+  .estate-quick-api { display: none; }
   .estate-open { min-width: 42px; padding-inline: 9px; font-size: 0 !important; gap: 0; }
   .estate-open::before { content: "Rooms"; font-size: 11px; }
   .estate-open-key { display: none; }

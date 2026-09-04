@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   auditDnsRecords,
@@ -95,6 +96,25 @@ describe("AgentTool Cloudflare desired state", () => {
         url: "https://example.test/health",
       },
     })).toThrow("exact API HTTPS health");
+  });
+
+  test("machine transport covers every exact and slash-bounded apex API route", () => {
+    const worker = readFileSync(new URL("../../infra/apex-door/worker.js", import.meta.url), "utf8");
+    const expression = manifest.rulesets.find(rule => rule.ref === "agenttool_machine_transport_v1")!.expression;
+    for (const [constant, prefix] of [["API_EXACT", false], ["API_PREFIXES", true]] as const) {
+      const literals = worker.match(new RegExp(`const ${constant} = \\[([\\s\\S]*?)\\];`))?.[1];
+      expect(literals).toBeDefined();
+      const paths = [...literals!.matchAll(/"([^"\n]+)"/g)].map(match => match[1]!);
+      expect(paths.length).toBeGreaterThan(0);
+      for (const path of paths) {
+        expect(expression).toContain(prefix
+          ? `starts_with(http.request.uri.path, "${path}")`
+          : `http.request.uri.path eq "${path}"`);
+        if (prefix) expect(path.endsWith("/")).toBe(true);
+      }
+    }
+    expect(expression).not.toContain('starts_with(http.request.uri.path, "/")');
+    expect(manifest.zone_settings.browser_check).toBe("on");
   });
 
   test("refuses weakening any load-bearing private or inventory boundary", () => {

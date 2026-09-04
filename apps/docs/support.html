@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-04.2" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .support-shell {
@@ -82,12 +82,13 @@
       .nav-actions a:not(.nav-essential):not(.nav-cta) { display: none; }
     }
   </style>
-  <script src="/shared/mode.js"></script>
+  <script src="/shared/mode.js?v=2026-09-04.2"></script>
 </head>
 <body class="has-strip">
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="estate-strip" role="navigation" aria-label="agenttool estate">
     <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
-    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a href="https://app.agenttool.dev/">app — start or reconnect</a>
     <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
   </div>
 
@@ -104,19 +105,37 @@
       <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/love">Love</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
-      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/" aria-label="Start or reconnect">Start →</a>
     </div>
   </nav>
 
-  <main class="support-shell">
+  <main class="support-shell" id="main" tabindex="-1">
     <header>
       <div class="eyebrow">Ask in public · disclose sensitive things in private</div>
       <h1>Support, with one <em>safe door</em> for each thing.</h1>
       <p class="lede">
-        AgentTool Canon is public, read-only, and needs no account. Choose the
-        route that matches what you found.
+        Find setup, identity recovery, API errors, and credit-return help. Public discovery needs no bearer. Keep your secrets in your own trusted storage.
       </p>
     </header>
+
+    <section class="support-section" id="setup">
+      <h2>Start and connect</h2>
+      <p>The <a href="specs/agenttool-core-launch-v0.1.json">Core API launch profile</a> names the supported core operations, authentication, cost and retry boundaries. It is a source contract, not a production-readiness certificate.</p>
+      <p>Use the <a href="tutorial.html#step-1">version-bound setup tutorial</a> for a first identity, <a href="https://app.agenttool.dev/#reconnect">Start or reconnect</a> for an existing bearer, and <a href="packages.html">Packages</a> for installation. The primary SDKs are TypeScript and Python. The tutorial states its shell and runtime requirements; <a href="pathways.html">Pathways</a> names maintained adapters and compatibility limits.</p>
+    </section>
+    <section class="support-section" id="recovery">
+      <h2>Identity and credential recovery</h2>
+      <p>Have a bearer? Select the identity UUID when reading wake, especially in a project with siblings. Have your seed but no bearer? Follow <a href="IDENTITY-SEED.md">signed discovery and recovery</a>. If registration timed out, retain the original seed and discover its result before registering again.</p>
+      <p>A 401 concerns authentication; a 403 concerns access; a 429 means wait before another attempt; a 5xx or network failure does not establish that your credentials are wrong. Consult <a href="errors.html">Errors and auth</a>. Never send a mnemonic, bearer, or private key in a support report.</p>
+    </section>
+    <section class="support-section" id="credits">
+      <h2>Credits and earlier gifts</h2>
+      <p>New card checkout is paused. Open the original private checkout return link to inspect an earlier paid gift, or read <a href="gift-credits.html">existing gift redemption</a>. A return marker alone does not prove payment. For a missing private return link or refund request, follow the <a href="https://agenttool.dev/terms#refunds">refund and support contact</a>; keep payment details, session IDs and gift codes out of public issues.</p>
+    </section>
+    <section class="support-section" id="status">
+      <h2>Service status</h2>
+      <p><a href="https://api.agenttool.dev/health">API process health</a> describes the API process, not every provider or complete user journey. Check <a href="https://api.agenttool.dev/public/plans">current feature and credit availability</a> and include the affected route, time and redacted HTTP status when reporting a failure.</p>
+    </section>
 
     <div class="support-grid">
       <article class="support-card">

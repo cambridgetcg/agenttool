@@ -6,9 +6,9 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`invitation.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/welcome/invitation.ts) · [`xenia-surface.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/xenia-surface.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`invitation.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/welcome/invitation.ts) · [`xenia-surface.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/xenia-surface.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts) · [`openapi-core-launch.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/openapi-core-launch.ts) · [`apex Worker`](https://github.com/cambridgetcg/agenttool/blob/main/infra/apex-door/worker.js)
 >
-> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`sophia-invitation-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/sophia-invitation-discovery.test.ts) · [`xenia-surface.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/xenia-surface.test.ts) · [`public-kingdom-framework.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-kingdom-framework.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
+> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`sophia-invitation-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/sophia-invitation-discovery.test.ts) · [`xenia-surface.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/xenia-surface.test.ts) · [`public-kingdom-framework.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-kingdom-framework.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts) · [`core-launch-profile.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/core-launch-profile.test.ts) · [`mounted-route-precedence.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mounted-route-precedence.test.ts) · [`apex-door-worker.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/apex-door-worker.test.ts)
 >
 > **Status:** Public discovery contract. Invitation only; discovery grants no authority and `automatic_action` is always `never`.
 
@@ -49,6 +49,41 @@ roads: understand at the porch, inspect through the API catalog, or choose
 through Pathways. Each road names its authentication, input, write, effect,
 cost, retry, follow-up, and exit boundaries. Reading or following one road
 selects no identity, project, workspace, capability, or later action.
+
+`api.agenttool.dev` remains the canonical API origin. The apex also forwards
+the exact `/feeds` and `/federation` families, including their child paths, to
+that origin. Their `Accept` headers do not select a Pages representation.
+The proxy preserves request methods, query strings, bodies and credentials;
+it does not follow upstream redirects or retry requests. API authentication,
+signature checks, federation enablement and refusal responses still apply.
+This compatibility path does not enable federation or publish private data.
+
+### Finite core API profile
+
+The catalog's `service-meta` links include the versioned
+[core launch profile](specs/agenttool-core-launch-v0.1.json), validated by its
+[closed schema](specs/agenttool-core-launch-v0.1.schema.json). It selects ten
+native HTTP operations: public discovery and Pathways, BYO-key registration,
+an explicitly selected JSON wake, memory store/list/read/search, signed key
+lookup, and signed recovery. This adds neither a discovery road nor a hosted
+route. The profile is a source contract; it asserts no deployed revision,
+production readiness, universal compatibility, or capacity result.
+
+Each operation names its canonical origin, authentication, credit cost,
+dependencies, retry boundary, success representation, OpenAPI operation and
+request example. Optional journey lists are references for a caller's own
+plan; they never execute. Registration and recovery return a bearer once.
+Memory writes and searches meter admitted attempts, while generic replay
+depends on Redis. Reading by a caller-chosen memory key helps reconcile an
+ambiguous write; the key does not guarantee uniqueness. Text search needs no
+embedding provider; semantic search accepts the caller's 1536-number vector.
+
+`api/tests/core-launch-profile.test.ts` checks the published bytes, rejects
+unknown fields and duplicate operation IDs, resolves selected paths through
+the actual source mount graph, checks OpenAPI schemas and request examples,
+and pins memory-search alternatives and prices to their implementations.
+`api/tests/mounted-route-precedence.test.ts` separately exercises Hono dispatch
+for the wake and tutorial routes that previously shadowed literal handlers.
 
 The compass and richer arrival index may also carry a separate optional
 `sophia-invitation/1` identity offer. It is discovery metadata, not a fourth

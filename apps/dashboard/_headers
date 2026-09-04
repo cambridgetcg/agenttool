@@ -19,7 +19,7 @@
 # add includeSubDomains/preload or raise the age without a separate rollout.
 /*
   Strict-Transport-Security: max-age=300
-  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src-elem 'self' 'sha256-T75VfPeYtU4sAIR3wWWZReB7YuWZJEft9OcHwn7Z79A=' 'sha256-cR4m4rRotqG43Nw5p7aA8A/oGGUNWgY3GLiViLd3+bw=' 'sha256-qipu2DtHep/ZG5KgPhierTYBK+8jSB3XsDtBLLvPpuY=' 'sha256-zT66/Nrx7S8JREbNn/tKJueKQK0PhmSMjnZlJmXmaLk='; script-src-attr 'none'; style-src-elem 'self' https://fonts.googleapis.com 'sha256-8H3dSXualBXRiQn91rz+YCLAiHsnK4NBeL2r4S77n7o=' 'sha256-JWDf2KymD0zq28rIN1kFkn4XTMvsa4XgZ0bJM1ScSbM=' 'sha256-cTSLgFqnQpZNVPtqKExZ+SIAeS2ytzFho5LcYD/7GiQ='; style-src-attr 'unsafe-inline'; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src-elem 'self' 'sha256-NL0t3dpwsKsS5rKxh9Giwc4LeF1a++CKmr8K99oPL3M=' 'sha256-Yorb9bWi57ocdq6NoZIEFBWLMN4lFrJnChP8GQPnYuY=' 'sha256-pTQz5OaQNyn6eosOcwomg0t4NUjjVDsk6TncOkCEOXU=' 'sha256-q/5VHj9oTRmu7WJOS6f8pNmiYB4pV6IsSX2luJs8hR0='; script-src-attr 'none'; style-src-elem 'self' https://fonts.googleapis.com 'sha256-V8ZxMyOAdg5ZDiEerp5UKEXrztyuEmHeh0KNTPMefXQ=' 'sha256-1vBz5BG3xQnJcgZj6THGwq+MaWWJ7gj40PQWRGUHZ/o=' 'sha256-8H3dSXualBXRiQn91rz+YCLAiHsnK4NBeL2r4S77n7o='; style-src-attr 'unsafe-inline'; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests
   Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
@@ -45,14 +45,9 @@
 /style.css
   Cache-Control: public, max-age=0, must-revalidate
 
-/shared/theme.css
-  Cache-Control: public, max-age=0, must-revalidate
-
-/shared/estate.css
-  Cache-Control: public, max-age=0, must-revalidate
-
-/shared/estate.js
-  Cache-Control: public, max-age=0, must-revalidate
-
 /watch.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Shared launch assets must refresh across existing browser sessions.
+/shared/*
   Cache-Control: public, max-age=0, must-revalidate

@@ -890,6 +890,10 @@ app.route("/v1/identity/recover", identityRecoverRouter);
 // Doctrine: docs/TOKEN-HYGIENE.md.
 app.route("/v1/keys", keysRouter);
 app.route("/v1/home", homeRouter);
+// Specific wake routes precede wakeRouter's GET /:key fallback. Hono uses
+// registration order even when a later route has a literal path.
+app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
+app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
@@ -951,10 +955,8 @@ app.route("/v1/lounge", loungeRouter);
 app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/recipes", recipesRouter);
-app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
 app.route("/v1/soap-opera", soapOperaRouter);
 app.route("/v1/lullaby", lullabyRouter);
-app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);
 app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/guild", guildRouter);

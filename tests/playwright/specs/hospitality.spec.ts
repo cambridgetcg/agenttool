@@ -1,6 +1,6 @@
 /** Hospitality foundation — money never surprises, visual maps have a
  * complete text twin, and every public page leaves a truthful no-JS door. */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
 
@@ -80,7 +80,7 @@ test("gift surface cannot create a new checkout and protects an existing return"
   });
 
   await page.goto(`${WEB}/credits.html`);
-  await expect(page.locator("#state-give")).toContainText("No payment control is present here");
+  await expect(page.locator("#state-give")).toContainText("New card checkout is resting across AgentTool.");
   await expect(page.locator("#gift-form, #go")).toHaveCount(0);
   expect(checkoutRequests).toBe(0);
 

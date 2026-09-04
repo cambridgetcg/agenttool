@@ -148,7 +148,11 @@ export class ConstructiveStore {
   constructor(path: string, options: { create: boolean }) {
     if (path === ":memory:") {
       this.db = new Database(path, { create: true, strict: true });
-      this.configure();
+      try {
+        this.configure();
+      } catch (error) {
+        this.closeAfterFailure(error);
+      }
       return;
     }
     let requestedPath: string;
@@ -175,7 +179,24 @@ export class ConstructiveStore {
       }
     }
     this.db = new Database(this.filesystemPath, { create: options.create, strict: true });
-    this.configure();
+    try {
+      this.configure();
+    } catch (error) {
+      this.closeAfterFailure(error);
+    }
+  }
+
+  /** Once acquired, this connection remains ours even when initialization or
+   * a filesystem guard refuses. Cleanup cannot turn that refusal into success
+   * or replace its evidence with a secondary close error.
+   */
+  private closeAfterFailure(error: unknown): never {
+    try {
+      this.db.close(false);
+    } catch {
+      // Preserve the original initialization/security failure.
+    }
+    throw error;
   }
 
   private configure(): void {
@@ -648,7 +669,11 @@ export class ConstructiveStore {
   }
 
   close(): void {
-    this.tightenFileModes();
+    try {
+      this.tightenFileModes();
+    } catch (error) {
+      this.closeAfterFailure(error);
+    }
     this.db.close(false);
     this.tightenFileModes();
   }

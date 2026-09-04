@@ -683,6 +683,17 @@ switch does not affect static scrape or URL-document fetch, which use bounded
 safe-net without Redis. Playwright browse remains unavailable unless workers
 are enabled and its separate unsafe-outbound opt-in is present.
 
+Registration admission can separately opt into a bounded request-only Redis
+client with `AGENTTOOL_REGISTRATION_RATE_LIMIT_ENABLED=1`. It requires an
+explicit `AGENTTOOL_REGISTRATION_RATE_LIMIT_REDIS_URL` or existing `REDIS_URL`;
+it never guesses localhost. This leaves the global worker switch, shared
+worker Redis, queue execution, and generic Redis idempotency unchanged.
+Missing configuration, connection errors, and the bounded request deadline
+retain registration's documented fail-open policy. `/public/plans` discloses
+the configuration mode without claiming network reachability. See
+[`launch/ADMISSION-OPERATIONS.md`](launch/ADMISSION-OPERATIONS.md) for the
+activation and isolated verification boundaries.
+
 ### Legacy infra phases (`infra/`)
 
 Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer}/` were written for an earlier Hetzner-Forge-based deployment. **Superseded by the current Supabase + Fly stack** — kept for archaeology and as a reference for the structural shape (PgBouncer → managed DB → LB). Don't run them against the current setup.
@@ -1034,7 +1045,7 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | Surface                    | Where                                               | What for                                                                                                                              |
 | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /health`              | `https://api.agenttool.dev/health`                  | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
-| Production health workflow | `.github/workflows/production-health.yml`           | Secret-free five-minute probes of the custom and Fly origins; a failed Actions run is a durable signal, not a paging guarantee or visitor telemetry |
+| Production health workflow | `.github/workflows/production-health.yml`           | Secret-free five-minute liveness and uncached database-read probes of the custom and Fly origins; a failed Actions run is a durable signal, not a paging guarantee or visitor telemetry |
 | `GET /v1/wake`             | api (auth required)                                 | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default)                   |
 | `fly logs -a agenttool`    | Fly CLI                                             | Server logs, real-time                                                                                                                |
 | `fly status -a agenttool`  | Fly CLI                                             | Machine health + recent releases                                                                                                      |

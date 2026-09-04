@@ -39,6 +39,17 @@ describe("apex-door upstream routing", () => {
     );
   });
 
+  test("feed and federation families belong to the API for every representation", () => {
+    for (const path of ["/feeds", "/feeds/", "/feeds/offers.atom", "/federation", "/federation/about"]) {
+      for (const accept of ["*/*", "application/json", "application/atom+xml", "text/html"]) {
+        expect(resolveGetRouteTarget(path, accept), `${path} ${accept}`).toBe("api.agenttool.dev");
+      }
+    }
+    for (const path of ["/feeds-extra", "/federation-example"]) {
+      expect(resolveGetRouteTarget(path, "text/html"), path).toBe("agenttool-web.pages.dev");
+    }
+  });
+
   test("the apex root remains content-negotiated", () => {
     expect(resolveGetRouteTarget("/", "application/json")).toBe(
       "api.agenttool.dev",

@@ -20,7 +20,7 @@ const GROUP_CLEANUP_TIMEOUT_MS = 1_000;
 const MAX_OUTPUT_BYTES = 1_048_576;
 
 const runner = `
-  import { closeSync, fsyncSync, openSync, writeSync } from "node:fs";
+  import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
 
   const database = process.argv[1];
   const receiptPath = process.argv[2];
@@ -76,14 +76,60 @@ const runner = `
   const childStreams = [];
   const trackedReaders = [];
   const outputSettlements = [];
+  const childProgress = [];
+  const streamCaptures = [];
+  const startedAt = performance.now();
   let readyCount = 0;
   let totalOutputBytes = 0;
   let deadline;
   let settlementPromise;
 
-  const settle = (exitCode) => {
+  const classifyOutput = (chunks) => {
+    if (chunks.length === 0) return "empty";
+    try {
+      const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (value?.status === "inserted" || value?.status === "existing") return value.status;
+      const errors = ["argument_error", "canonical_error", "conflict", "file_error", "integrity_error", "not_found", "ordering_error", "pin_error", "receipt_error", "internal_error"];
+      return errors.includes(value?.error) ? value.error : "json_other";
+    } catch { return "non_json"; }
+  };
+  const observeProcess = (pid) => {
+    let exists = null;
+    try { process.kill(pid, 0); exists = true; }
+    catch (error) { if (error?.code === "ESRCH") exists = false; }
+    let state = null, wait_channel = null;
+    if (process.platform === "linux") {
+      try {
+        const status = readFileSync("/proc/" + pid + "/status", "utf8");
+        state = status.match(/^State:\\s+([A-Z])/m)?.[1] ?? null;
+        const channel = readFileSync("/proc/" + pid + "/wchan", "utf8").trim();
+        wait_channel = /^[a-zA-Z0-9_]{1,80}$/.test(channel) ? channel : null;
+      } catch { /* Child exit or unavailable procfs is represented by nulls. */ }
+    }
+    return { exists, state, wait_channel };
+  };
+
+  const settle = (exitCode, reason) => {
     if (settlementPromise !== undefined) return settlementPromise;
     settlementPromise = (async () => {
+      // Capture before TERM/cancellation changes the evidence. Counts and
+      // lifecycle states only: never receipt bytes, child output, or paths.
+      try {
+        durableWriteNew(settlementPath + ".diagnostics", {
+          reason,
+          elapsed_ms: Math.round(performance.now() - startedAt),
+          output_bytes: totalOutputBytes,
+          children: childProgress.map((progress) => ({ ...progress })),
+          child_io: streamCaptures.map(({ stdout, stderr }) => ({
+            stdout_bytes: stdout.reduce((sum, chunk) => sum + chunk.byteLength, 0),
+            stderr_bytes: stderr.reduce((sum, chunk) => sum + chunk.byteLength, 0),
+            stdout_kind: classifyOutput(stdout), stderr_kind: classifyOutput(stderr),
+          })),
+          processes: processes.map(({ pid }) => observeProcess(pid)),
+        });
+      } catch {
+        // Diagnostics must not interfere with ownership settlement.
+      }
       for (const child of processes) {
         try {
           child.kill("SIGTERM");
@@ -124,9 +170,9 @@ const runner = `
     })();
     return settlementPromise;
   };
-  process.on("SIGTERM", () => void settle(124));
+  process.on("SIGTERM", () => void settle(124, "runner_sigterm"));
 
-  const readBounded = async (reader) => {
+  const readBounded = async (reader, capture) => {
     const chunks = [];
     let length = 0;
     try {
@@ -138,6 +184,7 @@ const runner = `
           throw new Error("child output exceeded the closed bound");
         }
         chunks.push(value);
+        capture.push(value);
         length += value.byteLength;
       }
     } finally {
@@ -203,6 +250,13 @@ const runner = `
         },
       );
       processes.push(child);
+      const progress = { exited: false, exit_code: null, stdout_done: false, stderr_done: false };
+      childProgress.push(progress);
+      streamCaptures.push({ stdout: [], stderr: [] });
+      void child.exited.then((exitCode) => {
+        progress.exited = true;
+        progress.exit_code = exitCode;
+      });
       const stdout = child.stdout.getReader();
       trackedReaders.push(stdout);
       const stderr = child.stderr.getReader();
@@ -223,7 +277,7 @@ const runner = `
       pids: processes.map(({ pid }) => pid),
       ready_count: readyCount,
     });
-    deadline = setTimeout(() => void settle(124), deadlineMs);
+    deadline = setTimeout(() => void settle(124, "internal_deadline"), deadlineMs);
 
     if (mode === "outer-stall") {
       await new Promise(() => {});
@@ -242,8 +296,14 @@ const runner = `
     }
 
     const results = await Promise.all(processes.map(async (child, index) => {
-      const stdout = readBounded(childStreams[index].stdout);
-      const stderr = readBounded(childStreams[index].stderr);
+      const stdout = readBounded(childStreams[index].stdout, streamCaptures[index].stdout).then((text) => {
+        childProgress[index].stdout_done = true;
+        return text;
+      });
+      const stderr = readBounded(childStreams[index].stderr, streamCaptures[index].stderr).then((text) => {
+        childProgress[index].stderr_done = true;
+        return text;
+      });
       outputSettlements.push(stdout, stderr);
       const [exit, stdoutText, stderrText] = await Promise.all([
         child.exited,
@@ -252,7 +312,7 @@ const runner = `
       ]);
       return { exit, stdout: stdoutText, stderr: stderrText };
     }));
-    if (mode === "record-race") void settle(124);
+    if (mode === "record-race") void settle(124, "synthetic_result_race");
     if (settlementPromise !== undefined) {
       await settlementPromise;
       return;
@@ -269,7 +329,7 @@ const runner = `
   try {
     await main();
   } catch {
-    await settle(125);
+    await settle(125, "runner_refusal");
   }
 `;
 
@@ -284,6 +344,15 @@ type SettlementEvidence = PidLedger & {
   signal_codes: Array<string | null>;
   sigkill_sent: boolean;
   term_sent: boolean;
+};
+
+type RunnerDiagnostics = {
+  reason: "internal_deadline" | "runner_sigterm" | "synthetic_result_race" | "runner_refusal";
+  elapsed_ms: number;
+  output_bytes: number;
+  children: Array<{ exited: boolean; exit_code: number | null; stdout_done: boolean; stderr_done: boolean }>;
+  child_io: Array<{ stdout_bytes: number; stderr_bytes: number; stdout_kind: string; stderr_kind: string }>;
+  processes: Array<{ exists: boolean | null; state: string | null; wait_channel: string | null }>;
 };
 
 function readJson<T>(path: string): T {
@@ -414,7 +483,10 @@ function expectBoundedEmptyOutput(
   expect(run.stderr.byteLength).toBe(0);
 }
 
-test("concurrent exact CLI retries create one chain event", () => {
+// Independent samples, each with its own database and original deadline.
+// The real executable is launched directly: no preload, wrapper, or retry.
+test.each(Array.from({ length: 10 }, (_, index) => index + 1))(
+  "concurrent exact CLI retries create one chain event (case %i/10)", () => {
   const root = join(import.meta.dir, "..");
   const directory = mkdtempSync(join(tmpdir(), "constructive-concurrent-"));
   const database = join(directory, "pilot.sqlite");
@@ -446,6 +518,28 @@ test("concurrent exact CLI retries create one chain event", () => {
     "record",
     INTERNAL_SUCCESS_DEADLINE_MS,
   );
+  if (run.exitCode !== 0 || run.exitedDueToTimeout || run.signalCode !== undefined) {
+    const diagnosticsPath = settlementPath + ".diagnostics";
+    const diagnostics = existsSync(diagnosticsPath)
+      ? readJson<RunnerDiagnostics>(diagnosticsPath)
+      : null;
+    const settlement = existsSync(settlementPath)
+      ? readJson<SettlementEvidence>(settlementPath)
+      : null;
+    console.error("constructive concurrent runner failure " + JSON.stringify({
+      exit_code: run.exitCode,
+      outer_timeout: run.exitedDueToTimeout === true,
+      signal_code: run.signalCode ?? null,
+      stdout_bytes: run.stdout.byteLength,
+      stderr_bytes: run.stderr.byteLength,
+      diagnostics,
+      // PIDs and fixture locations add no diagnostic value to CI logs.
+      settlement: settlement && {
+        exit_code: settlement.exit_code, settled: settlement.settled,
+        signal_codes: settlement.signal_codes, sigkill_sent: settlement.sigkill_sent,
+      },
+    }));
+  }
   expect(run.exitedDueToTimeout).not.toBe(true);
   expect(run.signalCode).toBeUndefined();
   expect(run.exitCode).toBe(0);
@@ -511,6 +605,17 @@ test("post-results settlement cannot publish a timeout as success", () => {
     sigkill_sent: false,
     term_sent: true,
   });
+  const diagnostics = readJson<RunnerDiagnostics>(settlementPath + ".diagnostics");
+  expect(diagnostics.reason).toBe("synthetic_result_race");
+  expect(diagnostics.output_bytes).toBeGreaterThan(0);
+  expect(diagnostics.children).toEqual([
+    { exited: true, exit_code: 0, stdout_done: true, stderr_done: true },
+    { exited: true, exit_code: 0, stdout_done: true, stderr_done: true },
+  ]);
+  expect(diagnostics.child_io.map(({ stdout_kind }) => stdout_kind).sort()).toEqual(["existing", "inserted"]);
+  expect(diagnostics.child_io.every(({ stderr_bytes, stderr_kind }) => stderr_bytes === 0 && stderr_kind === "empty")).toBe(true);
+  expect(diagnostics.child_io.reduce((sum, io) => sum + io.stdout_bytes + io.stderr_bytes, 0)).toBe(diagnostics.output_bytes);
+  expect(diagnostics.processes.map(({ exists }) => exists)).toEqual([false, false]);
   expectProcessesAbsentTwice(pidLedger.pids);
 
   const store = new ConstructiveStore(database, { create: false });
@@ -547,6 +652,15 @@ test("bounded concurrent runner force-kills and reaps two ready children", () =>
     sigkill_sent: true,
     term_sent: true,
   });
+  const diagnostics = readJson<RunnerDiagnostics>(settlementPath + ".diagnostics");
+  expect(diagnostics.reason).toBe("internal_deadline");
+  expect(diagnostics.elapsed_ms).toBeGreaterThanOrEqual(HERMETIC_FALSIFIER_DEADLINE_MS);
+  expect(diagnostics.output_bytes).toBe(0);
+  expect(diagnostics.children).toEqual([
+    { exited: false, exit_code: null, stdout_done: false, stderr_done: false },
+    { exited: false, exit_code: null, stdout_done: false, stderr_done: false },
+  ]);
+  expect(diagnostics.processes.map(({ exists }) => exists)).toEqual([true, true]);
   expectProcessesAbsentTwice(pidLedger.pids);
 }, TEST_TIMEOUT_MS);
 
