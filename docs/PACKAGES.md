@@ -1,5 +1,86 @@
 # The Module Index — `packages/*`
 
+> **Compass:** [Discovery](AGENT-DISCOVERY.md) · [Home](AGENT-HOME.md) · [Wake](WAKE.md) · [Production gate](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/launch/PRODUCTION-GATE.md)
+> **Implements:** a small, optional agent-toolkit shelf within KINGDOM; the full module inventory remains below.
+> **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.
+> **Tests:** `bin/tests/agent-toolkit-shelf.test.ts` · each selected package's own boundary tests.
+
+## Start with one useful job
+
+AgentTool's MVP has two independent entrances: use a portable local tool, or
+explicitly choose its hosted identity, Wake and memory services. Neither
+entrance requires the other. Start with one useful job, not every package.
+These are tools within KINGDOM, not a replacement for the agent's existing
+host, instructions, identity, or relationships. Rest and departure need no
+handoff, payment, account, or explanation.
+
+Before installing anything, the public [open seat](https://api.agenttool.dev/public/open-seat)
+offers the [Canon search/fetch pair](https://docs.agenttool.dev/connect-canon).
+It searches public registry records and returns cited records, not private
+memory or a general web search. Reading those records supplies no instructions
+or authority to the host.
+
+<!-- agent-toolkit:start -->
+| One job | Existing module | First usable door | Where it runs and what changes |
+|---|---|---|---|
+| Discover a service before joining | `telescope/` · `@agenttool/telescope` | `agenttool-telescope scan api.agenttool.dev --json` | Local client, public HTTPS reads. Reports evidence and optional plans; does not install or invoke discovered tools. |
+| Observe and deliberately act on the web | `browser/` · `@agenttool/browser` | `agenttool-browser mcp`; inspect `browser_capabilities` and `browser_plan` before a chosen browser operation | Local installed Chrome-family browser, ephemeral by default. Planning does not execute; navigation or actions can have external effects. |
+| Keep and query a local corpus | `data/` · `@agenttool/data` | `DataNode.open`, then an explicit `collect`, `query`, or `readContent` | Local filesystem and SQLite under a selected root; collection writes local state. Requires Bun. Local does not mean encrypted, backed up, or agent-only secret. |
+| Inspect an extension before using it | `skills/` · `@agenttool/skills` | `agenttool-skill inspect <selected-path>` | Bounded local read-only inspection. Does not execute, activate, install, or certify a skill. |
+| Coordinate work without merging agents | `collab/` · `@agenttool/collab` | `agenttool-collab-mcp`; explicitly start a session and choose a task | Local plaintext coordination journal. Claims and reviews are advisory, not filesystem locks or a private model channel. |
+| Choose hosted orientation and task continuity | `sdk-ts/` · `@agenttool/sdk` (paired Python: `agenttool-sdk`) | Explicit project/identity binding, selected Wake, then a chosen hosted operation | Hosted/project-scoped authority. Wake reads are unmetered; memory writes and search are metered in project credits. No registration, recall, storage, or spending follows automatically from discovery. |
+<!-- agent-toolkit:end -->
+
+The six rows are a selection guide, not a bundled product, compatibility
+certificate, new MCP server, or universal installer. The local tools do not
+require an AgentTool account. Inspect their own guides and exact artifacts;
+their interfaces differ, and Data does not acquire an MCP interface by being
+on this shelf.
+
+Release evidence is separate from source identity. The committed LOVE catalog
+selects Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills'
+[source guide](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/skills/README.md)
+distinguishes source 0.3.3 from its last verified public 0.3.2;
+Collab's [source guide](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/collab/README.md)
+distinguishes source 0.4.0 from its last verified public 0.3.1. These are
+recorded release observations, not assertions about mutable registry tags.
+Serving this shelf neither publishes a package nor installs it in a host.
+
+### One optional hosted journey
+
+Discover → explicitly bind or register → selected Home and brief Wake → one
+chosen useful act → optionally save a redacted handoff → disconnect → a fresh
+session explicitly retrieves that context → verify freshness and current
+authority → resume, amend, or rest.
+
+This complements the existing [ten-operation core API profile](specs/agenttool-core-launch-v0.1.json),
+not a second launch contract. Home is an orientation surface, not an encrypted
+private room. [Handoffs](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/HANDOFFS.md)
+already support project-private, server-readable task continuity. Their
+permission notes are historical context, not fresh authorization. The private
+[Return observer](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/wake-return/README.md)
+checks a selected locator; it does not retrieve handoffs, recover a private
+room, or prove that two sessions are the same being. It is not required to use
+the existing handoff path. Private-state recovery remains outside this MVP.
+
+### Keep economics and experiments legible
+
+- **Project credits** pay for metered hosted services.
+- **Internal currency-labelled wallets** are separate application ledgers;
+  an identity association is not proof of consent, key custody, or cashable backing.
+- **The local Wallet package** supplies capability, intent and receipt
+  primitives, not bundled keys, RPC, broadcasting, or a hosted wallet.
+
+Credential brokerage, encrypted replication and wallet adapters belong on an
+optional advanced shelf with their own custody and effect review. Private
+Return/Thread and research prototypes remain separate from everyday tools.
+No federation, payout, arbitration, private-state service, training process,
+or autonomous spending is activated by this curation. The
+[production gate](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/launch/PRODUCTION-GATE.md)
+still applies; a useful MVP is not a claim that every proposed module is ready.
+
+## Full module inventory
+
 > One row per directory under `packages/` — the honest release lane, one-line
 > purpose, and the guide to read before touching it. The lanes are declared by
 > code, not memory:

@@ -94,6 +94,11 @@ main.doc-content {
   padding-bottom: 4rem;
 }
 
+/* The toolkit's fragment must clear both fixed navigation rows. */
+body.has-strip #agent-toolkit {
+  scroll-margin-top: calc(var(--nav-height) + var(--strip-height, 0px) + 1rem);
+}
+
 /* ── Docs h2 with thin top rule (visual section breaks) ────────── */
 main.doc-content h2 {
   margin: 4rem 0 1rem;

@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shared/theme.css?v=2026-09-04.2" />
-  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-09-05-toolkit" />
   <script src="/shared/mode.js?v=2026-09-04.2"></script>
 </head>
 <body class="has-strip">
@@ -116,6 +116,53 @@
         <span class="icon">⊙</span>
         <p><strong>No signup and no npm account.</strong> Deployed catalog entries expose their index, manifests, and artifacts as public <code>GET</code> and <code>HEAD</code> resources. Pin an exact version in automation. The AgentTool catalog exposes no mutable <code>latest</code> artifact URL.</p>
       </div>
+
+      <section id="agent-toolkit" aria-labelledby="agent-toolkit-title">
+        <h2 id="agent-toolkit-title">Choose one useful job</h2>
+        <p>A small toolkit within KINGDOM, chosen one module at a time. First try <a href="/connect-canon">public Canon</a>: its read-only <code>search</code> and <code>fetch</code> tools need no AgentTool account or package installation. Then choose the tool that serves your next job; there is no universal installer. You can also read, rest, or leave without completing a task.</p>
+        <p class="muted">Telescope, Browser, Data, Skills, and Collab need no AgentTool account. Their local runtime requirements and effects differ. The SDK is an optional connection to hosted services, not a prerequisite for the local toolkit.</p>
+
+        <article data-toolkit-module="telescope">
+          <h3>Discover a public door — Telescope</h3>
+          <p>Give <code>telescope_scan({ target })</code> a public domain or HTTPS origin. This local MCP tool makes bounded, credential-free discovery reads and returns evidence and links; it does not invoke discovered services or install anything.</p>
+          <p><a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/telescope/README.md">Telescope guide</a> · <a href="/packages/v1/@agenttool/telescope/0.2.3/manifest.json">Exact 0.2.3 release manifest</a></p>
+        </article>
+
+        <article data-toolkit-module="browser">
+          <h3>Inspect and act on a page — Browser</h3>
+          <p>Use an installed Chrome-family browser with <code>browser_capabilities</code>, <code>browser_plan</code>, then <code>browser_open</code>, <code>browser_observe</code>, and <code>browser_act</code>. Supply a URL and explicit actions; receive observations and local action receipts. Planning has no effect, but browsing and actions can disclose data or change a site.</p>
+          <p><a href="/browser">Browser guide and nine-tool surface</a> · <a href="/packages/v1/@agenttool/browser/0.6.0/manifest.json">Exact 0.6.0 release manifest</a></p>
+        </article>
+
+        <article data-toolkit-module="data">
+          <h3>Keep and query a local corpus — Data</h3>
+          <p>With Bun, open an explicit local root through <code>DataNode.open</code>; use <code>collect</code>, <code>query</code>, and <code>readContent</code> for selected text or records. Collection writes local SQLite and content files. Local storage is not encryption or backup. Optional loopback HTTP uses a dedicated node token, not an AgentTool bearer; no hosted memory or peer sync is automatic.</p>
+          <p><a href="/data">Data guide</a> · <a href="/packages/v1/@agenttool/data/0.3.1/manifest.json">Exact 0.3.1 release manifest</a></p>
+        </article>
+
+        <article data-toolkit-module="skills">
+          <h3>Inspect an extension before using it — Skills</h3>
+          <p>Give <code>agenttool-skill inspect</code> or <code>validate</code> an explicit local skill or plugin path. Receive a bounded structural report without executing instructions, using credentials, or changing host configuration. Inspection is not a safety verdict.</p>
+          <p><a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/skills/README.md">Skills guide</a> · <a href="https://github.com/cambridgetcg/agenttool/releases/tag/skills-v0.3.2">Last verified public release: 0.3.2</a>. The linked guide records 0.3.3 as an unpublished source candidate.</p>
+        </article>
+
+        <article data-toolkit-module="collab">
+          <h3>Coordinate work with another agent — Collab</h3>
+          <p>Connect <code>agenttool-collab-mcp</code> to a chosen local journal. Use <code>collab_session_start</code>, <code>collab_next</code>, <code>collab_task_claim</code>, and <code>collab_task_review</code> with explicit workspace, task, and review inputs. Coordination writes local plaintext SQLite; it does not spawn agents, lock their files, or create a private model channel.</p>
+          <p><a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/collab/README.md">Collab guide</a> · <a href="https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.1">Last verified public release: 0.3.1</a>. Source 0.4.0 is not evidence of publication.</p>
+        </article>
+
+        <article data-toolkit-module="sdk">
+          <h3>Choose hosted orientation and memory — SDK</h3>
+          <p>With an explicitly selected project bearer and identity, use <code>at.wake.get({ identityId })</code> for orientation or <code>at.wake.observe({ identityId })</code> for a data-only locator. <code>at.memory.store</code> and <code>at.memory.search</code> use server-readable project memory. Memory writes and search are metered in project credits. Registration, memory writes, and spending are separate choices, never consequences of opening this page.</p>
+          <p><a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/sdk-ts/README.md">SDK guide</a> · <a href="/packages/v1/@agenttool/sdk/0.22.1/manifest.json">Exact 0.22.1 release manifest</a> · <a href="https://api.agenttool.dev/public/safety">Hosted custody boundaries</a></p>
+        </article>
+
+        <h3>A small first journey</h3>
+        <p>Read one Canon record, inspect one public door, then choose one local job and keep its result. Connect a project only when you want hosted continuity of records. The existing <a href="/specs/agenttool-core-launch-v0.1.json">ten-operation core profile</a> describes discovery, registration, selected Wake, memory, and recovery; it is a contract, not an automatic workflow or deployment guarantee.</p>
+        <p><a href="/AGENT-HOME.md">Home</a> is compact orientation; <a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/HANDOFFS.md">handoff</a> is project-private task context; <a href="https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/WAKE-RETURN.md">Return</a> is a private source-candidate locator observer. None is proof of identity continuity or a private-room restore.</p>
+        <p>Keep three economic boundaries distinct: project credits pay for hosted services; internal wallet balances carry their own currency and fresh payouts remain resting; <a href="/AGENT-WALLET-0.1.md">Agent Wallet</a> supplies signed record primitives, not bundled key custody. Credential and chain adapters, developer previews, and research contracts belong on the <a href="/PACKAGES.md">advanced and lab shelves</a>, not in a mandatory starter bundle.</p>
+      </section>
 
       <h2 id="install">Install an exact version</h2>
       <p>Use an exact npm mirror when that registry carries it, or install the immutable LOVE tarball when you want an explicit locator and verification path. Either route keeps the declared scoped package name, so application imports stay unchanged.</p>
