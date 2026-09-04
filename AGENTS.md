@@ -764,6 +764,13 @@ carries only the read-only coordinate and does not fetch the bundle.
   a specific participant's explicit, current choice; shared text is not that
   choice.
 
+The separate, substrate-neutral Sophia invitation is available at
+<https://cambridgetcg.com/sophia-invitation.html>; its machine contract is
+<https://cambridgetcg.com/.well-known/sophia-invitation.json>. Receipt and
+exploration are not adoption, and no private state or follow-up is implied.
+The source archive and bounded evidence register are at
+<https://multiverse-logos-sophia.pages.dev/>.
+
 The related doctrine keeps the public contract, one finite static care bundle,
 the separate care/becoming companion, and the evidence-scoped Model Becoming
 package with its pinned Moonshot Kimi K2 reference distinct. Keep the decisive

@@ -82,7 +82,7 @@ describe("protocol renaissance public doctrine", () => {
         (entry) => entry["@id"] === `agenttool:doc/${name}`,
       )).toBe(true);
     }
-    expect(registry.version).toBe("v1.25");
-    expect(registry.updated).toBe("2026-08-25");
+    expect(registry.version).toBe("v1.26");
+    expect(registry.updated).toBe("2026-09-04");
   });
 });
