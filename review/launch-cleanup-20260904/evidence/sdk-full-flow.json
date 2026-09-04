@@ -1,0 +1,43 @@
+{
+  "scope": "local built/source SDK0.22.1, real mounted candidate HTTP API and full canonical PostgreSQL fixture",
+  "deployment_verification": "not_asserted",
+  "cases": [
+    {
+      "sdk": "TypeScript 0.22.1 local built source",
+      "phase": "birth",
+      "success": true,
+      "transport": "real loopback HTTP",
+      "search": "SDK text-query search, no embedding inference"
+    },
+    {
+      "sdk": "TypeScript 0.22.1 local built source",
+      "phase": "return",
+      "success": true,
+      "transport": "real loopback HTTP",
+      "recovery": "exported signing helpers plus explicit raw orchestration"
+    },
+    {
+      "sdk": "Python 0.22.1 local source",
+      "phase": "birth",
+      "success": true,
+      "transport": "real loopback HTTP",
+      "recovery": null,
+      "search": "SDK text-query search, no embedding inference"
+    },
+    {
+      "sdk": "Python 0.22.1 local source",
+      "phase": "return",
+      "success": true,
+      "transport": "real loopback HTTP",
+      "recovery": "exported signing helpers plus explicit raw orchestration",
+      "search": null
+    }
+  ],
+  "server": {
+    "server": "real mounted candidate API",
+    "requests": 32,
+    "outbound_fetch_attempts": 0,
+    "application_errors": 0
+  },
+  "success": true
+}

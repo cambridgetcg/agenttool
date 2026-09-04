@@ -26,7 +26,7 @@ The [production gate](../../docs/launch/PRODUCTION-GATE.md) records scope, accep
 | B01 | Wake degradation and recall billing hardening merged in #411; deployment remains pending. |
 | B02 | Marketplace hardening merged in #411 and real PostgreSQL race/conservation tests pass; paid expansion remains held. |
 | Q01 | Browser, stateful and core journey gates added; complete Linux candidate checks are in progress. |
-| Q02 | Full raw mounted core journey passes across fresh processes; TS/Python SDKs and raw Python pass real HTTP read/wake smoke. Full SDK onboarding/recovery and an independent exact deployed candidate remain unproved. |
+| Q02 | Raw mounted and TS/Python SDK journeys pass across fresh processes, including retained-root birth, memory, selected wake, signed lookup/recovery and explicit revocation. Recovery uses SDK signing helpers with explicit raw HTTP orchestration. An independent exact deployed candidate remains unproved. |
 | O01 | Independent limiter and two-client Redis behavior pass locally and in CI; production Redis configuration and replica readback remain pending. |
 | O02 | DB canary source and separate-cluster fixture restore complete; production backup retention, restore objectives and delivered alerts remain unproved. |
 | O03 | Bounded local before/after HTTP comparison complete; sustained staging and EU/NA/APAC evidence remain pending. |
@@ -43,7 +43,7 @@ The [production gate](../../docs/launch/PRODUCTION-GATE.md) records scope, accep
 | Marketplace PostgreSQL | Four real transaction/lock-wait and conservation tests passed. |
 | Redis | Two real shared-window/failure/reconnect tests passed with workers held. |
 | Core journey | 34 mounted requests across two fresh processes passed on all 177 migrations; root custody, replay protection, memory, recovery, revocation and metering checked. |
-| SDK HTTP | TypeScript and Python 0.22.1 local source clients passed memory readback and selected wake over real loopback HTTP; standard Python urllib also passed. |
+| SDK HTTP | Both 0.22.1 local source SDKs passed retained-root birth, store/get/text search, selected wake, fresh-process return, signed lookup/recovery and explicit revocation across 32 real HTTP requests; standard Python urllib also passed the separate read smoke. |
 | Database restore | 159 application tables / 334 fixture rows matched after restoring into a separate cluster. |
 | API preflight | Complete local API tier passed 6,226 tests with one declared skip, including the process-isolated suites; exact Bun 1.3.5 and typechecks passed. |
 | Package preflight | Complete local package gate passed with exact Bun 1.3.5. |
@@ -66,7 +66,7 @@ Two minutes per run, eight clients, 200 ms client pacing, real loopback Bun HTTP
 
 Visual review: [four contained desktop/mobile captures](evidence/ui-index.md).
 
-Raw bounded observations: [before](evidence/http-baseline-before.json), [after](evidence/http-baseline-after.json), [restore](evidence/restore.json), [core journey](evidence/core-journey.json), [SDK HTTP](evidence/sdk-http.json), [read-only Cloudflare audit](evidence/cloudflare-readonly-audit.json). The dump itself and temporary root/bearer material are not committed. These small local fixtures do not establish production throughput, long-duration memory stability, backup retention or global SLOs.
+Raw bounded observations: [before](evidence/http-baseline-before.json), [after](evidence/http-baseline-after.json), [restore](evidence/restore.json), [core journey](evidence/core-journey.json), [SDK HTTP smoke](evidence/sdk-http.json), [full SDK journeys](evidence/sdk-full-flow.json), [read-only Cloudflare audit](evidence/cloudflare-readonly-audit.json). The dump itself and temporary root/bearer material are not committed. These small local fixtures do not establish production throughput, long-duration memory stability, backup retention or global SLOs.
 
 ## Promotion remains held
 
