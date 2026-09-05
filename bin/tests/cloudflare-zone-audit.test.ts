@@ -394,6 +394,58 @@ describe("Cloudflare audit projections", () => {
     expect(JSON.stringify(secretDrift)).not.toContain(secretLiteral);
   });
 
+  test("rejects duplicate desired refs even when a matching rule comes first", () => {
+    for (const desired of manifest.rulesets) {
+      for (const enabled of [true, false]) {
+        const provider = {
+          rules: [
+            { ...desired, enabled: true },
+            { ...desired, enabled, id: "duplicate-provider-id-never-serialize" },
+          ],
+        };
+        const before = JSON.stringify(provider);
+        const findings = auditRuleset(desired.phase, provider, [desired]);
+        expect(findings).toHaveLength(1);
+        expect(findings[0]).toMatchObject({
+          status: "drift",
+          detail: expect.stringContaining("duplicate source-managed rule ref"),
+          actual: { matching_rule_count: 2 },
+        });
+        expect(JSON.stringify(findings)).not.toContain("duplicate-provider-id-never-serialize");
+        expect(JSON.stringify(provider)).toBe(before);
+      }
+    }
+  });
+
+  test("requires the exact machine parameter set without reflecting unexpected fields", () => {
+    const desired = manifest.rulesets.find((rule) =>
+      rule.ref === "agenttool_machine_transport_v1"
+    )!;
+    const providerRule = { ...desired, enabled: true, id: "provider-id-never-serialize", version: "7" };
+    expect(auditRuleset(desired.phase, { rules: [providerRule] }, [desired])[0]?.status).toBe("ok");
+
+    const provider = {
+      rules: [{
+        ...providerRule,
+        action_parameters: {
+          ...desired.action_parameters,
+          "unexpected-name-never-serialize": "unexpected-value-never-serialize",
+        },
+      }],
+    };
+    const before = JSON.stringify(provider);
+    const findings = auditRuleset(desired.phase, provider, [desired]);
+    expect(findings[0]).toMatchObject({
+      status: "drift",
+      detail: expect.stringContaining("unexpected machine transport action parameters"),
+      actual: { unexpected_action_parameter_count: 1 },
+    });
+    for (const privateLiteral of [
+      "provider-id-never-serialize", "unexpected-name-never-serialize", "unexpected-value-never-serialize",
+    ]) expect(JSON.stringify(findings)).not.toContain(privateLiteral);
+    expect(JSON.stringify(provider)).toBe(before);
+  });
+
   test("checks only DNS shape and proxy posture, never record content", () => {
     const desired = manifest.dns_records[0]!;
     const secretContent = "origin-value-never-serialize";
@@ -662,6 +714,24 @@ describe("live audit transport", () => {
     expect(serialized).not.toContain("provider-request-id-never-serialize");
     expect(serialized).not.toContain("origin-request-id-never-serialize");
     expect(serialized).not.toContain("dns-proof-content-never-serialize");
+
+    const machine = manifest.rulesets.find((rule) =>
+      rule.ref === "agenttool_machine_transport_v1"
+    )!;
+    const healthyMachine = { ...machine, enabled: true };
+    for (const rules of [
+      [healthyMachine, { ...healthyMachine, enabled: false }],
+      [{ ...healthyMachine, action_parameters: { ...machine.action_parameters, additional_setting: true } }],
+    ]) {
+      phaseRules.set(machine.phase, { rules });
+      const drift = await runLiveAudit({ manifest, token, fetchImpl: fakeFetch });
+      expect(drift.exit_code).toBe(1);
+      expect(drift.summary.drift).toBe(1);
+      expect(drift.provider_writes).toBe(0);
+      expect(drift.findings.find((finding) => finding.control === `ruleset:${machine.ref}`)?.status).toBe("drift");
+      expect(calls.every((call) => call.method === "GET")).toBe(true);
+    }
+    phaseRules.set(machine.phase, { rules: [healthyMachine] });
 
     providerWorkerObservability = null;
     const missingObservabilityResult = await runLiveAudit({

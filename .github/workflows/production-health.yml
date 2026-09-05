@@ -29,6 +29,7 @@ jobs:
             if [ "$#" -eq 2 ]; then
               client_options=(--user-agent "$2")
             fi
+            printf 'Checking liveness: %s (client signature: %s)\n' "$endpoint" "${2:-curl default}"
             body="$(mktemp)"
             trap 'rm -f "$body"' RETURN
 
@@ -65,6 +66,7 @@ jobs:
           database_probe() {
             local origin="$1"
             local body status listing_id
+            printf 'Checking uncached database read: %s\n' "$origin"
             body="$(mktemp)"
             trap 'rm -f "$body"' RETURN
             listing_id="$(cat /proc/sys/kernel/random/uuid)"
