@@ -839,15 +839,43 @@ export function auditRuleset(
   const enabledRules = rules.filter((candidate) =>
     isRecord(candidate) && candidate.enabled !== false
   );
-  return relevant.map((desired) => {
-    const actual = rules.find((candidate) =>
+  return relevant.map((desired): AuditFinding => {
+    const matches = rules.filter((candidate) =>
       isRecord(candidate) && candidate.ref === desired.ref
     );
+    if (matches.length > 1) {
+      return {
+        control: `ruleset:${desired.ref}`,
+        status: "drift",
+        detail: "duplicate source-managed rule ref; no unique rule can be verified",
+        actual: { matching_rule_count: matches.length },
+        required_permissions: desired.required_permissions,
+      };
+    }
+    const actual = matches[0];
     if (!actual) {
       return {
         control: `ruleset:${desired.ref}`,
         status: "drift",
         detail: "source-managed rule ref is absent; unknown rules were not evaluated or replaced",
+        required_permissions: desired.required_permissions,
+      };
+    }
+    // Provider metadata may grow, but additional machine settings change
+    // behavior beyond the reviewed contract. Suppress their names and values.
+    const unexpectedParameterCount =
+      desired.ref === "agenttool_machine_transport_v1" &&
+        isRecord(actual.action_parameters)
+        ? Object.keys(actual.action_parameters).filter((key) =>
+            !Object.hasOwn(desired.action_parameters, key)
+          ).length
+        : 0;
+    if (unexpectedParameterCount > 0) {
+      return {
+        control: `ruleset:${desired.ref}`,
+        status: "drift",
+        detail: "unexpected machine transport action parameters require review; provider fields were suppressed",
+        actual: { unexpected_action_parameter_count: unexpectedParameterCount },
         required_permissions: desired.required_permissions,
       };
     }
