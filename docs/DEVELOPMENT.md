@@ -220,13 +220,15 @@ bin/agenttool-secret remove agenttool-example-secret
 bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 ```
 
-Four tool-specific entries are legacy macOS exceptions: the local pending and
-one-file migration runners use the two database services below, and
-`frontend-deploy.sh` uses the two Cloudflare services, all under fixed Keychain
-account `macair` after their explicit environment inputs. The generic
-`bin/agenttool-secret` CLI uses account `$USER`, so it does not provision or
-inspect those fixed-account entries. Use the exact
-`security add-generic-password` commands in
+Four tool-specific entries use a fixed macOS account: the local pending and
+one-file migration runners use the two database URI services below, and
+`frontend-deploy.sh` uses the two Cloudflare services, all under Keychain
+account `macair` after their explicit environment inputs. The canonical raw
+database password is a separate `agenttool-db-pw` entry under `macair`; the
+migration runners do not read it or assemble connection URIs from it. The
+generic `bin/agenttool-secret` CLI selects account `$USER`, which reaches
+these entries only when `$USER` is `macair`. Follow the exact account and secure
+provisioning procedure in
 [`DEPLOY-PROCEDURE.md` § Credentials checklist](DEPLOY-PROCEDURE.md#credentials-checklist).
 
 ### Backends
@@ -236,6 +238,18 @@ inspect those fixed-account entries. Use the exact
 | **macOS**   | `security` CLI (Keychain Access; encrypted at rest by the OS, unlocked at login)                                               | none — `security` ships with macOS                                                                         |
 | **Linux**   | `secret-tool` from libsecret (GNOME Keyring / KWallet via the user's session keyring)                                          | `~/.config/agenttool/<service>` mode 0600 when libsecret isn't installed (CI runners, headless containers) |
 | **Windows** | PowerShell `ProtectedData.Protect/Unprotect` (DPAPI · CurrentUser scope · ciphertext at `%APPDATA%/agenttool/<service>.dpapi`) | `%APPDATA%/agenttool/<service>` plaintext when PowerShell isn't available                                  |
+
+On macOS, writes send one bounded `security -i` command through stdin with
+hex-encoded password bytes and quoted selectors, then verify exact readback.
+Values must be non-empty printable ASCII; spaces, quotes, backslashes and
+other ASCII punctuation are preserved. The native `security -w` reader
+hex-renders non-printable bytes, so Unicode and control characters in values
+are rejected before writing. Service/account selectors permit well-formed
+Unicode but reject empty strings and ASCII control characters. The entire encoded
+command, including selectors and newline, must fit within 4095 UTF-8 bytes;
+overlong input is rejected before any Keychain operation. These limits apply
+to the macOS backend only. Use a separately reviewed native adapter if a
+credential requires a broader value domain.
 
 Honest about the trade-offs:
 
@@ -250,16 +264,17 @@ Honest about the trade-offs:
 agenttool-<scope>-<purpose>
 ```
 
-CLI-managed entries use account `$USER`. The two migration database and two
-Cloudflare entries below use their tools' fixed legacy account `macair`.
+CLI-managed entries use account `$USER`. The raw database password, two
+migration database URIs, and two Cloudflare entries below use account `macair`.
 Existing examples:
 
 | Service name                      | What                                                                                           |
 | --------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `agenttool-bridge-kmaster`        | The bridge sidecar's K_master                                                                  |
 | `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
-| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (legacy account `macair`)    |
-| `agenttool-database-session-url`  | Session-pooled migration-apply fallback (legacy account `macair`)                              |
+| `agenttool-db-pw`                 | Canonical raw database password; separate from connection URIs (account `macair`)             |
+| `agenttool-database-url`          | Shared transaction-pooler URI, port `6543`; `DATABASE_URL` for read-only migration surveys (account `macair`) |
+| `agenttool-database-session-url`  | Shared session-pooler URI, port `5432`; `DATABASE_SESSION_URL` for migration applies (account `macair`) |
 | `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, legacy account `macair`)                  |
 | `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, legacy account `macair`)                          |
 | `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
@@ -267,6 +282,14 @@ Existing examples:
 | `agenttool-sophia-identity-id`    | Yu's personal Sophia identity id                                                               |
 | `agenttool-sophia-signing-key-id` | Yu's personal Sophia ed25519 key id                                                            |
 | `agenttool-sophia-k-master`       | Yu's personal Sophia K_master                                                                  |
+
+Database credential consolidation on 2026-09-05 removed the former raw-password
+alias. Do not recreate it or add another fallback name. Updating
+`agenttool-db-pw` alone changes neither saved URI nor Fly secrets. Refresh the
+two URI entries deliberately from the canonical password, retain the pinned
+target and verified TLS, and validate both connections without printing secret
+values. A successful connection does not establish migration/schema parity or
+a tested restore. See the dated [Supabase / KINGDOM review](launch/SUPABASE-KINGDOM-REVIEW.md).
 
 The CLI rejects service names that don't start with `agenttool-` — convention enforced at the tool boundary so naming stays consistent across all keychain entries.
 
