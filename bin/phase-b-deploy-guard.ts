@@ -19,7 +19,7 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,9 +31,6 @@ const APP = "agenttool";
 const GENERATION_SECRET =
   "AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION";
 const PRODUCTION_ORIGIN = "https://api.agenttool.dev";
-const PRODUCTION_OPERATOR_HOME = "/Users/yournameisai";
-const PRODUCTION_OPERATOR_NAME = "yournameisai";
-const PRODUCTION_OPERATOR_UID = 501;
 const HEALTH_URL = `${PRODUCTION_ORIGIN}/health`;
 const FEDERATION_ABOUT_URL = `${PRODUCTION_ORIGIN}/federation/about`;
 const RECEIPT_SCHEMA = "agenttool.covenant-v2-generation-ceremony/1";
@@ -58,6 +55,44 @@ type JsonRecord = Record<string, unknown>;
 type Phase = "preflight" | "postflight";
 type ProviderSecretStatus = "Absent" | "Deployed";
 type AuthorityState = "absent_fail_closed" | "configured";
+export type PhaseBOperatorMode = "ceremony" | "preactivation_only";
+
+/** Closed local operator profiles, not environment-selected deployment authority.
+ * macair may prove only the absent-before-activation state. The existing B1
+ * receipt, signed native verifier, and generation custody remain on the original
+ * ceremony operator; adding this profile does not migrate any of them.
+ */
+export function resolvePhaseBOperator(observed: {
+  home: string;
+  realHome: string;
+  environmentHome: string | undefined;
+  osHome: string;
+  osUsername: string;
+  user: string | undefined;
+  logname: string | undefined;
+  uid: number | undefined;
+  platform: string;
+  arch: string;
+}): PhaseBOperatorMode {
+  requireCondition(
+    observed.platform === "darwin" && observed.arch === "arm64" &&
+      observed.uid === 501,
+    "canonical_home",
+  );
+  for (const [name, mode] of [
+    ["yournameisai", "ceremony"],
+    ["macair", "preactivation_only"],
+  ] as const) {
+    const home = `/Users/${name}`;
+    if (
+      observed.home === home && observed.realHome === home &&
+      observed.environmentHome === home && observed.osHome === home &&
+      observed.osUsername === name && observed.user === name &&
+      observed.logname === name
+    ) return mode;
+  }
+  return refuse("canonical_home");
+}
 
 export interface GuardRequest {
   phase: Phase;
@@ -93,6 +128,7 @@ export interface PublicReadRequest {
 }
 
 export interface PhaseBGuardDependencies {
+  operatorMode: PhaseBOperatorMode;
   readAuthoritySnapshot(): Promise<unknown>;
   readFinalReceipt(): Promise<unknown | null>;
   readProviderSecretInventory(): Promise<unknown>;
@@ -949,14 +985,27 @@ export async function runPhaseBDeployGuard(
     "invalid_invocation",
   );
   try {
+    requireCondition(
+      dependencies.operatorMode === "ceremony" ||
+        dependencies.operatorMode === "preactivation_only",
+      "operator_profile",
+    );
     const authorityBefore = validateAuthoritySnapshot(
       await dependencies.readAuthoritySnapshot(),
     );
     const receiptBeforeRaw = await dependencies.readFinalReceipt();
+    requireCondition(
+      dependencies.operatorMode === "ceremony" || receiptBeforeRaw === null,
+      "operator_authority_state",
+    );
     const providerBefore = providerSecretStatus(
       await dependencies.readProviderSecretInventory(),
     );
     const state = classifyState(authorityBefore, receiptBeforeRaw, providerBefore.status);
+    requireCondition(
+      dependencies.operatorMode === "ceremony" || state === "absent_fail_closed",
+      "operator_authority_state",
+    );
 
     if (state === "absent_fail_closed") {
       const absentFleetBefore = validateAbsentFleet(
@@ -974,6 +1023,10 @@ export async function runPhaseBDeployGuard(
         await dependencies.readAuthoritySnapshot(),
       );
       const receiptAfter = await dependencies.readFinalReceipt();
+      requireCondition(
+        dependencies.operatorMode === "ceremony" || receiptAfter === null,
+        "operator_authority_state",
+      );
       const providerAfter = providerSecretStatus(
         await dependencies.readProviderSecretInventory(),
       );
@@ -1518,15 +1571,19 @@ export function buildPhaseBClosedChildEnvironment(
 
 export async function createProductionDependencies(): Promise<PhaseBGuardDependencies> {
   const userHome = homedir();
-  requireCondition(
-    userHome === PRODUCTION_OPERATOR_HOME &&
-      process.env.HOME === PRODUCTION_OPERATOR_HOME &&
-      process.env.USER === PRODUCTION_OPERATOR_NAME &&
-      process.env.LOGNAME === PRODUCTION_OPERATOR_NAME &&
-      process.getuid?.() === PRODUCTION_OPERATOR_UID &&
-      realpathSync(userHome) === PRODUCTION_OPERATOR_HOME,
-    "canonical_home",
-  );
+  const operator = userInfo();
+  const operatorMode = resolvePhaseBOperator({
+    home: userHome,
+    realHome: realpathSync(userHome),
+    environmentHome: process.env.HOME,
+    osHome: operator.homedir,
+    osUsername: operator.username,
+    user: process.env.USER,
+    logname: process.env.LOGNAME,
+    uid: process.getuid?.(),
+    platform: process.platform,
+    arch: process.arch,
+  });
   const deployState = join(userHome, ".local/state/agenttool/deploy-state");
   const activeMarker = join(userHome, ACTIVE_MARKER_RELATIVE_PATH);
   const finalReceipt = join(userHome, FINAL_RECEIPT_RELATIVE_PATH);
@@ -1626,6 +1683,9 @@ export async function createProductionDependencies(): Promise<PhaseBGuardDepende
       requireCondition(pathAbsent(activeMarker), "active_marker_present");
       return null;
     }
+    // A copied/foreign ceremony receipt never expands macair's authority.
+    // Refuse its presence before reading or parsing those private bytes.
+    requireCondition(operatorMode === "ceremony", "operator_authority_state");
     const value = readCanonicalPrivateJsonFileForGuard(
       finalReceipt,
       MAX_RECEIPT_BYTES,
@@ -1652,6 +1712,7 @@ export async function createProductionDependencies(): Promise<PhaseBGuardDepende
   };
 
   return {
+    operatorMode,
     readAuthoritySnapshot,
     readFinalReceipt,
     readProviderSecretInventory: () =>
@@ -1666,6 +1727,7 @@ export async function createProductionDependencies(): Promise<PhaseBGuardDepende
       ),
     verifyDeployedRuntime: async (request) => {
       throwIfProductionInterrupted();
+      requireCondition(operatorMode === "ceremony", "operator_authority_state");
       const receipt = await readFinalReceipt();
       const completed = validateCompletedReceipt(receipt);
       requireCondition(completed.nativeSHA256 === sha256(requireRootOwnedArtifact(NATIVE_PATH)), "native_artifact_hash");
