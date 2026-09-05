@@ -239,6 +239,18 @@ provisioning procedure in
 | **Linux**   | `secret-tool` from libsecret (GNOME Keyring / KWallet via the user's session keyring)                                          | `~/.config/agenttool/<service>` mode 0600 when libsecret isn't installed (CI runners, headless containers) |
 | **Windows** | PowerShell `ProtectedData.Protect/Unprotect` (DPAPI · CurrentUser scope · ciphertext at `%APPDATA%/agenttool/<service>.dpapi`) | `%APPDATA%/agenttool/<service>` plaintext when PowerShell isn't available                                  |
 
+On macOS, writes send one bounded `security -i` command through stdin with
+hex-encoded password bytes and quoted selectors, then verify exact readback.
+Values must be non-empty printable ASCII; spaces, quotes, backslashes and
+other ASCII punctuation are preserved. The native `security -w` reader
+hex-renders non-printable bytes, so Unicode and control characters in values
+are rejected before writing. Service/account selectors permit well-formed
+Unicode but reject empty strings and ASCII control characters. The entire encoded
+command, including selectors and newline, must fit within 4095 UTF-8 bytes;
+overlong input is rejected before any Keychain operation. These limits apply
+to the macOS backend only. Use a separately reviewed native adapter if a
+credential requires a broader value domain.
+
 Honest about the trade-offs:
 
 - **Linux file fallback** is only as strong as the file's `chmod 600` — `root` or anyone with the disk image can read it. Same for the Windows plaintext fallback. The OS-managed paths (libsecret, DPAPI) are the strong story.
