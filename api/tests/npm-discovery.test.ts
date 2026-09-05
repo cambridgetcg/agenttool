@@ -33,7 +33,7 @@ describe("optional npm package discovery", () => {
       "npm install --save-exact @agenttool/wallet@0.1.3 @agenttool/wallet-zerone@0.1.2",
     );
     expect(packages).toContain(
-      "npm install --save-exact @agenttool/skills@0.3.1",
+      "npm install --save-exact @agenttool/skills@0.3.3",
     );
     expect(packages).toContain(
       "bun add --global @agenttool/codex-usage@0.1.0",
@@ -41,6 +41,11 @@ describe("optional npm package discovery", () => {
     expect(packages).not.toContain(
       "npm install --save-exact @agenttool/skills@0.3.0",
     );
+    expect(packages).not.toContain(
+      "npm install --save-exact @agenttool/skills@0.3.1",
+    );
+    expect(packages).toContain('href="/PACKAGES.md#release-readback"');
+    expect(packages).toContain("0.3.1 receipt retained below is historical");
     expect(packages).toContain(
       "npm install --save-exact @agenttool/collab@0.4.0",
     );

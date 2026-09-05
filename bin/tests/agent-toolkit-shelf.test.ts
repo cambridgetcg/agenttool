@@ -52,7 +52,7 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
           expect(source, href).not.toBeNull();
           expect(existsSync(join(root, source![1]!)), href).toBe(true);
         } else {
-          expect(url.pathname).toMatch(/^\/cambridgetcg\/agenttool\/releases\/tag\/(skills-v0\.3\.2|collab-v0\.3\.1)$/);
+          expect(url.pathname).toMatch(/^\/cambridgetcg\/agenttool\/releases\/tag\/(skills-v0\.3\.3|collab-v0\.4\.0)$/);
         }
       } else {
         expect(url.href).toBe("https://api.agenttool.dev/public/safety");
@@ -72,10 +72,20 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
       expect(shelf).toContain(`href="${path}"`);
       expect(index.packages.find((entry) => entry.name === `@agenttool/${name}`)?.versions.some((entry) => entry.version === version && new URL(entry.manifest_url).pathname === path)).toBe(true);
     }
-    expect(shelf).toContain("Last verified public release: 0.3.2");
-    expect(shelf).toContain("Last verified public release: 0.3.1");
-    expect(shelf).toContain("source candidate");
-    expect(shelf).toContain("Source 0.4.0 is not evidence of publication");
+    expect(shelf).toContain("Verified public release: 0.3.3");
+    expect(shelf).toContain("Verified public release: 0.4.0");
+    expect(shelf).toContain("/PACKAGES.md#release-readback");
+    expect(markdown).toContain("### Release readback");
+    expect(markdown).toContain("skills-v0.3.3/agenttool-skills-0.3.3.tgz");
+    expect(markdown).toContain("70,144");
+    expect(markdown).toContain("e3c1fb71ee7f642d9fe4a13327dabe9b964a1e66b6c491d9a2564b33c5ee0353");
+    const receipt = read("docs/NPM-RELEASES.md").split("## Verified Collab 0.4.0 publication — 2026-08-04")[1]?.split("\n## ")[0] ?? "";
+    expect(receipt).toContain("public npm `@agenttool/collab@0.4.0` tarballs are byte-identical");
+    expect(receipt).toContain("303,376");
+    expect(receipt).toContain("1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51");
+    expect(shelf).toContain("#verified-collab-040-publication--2026-08-04");
+    expect(markdown).toContain("#verified-collab-040-publication--2026-08-04");
+    expect(shelf).not.toContain("collab-v0.3.1");
     for (const name of ["skills", "collab", "wake-return", "wake-thread"]) {
       expect(shelf).not.toContain(`/packages/v1/@agenttool/${name}/`);
     }

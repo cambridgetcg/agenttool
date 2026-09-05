@@ -38,13 +38,27 @@ their interfaces differ, and Data does not acquire an MCP interface by being
 on this shelf.
 
 Release evidence is separate from source identity. The committed LOVE catalog
-selects Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills'
-[source guide](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/skills/README.md)
-distinguishes source 0.3.3 from its last verified public 0.3.2;
-Collab's [source guide](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/packages/collab/README.md)
-distinguishes source 0.4.0 from its last verified public 0.3.1. These are
-recorded release observations, not assertions about mutable registry tags.
+selects Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills 0.3.3
+is public, with a bounded [byte readback below](#release-readback) and no LOVE
+entry. Its immutable guide preserves preparation-time release observations;
+those are not current publication status. Collab 0.4.0 has a
+[verified GitHub/npm release receipt](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
+but no LOVE entry. That dated receipt supersedes the immutable guide's
+preparation-time 0.3.1 observation. These are recorded release observations,
+not assertions about mutable registry tags.
 Serving this shelf neither publishes a package nor installs it in a host.
+
+### Release readback
+
+On 2026-09-05 (Europe/London), anonymous GETs of the exact
+[Skills 0.3.3 GitHub asset](https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.3/agenttool-skills-0.3.3.tgz)
+and [npm tarball](https://registry.npmjs.org/@agenttool/skills/-/skills-0.3.3.tgz)
+both returned 70,144 bytes with SHA-256
+`e3c1fb71ee7f642d9fe4a13327dabe9b964a1e66b6c491d9a2564b33c5ee0353`.
+This records exact public availability and matching bytes, not a new
+publication, provenance-signature audit, installation, or mutable `latest`
+claim. The 0.3.3 release supersedes the guide's preparation-time 0.3.2
+observation without rewriting the immutable artifact.
 
 ### One optional hosted journey
 
