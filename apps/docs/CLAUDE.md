@@ -149,6 +149,11 @@ does not create a hosted browser, ambient
 recognition action, credential bridge, or stronger SSRF isolation. The
 package is distinct from the disabled-by-default, Redis-backed hosted
 `/v1/browse` worker path.
+The package page's static `#agent-toolkit` section curates six existing modules
+by complete agent jobs, with public Canon as the no-install first step. It keeps
+local tools separate from optional hosted SDK use, source candidates separate
+from verified releases, and project credits separate from wallet currency and
+key custody. It adds no installer, tool registration, or runtime behavior.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. Its current Telescope entry is
