@@ -1,0 +1,44 @@
+{
+  "checked_at": "2026-09-06T22:35:44.363Z",
+  "browser": "152.0.7977.82",
+  "checks": [
+    "desktop render, graph counts, no horizontal overflow",
+    "selection relationships, details jump, map focus return",
+    "version-bound source links and caveat",
+    "keyboard arrows, enter and escape",
+    "all evidence filters, query, empty state and reset",
+    "opportunity and capability deep links",
+    "download equals companion JSON",
+    "768/390/320 widths, details navigation and selected bar fit",
+    "finding deep link",
+    "no-JavaScript companion-file guidance",
+    "zero page/console errors and zero unsolicited HTTP requests"
+  ],
+  "errors": [],
+  "external_requests": [],
+  "scope": "Static review artifact only; no Supabase integration experiment was executed.",
+  "structural_checks": [
+    "unique identifiers and all graph references",
+    "credential-free HTTPS source URL syntax",
+    "local Markdown link targets",
+    "embedded and companion JSON semantic equality",
+    "JavaScript syntax",
+    "git diff --check"
+  ],
+  "typecheck": {
+    "result": "passed",
+    "base_sha": "83b70df18918c22cf896ff7dc1e41ef8a7bc80df",
+    "scope": "Unchanged API source at the identical base revision in an existing dependency-prepared checkout",
+    "command": "node api/node_modules/typescript/bin/tsc --noEmit --project api/tsconfig.json"
+  },
+  "artifacts": {
+    "index.html": {
+      "bytes": 87763,
+      "sha256": "a0a554376f7f769ab48fe397248592d5fdbf5fc0f2a01c6e5191b038b21d0369"
+    },
+    "data.json": {
+      "bytes": 52699,
+      "sha256": "3bc0a91c67d7352ad49153d610ada56ec38b1531025867c59cc93273e7ac70ab"
+    }
+  }
+}
