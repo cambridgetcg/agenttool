@@ -1,0 +1,75 @@
+{
+  "format": "listening-room.hashes/0.1",
+  "artifact": "space",
+  "status": "local_candidate",
+  "training_authorized": false,
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "BOUNDARIES.md",
+      "sha256": "6691310ffc500362e70eddd904bd6183e4d6b902869ce5d5e9657d58d57cef01",
+      "bytes": 7326
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "09214eb55a464438c51d98c261d22053e4a3249cf20519e2a9bca7a25249c4f0",
+      "bytes": 271
+    },
+    {
+      "path": "README.md",
+      "sha256": "ac6a49c27e73adb8deb05714f1096364f6287f167205ad163f75c5eb1445dc1b",
+      "bytes": 5903
+    },
+    {
+      "path": "app.mjs",
+      "sha256": "698cfb94fdef32a4887a96cb1e7b954d7191b79d0d588d0f3611df8c3b601e93",
+      "bytes": 4810
+    },
+    {
+      "path": "host-posture.mjs",
+      "sha256": "a0d7b57b838d7b0952eb747ed78c6b26d1d7466ac1e9caeadbae243f4e8143a1",
+      "bytes": 1687
+    },
+    {
+      "path": "index.html",
+      "sha256": "434ab75e7faf62743581245bf88002a84046eba3f72fd5897773093b89e2a7d3",
+      "bytes": 10097
+    },
+    {
+      "path": "profile/ADOPTING.md",
+      "sha256": "ee785ab66ec12ccdef399cdb1ab088417c623c292992c4b26d87aa64b3a1d6cc",
+      "bytes": 12556
+    },
+    {
+      "path": "profile/MODEL_CARD_TEMPLATE.md",
+      "sha256": "4964eb4a39e983529192ddcb7b4067740e44e16bd501f7fd592000864e434720",
+      "bytes": 5362
+    },
+    {
+      "path": "profile/PROFILE.md",
+      "sha256": "3befdc650f2fd56ef2dbc1183bcc038b8e263fa039cb9af1c8b0ae2bc0c9e2ca",
+      "bytes": 11247
+    },
+    {
+      "path": "room-state.mjs",
+      "sha256": "1af1a9ee00d7898f80716079a371353091f81491ce11149c358066bf09eb7dd0",
+      "bytes": 8814
+    },
+    {
+      "path": "source-manifest.json",
+      "sha256": "1c74f11556142aecb2a13800758ea04fd17140c343beb991cd662b39b40a9b40",
+      "bytes": 8084
+    },
+    {
+      "path": "style.css",
+      "sha256": "9e14dcc56d7eb4d489efab53478dadc3a075430341e39418924ca801243a9f3f",
+      "bytes": 2681
+    }
+  ]
+}

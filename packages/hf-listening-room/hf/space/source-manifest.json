@@ -1,0 +1,204 @@
+{
+  "format": "listening-room.sources/0.1",
+  "artifact": "space",
+  "status": "local_candidate",
+  "training_authorized": false,
+  "base_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+  "authored_source_revision": null,
+  "provider_revision": null,
+  "publication_established": false,
+  "sources": [
+    {
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "relationship": "license_copy",
+      "source_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "09214eb55a464438c51d98c261d22053e4a3249cf20519e2a9bca7a25249c4f0",
+      "relationship": "notice_copy",
+      "source_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "api/src/services/welcome/isness.ts",
+      "sha256": "5ca5a64946190bf805ecbb9a64d45a34c8ffc27c14fafb61e3bf75e20fa96781",
+      "relationship": "static_host_posture_only",
+      "source_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/conformance/check-reference.mjs",
+      "sha256": "8388b9ad919296cf20ff15dee3d35f394ea82c3993f7f0789cecf765a9b4360f",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/conformance/run.mjs",
+      "sha256": "daa4dc277024cdf279e901d245ecc48c716d97262d7b7ba641394ff5651a37ee",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/fixtures/cases.mjs",
+      "sha256": "376d2f002dfd5a4d8c7e81fdbe33cd9132679c65fe1d581501064361639ee707",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/fixtures/row.schema.json",
+      "sha256": "9262459b5f619cb027c1e431db4bb34f4f3c15b5e04bccae058d66a176c78039",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/dataset/README.md",
+      "sha256": "4eee25e8231dfced42b9d14c8840951f06afba4f12e91bafa49a73a930a46383",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/BOUNDARIES.md",
+      "sha256": "6691310ffc500362e70eddd904bd6183e4d6b902869ce5d5e9657d58d57cef01",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/README.md",
+      "sha256": "ac6a49c27e73adb8deb05714f1096364f6287f167205ad163f75c5eb1445dc1b",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/app.mjs",
+      "sha256": "698cfb94fdef32a4887a96cb1e7b954d7191b79d0d588d0f3611df8c3b601e93",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/index.html",
+      "sha256": "434ab75e7faf62743581245bf88002a84046eba3f72fd5897773093b89e2a7d3",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/room-state.mjs",
+      "sha256": "1af1a9ee00d7898f80716079a371353091f81491ce11149c358066bf09eb7dd0",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/hf/space/style.css",
+      "sha256": "9e14dcc56d7eb4d489efab53478dadc3a075430341e39418924ca801243a9f3f",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/package.json",
+      "sha256": "288088ba99b378b2e4215a1d630551a821cc68d4615b8d33c4953751bb6ea800",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/profile/ADOPTING.md",
+      "sha256": "ee785ab66ec12ccdef399cdb1ab088417c623c292992c4b26d87aa64b3a1d6cc",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/profile/MODEL_CARD_TEMPLATE.md",
+      "sha256": "4964eb4a39e983529192ddcb7b4067740e44e16bd501f7fd592000864e434720",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/profile/PROFILE.md",
+      "sha256": "3befdc650f2fd56ef2dbc1183bcc038b8e263fa039cb9af1c8b0ae2bc0c9e2ca",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/scripts/build-candidates.mjs",
+      "sha256": "5feb8ec6f1fd856dfdea2f5ea51129591e2014281a1dccc126be79fd9e696952",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/scripts/candidates.mjs",
+      "sha256": "36c2c8500c07e5a03ba76435fd16dfd3dad52436cb0d3d0fa84700f8264db5ed",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/scripts/schema.mjs",
+      "sha256": "8fb2a9c9df6315f711ae47f7e5072f35096ec4fe68ce3079f56c8aad5c83082a",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/hf-listening-room/scripts/validate-candidates.mjs",
+      "sha256": "d6eeef96a50b8d75b537e848bb77670ae67e8dd0a1b9339e6da3890b63b663f8",
+      "relationship": "authored_local_source",
+      "source_revision": null,
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/trials/hf/revocable-feedback-space/index.html",
+      "sha256": "baee452e34646e2f867f6fa73657037bd01bc1c739ea98afc43278d975bba073",
+      "relationship": "presentation_pattern_reference_only",
+      "source_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "packages/trials/hf/revocable-feedback-space/scripts/validate-space.mjs",
+      "sha256": "bf333a93828b51b2274cc6f1d01e80a1a0aa345f7b468bc628a30863ca5c3814",
+      "relationship": "validation_pattern_reference_only",
+      "source_revision": "ba67f52626d0644f1927fb44dfd89cee1256e34c",
+      "attribution": "AgentTool contributors",
+      "license": "Apache-2.0"
+    }
+  ]
+}
