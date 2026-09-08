@@ -1,7 +1,7 @@
 /** Selected data-only courier; receipts never acknowledge or accept task work.
  * Doctrine: docs/COLLABORATION-CHANNELS.md */
 import type { CorrespondenceSignedEvent, CorrespondenceEventsPage } from '@agenttool/sdk';
-import { Binding, Destination, active, audience, bindingKey, check, CourierError, digest, summary, abort, sleep } from './binding.js';
+import { Binding, Destination, active, audience, check, CourierError, digest, summary, abort, sleep } from './binding.js';
 import { Ledger, type Selection, type Ingress, type ImportRequest, ExclusiveOwner } from './ledger.js';
 import type { LocalImporter } from './importer.js';
 import { CorrespondenceWire, signSelection, validEnvelope, wakeHint, type Transport } from './correspondence.js';
@@ -18,8 +18,7 @@ export interface CourierDependencies {
 }
 export async function selectReport(binding:Binding|(()=>Binding),ledger:Ledger,importer:LocalImporter,input:{idempotencyKey:string;alias:string;reportId:string;sequence:number;summary:string;expiresAt:number;parents?:string[]},signal:AbortSignal):Promise<string> {
   const current=typeof binding==='function'?binding:()=>binding;
-  const frozen=ledger.meta('binding');
-  const b=current();check(bindingKey(b)===frozen,'binding_changed');check(importer.sessionId===b.local.sessionId,'importer_session_mismatch');
+  const b=current();ledger.observeBinding(b);check(importer.sessionId===b.local.sessionId,'importer_session_mismatch');
   const now=Date.now();const d=audience(b,input.alias,now);summary(input.summary);
   check(Number.isSafeInteger(input.sequence)&&input.sequence>0 && input.reportId.length<=200,'invalid_source');
   check(Number.isSafeInteger(input.expiresAt)&&input.expiresAt>now&&input.expiresAt<=Math.min(b.expiresAt,d.expiresAt,now+604800000),'invalid_expiry');
@@ -27,7 +26,7 @@ export async function selectReport(binding:Binding|(()=>Binding),ledger:Ledger,i
   check(d.kind==='correspondence'||parents.length===0,'unsupported_parent');
   const source=await importer.source(input.reportId,input.sequence,signal);
   check(source.id===input.reportId && source.workspace_id===b.local.workspaceId && source.event_sequence===input.sequence,'source_report_mismatch');
-  abort(signal);const live=current();check(bindingKey(live)===frozen&&ledger.meta('binding')===frozen,'binding_changed');
+  abort(signal);const live=current();ledger.observeBinding(live);
   const liveAudience=audience(live,input.alias);
   check(input.expiresAt>Date.now()&&input.expiresAt<=Math.min(live.expiresAt,liveAudience.expiresAt),'invalid_expiry');
   return ledger.select({alias:input.alias,sourceReportId:source.id,sourceSequence:source.event_sequence,summary:input.summary,expiresAt:input.expiresAt,parents},input.idempotencyKey).id;
@@ -37,8 +36,8 @@ function importRequest(b:Binding,id:string,text:string,refs:string[],channel:'co
 }
 export class Courier {
   readonly b:Binding;
-  constructor(readonly ledger:Ledger,readonly deps:CourierDependencies) {this.b=deps.current();check(bindingKey(this.b)===bindingKey(ledger.binding),'binding_changed');check(deps.importer.sessionId===this.b.local.sessionId,'importer_session_mismatch');}
-  private current():Binding {const b=this.deps.current();check(bindingKey(b)===bindingKey(this.b),'binding_changed');active(b);return b;}
+  constructor(readonly ledger:Ledger,readonly deps:CourierDependencies) {this.b=deps.current();ledger.observeBinding(this.b);check(deps.importer.sessionId===this.b.local.sessionId,'importer_session_mismatch');}
+  private current():Binding {const b=this.deps.current();this.ledger.observeBinding(b);active(b);return b;}
   private mark(stage:string):void {this.deps.checkpoint?.(stage);}
   private async import(row:Ingress,signal:AbortSignal):Promise<void> {
     if(row.state!=='pending')return;abort(signal);
@@ -82,8 +81,8 @@ export class Courier {
       this.ledger.update(row,'provider_accepted',{messageId:receipt.messageId});this.mark('after_send_receipt');
     }
   }
-  private telegramIngress(update:TelegramUpdate):void {
-    const b=this.current();check(b.telegram,'telegram_not_bound');
+  private telegramIngress(b:Binding,update:TelegramUpdate):void {
+    check(b.telegram,'telegram_not_bound');
     const id=`telegram:${b.telegram.botId}:${update.update_id}`;
     const existing=this.ledger.get<Ingress>(id);if(existing)return;
     let rejection='unmatched_reply';
@@ -105,7 +104,11 @@ export class Courier {
   async runOnce(signal:AbortSignal):Promise<{processed:number}> {
     const b=this.current();const stop=AbortSignal.any([signal,AbortSignal.timeout(b.limits.runMs)]);let processed=0;
     this.ledger.recoverAttempts();
-    if(this.deps.telegram) {await this.deps.telegram.getMe({signal:stop});await this.deps.telegram.getWebhookInfo({signal:stop});}
+    if(this.deps.telegram) {
+      this.current();await this.deps.telegram.getMe({signal:stop});
+      this.current();await this.deps.telegram.getWebhookInfo({signal:stop});
+      this.current();
+    }
     // One eligible item per lane turn. The next lane is persisted before work,
     // so maxEvents=1 and restarts cannot forever privilege an earlier channel.
     const lanes:Array<()=>Promise<boolean>>=[];
@@ -148,13 +151,18 @@ export class Courier {
         if(!polled){
           await client.getWebhookInfo({signal:stop});
           const offset=Number(this.ledger.meta('telegram_offset')??'0');
+          this.current();
           updates=await client.getUpdates({offset,limit:Math.min(50,b.limits.maxEvents-processed),timeoutSeconds:0},{signal:stop});polled=true;
+          this.current();
           // A malformed/reordered batch never acknowledges an unseen lower update.
           for(let i=1;i<updates.length;i++)check(updates[i].update_id>updates[i-1].update_id,'telegram_update_order');
           updates=updates.filter(update=>update.update_id>=offset);
         }
         const update=updates.shift();if(!update)return false;abort(stop);
-        this.ledger.atomic(()=>{this.telegramIngress(update);this.mark('after_telegram_ingress');this.ledger.setMeta('telegram_offset',String(update.update_id+1));});this.mark('after_telegram_offset');
+        // Observe outside the ingress transaction: a later denial/fault must not
+        // roll back lifecycle restrictions together with the item and offset.
+        const live=this.current();
+        this.ledger.atomic(()=>{this.telegramIngress(live,update);this.mark('after_telegram_ingress');this.ledger.setMeta('telegram_offset',String(update.update_id+1));});this.mark('after_telegram_offset');
         const row=this.ledger.get<Ingress>(`telegram:${b.telegram!.botId}:${update.update_id}`)!;await this.import(row,stop);return true;
       });
     }

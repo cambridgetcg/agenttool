@@ -15,7 +15,6 @@ export async function main(argv=process.argv.slice(2)):Promise<void> {
   const permitted=new Set(['--profile',...(command==='select'?['--idempotency-key','--destination','--report','--sequence','--expires-at','--summary-stdin','--parents']:[]),...(command==='watch'?['--for']:[])]);
   check([...options.keys()].every(k=>permitted.has(k))&&options.has('--profile'),'invalid_arguments');
   const file=options.get('--profile')!;const b=readBinding(file);
-  if(command!=='status')active(b);
   let watchMs=0;
   if(command==='watch') {const match=/^([1-9][0-9]*)(ms|s|m|h)$/.exec(options.get('--for')??'');check(match,'invalid_watch_duration');watchMs=Number(match[1])*({ms:1,s:1000,m:60000,h:3600000}[match[2]]!);check(Number.isSafeInteger(watchMs)&&watchMs>0&&watchMs<=3600000,'invalid_watch_duration');}
   if(command==='select')check(options.has('--idempotency-key')&&options.get('--summary-stdin')==='true'&&options.has('--destination')&&options.has('--report')&&options.has('--sequence')&&options.has('--expires-at'),'invalid_arguments');
@@ -25,10 +24,11 @@ export async function main(argv=process.argv.slice(2)):Promise<void> {
   const signal=AbortSignal.any([controller.signal,remaining()>0?AbortSignal.timeout(remaining()):AbortSignal.abort()]);
   let ledger:Ledger|undefined,release:(()=>void)|undefined,importer:McpImporter|undefined,network:Awaited<ReturnType<typeof import('../src/host.js')['hostNetwork']>>|undefined;
   try {
-    if(command!=='status'){abort(signal);release=ownRunner(b,command!=='select');}
+    // Enrollment/observation must commit even when the live policy denies work.
     ledger=new Ledger(b);
     if(command==='status'){process.stdout.write(JSON.stringify(ledger.status())+'\n');return;}
-    abort(signal);importer=await McpImporter.open(b,ledger,signal);
+    active(b);abort(signal);release=ownRunner(b,command!=='select');
+    importer=await McpImporter.open(b,ledger,signal);
     if(command==='select') {
       check(options.has('--idempotency-key')&&options.get('--summary-stdin')==='true'&&options.has('--destination')&&options.has('--report')&&options.has('--sequence')&&options.has('--expires-at'),'invalid_arguments');
       let text='';const reader=Bun.stdin.stream().getReader();const decoder=new TextDecoder('utf-8',{fatal:true});

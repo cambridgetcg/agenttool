@@ -111,7 +111,8 @@ A new key is a new deliberate disclosure. `--parents` accepts comma-separated
 already-known Correspondence event IDs for an explicitly selected return reply.
 
 `status` is redacted local counts and timestamps; no MCP, credential lookup or
-network probe. It can initialize the private delivery ledger on first use.
+network probe. It can initialize the private delivery ledger on first use and
+persists any newly observed lifecycle restrictions on later use.
 `select` checks the exact report ID and event sequence through the bound local
 MCP, then discards source content. It checks the current binding against the
 ledger's frozen scope both before and after asynchronous source validation;
@@ -165,13 +166,47 @@ its direct dispatcher never inherits an ambient proxy or payer.
   and bounded periodic sweeps replay receipts even without hints. Blocked reads are
   cancellable. No idle-harness interrupt or model reception is claimed.
 
-Profile changes are rechecked at operation boundaries; pause with `enabled:false`
-or revoke a peer/destination. In-flight requests cannot be recalled; their finite
-request/stream deadlines bound shutdown. Expiry prevents new sends/imports.
-Observation wire bodies have no expiry field: sender selection expiry governs
-sending, while receiver admission independently uses peer `maxAgeMs` plus its
-binding/peer/destination expiry. Revocation is local enrollment policy, not a live
-registry-revocation query.
+Profile changes are rechecked at operation boundaries. `enabled:false` is a
+**reversible pause**. Global, destination and peer expiries may only stay the
+same or decrease; observed peer/destination revocation is **sticky**. The same
+ledger stores their minimum expiries and revocation bits separately from the
+normalized static binding digest (which still freezes audience, scope, credentials
+and limits). Initial enrollment and each live-profile check compare and commit
+these restrictions synchronously, before inactive denial or asynchronous I/O.
+Even a denied selection or paused CLI invocation retains observed restrictions;
+restoring an older profile, reopening the ledger, or extending an already expired
+enrollment cannot reactivate it. An expiry increase or true-to-false revocation
+returns `binding_changed`. Mixed widening/tightening observations retain the
+tighter restrictions while still failing. Schema and initial policy enrollment
+share one SQLite write transaction; policy uses bounded per-alias metadata, not
+one potentially oversized JSON value, and no async I/O holds this policy lock.
+
+Only **observed** profile changes are retained; the courier does not continuously
+watch the file or protect against a privileged ledger rewrite/rollback. In-flight
+requests cannot be recalled; their finite request/stream deadlines bound shutdown.
+Expiry prevents new sends/imports. Observation wire bodies have no expiry field:
+sender selection expiry governs sending, while receiver admission independently
+uses peer `maxAgeMs` plus its binding/peer/destination expiry. Revocation is local
+enrollment policy, not a live registry-revocation query.
+
+**Missing or damaged lifecycle metadata also returns `binding_changed`.** A
+pre-fix ledger has only a normalized digest and cannot recover its original
+expiries or observed revocations from today's profile. Existing ledgers, including
+empty pre-fix schemas, therefore fail closed without auto-seeding policy or
+changing delivery rows, sequences, deduplication evidence or cursors. This private,
+unreleased format has no automatic migration or renewal promise.
+
+For explicit operator reconciliation: stop all runners; preserve the courier
+ledger, canonical journal, dedicated session credential and profile privately
+before any repair. Inspect pending/attempting/ambiguous records against the
+canonical journal and provider receipts. A complete same-enrollment backup is
+usable only if all later observed restrictions and replay/dedup history are also
+accounted for; do not restore a stale backup to erase a stop. If original policy
+cannot be established, retain the blocked ledger and resolve those unknowns and
+outstanding effects through explicit reviewed reconciliation before separately
+authorizing any new enrollment. Do not delete the ledger, remove policy metadata,
+reset cursors or silently seed current values to get past the error. There is no
+renewal, policy-repair or enrollment CLI.
 
 A missing, ended, replaced or fenced importer session **blocks**. A changed token
 fingerprint cannot silently rebind. Pending imports whose expiry passed are also
@@ -192,6 +227,7 @@ and 1 s Wake/replay windows. Strict supported maxima are:
 | Destinations / pinned peers / Telegram senders per destination | 32 / 32 / 32 |
 | Summary / parent IDs | 1,000 Unicode scalars / 16 |
 | Profile / one private ledger row | 64 KiB / 32 KiB |
+| Lifecycle metadata records / one metadata value | 66 / 4,096 characters |
 | Delivery+ingress rows / main SQLite DB | 100,000 / 256 MiB |
 | SDK page / pages per destination / items per run | 50 / 20 / 200 |
 | Run / request / replay sweep interval / Wake connection | 120 s / 30 s / 30 s / 30 s |

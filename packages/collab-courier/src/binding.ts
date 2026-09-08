@@ -63,7 +63,16 @@ export function privateParent(file: string): void {
 export function readBinding(file: string): Binding {
   try { return parseBinding(JSON.parse(privateRead(file, 65536))); } catch(e) { if(e instanceof CourierError) throw e; throw new CourierError('binding_unavailable'); }
 }
-/** Freeze cursor filters, importer identity, endpoints, audience and credentials; host may pause/revoke/shorten expiry. */
+/** Lifecycle is pinned separately in the SAME ledger; this digest only freezes static scope. */
+export const lifecycleSchema = z.object({ expiresAt: timestamp, revoked: z.boolean() }).strict();
+export function bindingLifecycle(b: Binding): Array<[string, z.infer<typeof lifecycleSchema>]> {
+  return [
+    ['policy:global', { expiresAt: b.expiresAt, revoked: false }],
+    ...b.destinations.map(d => [`policy:destination:${d.alias}`, { expiresAt: d.expiresAt, revoked: d.revoked }] as [string, z.infer<typeof lifecycleSchema>]),
+    ...b.correspondence.peers.map(p => [`policy:peer:${p.alias}`, { expiresAt: p.expiresAt, revoked: p.revoked }] as [string, z.infer<typeof lifecycleSchema>]),
+  ];
+}
+/** Freeze cursor filters, importer identity, endpoints, audience and credentials; enabled remains a reversible pause. */
 export function bindingKey(b: Binding): string {
   return digest(JSON.stringify({ ...b, enabled: true, expiresAt: 0, destinations:b.destinations.map(d=>({...d,expiresAt:0,revoked:false})), correspondence:{...b.correspondence,peers:b.correspondence.peers.map(p=>({...p,expiresAt:0,revoked:false}))} }));
 }

@@ -2,7 +2,7 @@
 import { Database } from 'bun:sqlite';
 import { chmodSync, existsSync, lstatSync, openSync, closeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { Binding, bindingKey, check, CourierError, decimal, digest, privateParent } from './binding.js';
+import { Binding, bindingKey, bindingLifecycle, lifecycleSchema, check, CourierError, decimal, digest, privateParent } from './binding.js';
 
 export interface Selection { id:string; alias:string; sourceReportId:string; sourceSequence:number; summary:string; expiresAt:number; parents:string[]; state:'queued'|'signed'|'attempting'|'provider_accepted'|'ambiguous'|'failed'|'expired'; createdAt:number; updatedAt:number; signedBytes?:string; eventId?:string; messageId?:number; attempts:number; retryAt?:number; failure?:string }
 export interface ImportRequest { workspace_id:string; idempotency_key:string; kind:'observation'; body:string; evidence_refs:string[]; confidence:'unknown'; confidence_basis:string; limits:string; relation:'informs'; authority_scope:string; authority_basis:string }
@@ -10,8 +10,12 @@ export interface Ingress { id:string; route:string; state:'pending'|'imported'|'
 
 function privateDb(path:string, maxBytes:number): Database {
   privateParent(path);
-  if(existsSync(path)) { const s=lstatSync(path); check(s.isFile() && !s.isSymbolicLink() && (s.mode&0o077)===0 && s.uid===process.getuid?.() && s.size<=maxBytes,'unsafe_ledger'); }
-  else { closeSync(openSync(path,'wx',0o600)); }
+  if(!existsSync(path)) {
+    try { closeSync(openSync(path,'wx',0o600)); }
+    catch(e) { if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e; }
+  }
+  // A concurrent opener may have created the file; validate it either way.
+  const s=lstatSync(path); check(s.isFile() && !s.isSymbolicLink() && (s.mode&0o077)===0 && s.uid===process.getuid?.() && s.size<=maxBytes,'unsafe_ledger');
   const db=new Database(path); chmodSync(path,0o600);
   try {
     const pageSize=(db.query('PRAGMA page_size').get() as {page_size:number}).page_size;
@@ -34,13 +38,56 @@ export class Ledger {
   private db:Database;
   constructor(readonly binding:Binding) {
     this.db=privateDb(binding.ledgerPath,binding.limits.maxBytes);
-    this.db.exec(`CREATE TABLE IF NOT EXISTS meta (id TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, route TEXT NOT NULL, state TEXT NOT NULL, value TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS item_lookup ON items(kind,route,state);`);
-    try { this.db.transaction(()=>{
-      const prior=this.meta('binding'); const key=bindingKey(binding);
-      if(prior) check(prior===key,'binding_changed'); else {this.setMeta('binding',key);this.setMeta('session',binding.local.sessionId);}
-    })(); } catch(e) {this.db.close();throw e;}
+    try {
+      const allowed=this.db.transaction(()=>{
+        // Decide first enrollment under the same write lock as schema + policy.
+        // Existing tables, even empty ones, are NOT a fresh enrollment.
+        const fresh=!this.db.query("SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1").get();
+        this.db.exec(`CREATE TABLE IF NOT EXISTS meta (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, route TEXT NOT NULL, state TEXT NOT NULL, value TEXT NOT NULL);
+          CREATE INDEX IF NOT EXISTS item_lookup ON items(kind,route,state);`);
+        if(fresh) {
+          this.setMeta('binding',bindingKey(binding));this.setMeta('session',binding.local.sessionId);
+          this.setMeta('policy:version','1');
+          for(const [id,value] of bindingLifecycle(binding)) {
+            check(lifecycleSchema.safeParse(value).success,'binding_changed');
+            this.setMeta(id,JSON.stringify(value));
+          }
+          return true;
+        }
+        return this.observePolicy(binding);
+      }).immediate();
+      check(allowed,'binding_changed');
+    } catch(e) {this.db.close();throw e;}
+  }
+  /** Synchronous, bounded transaction; commit restrictions BEFORE callers deny or await I/O. */
+  observeBinding(binding:Binding):void {
+    const allowed=this.db.transaction(()=>this.observePolicy(binding)).immediate();
+    check(allowed,'binding_changed');
+  }
+  private observePolicy(binding:Binding):boolean {
+    check(this.meta('binding')===bindingKey(binding) && this.meta('policy:version')==='1','binding_changed');
+    const policy=bindingLifecycle(binding);
+    const count=(this.db.query("SELECT count(*) AS n FROM meta WHERE id LIKE 'policy:%'").get() as {n:number}).n;
+    check(count===policy.length+1,'binding_changed');
+    // Validate the COMPLETE prior record before writing anything. Legacy, corrupt
+    // or partial metadata needs explicit reconciliation, never current-profile seeding.
+    const entries=policy.map(([id,current])=>{
+      const raw=this.meta(id);check(raw!==null && raw.length<=4096,'binding_changed');
+      let value:unknown;try {value=JSON.parse(raw);}catch{throw new CourierError('binding_changed');}
+      const prior=lifecycleSchema.safeParse(value);
+      check(prior.success && lifecycleSchema.safeParse(current).success,'binding_changed');
+      check(id!=='policy:global' || !prior.data.revoked,'binding_changed');
+      return {id,current,prior:prior.data};
+    });
+    let allowed=true;
+    for(const {id,current,prior} of entries) {
+      if(current.expiresAt>prior.expiresAt || (prior.revoked && !current.revoked))allowed=false;
+      const next={expiresAt:Math.min(prior.expiresAt,current.expiresAt),revoked:prior.revoked||current.revoked};
+      // Even a mixed widening/tightening observation retains its restrictions.
+      if(next.expiresAt!==prior.expiresAt || next.revoked!==prior.revoked)this.setMeta(id,JSON.stringify(next));
+    }
+    return allowed;
   }
   close():void {this.db.close();}
   atomic<T>(fn:()=>T):T {return this.db.transaction(fn)();}

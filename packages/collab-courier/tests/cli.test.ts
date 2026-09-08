@@ -72,6 +72,23 @@ for(const duration of ['1ms','60ms'])test(`watch ${duration} includes silent MCP
   }finally{await f.close();}
 });
 
+for(const command of ['status','select','run-once','watch'])test(`CLI ${command} records tightened paused/expired policy before inactive denial or host startup`,async()=>{
+  const f=fixture(1);
+  try {
+    const original=f.b,changed=structuredClone(original);changed.enabled=false;changed.expiresAt=Date.now()-1;changed.destinations[0].revoked=true;changed.correspondence.peers[0].expiresAt--;
+    f.ledger.advance('fleet','7');f.setBinding(changed);
+    const args=[command,'--profile',f.profile,...(command==='watch'?['--for','1s']:command==='select'?['--idempotency-key','paused','--destination','fleet','--report',f.source.id,'--sequence',String(f.source.event_sequence),'--expires-at',String(Date.now()+60000),'--summary-stdin']:[])];
+    const result=await invoke(args,f.root,'Chosen but inactive');
+    expect(result.code).toBe(command==='status'?0:1);if(command!=='status')expect(result.stderr).toContain('binding_inactive');
+    expect(JSON.parse(f.ledger.meta('policy:global')!).expiresAt).toBe(changed.expiresAt);
+    expect(JSON.parse(f.ledger.meta('policy:destination:fleet')!).revoked).toBe(true);
+    expect(JSON.parse(f.ledger.meta('policy:peer:peer')!).expiresAt).toBe(changed.correspondence.peers[0].expiresAt);
+    expect(f.ledger.cursor('fleet')).toBe('7');expect(f.ledger.meta('importer_token')).toBeNull();expect(f.ledger.rows('out',['queued'])).toEqual([]);
+    expect(readdirSync(f.b.local.home).filter(name=>name.startsWith('courier-mcp-'))).toEqual([]);
+    f.setBinding(original);const restored=await invoke(['status','--profile',f.profile],f.root);expect(restored.code).toBe(1);expect(restored.stderr).toContain('binding_changed');expect(f.ledger.cursor('fleet')).toBe('7');
+  } finally {await f.close();}
+});
+
 test('Bun importer does not auto-load workspace .env',async()=>{
   const f=fixture(1);try{
     writeFileSync(f.b.local.workspacePath+'/.env','DATABASE_URL=synthetic-never-production\nAGENTOOL_COLLAB_DB=/nonexistent/poison\n');

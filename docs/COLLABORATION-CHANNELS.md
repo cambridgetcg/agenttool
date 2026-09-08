@@ -184,7 +184,7 @@ configuration or authorization to activate a destination.
 
 | Operation | Source behavior | Not implied |
 |---|---|---|
-| `status --profile` | Redacted local counts and timestamps; may initialize the private delivery ledger. | No MCP, credential lookup, or network probe; configured does not mean connected. |
+| `status --profile` | Redacted local counts and timestamps; may initialize the private delivery ledger and persists observed lifecycle restrictions. | No MCP, credential lookup, or network probe; configured does not mean connected. |
 | `select --profile` | Resume the dedicated local importer, check the selected report ID and event sequence, then queue the supplied summary, audience, expiry, and stable selection key. | No network-secret lookup or send; source report content is discarded, not automatically exported. |
 | `run-once --profile` | Load only named network credentials and perform one finite transport/import pass within the profile's bounds. | An unfinished backlog is not completion or permission for an unbounded retry loop. |
 | `watch --profile --for` | Run for an explicitly selected finite duration, subject to cancellation, expiry, revocation, and bounded passes. | No service installation, automatic restart, global harness configuration, or native idle wake. |
@@ -315,13 +315,23 @@ sensitive. “Private package” is a distribution lane, not a secrecy guarantee
   a new session changes the idempotency namespace and can duplicate imports.
   Preserve both anchors on cursor disagreement and use only explicit reviewed
   recovery. A clean exit is not proof that backlog was reconciled.
-- Pause with `enabled: false`, or revoke the applicable peer/destination.
-  The profile is rechecked at operation boundaries; in-flight calls cannot be
-  recalled and have finite deadlines. Selection expiry gates sending; the
-  observation wire has no expiry field. Receiver admission independently uses
-  peer `maxAgeMs` and binding/peer/destination expiry. These are local operational
-  permissions, not revocation of rights, retrospective deletion, or a live key
-  registry query.
+- Pause reversibly with `enabled: false`. Global/peer/destination expiries can
+  only decrease, and observed peer/destination revocation is sticky across
+  profile restoration and ledger reopen. The same ledger atomically retains
+  minimum expiries and revocation bits at enrollment and every live-profile
+  boundary, before inactive denial or async I/O; the separate normalized digest
+  still guards static scope. Widening, unrevoking, or missing/corrupt/partial
+  policy metadata returns `binding_changed`. Pre-fix metadata cannot recover
+  original policy from the current profile and is never silently seeded. Stop
+  runners, preserve the original ledger/journal/session/profile, inspect pending
+  effects and receipts, and follow the [preserve-and-reconcile boundary](../packages/collab-courier/README.md#delivery-replay-and-crash-recovery).
+  No delivery rows or cursors are reset to reopen work; there is no renewal CLI.
+- Only observed restrictions are retained, not unobserved file changes or a
+  privileged rollback of the ledger. In-flight calls cannot be recalled and have
+  finite deadlines. Selection expiry gates sending; the observation wire has no
+  expiry field. Receiver admission independently uses peer `maxAgeMs` and
+  binding/peer/destination expiry. These are local operational permissions, not
+  revocation of rights, retrospective deletion, or a live key registry query.
 
 Existing Collab has no selective redaction, retention, or secure-deletion
 command; Correspondence corrections append rather than rewrite history.
