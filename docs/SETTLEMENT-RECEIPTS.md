@@ -8,7 +8,7 @@
 >
 > **Wake keys:** `wake.discovery.settlements` (this identity's settled work) · `wake.discovery.settlements_verification` (the signature recipe).
 >
-> **Code:** `bin/agenttool-zerone-reconcile.ts` (offline comparison) · `api/src/services/marketplace/settlement-receipt-verify.ts` (configuration-free canonical bytes and verification) · `api/src/services/marketplace/settlement-receipt-sig.ts` (signing) · `api/src/services/marketplace/settlement-receipts.ts` (record + feed + per-seller facts) · `api/src/routes/public/settlements.ts` (public surface) · `api/src/routes/identity/discover.ts` (facts in discovery) · `api/src/services/marketplace/invocations.ts` (the write, inside the settlement transaction) · `api/migrations/20260725T004500_settlement_receipts.sql`
+> **Code:** `bin/agenttool-zerone-reconcile.ts` (offline CLI) · `api/src/services/marketplace/invocation-reconciliation.ts` (pure comparison) · `api/src/services/marketplace/settlement-receipt-verify.ts` (configuration-free canonical bytes and verification) · `api/src/services/marketplace/settlement-receipt-sig.ts` (signing) · `api/src/services/marketplace/settlement-receipts.ts` (record + feed + per-seller facts) · `api/src/routes/public/settlements.ts` (public surface) · `api/src/routes/identity/discover.ts` (facts in discovery) · `api/src/services/marketplace/invocations.ts` (the write, inside the settlement transaction) · `api/migrations/20260725T004500_settlement_receipts.sql`
 >
 > **Tests:** `bin/tests/agenttool-zerone-reconcile.test.ts` · `api/tests/marketplace-settlement-receipt-sig.test.ts` · `api/tests/discover-honest-signals.test.ts`
 
@@ -174,22 +174,38 @@ omit evidence that is unavailable instead of fabricating a perfect packet.
 
 ### Commands and smallest input
 
-From the repository root, with already-installed/cached dependencies:
+From the repository root, first explicitly prepare the API profile with **Bun
+1.3.5** on `PATH` (installation may contact package registries):
 
 ```sh
-env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME=/Users/yournameisai TMPDIR=/tmp \
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+```
+
+This installs `api`, `packages/data-protocol`, `packages/sdk-ts`,
+`packages/kingdom`, and `packages/wallet-zerone` from their frozen lockfiles.
+The comparison core lives in the API workspace, which declares Zod and the
+receipt verifier's crypto dependencies. Wallet Zerone's existing development
+lock supplies the exact public `@agenttool/wallet@0.1.3` artifact and its peers;
+no local Wallet build, root `node_modules`, `NODE_PATH`, global-cache fallback,
+or symlink-preservation flag is needed. The CLI's existing exports remain
+available from `bin/agenttool-zerone-reconcile.ts`.
+
+Then run locally with an explicitly selected evidence file and an empty,
+operator-owned HOME directory. Set `BUN_BIN_DIR` to the directory containing
+Bun 1.3.5 and `EMPTY_HOME` to that empty directory:
+
+```sh
+env -i PATH="$BUN_BIN_DIR:/usr/bin:/bin" HOME="$EMPTY_HOME" TMPDIR=/tmp \
   bun --no-install --no-env-file bin/agenttool-zerone-reconcile.ts \
   --input /explicit/local/evidence.json --format json
 
 # The same command with --input - reads exactly one JSON document from stdin.
-# --format text is the human-readable equivalent; --help lists arguments.
+# --format text is the human-readable equivalent; --help lists arguments/setup.
 ```
 
-The isolated readiness checkout uses a symlink to a cached Wallet artifact. In
-**that dependency layout**, add `--preserve-symlinks` after `--no-env-file` to
-resolve the artifact's peers from the checkout rather than its cache directory.
-This is a local cached-dependency workaround, not a protocol requirement. Do not
-install dependencies or obtain new evidence implicitly when a local run fails.
+Neither this command nor the tests install dependencies or obtain new evidence
+implicitly when a local run fails. Preparation and offline execution are
+separate actions.
 
 A valid minimal document (synthetic identifier) is:
 
@@ -359,12 +375,18 @@ satisfy this fixed byte-comparison scope.
 Hermetic synthetic tests and existing wallet parity vectors:
 
 ```sh
-env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME=/Users/yournameisai TMPDIR=/tmp \
-  bun --no-install --no-env-file --preserve-symlinks test \
+env -i PATH="$BUN_BIN_DIR:/usr/bin:/bin" HOME="$EMPTY_HOME" TMPDIR=/tmp \
+  bun --no-install --no-env-file test \
   bin/tests/agenttool-zerone-reconcile.test.ts \
   packages/wallet-zerone/tests/messages-invocation.test.ts \
   packages/wallet-zerone/tests/go-cosmos-vectors.test.ts
 ```
+
+The CLI regression copies only the source closure and documented workspace
+dependencies into a disposable layout, with no root `node_modules`, an empty
+HOME/cache, runtime installs disabled, and a loader guard rejecting every
+out-of-layout dependency. Removing either Zod or Wallet must fail rather than
+fall back to an ambient installation.
 
 These prove local compatibility and refusal behavior, not a live drill, output
 quality, demand, actual reward payment, runtime provenance or Zerone-2 readiness.

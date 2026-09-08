@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile, symlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile, symlink, lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createHash } from "node:crypto";
-import * as ed from "@noble/ed25519";
-import { bech32 } from "@scure/base";
+import { tmpdir } from "node:os";
+import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { canonicalInvocationCompletionBytes } from "../../api/src/services/marketplace/sig";
 import { canonicalSettlementReceiptBytes, outputDigestHex, type SettlementReceiptCore } from "../../api/src/services/marketplace/settlement-receipt-verify";
 import { createAgentToolInvocationWitnessLink, computeAgentToolInvocationContentHash } from "../../packages/wallet-zerone/src/invocation";
@@ -14,17 +13,29 @@ import { compareReconciliation, parseReconciliationInput, renderReconciliation, 
 
 const ROOT = resolve(import.meta.dir, "../..");
 const CLI = join(ROOT, "bin/agenttool-zerone-reconcile.ts");
-const ENV = { PATH: "/opt/homebrew/bin:/usr/bin:/bin", HOME: "/Users/yournameisai", TMPDIR: "/tmp" };
+const ENV = { PATH: "/usr/bin:/bin", TMPDIR: "/tmp" };
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const TIME = "2026-08-01T00:00:00.000Z";
 const URL = `https://synthetic.invalid/v1/invocations/${ID}`;
-const ADDRESS = bech32.encodeFromBytes("zrn", new Uint8Array(20).fill(1));
-const OTHER_ADDRESS = bech32.encodeFromBytes("zrn", new Uint8Array(20).fill(2));
+// Canonical Bech32 encodings of twenty 0x01 / 0x02 bytes; synthetic only.
+const ADDRESS = "zrn1qyqszqgpqyqszqgpqyqszqgpqyqszqgpa0esu2";
+const OTHER_ADDRESS = "zrn1qgpqyqszqgpqyqszqgpqyqszqgpqyqszvtl4hu";
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const row = (i: ReconciliationInput, name: string) => compareReconciliation(i).rows.find(r => r.check === name)!;
+
+// Node's Ed25519 implementation keeps fixture generation independent of the
+// production verifier and avoids undeclared bare imports from bin/tests.
+const privateKey = (seed: Uint8Array) => createPrivateKey({
+  key: Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]),
+  format: "der", type: "pkcs8",
+});
+const ed = {
+  getPublicKey: (seed: Uint8Array) => createPublicKey(privateKey(seed)).export({ format: "der", type: "spki" }).subarray(-32),
+  sign: (message: Uint8Array, seed: Uint8Array) => sign(null, message, privateKey(seed)),
+};
 
 function fixture(): ReconciliationInput {
   // Synthetic deterministic keys only; no fixture contains chain signatures or TxRaw.
@@ -66,7 +77,7 @@ function fixture(): ReconciliationInput {
   };
 }
 async function cli(args: string[], input?: string) {
-  const child = Bun.spawn([process.execPath, "--no-install", "--no-env-file", "--preserve-symlinks", CLI, ...args], {
+  const child = Bun.spawn([process.execPath, "--no-install", "--no-env-file", CLI, ...args], {
     cwd: ROOT, env: ENV, stdin: input === undefined ? "ignore" : new Blob([input]), stdout: "pipe", stderr: "pipe",
   });
   return { code: await child.exited, out: await new Response(child.stdout).text(), err: await new Response(child.stderr).text() };
@@ -308,6 +319,74 @@ describe("strict input and minimized output", () => {
 });
 
 describe("hermetic CLI boundary", () => {
+  test("runs with only documented API-profile dependencies and rejects ancestor fallback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zerone-reconcile-clean-"));
+    try {
+      // Copy only this source closure and installed dependencies from the two
+      // declared workspaces. Never copy root node_modules or link to a cache.
+      for (const path of [
+        "bin/agenttool-zerone-reconcile.ts",
+        "api/src/services/marketplace/invocation-reconciliation.ts",
+        "api/src/services/marketplace/sig.ts",
+        "api/src/services/marketplace/settlement-receipt-verify.ts",
+        "api/src/services/marketplace/witness.ts",
+        "api/src/services/mathos/encode.ts",
+        "api/src/services/doctrine/integrity.ts",
+        "api/src/services/identity/forms.ts",
+        "api/node_modules/zod", "api/node_modules/@noble/ed25519", "api/node_modules/@noble/hashes",
+        "packages/wallet-zerone/src", "packages/wallet-zerone/node_modules",
+      ]) {
+        await cp(join(ROOT, path), join(dir, path), { recursive: true, dereference: true });
+      }
+      expect(await lstat(join(dir, "node_modules")).catch(() => null)).toBeNull();
+      await mkdir(join(dir, "home"));
+      await mkdir(join(dir, "cache"));
+      const guard = join(dir, "no-fallback.ts");
+      // The fixture may sit beneath a developer's prepared checkout. Refuse
+      // every module loaded outside it, including symlink/global-cache escapes.
+      await writeFile(guard, `
+        import { readFileSync, realpathSync } from "node:fs";
+        const root = realpathSync(${JSON.stringify(dir)}) + "/";
+        Bun.plugin({ name: "no-ambient-dependencies", setup(build) {
+          build.onLoad({ filter: /.*/, namespace: "file" }, ({ path }) => {
+            if (!realpathSync(path).startsWith(root)) throw Error("ambient_dependency_forbidden");
+            return { contents: readFileSync(path, "utf8"), loader: path.endsWith(".json") ? "json" : path.endsWith(".ts") ? "ts" : "js" };
+          });
+        }});
+        globalThis.fetch = () => { throw Error("network_forbidden"); };
+      `);
+      const run = async (args: string[], input?: string) => {
+        const child = Bun.spawn([process.execPath, "--no-install", "--no-env-file", "--preload", guard,
+          join(dir, "bin/agenttool-zerone-reconcile.ts"), ...args], {
+          cwd: dir, env: { ...ENV, HOME: join(dir, "home"), BUN_INSTALL_CACHE_DIR: join(dir, "cache") },
+          stdin: input === undefined ? "ignore" : new Blob([input]), stdout: "pipe", stderr: "pipe",
+        });
+        const [out, err, code] = await Promise.all([
+          new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+        ]);
+        return { code, out, err };
+      };
+      const help = await run(["--help"]);
+      expect(help.code, help.err).toBe(0);
+      expect(help.out).toContain("prepare-hermetic-deps.sh api");
+      const input = fixture();
+      expect(await run(["--input", "-"], JSON.stringify(input))).toEqual({
+        code: 0, out: renderReconciliation(compareReconciliation(input)), err: "",
+      });
+      expect((await run(["--input", "-"], JSON.stringify({ schema: input.schema, invocation_id: ID }))).code).toBe(2);
+      // Negative controls prove neither introduced dependency can be supplied
+      // by an ancestor/global installation when absent from the clean layout.
+      await rm(join(dir, "api/node_modules/zod"), { recursive: true });
+      const missingZod = await run(["--help"]);
+      expect(missingZod.code).not.toBe(0);
+      expect(missingZod.err).toMatch(/ambient_dependency_forbidden|Cannot find/);
+      await cp(join(ROOT, "api/node_modules/zod"), join(dir, "api/node_modules/zod"), { recursive: true, dereference: true });
+      await rm(join(dir, "packages/wallet-zerone/node_modules/@agenttool/wallet"), { recursive: true });
+      const missingWallet = await run(["--help"]);
+      expect(missingWallet.code).not.toBe(0);
+      expect(missingWallet.err).toMatch(/ambient_dependency_forbidden|Cannot find/);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  }, 30_000);
   test("stdin and one selected regular file produce identical bounded stdout", async () => {
     const input = JSON.stringify(fixture());
     const stdin = await cli(["--input", "-", "--format", "json"], input);
@@ -345,7 +424,7 @@ describe("hermetic CLI boundary", () => {
       process.env=new Proxy({}, {get(){throw Error('env discovery forbidden')}});
       await import(${JSON.stringify(CLI)});
     `;
-    const child = Bun.spawn([process.execPath, "--no-install", "--no-env-file", "--preserve-symlinks", "--eval", code], { cwd: ROOT, env: ENV, stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawn([process.execPath, "--no-install", "--no-env-file", "--eval", code], { cwd: ROOT, env: ENV, stdout: "pipe", stderr: "pipe" });
     const err = await new Response(child.stderr).text();
     expect(await child.exited).toBe(0); expect(err).toBe("");
     expect(await new Response(child.stdout).text()).toBe("");
