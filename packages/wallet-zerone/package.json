@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/wallet-zerone",
-  "version": "0.1.2",
+  "version": "0.2.0-dev.0",
   "description": "Offline-first Zerone chain adapter for Agent Wallet intents and exact Cosmos direct-sign bytes",
   "license": "Apache-2.0",
   "type": "module",

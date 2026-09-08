@@ -8,11 +8,13 @@
 ## Release and trust boundary
 
 The new `@agenttool/wallet-zerone/bootstrap/v1` subpath implements the frozen
-`SeedPlannerApi`. It is **unreleased candidate source**, not the immutable 0.1.2
-LOVE artifact. Existing root exports, networks, SDK pin, transaction implementation
-and byte vectors are unchanged. Root/package version metadata is historical until
-a separately reviewed new version is assigned; publishing changed bytes under the
-historical version would be invalid. This work publishes or activates nothing.
+`SeedPlannerApi`. Package source version **0.2.0-dev.0 is a developer-preview
+candidate, not yet published or production-approved**, and is not the immutable
+0.1.2 LOVE/npm artifact. The exported `PACKAGE_VERSION` matches package metadata
+0.2.0-dev.0; the existing root contract, networks, SDK pin, transaction
+implementation and byte vectors are unchanged. A new exact LOVE manifest/artifact must be built from a
+clean source commit before registration; publication and production approval
+remain separate. This work publishes or activates nothing.
 
 The profile requires explicit source-manifest, serialized-genesis, runtime and
 helper SHA256 digests, source revision, and mutually consistent CAIP identifiers.

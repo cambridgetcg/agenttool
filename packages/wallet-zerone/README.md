@@ -32,13 +32,19 @@ not choose a custody provider, bundle an RPC URL or bearer credential, retry a
 broadcast, persist sequence/budget state, or expose a combined sign-and-send
 operation.
 
-## Unreleased bootstrap/v1 source candidate
+## 0.2.0-dev.0 developer-preview candidate
 
-This checkout additionally contains **unreleased source**, available only through
-`@agenttool/wallet-zerone/bootstrap/v1` after a local build. It is not part of the
-historical 0.1.2 LOVE bytes described above. Package/root version metadata remains
-historical pending a separately reviewed new release; **do not publish these
-changed bytes as 0.1.2**. No historical artifact is updated by this work.
+The current source version is **`0.2.0-dev.0`, a developer-preview candidate**.
+It is **not yet published or production-approved**. Its new
+`@agenttool/wallet-zerone/bootstrap/v1` entrypoint is available after a local build;
+it is not part of the historical 0.1.2 LOVE/npm artifacts described above.
+The exported `PACKAGE_VERSION` matches the source package version `0.2.0-dev.0`;
+the existing root contract, protocol/network pins, and Send/witness behavior remain
+unchanged. No historical artifact is updated.
+
+A new exact LOVE manifest and artifact must be built from a clean source commit
+before registering this preview. Package registration, publication, and production
+approval remain separate steps; this metadata change performs none of them.
 
 The separate candidate constructs exactly one sponsored native seed `MsgClaim`
 and unsigned direct-sign plan. Its dynamic profile binds explicit genesis,

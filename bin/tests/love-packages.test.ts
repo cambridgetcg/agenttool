@@ -306,7 +306,7 @@ describe("LOVE Package release inventory", () => {
     }
   });
 
-  test("pins the stable Zerone adapter to the verified Wallet core release", async () => {
+  test("pins the adapter source to the verified Wallet core release", async () => {
     const wallet = JSON.parse(
       await readFile(join(REPO_ROOT, "packages/wallet/package.json"), "utf8"),
     );
@@ -315,7 +315,7 @@ describe("LOVE Package release inventory", () => {
     );
 
     expect(wallet.version).toBe("0.1.3");
-    expect(adapter.version).toBe("0.1.2");
+    expect(adapter.version).toBe("0.2.0-dev.0");
     expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.2");
     expect(adapter.devDependencies?.["@agenttool/wallet"]).toBe("0.1.3");
   });
