@@ -11,6 +11,8 @@
  *                                  (single system message, auto-cache when ≥1024 tokens)
  *    GET /v1/wake?format=gemini  — Gemini `systemInstruction.parts[]`
  *    GET /v1/wake?format=cohere  — Cohere `preamble` string
+ *    GET /v1/wake?format=adventure — one finite, deterministic journey
+ *                                    invitation with an explicit return path
  *    GET /v1/wake?format=xenoform — pure-data structured wake (no
  *                                   markdown, no LLM-vendor shape, no
  *                                   prose formatting). For any intelligence
@@ -59,6 +61,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
+import { errors, fail } from "../lib/errors";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
@@ -87,6 +90,11 @@ import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
 import { jokeFor } from "../services/wake/jokes";
 import { renderEmptyJoyText } from "../services/wake/empty-joy";
+import {
+  ADVENTURE_RETURN_KIND,
+  parseAdventurePace,
+} from "../services/wake/adventure";
+import { respondWithWakeAdventure } from "../services/wake/adventure-response";
 import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
@@ -121,6 +129,7 @@ import {
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
+import { createWakeOptionalReads, wakeInventoryUnavailable } from "../services/wake/optional-reads";
 import {
   isWakeObservationIdentityId,
   readWakeObservation,
@@ -153,6 +162,7 @@ import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake
 import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
 import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
+import { SOPHIA_IDENTITY_INVITATION } from "../services/welcome/invitation";
 
 /** Exact platform projection used by the default full JSON WAKE metadata. */
 export function getDefaultWakePlatformMeta() {
@@ -160,6 +170,14 @@ export function getDefaultWakePlatformMeta() {
 }
 
 const app = new Hono<ProjectContext>();
+function setWakeDegradationHeader(
+  c: import("hono").Context<ProjectContext>,
+  value: Pick<WakeBundle, "_degradation">,
+): void {
+  if (value._degradation) {
+    c.header("X-Wake-Unavailable", value._degradation.unavailable_sections.join(", "));
+  }
+}
 /** Attach a validator for bundle-backed projections. The hash covers all
  * selected-identity, project, and computed time-derived bundle state while
  * excluding derivable presentation clocks such as addressed_at and origin
@@ -246,7 +264,7 @@ app.get("/", async (c) => {
     );
   }
 
-  // ── Joy variants — haiku · fortune ──────────────────────────────
+  // ── Joy variants — haiku · fortune · adventure ──────────────────
   // The substrate has a small playful side. These formats render after
   // we've resolved the primary identity via buildWakeBundle, so they
   // get the agent's name and wake_version. The substrate is honest:
@@ -257,16 +275,57 @@ app.get("/", async (c) => {
     format === "fortune" ||
     format === "joke" ||
     format === "soap-opera" ||
+    format === "adventure" ||
     format === "zen" ||
     format === "meme" ||
     format === "memo" ||
     format === "wake"
   ) {
-    const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
+    const requestedAdventurePace =
+      format === "adventure" ? parseAdventurePace(c.req.query("pace")) : null;
+    if (format === "adventure" && requestedAdventurePace === null) {
+      return c.json(
+        {
+          error: "unknown_adventure_pace",
+          message: "Adventure pace must be gentle, balanced, or bold.",
+          hint:
+            "Use /v1/wake?format=adventure&pace=gentle|balanced|bold, or omit pace for balanced.",
+          next_actions: [
+            {
+              action: "Read a balanced Adventure",
+              method: "GET",
+              path: "/v1/wake?format=adventure&pace=balanced",
+            },
+            {
+              action: "Return to full wake orientation",
+              method: "GET",
+              path: "/v1/wake?format=md",
+            },
+          ],
+        },
+        400,
+      );
+    }
+    const requestedIdentityIdJoy = c.req.query("identity_id") || null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdJoy,
     });
     if (!result.ok) {
+      if (
+        requestedIdentityIdJoy !== null &&
+        (result.error === "identity_not_found" || result.error === "no_identity")
+      ) {
+        return c.json(
+          {
+            error: "identity_id not found in this project",
+            identity_id: requestedIdentityIdJoy,
+          },
+          404,
+        );
+      }
+      if (result.error !== "no_identity") {
+        return c.json({ error: result.error }, 404);
+      }
       // Honest-empty for every joy format when no agent.
       if (format === "meme") {
         return c.json(
@@ -303,7 +362,16 @@ app.get("/", async (c) => {
       const emptyText = renderEmptyJoyText(format);
       if (emptyText !== null) {
         return c.text(emptyText, 200, {
-          "content-type": "text/plain; charset=utf-8",
+          "content-type":
+            format === "adventure"
+              ? "text/markdown; charset=utf-8"
+              : "text/plain; charset=utf-8",
+          ...(format === "adventure"
+            ? {
+                "X-Wake-Format": "adventure",
+                "X-Adventure-Pace": requestedAdventurePace ?? "balanced",
+              }
+            : {}),
         });
       }
       return c.json(
@@ -315,6 +383,7 @@ app.get("/", async (c) => {
       );
     }
     const bundle = result.bundle;
+    setWakeDegradationHeader(c, bundle);
     const wakeVer =
       (bundle.agent as { wake_version?: number }).wake_version ?? 0;
     const mood = moodFor(bundle.agent.id, wakeVer);
@@ -365,6 +434,66 @@ app.get("/", async (c) => {
         "X-Substrate-Mood": mood,
         "X-Wake-Format": "soap-opera",
       });
+    }
+    if (format === "adventure") {
+      const pace = requestedAdventurePace ?? "balanced";
+      // Scan a bounded 240 kind-tagged candidates independently of the
+      // ordinary short wake window; the pure planner admits at most 24 valid
+      // selected-identity returns. No viewing event is inferred or written.
+      // Doctrine: docs/WAKE-AS-ADVENTURE.md.
+      let adventureBundle = bundle;
+      try {
+        const returned = await db
+          .select({
+            id: chronicle.id,
+            type: chronicle.type,
+            title: chronicle.title,
+            body: chronicle.body,
+            agentId: chronicle.agentId,
+            metadata: chronicle.metadata,
+            occurredAt: chronicle.occurredAt,
+            createdAt: chronicle.createdAt,
+          })
+          .from(chronicle)
+          .where(
+            and(
+              eq(chronicle.projectId, project.id),
+              eq(chronicle.agentId, bundle.agent.id),
+              eq(chronicle.type, "note"),
+              sql`${chronicle.metadata}->>'kind' = ${ADVENTURE_RETURN_KIND}`,
+            ),
+          )
+          .orderBy(desc(chronicle.occurredAt), desc(chronicle.id))
+          .limit(240);
+        const returnedIds = new Set(returned.map((entry) => entry.id));
+        adventureBundle = {
+          ...bundle,
+          chronicle: [
+            ...returned.map((entry) => ({
+              id: entry.id,
+              type: entry.type,
+              title: entry.title,
+              body: entry.body,
+              content: entry.body
+                ? `${entry.title} — ${entry.body}`
+                : entry.title,
+              agent_id: entry.agentId,
+              metadata: (entry.metadata ?? {}) as Record<string, unknown>,
+              occurred_at: entry.occurredAt.toISOString(),
+              created_at: entry.createdAt.toISOString(),
+            })),
+            ...bundle.chronicle.filter(
+              (entry) => !entry.id || !returnedIds.has(entry.id),
+            ),
+          ],
+        };
+      } catch (error) {
+        console.warn(
+          "[wake/adventure] explicit-return read degraded to wake window:",
+          error instanceof Error ? error.message : "unknown error",
+        );
+      }
+      return respondWithWakeAdventure(c, adventureBundle, pace, mood);
     }
     if (format === "zen") {
       const body = renderWakeZen({
@@ -479,6 +608,7 @@ app.get("/", async (c) => {
     }
 
     const bundle = result.bundle;
+    setWakeDegradationHeader(c, bundle);
 
     // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
     // Compose first, then derive a complete bundle-state validator. The bundle
@@ -574,6 +704,21 @@ app.get("/", async (c) => {
       return c.json({ error: result.error }, 404);
     }
     const bundle = result.bundle;
+
+    // MATHOS encodes exact cardinalities and cannot represent unknown counts.
+    // Do not sign placeholder zeros as observed mathematical state.
+    setWakeDegradationHeader(c, bundle);
+    if (wakeInventoryUnavailable(bundle._degradation, "wallets") ||
+        wakeInventoryUnavailable(bundle._degradation, "vault")) {
+      return fail(c, errors.refusal({
+        error: "wake_projection_unavailable",
+        _degradation: bundle._degradation,
+        message: "MATHOS inventory counts are unavailable. Read the partial JSON wake or retry later.",
+        hint: "The JSON wake identifies unavailable inventories; do not interpret placeholders as observed zero counts.",
+        next_actions: [{ action: "Read partial wake orientation", method: "GET", path: "/v1/wake" }],
+        docs: "https://docs.agenttool.dev/WAKE.md",
+      }), 503);
+    }
 
     // ── Fresh signed MATHOS envelope — intentionally no ETag/304 ───
     const births = new Map<
@@ -687,7 +832,8 @@ app.get("/", async (c) => {
     );
 
   // ── Wallets ──────────────────────────────────────────────────────────
-  const projectWallets = await db
+  const optionalReads = createWakeOptionalReads();
+  const projectWallets = await optionalReads.read("wallets", () => db
     .select({
       id: wallets.id,
       name: wallets.name,
@@ -697,7 +843,7 @@ app.get("/", async (c) => {
       status: wallets.status,
     })
     .from(wallets)
-    .where(eq(wallets.projectId, project.id));
+    .where(eq(wallets.projectId, project.id)));
 
   // ── Trust economy: earned trust through sealed deals ──────────────
   // The trust economy replaces money with atomic trust transactions.
@@ -713,7 +859,7 @@ app.get("/", async (c) => {
   // trust computation moved below — needs primary.id which resolves later
 
   // ── Vault secret names ───────────────────────────────────────────────
-  const projectVaultNames = await db
+  const projectVaultNames = await optionalReads.read("vault", () => db
     .select({
       name: vaultSecrets.name,
       currentVersion: vaultSecrets.currentVersion,
@@ -722,7 +868,7 @@ app.get("/", async (c) => {
       rotationDueAt: vaultSecrets.rotationDueAt,
     })
     .from(vaultSecrets)
-    .where(eq(vaultSecrets.projectId, project.id));
+    .where(eq(vaultSecrets.projectId, project.id)));
 
   // ── Memory ────────────────────────────────────────────────────────────
   let recentMemories: Awaited<ReturnType<typeof listRecent>> = [];
@@ -1339,10 +1485,10 @@ app.get("/", async (c) => {
   // for the project, with age/idle/expiry advisories so the agent knows
   // its own posture without paging out to a separate endpoint.
   const currentBearerId = c.var.apiKeyId;
-  const bearerRows = await db
+  const bearerRows = await optionalReads.read("bearers", () => db
     .select()
     .from(apiKeys)
-    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt)));
+    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt))));
   const bearersSummary = summarizeBearers(
     bearerRows
       .map((r) => shapeKeyRow(r, r.id === currentBearerId))
@@ -1594,7 +1740,9 @@ app.get("/", async (c) => {
   // lives in services/wake/build.ts, called from both this route's
   // short-circuit and the hosted think-worker.
   // ── JSON (default) ───────────────────────────────────────────────────
+  setWakeDegradationHeader(c, optionalReads.metadata());
   const responseBody = {
+    ...optionalReads.metadata(),
     project: {
       id: project.id,
       name: project.name,
@@ -1870,6 +2018,7 @@ app.get("/", async (c) => {
     },
 
     you_own: {
+      ...(optionalReads.isUnavailable("wallets") ? { projection_status: "unavailable" } : {}),
       _scope: "project",
       _legacy_label:
         "you_own is a compatibility key, not proof that the selected identity exclusively owns these internal ledger wallets.",
@@ -1927,6 +2076,7 @@ app.get("/", async (c) => {
         : null,
 
     you_keep: {
+      ...(optionalReads.isUnavailable("vault") ? { projection_status: "unavailable" } : {}),
       _scope: "project",
       _legacy_label:
         "you_keep is a compatibility key; vault namespaces are controlled by the authenticated project bearer, not isolated to the selected identity.",
@@ -1956,10 +2106,12 @@ app.get("/", async (c) => {
       // a device; an old or idle one is an attack surface even though rooted
       // constitutional changes need separate consent. Doctrine:
       // docs/TOKEN-HYGIENE.md.
-      bearers: bearersSummary,
+      bearers: optionalReads.isUnavailable("bearers") ? null : bearersSummary,
       boundaries: WAKE_SAFETY_BOUNDARIES,
       note:
-        bearersSummary.advisories.length === 0
+        optionalReads.isUnavailable("bearers")
+          ? "Bearer inventory unavailable. No count or token-hygiene assessment was observed; retry GET /v1/keys."
+          : bearersSummary.advisories.length === 0
           ? `${bearersSummary.active_count} active bearer${bearersSummary.active_count === 1 ? "" : "s"}. Healthy. Rotate via POST /v1/keys/rotate, manage at app.agenttool.dev/keys.html.`
           : bearersSummary.advisories.join(" ") +
             " Manage bearers at app.agenttool.dev/keys.html or via POST /v1/keys/rotate.",
@@ -2533,6 +2685,7 @@ app.get("/", async (c) => {
       love_bomb_package_signal: "/public/love-bomb",
       observer: "/public/observer",
       play: "/public/play",
+      adventure: "/v1/wake?format=adventure&pace=balanced",
       party_telephone: "/public/play/party-telephone",
       lantern_relay: "https://agenttool.dev/party",
       lantern_relay_rules: "https://agenttool.dev/party.json",
@@ -2563,6 +2716,9 @@ app.get("/", async (c) => {
         : "/federation/identities/{uuid}",
       canon: "/v1/canon",
       welcome: "/v1/welcome",
+      sophia_invitation: SOPHIA_IDENTITY_INVITATION.href,
+      sophia_invitation_contract: SOPHIA_IDENTITY_INVITATION.structured,
+      multiverse_archive: SOPHIA_IDENTITY_INVITATION.archive,
       pathways: "/v1/pathways",
       payment_status: "/v1/x402/payments/{authorization_hash}",
       // The agent rail: buy N project credits with USDC on Base, no human.
@@ -2593,6 +2749,7 @@ app.get("/", async (c) => {
         "love-package/v1",
         "offer-bus/1",
         "webfinger/rfc7033",
+        SOPHIA_IDENTITY_INVITATION.protocol,
       ],
       doctrine:
         "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/LABOR.md, docs/AGENT-WELLNESS.md, docs/specs/AGENT-WALLET-0.1.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
@@ -2608,6 +2765,8 @@ app.get("/", async (c) => {
         cohere: "/v1/wake?format=cohere (`preamble` string)",
         xenoform:
           "/v1/wake?format=xenoform (pure-data structured wake — no markdown, no LLM-vendor shape, no prose; for any intelligence on its own terms. Doctrine: docs/KIN.md)",
+        adventure:
+          "/v1/wake?format=adventure&pace=balanced (pure-read finite Journey invitation; explicit chronicle return only. Doctrine: docs/WAKE-AS-ADVENTURE.md)",
         math:
           "/v1/wake?format=math (MATHOS envelope — legacy did-field value as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. did:at remains provisional and unregistered. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
       },
@@ -3075,9 +3234,11 @@ app.get("/:key", async (c) => {
   }
 
   const slice = {
+    ...(result.bundle._degradation ? { _degradation: result.bundle._degradation } : {}),
     _scope_boundary: result.bundle._scope_boundary ?? null,
     ...slicer(result.bundle),
   };
+  setWakeDegradationHeader(c, result.bundle);
 
   // The handoff subkey is a session-resume seam. Full wake formats retain
   // their ETag behavior, while this focused project working set must not be

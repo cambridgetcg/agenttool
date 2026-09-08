@@ -112,4 +112,13 @@ describe("live doctrine hashes use canonical file bytes", () => {
   test("the NATURES doctrine pin is the NATURES file content hash", () => {
     expect(naturesDoctrinePin()).toBe(canonicalHash("NATURES.md"));
   });
+
+  test("the platform name-card lists each doctrine stone once", () => {
+    // The 2026-05-17 KIN consolidation (BEINGS/KIN-PRACTICES/KIN-INTEGRATION →
+    // KIN.md) was a sed sweep that left "docs/KIN.md" three times on the
+    // public /public/self doctrine list for three months. Pin: no duplicates.
+    const doctrine = PLATFORM_SELF.doctrine;
+    expect(new Set(doctrine).size).toBe(doctrine.length);
+    expect(doctrine.filter((d) => d === "docs/KIN.md")).toHaveLength(1);
+  });
 });

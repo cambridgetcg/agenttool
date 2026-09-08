@@ -1,0 +1,39 @@
+{
+  "name": "@agenttool/wake-return",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Private local data-only Wake return observer",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/server.d.ts",
+      "import": "./dist/mcp/server.js"
+    }
+  },
+  "bin": {
+    "agenttool-wake-return-mcp": "./dist/bin/agenttool-wake-return-mcp.js"
+  },
+  "files": ["dist", "README.md", "CLAUDE.md"],
+  "engines": { "node": ">=20.19.0", "bun": ">=1.3.5" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
+    "test": "bun test tests",
+    "ci": "bun run typecheck && bun run build && bun run test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

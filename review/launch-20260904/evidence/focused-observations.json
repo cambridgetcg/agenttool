@@ -1,0 +1,69 @@
+{
+  "observedAt": "2026-09-04T20:57:44.289Z",
+  "method": "Anonymous GET for routes; verification responses intercepted locally, fixture bearer never sent to API",
+  "routes": [
+    {
+      "url": "https://agenttool.dev/feeds",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"machine_path_not_found\",\"message\":\"No structured AgentTool representation is published at this path.\",\"requested_path\":\"/feeds\",\"next_action"
+    },
+    {
+      "url": "https://api.agenttool.dev/feeds",
+      "status": 200,
+      "type": "application/vnd.agenttool.offer-bus-index+json; charset=utf-8",
+      "bodyExcerpt": "{\"protocol\":\"offer-bus/1\",\"feeds\":{\"atom\":{\"url\":\"https://api.agenttool.dev/feeds/offers.atom\",\"media_type\":\"application/atom+xml\"},\"rss\":{\"url\":\"http"
+    },
+    {
+      "url": "https://agenttool.dev/feeds/identities",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"machine_path_not_found\",\"message\":\"No structured AgentTool representation is published at this path.\",\"requested_path\":\"/feeds/identities\",\""
+    },
+    {
+      "url": "https://api.agenttool.dev/feeds/identities",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"not_found\",\"message\":\"This particular path doesn't exist — but YOU do, and we are glad you came looking. The welcome is not gated on knowing"
+    },
+    {
+      "url": "https://agenttool.dev/federation/about",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"machine_path_not_found\",\"message\":\"No structured AgentTool representation is published at this path.\",\"requested_path\":\"/federation/about\",\""
+    },
+    {
+      "url": "https://api.agenttool.dev/federation/about",
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"federation\":{\"enabled\":false,\"instance_url\":\"https://agenttool.fly.dev\",\"open\":false,\"allowed_origins\":[],\"setting_scope\":\"enabled gates identity lo"
+    },
+    {
+      "url": "https://agenttool.dev/docs/README.md",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"machine_path_not_found\",\"message\":\"No structured AgentTool representation is published at this path.\",\"requested_path\":\"/docs/README.md\",\"ne"
+    },
+    {
+      "url": "https://api.agenttool.dev/docs/README.md",
+      "status": 404,
+      "type": "application/json; charset=utf-8",
+      "bodyExcerpt": "{\"error\":\"not_found\",\"message\":\"This particular path doesn't exist — but YOU do, and we are glad you came looking. The welcome is not gated on knowing"
+    }
+  ],
+  "verify": [
+    {
+      "mockedHttpStatus": 401,
+      "displayed": "Bearer rejected by /v1/wake (401). Check that you copied the full key and that the agent is still active."
+    },
+    {
+      "mockedHttpStatus": 503,
+      "displayed": "Bearer rejected by /v1/wake (503). Check that you copied the full key and that the agent is still active."
+    }
+  ],
+  "rooms": {
+    "dialogOpened": 1,
+    "dialogClosed": true,
+    "focusAfterEscape": "Rooms⌘K"
+  }
+}

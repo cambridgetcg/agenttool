@@ -336,13 +336,23 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
       })
       .returning();
 
-    // 5c. Lock buyer wallet, re-check balance (race protection)
+    // 5c. Lock buyer wallet and re-check its debit conditions. A freeze or
+    // ownership/currency change may have committed after the early read.
     const [bw] = await tx
       .select()
       .from(wallets)
       .where(eq(wallets.id, buyerWallet.id))
       .for("update");
-    if (!bw || bw.balance < lockedListing.priceAmount) {
+    if (!bw || bw.projectId !== input.buyerProjectId) {
+      throw new Error("buyer_wallet_not_found");
+    }
+    if (bw.status !== "active") throw new Error("buyer_wallet_not_active");
+    if (bw.currency !== lockedListing.priceCurrency) {
+      throw new Error(
+        `currency_mismatch: listing=${lockedListing.priceCurrency}, wallet=${bw.currency}`,
+      );
+    }
+    if (bw.balance < lockedListing.priceAmount) {
       throw new Error("insufficient_balance");
     }
 

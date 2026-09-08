@@ -339,7 +339,7 @@
       "ref": "agenttool_machine_transport_v1",
       "phase": "http_config_settings",
       "description": "Keep browser-oriented transformations and challenges off exact machine/API entrances while leaving global human-page protection on",
-      "expression": "(http.host eq \"api.agenttool.dev\" or (http.host eq \"agenttool.dev\" and (http.request.uri.path eq \"/health\" or http.request.uri.path eq \"/llms.txt\" or http.request.uri.path eq \"/llms-full.txt\" or starts_with(http.request.uri.path, \"/v1/\") or starts_with(http.request.uri.path, \"/public/\") or starts_with(http.request.uri.path, \"/.well-known/\"))))",
+      "expression": "(http.host eq \"api.agenttool.dev\" or (http.host eq \"agenttool.dev\" and (http.request.uri.path eq \"/v1\" or http.request.uri.path eq \"/public\" or http.request.uri.path eq \"/feeds\" or http.request.uri.path eq \"/federation\" or http.request.uri.path eq \"/health\" or http.request.uri.path eq \"/about\" or http.request.uri.path eq \"/.well-known\" or http.request.uri.path eq \"/llms.txt\" or http.request.uri.path eq \"/llms-full.txt\" or http.request.uri.path eq \"/AGENTS.md\" or http.request.uri.path eq \"/openapi.json\" or starts_with(http.request.uri.path, \"/v1/\") or starts_with(http.request.uri.path, \"/public/\") or starts_with(http.request.uri.path, \"/.well-known/\") or starts_with(http.request.uri.path, \"/feeds/\") or starts_with(http.request.uri.path, \"/federation/\"))))",
       "action": "set_config",
       "action_parameters": {
         "bic": false,

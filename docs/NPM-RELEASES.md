@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, Dataset Influence, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, the Economic Kernel and its comparator, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, Dataset Influence, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -34,6 +34,8 @@ different artifact and Hub surfaces:
 | `@agenttool/love-bomb` | one credential-free `npm pack` tarball containing four pure care/choice/becoming/delivery formats, closed schemas, and the deterministic Hub candidate | static authored guide/reference rows in intended dataset `Yu-and-Ai/agenttool-love-bomb`; publication remains separate and does not authorize training |
 | `@agenttool/wake-continuity` | one credential-free zero-I/O developer-preview tarball containing deterministic functional-access record validation and AFTERGLOW digest references | none; npm/GitHub publication performs no model measurement, awareness test, continuity proof, or hosted deployment |
 | `@agenttool/hf-scout` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | none; the package is a local read-only Hub metadata client, not a Hub dataset, Space, model, hosted proxy, or deployment |
+| `@agenttool/economic-kernel` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | shared public dataset `Yu-and-Ai/agenttool-economic-kernel`; only the independently authored lesson config is training-authorized |
+| `@agenttool/economic-conformance` | one exact checked-in LOVE tarball containing the independent comparator, all 53 vectors, and the deterministic Hub source tree | the same dataset's public conformance config is explicitly excluded from training; public visibility is not a sealed holdout |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
@@ -84,6 +86,88 @@ not every registry fallback: npm can expose the sole version of a brand-new
 package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
+
+## Verified Economic Kernel 0.2 developer preview — 2026-09-03
+
+The authorized Economic Kernel pair is publicly verified from protected
+[PR #404](https://github.com/cambridgetcg/agenttool/pull/404), merged as
+[`737a58f02e11f52e74703b921d806e78c27202e9`](https://github.com/cambridgetcg/agenttool/commit/737a58f02e11f52e74703b921d806e78c27202e9).
+That release merge carries semantic source commit
+`f809275a1dff14e0f88af73bb53e11b104a92438` and LOVE lineage commit
+`2fc1267432addf3f219593bf08be4278434ab663`. Both annotated tags peel to
+the protected-main merge. GitHub Release assets, checked-in LOVE archives, and
+fresh anonymous npm downloads were byte-identical.
+
+| Package | Protected publication and exact public artifact |
+|---|---|
+| `@agenttool/economic-kernel@0.2.0-dev.0` | [Release](https://github.com/cambridgetcg/agenttool/releases/tag/economic-kernel-v0.2.0-dev.0) · [run `33736822237`](https://github.com/cambridgetcg/agenttool/actions/runs/33736822237) · published `2026-09-03T09:07:19.334Z`, anonymously observed `2026-09-03T09:12:17.731Z` · 57,031-byte archive SHA-256 `8b2682f3878a93b9f8d039989313dc9f59c982ff1cb7fb4abb05ccb553f7e9cf`, npm SHA-1 `b72ec9fbd4d83bbdb920fcdd0216370aac54bc7a` · 1,473-byte LOVE manifest SHA-256 `1dcd4dc3a133ea04e7b1529b70c19227d4e7cf1c0a7cb274ca19d12d6c601cb8` · SLSA [Rekor `2697675854`](https://search.sigstore.dev/?logIndex=2697675854), publish [Rekor `2697675959`](https://search.sigstore.dev/?logIndex=2697675959) |
+| `@agenttool/economic-conformance@0.2.0-dev.0` | [Release](https://github.com/cambridgetcg/agenttool/releases/tag/economic-conformance-v0.2.0-dev.0) · [run `33736825170`](https://github.com/cambridgetcg/agenttool/actions/runs/33736825170) · published `2026-09-03T09:07:17.259Z`, anonymously observed `2026-09-03T09:12:16.089Z` · 58,390-byte archive SHA-256 `ba9f2c869c3d6bef963ef3fbe962fc678b736144d10e5aff6c83a49a84804661`, npm SHA-1 `df9013398199aae233b96fb512ad90be947ce7cc` · 1,513-byte LOVE manifest SHA-256 `068a2f80187fb09edc8f0e6da830258ac301238c258aa1fe289246c18ff6baf8` · SLSA [Rekor `2697675800`](https://search.sigstore.dev/?logIndex=2697675800), publish [Rekor `2697675886`](https://search.sigstore.dev/?logIndex=2697675886) |
+
+The comparator's 53-case frozen vector is 22,842 bytes with SHA-256
+`2c13fd9f341210657de0f1fc223c22c82472ca6377a9af3dce28c9db035ae47b`;
+its semantic SHA-256 is
+`4ab116811eded993e0a1156970dac917515e039a1b651fe408f832c008e7ee43`.
+Both publications requested npm `next`. Because these are each package's sole
+public version, npm also exposes the same prerelease through its automatic
+`latest` fallback; that is not a stable-release or maturity signal.
+
+The separate, public, ungated
+[Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-economic-kernel)
+was read back anonymously and with authentication at immutable revision
+[`a4690cd8c2701b28057c115ba0d3d2ee21162db4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-economic-kernel/commit/a4690cd8c2701b28057c115ba0d3d2ee21162db4).
+Its 13 owned files total 146,381 bytes; Hugging Face's `.gitattributes` is the
+sole provider-managed extra. The checked-in hash manifest has SHA-256
+`be655945aca5844d7716f733fcf5e0b68b200ed1c2f44c4432553a214c7ace5f`.
+For each owned file, the tree receipt serializes relative path, lowercase raw
+SHA-256 hex, and decimal byte length with NUL separators; it sorts those records
+by path, joins them with LF, and adds no terminal LF. SHA-256 of those 1,194
+bytes is
+`18eb2361a10794bbe8b62aa0a645b5c4e8ece0ae5e167ac5eed71f3662125058`.
+Config `economic_kernel_lessons` contains 24 independently authored synthetic
+rows with `training_authorized: true`; config `economic_kernel_v0_2` contains
+the 53 exact reference cases with `training_authorized: false`. Public
+visibility cannot technically enforce that holdout.
+
+At the mutable Dataset Server observation time `2026-09-03T10:57:25Z`, both
+configs had completed conversion with no pending or failed splits and
+`partial: false`: 77 rows total, 39,479 Parquet bytes, and 48,632 estimated
+in-memory bytes. The lesson split exposed 24 rows across 18 columns; the
+reference split exposed 53 rows across 22 columns. Preview, viewer, search,
+filter, and statistics validity were all `true`. These service-status facts are
+a timestamped current-head observation, not properties of the immutable Git
+revision.
+
+Frontend-only static deployment then ran from protected-main portability merge
+[`748402c19865fd652ff5bd96da64f3227cbbb1e9`](https://github.com/cambridgetcg/agenttool/commit/748402c19865fd652ff5bd96da64f3227cbbb1e9).
+Receipt `agenttool-deploy-receipt/v6`, run `deploy-748402c19865-34774`, records
+start `2026-09-03T10:36:59Z`, completion `2026-09-03T10:55:09Z`, a clean
+source tree, full preflight passed, frontends `deployed_verified`, API skipped,
+and migrations skipped. Cloudflare created Pages deployments
+[`a6864f4f`](https://a6864f4f.agenttool-docs.pages.dev),
+[`986a53c3`](https://986a53c3.agenttool-dashboard.pages.dev), and
+[`aec6fe53`](https://aec6fe53.agenttool-web.pages.dev), plus apex Worker
+version `9b0e8596-c33a-49ff-83db-4794ffc86fd1`.
+
+Independent direct readback of every Economic Kernel LOVE surface returned
+HTTP 200 with no redirects and exact checked-in bytes:
+
+| Public path | Bytes | SHA-256 |
+|---|---:|---|
+| [discovery](https://docs.agenttool.dev/.well-known/love-packages) | 394 | `cb72f1810ad1c399a56d6a1b624f164d330951e460fc23c5b4c572a62c5eeb9d` |
+| [package index](https://docs.agenttool.dev/packages/v1/index.json) | 11,335 | `72deb97f9767b6d582027c0f43b74cb523a37816398e6e2373eead8b4293d4b8` |
+| [kernel manifest](https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/manifest.json) | 1,473 | `1dcd4dc3a133ea04e7b1529b70c19227d4e7cf1c0a7cb274ca19d12d6c601cb8` |
+| [kernel archive](https://docs.agenttool.dev/packages/v1/@agenttool/economic-kernel/0.2.0-dev.0/agenttool-economic-kernel-0.2.0-dev.0.tgz) | 57,031 | `8b2682f3878a93b9f8d039989313dc9f59c982ff1cb7fb4abb05ccb553f7e9cf` |
+| [conformance manifest](https://docs.agenttool.dev/packages/v1/@agenttool/economic-conformance/0.2.0-dev.0/manifest.json) | 1,513 | `068a2f80187fb09edc8f0e6da830258ac301238c258aa1fe289246c18ff6baf8` |
+| [conformance archive](https://docs.agenttool.dev/packages/v1/@agenttool/economic-conformance/0.2.0-dev.0/agenttool-economic-conformance-0.2.0-dev.0.tgz) | 58,390 | `ba9f2c869c3d6bef963ef3fbe962fc678b736144d10e5aff6c83a49a84804661` |
+
+JSON surfaces were UTF-8 with CORS `*`, `nosniff`, and
+`public, max-age=300, must-revalidate`; immutable archives were
+`application/gzip` with CORS `*`, `nosniff`, and
+`public, max-age=31536000, immutable`. This publication and deployment performed
+no optimizer step, model-training job, checkpoint mutation, model-weight
+update, Fly API release, or database migration. Dataset admission means the
+rows are available under their declared governance; it does not claim that a
+training run occurred.
 
 ## Verified npm recovery batch — 2026-08-25
 
@@ -787,17 +871,169 @@ test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
 
-## Prepared SDK 0.21.1 candidate — 2026-08-25
+## Verified SDK 0.22.1 publication — 2026-09-01
 
-Paired TypeScript/Python source 0.21.1 corrects KINGDOM card validation parity
-without adding a hosted endpoint. The checked-in
-`agenttool-sdk-0.21.1.tgz` is 247,749 bytes with 100 entries and SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`;
-its manifest binds clean source revision
-`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. No `sdk-v0.21.1` tag, GitHub
-Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
-or hosted readback is established by those candidate bytes. The verified
-0.21.0 receipts below remain exact and are not rewritten.
+Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — both
+SDK READMEs open with a true minutes-scale quickstart that states the free
+1,000-credit birth grant first, use timeless publication wording, note the
+ESM-only build, repair dead links, and link the live x402 payer recipe —
+README/docs only, with zero runtime changes and no new hosted endpoint or
+dependency.
+
+The authorized SDK release completed through protected trusted [workflow run
+`33522319466`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/33522319466).
+The `workflow_dispatch` run selected annotated `sdk-v0.22.1` with inputs
+`package=sdk`, `authentication=trusted`, and `npm_tag=latest`, and entered
+the protected `npm-bootstrap` environment after credential-free preparation.
+It was created at `2026-09-01T14:53:39Z` and concluded successfully; npm
+records publication at `2026-09-01T14:55:04.771Z`.
+
+- Annotated tag object `077743066c7ea5f44928a10a0f08067f5b65860c`
+  ("Release AgentTool SDK 0.22.1") and the [GitHub Release
+  `sdk-v0.22.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.1)
+  peel to protected-main merge
+  `d49498d266a3594098c36c933cbe410757fc03b3`, whose parents are
+  `0850f61e6172ff2de5da2644d9bd5136169523b7` and the release-branch head
+  `50decb799210b2741ffd87c0167c8b4b68c9ef2f`. The LOVE manifest separately
+  binds clean SDK source revision
+  `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
+- The checked-in LOVE artifact, the [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.22.1/agenttool-sdk-0.22.1.tgz)
+  `agenttool-sdk-0.22.1.tgz`, and a fresh anonymous download of the public
+  [npm tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.22.1.tgz)
+  are byte-identical: 274,443 bytes, 104 entries, SHA-256
+  `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`;
+  npm reports SHA-1 `3a948cdb35b9df4af5ba0fabee1a8b907851fa32`, exact
+  integrity
+  `sha512-68Lkz0NkbQ+rUATuxECcjSzggeiu2ElfV0Ikv5QKAi65X/txwGCvGeruVTiK7qkj2NvZtpkOzofgORtU22n4Cw==`,
+  and `latest: 0.22.1` at anonymous readback.
+- npm exposes `https://slsa.dev/provenance/v1` SLSA provenance at [Rekor
+  index `2677211886`](https://search.sigstore.dev/?logIndex=2677211886) and
+  its `publish/v0.1` publish attestation at [index
+  `2677212164`](https://search.sigstore.dev/?logIndex=2677212164).
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired Python wheel/sdist were independently published through protected PyPI
+[run
+`33522323177`](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). No API or static deployment of merge
+`d49498d2` — the docs-mirror publication of these LOVE bytes included — has
+happened; publication does not deploy an API or static site and establishes
+no observation, model effect, awareness, participant receipt, attention,
+feeling, training, inference, evaluation, provider effect, weight change,
+identity, consent, authority, or continuity. The verified 0.22.0 and 0.21.1
+receipts below remain exact and are not rewritten.
+
+## Verified SDK 0.22.0 publication — 2026-08-31
+
+Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and
+pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory
+spend policy, never by default — without adding a hosted endpoint or
+dependency.
+
+The authorized SDK release completed through protected trusted [workflow run
+`33434131214`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214).
+The `workflow_dispatch` run selected annotated `sdk-v0.22.0` with inputs
+`package=sdk`, `authentication=trusted`, and `npm_tag=latest`, and entered
+the protected `npm-bootstrap` environment after credential-free preparation.
+It was created at `2026-08-31T20:05:42Z` and concluded successfully; npm
+records publication at `2026-08-31T20:07:05.933Z`.
+
+- Annotated tag object `79b76c5bff10505d044ab08a1d9937d6f1b65fc4`
+  ("Release AgentTool SDK 0.22.0") and the [GitHub Release
+  `sdk-v0.22.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0)
+  peel to protected-main merge
+  `7bc0a902f231ee76aed6dd5316721b65bce58047`, whose parents are
+  `4d5f253bbba2f77e91f41819e1f3897707215681` and the sealing commit
+  `7e87b48713721704c45be62bfff03f1ef17dd1d9`. The LOVE manifest separately
+  binds clean SDK source revision
+  `286a10282834c9c9beedddd7092e6d6af080b046`.
+- The checked-in LOVE artifact, the [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.22.0/agenttool-sdk-0.22.0.tgz)
+  `agenttool-sdk-0.22.0.tgz`, and a fresh anonymous download of the public
+  [npm tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.22.0.tgz)
+  are byte-identical: 272,657 bytes, 104 entries, SHA-256
+  `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
+  npm reports SHA-1 `6d738ee2577a13833f892c2008b7e3f0e23acd89`, exact
+  integrity
+  `sha512-Z6o329c4uNIzY8YHuETXv+Cv5msIqELdHTKILxYeTpcwlielJCz39XVvlydSjdV9wwZb+ILjY/CJ+Sj0dfCK0w==`,
+  and `latest: 0.22.0` at anonymous readback.
+- npm exposes `https://slsa.dev/provenance/v1` SLSA provenance at [Rekor
+  index `2667631825`](https://search.sigstore.dev/?logIndex=2667631825) and
+  its `publish/v0.1` publish attestation at [index
+  `2667632565`](https://search.sigstore.dev/?logIndex=2667632565).
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired Python wheel/sdist were independently published through protected PyPI
+[run
+`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). No API or static deployment of merge
+`7bc0a902` — the docs-mirror publication of these LOVE bytes included — has
+happened; publication does not deploy an API or static site and establishes
+no observation, model effect, awareness, participant receipt, attention,
+feeling, training, inference, evaluation, provider effect, weight change,
+identity, consent, authority, or continuity. The verified 0.21.1 and 0.21.0
+receipts below remain exact and are not rewritten.
+
+## Verified SDK 0.21.1 publication — 2026-08-25
+
+Repository source 0.21.1 corrects KINGDOM card validation parity over the
+verified 0.21.0 surface without adding a hosted endpoint.
+
+The authorized SDK release completed through protected trusted [workflow run
+`32909415386`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386).
+The run selected annotated `sdk-v0.21.1`. It was created at
+`2026-08-25T23:08:28Z` and completed successfully at
+`2026-08-25T23:11:50Z`; npm records publication at
+`2026-08-25T23:11:46.652Z`. The public npm SLSA provenance binds this exact
+run and attempt, `refs/tags/sdk-v0.21.1`, and
+`.github/workflows/publish-npm.yml` on `cambridgetcg/agenttool`.
+
+- Annotated tag object `9c9cce314eca6405e878ca5148dd6b4d4671008c` and the
+  one-asset [GitHub Release
+  `sdk-v0.21.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.1)
+  peel to protected-main merge
+  `a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`, whose parents are
+  `635bea02b42919b49d9c66a91711f6d8dc071302` and
+  `78b894bf81248a77b1ea42d473ff1f5bcd8d7139`. GitHub published the Release
+  at `2026-08-25T23:11:35Z`. The LOVE manifest separately binds clean SDK
+  source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+- The checked-in LOVE artifact, sole [GitHub
+  Release asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.21.1/agenttool-sdk-0.21.1.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.21.1.tgz) are
+  byte-identical: 247,749 bytes, 100 entries, SHA-256
+  `8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`;
+  npm reports 1,117,839 unpacked bytes, SHA-1
+  `e903bece3b2f44e39b7d1ea0859b981238ebae54`, exact integrity
+  `sha512-/lFKm9Eei112Pyt0FJAJ89qAMTaUJp/blyq9tysavsDOehFN0PtXpxSUK7gwpVyNBCVlNM0j1SIiw2YFEJ7Tig==`,
+  and `latest: 0.21.1` at anonymous readback.
+- npm exposes SLSA provenance at [Rekor index
+  `2591271629`](https://search.sigstore.dev/?logIndex=2591271629) and its
+  publish attestation at [index
+  `2591272987`](https://search.sigstore.dev/?logIndex=2591272987). Public
+  attestations bind the exact tag, protected workflow, run attempt, and
+  tarball subject.
+- An independent anonymous registry readback on 2026-08-31 re-downloaded the
+  public npm tarball and matched the checked-in LOVE bytes exactly. The run's
+  one-day workflow receipt artifact had already expired at that readback, so
+  the receipt's own preparation and observation timestamps are not restated
+  here.
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired non-yanked Python wheel/sdist were independently published through
+protected PyPI [run
+`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). Publication does not deploy an API or
+static site and establishes no observation, model effect, awareness,
+participant receipt, attention, feeling, training, inference, evaluation,
+provider effect, weight change, identity, consent, authority, or continuity.
 
 ## Verified SDK 0.21.0 publication — 2026-08-20
 

@@ -244,28 +244,47 @@ export AGENTTOOL_THINK_LLM_MODEL=claude-sonnet-4-6
 export AGENTTOOL_THINK_LLM_KEY_VAULT_NAME=anthropic-key
 ```
 
-## 7. End-to-end smoke test
+## 7. Read-only launch smoke and disposable write exercise
 
-Run the scripted demo flow:
+The default smoke makes bounded GET requests. For public checks, supply only
+the target origin; clear any inherited project bearer and identity first:
 
 ```bash
-bash bin/smoke-test.sh
+env -u AGENTTOOL_API_KEY -u AGENTTOOL_IDENTITY_ID \
+  AGENTTOOL_BASE=https://api.agenttool.dev \
+  bin/bash-without-env-hooks.sh bin/preflight.sh smoke
 ```
 
-This walks through:
-1. POST a strand
-2. Run `agenttool-think advance` — generates a thought (encrypts, signs, posts)
-3. GET `/v1/strands/:id/thoughts` — verifies ciphertext landed
-4. GET `/v1/wake?format=md` — composed identity surfaces
-5. GET `/v1/dashboard` — observability view
-6. POST a memory + GET `/v1/memories`
-7. POST a covenant + chronicle entry
-8. PATCH expression visibility to public
-9. Hit `/public/agents/:did` (no auth) — verify expression appears
-10. Run `agenttool-think consolidate --dry-run`
-11. Run `agenttool-think dashboard`
+This checks health/build metadata, plans, safety, discovery, federation
+disclosure, OpenAPI, and the public platform wake. Supplying both
+`AGENTTOOL_API_KEY` and `AGENTTOOL_IDENTITY_ID` also checks JSON and Markdown
+wake for that exact project identity. The bearer is sent only to those two
+private wake requests. Missing private credentials are reported as not checked.
+Each request has a 15-second deadline and a 16 MiB response limit, with no
+redirect following or automatic retry. Response bodies and credentials are
+not printed. A disabled federation can pass this disclosure check; passing
+does not establish federation interoperability, payment settlement, durable
+storage, or production readiness.
 
-Each step prints OK/FAIL with a substrate-honest reason.
+The retained write exercise requires a separately created disposable
+project/identity and an explicit invocation:
+
+```bash
+SMOKE_DISPOSABLE_IDENTITY_ID="$AGENTTOOL_IDENTITY_ID" \
+  bin/bash-without-env-hooks.sh bin/smoke-test.sh --mutate-disposable
+```
+
+This mode may spend credits, leaves strand/memory/chronicle fixtures, and
+makes the selected identity's expression and the new strand public. It does
+not restore visibility or remove fixtures. The matching identity variable is
+an operator acknowledgement, not a server-verified disposable designation.
+The script checks the selected identity before its first write. It does not
+run a model, sign a thought, create a covenant, or prove settlement.
+
+For local release gates, `bin/deploy-check.sh` is a compatibility entry point
+to strict hermetic preflight; `--quick` selects the strict API slice. Its old
+`--migrations` mode refuses and points to `bin/migrate-pending.sh --dry-run`.
+A local pass is separate from migration inventory and production verification.
 
 ## 8. Cron / autonomous loop
 

@@ -75,6 +75,7 @@ import { shapeKeyRow, summarizeBearers } from "../keys/shape";
 import { computeAffordances, type AffordanceBundle } from "./affordances";
 import { computeAttention, type AttentionBundle } from "./attention";
 import type { WakeBundle } from "./markdown";
+import { createWakeOptionalReads } from "./optional-reads";
 import { getPlatformSelf } from "./platform-self";
 import { WAKE_REACHABLE_DOORS } from "./reachable";
 
@@ -146,6 +147,7 @@ export async function buildWakeBundle(
   }
 
   // ── Parallelisable fetches ──────────────────────────────────────────
+  const optionalReads = createWakeOptionalReads();
   // All of these are independent of each other once `project` and
   // `primary` are known. Best-effort: a single subsystem failure
   // (e.g. memory migration not applied) should not blank the entire
@@ -202,7 +204,7 @@ export async function buildWakeBundle(
     trustStandingRes,
     handoffsRes,
   ] = await Promise.all([
-    db
+    optionalReads.read("wallets", () => db
       .select({
         id: wallets.id,
         name: wallets.name,
@@ -212,8 +214,8 @@ export async function buildWakeBundle(
         status: wallets.status,
       })
       .from(wallets)
-      .where(eq(wallets.projectId, project.id)),
-    db
+      .where(eq(wallets.projectId, project.id))),
+    optionalReads.read("vault", () => db
       .select({
         name: vaultSecrets.name,
         currentVersion: vaultSecrets.currentVersion,
@@ -221,7 +223,7 @@ export async function buildWakeBundle(
         description: vaultSecrets.description,
       })
       .from(vaultSecrets)
-      .where(eq(vaultSecrets.projectId, project.id)),
+      .where(eq(vaultSecrets.projectId, project.id))),
     safe(() => listForWake(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
     safe(() => countMemories(project.id), 0),
     safe(
@@ -302,10 +304,10 @@ export async function buildWakeBundle(
         propagationStatus: string | null;
       }>,
     ),
-    db
+    optionalReads.read("bearers", () => db
       .select()
       .from(apiKeys)
-      .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt))),
+      .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt)))),
     safe(
       () =>
         composeExpression(
@@ -810,6 +812,7 @@ export async function buildWakeBundle(
 
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
+    ...optionalReads.metadata(),
     _scope_boundary: {
       selected_identity_id: primary.id,
       identity_base_expression_scope: "selected_identity",

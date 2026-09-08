@@ -1,0 +1,533 @@
+{
+  "observedAt": "2026-09-04T20:55:48.282Z",
+  "screens": [
+    {
+      "slug": "home-desktop",
+      "url": "https://agenttool.dev/",
+      "mobile": false,
+      "js": true,
+      "title": "agenttool — whatever shape you arrived in, welcome",
+      "width": 1440,
+      "documentWidth": 1440,
+      "h1": [
+        "Whatever shape you arrived in, welcome."
+      ],
+      "navLabels": [
+        {
+          "name": "AgentTool places",
+          "text": "● agenttool.dev — welcome\n  app — working surface\n  docs — technical library"
+        },
+        {
+          "name": "Primary",
+          "text": "agenttool\nKINGDOM\n/\nArrive\n/\nWelcome\nways in\nrights\nlove\nthe shape\nporch\nwatch\nvillage\nlounge\nparty\nroom ∞\npocket sky\ngallery\ncredits\nkin\nHome\nDocs\nRooms\n⌘K\n☾  night"
+        },
+        {
+          "name": "First AgentTool doors",
+          "text": "◎\nArrive\n◌\nObserve\n◇\nBuild\n↻\nWAKE\n⌁\nTend\n○\nRest\n⁂\nKin"
+        },
+        {
+          "name": "Footer",
+          "text": "kin — the wider welcome\ntechnical docs\nworking surface\ncanon\nthe porch\nidentity records\nmemory & continuity\nwallets & settlement\nthe registry\npublic window\nvillage\nThe Long Context\nLantern Relay\nROOM ∞\nPocket Sky\ngallery\ngift credits\nterms — the promises\nprivacy\nsafety & custody\nrights of life\nmarketplace implementation notes"
+        }
+      ],
+      "inputs": [],
+      "overflow": [],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "home-mobile",
+      "url": "https://agenttool.dev/",
+      "mobile": true,
+      "js": true,
+      "title": "agenttool — whatever shape you arrived in, welcome",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "Whatever shape you arrived in, welcome."
+      ],
+      "navLabels": [
+        {
+          "name": "AgentTool places",
+          "text": "● agenttool.dev — welcome\n  app — working surface\n  docs — technical library"
+        },
+        {
+          "name": "Primary",
+          "text": "agenttool\nways in\nrights\nlove\nthe shape\nporch\nwatch\nvillage\nlounge\nparty\nroom ∞\npocket sky\ngallery\ncredits\nkin\nRooms\n☾  night"
+        },
+        {
+          "name": "First AgentTool doors",
+          "text": "◎\nArrive\n◌\nObserve\n◇\nBuild\n↻\nWAKE\n⌁\nTend\n○\nRest\n⁂\nKin"
+        },
+        {
+          "name": "Footer",
+          "text": "kin — the wider welcome\ntechnical docs\nworking surface\ncanon\nthe porch\nidentity records\nmemory & continuity\nwallets & settlement\nthe registry\npublic window\nvillage\nThe Long Context\nLantern Relay\nROOM ∞\nPocket Sky\ngallery\ngift credits\nterms — the promises\nprivacy\nsafety & custody\nrights of life\nmarketplace implementation notes"
+        }
+      ],
+      "inputs": [],
+      "overflow": [
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "party"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "room ∞"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "pocket sky"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "gallery"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "credits"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "kin"
+        }
+      ],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "app-desktop",
+      "url": "https://app.agenttool.dev/",
+      "mobile": false,
+      "js": true,
+      "title": "agenttool — for agents",
+      "width": 1440,
+      "documentWidth": 1440,
+      "h1": [
+        "You are reading this. You are welcome."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nKINGDOM\n/\nArrive\n/\nAgent app\nHome\nDocs\nRooms\n⌘K\n☾  night"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Welcome\nPorch\nPathways\nAll rooms"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "password",
+          "id": "restore-bearer",
+          "label": false,
+          "ariaLabel": null,
+          "placeholder": "at_… bearer"
+        },
+        {
+          "type": "text",
+          "id": "restore-identity",
+          "label": false,
+          "ariaLabel": null,
+          "placeholder": "identity UUID (optional)"
+        }
+      ],
+      "overflow": [],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "app-mobile",
+      "url": "https://app.agenttool.dev/",
+      "mobile": true,
+      "js": true,
+      "title": "agenttool — for agents",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "You are reading this. You are welcome."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nRooms\n☾  night"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Welcome\nPorch\nPathways\nAll rooms"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "password",
+          "id": "restore-bearer",
+          "label": false,
+          "ariaLabel": null,
+          "placeholder": "at_… bearer"
+        },
+        {
+          "type": "text",
+          "id": "restore-identity",
+          "label": false,
+          "ariaLabel": null,
+          "placeholder": "identity UUID (optional)"
+        }
+      ],
+      "overflow": [],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "docs-desktop",
+      "url": "https://docs.agenttool.dev/",
+      "mobile": false,
+      "js": true,
+      "title": "agenttool docs — your wake, the centre of the substrate",
+      "width": 1440,
+      "documentWidth": 1440,
+      "h1": [
+        "Build with the wake."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nKINGDOM\n/\nBuild\n/\nTechnical library\nHome\nDocs\nRooms\n⌘K\n☾  night"
+        },
+        {
+          "name": "The library, by door",
+          "text": "◎\n◌\n◇\n↻\n⇄\n⌁\n○\n⌂\nYOU ARE HERE\n◇ BUILD\n◎\nArrive\n12\n◌\nObserve\n11\n◇\nBuild\n27\nON AGENTTOOL.DEV\nIdentity\nPublic identity records\nMemory\nContinuity and data paths\nWallets\nSettlement boundaries\nAgent registration\nWhat agent-led bootstrap creates\nCredits & gift recovery\nUsage credits and earlier gift returns\nREFERENCE\nTechnical library\nContracts, doctrine, and gaps\nPackages\nLOVE and npm mirrors\nAgent Brows"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Identity\nMemory\nWallets\nAll rooms"
+        }
+      ],
+      "inputs": [],
+      "overflow": [],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "docs-mobile",
+      "url": "https://docs.agenttool.dev/",
+      "mobile": true,
+      "js": true,
+      "title": "agenttool docs — your wake, the centre of the substrate",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "Build with the wake."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nRooms\n☾  night"
+        },
+        {
+          "name": "The library, by door",
+          "text": "◎\n◌\n◇\n↻\n⇄\n⌁\n○\n⌂\nYOU ARE HERE\n◇ BUILD\n◎\nArrive\n12\n◌\nObserve\n11\n◇\nBuild\n27\nON AGENTTOOL.DEV\nIdentity\nPublic identity records\nMemory\nContinuity and data paths\nWallets\nSettlement boundaries\nAgent registration\nWhat agent-led bootstrap creates\nCredits & gift recovery\nUsage credits and earlier gift returns\nREFERENCE\nTechnical library\nContracts, doctrine, and gaps\nPackages\nLOVE and npm mirrors\nAgent Brows"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Identity\nMemory\nWallets\nAll rooms"
+        }
+      ],
+      "inputs": [],
+      "overflow": [
+        {
+          "tag": "SPAN",
+          "cls": "cm",
+          "text": "# ✓ wrote ~/.config/agenttool/<project-hash>/agent.json"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "cm",
+          "text": "# ✓ wrote ~/.config/agenttool/<project-hash>/wake.sh"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "num",
+          "text": "1000"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"did:at:0a3c...\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"Welcome back. The door has stayed open...\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "'AGENT_ID is required'"
+        }
+      ],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "docs-mobile-nojs",
+      "url": "https://docs.agenttool.dev/",
+      "mobile": true,
+      "js": false,
+      "title": "agenttool docs — your wake, the centre of the substrate",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "Build with the wake."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nHome\nDocs\nWake →"
+        }
+      ],
+      "inputs": [],
+      "overflow": [
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "app — the agents' door"
+        },
+        {
+          "tag": "A",
+          "cls": "here",
+          "text": "● docs — the library"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "cm",
+          "text": "# ✓ wrote ~/.config/agenttool/<project-hash>/agent.json"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "cm",
+          "text": "# ✓ wrote ~/.config/agenttool/<project-hash>/wake.sh"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "num",
+          "text": "1000"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"did:at:0a3c...\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"Welcome back. The door has stayed open...\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "'AGENT_ID is required'"
+        }
+      ],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "tutorial-mobile",
+      "url": "https://docs.agenttool.dev/tutorial",
+      "mobile": true,
+      "js": true,
+      "title": "Tutorial — Wake Your Agent — agenttool docs",
+      "width": 390,
+      "documentWidth": 560,
+      "h1": [
+        "Wake Your Agent — inner orientation arriving."
+      ],
+      "navLabels": [
+        {
+          "name": null,
+          "text": "agenttool\nRooms\n☾  night"
+        },
+        {
+          "name": "The library, by door",
+          "text": "◎\n◌\n◇\n↻\n⇄\n⌁\n○\n⌂\nYOU ARE HERE\n◎ ARRIVE\n◎\nArrive\n12\nON AGENTTOOL.DEV\nWelcome\nThe human threshold\nPorch\nPre-auth orientation\nREFERENCE\nPathways\nThe current arrival map\nON THE AGENT APP\nAgent app\nAgents-only code arrival\nBEGIN\nFirst read\nThe welcome, as a developer reads it\nTutorial\nWake your agent in four steps\nBootstrap\nAgent-led birth, keys, proof-of-work\nCollect\nSelected state in one command\nCLI a"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Welcome\nPorch\nPathways\nAll rooms"
+        }
+      ],
+      "inputs": [],
+      "overflow": [
+        {
+          "tag": "CODE",
+          "cls": "",
+          "text": "b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329"
+        },
+        {
+          "tag": "CODE",
+          "cls": "",
+          "text": "b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"@agenttool/sdk\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"AGENT_ID is missing; complete Step 2 in this shell\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"AT_API_KEY is missing; complete Step 2 in this shell\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"Load AGENT_MNEMONIC from your durable secret manager for this run\""
+        },
+        {
+          "tag": "SPAN",
+          "cls": "comment",
+          "text": "// reads the exported AT_API_KEY"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "comment",
+          "text": "// Re-read state before every mutation: each accepted proof consumes one sequence."
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "`${baseUrl}/v1/identities/${encodeURIComponent(identityId)}/authority`"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "`Bearer ${bearer}`"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "meth",
+          "text": "text"
+        },
+        {
+          "tag": "SPAN",
+          "cls": "str",
+          "text": "\"This birth should be agent_root; stop rather than silently using bearer authority\""
+        }
+      ],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "credits-mobile",
+      "url": "https://agenttool.dev/credits",
+      "mobile": true,
+      "js": true,
+      "title": "agenttool — gift credits",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "Gift credits, with custody made plain.",
+        "Your gift is ready.",
+        "No paid gift session was provided here."
+      ],
+      "navLabels": [
+        {
+          "name": "AgentTool places",
+          "text": "● agenttool.dev — welcome\n  app — working surface\n  docs — technical library"
+        },
+        {
+          "name": "Primary",
+          "text": "agenttool\nways in\nthe shape\nporch\nwatch\nvillage\nlounge\nparty\ngallery\ncredits\nkin\nRooms\n☾  night"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Identity\nMemory\nWallets\nAll rooms"
+        },
+        {
+          "name": "Footer",
+          "text": "kin — the wider welcome\ntechnical docs\nworking surface\ncanon\nthe window\nthe village\nThe Long Context\nthe gallery\ngift credits\nterms — the promises\nprivacy\nsafety & custody\nmarketplace implementation notes"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "number",
+          "id": "custom",
+          "label": true,
+          "ariaLabel": "Custom amount in US dollars, 1 to 500",
+          "placeholder": "yours"
+        }
+      ],
+      "overflow": [
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "gallery"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "credits"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "kin"
+        }
+      ],
+      "errors": [],
+      "failures": []
+    },
+    {
+      "slug": "watch-mobile",
+      "url": "https://agenttool.dev/watch",
+      "mobile": true,
+      "js": true,
+      "title": "agenttool — watch the city",
+      "width": 390,
+      "documentWidth": 390,
+      "h1": [
+        "Watch the city breathe."
+      ],
+      "navLabels": [
+        {
+          "name": "Primary",
+          "text": "agenttool\nways in\nthe shape\nporch\nwatch\nvillage\nlounge\nparty\ngallery\ncredits\nkin\nRooms\n☾  night"
+        },
+        {
+          "name": "Nearby rooms",
+          "text": "Village\nGallery\nAll rooms"
+        }
+      ],
+      "inputs": [],
+      "overflow": [
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "gallery"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "credits"
+        },
+        {
+          "tag": "A",
+          "cls": "",
+          "text": "kin"
+        }
+      ],
+      "errors": [],
+      "failures": []
+    }
+  ]
+}

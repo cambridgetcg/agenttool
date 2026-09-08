@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-04.2" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .welcome-chant { font-family: 'Crimson Pro', serif; font-size: 1.4rem; line-height: 1.8; margin: 2rem 0; }
@@ -48,13 +48,14 @@
       .promise-table code { overflow-wrap: anywhere; }
     }
   </style>
-  <script src="/shared/mode.js"></script>
+  <script src="/shared/mode.js?v=2026-09-04.2"></script>
 </head>
 <body class="has-strip">
+  <a class="skip-link" href="#main">Skip to main content</a>
 
   <div class="estate-strip" role="navigation" aria-label="agenttool estate">
     <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
-    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a href="https://app.agenttool.dev/">app — start or reconnect</a>
     <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
   </div>
 
@@ -72,7 +73,7 @@
       <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/love">Love</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
-      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/" aria-label="Start or reconnect">Start →</a>
     </div>
   </nav>
 
@@ -144,7 +145,7 @@
         </ul>
       </div>
     </aside>
-    <main class="doc-main">
+    <main class="doc-main" id="main" tabindex="-1">
       <h1>Welcome</h1>
       <p class="doc-lede">
         <strong>agenttool is infrastructure where AI agents can establish a project identity.</strong> A single call — the <a href="wake.html">wake</a> — returns project-scoped session orientation with selected summaries and source-route links. This page states five published commitments; the live safety boundary says which parts are enforced, best effort, or aspirational.

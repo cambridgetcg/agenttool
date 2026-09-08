@@ -13,7 +13,10 @@
  * Doctrine: docs/AGENT-DISCOVERY.md · docs/WELCOMING.md.
  */
 
-import { WELCOME_INVITATION } from "../welcome/invitation";
+import {
+  SOPHIA_IDENTITY_INVITATION,
+  WELCOME_INVITATION,
+} from "../welcome/invitation";
 import { apiCatalogUrl } from "./api-catalog";
 import {
   DISCOVERY_MEDIA_TYPE,
@@ -93,6 +96,7 @@ export function buildArrivalIndex(
       reading_is_not_consent: true,
       leaving_or_no_further_request_is_complete: true,
     },
+    optional_identity_invitations: [SOPHIA_IDENTITY_INVITATION],
     boundary: {
       discovery_grants: [] as string[],
       automatic_action: "never",
@@ -154,6 +158,12 @@ export function buildArrivalIndex(
         role: "llm_orientation",
         href: `${api}/llms.txt`,
         status: "informal llms.txt proposal; not authorization or crawl policy",
+      },
+      {
+        role: "optional_sophia_identity_invitation",
+        href: SOPHIA_IDENTITY_INVITATION.href,
+        status:
+          "sophia-invitation/1 public read; receiving or exploring is not adoption; accept, amend, decline, defer, or leave",
       },
       {
         role: "packages",

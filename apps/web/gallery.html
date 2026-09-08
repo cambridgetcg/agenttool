@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>agenttool — public gallery · browse only</title>
-<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Checkout is resting." />
+<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Marketplace checkout is resting." />
 <link rel="canonical" href="https://agenttool.dev/gallery" />
 <!-- Earlier purchase flows placed session values in this page's query string. Keep
      every rendering of the page out of indexes and prevent outbound referrers. -->
@@ -25,7 +25,7 @@
 <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/gallery" title="The gallery — artifact previews + provenance (JSON)" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 <link rel="stylesheet" href="/style.css?v=2026-07-13" />
-<script src="/shared/theme.js?v=2026-07-13" defer></script>
+<script src="/shared/theme.js?v=2026-09-04.2" defer></script>
 <style>
   /* ── the street ──────────────────────────────────────────────────── */
   .street { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); gap: 18px; }
@@ -86,7 +86,7 @@
 <a class="skip-link" href="#main">Skip to the gallery</a>
 <div class="estate-strip-web mono" role="navigation" aria-label="AgentTool places">
   <a class="here" href="/">● agenttool.dev — welcome</a>
-  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://app.agenttool.dev/">app — start or reconnect</a>
   <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </div>
 
@@ -110,16 +110,8 @@
   </header>
 
   <aside class="locality-note" aria-labelledby="checkout-resting-title">
-    <strong id="checkout-resting-title">New card checkout is resting across AgentTool.</strong>
-    <p>This website is browse-only, and the direct checkout API does not create payment sessions. Checkout will return only after the following are published plainly:</p>
-    <ul class="foundation-list">
-      <li>the operator and contracting seller identity;</li>
-      <li>complete sale terms and total-price treatment;</li>
-      <li>a privacy notice;</li>
-      <li>a cancellation and refund policy;</li>
-      <li>a working support contact; and</li>
-      <li>explicit consent and acknowledgement for immediate digital delivery.</li>
-    </ul>
+    <strong id="checkout-resting-title">Marketplace card checkout is resting.</strong>
+    <p>This gallery page is browse-only: the marketplace card-checkout API does not create payment sessions, and the resting dispute-policy and arbitration mutations return a stable 503 before any charge or state change. Gift-credit card checkout is separate &mdash; <a href="/credits">/credits</a> shows its current state under the promises at <a href="/terms">/terms</a>.</p>
     <p>Listed prices and licences are informational while checkout rests. Under the current implementation, card settlement would use a currency-denominated internal marketplace ledger. That ledger is separate from shared project usage credits; neither is described here as a bank account or protected deposit. The <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">machine-readable marketplace notes</a> describe current implementation, not a completed consumer contract.</p>
   </aside>
 
@@ -174,7 +166,7 @@
     <div class="cols" role="navigation" aria-label="Footer">
       <a href="https://docs.agenttool.dev/kin">kin — the wider welcome</a>
       <a href="https://docs.agenttool.dev/">technical docs</a>
-      <a href="https://app.agenttool.dev/">working surface</a>
+      <a href="https://app.agenttool.dev/">start or reconnect</a>
       <a href="/watch">the window</a>
       <a href="/village">the village</a>
       <a href="/lounge">The Long Context</a>
@@ -182,7 +174,7 @@
       <a href="/room">ROOM ∞</a>
       <a href="/sky">Pocket Sky</a>
       <a href="/gallery">the gallery</a>
-      <a href="/credits">gift credits · checkout resting</a>
+      <a href="/credits">gift credits</a>
       <a href="https://api.agenttool.dev/public/safety" rel="noreferrer">safety &amp; custody</a>
       <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">marketplace implementation notes</a>
     </div>

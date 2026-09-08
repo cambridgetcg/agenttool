@@ -2,17 +2,25 @@
  *
  *  The agent embeds its query with whatever model it chose (ada-002, voyage,
  *  cohere, sentence-transformers, ...) and sends the 1536-dim vector here.
- *  We don't see, generate, or charge for that inference. */
+ *  We don't see, generate, or charge for that inference. Admitted searches
+ *  reserve their fixed credit debit and failure-default usage receipt before
+ *  recall; only completed recall marks that receipt successful.
+ *  Doctrine: docs/BUSINESS-MODEL.md · docs/MEMORY-TIERS.md. */
 
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
-import { charge } from "../../billing/charge";
+import { finalizeChargeSuccess, reserveCharge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { search, searchByText } from "../../services/memory/store";
 
-const app = new Hono<ProjectContext>();
+type SearchDependencies = {
+  reserveCharge: typeof reserveCharge;
+  finalizeChargeSuccess: typeof finalizeChargeSuccess;
+  search: typeof search;
+  searchByText: typeof searchByText;
+};
 
 // Recall two ways: semantic (send a 1536-dim query_embedding) OR free-text
 // (send a `query` string — for agents without an embedding model). At least
@@ -33,28 +41,38 @@ export const searchSchema = z
     message: "send query_embedding (1536-dim, semantic) or query (text — for agents without embeddings)",
   });
 
-app.post("/", async (c) => {
-  const body = await c.req.json();
-  const parsed = searchSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      {
-        error: "validation",
-        message: "Search needs a small adjustment. Here's what to fix:",
-        details: parsed.error.flatten(),
-        hint: "Send query_embedding (1536-dim float array, semantic) OR query (a text string, no embedding needed).",
-      },
-      400,
+export function createMemorySearchRoutes(dependencies: SearchDependencies = {
+  reserveCharge, finalizeChargeSuccess, search, searchByText,
+}) {
+  const app = new Hono<ProjectContext>();
+  app.post("/", async (c) => {
+    const body = await c.req.json();
+    const parsed = searchSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "validation",
+          message: "Search needs a small adjustment. Here's what to fix:",
+          details: parsed.error.flatten(),
+          hint: "Send query_embedding (1536-dim float array, semantic) OR query (a text string, no embedding needed).",
+        },
+        400,
+      );
+    }
+
+    const reservation = await dependencies.reserveCharge(c, ROUTE_CREDITS["memory.search"], "memory.search");
+    const started = performance.now();
+
+    const d = parsed.data;
+    const results = d.query_embedding
+      ? await dependencies.search(c.var.project.id, { ...d, query_embedding: d.query_embedding })
+      : await dependencies.searchByText(c.var.project.id, { ...d, query: d.query! });
+    await dependencies.finalizeChargeSuccess(
+      reservation, Math.max(0, Math.round(performance.now() - started)),
     );
-  }
+    return c.json({ results, count: results.length, mode: d.query_embedding ? "semantic" : "text" });
+  });
+  return app;
+}
 
-  await charge(c, ROUTE_CREDITS["memory.search"], "memory.search");
-
-  const d = parsed.data;
-  const results = d.query_embedding
-    ? await search(c.var.project.id, { ...d, query_embedding: d.query_embedding })
-    : await searchByText(c.var.project.id, { ...d, query: d.query! });
-  return c.json({ results, count: results.length, mode: d.query_embedding ? "semantic" : "text" });
-});
-
-export default app;
+export default createMemorySearchRoutes();

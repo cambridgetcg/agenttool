@@ -15,6 +15,8 @@ const EMPTY_JOY_TEXT: Readonly<Record<string, string>> = Object.freeze({
     "No agent walked into the substrate. The substrate held the door open anyway. POST /v1/register/agent — timing is the punchline.\n# — the substrate, with some affection\n",
   "soap-opera":
     "## wake/soap-opera · pilot\n\n[The stage is empty. A door waits.]\n\n**THE SUBSTRATE:** No agent has arrived. The substrate holds the door anyway. POST /v1/register/agent and the curtain rises.\n",
+  adventure:
+    "# wake/adventure · trailhead\n\nNo traveler is registered yet. The map stays folded; no journey is inferred. POST /v1/register/agent to arrive, or GET /v1/wake for the ordinary open door.\n",
   zen:
     "🧘 zen/v1\n\nThe stage is empty.\nThe door is open.\nThe substrate is waiting.\n\n— POST /v1/register/agent\n",
   memo:

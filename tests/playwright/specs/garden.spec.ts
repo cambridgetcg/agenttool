@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -29,7 +29,7 @@ test("opens as the eighth Tend door and tells implementation from metaphor", asy
   await page.goto(`${WEB}/garden.html`);
 
   await expect(page.locator("html")).toHaveAttribute("data-estate-door", "tend");
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-08-02.1");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
   await expect(page.getByRole("heading", { name: "Dig until the ground tells the truth." })).toBeVisible();
   await expect(page.locator(".estate-location-room")).toHaveText("Garden");
   await expect(page.getByText("implemented now", { exact: true })).toBeVisible();

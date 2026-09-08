@@ -2,8 +2,8 @@
  *
  *  Before: every apex request was rewritten to api.agenttool.dev (the
  *  original 12-line proxy). Now the same worker splits:
- *    - API surfaces (/v1, /public, /health, /about, /.well-known) keep the
- *      original hostname rewrite to api.agenttool.dev except for the two
+ *    - API surfaces (/v1, /public, /feeds, /federation, /health, /about,
+ *      /.well-known) keep the hostname rewrite to api.agenttool.dev except for the two
  *      bounded XENIA website-threshold routes served locally at the apex.
  *      Live MCP, wake, and native discovery stay available at the apex. The
  *      unsupported A2A AgentCard path is refused locally with 404.
@@ -32,10 +32,15 @@ const PAGES_HOST = "agenttool-web.pages.dev";
 const API_HOST = "api.agenttool.dev";
 const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
 
-const API_PREFIXES = ["/v1/", "/public/", "/.well-known/"];
+// Feed representations and federation requests retain their exact method,
+// query, body, and headers at the API origin. Accept negotiation belongs to
+// that origin; these route families have no Pages representation.
+const API_PREFIXES = ["/v1/", "/public/", "/.well-known/", "/feeds/", "/federation/"];
 const API_EXACT = [
   "/v1",
   "/public",
+  "/feeds",
+  "/federation",
   "/health",
   "/about",
   "/.well-known",

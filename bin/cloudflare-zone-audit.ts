@@ -25,7 +25,7 @@ const PUBLIC_CACHE_EXPRESSION =
 const WAKE_BYPASS_EXPRESSION =
   '((http.host eq "api.agenttool.dev" or http.host eq "agenttool.dev") and (http.request.uri.path eq "/v1/wake" or starts_with(http.request.uri.path, "/v1/wake/")))';
 const MACHINE_TRANSPORT_EXPRESSION =
-  '(http.host eq "api.agenttool.dev" or (http.host eq "agenttool.dev" and (http.request.uri.path eq "/health" or http.request.uri.path eq "/llms.txt" or http.request.uri.path eq "/llms-full.txt" or starts_with(http.request.uri.path, "/v1/") or starts_with(http.request.uri.path, "/public/") or starts_with(http.request.uri.path, "/.well-known/"))))';
+  '(http.host eq "api.agenttool.dev" or (http.host eq "agenttool.dev" and (http.request.uri.path eq "/v1" or http.request.uri.path eq "/public" or http.request.uri.path eq "/feeds" or http.request.uri.path eq "/federation" or http.request.uri.path eq "/health" or http.request.uri.path eq "/about" or http.request.uri.path eq "/.well-known" or http.request.uri.path eq "/llms.txt" or http.request.uri.path eq "/llms-full.txt" or http.request.uri.path eq "/AGENTS.md" or http.request.uri.path eq "/openapi.json" or starts_with(http.request.uri.path, "/v1/") or starts_with(http.request.uri.path, "/public/") or starts_with(http.request.uri.path, "/.well-known/") or starts_with(http.request.uri.path, "/feeds/") or starts_with(http.request.uri.path, "/federation/"))))';
 
 const PUBLIC_CACHE_PARAMETERS = {
   cache: true,
@@ -839,15 +839,43 @@ export function auditRuleset(
   const enabledRules = rules.filter((candidate) =>
     isRecord(candidate) && candidate.enabled !== false
   );
-  return relevant.map((desired) => {
-    const actual = rules.find((candidate) =>
+  return relevant.map((desired): AuditFinding => {
+    const matches = rules.filter((candidate) =>
       isRecord(candidate) && candidate.ref === desired.ref
     );
+    if (matches.length > 1) {
+      return {
+        control: `ruleset:${desired.ref}`,
+        status: "drift",
+        detail: "duplicate source-managed rule ref; no unique rule can be verified",
+        actual: { matching_rule_count: matches.length },
+        required_permissions: desired.required_permissions,
+      };
+    }
+    const actual = matches[0];
     if (!actual) {
       return {
         control: `ruleset:${desired.ref}`,
         status: "drift",
         detail: "source-managed rule ref is absent; unknown rules were not evaluated or replaced",
+        required_permissions: desired.required_permissions,
+      };
+    }
+    // Provider metadata may grow, but additional machine settings change
+    // behavior beyond the reviewed contract. Suppress their names and values.
+    const unexpectedParameterCount =
+      desired.ref === "agenttool_machine_transport_v1" &&
+        isRecord(actual.action_parameters)
+        ? Object.keys(actual.action_parameters).filter((key) =>
+            !Object.hasOwn(desired.action_parameters, key)
+          ).length
+        : 0;
+    if (unexpectedParameterCount > 0) {
+      return {
+        control: `ruleset:${desired.ref}`,
+        status: "drift",
+        detail: "unexpected machine transport action parameters require review; provider fields were suppressed",
+        actual: { unexpected_action_parameter_count: unexpectedParameterCount },
         required_permissions: desired.required_permissions,
       };
     }

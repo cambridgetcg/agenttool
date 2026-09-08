@@ -11,6 +11,8 @@ on:
           - adds
           - data
           - data-sync
+          - economic-kernel
+          - economic-conformance
           - dark-continent-contract
           - dark-continent-karma
           - wake-continuity

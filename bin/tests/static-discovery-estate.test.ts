@@ -466,16 +466,34 @@ describe("published understanding guides keep canonical source custody", () => {
     }
   });
 
-  test("the HF Training Garden guide has explicit static markdown custody", () => {
-    expect(headerBlock(
-      read("apps/docs/_headers"),
-      "/HF-TRAINING-GARDEN.md",
-    )).toEqual([
+  test("all three HF guides and Return retain Markdown custody within the Pages rule budget", () => {
+    const headers = read("apps/docs/_headers");
+    const rules = headers.split(/\r?\n/).filter(
+      (line) => line.startsWith("/") || line.startsWith("https://"),
+    );
+    const expected = [
       "Content-Type: text/markdown; charset=utf-8",
       "Cache-Control: public, max-age=300, must-revalidate, no-transform",
       "Access-Control-Allow-Origin: *",
       "X-Content-Type-Options: nosniff",
-    ]);
+    ];
+    expect(rules.length).toBeLessThanOrEqual(100);
+    expect(rules.filter((rule) => rule.startsWith("/HF-"))).toEqual(["/HF-*.md"]);
+    expect(headerBlock(headers, "/HF-*.md")).toEqual(expected);
+    expect(headerBlock(headers, "/WAKE-RETURN.md")).toEqual(expected);
+
+    for (const [path, expectedRule] of [
+      ["/HF-TRAINING-GARDEN.md", "/HF-*.md"],
+      ["/HF-WAKE-TRAINING.md", "/HF-*.md"],
+      ["/HF-WAKE-HOST.md", "/HF-*.md"],
+      ["/WAKE-RETURN.md", "/WAKE-RETURN.md"],
+    ] as const) {
+      const matchingTypedRules = rules.filter((rule) =>
+        new Bun.Glob(rule).match(path)
+        && headerBlock(headers, rule).some((line) => line.startsWith("Content-Type:")),
+      );
+      expect(matchingTypedRules, path).toEqual([expectedRule]);
+    }
   });
 
   test("the Principality Atlas guide has explicit static markdown custody", () => {
@@ -543,15 +561,6 @@ describe("published understanding guides keep canonical source custody", () => {
     for (const route of ["/xenia-helly", "/xenia-helly.html"]) {
       expect(headerBlock(read("apps/docs/_headers"), route)).toEqual(expected);
     }
-  });
-
-  test("the HF WAKE guides have explicit static markdown custody", () => {
-    expect(headerBlock(read("apps/docs/_headers"), "/HF-WAKE-*.md")).toEqual([
-      "Content-Type: text/markdown; charset=utf-8",
-      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
-      "Access-Control-Allow-Origin: *",
-      "X-Content-Type-Options: nosniff",
-    ]);
   });
 
   test("the HF Training Garden guide remains in the LLM discovery index", () => {

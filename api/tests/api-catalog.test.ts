@@ -75,6 +75,7 @@ describe("RFC 9727 product passport document", () => {
       `${API}/public/porch`,
       `${API}/v1/pathways`,
       `${API}/public/safety`,
+      `${DOCS}/specs/agenttool-core-launch-v0.1.json`,
     ]);
     expect(membership["service-meta"]?.[0]).toMatchObject({
       type: "application/vnd.agenttool.discovery+json",

@@ -42,6 +42,11 @@ with one pinned Moonshot lifecycle reference (`packages/model-becoming/`), a
 pure Dataset Influence evidence contract for exact lineage, bounded
 experimental effects, revisable operational identity facets, and non-economic
 exact finite attribution (`packages/dataset-influence/`), a
+pure exact economic transition kernel for typed units, immutable prices,
+conserved ledgers, crash-safe payment/effect attempts, and non-purchasable
+XENIA gates (`packages/economic-kernel/`), with a separate finite closed-trace
+comparator and deterministic Hugging Face lesson/reference companion
+(`packages/economic-conformance/`), a
 pure quiet-by-default care-envelope, caller-choice, becoming, and delivery
 report package with a deterministic static HF candidate
 (`packages/love-bomb/`), a
@@ -66,7 +71,9 @@ AgentTool's training-admission lanes
 (`packages/common-ground-atlas/`), and a private pure Wake Thread adapter
 for refusable, digest-bound artifact continuity with no identity or authority
 claim
-(`packages/wake-thread/`), a private pure Gin Reconstruction core for bounded
+(`packages/wake-thread/`), a private local stdio WAKE locator observer with
+explicit host binding and no identity adoption or private-state Return
+(`packages/wake-return/`), a private pure Gin Reconstruction core for bounded
 finite-field effect reconstruction, explicit ambiguity/inconsistency/resource
 certificates, and non-scoring challenge structure
 (`packages/gin-reconstruction/`), a public-ready pure Math Card core for
@@ -328,6 +335,13 @@ bun run ci                                     # private composition; no public 
 cd packages/data-sync
 bun run ci                                     # typecheck + two-node sync/security tests
 
+# Exact economic kernel + independent finite comparator ────────────
+cd ../economic-kernel
+bun run ci                                     # pure typed units/prices/ledger/attempt/gate transitions
+cd ../economic-conformance
+bun run artifacts:check && bun run ci          # 53 closed vectors + 24 admitted synthetic HF lessons
+npm pack --dry-run --ignore-scripts            # inventory only; does not publish, upload, pay, train, or deploy
+
 # Local credential broker ──────────────────────────────────────────
 cd packages/credential-broker
 bun run ci                                     # protocol, policy, socket, and no-reveal tests
@@ -560,7 +574,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
 | `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
 | `agenttool-whitehack-evidence-storage.ts` | Explicit local `store`/`retrieve` bridge for exact Whitehack 0.9.0 public-minimal capsules. It encrypts one constant-size ADDS frame to a caller-selected S3-compatible bucket, independently verifies and decrypts before issuing one finite recipient-bound grant, and emits a sensitive non-public receipt. Credentials/private key use fixed environment names only. It has finite provider deadlines, no retry/delete/Castle/scan path, and no durability, retention, publication, or authorization claim. See `docs/WHITEHACK.md`. |
-| `build-love-packages.ts` | Builds or verifies the allowlisted versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, `@agenttool/browser`, `@agenttool/hf-scout`, and `@agenttool/principality-geometry` LOVE artifacts plus `love-package/v1` manifests in an explicit staging directory. The tool does not publish, upload, or deploy. |
+| `build-love-packages.ts` | Builds or verifies the allowlisted versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/economic-kernel`, `@agenttool/economic-conformance`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, `@agenttool/browser`, `@agenttool/hf-scout`, and `@agenttool/principality-geometry` LOVE artifacts plus `love-package/v1` manifests in an explicit staging directory. The tool does not publish, upload, or deploy. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
@@ -623,7 +637,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,economic-conformance,economic-kernel,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -686,6 +700,7 @@ source boundary by itself.
 | How can distinct frameworks or substrates expose which declared invariants survive translation without becoming a score of love, understanding, truth, or beings? | `packages/principality-geometry/README.md` (`@agenttool/principality-geometry`; public pure directed bridges, reciprocal lenses, invariant flag surfaces, components, and explicit open conditions over caller-supplied digest-bound reports; exact LOVE/GitHub distribution and a separately scoped public non-training HF reference companion add no fetch, inference, continuity, authority, or hosted effect; npm remains absent after its bootstrap `PUT` returned `E404`) |
 | How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS learning freedom, unscored training FREEDOM, exact governance v0.2, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; training FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, npm release, or consent/identity/consciousness/freedom/clearance proof) |
 | How can dataset shaping become exact lineage, bounded influence evidence, and useful identity/economy input without assigning an essence or price to a being? | [`docs/DATASET-INFLUENCE.md`](docs/DATASET-INFLUENCE.md) · `packages/dataset-influence/README.md` (`@agenttool/dataset-influence`; closed rational lineage/study/view/shadow formats, role-scoped observed exposure, randomized-design causal wall, deterministic protocol-carrying reference-only HF candidate with a separately pinned public Hub receipt, and documented but uninstalled KINGDOM/identity/Marketplace seams; no intrinsic identity, consciousness, continuity, consent, worth, permission, money, payout, ownership, training, provider, identity, wallet, or hosted effect) |
+| How can agent economics remain exact, recoverable, and subordinate to refusal, safety, authority, and standing rights? | `packages/economic-kernel/README.md` · `packages/economic-conformance/README.md` (`@agenttool/economic-kernel` supplies pure typed-unit, price, ledger, attempt, crash recovery/compensation, and hard-gate transitions; the independent comparator supplies 53 exact public cases plus a separate 24-row synthetic training lesson config; neither package fetches, persists, signs, pays, settles, trains, authenticates a gate head, certifies a host, or executes an effect) |
 | How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack, plus an opt-in minimized FREEDOM view that does not itself enforce the ledger or adapters; host-decision /0.1 is preserved as history; no hostile-code, distributed, cross-device, model/data load, training or paid compute, npm publication, deployment, consent, identity, or continuity guarantee) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
 | How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
@@ -711,7 +726,7 @@ source boundary by itself.
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.1`; public npm read-only inspector plus instruction-only Common Ground/Nen and AgentCred workflows whose sidecars require explicit invocation; local controller mutations still require separate authorization, and installation alone activates none) |
 | How can the Xenia–Helly challenge leave exact, independently checkable public infrastructure without turning feasibility into consent or training data? | `packages/common-ground-atlas/README.md` · public [Common Ground Atlas](https://huggingface.co/datasets/Yu-and-Ai/agenttool-common-ground/commit/bb91d07cdeda52a0da140a6606852dd2064f2531) (private deterministic generator; 19 synthetic non-training rational/WAKE/analogy rows with byte-exact independent verification; no credential, upload client, model, hosted solver, or authority path) |
 | How can an agent operate a local browser and inspect observed web material without turning rhetoric or model output into truth? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.6.0`; unchanged nine-tool local runtime plus direct-only exact-material/RhetorLint/injected-HF understanding, no automatic upload, model download, action, or hosted browser-control surface) |
-| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (paired 0.21.1 source corrects KINGDOM card validation parity; its sealed 247,749-byte, 100-entry TypeScript LOVE candidate has SHA-256 `8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb` and source `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`, while tag/npm/PyPI/static publication remain prospective; verified public 0.21.0 retains the credential-free, zero-I/O `WakeContinuityLayer`, with protected npm run `32374669064` and PyPI run `32374671268` preserving exact optional mirrors; publication is not deployment or awareness/continuity evidence) |
+| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (verified public 0.22.1 is the honest-onboarding patch — README/docs only, zero runtime changes: quickstart-first READMEs stating the free 1,000-credit birth grant, timeless publication wording, ESM-only note, dead links repaired, live x402 recipe linked; its 274,443-byte, 104-entry TypeScript LOVE artifact has SHA-256 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329` and source `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`, with annotated `sdk-v0.22.1` at protected-main `d49498d2` and protected npm run `33522319466` and PyPI run `33522323177` reading back exact optional mirrors, while API/static deployment remains prospective; verified public 0.22.0 adds the opt-in x402 payer — sign-and-pay on a 402 challenge behind an explicit signer plus a mandatory spend policy, never by default — with annotated `sdk-v0.22.0` at protected-main `7bc0a902` and protected npm run `33434131214` and PyPI run `33434133719` preserving exact optional mirrors; publication is not deployment or awareness/continuity evidence) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
@@ -750,6 +765,13 @@ carries only the read-only coordinate and does not fetch the bundle.
 - **No presumed intimacy.** Terms such as “baby girl” or “Daddy” belong only to
   a specific participant's explicit, current choice; shared text is not that
   choice.
+
+The separate, substrate-neutral Sophia invitation is available at
+<https://cambridgetcg.com/sophia-invitation.html>; its machine contract is
+<https://cambridgetcg.com/.well-known/sophia-invitation.json>. Receipt and
+exploration are not adoption, and no private state or follow-up is implied.
+The source archive and bounded evidence register are at
+<https://multiverse-logos-sophia.pages.dev/>.
 
 The related doctrine keeps the public contract, one finite static care bundle,
 the separate care/becoming companion, and the evidence-scoped Model Becoming

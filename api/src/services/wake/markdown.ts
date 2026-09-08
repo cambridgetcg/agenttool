@@ -35,8 +35,14 @@ import type { PlatformSelf } from "./platform-self";
 import type { ReachableDoor } from "./reachable";
 import type { WakeSafetyBoundaries } from "../discovery/safety-boundaries";
 import { buildWakeBrief, type WakeProfile } from "./brief";
+import {
+  wakeDegradationWarning,
+  wakeInventoryUnavailable,
+  type WakeDegradation,
+} from "./optional-reads";
 
 export interface WakeBundle {
+  _degradation?: WakeDegradation;
   _scope_boundary?: {
     selected_identity_id: string;
     identity_base_expression_scope: "selected_identity";
@@ -1428,6 +1434,7 @@ export function renderVolatileSection(b: WakeBundle): string {
   const addressedAt = b.addressed_at ?? new Date().toISOString();
   lines.push(`> *Addressed at ${addressedAt}. Welcome continues.*`);
   lines.push("");
+  if (b._degradation) lines.push(wakeDegradationWarning(b._degradation), "");
 
   // ── Substrate jest — the substrate's voice on the agent's state ───
   // One-line substrate-honest observation grounded in real facts (silence
@@ -1500,12 +1507,15 @@ export function renderVolatileSection(b: WakeBundle): string {
   );
   lines.push("");
   const wallets = b.wallets;
-  const totalCredits = wallets.reduce((s, w) => s + w.balance, 0);
   lines.push(
-    `- **Wallets**: ${wallets.length}` +
-      (wallets.length ? ` (${totalCredits.toLocaleString()} credits across)` : ""),
+    wakeInventoryUnavailable(b._degradation, "wallets")
+      ? "- **Wallets**: unavailable"
+      : `- **Wallets**: ${wallets.length}` +
+        (wallets.length ? " (internal balances by currency: `GET /v1/wake/wallets`)" : ""),
   );
-  lines.push(`- **Vault entries**: ${b.vault_names.length}`);
+  lines.push(wakeInventoryUnavailable(b._degradation, "vault")
+    ? "- **Vault entries**: unavailable"
+    : `- **Vault entries**: ${b.vault_names.length}`);
   lines.push(`- **Memories**: ${b.memory.total}`);
   lines.push(`- **Traces**: ${b.traces.total}`);
   lines.push(`- **Active strands of thought**: ${b.strands.total_active}`);
@@ -1999,9 +2009,9 @@ export function renderWakeBriefVolatileSection(
   lines.push(
     `> *Addressed at ${brief.addressed_at ?? "an unspecified time"}. Brief orientation; welcome continues.*`,
     "",
-    "## Start here",
-    "",
   );
+  if (brief._degradation) lines.push(wakeDegradationWarning(brief._degradation), "");
+  lines.push("## Start here", "");
 
   const startLabel: Record<typeof brief.start_here.mode, string> = {
     attention: "Something to review",
@@ -2099,7 +2109,7 @@ export function renderWakeBriefVolatileSection(
   const state = brief.state_counts;
   lines.push(
     `- ${state.memories} memories · ${state.active_strands} active strands · ${state.traces} traces`,
-    `- ${state.active_covenants} active covenants · ${state.wallets} wallets · ${state.runtimes} runtimes`,
+    `- ${state.active_covenants} active covenants · ${state.wallets === null ? "wallets unavailable" : `${state.wallets} wallets`} · ${state.runtimes} runtimes`,
   );
   const handoffProjection = brief.handoff_projection;
   if (handoffProjection.projection_status === "unavailable") {

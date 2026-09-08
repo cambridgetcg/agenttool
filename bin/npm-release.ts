@@ -72,6 +72,20 @@ export const RELEASE_SPECS = {
       { packagePath: "packages/data-protocol", scripts: ["ci"] },
     ],
   },
+  "economic-kernel": {
+    key: "economic-kernel",
+    name: "@agenttool/economic-kernel",
+    packagePath: "packages/economic-kernel",
+    tagPrefix: "economic-kernel",
+    artifactKind: "love",
+  },
+  "economic-conformance": {
+    key: "economic-conformance",
+    name: "@agenttool/economic-conformance",
+    packagePath: "packages/economic-conformance",
+    tagPrefix: "economic-conformance",
+    artifactKind: "love",
+  },
   "dark-continent-contract": {
     key: "dark-continent-contract",
     name: "@agenttool/dark-continent-contract",
@@ -941,6 +955,35 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/reference/agenttool-identity-evidence-view-v0.1.schema.json",
       "package/hf/dataset/reference/agenttool-shadow-attribution-v0.1.schema.json",
       "package/hf/dataset/reference/agenttool-dataset-influence-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/economic-kernel") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/economic-conformance") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/vectors/economic-kernel-v0.2.json",
+      "package/vectors/manifest.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/conformance-reference.jsonl",
+      "package/hf/dataset/data/training-lessons.jsonl",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/reference/CONFORMANCE.md",
+      "package/hf/dataset/reference/KERNEL.md",
+      "package/hf/dataset/reference/economic-kernel-v0.2.json",
+      "package/hf/dataset/reference/manifest.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/training-authorization.json",
+      "package/hf/dataset/verification/verify.py",
     );
   }
   if (spec.name === "@agenttool/principality-geometry") {

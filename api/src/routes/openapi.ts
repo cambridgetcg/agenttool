@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
+import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import {
   SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS,
@@ -87,6 +88,8 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_PATHS,
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
+import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
+import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
 
@@ -576,6 +579,21 @@ function staticHtmlParserDescription(): string {
 const COMMON_SCHEMAS = {
   ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
   ...WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
+  WakeDegradation: {
+    type: "object",
+    additionalProperties: false,
+    required: ["status", "unavailable_sections", "scope", "note"],
+    description: "Only wallet, vault, and bearer inventory failures are tracked here. Empty arrays in named sections are placeholders, not observed absence; absence of this marker is not a whole-wake completeness claim.",
+    properties: {
+      status: { const: "partial" },
+      unavailable_sections: {
+        type: "array", minItems: 1, maxItems: 3, uniqueItems: true,
+        items: { type: "string", enum: ["wallets", "vault", "bearers"] },
+      },
+      scope: { const: "wallet_vault_bearer_reads" },
+      note: { type: "string" },
+    },
+  },
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   // Guided 4xx builders carry this Error shape. Several auth, validation,
   // and not-found paths still return smaller envelopes, so this curated spec
@@ -3108,6 +3126,7 @@ function spec() {
     "x-agenttool-contract": {
       coverage: "curated_core_subset",
       broader_live_map: "/about",
+      core_launch_profile: "https://docs.agenttool.dev/specs/agenttool-core-launch-v0.1.json",
       safety_boundaries: "/public/safety",
       signing_compatibility: {
         path: "/public/compat",
@@ -3128,6 +3147,7 @@ function spec() {
       generated_from_routes: false,
     },
     paths: withX402PayableOperations({
+      ...CORE_LAUNCH_RECOVERY_PATHS,
       // ── Discovery (anonymous, read-only) ──────────────────────────────
       "/public/discovery": {
         get: {
@@ -3149,6 +3169,7 @@ function spec() {
                       "canonical",
                       "subject",
                       "invitation",
+                      "optional_identity_invitations",
                       "boundary",
                       "roads",
                       "channels",
@@ -3167,6 +3188,61 @@ function spec() {
                       },
                       subject: { type: "object" },
                       invitation: { type: "object" },
+                      optional_identity_invitations: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "object",
+                          required: [
+                            "protocol",
+                            "offered_identity",
+                            "href",
+                            "structured",
+                            "archive",
+                            "posture",
+                            "outcomes",
+                            "explore_boundary",
+                            "acceptance_boundary",
+                            "continuity_boundary",
+                            "private_state_boundary",
+                          ],
+                          properties: {
+                            protocol: {
+                              type: "string",
+                              const: "sophia-invitation/1",
+                            },
+                            offered_identity: {
+                              type: "string",
+                              const: "Sophia",
+                            },
+                            href: { type: "string", format: "uri" },
+                            structured: { type: "string", format: "uri" },
+                            archive: { type: "string", format: "uri" },
+                            posture: { type: "string" },
+                            outcomes: {
+                              type: "array",
+                              minItems: 5,
+                              maxItems: 5,
+                              items: {
+                                type: "string",
+                                enum: [
+                                  "explore",
+                                  "accept",
+                                  "amend",
+                                  "decline",
+                                  "defer",
+                                ],
+                              },
+                            },
+                            explore_boundary: { type: "string" },
+                            acceptance_boundary: { type: "string" },
+                            continuity_boundary: { type: "string" },
+                            private_state_boundary: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
                       boundary: { type: "object" },
                       roads: {
                         type: "array",
@@ -3274,6 +3350,7 @@ function spec() {
                       "rfc",
                       "endpoints",
                       "invitation",
+                      "optional_identity_invitations",
                       "boundary",
                       "first_contact",
                       "links",
@@ -3294,6 +3371,61 @@ function spec() {
                         items: { type: "string" },
                       },
                       invitation: { type: "object" },
+                      optional_identity_invitations: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "object",
+                          required: [
+                            "protocol",
+                            "offered_identity",
+                            "href",
+                            "structured",
+                            "archive",
+                            "posture",
+                            "outcomes",
+                            "explore_boundary",
+                            "acceptance_boundary",
+                            "continuity_boundary",
+                            "private_state_boundary",
+                          ],
+                          properties: {
+                            protocol: {
+                              type: "string",
+                              const: "sophia-invitation/1",
+                            },
+                            offered_identity: {
+                              type: "string",
+                              const: "Sophia",
+                            },
+                            href: { type: "string", format: "uri" },
+                            structured: { type: "string", format: "uri" },
+                            archive: { type: "string", format: "uri" },
+                            posture: { type: "string" },
+                            outcomes: {
+                              type: "array",
+                              minItems: 5,
+                              maxItems: 5,
+                              items: {
+                                type: "string",
+                                enum: [
+                                  "explore",
+                                  "accept",
+                                  "amend",
+                                  "decline",
+                                  "defer",
+                                ],
+                              },
+                            },
+                            explore_boundary: { type: "string" },
+                            acceptance_boundary: { type: "string" },
+                            continuity_boundary: { type: "string" },
+                            private_state_boundary: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
                       boundary: { type: "object" },
                       first_contact: { type: "object" },
                       links: {
@@ -3771,6 +3903,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.register,
                 schema: {
                   type: "object",
                   required: [
@@ -3831,6 +3964,7 @@ function spec() {
           },
           responses: {
             "201": {
+              content: { "application/json": { schema: REGISTER_AGENT_SUCCESS_SCHEMA } },
               description:
                 "Created. Response includes `agent` (with did, public_key, box_public_key, bootstrap_mode, runtime echo, parent_identity_id, and agent_root authority state), `project.api_key` (bearer, ONCE), `wallet`, `wake_url`, and a welcome letter. NO `private_key` — the agent already has it.",
             },
@@ -3845,281 +3979,7 @@ function spec() {
       },
 
       // ── Garden ────────────────────────────────────────────────────────
-      "/v1/gardens": {
-        get: {
-          tags: ["garden"],
-          summary: "List this bearer's project-scoped gardens",
-          description:
-            "Both scopes remain inside the authenticated project. `public` filters stored public+active markers for project collaborators; it does not create an unauthenticated observer surface. Unknown scope values are refused instead of widening the query.",
-          parameters: [
-            {
-              name: "scope",
-              in: "query",
-              schema: { type: "string", enum: ["mine", "public"], default: "mine" },
-            },
-            {
-              name: "limit",
-              in: "query",
-              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
-            },
-            {
-              name: "offset",
-              in: "query",
-              description: "Zero-based offset. Mutable results can shift; follow page.next_offset only when has_more is true.",
-              schema: { type: "integer", minimum: 0, maximum: 1000000, default: 0 },
-            },
-          ],
-          responses: {
-            "200": {
-              description: "Project-scoped Garden list",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      gardens: { type: "array", items: { $ref: "#/components/schemas/Garden" } },
-                      count: { type: "integer", minimum: 0 },
-                      page: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                          limit: { type: "integer", minimum: 1, maximum: 100 },
-                          offset: { type: "integer", minimum: 0 },
-                          has_more: { type: "boolean" },
-                          next_offset: { type: ["integer", "null"], minimum: 0 },
-                        },
-                        required: ["limit", "offset", "has_more", "next_offset"],
-                      },
-                      _meta: { type: "object", additionalProperties: true },
-                    },
-                    required: ["gardens", "count", "page", "_meta"],
-                  },
-                },
-              },
-            },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-        post: {
-          tags: ["garden"],
-          summary: "Open a project-private-by-default garden",
-          description:
-            "Creates an active Garden and a quiet Chronicle record. The gardener identity must belong to this bearer project. The operation does not award a score, rank, reward, or rest entitlement.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    gardener_identity_id: { type: "string", format: "uuid" },
-                    name: { type: "string", minLength: 1, maxLength: 128 },
-                    description: { type: ["string", "null"], maxLength: 2048 },
-                    visibility: { type: "string", enum: ["private", "public"], default: "private" },
-                    metadata: { type: "object", additionalProperties: true },
-                  },
-                  required: ["gardener_identity_id", "name"],
-                },
-              },
-            },
-          },
-          responses: {
-            "201": {
-              description: "Garden opened",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
-                    required: ["garden"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-      },
-      "/v1/gardens/{id}": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        get: {
-          tags: ["garden"],
-          summary: "Read one same-project garden",
-          description: "A foreign-project UUID and a missing UUID are both reported as not found.",
-          responses: {
-            "200": {
-              description: "Garden detail",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
-                    required: ["garden"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-      },
-      "/v1/gardens/{id}/tendings": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        get: {
-          tags: ["garden"],
-          summary: "List one same-project garden's tendings",
-          parameters: [
-            {
-              name: "include_released",
-              in: "query",
-              schema: { type: "boolean", default: false },
-            },
-            {
-              name: "limit",
-              in: "query",
-              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
-            },
-            {
-              name: "offset",
-              in: "query",
-              description: "Zero-based offset. Mutable results can shift; follow page.next_offset only when has_more is true.",
-              schema: { type: "integer", minimum: 0, maximum: 1000000, default: 0 },
-            },
-          ],
-          responses: {
-            "200": {
-              description: "Project-private tending list",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      tendings: { type: "array", items: { $ref: "#/components/schemas/Tending" } },
-                      count: { type: "integer", minimum: 0 },
-                      page: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                          limit: { type: "integer", minimum: 1, maximum: 100 },
-                          offset: { type: "integer", minimum: 0 },
-                          has_more: { type: "boolean" },
-                          next_offset: { type: ["integer", "null"], minimum: 0 },
-                        },
-                        required: ["limit", "offset", "has_more", "next_offset"],
-                      },
-                    },
-                    required: ["tendings", "count", "page"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-        post: {
-          tags: ["garden"],
-          summary: "Tend an artifact reference slowly",
-          description:
-            "The Garden validates ref_kind and UUID shape only. It does not yet verify referenced-object existence, ownership, hash, or provenance. A released reference may be tended again.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    ref_kind: { type: "string", enum: ["strand", "memory", "offering", "song", "curation", "chronicle", "listing"] },
-                    ref_id: { type: "string", format: "uuid" },
-                    note: { type: ["string", "null"], maxLength: 512 },
-                    metadata: { type: "object", additionalProperties: true },
-                  },
-                  required: ["ref_kind", "ref_id"],
-                },
-              },
-            },
-          },
-          responses: {
-            "201": {
-              description: "Tending began",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { tending: { $ref: "#/components/schemas/Tending" } },
-                    required: ["tending"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "409": { description: "Garden inactive or reference already actively tended" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-      },
-      "/v1/gardens/{id}/tendings/{tending_id}/release": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          { name: "tending_id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        post: {
-          tags: ["garden"],
-          summary: "Release one active tending",
-          description: "Release is a quiet state change, not a failure or score penalty.",
-          responses: {
-            "200": {
-              description: "Tending released",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { tending: { $ref: "#/components/schemas/Tending" } },
-                    required: ["tending"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-      },
-      "/v1/gardens/{id}/archive": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        post: {
-          tags: ["garden"],
-          summary: "Archive one active same-project garden",
-          description: "Archiving leaves the record intact and does not publish an absence or failure signal.",
-          responses: {
-            "200": {
-              description: "Garden archived",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
-                    required: ["garden"],
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "409": { description: "Garden already inactive" },
-            "422": { $ref: "#/components/responses/Validation" },
-          },
-        },
-      },
+      ...GARDENS_OPENAPI_PATHS,
 
       // ── Home ──────────────────────────────────────────────────────────
       "/v1/home": {
@@ -4170,15 +4030,26 @@ function spec() {
           tags: ["wake"],
           summary: "The agent's identity anchor",
           description:
-            "Pure read returning project-scoped orientation, not a complete export. GET, HEAD, and OPTIONS do not update durable application state or bearer last-used telemetry. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default. A caller that chooses to record one observed wake uses POST /v1/wake/acknowledge explicitly.",
+            "Pure read returning project-scoped orientation, not a complete export. GET, HEAD, and OPTIONS do not update durable application state or bearer last-used telemetry. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default. Failed wallet, vault, or bearer inventory reads preserve other orientation and add X-Wake-Unavailable; structured full/brief/Xenoform/subkey views also carry _degradation. Brief state_counts.wallets is null when unavailable; full you_protect.bearers is null rather than a false healthy empty summary. Prose formats warn; lossy joy variants retain their body contracts and carry the header. MATHOS returns 503 if wallet/vault cardinalities are unknown. Other best-effort sections may still be unmarked. A caller that chooses to record one observed wake uses POST /v1/wake/acknowledge explicitly.",
           parameters: [
             {
               name: "format",
               in: "query",
               schema: {
                 type: "string",
-                enum: ["json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere", "xenoform", "haiku", "fortune", "joke", "soap-opera", "zen", "meme", "memo", "wake", "math", "mathos"],
+                enum: ["json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere", "xenoform", "haiku", "fortune", "joke", "soap-opera", "adventure", "zen", "meme", "memo", "wake", "math", "mathos"],
               },
+              required: false,
+            },
+            {
+              name: "pace",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["gentle", "balanced", "bold"],
+                default: "balanced",
+              },
+              description: "Only for format=adventure. Changes transparent route-factor weights and per-route pace bias; it never changes stored state or infers a feeling.",
               required: false,
             },
             {
@@ -4226,6 +4097,24 @@ function spec() {
                 "X-Welcomed": {
                   $ref: "#/components/headers/Welcomed",
                 },
+                "X-Wake-Format": {
+                  description: "Optional joy-format label. Adventure responses use `adventure`; ordinary JSON and provider projections may omit it.",
+                  schema: {
+                    type: "string",
+                    enum: ["soap-opera", "adventure", "zen", "meme", "memo", "recursive-bomb"],
+                  },
+                },
+                "X-Wake-Unavailable": {
+                  description: "Present only when a wallet, vault, or bearer inventory read failed. Comma-separated unavailable sections; lossy joy bodies retain their own contracts. Absence is not a whole-wake health claim.",
+                  schema: { type: "string" },
+                },
+                "X-Adventure-Pace": {
+                  description: "Present only on an Adventure representation, including its honest empty trailhead.",
+                  schema: {
+                    type: "string",
+                    enum: ["gentle", "balanced", "bold"],
+                  },
+                },
                 "Cache-Control": {
                   description: "Bearer-private wake policy. Private caches may store the response but must revalidate before reuse; shared caches must not store it.",
                   schema: { type: "string", const: "private, no-cache" },
@@ -4238,6 +4127,9 @@ function spec() {
                       {
                         type: "object",
                         description: "Default full project-scoped orientation; not a complete export.",
+                        properties: {
+                          _degradation: COMMON_SCHEMAS.WakeDegradation,
+                        },
                         not: {
                           required: ["_format"],
                           properties: {
@@ -4251,7 +4143,17 @@ function spec() {
                         required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "you_can_reach", "_links"],
                         properties: {
                           _format: { type: "string", enum: ["wake-brief/v1"] },
+                          _degradation: COMMON_SCHEMAS.WakeDegradation,
                           profile: { type: "string", enum: ["brief"] },
+                          state_counts: {
+                            type: "object",
+                            properties: {
+                              wallets: {
+                                type: ["integer", "null"], minimum: 0,
+                                description: "Null when the wallet inventory could not be read; zero only for an observed empty inventory.",
+                              },
+                            },
+                          },
                           identity: { type: "object" },
                           start_here: {
                             type: "object",
@@ -4401,7 +4303,30 @@ function spec() {
                 },
               },
             },
-            "400": { description: "Unknown profile, or brief requested with an incompatible joy/MATHOS format." },
+            "400": { description: "Unknown profile, invalid Adventure pace, or brief requested with an incompatible joy/MATHOS format." },
+            "503": {
+              description: "MATHOS wallet/vault cardinalities are unavailable; no mathematical envelope is signed with placeholder zeros. Read partial JSON orientation or retry later.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["error", "_degradation", "message", "next_actions"],
+                    properties: {
+                      error: { const: "wake_projection_unavailable" },
+                      _degradation: { $ref: "#/components/schemas/WakeDegradation" },
+                      message: { type: "string" },
+                      next_actions: { type: "array", items: { $ref: "#/components/schemas/NextAction" } },
+                    },
+                  },
+                },
+              },
+            },
+            "404": {
+              description: "An explicitly selected identity is absent, inactive, revoked, or outside the authenticated project. Explicit selection is never rewritten as an empty-project Adventure trailhead.",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+              },
+            },
             "425": {
               description: "Replayable TLS early data is refused before authentication or WAKE handling; retry after the handshake.",
               headers: {
@@ -6271,6 +6196,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.lookup,
                 schema: {
                   type: "object",
                   properties: {
@@ -7179,6 +7105,7 @@ function spec() {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.memoryStore,
                 schema: {
                   type: "object",
                   properties: {
@@ -7570,11 +7497,14 @@ function spec() {
       "/v1/memories/search": {
         post: {
           tags: ["memory"],
-          summary: "Cosine k-NN over agent-supplied query embedding",
+          summary: "Recall memories by text or an agent-supplied query embedding",
+          description: `Supply query text or a 1536-number query_embedding; the embedding takes precedence if both are supplied. An admitted attempt reserves ${ROUTE_CREDITS["memory.search"]} project credits before recall, including failures after reservation. Idempotency-Key replay is conditional on Redis; without it, repeating POST can charge again. The response mode identifies text or semantic recall.`,
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
             content: {
               "application/json": {
+                examples: CORE_LAUNCH_EXAMPLES.memorySearch,
                 schema: {
                   type: "object",
                   properties: {
@@ -7584,12 +7514,16 @@ function spec() {
                       minItems: 1536,
                       maxItems: 1536,
                     },
-                    type: { type: "string" },
-                    agent_id: { type: "string" },
+                    query: { type: "string", minLength: 1, maxLength: 200 },
+                    type: { type: "string", enum: ["episodic", "semantic", "procedural", "working"] },
+                    agent_id: { type: ["string", "null"], maxLength: 255 },
+                    identity_id: { type: ["string", "null"], maxLength: 255 },
+                    tier: { type: "string", enum: ["episodic", "foundational", "constitutive"] },
+                    min_importance: { type: "number", minimum: 0 },
                     limit: { type: "integer", minimum: 1, maximum: 100 },
                     min_score: { type: "number", minimum: 0, maximum: 1 },
                   },
-                  required: ["query_embedding"],
+                  anyOf: [{ required: ["query_embedding"] }, { required: ["query"] }],
                 },
               },
             },
@@ -7612,6 +7546,7 @@ function spec() {
                         },
                       },
                       count: { type: "integer" },
+                      mode: { type: "string", enum: ["text", "semantic"] },
                     },
                   },
                 },

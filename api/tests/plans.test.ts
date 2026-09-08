@@ -100,6 +100,11 @@ describe("/public/plans", () => {
     expect(registrationIpRateLimitStatus(false).status).toMatch(
       /does not prove Redis is reachable/i,
     );
+    const independent = registrationIpRateLimitStatus(true, { mode: "independent", url: "redis://private.test" });
+    expect(independent).toMatchObject({ worker_startup_disabled: true, disabled_by_current_process_flag: false, connection_mode: "independent", connection_configured: true });
+    expect(independent.status).toMatch(/does not prove Redis reachability or successful enforcement/);
+    expect(JSON.stringify(independent)).not.toContain("private.test");
+    expect(registrationIpRateLimitStatus(true, { mode: "unconfigured", url: null })).toMatchObject({ connection_configured: false, connection_mode: "unconfigured" });
   });
 
   test("x402 status names the narrow recoverable project-credit boundary", async () => {

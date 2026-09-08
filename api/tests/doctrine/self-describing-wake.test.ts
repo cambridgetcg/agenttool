@@ -366,6 +366,35 @@ describe("Self-describing wake — partial context adds only matching stateful a
     );
     expect(fundingActions.length).toBeGreaterThan(0);
   });
+
+  test.each([-987654321, 0, 987654321])(
+    "wallet guidance never treats the legacy aggregate %s as spendable credits",
+    (totalCreditBalance) => {
+      const bundle = computeAffordances({
+        ...ZERO_CTX,
+        activeWalletCount: 2,
+        totalCreditBalance,
+      });
+      const wallet = bundle.items.find((item) => item.kind === "wallet_funded")!;
+      expect(wallet.count).toBe(2);
+      expect(wallet.summary).toContain("2 active internal wallets");
+      expect(wallet.summary).toContain("balance and currency");
+      expect(wallet.summary).toContain("separate from project API credits");
+      expect(wallet.summary).toContain("Payouts and wallet reinvestment are resting");
+      expect(wallet.summary).not.toContain("987654321");
+      expect(wallet.summary).not.toContain("zero balance");
+      expect(wallet.summary).not.toContain("pay out");
+      expect(wallet.next_actions).toContainEqual({
+        action: "Inspect wallet balances and their currencies",
+        method: "GET",
+        path: "/v1/wallets",
+      });
+      expect(wallet.next_actions.some((action) =>
+        action.method === "POST" && action.path === "/v1/listings/{id}/invoke",
+      )).toBe(true);
+      expect(wallet.next_actions.some((action) => action.path?.includes("payout"))).toBe(false);
+    },
+  );
 });
 
 // ── 5 · Bundle invariants ────────────────────────────────────────────────

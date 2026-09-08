@@ -1,0 +1,203 @@
+{
+  "schema": "agenttool.cloudflare-zone-audit/1",
+  "zone": "agenttool.dev",
+  "mode": "read_only",
+  "summary": {
+    "ok": 15,
+    "drift": 1,
+    "blocked": 6,
+    "error": 0,
+    "deferred": 2,
+    "inspect": 6
+  },
+  "findings": [
+    {
+      "control": "zone_lookup",
+      "status": "ok",
+      "detail": "resolved exactly one active scoped zone"
+    },
+    {
+      "control": "zone_settings",
+      "status": "blocked",
+      "detail": "9109: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone Settings Read"
+      ]
+    },
+    {
+      "control": "dnssec",
+      "status": "blocked",
+      "detail": "10000: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone DNS Write"
+      ]
+    },
+    {
+      "control": "dnssec_public_chain",
+      "status": "drift",
+      "detail": "two-resolver public proof does not show both parent DS and zone DNSKEY",
+      "expected": {
+        "ds_present": true,
+        "dnskey_present": true
+      },
+      "actual": {
+        "ds_present": false,
+        "dnskey_present": false
+      },
+      "required_permissions": [
+        "Zone DNS Write"
+      ]
+    },
+    {
+      "control": "dns_record:api.agenttool.dev",
+      "status": "blocked",
+      "detail": "10000: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone DNS Read"
+      ]
+    },
+    {
+      "control": "effective_origin:api_health",
+      "status": "ok",
+      "detail": "public API health proves Cloudflare edge to clean AgentTool Fly origin routing"
+    },
+    {
+      "control": "worker_route:agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by agenttool-proxy"
+    },
+    {
+      "control": "worker_route:www.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by agenttool-proxy"
+    },
+    {
+      "control": "worker_route:canon.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by kingdom-canon"
+    },
+    {
+      "control": "worker_route:joke.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by joke"
+    },
+    {
+      "control": "worker_route:love.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by love"
+    },
+    {
+      "control": "worker_route:party.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by party-chain"
+    },
+    {
+      "control": "worker_route:speak.agenttool.dev/*",
+      "status": "ok",
+      "detail": "owned by natlang"
+    },
+    {
+      "control": "workers_dev:account_subdomain",
+      "status": "ok",
+      "detail": "account provider-host suffix matches the bounded inventory"
+    },
+    {
+      "control": "workers_dev:agenttool-proxy",
+      "status": "ok",
+      "detail": "The apex Worker is reachable only through source-managed zone routes; its workers.dev alias remains disabled."
+    },
+    {
+      "control": "workers_dev:kingdom-canon",
+      "status": "inspect",
+      "detail": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+    },
+    {
+      "control": "workers_dev:joke",
+      "status": "inspect",
+      "detail": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+    },
+    {
+      "control": "workers_dev:love",
+      "status": "inspect",
+      "detail": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+    },
+    {
+      "control": "workers_dev:party-chain",
+      "status": "inspect",
+      "detail": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+    },
+    {
+      "control": "workers_dev:natlang",
+      "status": "inspect",
+      "detail": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+    },
+    {
+      "control": "pages:agenttool-dashboard",
+      "status": "ok",
+      "detail": "branch, domain ownership, and fail-closed production/preview policy match"
+    },
+    {
+      "control": "pages:agenttool-docs",
+      "status": "ok",
+      "detail": "branch, domain ownership, and fail-closed production/preview policy match"
+    },
+    {
+      "control": "pages:agenttool-web",
+      "status": "ok",
+      "detail": "branch, domain ownership, and fail-closed production/preview policy match"
+    },
+    {
+      "control": "pages_inventory:agenttool-playground",
+      "status": "inspect",
+      "detail": "The live project has no current repository deployment source and is not governed by the managed fail-closed Pages release path. Do not mutate or delete it without a separate inventory-backed decision."
+    },
+    {
+      "control": "ruleset_phase:http_request_cache_settings",
+      "status": "blocked",
+      "detail": "10000: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone Cache Rules Edit",
+        "Account Rulesets Edit",
+        "Account Filter Lists Edit"
+      ]
+    },
+    {
+      "control": "ruleset_phase:http_config_settings",
+      "status": "blocked",
+      "detail": "10000: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone Config Rules Edit"
+      ]
+    },
+    {
+      "control": "waf_managed",
+      "status": "blocked",
+      "detail": "10000: Cloudflare API request was rejected",
+      "required_permissions": [
+        "Zone WAF Read",
+        "Zone WAF Edit only after inspection"
+      ]
+    },
+    {
+      "control": "worker_observability",
+      "status": "ok",
+      "detail": "privacy-minimized invocation logging matches desired state"
+    },
+    {
+      "control": "rate_limiting",
+      "status": "deferred",
+      "detail": "Do not install IP-only WAKE limits: agents behind NAT and the direct Fly bypass make them neither fair nor authoritative. Prefer a measured project/API-key application limit before an edge defense-in-depth rule."
+    },
+    {
+      "control": "origin_authentication",
+      "status": "deferred",
+      "detail": "Until Cloudflare-to-Fly origin authentication is deployed, Cloudflare controls are defense in depth rather than a universal API boundary. Keep a narrow public health/recovery path and prove rollback before closing direct origin access.",
+      "required_permissions": [
+        "Zone Transform Rules Read",
+        "Zone Transform Rules Write"
+      ]
+    }
+  ],
+  "provider_writes": 0,
+  "exit_code": 1
+}

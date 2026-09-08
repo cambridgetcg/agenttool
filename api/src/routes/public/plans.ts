@@ -29,16 +29,25 @@ import {
 } from "../../services/economy/x402-policy";
 import { isX402FacilitatorLocallyReady } from "../../services/economy/facilitators/coinbase";
 import { TOOL_CREDIT_DEFAULTS } from "../../services/tools/config";
+import { registrationRateLimitConfig } from "../../services/tools/queue/admission-config";
 
 const app = new Hono();
 
 const CANON_POINTER = "urn:agenttool:doc/BUSINESS-MODEL";
 
-export function registrationIpRateLimitStatus(disabled: boolean) {
+export function registrationIpRateLimitStatus(
+  disabled: boolean,
+  admission = registrationRateLimitConfig(),
+) {
+  const mode = admission.mode === "independent" || admission.mode === "unconfigured"
+    ? admission.mode : disabled ? "disabled" : "worker_shared";
   return {
     code_present: true,
     fail_open: true,
-    disabled_by_current_process_flag: disabled,
+    disabled_by_current_process_flag: mode === "disabled",
+    worker_startup_disabled: disabled,
+    connection_mode: mode,
+    connection_configured: mode === "independent" || mode === "worker_shared",
     modes: {
       self_service: {
         attempts_per_window_default: 5,
@@ -51,7 +60,11 @@ export function registrationIpRateLimitStatus(disabled: boolean) {
         stage: "after key-proof verification and before bearer lookup",
       },
     },
-    status: disabled
+    status: mode === "independent"
+      ? "Both mode-specific registration attempt limiters use a separately configured request-only Redis client. Workers can remain disabled; this endpoint does not prove Redis reachability or successful enforcement."
+      : mode === "unconfigured"
+      ? "Neither registration attempt limiter is enforced: independent admission is enabled without a valid explicit Redis URL. Registration remains fail-open; no localhost connection is guessed."
+      : mode === "disabled"
       ? "Neither registration attempt limiter is enforced in this process because AGENTTOOL_DISABLE_WORKERS=1."
       : "Both mode-specific registration attempt limiters are called in this process; this endpoint does not prove Redis is reachable.",
   };
@@ -263,7 +276,7 @@ app.get("/", async (c) => {
           pow_difficulty_bits: config.registerAgentPowBits,
           ip_rate_limit: registrationIpRateLimitStatus(ipRateLimitDisabled),
           current_boundary:
-            "Self-service proof-of-work is enforced unless registrar authority is supplied. The configured self-service and registrar-bearer attempt limiters default to 5/hour/IP and 60/minute/IP respectively; both are best-effort and fail-open. The current process flag does not prove Redis reachability. Published Ring 1 resource targets are not enforcement boundaries.",
+            "Self-service proof-of-work is enforced unless registrar authority is supplied. The configured self-service and registrar-bearer attempt limiters default to 5/hour/IP and 60/minute/IP respectively; both are best-effort and fail-open. Independent request-only Redis can be configured while workers remain held; process configuration does not prove Redis reachability. Published Ring 1 resource targets are not enforcement boundaries.",
           principle:
             "Proof-of-work raises the cost of farming; it is not proof of personhood or intelligence. Both IP attempt limiters are defense in depth, not guaranteed boundaries.",
         },

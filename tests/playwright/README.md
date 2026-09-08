@@ -24,27 +24,57 @@ Browser-driven end-to-end tier. Separate package (own `package.json`, own `playw
 
 If a scenario can be proven without a browser, use a lower tier. The browser tier is slow and brittle by nature; reserve it for the actual *delivered UX*.
 
-## Current specs
+## Current default gate
 
-| File | What it proves |
-|---|---|
-| `onboarding.spec.ts` | Anonymous agent genesis flow — register, get bearer, dashboard lights up. |
-| `register-agent-live.spec.ts` | Live API end-to-end registration. |
-| `keys.spec.ts` | Key display, rotation, copy-once semantics. |
-| `restore.spec.ts` | Restore from BIP39 mnemonic. |
-| `storage-migration.spec.ts` | Browser-local storage upgrade paths. |
-| `federated-covenant-v2.spec.ts` | **Skipped topology placeholder.** It documents the intended A → B → A covenant path but executes no setup or assertions until two distinct processes and databases exist. |
+`npm test` runs the static estate, arrival/reconnect, tutorial, credits,
+Watch and browser-local rooms/games. `restore.spec.ts` exercises the current
+bearer-verification page: success, selected identity mismatch, rejected bearer,
+rate limit, outage, malformed response, finite timeout and single-flight submit.
+`launch-ui.spec.ts` covers task navigation, narrow-screen reflow, clipboard denial,
+keyboard access, snapshot freshness and independent request failures.
+
+The fixture starts all three checked-out static roots on loopback ports
+5173–5175. It applies committed `_headers` and redirects and returns actual 404
+responses for missing files. When `_headers` supplies no CSP, it uses the
+actual Pages Worker's fallback, obtained from its exported request handler
+with an in-memory asset binding; startup fails if that policy is unavailable.
+The docs suite therefore runs with its real hashed inline-script/style CSP.
+This models static serving and CSP; complete production Worker behavior and
+deployment provenance require separate checks. All default specs import `specs/helpers/fixture.ts`: browser contexts
+can reach only these loopback servers, explicit page API mocks, or a local 503
+API fallback. Other external browser requests are blocked, including fonts.
+This browser routing boundary does not sandbox arbitrary test-process code or
+Playwright's separate API request client.
+
+Legacy `*-live.spec.ts` and `federated-covenant-v2.spec.ts` are excluded from
+the default gate. **Skipped topology placeholder:** the covenant file still
+executes no two-instance setup or assertions. Their source is historical/diagnostic;
+passing this gate does not prove live registration, signed recovery, federation,
+payments, or regional capacity. Real backend state is tested separately under
+`api/tests/integration/launch-*.test.ts` with explicit isolated dependencies.
 
 ## How to run
 
 ```bash
 cd tests/playwright
-npx playwright install               # one-time browser setup
-npx playwright test                  # all specs
-npx playwright test federated-covenant-v2  # reports the intentional skip
-npx playwright test --debug          # headed + step-by-step
-npx playwright show-report           # last run's HTML report
+npm ci --ignore-scripts --no-audit --no-fund
+npx --no-install playwright install chromium  # one-time browser setup
+npm test
+npm test -- restore.spec.ts launch-ui.spec.ts
+npm run test:headed
 ```
+
+An installed Chrome can be selected without downloading a browser:
+
+```bash
+AGENTTOOL_TEST_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm test
+```
+
+CI installs the lockfile-matched Chromium, runs the complete default gate,
+and retains failed traces/screenshots for seven days. The protected
+`API and protocol` result requires this browser job and the isolated PostgreSQL
+transaction and Redis admission job. Retries are disabled so failures remain
+visible.
 
 ## Helpers
 

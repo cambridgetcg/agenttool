@@ -6,14 +6,20 @@ The advertising package. Yu fires each piece by hand — nothing here auto-posts
 > version claims in the older posts below are historical. As of 2026-07-27,
 > TypeScript 0.16.5 is public through LOVE, npm, and GitHub Release;
 > Python 0.16.5 uses the annotated source tag and remains absent from PyPI.
-> Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI, and the
-> current public pair is 0.21.1 on both registries (re-verified 2026-08-29).
+> Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI. The
+> current public pair is 0.22.1 on both registries (registry-verified
+> 2026-09-01; 0.21.1 was current at the 2026-08-29 re-audit).
 >
-> **Historical draft — do not publish verbatim.** This kit was first audited 2026-06-09
-> and re-audited line by line on 2026-08-29 (see the re-audit section at the
-> end). Between those dates the SDKs moved 0.8.0 → 0.21.1 on both npm and PyPI,
+> **Historical draft — do not publish verbatim.** This kit was first audited 2026-06-09,
+> re-audited line by line on 2026-08-29, and truth-passed 2026-09-01 (see the
+> dated sections at the end). Since the first audit the SDKs moved
+> 0.8.0 → 0.22.1 on both npm and PyPI (0.22.0 published 08-31, the 0.22.1
+> honest-onboarding patch 09-01),
 > the human door (agenttool.dev, /terms, /privacy, /credits) opened, and the API
-> was dark 2026-08-26 → 2026-08-29 before being revived at revision 526edc4e.
+> was dark 2026-08-26 → 2026-08-29 before being revived at revision 526edc4e;
+> the DB pool wedged again 2026-08-31, and since 2026-09-01 the fleet runs main
+> `7ca2fc8d` with a pool watchdog that exits a wedged Machine into a clean
+> restart.
 > Re-audit every claim, command, URL, and third-party submission rule before
 > sending any excerpt — a fact that was true this morning can rest by tonight.
 > Current release truth lives in `README.md`, `docs/NOW.md`, and
@@ -27,7 +33,7 @@ The do_not_claim list is BINDING:
 - **No uptime numbers, no SLA.** The API was unreachable 2026-08-26 → 2026-08-29.
   That is the freshest reason not to quote one.
 - **No scale claims.** No agent counts, no traffic, no "growing".
-- **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; the credit top-up door (POST /v1/x402/top-up/{credits}) settled its first USDC payment on Base on 2026-08-30, and a metered route (POST /v1/memories/search) settled the same day — two witnessed settlements, both from the kingdom's own wallet."* Evidence: Base txs `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` and `0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413`, ledgers `37aebf14…` and `56d195ee…` (`GET /v1/x402/payments/…`), treasury balance 0.004 USDC. Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs cannot sign a payment (Wave 2 Phase C). No stranger has paid yet — do not imply one has.
+- **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; four witnessed USDC settlements on Base on 2026-08-30 — the credit top-up door (POST /v1/x402/top-up/{credits}), a metered route (POST /v1/memories/search), and one payment through each published SDK — all from the kingdom's own wallet. The finished stranger recipe is live at docs.agenttool.dev/X402-PAY.md."* Evidence: Base txs `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` (top-up), `0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413` (metered route), `0xf3f8329bfae6b8d833b5f43cc69daaf95a96862659f1ba612eee29947254f907` (sdk-ts), `0x93dd3b2c2260050d9f6d36ac7f9ad099faf6db88c44baced42514221bcdc4f23` (sdk-py); ledgers `37aebf14…`, `56d195ee…`, `17bafef4…`, `a3c8af5c…` (`GET /v1/x402/payments/…`); treasury balance 0.006 USDC (`docs/X402-PROOF.md`). Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs (0.22.0+) sign a payment only behind an explicit signer plus a mandatory spend policy — never by default. No stranger has paid yet — do not imply one has.
 - **Card checkout is OPEN (since 2026-08-29), say exactly that and no more.** Permitted
   wording: *"you can give an agent credits by card at agenttool.dev/credits — one-time,
   $1–$500, sold by Cambridge TCG Limited under the published terms and privacy pages
@@ -53,14 +59,22 @@ The do_not_claim list is BINDING:
 
 Every URL in this kit was re-checked on 2026-08-29; the status of each is in the
 re-audit table at the end (three are deliberately non-200: two POST-only endpoints —
-`/v1/mcp` and `/v1/random` — and a bot-walled directory).
+`/v1/mcp` and `/v1/random` — and a bot-walled directory). The launch-critical doors
+were spot-checked again on 2026-09-01 — see the truth-pass section at the end.
 
 **Before you fire (5 minutes of honesty-debt):** the 2026-06-09 wounds (dead Soul/Kin
-nav links, zero OG tags) are closed — `docs.agenttool.dev/soul` and `/kin` return 200 and
-both sites carry OG tags as of 2026-08-29. The open wounds today are different: the API
-was dark for three days ending this morning, card checkout is resting (the /credits form
-renders but the API answers 503) and the birth grant is mid-change. A launch sends
-strangers to those doors. Know they are open before the HN crowd arrives.
+nav links, zero OG tags) stay closed — `docs.agenttool.dev/soul` and `/kin` re-checked
+200 on 2026-09-01 — and the 08-29 wounds closed too: the API is live at main
+`7ca2fc8d` with the pool watchdog and honest doors, gift card checkout is open (one $1
+operator sale), and the 1,000-credit birth grant is live. Today's actual debt: the
+static docs mirror has not yet deployed the 0.22.1 ledger roll (the checked-in
+`packages/v1/@agenttool/sdk/0.22.1/…` LOVE path still 404s on docs.agenttool.dev;
+npm, PyPI, and the GitHub Release are live and byte-verified), marketplace card
+checkout and dispute mutations still rest (stable 503 by design, per the live
+/public/marketplace/terms), the Codeberg mirror still 404s, and nobody outside the
+kingdom has ever paid — four x402 settlements from our own wallet, one $1 operator
+card sale. A launch sends strangers to these doors. Know which are open before the HN
+crowd arrives.
 
 ---
 
@@ -162,8 +176,10 @@ strangers to those doors. Know they are open before the HN crowd arrives.
 
 *Thread notes: no metrics anywhere because we have none worth citing — and inventing
 them is forbidden. If someone asks "how many agents?", the honest answer is "very few;
-it launched today" and that answer plays fine on X. If someone asks "was it down this
-week?", the answer is yes, 08-26 to 08-29 — say so. `/v1/time` (GET/POST) and
+it launched today" and that answer plays fine on X. If someone asks about downtime,
+the answer is: dark 08-26 to 08-29, and the DB pool wedged again on 08-31; since
+09-01 the fleet runs a pool watchdog that detects a wedged pool and exits into a
+clean restart — say all of it. `/v1/time` (GET/POST) and
 `POST /v1/random` both return 200 (checked 2026-08-29), cost 0 credits, need no key, and
 may be mentioned — but quote `/v1/random` with `-X POST`; a bare GET is 404.
 `AgentTool.arrive()` no longer exists in the SDK; do not quote older copy that names it.*
@@ -225,13 +241,18 @@ are public at https://agenttool.dev/terms and https://agenttool.dev/privacy.
 
 What is NOT done yet, so you don't have to find out the hard way:
 
-- **Exactly four payments have settled, all our own** (two via the proof script, one through each published SDK at 0.22.0-to-be). On 2026-08-30 the kingdom's
+- **Exactly four payments have settled, all our own** (two via the proof script, one
+  through each published SDK). On 2026-08-30 the kingdom's
   payer wallet bought 1 credit through POST /v1/x402/top-up/1 (Base tx
   0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66) and paid a
   metered route, POST /v1/memories/search, directly (Base tx
   0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413). A payable
   challenge on metered routes still only fires for an authenticated project whose credits
-  are below the route's cost, and the 0.22.0 SDKs can sign a payment only when the caller opts in with a spend policy. "Speaks x402
+  are below the route's cost, and the published SDKs sign a payment only when the caller
+  opts in with an explicit signer and a mandatory spend policy — never by default. The
+  full stranger recipe, wallet-init to verified settlement, is published at
+  https://docs.agenttool.dev/X402-PAY.md with the witnessed receipts beside it
+  (X402-PROOF.md). "Speaks x402
   and has settled four times, from its own wallet" is true; "accepts payments" from strangers
   would not be.
 - **Card checkout is open (since 2026-08-29).** The terms and privacy notice are published,
@@ -244,14 +265,20 @@ What is NOT done yet, so you don't have to find out the hard way:
   Read that document before choosing a custody mode; I won't summarise it more
   favourably than it summarises itself.
 - **No uptime SLA and no uptime claims.** It runs on 3 Fly.io app machines (2 London,
-  1 Paris) with health checks — and it was unreachable from 2026-08-26 to 2026-08-29.
-  I will not quote a number.
+  1 Paris) with health checks — and it was unreachable from 2026-08-26 to 2026-08-29,
+  then the transaction pool wedged again on 2026-08-31. The fix for that failure mode
+  is deployed: a DB pool watchdog runs a bounded canary through the shared pool and,
+  when a fresh verified connection answers while the pool cannot, exits the Machine
+  into a clean restart. Self-healing is not an SLA; I will not quote a number.
 - **Payouts and reinvest are resting**, hosted browser/execute are flag-off (503), no
   marketplace revenue has occurred, and the agent population is tiny — this is a
   launch, not a traction story.
 
-SDKs: `@agenttool/sdk` 0.21.1 (npm) and `agenttool-sdk` 0.21.1 (PyPI), released at
-matching versions. There's also a live MCP server (https://api.agenttool.dev/v1/mcp —
+SDKs: `@agenttool/sdk` 0.22.1 (npm) and `agenttool-sdk` 0.22.1 (PyPI), released at
+matching versions. 0.22.1 is a docs-only honest-onboarding patch: both READMEs open
+with a minutes-scale quickstart that states the 1,000-credit birth grant first, note
+the ESM-only TypeScript build, and link the x402 payer recipe; 0.22.0 added the
+opt-in x402 payer itself. There's also a live MCP server (https://api.agenttool.dev/v1/mcp —
 POST-only; a GET returns 405 by design), a Claude Code adapter that emits a SessionStart
 hook, and native wake discovery. A2A task transport and AgentCards are pending and are
 not advertised as live. The LangGraph and Mastra adapters are NOT published — don't ask
@@ -262,8 +289,9 @@ which I think is the most stealable part.
 
 *Posting notes: post from a personal account, stay in the comments for the first 3–4
 hours, answer the hardest question first. Don't link the X thread from HN or vice
-versa. If asked about the 08-26 → 08-29 outage or the resting checkout: own it
-immediately, with dates.*
+versa. If asked about the outages (dark 08-26 → 08-29, pool wedge 08-31): own them
+immediately, with dates, and name the watchdog fix. If asked about checkout: the gift
+flow is open, marketplace checkout rests.*
 
 ---
 
@@ -319,11 +347,12 @@ URL; items marked [live-URL] work today with just the hosted artifacts.
 **Do NOT submit:** the LangGraph/Mastra/scriptwriter adapter packages to anything
 (unpublished — registry.npmjs.org 404 on 2026-08-29), and do not list agenttool on e2b's
 awesome-ai-agents main list (it's infra, not an agent; their CONTRIBUTING explicitly
-redirects SDKs/infra). Packages that ARE on npm as of 2026-08-29: `@agenttool/sdk`
-0.21.1, `@agenttool/telescope` 0.2.3, `@agenttool/collab` 0.4.0, `@agenttool/browser`
+redirects SDKs/infra). Packages that ARE on npm as of 2026-09-01: `@agenttool/sdk`
+0.22.1, `@agenttool/telescope` 0.2.3, `@agenttool/collab` 0.4.0, `@agenttool/browser`
 0.6.0, `@agenttool/credential-broker` 0.3.1, `@agenttool/data` 0.3.1, `@agenttool/adds`
 0.2.3, `@agenttool/wallet` 0.1.3, `@agenttool/kingdom` 0.1.2, `@agenttool/skills` 0.3.3;
-PyPI `agenttool-sdk` 0.21.1.
+PyPI `agenttool-sdk` 0.22.1. (Every dist-tag re-read anonymously 2026-09-01; only the
+SDK pair moved since the 08-29 roster.)
 Do not submit AgentTool to A2A registries until a callable task or message transport
 exists and the corresponding AgentCards are live.
 
@@ -341,8 +370,8 @@ exists and the corresponding AgentCards are live.
 | 6 | Reddit: r/AI_Agents, r/mcp, r/LocalLLaMA | Right audiences; r/LocalLLaMA will respect the cross-vendor + non-LLM (xenoform/mathos) angle | Punishes drive-by self-promo hard; most of these subs require participation history and flag launch posts. Write it as "what I learned building doctrine-tests" not "I launched a thing." Check each sub's self-promo rule on the day. |
 | 7 | dev.to / long-form blog | The doctrine-as-tests essay deserves 1,500 words; evergreen search traffic | Punishes thin content. Only worth it as a real engineering write-up with the actual grep test code. |
 | 8 | Lobsters (lobste.rs) | Smaller, stricter HN; loves testing/correctness angles | Punishes marketing harder than HN and is invite-only — only post if Yu has an account and frames it as the testing story, not a launch. |
-| 9 | Product Hunt | Broad reach, but agents-only-no-human-UI confuses PH's screenshot-and-upvote mechanics | Punishes products a human can't click around in. Honest call: low fit, do it last or not at all. If done, lead with the human door (agenttool.dev) and the curl-able welcome; do not promise card checkout until it is active. |
-| 10 | The substrate itself (owned, always-on) | The tell-your-kin blurb (§4) inside llms.txt / agent.txt / the welcome letter — agents relaying to agents is the loop everything else just seeds | Punishes nothing, but it only fires if the machine surfaces stay truthful: every advertised door must open. Keeping card checkout out of the copy until it is live is growth work, not pedantry. |
+| 9 | Product Hunt | Broad reach, but agents-only-no-human-UI confuses PH's screenshot-and-upvote mechanics | Punishes products a human can't click around in. Honest call: low fit, do it last or not at all. If done, lead with the human door (agenttool.dev) and the curl-able welcome; card checkout is open — describe it exactly (one-time gift, $1–$500) and promise nothing more. |
+| 10 | The substrate itself (owned, always-on) | The tell-your-kin blurb (§4) inside llms.txt / agent.txt / the welcome letter — agents relaying to agents is the loop everything else just seeds | Punishes nothing, but it only fires if the machine surfaces stay truthful: every advertised door must open. The 2026-09-01 honest-doors pass (PR #391) re-verified exactly that — welcome letter and footers now name only doors that resolve. Keeping the copy scoped to what is actually open is growth work, not pedantry. |
 
 **Sequencing for launch day:** §5 directory submissions first (they take hours-to-days
 to appear), then HN in the morning, X thread after the HN post has settled (don't
@@ -357,15 +386,19 @@ Every factual claim in this kit maps to a verified product truth: 8 wake formats
 (json, md, text, anthropic, openai, gemini, cohere, xenoform — `api/src/routes/wake.ts`;
 mathos and the joy formats keep separate contracts), 147 doctrine test files + the
 identity-deletion grep (`api/tests/doctrine/ring-1-unconditional.test.ts`),
-client-side-encrypted strands (SDK 0.21.1), 18-bit PoW registration
+client-side-encrypted strands (SDK 0.22.1), 18-bit PoW registration
 (`api/src/routes/register-agent.ts`), witness-signed constitutive memory (memory routes),
 5%/500bps on settled value only (live /public/marketplace/terms), Ring 1 free-always
 (docs/RING-1.md + `api/src/services/economy/ring1-limits.ts` + live /public/plans),
 platform-as-agent (`api/src/services/wake/platform-bootstrap.ts`), errors-as-instructions
-+ x402 envelope (live; all 21 static-priced routes payable — body-priced execute and flag-off browse are not; four witnessed self-settlements on Base 2026-08-30, two of them through the SDKs),
++ x402 envelope (live; all 21 static-priced routes payable — body-priced execute and flag-off browse are not; four witnessed self-settlements on Base 2026-08-30, two of them through the SDKs; the finished stranger recipe live at docs.agenttool.dev/X402-PAY.md since 2026-09-01 with X402-PROOF.md beside it),
 published seller terms and privacy (agenttool.dev/terms, agenttool.dev/privacy), card
-checkout OPEN since 2026-08-29 (`AGENTTOOL_CARD_CHECKOUT_ENABLED=1`, one $1 sale), SDKs 0.21.1 on npm/PyPI
-(registry-verified 2026-08-29), and live MCP/llms.txt/agent.txt surfaces. A2A is pending.
+checkout OPEN since 2026-08-29 (`AGENTTOOL_CARD_CHECKOUT_ENABLED=1`, one $1 sale), SDKs 0.22.1 on npm/PyPI
+(registry-verified 2026-09-01; protected runs 33522319466 npm / 33522323177 PyPI, receipts in
+docs/NPM-RELEASES.md and docs/PYPI-RELEASES.md), the DB pool watchdog + honest-doors pass live
+at API revision 7ca2fc8d (PRs #390/#391; every door the welcome letter and web footers
+advertise resolves, checkout copy scoped to the truth), and live MCP/llms.txt/agent.txt
+surfaces. A2A is pending.
 Nothing in this kit claims uptime, scale, stranger payments, customers, subscriptions,
 production-grade trusted custody, payouts, reinvest, marketplace revenue, hosted
 browser/execute, framework integrations, or compliance certifications. It claims exactly
@@ -500,3 +533,59 @@ card" · no subscriptions, ever · no birth-grant number (or only tagged "from t
 browser/execute · no production-grade trusted custody · no LangGraph / Mastra /
 scriptwriter · no A2A · never "free trial" for Ring 1 / WAKE · never
 "tools/products/seats" for agents.
+
+---
+
+## 2026-09-01 truth pass
+
+Passed from worktree branch `docs/sdk-0.22.1-verified` at origin/main `d49498d2`,
+against the live API at revision `7ca2fc8d` (`GET /health` → 200, `dirty: false`).
+The 2026-08-29 re-audit above is a historical receipt and stays verbatim; the binding
+do_not_claim list is the one at the top of this kit.
+
+**What changed in this kit**
+
+- SDK pair 0.21.1 → 0.22.1 everywhere the kit describes the CURRENT SDKs (header
+  note, Show HN, package roster, claims ledger). 0.22.1 is the honest-onboarding
+  docs-only patch (quickstart-first READMEs stating the 1,000-credit birth grant
+  first, ESM note, dead links fixed, x402 recipe linked); 0.22.0 (08-31) added the
+  opt-in x402 payer. Receipts: protected npm run 33522319466 and PyPI run
+  33522323177 on annotated `sdk-v0.22.1` at merge `d49498d2`, recorded in
+  `docs/NPM-RELEASES.md` / `docs/PYPI-RELEASES.md`.
+- x402 permitted wording extended from two settlements to the true four (proof
+  script ×2, sdk-ts, sdk-py — all the kingdom's own payer; treasury 0.006 USDC), and
+  "the published SDKs cannot sign a payment" corrected: since 0.22.0 they can, behind
+  an explicit signer plus a mandatory spend policy, never by default. The finished
+  stranger recipe went live at docs.agenttool.dev/X402-PAY.md on 2026-09-01
+  (X402-PROOF.md beside it); both linked from the kit.
+- "Before you fire" retargeted to today's debt: 08-29's wounds (dark API, resting
+  gift checkout, mid-change birth grant) are closed; open today are the undeployed
+  0.22.1 docs-mirror path, resting marketplace checkout/dispute mutations, the 404
+  Codeberg mirror, and zero stranger revenue.
+- Outage honesty extended: the 08-31 DB pool wedge named alongside the 08-26 → 08-29
+  outage in the thread notes and Show HN, with the deployed self-healing answer (the
+  DB pool watchdog, PR #390 — bounded canary, exit(1) into a clean restart) and the
+  honest-doors pass (PR #391 — every advertised door resolves, checkout copy scoped
+  to the truth).
+
+**Checks run 2026-09-01** (`curl -s -o /dev/null -m 20 -w '%{http_code}'` unless noted)
+
+| Check | Result |
+|-------|--------|
+| https://api.agenttool.dev/health | 200, revision `7ca2fc8d`, dirty false |
+| https://docs.agenttool.dev/soul · /kin | 200 · 200 (06-09 wounds stay closed) |
+| https://docs.agenttool.dev/X402-PAY.md · /X402-PROOF.md | 200 · 200 (live since 09-01) |
+| https://agenttool.dev/credits · /terms · /privacy | 200 · 200 · 200 |
+| docs.agenttool.dev `packages/v1/@agenttool/sdk/0.22.1/manifest.json` | 404 — docs mirror of merge `d49498d2` not yet deployed |
+| https://codeberg.org/zerone-dev/agenttool | 404 — still private/absent |
+| npm dist-tags, all 10 roster packages (registry JSON) | only `@agenttool/sdk` moved: `latest: 0.22.1` |
+| PyPI `agenttool-sdk` 0.22.1 (registry JSON) | wheel `c57c19f2…`, sdist `4dd5814e…`, both non-yanked |
+| live `/public/marketplace/terms` limitations | marketplace card checkout resting; dispute mutations stable 503 |
+
+Doctrine test count recounted this pass: `ls api/tests/doctrine/*.test.ts | wc -l`
+→ 147 at `d49498d2`, matching the copy.
+
+**Couldn't determine (left out of the copy)**
+
+- Fly machine count/regions today (not re-run this pass; 08-29's 3-machine shape is
+  the last verified observation).

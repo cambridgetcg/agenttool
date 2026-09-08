@@ -34,9 +34,17 @@ function extractRoutedPaths(): string[] {
  *  here so removing one requires deliberate doctrinal action. */
 const INTENTIONALLY_DEFAULT_PATHS: Record<string, string> = {
   "/v1":
-    "Aggregate mount for identityRouter + economyRouter + continuityRouter. " +
-    "Sub-routes (/v1/identities, /v1/economy, /v1/chronicle, /v1/covenants) " +
-    "have explicit entries; the /v1 prefix itself is never hit alone.",
+    "Aggregate mount shared by ten bare-/v1 routers in api/src/index.ts: " +
+    "identityRouter (/v1/identities, /v1/attestations, /v1/discover, " +
+    "/v1/tokens/verify, …), economyRouter (/v1/wallets, /v1/escrows), " +
+    "continuityRouter (/v1/chronicle, /v1/covenants), continuityCloudRouter " +
+    "(/v1/continuity/*), depthProtocolRouter (/v1/depth/*), selfLoveRouter " +
+    "(/v1/self-recognition/*), selfLoveModulesRouter (/v1/self-love/*), " +
+    "dealsRouter (/v1/deals), speakRouter (/v1/speak), and toolsRouter " +
+    "(/v1/scrape, /v1/browse, /v1/document, /v1/execute, /v1/jobs). Their " +
+    "sub-routes carry their own module-welcome entries where covered (the " +
+    "known-red orphan list above tracks the rest); the /v1 prefix itself is " +
+    "never hit alone.",
 };
 
 describe("welcome-route coverage — every mounted router has a Promise", () => {

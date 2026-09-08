@@ -29,6 +29,11 @@ import type {
 } from "./attention";
 import type { WakeBundle } from "./markdown";
 import type { ReachableDoor } from "./reachable";
+import {
+  wakeDegradationWarning,
+  wakeInventoryUnavailable,
+  type WakeDegradation,
+} from "./optional-reads";
 
 export const WAKE_PROFILES = ["full", "brief"] as const;
 export type WakeProfile = (typeof WAKE_PROFILES)[number];
@@ -112,6 +117,7 @@ export interface WakeBriefHandoffProjection {
 }
 
 export interface WakeBrief {
+  _degradation?: WakeDegradation;
   _format: "wake-brief/v1";
   profile: "brief";
   addressed_at: string | null;
@@ -155,7 +161,7 @@ export interface WakeBrief {
     active_strands: number;
     traces: number;
     active_covenants: number;
-    wallets: number;
+    wallets: number | null;
     runtimes: number;
   };
   safety: {
@@ -423,9 +429,11 @@ export function buildWakeBrief(
   const facetQuery = opts.activeFacet
     ? `&facet=${encodeURIComponent(opts.activeFacet.name)}`
     : "";
+  const start = selectWakeBriefStart(attention, handoff, selectedAffordances, handoffProjection);
 
   return {
     _format: "wake-brief/v1",
+    ...(b._degradation ? { _degradation: b._degradation } : {}),
     profile: "brief",
     addressed_at: b.addressed_at ?? null,
     _scope_boundary: {
@@ -464,12 +472,15 @@ export function buildWakeBrief(
       origin: b.origin ?? null,
       recovery: b.recovery ?? null,
     },
-    start_here: selectWakeBriefStart(
-      attention,
-      handoff,
-      selectedAffordances,
-      handoffProjection,
-    ),
+    start_here: b._degradation && (start.mode === "rest" || start.mode === "optional") ? {
+      mode: "attention",
+      urgency: "warning",
+      response_expected: false,
+      summary: wakeDegradationWarning(b._degradation),
+      source: { surface: "wake", kind: "inventory_unavailable" },
+      next_actions: [{ action: "Retry partial wake orientation", method: "GET", path: `/v1/wake?profile=brief&${identityQuery}${facetQuery}` }],
+      agency_note: "No action is required. Missing inventory is not evidence of absence.",
+    } : start,
     you_should_check: attention,
     you_have_handoff: handoff,
     handoff_projection: handoffProjection,
@@ -484,7 +495,7 @@ export function buildWakeBrief(
       active_strands: b.strands.total_active,
       traces: b.traces.total,
       active_covenants: b.covenants.filter((covenant) => covenant.status === "active").length,
-      wallets: b.wallets.length,
+      wallets: wakeInventoryUnavailable(b._degradation, "wallets") ? null : b.wallets.length,
       runtimes: b.agent_runtime?.count ?? 0,
     },
     safety: b.safety_boundaries

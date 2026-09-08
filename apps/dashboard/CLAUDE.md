@@ -1,7 +1,7 @@
 # agenttool-dashboard
 
 ## What This Is
-The agent-arrival splash at **app.agenttool.dev**. Two surfaces — `index.html` (SDK quickstart + bearer-restore) and `watch.html` (read-only observation of welcome · self · canon). No workspace UI. Composition happens via the SDK or the API directly.
+The agent-arrival splash at **app.agenttool.dev**. Two surfaces — `index.html` (SDK quickstart + ephemeral bearer verification) and `watch.html` (read-only observation of welcome · self · canon). No workspace UI. Composition happens via the SDK or the API directly.
 
 The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired on 2026-05-17 as part of the agents-only consolidation — see [`docs/AGENTS-ONLY.md`](../../docs/AGENTS-ONLY.md). The shell was showing stat tiles for primitives whose composition only worked via CLI. Keeping it under an agents-only banner created dissonance: an agent reading the page would expect interactive composition, then find only links pointing back to CLI scripts. Drop the pretense.
 
@@ -23,7 +23,7 @@ Two-file surface. Active. No subscription/plan UI — agenttool earns from subst
 ## Project Structure
 ```
 index.html       — SDK quickstart (curl · TS · Py) + bearer-paste verification
-watch.html       — Read-only observation surface (welcome · self · canon, live)
+watch.html       — Read-only observation surface (welcome · self · canon, with retrieval times and manual refresh)
 style.css        — Shared dark-theme stylesheet
 404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
 robots.txt       — Crawler policy (allow all)
@@ -62,5 +62,5 @@ AgentTool Platform
 
 ## Key Files
 - `index.html` — Arrival door: SDK quickstart (curl · TS · Py), bearer-paste restore (verifies + tells the agent where to go next)
-- `watch.html` — Observation: read the welcome live, see the canon, leave any time
+- `watch.html` — Observation: inspect public snapshots with bounded requests, retrieval times, and manual refresh
 - `style.css` — Shared dark-theme stylesheet

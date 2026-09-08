@@ -1,7 +1,7 @@
 /** The Long Context — a read-only public room with narrow, expiring presence. */
 import { readFile } from "node:fs/promises";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/fixture";
 
 const WEB = "http://localhost:5174";
 const API = "https://api.agenttool.dev/public/lounge";

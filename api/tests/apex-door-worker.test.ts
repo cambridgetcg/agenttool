@@ -108,6 +108,85 @@ describe("apex Accept negotiation", () => {
     );
   });
 
+  test("forwards feed and federation reads without choosing a Pages representation", async () => {
+    for (const path of ["/feeds", "/feeds/", "/feeds/offers.atom", "/feeds/offers.rss", "/feeds/offers.json", "/federation", "/federation/about"]) {
+      for (const method of ["GET", "HEAD", "OPTIONS"]) {
+        for (const accept of ["*/*", "application/json", "application/atom+xml", "application/problem+json", "text/html"]) {
+          let calls = 0;
+          const response = await handleRequest(new Request(`https://agenttool.dev${path}?seller_did=did%3Aat%3Afixture`, {
+            method,
+            headers: { accept, "if-none-match": '"fixture-revision"' },
+          }), async (url: string, init?: RequestInit) => {
+            calls += 1;
+            expect(url).toBe(`https://api.agenttool.dev${path}?seller_did=did%3Aat%3Afixture`);
+            expect(init?.method).toBe(method);
+            expect(init?.redirect).toBe("manual");
+            const headers = new Headers(init?.headers);
+            expect(headers.get("accept")).toBe(accept);
+            expect(headers.get("if-none-match")).toBe('"fixture-revision"');
+            return new Response(null, { status: 304, headers: { etag: '"fixture-revision"', vary: "Origin" } });
+          });
+          expect(calls).toBe(1);
+          expect(response.status).toBe(304);
+          expect(response.headers.get("etag")).toBe('"fixture-revision"');
+          expect(response.headers.get("vary")).toBe("Origin");
+        }
+      }
+    }
+  });
+
+  test("preserves signed federation requests and API refusals without following redirects", async () => {
+    const body = '{ "signed_payload": "fixture", "sequence": 1 }\n';
+    let calls = 0;
+    const response = await handleRequest(new Request("https://agenttool.dev/federation/covenants?version=2", {
+      method: "POST",
+      body,
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        authorization: "Bearer fixture",
+        cookie: "fixture=value",
+        origin: "https://peer.example",
+        "idempotency-key": "fixture-request-identity",
+        "early-data": "1",
+      },
+    }), async (url: string, init?: RequestInit) => {
+      calls += 1;
+      expect(url).toBe("https://api.agenttool.dev/federation/covenants?version=2");
+      expect(init?.method).toBe("POST");
+      expect(init?.redirect).toBe("manual");
+      expect(await new Response(init?.body).text()).toBe(body);
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer fixture");
+      expect(headers.get("cookie")).toBe("fixture=value");
+      expect(headers.get("origin")).toBe("https://peer.example");
+      expect(headers.get("idempotency-key")).toBe("fixture-request-identity");
+      expect(headers.get("early-data")).toBe("1");
+      return new Response('{"error":"federation_disabled"}', {
+        status: 503,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    });
+    expect(calls).toBe(1);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "federation_disabled" });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("does not forward JSON requests for lookalike feed or federation prefixes", async () => {
+    for (const path of ["/feeds-extra", "/federation-example"]) {
+      let called = false;
+      const response = await handleRequest(new Request(`https://agenttool.dev${path}`, {
+        headers: { accept: "application/json" },
+      }), async () => {
+        called = true;
+        return new Response("unexpected");
+      });
+      expect(called, path).toBe(false);
+      expect(response.status, path).toBe(404);
+    }
+  });
+
   test("serves the bounded XENIA threshold locally with GET/HEAD parity", async () => {
     let calls = 0;
     const upstream = async () => {

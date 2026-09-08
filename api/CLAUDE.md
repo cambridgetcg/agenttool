@@ -64,7 +64,11 @@ api/src/
 
 ## Route map
 
-Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoints:` registry there.
+Mounted in `api/src/index.ts`. There is no `endpoints:` registry; the one-line
+route doc-strings live in the `routes:` object inside the `GET /about` handler
+in `api/src/index.ts` (~line 1348), and the `/.well-known` surface is listed in
+the `endpoints:` array of `buildArrivalIndex` in
+`api/src/services/discovery/arrival.ts`.
 
 | Route | Domain | Doctrine |
 |---|---|---|

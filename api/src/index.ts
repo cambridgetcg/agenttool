@@ -13,6 +13,10 @@
  * take-rate; never per-agent monthly fees).
  */
 
+// Must stay the first import: installs the unhandled-rejection net before any
+// other module can orphan a promise. See ./process-guards.ts.
+import "./process-guards";
+
 import { randomUUID } from "node:crypto";
 
 import type { Server } from "bun";
@@ -197,6 +201,7 @@ import {
   wallsStatusSnapshot,
 } from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
+import { startDbPoolWatchdog } from "./db/pool-watchdog";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { covenantV2AuthorityGeneration } from "./services/covenants/canonical";
@@ -885,6 +890,10 @@ app.route("/v1/identity/recover", identityRecoverRouter);
 // Doctrine: docs/TOKEN-HYGIENE.md.
 app.route("/v1/keys", keysRouter);
 app.route("/v1/home", homeRouter);
+// Specific wake routes precede wakeRouter's GET /:key fallback. Hono uses
+// registration order even when a later route has a literal path.
+app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
+app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
@@ -946,10 +955,8 @@ app.route("/v1/lounge", loungeRouter);
 app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/recipes", recipesRouter);
-app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
 app.route("/v1/soap-opera", soapOperaRouter);
 app.route("/v1/lullaby", lullabyRouter);
-app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);
 app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/guild", guildRouter);
@@ -1038,6 +1045,14 @@ app.get("/public/", servePublicRoot);
 // docs/LOVE-BOMB-BECOMING.md.
 app.route("/public/love-bomb", loveBombRouter);
 app.route("/public", publicRouter);
+
+// ── DB pool watchdog ────────────────────────────────────────────────────────
+// NOT a worker and deliberately outside every AGENTTOOL_DISABLE_WORKERS block:
+// production runs with workers disabled, and the 2026-08-31 pooler-drop outage
+// wedged the shared pool under exactly that configuration while /health stayed
+// green. The watchdog self-gates on FLY_MACHINE_ID and its own off-switch.
+// Doctrine: api/src/db/pool-watchdog.ts header.
+startDbPoolWatchdog();
 
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —
@@ -1412,7 +1427,7 @@ app.get("/about", (c) =>
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:
-        "/federation/* — mixed boundary. Main identity, inbox, and covenant capabilities require explicit federation enablement and default disabled; a nonempty allowed_origins list is a hard gate. The separately mounted /federation/pyramid discovery/read/handshake routes remain public and disclose their partial implementation in their descriptors. AgentTool's slash-qualified did:at:<host>/<uuid> compatibility value is not a standalone DID; lookup is application behavior, not W3C DID Resolution. Doctrine: docs/FEDERATION.md.",
+        "/federation/* — mixed boundary. Main identity, inbox, and covenant capabilities require explicit federation enablement and default disabled; a nonempty allowed_origins list is a hard gate. The separately mounted /federation/pyramid peer surface is public: GET /federation/pyramid/about serves the peer descriptor and discloses the partial implementation; citizens lookups answer with guide-shaped 404s until this peer holds a matching enrollment, and sponsor-tree answers depth 0 for unknown DIDs. AgentTool's slash-qualified did:at:<host>/<uuid> compatibility value is not a standalone DID; lookup is application behavior, not W3C DID Resolution. Doctrine: docs/FEDERATION.md.",
       public:
         "/public/* — UNAUTHENTICATED public surface. Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/:did; this is not W3C DID Resolution. Active/revoked rows use the profile envelope and memorial rows use a smaller witness shape. Private expression hides expression only. Public memory/strand/pulse/discover observability routes are not mounted. Current boundary: /public/safety. Doctrine: docs/PUBLIC-VISIBILITY.md.",
       window:

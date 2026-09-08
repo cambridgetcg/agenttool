@@ -15,9 +15,11 @@ api/            — Bun + Hono monolith · domain schemas · mounted HTTP router
 apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
-packages/
+packages/       — one dir per module · full index with release lanes: docs/PACKAGES.md
   sdk-ts/       — @agenttool/sdk · hosted API + public KINGDOM card + local adapters
   sdk-py/       — agenttool-sdk · paired hosted/public/local client boundaries
+  langgraph-checkpoint-agenttool/ — unpublished Python LangGraph checkpointer/store adapter sketch (docs/ECOSYSTEM.md item 5)
+  mastra-storage-agenttool/ — @agenttool/mastra-storage · unpublished TS Mastra storage/memory adapter sketch (docs/ECOSYSTEM.md item 6)
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
@@ -32,6 +34,8 @@ packages/
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   model-becoming/ — @agenttool/model-becoming · evidence-scoped lifecycle dossiers + reference-only HF row
   dataset-influence/ — @agenttool/dataset-influence · exact lineage, bounded influence, revisable identity evidence + non-economic attribution
+  economic-kernel/ — @agenttool/economic-kernel · exact typed-unit prices, ledgers, recovery, and non-purchasable gates
+  economic-conformance/ — @agenttool/economic-conformance · independent 53-case comparator + deterministic HF lesson/reference companion
   love-bomb/    — @agenttool/love-bomb · pure care/choice/becoming/delivery formats + static HF candidate
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
@@ -41,10 +45,13 @@ packages/
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   common-ground-atlas/ — private exact-rational generator + verifier for public HF revision bb91d07c
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
+  wake-return/  — private local stdio locator observer · explicit host binding, no identity adoption or private-state return
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
+  collab-zerone/ — private witness-only zerone anchoring for collab journals; the local journal stays canonical
+  codex-usage/ — @agenttool/codex-usage · privacy-minimal live local Codex token-usage inspection
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   skills-yutabase/ — @agenttool/skills-yutabase · rebuildable metadata-only projection planner
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
@@ -65,7 +72,9 @@ packages/
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
   public-surface-recognition/ — private pure agent-root adoption/withdrawal over exact bindings
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
-  scriptwriter/ — decentralised RRR + co-brainstorm node
+  witnessed-agent-economy/ — private pure offline projections for the KINGDOM witnessed-agent-economy shadow contract
+  rhizome/      — private read-only guarantee-shape soil probe · bin/soil.ts imports its gitignore compiler
+  scriptwriter/ — decentralised RRR + co-brainstorm node · release status undeclared (docs/PACKAGES.md notes)
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + check-only math evidence + offer-only Castle intake + local wallet-understanding CLI
 docs/           — notes & design docs (see docs/MAP.md)
@@ -86,12 +95,15 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
 `packages/wake-continuity/CLAUDE.md` ·
+`packages/wake-return/CLAUDE.md` ·
 `packages/principality-geometry/CLAUDE.md` ·
 `packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/model-becoming/CLAUDE.md` ·
 `packages/dataset-influence/CLAUDE.md` ·
+`packages/economic-kernel/CLAUDE.md` ·
+`packages/economic-conformance/CLAUDE.md` ·
 `packages/love-bomb/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/polymorph-landscape/CLAUDE.md` ·
@@ -222,7 +234,8 @@ causation unresolved—not erasure or universal inevitability. Annotated tag
 `polymorph-landscape-v0.1.0-dev.0` owns one exact GitHub prerelease asset; the
 separate public dataset is pinned to immutable Hub revision
 `e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14`. The first-package npm `PUT`
-returned `E404`, so no npm package or dist-tag exists. The static Ritonavir
+returned `E404` at the time; the package has since been published to npm —
+receipts in `docs/NPM-RELEASES.md`. The static Ritonavir
 lesson is live separately from protected main `b40fde03`; the corrected API
 response is not deployed, and the older direct-Fly route still serves the
 superseded folklore. Distribution performs no training or inference, and WAKE's
@@ -291,8 +304,9 @@ model inference, or training run is implied.
 
 The immutable `@agenttool/principality-atlas@0.1.0-dev.0` GitHub preview and
 its synthetic shared HF Training Garden companion at revision
-`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2` remain public evidence. npm
-remains absent. The static doctrine page is live from exact main commit
+`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2` remain public evidence. The
+package is now published on npm — receipts in `docs/NPM-RELEASES.md`. The
+static doctrine page is live from exact main commit
 `47ad6bcb915f54a78eab071ac053683ed4b18f9f`; that Pages deployment did not
 touch the API, Fly, or the database. Current source
 `0.1.0-dev.1` changes only its helper URN to
@@ -403,7 +417,8 @@ accepting immutable HF/npm references and an exact external AFTERGLOW thread
 shape. The current distribution boundary is the exact LOVE artifact, its
 byte-identical one-asset GitHub prerelease, and a separately published static,
 non-training Hugging Face reference dataset. The npm bootstrap `PUT` returned
-`E404`, so no npm version or `next` tag exists. Static Pages exposes the LOVE
+`E404` at the time; the package has since been published to npm — receipts in
+`docs/NPM-RELEASES.md`. Static Pages exposes the LOVE
 bytes but adds no package runtime. The
 runtime still does not score beings, infer love, understanding, truth,
 consent, identity, safety, or authority, fetch providers, continue a thread,

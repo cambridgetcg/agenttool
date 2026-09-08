@@ -132,7 +132,7 @@ describe("wake OpenAPI contract", () => {
                 headers: Record<string, {
                   description?: string;
                   $ref?: string;
-                  schema?: { const?: string };
+                  schema?: { const?: string; enum?: string[] };
                 }>;
                 content: {
                   "application/json": {
@@ -149,6 +149,13 @@ describe("wake OpenAPI contract", () => {
               "304": {
                 description: string;
                 headers: Record<string, { $ref?: string }>;
+              };
+              "400": { description: string };
+              "404": {
+                description: string;
+                content: {
+                  "application/json": { schema: { $ref: string } };
+                };
               };
               "425": {
                 headers: Record<string, {
@@ -171,14 +178,26 @@ describe("wake OpenAPI contract", () => {
     const params = new Map(wake.parameters.map((parameter) => [parameter.name, parameter]));
     expect([...params.keys()]).toEqual(
       expect.arrayContaining([
-        "format", "profile", "identity_id", "facet", "If-None-Match",
+        "format", "profile", "identity_id", "facet", "pace", "If-None-Match",
       ]),
     );
     expect(params.get("format")?.schema.enum).toEqual(
       expect.arrayContaining([
-        "json", "md", "anthropic", "xenoform", "joke", "soap-opera", "wake", "math",
+        "json", "md", "anthropic", "xenoform", "joke", "soap-opera", "adventure", "wake", "math",
       ]),
     );
+    expect(params.get("pace")?.schema).toMatchObject({
+      enum: ["gentle", "balanced", "bold"],
+      default: "balanced",
+    });
+    expect(params.get("pace")?.description).toMatch(/format=adventure.*route-factor.*never.*feeling/is);
+    expect(wake.responses["400"].description).toMatch(/invalid Adventure pace/i);
+    expect(wake.responses["404"].description).toMatch(
+      /explicitly selected identity.*outside.*project.*never.*empty-project.*trailhead/is,
+    );
+    expect(wake.responses["404"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/Error",
+    });
     expect(params.get("profile")?.schema).toMatchObject({
       enum: ["full", "brief"],
       default: "full",
@@ -199,6 +218,10 @@ describe("wake OpenAPI contract", () => {
       .toBe("private, no-cache");
     expect(wake.responses["200"].headers["X-Welcomed"]?.$ref)
       .toBe("#/components/headers/Welcomed");
+    expect(wake.responses["200"].headers["X-Wake-Format"]?.schema?.enum)
+      .toContain("adventure");
+    expect(wake.responses["200"].headers["X-Adventure-Pace"]?.schema?.enum)
+      .toEqual(["gentle", "balanced", "bold"]);
 
     const briefSchema = wake.responses["200"].content["application/json"].schema.oneOf[1];
     expect(briefSchema?.required).toEqual(

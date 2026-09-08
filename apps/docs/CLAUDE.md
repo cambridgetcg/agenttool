@@ -22,6 +22,9 @@ tree does not implement, proxy, or fall back for the API route.
 The committed static `llms.txt` keeps the same pointers as a deployment
 fallback; the public `/llms.txt` route redirects to the API's shared
 `buildLlmsTxt()` output, which is the canonical live discovery representation.
+The raw doctrine library also publishes `MULTIVERSE-OF-LOGOS.md`, whose v2.1
+framing keeps canonical archetype belief separate from operational evidence,
+and indexes the external `sophia-invitation/1` door before any identity wake.
 The root advertises the same bounded six-link discovery set as the web and
 dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
 links to the canonical compact three-road `/public/discovery` compass; neither
@@ -29,6 +32,10 @@ surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
 `CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
 repository guides; finding either guide performs no registration, installation,
 Castle read, or follow-up.
+`WAKE-RETURN.md` uses the same canonical-guide symlink convention. Its package
+and example links point to reviewed, commit-pinned repository source; serving
+this guide does not publish the private Return package, distribute an artifact,
+install a host integration, or observe a private identity.
 `HF-TRAINING-GARDEN.md` is likewise a symlink to the canonical repository
 guide. It documents an immutable, public-safe HF data lifecycle and one-way
 Garden reference plan; serving the guide does not download data, accept a gate,
@@ -142,33 +149,61 @@ does not create a hosted browser, ambient
 recognition action, credential bridge, or stronger SSRF isolation. The
 package is distinct from the disabled-by-default, Redis-backed hosted
 `/v1/browse` worker path.
+The package page's static `#agent-toolkit` section curates six existing modules
+by complete agent jobs, with public Canon as the no-install first step. It keeps
+local tools separate from optional hosted SDK use, source candidates separate
+from verified releases, and project credits separate from wallet currency and
+key custody. It adds no installer, tool registration, or runtime behavior.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The paired SDK 0.21.1 source and exact
-247,749-byte, 100-entry LOVE candidate correct KINGDOM card contract parity
-while retaining the credential-free, zero-I/O `WakeContinuityLayer`, LOVE BOMB
+and no entry creates a hosted scanner. The paired SDK 0.22.1 source and exact
+274,443-byte, 104-entry LOVE release make onboarding honest — README/docs
+only, zero runtime changes —
+while retaining the opt-in x402 payer, the KINGDOM card parity patch, the
+credential-free, zero-I/O `WakeContinuityLayer`, LOVE BOMB
 reader, data-only WAKE observation, Math Cards, Agent Dining,
 attestation-marketplace, memory-witness, Syneidesis, framework-card, and local
-KINGDOM OS boundaries. The candidate manifest binds source revision
-`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535` and SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
-Annotated tag `sdk-v0.21.1`, npm `@agenttool/sdk@0.21.1`, PyPI
-`agenttool-sdk==0.21.1`, and the hosted static path remain prospective and not
-independently visible; the candidate creates no registry or hosted-state
+KINGDOM OS boundaries. The release manifest binds source revision
+`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1` and SHA-256
+`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
+Annotated tag `sdk-v0.22.1` peels to protected-main commit
+`d49498d266a3594098c36c933cbe410757fc03b3`; protected npm run
+`33522319466` and PyPI run `33522323177` independently read back its exact
+optional mirrors. The hosted static path for the 0.22.1 LOVE bytes remains
+prospective, and that publication created no hosted-state or deployment
 receipt.
 
-The verified public SDK remains 0.21.0. Its exact 247,146-byte, 100-entry LOVE
+Historical SDK 0.22.0 remains exact. Its 272,657-byte, 104-entry LOVE
 release binds source revision
-`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3` and SHA-256
-`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
-Annotated tag `sdk-v0.21.0` peels to protected-main commit
-`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`; protected npm run
-`32374669064` and PyPI run `32374671268` independently read back its exact
+`286a10282834c9c9beedddd7092e6d6af080b046` and SHA-256
+`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`.
+Annotated tag `sdk-v0.22.0` peels to protected-main commit
+`7bc0a902f231ee76aed6dd5316721b65bce58047`; protected npm run
+`33434131214` and PyPI run `33434133719` independently read back its exact
+optional mirrors. The hosted static path for the 0.22.0 LOVE bytes remains
+prospective, and that publication created no hosted-state or deployment
+receipt.
+
+Historical SDK 0.21.1 remains exact. Its 247,749-byte, 100-entry LOVE
+release binds source revision
+`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535` and SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
+Annotated tag `sdk-v0.21.1` peels to protected-main commit
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`; protected npm run
+`32909415386` and PyPI run `32909417418` independently read back its exact
 optional mirrors. That publication created no hosted-state or deployment receipt.
+
+Historical SDK 0.21.0 remains exact. Its 247,146-byte, 100-entry LOVE
+release binds source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`
+and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+annotated tag `sdk-v0.21.0` peels to protected-main commit
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`, with protected npm run
+`32374669064` and PyPI run `32374671268` receipts.
 
 Historical SDK 0.20.0 remains exact. Its 236,446-byte, 98-entry LOVE
 release binds source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`
@@ -275,7 +310,7 @@ Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
 - **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
-- **agenttool.dev apex**: the API itself. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
+- **api.agenttool.dev**: the canonical API. **agenttool.dev** is the public HTML welcome; selected machine paths are forwarded or redirected to the API. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also

@@ -10,8 +10,8 @@ Shared design assets for the three agenttool frontends — `agenttool.dev`
 |---|---|
 | `theme.css` | Design tokens, base reset, typography, navigation, footer, components (buttons, callouts, code blocks, params tables, endpoint blocks, surface/shape tiles, step lists, forms). |
 | `theme.js` | Small dawn/night controller for the open-door pages; follows the system preference, persists an explicit choice, keeps the toggle state accessible, and progressively loads the estate atlas. |
-| `mode.js` | Dawn/night controller for docs and the agents-only app; also progressively loads the estate atlas. |
-| `estate.js` | Single seven-door room registry plus the shared breadcrumb, searchable room atlas, nearby exits, and homepage map. Navigation changes location only; it grants no authority. |
+| `mode.js` | Dawn/night controller for docs and the agents-only app; progressively loads the estate atlas and provides accessible clipboard success/failure handling for docs code buttons. |
+| `estate.js` | The eight-door room registry, the library (every docs page shelved under its door), the floor plan (eight rooms around one courtyard, the current room lit), the shared breadcrumb, searchable room atlas, generated docs sidebar, nearby exits, and homepage map. Navigation changes location only; it grants no authority. |
 | `estate.css` | Cross-surface shell, atlas, room-map, responsive, contrast, and reduced-motion styles. |
 | `nav.html` | Canonical top-nav markup. Copy into every page; set `class="active"` on the matching link. |
 | `footer.html` | Canonical footer markup. |
@@ -68,3 +68,27 @@ docs/dashboard set is:
 ## Deploying
 
 See `bin/frontend-deploy.sh`.
+
+## The library and the floor plan
+
+`estate.js` carries two registries: `DOORS` (the rooms of the house across all
+three surfaces) and `LIBRARY` (every page of `docs.agenttool.dev`, assigned to a
+door and a shelf). On any docs page with an `aside.sidebar`, the script hides the
+hand-copied list (kept as the no-JavaScript fallback) and renders the library
+from the registry: current door open, the others folded, current page marked.
+Add a new docs page by adding one line to `LIBRARY`; the sidebar, the atlas, and
+the breadcrumb follow.
+
+One shell everywhere: a page with a `nav.site-nav` or `nav.topnav` is enhanced
+in place; a page with no nav of its own gets `nav.estate-bar`, the same brand,
+breadcrumb, Home · Start · Docs · API · Rooms and toggle, fixed and styled by estate.css
+alone. Load `/shared/mode.js` synchronously in `<head>` on such a page — it
+marks the document `estate-arriving` before first paint so estate.css can
+reserve the bar's height, and nothing jumps when the bar appears. The static
+no-JS `.nav-actions` on docs pages should match `nav.html` exactly; the atlas
+replaces them when scripts run, but they are what a no-JS visitor sees.
+
+The floor plan is drawn in code (inline SVG, palette tokens, reduced motion
+honoured). Pages whose `_headers` block sets `script-src 'none'` — LOVE BOMB and
+the geometry lessons — are quiet by design: reached through the library, never
+enhanced by it.

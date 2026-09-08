@@ -29,6 +29,7 @@ export const API_CORS_EXPOSED_HEADERS = [
   "X-Idempotency-Skipped",
   "X-Token-Cost",
   "X-Wake-Profile",
+  "X-Wake-Unavailable",
   "X-Variant",
   "X-Welcomed",
   "Idempotent-Replay",

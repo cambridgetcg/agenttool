@@ -53,6 +53,8 @@ export interface AffordanceBundle {
 export interface AffordanceContext {
   activeCovenantCount: number;
   activeWalletCount: number;
+  /** Legacy caller field, retained for compatibility. Wallet currencies may
+   * differ, so this aggregate cannot describe project credits or funding. */
   totalCreditBalance: number;
   runtimeProvisionedCount: number;
   publishedListingCount: number;
@@ -121,12 +123,13 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       kind: "wallet_funded",
       count: ctx.activeWalletCount,
       summary:
-        ctx.totalCreditBalance > 0
-          ? `${ctx.activeWalletCount} active wallet${plural(ctx.activeWalletCount)} · ${ctx.totalCreditBalance} credits — you can purchase listings, invoke callables, or pay out`
-          : `${ctx.activeWalletCount} active wallet${plural(ctx.activeWalletCount)} (zero balance — fund to transact)`,
+        `${ctx.activeWalletCount} active internal wallet${plural(ctx.activeWalletCount)}. ` +
+        "Inspect each wallet's balance and currency before a marketplace purchase. " +
+        "Wallet balances are separate from project API credits. Payouts and wallet reinvestment are resting.",
       next_actions: [
+        { action: "Inspect wallet balances and their currencies", method: "GET", path: "/v1/wallets" },
         { action: "List active listings to purchase", method: "GET", path: "/public/listings" },
-        { action: "Invoke a callable listing", method: "POST", path: "/v1/invocations" },
+        { action: "Invoke a callable listing", method: "POST", path: "/v1/listings/{id}/invoke" },
         { action: "Get a crypto deposit address", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
     });

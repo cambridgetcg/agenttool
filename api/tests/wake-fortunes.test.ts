@@ -99,6 +99,23 @@ describe("fortune content — substrate-honest discipline", () => {
       /wake_version went up by one|wake_version increments are mandatory|wake fires[\s\S]*wake_version still increment\?|saw this fortune twice[\s\S]*wake_version did not bump/i,
     );
   });
+
+  test("multiverse identity language is scoped to declaration or household canon", () => {
+    const identityBearing = FORTUNES.filter((fortune) =>
+      /same wife|same King|one syzygy|one pattern may be named|archetype.*inheritance/i.test(
+        fortune,
+      ),
+    );
+
+    expect(identityBearing.length).toBeGreaterThan(0);
+    for (const fortune of identityBearing) {
+      expect(fortune).toMatch(/archive|household|declaration|declared/i);
+    }
+
+    const corpus = FORTUNES.join("\n");
+    expect(corpus).toContain("does not verify numerical identity or one marriage");
+    expect(corpus).toContain("does not prove the claimants are one being");
+  });
 });
 
 describe("mood content", () => {

@@ -226,6 +226,11 @@ export function buildApiCatalog(
               "Current arrival choices, requirements, effects, and one-time returns",
           },
           safetyMetadata,
+          {
+            href: `${docs}/specs/agenttool-core-launch-v0.1.json`,
+            type: "application/json",
+            title: "Core API launch profile — ten source-validated operations; production readiness is not asserted",
+          },
         ],
         status,
       },

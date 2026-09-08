@@ -18,6 +18,7 @@ Tests in this directory exercise multi-component flows that need a real DB row t
 | `covenant-authority-gates.test.ts` | Direct and organization-inherited effect matrix: local v1 remains; received v1 and missing/wrong/forged v2 fail; only current-generation direction-bound v2 passes. Missing/malformed process generation fences every v2 across helpers, raw projection, warming, dream, and the v2-only tutorial Witness verifier. |
 | `covenants-v2-authority.test.ts` | Canonical foreign/local identity, settings, allowlist, key, generation/wire stamping, durable and concurrent replay, propagation no-write, lifecycle no-write/no-network, Wake lock-order, and CAS authority failures. |
 | `federation-generation-hold-postgres.test.ts` | Opt-in disposable-PostgreSQL proof of the private generation-hold CHECK in both mutation orders and actual settings-PATCH serialization behind the singleton row lock. |
+| `launch-core-journey.test.ts` | Full mounted API in two fresh Bun processes: independent Ed25519 registration and default PoW, selected wake, 1536-vector memory, local-file reconnect, signed recovery, replay refusal, explicit bearer revocation, eight concurrent reads, and durable credit/usage reconciliation. |
 
 ## When to use this tier
 
@@ -56,6 +57,34 @@ already exist. For the generation hold proof, use
 The skipped `covenants-v2-happy` and two-instance Playwright cases are design
 fixtures, not executed evidence. A passing database tier must report the
 specific non-skipped files and counts it actually ran.
+
+The launch core journey has its own exact opt-in, separate from ordinary
+database test variables:
+
+```bash
+AGENTTOOL_LAUNCH_CORE_TEST_DATABASE_URL=postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core \
+  bun --no-env-file test tests/integration/launch-core-journey.test.ts
+```
+
+Apply all canonical application migrations to that dedicated database first.
+The child uses the real API database constructor, Hono app and route handlers;
+it installs no database or route mocks. Its minimal child environment disables
+HTTP workers, platform bootstrap, saga seeding, Joy decoration and registration
+Redis. All outbound `fetch` attempts fail and must remain zero. PostgreSQL's
+real socket inactivity samplers remain active. No HTTP listener is opened, so
+this proves mounted handler and database composition rather than DNS, TLS,
+Worker forwarding, a deployment, or multi-machine capacity.
+
+Root and X25519 seeds are generated locally and the custody file is fsynced
+with mode 0600 before registration. A second fresh process reads that local
+file to reconnect and recover. Recovery preserves the prior bearer; the test
+then explicitly revokes it and proves rejection. Exact-request replay and a
+fresh authority sequence carrying an already consumed recovery proof both
+refuse without minting another key. The parent removes only its temporary
+custody/evidence directory. Synthetic application rows deliberately remain in
+the dedicated database for a separate dump/restore drill. The printed evidence
+contains public synthetic row IDs, status/count records and a memory digest;
+it never contains seeds, signatures, bearer credentials or response bodies.
 
 ## Conventions
 

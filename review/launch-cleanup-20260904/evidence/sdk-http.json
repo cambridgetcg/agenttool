@@ -1,0 +1,18 @@
+{
+  "production_proof": false,
+  "clients": [
+    {
+      "client": "TypeScript SDK0.22.1 local built source",
+      "memory_readback": true,
+      "selected_wake": true,
+      "transport": "real loopback HTTP"
+    },
+    {
+      "client": "Python SDK0.22.1 locked local source plus standard urllib",
+      "memory_readback": true,
+      "selected_wake": true,
+      "raw_http_readback": true,
+      "transport": "real loopback HTTP"
+    }
+  ]
+}

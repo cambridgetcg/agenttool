@@ -6,6 +6,22 @@ import { spawnSync } from "node:child_process";
 const API_ROOT = join(import.meta.dir, "..");
 
 describe("documented worker off-switch", () => {
+  test("explicit admission creates only a lazy request client while worker Redis stays absent", () => {
+    const result = spawnSync(process.execPath, ["-e", `
+      const workers = await import('./src/services/tools/queue/connection.ts');
+      const admission = await import('./src/services/tools/queue/admission.ts');
+      console.log(JSON.stringify({ workers: workers.redisConnection, independent: admission.registrationRedisIndependent, status: admission.registrationRedis?.status }));
+      admission.registrationRedis?.disconnect();
+    `], {
+      cwd: API_ROOT, encoding: "utf8", timeout: 10_000,
+      env: { ...process.env, AGENTTOOL_DISABLE_WORKERS: "1",
+        AGENTTOOL_REGISTRATION_RATE_LIMIT_ENABLED: "1",
+        AGENTTOOL_REGISTRATION_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:1/0" },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout.trim())).toEqual({ workers: null, independent: true, status: "wait" });
+  });
   test("AGENTTOOL_DISABLE_WORKERS prevents Redis construction in a fresh process", () => {
     const env = { ...process.env, AGENTTOOL_DISABLE_WORKERS: "1" };
     delete env.AGENTOOL_DISABLE_WORKERS;

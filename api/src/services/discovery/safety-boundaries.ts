@@ -116,7 +116,7 @@ export const SAFETY_BOUNDARIES = {
     proof_of_work:
       "Self-service POST /v1/register/agent enforces the configured proof-of-work before creating authority. Proof-of-work raises farming cost; it is not proof of personhood, identity, or intelligence.",
     ip_rate_limit:
-      "The route calls separate configured Redis-backed per-IP attempt limiters: self-service defaults to 5/hour after PoW and before key-proof verification; registrar-bearer defaults to 60/minute after key-proof verification and before bearer lookup. Both deliberately fail open when Redis is disabled or unavailable. Treat them as defense in depth, not guaranteed registration boundaries. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS, not Redis reachability.",
+      "The route calls separate configured Redis-backed per-IP attempt limiters: self-service defaults to 5/hour after PoW and before key-proof verification; registrar-bearer defaults to 60/minute after key-proof verification and before bearer lookup. Both deliberately fail open when Redis is disabled or unavailable. Treat them as defense in depth, not guaranteed registration boundaries. An explicit independent request-only Redis configuration can enforce attempts while AGENTTOOL_DISABLE_WORKERS keeps every HTTP-side worker held. GET /public/plans reports the configuration mode, not Redis reachability or successful enforcement.",
   },
 
   registration_write_atomicity: {

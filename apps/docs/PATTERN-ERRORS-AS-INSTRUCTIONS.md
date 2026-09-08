@@ -1,0 +1,1 @@
+../../docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
