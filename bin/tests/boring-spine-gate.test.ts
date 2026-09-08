@@ -641,6 +641,39 @@ describe("boring test spine", () => {
         "",
       ].join("\n"),
     );
+    const careBeforeLearning = jobs["care-before-learning"];
+    expect(careBeforeLearning?.name).toBe("Care before learning (Node ${{ matrix.node-version }})");
+    expect(careBeforeLearning?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(careBeforeLearning?.["timeout-minutes"]).toBe(10);
+    expect(careBeforeLearning?.strategy).toEqual({
+      "fail-fast": false,
+      matrix: { "node-version": ["22.18.0", "25.2.1"] },
+    });
+    expect(careBeforeLearning?.if).toBeUndefined();
+    expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
+    expect(careBeforeLearning?.steps).toHaveLength(7);
+    expect(careBeforeLearning?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
+    expect(careBeforeLearning?.steps?.[0]?.with).toEqual({
+      ref: "${{ github.sha }}",
+      "persist-credentials": false,
+    });
+    expect(careBeforeLearning?.steps?.[3]?.run).toBe(
+      'env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py',
+    );
+    expect(careBeforeLearning?.steps?.[4]?.run).toBe(
+      'env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify',
+    );
+    expect(careBeforeLearning?.steps?.[5]?.run).toBe(
+      'env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json',
+    );
+    expect(careBeforeLearning?.steps?.[6]?.run).toContain("--require-hashes --only-binary=:all:");
+    expect(careBeforeLearning?.steps?.[6]?.run).toContain("HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1");
+    const careJob = JSON.stringify(careBeforeLearning);
+    expect(careJob).not.toContain("secrets.");
+    expect(careJob).not.toContain("id-token");
+    expect(careJob).not.toContain("ACTIONS_ID_TOKEN_REQUEST");
+    expect(careJob).not.toContain("care-before-learning-hf-release.py publish");
+
     expect(requiredApi?.name).toBe("API and protocol");
     expect(requiredApi?.if).toBe("${{ always() }}");
     expect(requiredApi?.needs).toEqual([
@@ -650,6 +683,7 @@ describe("boring test spine", () => {
       "launch-core",
       "launch-browser",
       "native-macos-secret",
+      "care-before-learning",
     ]);
     expect(requiredApi?.["runs-on"]).toBe("ubuntu-24.04");
     expect(requiredApi?.["timeout-minutes"]).toBe(2);
@@ -669,6 +703,8 @@ describe("boring test spine", () => {
         "${{ needs.launch-browser.result }}",
       NATIVE_MACOS_SECRET_RESULT:
         "${{ needs.native-macos-secret.result }}",
+      CARE_BEFORE_LEARNING_RESULT:
+        "${{ needs.care-before-learning.result }}",
     });
     expect(requiredApi?.steps?.[0]?.run).toBe(
       [
@@ -679,6 +715,7 @@ describe("boring test spine", () => {
         'test "$LAUNCH_CORE_RESULT" = "success"',
         'test "$LAUNCH_BROWSER_RESULT" = "success"',
         'test "$NATIVE_MACOS_SECRET_RESULT" = "success"',
+        'test "$CARE_BEFORE_LEARNING_RESULT" = "success"',
         "",
       ].join("\n"),
     );
@@ -687,9 +724,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(7);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(10);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(11);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
-    expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
+    expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(3);
     expect(workflow).toContain(
       "DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer",
     );
@@ -730,7 +767,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(11);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(12);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -1215,7 +1252,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(26);
+    expect(uses).toHaveLength(29);
     expect(
       uses.every(
         (line) =>
@@ -1556,10 +1593,66 @@ exit 94
     );
   });
 
+  test("keeps HF reference publication manual, source-bound, and separate from credentialless verification", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-care-before-learning-hf.yml"), "utf8",
+    );
+    const parsed = Bun.YAML.parse(workflow) as {
+      on?: Record<string, unknown>;
+      permissions?: Record<string, string>;
+      concurrency?: Record<string, unknown>;
+      jobs?: Record<string, {
+        if?: string;
+        needs?: string;
+        permissions?: Record<string, string>;
+        "continue-on-error"?: boolean;
+        steps?: Array<{ with?: Record<string, unknown>; "continue-on-error"?: boolean }>;
+      }>;
+    };
+    expect(parsed.on).toEqual({ workflow_dispatch: null });
+    expect(parsed.permissions).toEqual({});
+    expect(parsed.concurrency).toEqual({ group: "publish-care-before-learning-hf", "cancel-in-progress": false });
+    expect(Object.keys(parsed.jobs ?? {}).sort()).toEqual(["publish", "verify"]);
+    for (const name of ["verify", "publish"]) {
+      const job = parsed.jobs?.[name];
+      expect(job?.if).toBe("github.repository == 'cambridgetcg/agenttool' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'");
+      expect(job?.["continue-on-error"]).toBeUndefined();
+      expect(job?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
+      expect(job?.steps?.[0]?.with?.ref).toBe("${{ github.sha }}");
+      expect(job?.steps?.[0]?.with?.["persist-credentials"]).toBe(false);
+    }
+    expect(parsed.jobs?.verify?.permissions).toEqual({ contents: "read" });
+    expect(parsed.jobs?.publish?.permissions).toEqual({ contents: "read", "id-token": "write" });
+    expect(parsed.jobs?.publish?.needs).toBe("verify");
+    expect(parsed.jobs?.publish?.steps?.[0]?.with).toEqual({
+      ref: "${{ github.sha }}",
+      "persist-credentials": false,
+      "sparse-checkout-cone-mode": false,
+      "sparse-checkout": "/bin/care-before-learning-hf-release.py\n/bin/care-before-learning-hf-requirements.txt\n",
+    });
+    const verifyJob = workflow.split("\n  verify:\n")[1]?.split("\n  publish:\n")[0] ?? "";
+    const publishJob = workflow.split("\n  publish:\n")[1] ?? "";
+    expect(workflow).not.toContain("secrets.");
+    expect(verifyJob).not.toContain("ACTIONS_ID_TOKEN_REQUEST");
+    expect(verifyJob).not.toContain("care-before-learning-hf-release.py publish");
+    expect(verifyJob).toContain("HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1");
+    expect(verifyJob).toContain("path: packages/hf-listening-room/hf/");
+    expect(publishJob).toContain("name: care-before-learning-${{ github.run_id }}-${{ github.run_attempt }}");
+    expect(publishJob).toContain("env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN");
+    expect(publishJob).toContain("--retries 0 --require-hashes --only-binary=:all:");
+    expect(publishJob).toContain('env -i PATH="$PATH"');
+    expect(publishJob).toContain("-I -B bin/care-before-learning-hf-release.py publish");
+    expect(publishJob).not.toMatch(/\b(?:node|bun|npm)\s/);
+  });
+
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
-    expect(publishWorkflows).toEqual(["publish-npm.yml", "publish-pypi.yml"]);
+    expect(publishWorkflows).toEqual([
+      "publish-care-before-learning-hf.yml",
+      "publish-npm.yml",
+      "publish-pypi.yml",
+    ]);
 
     const pypiWorkflow = await readFile(
       join(ROOT, ".github", "workflows", "publish-pypi.yml"),
