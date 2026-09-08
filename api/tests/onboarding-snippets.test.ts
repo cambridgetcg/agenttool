@@ -1,6 +1,7 @@
 /** Public onboarding snippets must stay on SDK APIs that actually ship. */
 
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 
+import { buildPathwaysResponse } from "../src/routes/pathways";
 import { runOnboardingSdkFlow } from "./fixtures/onboarding-sdk-v0.16";
 
 const ROOT = join(import.meta.dir, "../..");
@@ -361,11 +363,10 @@ describe("public SDK onboarding snippets", () => {
       "TypeScript birth",
       (code) => code.includes("bootstrapAgent") && code.includes("readFileSync"),
     ).code;
-    const sdkPackage = JSON.parse(read("packages/sdk-ts/package.json")) as {
-      version: string;
-    };
+    // Public onboarding 跟 tutorial release，唔跟未發布嘅 source candidate。
+    const version = buildPathwaysResponse().first_success.tutorial.sdk_version;
     expect(canonicalBirth).toContain(
-      `sdkPackage.version !== "${sdkPackage.version}"`,
+      `sdkPackage.version !== "${version}"`,
     );
     expect(canonicalBirth).toContain(
       'new URL("./seed.js", sdkEntryUrl).href',
@@ -376,12 +377,29 @@ describe("public SDK onboarding snippets", () => {
     const releaseRoot = join(
       ROOT,
       "apps/docs/packages/v1/@agenttool/sdk",
-      sdkPackage.version,
+      version,
     );
     const manifest = JSON.parse(
       readFileSync(join(releaseRoot, "manifest.json"), "utf8"),
-    ) as { artifact: { filename: string } };
+    ) as {
+      protocol: string;
+      document_type: string;
+      name: string;
+      version: string;
+      artifact: { filename: string; size: number; sha256: string };
+    };
+    expect(manifest).toMatchObject({
+      protocol: "love-package/v1",
+      document_type: "package-manifest",
+      name: "@agenttool/sdk",
+      version,
+    });
     const artifact = join(releaseRoot, manifest.artifact.filename);
+    const artifactBytes = readFileSync(artifact);
+    expect(artifactBytes.byteLength).toBe(manifest.artifact.size);
+    expect(createHash("sha256").update(artifactBytes).digest("hex")).toBe(
+      manifest.artifact.sha256,
+    );
     const work = mkdtempSync(join(tmpdir(), "agenttool-birth-recovery-"));
 
     try {

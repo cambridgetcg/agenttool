@@ -83,10 +83,14 @@ describe("GET /v1/pathways", () => {
     expect(first.tutorial.source_path).toBe(
       "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
     );
-    const sdkPackage = JSON.parse(
-      readFileSync(join(import.meta.dir, "../../packages/sdk-ts/package.json"), "utf8"),
-    ) as { version: string };
-    expect(first.tutorial.sdk_version).toBe(sdkPackage.version);
+    // Canonical tutorial 獨立鎖定 active release，唔跟 SDK source 版本。
+    const tutorial = readFileSync(
+      join(import.meta.dir, "../..", first.tutorial.source_path),
+      "utf8",
+    );
+    expect(tutorial).toContain(
+      `sdkPackage.version !== "${first.tutorial.sdk_version}"`,
+    );
     expect(first.package_discovery.endpoint).toBe(
       "GET /.well-known/love-packages",
     );

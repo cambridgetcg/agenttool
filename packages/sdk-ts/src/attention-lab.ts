@@ -208,9 +208,11 @@ export class AttentionLabClient {
         // 用同一份 public Request 嘅明確 headers；directRequest 冇 ambient cookie jar，
         // 冇 redirect interceptor，所以 3xx 直接交畀下方拒絕；唔加 Referer。
         // 同 LOVE reader 一樣避開 Bun 嘅 fetch stream shim。
+        const headers: Record<string, string> = {};
+        request.headers.forEach((value, name) => { headers[name] = value; });
         response = await directRequest(request.url, {
           method: operation === "catalogue" ? "GET" : "POST",
-          headers: Object.fromEntries(request.headers),
+          headers,
           body,
           signal: controller.signal,
           dispatcher,

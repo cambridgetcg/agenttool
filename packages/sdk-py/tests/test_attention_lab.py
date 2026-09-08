@@ -239,7 +239,7 @@ def test_transport_errors_are_sanitized_including_traceback_chain(exception):
     with client_for(handler) as client:
         error = assert_error(client, "unreachable")
     assert "sentinel" not in str(error)
-    assert "sentinel" not in "".join(traceback.format_exception(error))
+    assert "sentinel" not in "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
 
 @pytest.mark.parametrize("stage", ["headers", "body", "cleanup"])
@@ -618,8 +618,8 @@ def test_illformed_metric_unicode_is_sanitized_before_network(surrogate):
     assert requests == []
     assert error.__cause__ is None
     assert error.__context__ is None
-    assert "private-sentinel" not in "".join(traceback.format_exception(error))
-    assert "UnicodeEncodeError" not in "".join(traceback.format_exception(error))
+    assert "private-sentinel" not in "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    assert "UnicodeEncodeError" not in "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
 
 @pytest.mark.parametrize("surrogate", [chr(0xD800), chr(0xDC00)])
@@ -631,8 +631,8 @@ def test_illformed_upstream_metric_unicode_is_sanitized(surrogate):
         error = assert_error(client, "invalid_response", lambda: client.compare(GOLDEN["comparisonInput"]))
     assert error.__cause__ is None
     assert error.__context__ is None
-    assert "private-sentinel" not in "".join(traceback.format_exception(error))
-    assert "UnicodeEncodeError" not in "".join(traceback.format_exception(error))
+    assert "private-sentinel" not in "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    assert "UnicodeEncodeError" not in "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
 
 @pytest.mark.parametrize("escaped", [False, True])
