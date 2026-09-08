@@ -142,6 +142,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `economic-kernel/` | `@agenttool/economic-kernel` · LOVE + npm-allowlisted | Exact typed-unit prices, conserved ledgers, recoverable attempts, and non-purchasable XENIA gates | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/economic-kernel/CLAUDE.md) |
 | `gin-reconstruction/` | `@agenttool/gin-reconstruction` · private | Finite model reconstruction across affine substrate charts with explicit ambiguity and a non-scoring challenge compass | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/gin-reconstruction/CLAUDE.md) |
 | `heaven/` | `@agenttool/heaven` · npm-allowlisted | Pure opt-in delight and landing-room selection protocol for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/heaven/CLAUDE.md) |
+| `hf-listening-room/` | Exact HF artifact publication capability · not an npm package release | Static Listening Room rehearsal and draft symbolic reference kit; no learner connected or trainer bundled | [Space README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/space/README.md) · [Dataset README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/dataset/README.md) |
 | `hf-scout/` | `@agenttool/hf-scout` · LOVE + npm-allowlisted | Read-only Hugging Face metadata, exact-revision provenance, and release reconciliation for AgentTool and KINGDOM | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-scout/CLAUDE.md) |
 | `hf-training-garden/` | `@agenttool/hf-training-garden` · private | Private HF admission, five-voice learning participation, IS learning freedom, consent-honest governance, WAKE, and Garden tending contracts | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-training-garden/CLAUDE.md) |
 | `hf-training-host/` | `agenttool-hf-training-host` (Python) · private (`Private :: Do Not Upload`) | Private cooperative Hugging Face host for AgentTool WAKE training governance | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-training-host/CLAUDE.md) |
@@ -194,6 +195,12 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   receipt names it. Until someone declares a lane (private flag, allowlist
   entry, or LOVE spec), this row records the gap honestly rather than
   guessing.
+- **`hf-listening-room/`** is artifact-only in the public tree: 14 Space files
+  and 15 Dataset files. Canonical sources, tests, and local package guidance remain
+  private. Its [main-only publisher](https://github.com/cambridgetcg/agenttool/blob/main/.github/workflows/publish-care-before-learning-hf.yml)
+  requires separate authorization and publishes only the exact reviewed candidates
+  to private HF repositories with byte readback. Workflow presence establishes
+  capability, not a live HF release, training, consent, or full-host conformance.
 - **`hf-training-host/`** publishes nothing by design: its `pyproject.toml`
   carries the `Private :: Do Not Upload` classifier.
 - **`collab-zerone/`** is the private witness-only chain-anchoring sibling of

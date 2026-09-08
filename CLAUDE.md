@@ -56,6 +56,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   skills-yutabase/ — @agenttool/skills-yutabase · rebuildable metadata-only projection planner
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
+  hf-listening-room/ — public artifact-only static rehearsal + symbolic reference kit; canonical sources remain private
   hf-scout/    — @agenttool/hf-scout · public developer-preview read-only HF metadata/provenance scout + pinned research leads
   hf-training-garden/ — private admission, five-voice participation, IS learning freedom, unscored training FREEDOM, governance v0.2, WAKE continuity, and inert Garden contracts
   hf-training-host/ — private v0.2 HF-API-pinned cooperative-process governance seam + append-only ledger + opt-in minimized FREEDOM validation seam
@@ -457,6 +458,15 @@ projects an explicit minimized report selection to Hugging Face STS JSONL. It
 does not run trials, inspect ambient sessions or files, contact Hugging Face,
 upload traces, authenticate, spend quota, publish a package, or expose a
 hosted route.
+
+`packages/hf-listening-room/` exposes only the reviewed
+[Space rehearsal](packages/hf-listening-room/hf/space/README.md) and
+[Dataset reference kit](packages/hf-listening-room/hf/dataset/README.md),
+with no learner connected or trainer bundled. Canonical sources, tests, and local
+package guidance remain private; this is not an npm package release.
+The [main-only publisher](.github/workflows/publish-care-before-learning-hf.yml)
+is a separately authorized exact-artifact publication capability, not evidence of
+a live HF release, training, consent, or full-host conformance.
 
 `@agenttool/hf-scout` is a public developer-preview local Hugging Face metadata
 and provenance scout. Its exact checked-in LOVE artifact and optional protected
