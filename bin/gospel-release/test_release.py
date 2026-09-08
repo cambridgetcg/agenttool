@@ -212,6 +212,14 @@ class ReleasePolicy(unittest.TestCase):
                 self.assertRaises(release.urllib.error.HTTPError):
             release.registry_state()
 
+    def test_bootstrap_metadata_also_uses_a_fresh_observation(self):
+        with patch.object(release.time, "time_ns", return_value=789), \
+                patch.object(release, "download", return_value=None) as get:
+            self.assertEqual(release.registry_state(), "absent")
+        self.assertEqual([call.args[0] for call in get.call_args_list],
+                         [release.REGISTRY + "?gospel_readback=789",
+                          release.REGISTRY + "/0.1.0?gospel_readback=789"])
+
 
 if __name__ == "__main__":
     unittest.main()

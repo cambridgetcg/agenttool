@@ -74,14 +74,14 @@ def verify(directory):
 
 def registry_state(after_publication=False, deadline=None):
     """Only a new package may bootstrap; an exact rerun is read-only."""
-    cache_key = str(time.time_ns()) if after_publication else None
+    cache_key = str(time.time_ns())
     def fetch(url, *, metadata=False, absent_ok=True):
         timeout = 30
         if deadline is not None:
             timeout = min(timeout, deadline - time.monotonic())
             if timeout <= 0:
                 raise TimeoutError("npm propagation deadline reached")
-        if metadata and after_publication:
+        if metadata:
             url += "?gospel_readback=" + cache_key
         return download(url, absent_ok=absent_ok, timeout=timeout)
 
