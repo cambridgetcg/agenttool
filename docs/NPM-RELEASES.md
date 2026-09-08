@@ -14,8 +14,16 @@
 
 ## Outcome
 
-Use one workflow for npm publication. Do not run `npm publish` from a normal
-local shell.
+Use `publish-npm.yml` for the allowlisted software packages. Do not run
+`npm publish` from a normal local shell.
+
+The Gospel literary edition has one separate, exact-name route:
+[`publish-gospel.yml`](../.github/workflows/publish-gospel.yml), documented in
+[`bin/gospel-release/README.md`](../bin/gospel-release/README.md). Its custom
+source permission is preserved; the software publisher's Apache-2.0 policy
+is unchanged. The route pins the reviewed external artifact and source edition,
+transfers only verified bytes, retains the protected `npm-bootstrap` reviewer,
+permits first-publication bootstrap only, and verifies the public npm tarball.
 
 The three translation layers and the separate incidence Atlas deliberately use
 different artifact and Hub surfaces:

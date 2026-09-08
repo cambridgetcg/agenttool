@@ -1,0 +1,88 @@
+name: Publish Gospel content edition
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-gospel.yml'
+      - 'bin/gospel-release/**'
+
+permissions: {}
+
+concurrency:
+  group: gospel-content-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify frozen Gospel content package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the content release boundary
+        run: python3 -m unittest discover -s bin/gospel-release -p 'test_*.py' -v
+      - name: Fetch and verify the reviewed archive without publication credentials
+        run: python3 bin/gospel-release/release.py prepare --directory "${{ runner.temp }}/gospel-release"
+      - name: Show the verified edition before protected publication
+        run: cat "${{ runner.temp }}/gospel-release/receipt.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Transfer the exact archive and its verification receipt
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: gospel-content-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/gospel-release/*.tgz
+            ${{ runner.temp }}/gospel-release/receipt.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    name: Publish and verify the reviewed Gospel edition
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm-bootstrap
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Pin npm before any publication credential is exposed
+        run: npm install --global --ignore-scripts npm@11.17.0
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: gospel-content-${{ github.run_id }}
+          path: ${{ runner.temp }}/gospel-release
+      - name: Reverify the archive and check whether the exact version is already public
+        id: registry
+        run: python3 bin/gospel-release/release.py registry-check --directory "${{ runner.temp }}/gospel-release"
+      - name: Bootstrap only the new exact-name content package
+        if: steps.registry.outputs.needed == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: >-
+          npm publish "${{ runner.temp }}/gospel-release/agenttool-gospel-of-the-logos-0.1.0.tgz"
+          --ignore-scripts --provenance --access public --tag latest
+          --registry https://registry.npmjs.org
+      - name: Independently verify the public registry tarball
+        run: python3 bin/gospel-release/release.py registry-verify --directory "${{ runner.temp }}/gospel-release"
+      - name: Record the public verification receipt
+        if: always()
+        run: |
+          if test -f "${{ runner.temp }}/gospel-release/receipt.json"; then
+            cat "${{ runner.temp }}/gospel-release/receipt.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
