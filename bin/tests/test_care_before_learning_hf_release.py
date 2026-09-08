@@ -2,6 +2,7 @@
 import base64
 import contextlib
 import copy
+from email.message import Message
 import hashlib
 import importlib.util
 import io
@@ -16,6 +17,7 @@ import types
 import unittest
 from unittest.mock import patch
 import urllib.parse
+import urllib.response
 
 HELPER = Path(__file__).absolute().parents[1] / "care-before-learning-hf-release.py"
 spec = importlib.util.spec_from_file_location("care_release", HELPER)
@@ -552,32 +554,57 @@ class NetworkTests(unittest.TestCase):
         response.headers = headers or {}
         return response
 
+    def test_redirect_responses_never_send_a_second_request(self):
+        url = r.ORIGIN + "/offline-redirect-probe"
+        location = "https://other.invalid/never-contact"
+        for method in ("GET", "POST"):
+            for status in (301, 302, 303, 307, 308):
+                with self.subTest(method=method, status=status):
+                    calls = []
+                    body = b"{}" if method == "POST" else None
+
+                    def https_open(_handler, request):
+                        calls.append((request.full_url, request.get_method(), request.data,
+                                      request.get_header("Authorization"), request.timeout, request.host))
+                        headers = Message()
+                        headers["Location"] = location
+                        response = urllib.response.addinfourl(io.BytesIO(b"redirect"), headers, url, status)
+                        response.msg = "Redirect"
+                        return response
+
+                    with patch.dict(os.environ, {"https_proxy": "http://proxy.invalid:8080", "no_proxy": ""}), \
+                         patch("socket.socket.connect", side_effect=AssertionError("live network forbidden")), \
+                         patch.object(r.urllib.request.HTTPSHandler, "https_open", https_open):
+                        result = r.Network().request(method, url, SECRET, body)
+                    self.assertEqual(result, (status, b"redirect", location))
+                    self.assertEqual(calls, [(url, method, body, "Bearer " + SECRET, 15, "huggingface.co")])
+
     def test_actual_response_read_bound(self):
         network = r.Network()
-        with patch.object(network.opener, "open", return_value=self.response(b"12345")), \
+        with patch.object(r, "open_no_redirect", return_value=self.response(b"12345")), \
              self.assertRaisesRegex(r.ReleaseError, "response_bound"):
             network.request("GET", r.ORIGIN, limit=4)
 
     def test_request_and_total_byte_bounds(self):
         network = r.Network()
         network.requests = r.REQUEST_LIMIT
-        with patch.object(network.opener, "open", side_effect=AssertionError("network")), \
+        with patch.object(r, "open_no_redirect", side_effect=AssertionError("network")), \
              self.assertRaisesRegex(r.ReleaseError, "network_bound"):
             network.request("GET", r.ORIGIN)
         network.requests = 0
         network.received = r.NETWORK_BYTES
-        with patch.object(network.opener, "open", return_value=self.response()), \
+        with patch.object(r, "open_no_redirect", return_value=self.response()), \
              self.assertRaisesRegex(r.ReleaseError, "network_bound"):
             network.request("GET", r.ORIGIN)
 
     def test_no_compression_pagination_or_retry(self):
         for headers in ({"Content-Encoding": "gzip"}, {"Link": "evil"}):
             network = r.Network()
-            with patch.object(network.opener, "open", return_value=self.response(headers=headers)), \
+            with patch.object(r, "open_no_redirect", return_value=self.response(headers=headers)), \
                  self.assertRaisesRegex(r.ReleaseError, "response_bound"):
                 network.request("GET", r.ORIGIN)
         network = r.Network()
-        with patch.object(network.opener, "open", side_effect=TimeoutError(SECRET)) as call, \
+        with patch.object(r, "open_no_redirect", side_effect=TimeoutError(SECRET)) as call, \
              self.assertRaisesRegex(r.ReleaseError, "transport"):
             network.request("GET", r.ORIGIN)
         self.assertEqual(call.call_count, 1)
@@ -590,7 +617,7 @@ class NetworkTests(unittest.TestCase):
 
     def test_http_failure_sanitized(self):
         network = r.Network()
-        with patch.object(network.opener, "open", return_value=self.response(SECRET.encode(), 403)):
+        with patch.object(r, "open_no_redirect", return_value=self.response(SECRET.encode(), 403)):
             with self.assertRaises(r.ReleaseError) as error:
                 network.json("POST", r.ORIGIN)
         self.assertEqual(str(error.exception), "http")

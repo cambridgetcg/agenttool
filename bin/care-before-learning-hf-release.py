@@ -203,10 +203,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def open_no_redirect(request, *, timeout):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    return opener.open(request, timeout=timeout)
+
+
 class Network:
     """No proxies, retries, response decompression, or implicit redirect auth."""
     def __init__(self):
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         self.requests = 0
         self.received = 0
         self.started = time.monotonic()
@@ -222,7 +226,7 @@ class Network:
         request = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
             try:
-                response = self.opener.open(request, timeout=15)
+                response = open_no_redirect(request, timeout=15)
             except urllib.error.HTTPError as error:
                 response = error
             with response:
