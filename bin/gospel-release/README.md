@@ -26,8 +26,14 @@ permits bootstrap only if both npm package and exact version are absent.
 The `NPM_TOKEN` is exposed only to the final `npm publish --ignore-scripts
 --provenance --access public` step. An exact already-public rerun verifies bytes
 and `latest` without republishing. Existing different bytes, partial registry
-state, or a different dist-tag fail closed. The final step anonymously downloads
-the public npm tarball and compares it with the reviewed digest.
+state, or a different dist-tag fail closed before publication. The final step
+anonymously downloads the public npm tarball and compares it with the reviewed
+digest. Readback allows 450 seconds for missing metadata, tarball, or `latest`
+to propagate; it also retries transport failures, HTTP 408/425/429, and 5xx responses.
+Metadata lookups bypass stale caches, and each request uses the remaining time
+budget. Conflicting identities, bytes, origins, or existing dist-tags fail
+immediately. A readback timeout reports that publication may already have
+succeeded, so an operator can inspect the registry before retrying.
 
 This first-edition route accepts no arbitrary package, URL, shell command,
 version, digest, or license input at dispatch. Another edition requires another

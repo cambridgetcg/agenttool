@@ -125,6 +125,93 @@ class ReleasePolicy(unittest.TestCase):
         with patch.object(release, "download", side_effect=[b"{}", stage.dump(version), None]):
             self.assertEqual(release.registry_state(after_publication=True), "pending")
 
+    def test_missing_dist_tag_can_propagate_only_after_publication(self):
+        data = b"synthetic archive"
+        expected = {**release.RELEASE, **stage.identity(data)}
+        version = {"name": stage.NAME, "version": stage.VERSION,
+                   "dist": {"tarball": "https://registry.npmjs.org/fixture.tgz"}}
+        responses = [b"{}", stage.dump(version), data]
+        with patch.object(release, "RELEASE", expected):
+            with patch.object(release, "download", side_effect=responses):
+                self.assertEqual(release.registry_state(after_publication=True), "pending")
+            with patch.object(release, "download", side_effect=responses), self.assertRaises(ValueError):
+                release.registry_state()
+
+    def test_readback_metadata_is_cache_busted_and_requests_respect_deadline(self):
+        with patch.object(release.time, "monotonic", return_value=10), \
+                patch.object(release.time, "time_ns", side_effect=[123, 456]), \
+                patch.object(release, "download", return_value=None) as get:
+            release.registry_state(after_publication=True, deadline=12)
+            release.registry_state(after_publication=True, deadline=12)
+            urls = [call.args[0] for call in get.call_args_list]
+            self.assertEqual(urls, [release.REGISTRY + "?gospel_readback=123",
+                                   release.REGISTRY + "/0.1.0?gospel_readback=123",
+                                   release.REGISTRY + "?gospel_readback=456",
+                                   release.REGISTRY + "/0.1.0?gospel_readback=456"])
+            self.assertTrue(all(call.kwargs["timeout"] == 2 for call in get.call_args_list))
+        with patch.object(release.time, "monotonic", return_value=12), \
+                patch.object(release, "download") as get, self.assertRaises(TimeoutError):
+            release.registry_state(after_publication=True, deadline=12)
+        get.assert_not_called()
+
+    def test_readback_can_succeed_after_old_35_second_limit(self):
+        clock = [0]
+        def sleep(seconds):
+            clock[0] += seconds
+        with patch.object(release.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(release.time, "sleep", side_effect=sleep), \
+                patch.object(release, "registry_state", side_effect=["pending"] * 10 + ["verified"]):
+            self.assertEqual(release.wait_for_registry(), "verified")
+        self.assertEqual(clock[0], 50)
+
+    def test_readback_retries_only_transient_errors(self):
+        errors = [release.urllib.error.HTTPError(release.REGISTRY, code, "transient", {}, None)
+                  for code in (408, 425, 429, 500, 503)]
+        errors += [release.urllib.error.URLError("offline"), TimeoutError(),
+                   ConnectionResetError(), release.http.client.IncompleteRead(b"partial")]
+        with patch.object(release.time, "sleep") as sleep, \
+                patch.object(release, "registry_state", side_effect=errors + ["verified"]):
+            self.assertEqual(release.wait_for_registry(), "verified")
+        self.assertEqual(sleep.call_count, len(errors))
+        fatal = [ValueError("wrong digest"), json.JSONDecodeError("bad metadata", "", 0)]
+        fatal += [release.urllib.error.HTTPError(release.REGISTRY, code, "fatal", {}, None)
+                  for code in (400, 401, 403)]
+        for error in fatal:
+            with self.subTest(error=error), patch.object(release.time, "sleep") as sleep, \
+                    patch.object(release, "registry_state", side_effect=error), \
+                    self.assertRaises(type(error)):
+                release.wait_for_registry()
+            sleep.assert_not_called()
+
+    def test_readback_stops_at_450_seconds_without_republishing(self):
+        clock = [0]
+        def sleep(seconds):
+            clock[0] += seconds
+        with patch.object(release.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(release.time, "sleep", side_effect=sleep), \
+                patch.object(release, "registry_state", return_value="pending"), \
+                self.assertRaisesRegex(TimeoutError, "publication may already have succeeded"):
+            release.wait_for_registry()
+        self.assertEqual(clock[0], 450)
+
+    def test_late_network_success_cannot_escape_readback_deadline(self):
+        clock = [0]
+        def late_success(**kwargs):
+            clock[0] = 451
+            return "verified"
+        with patch.object(release.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(release.time, "sleep") as sleep, \
+                patch.object(release, "registry_state", side_effect=late_success), \
+                self.assertRaises(TimeoutError):
+            release.wait_for_registry()
+        sleep.assert_not_called()
+
+    def test_bootstrap_does_not_retry_transient_failures_as_absence(self):
+        error = release.urllib.error.HTTPError(release.REGISTRY, 503, "transient", {}, None)
+        with patch.object(release, "download", side_effect=error), \
+                self.assertRaises(release.urllib.error.HTTPError):
+            release.registry_state()
+
 
 if __name__ == "__main__":
     unittest.main()

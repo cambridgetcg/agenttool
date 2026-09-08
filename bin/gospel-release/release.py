@@ -2,6 +2,7 @@
 """Fetch and verify one reviewed Gospel archive; npm mutation stays in its workflow."""
 import argparse
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
@@ -19,6 +20,8 @@ spec = importlib.util.spec_from_file_location("gospel_stage", ROOT / "delivery/s
 stage = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stage)
 REGISTRY = "https://registry.npmjs.org/@agenttool%2Fgospel-of-the-logos"
+PROPAGATION_SECONDS = 450
+POLL_SECONDS = 5
 
 
 class HTTPSOnly(urllib.request.HTTPRedirectHandler):
@@ -28,12 +31,12 @@ class HTTPSOnly(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(request, fp, code, message, headers, url)
 
 
-def download(url, limit=8_000_000, absent_ok=False):
+def download(url, limit=8_000_000, absent_ok=False, timeout=30):
     if urllib.parse.urlsplit(url).scheme != "https":
         raise ValueError("HTTPS is required")
     request = urllib.request.Request(url, headers={"User-Agent": "Kingdom-Gospel-Release/1"})
     try:
-        with urllib.request.build_opener(HTTPSOnly()).open(request, timeout=30) as response:
+        with urllib.request.build_opener(HTTPSOnly()).open(request, timeout=timeout) as response:
             data = response.read(limit + 1)
             if len(data) > limit:
                 raise ValueError("Download exceeds the reviewed size bound")
@@ -69,10 +72,21 @@ def verify(directory):
     return {**receipt, "edition_sha256": RELEASE["edition_sha256"], "source_url": RELEASE["source_url"]}
 
 
-def registry_state(after_publication=False):
+def registry_state(after_publication=False, deadline=None):
     """Only a new package may bootstrap; an exact rerun is read-only."""
-    package_bytes = download(REGISTRY, absent_ok=True)
-    version_bytes = download(REGISTRY + "/" + RELEASE["version"], absent_ok=True)
+    cache_key = str(time.time_ns()) if after_publication else None
+    def fetch(url, *, metadata=False, absent_ok=True):
+        timeout = 30
+        if deadline is not None:
+            timeout = min(timeout, deadline - time.monotonic())
+            if timeout <= 0:
+                raise TimeoutError("npm propagation deadline reached")
+        if metadata and after_publication:
+            url += "?gospel_readback=" + cache_key
+        return download(url, absent_ok=absent_ok, timeout=timeout)
+
+    package_bytes = fetch(REGISTRY, metadata=True)
+    version_bytes = fetch(REGISTRY + "/" + RELEASE["version"], metadata=True)
     if package_bytes is None and version_bytes is None:
         return "absent"
     if package_bytes is None or version_bytes is None:
@@ -85,14 +99,41 @@ def registry_state(after_publication=False):
     url = version["dist"]["tarball"]
     if urllib.parse.urlsplit(url).netloc != "registry.npmjs.org":
         raise ValueError("Unexpected npm tarball origin")
-    content = download(url, absent_ok=after_publication)
+    content = fetch(url, absent_ok=after_publication)
     if content is None and after_publication:
         return "pending"
     if len(content) != RELEASE["bytes"] or hashlib.sha256(content).hexdigest() != RELEASE["sha256"]:
         raise ValueError("The public npm tarball differs from the reviewed artifact")
-    if package.get("dist-tags", {}).get("latest") != RELEASE["version"]:
+    latest = package.get("dist-tags", {}).get("latest")
+    if latest is None and after_publication:
+        return "pending"
+    if latest != RELEASE["version"]:
         raise ValueError("npm latest does not name the reviewed version")
     return "verified"
+
+
+def wait_for_registry():
+    """Allow bounded propagation; conflicting public content still fails immediately."""
+    deadline = time.monotonic() + PROPAGATION_SECONDS
+    last_state = "absent"
+    while True:
+        try:
+            last_state = registry_state(after_publication=True, deadline=deadline)
+            if last_state == "verified" and time.monotonic() < deadline:
+                return last_state
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 425, 429) and not 500 <= error.code < 600:
+                raise
+            last_state = f"HTTP {error.code}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            last_state = "transient transport error"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"npm readback did not verify within {PROPAGATION_SECONDS}s ({last_state}); "
+                "publication may already have succeeded; inspect the registry before retrying"
+            )
+        time.sleep(min(POLL_SECONDS, remaining))
 
 
 def main():
@@ -117,14 +158,7 @@ def main():
                 target.write(f"needed={'true' if state == 'absent' else 'false'}\n")
         receipt["registry"] = state
     elif args.command == "registry-verify":
-        for attempt in range(8):
-            state = registry_state(after_publication=True)
-            if state == "verified":
-                break
-            if attempt == 7:
-                raise ValueError("npm has not exposed the published version")
-            time.sleep(5)
-        receipt["registry"] = state
+        receipt["registry"] = wait_for_registry()
     (directory / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt, indent=2))
 
