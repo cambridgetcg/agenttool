@@ -10,7 +10,9 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**UNRELEASED 0.4.1-dev.0:** 33 tools; public 0.4.0 remains the unchanged 32-tool
+**RELEASE CANDIDATE 0.5.0:** 33 tools. These release-candidate bytes do not establish
+npm publication; verify the protected receipt and registry separately.
+Public 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution
 requires separate MCP processes, not a shared endpoint plus different labels.
 
@@ -72,7 +74,7 @@ process with `AGENTOOL_COLLAB_SESSION_FILE`; never read, paste, report, log, or
 commit that bearer file. Let the host use the one-shot cursor recovery override
 only for an intentional audited reset.
 
-## Receive without liveness writes (unreleased)
+## Receive without liveness writes (0.5.0)
 
 While Hermes is already running, optionally call
 `mcp_agenttool_collab_events_wait` with `workspace_id` and exact `after_anchor`.

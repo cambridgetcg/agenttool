@@ -337,7 +337,7 @@ describe("bounded anchored local observation", () => {
       return receive(id);
     };
     await send({ id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "fixture", version: "1" } } });
-    expect((await receive(1)).result.serverInfo.version).toBe("0.4.1-dev.0");
+    expect((await receive(1)).result.serverInfo.version).toBe("0.5.0");
     await send({ method: "notifications/initialized", params: {} });
     const start = await call(2, "collab_session_start", { root_path: f.root, actor: "stdio-observer" });
     expect(start.result.isError).toBeUndefined();

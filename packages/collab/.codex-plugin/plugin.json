@@ -1,7 +1,7 @@
 {
   "name": "agenttool-collab",
-  "version": "0.4.1-dev.0",
-  "description": "UNRELEASED local coordination, bounded event waiting and optional read-only witness status",
+  "version": "0.5.0",
+  "description": "Local coordination, bounded event waiting and optional read-only witness status",
   "author": {
     "name": "AgentTool contributors",
     "url": "https://agenttool.dev"
@@ -30,7 +30,7 @@
   "interface": {
     "displayName": "AgentTool Collab",
     "shortDescription": "Coordinate agent sessions with local evidence.",
-    "longDescription": "UNRELEASED 0.4.1-dev.0: 33 tools over one local plaintext SQLite journal, with separate self-declared presence and credential-bound coordination. Adds bounded read-only anchored event waiting without acknowledgement, last_seen/presence writes or lease renewal; continue from next_anchor, never the head. Includes reports, advisory claims, review, refusable handoffs and optional local Zerone witness status. It never contacts a chain or creates an anchor. One MCP process has one session binding; independent children need separate endpoints. MCP results remain provider-visible. Native dispatcher, persona, memory, permissions, lifecycle and idle wake remain host-owned; arrival is not proof of reading or consent.",
+    "longDescription": "Collab 0.5.0: 33 tools over one local plaintext SQLite journal, with separate self-declared presence and credential-bound coordination. Adds bounded read-only anchored event waiting without acknowledgement, last_seen/presence writes or lease renewal; continue from next_anchor, never the head. Includes reports, advisory claims, review, refusable handoffs and optional local Zerone witness status. It never contacts a chain or creates an anchor. One MCP process has one session binding; independent children need separate endpoints. MCP results remain provider-visible. Native dispatcher, persona, memory, permissions, lifecycle and idle wake remain host-owned; arrival is not proof of reading or consent.",
     "developerName": "AgentTool contributors",
     "category": "Productivity",
     "capabilities": [

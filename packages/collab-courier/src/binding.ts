@@ -24,7 +24,7 @@ const destination = z.discriminatedUnion('kind', [
 export const bindingSchema = z.object({
   format: z.literal('agenttool.collab-courier/0.1'), enabled: z.boolean(), expiresAt: timestamp,
   projectId: uuid, repositoryId: text, ledgerPath: path,
-  local: z.object({ binary: path, runtime: z.literal('bun'), args: z.array(path).length(1), version: z.enum(['0.4.0','0.4.1-dev.0']), home: path, databasePath: path, workspacePath: path, workspaceId: z.string().min(1).max(200), repositoryKey: z.string().min(1).max(1000), sessionId: z.string().min(1).max(200), sessionFile: path }).strict(),
+  local: z.object({ binary: path, runtime: z.literal('bun'), args: z.array(path).length(1), version: z.enum(['0.4.0','0.5.0']), home: path, databasePath: path, workspacePath: path, workspaceId: z.string().min(1).max(200), repositoryKey: z.string().min(1).max(1000), sessionId: z.string().min(1).max(200), sessionFile: path }).strict(),
   correspondence: z.object({ baseUrl: z.string().url().refine(s=> { const u=new URL(s); return u.protocol==='https:' && !u.username && !u.password && !u.search && !u.hash && u.pathname==='/' && s===u.origin; }), bearer: ref, signingKey: ref, sender: senderSchema, publicKey: z.string().regex(/^[A-Za-z0-9+/]{43}=$/), peers: z.array(peer).max(32) }).strict(),
   telegram: z.object({ botId: z.number().int().positive().refine(Number.isSafeInteger), token: ref, ownerPath: path, receiverOwnershipConfirmed: z.literal(true) }).strict().nullable(),
   destinations: z.array(destination).min(1).max(32),

@@ -14,7 +14,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.4.1-dev.0");
+    expect(packageManifest.version).toBe("0.5.0");
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
     expect(codex.skills).toBe("./skills/");
@@ -30,9 +30,10 @@ describe("cross-host package", () => {
     });
     expect(codex.interface.capabilities).toContain("Read-only Zerone witness status");
     expect(codex.interface.capabilities).toContain("Bounded read-only event waiting");
-    expect(packageManifest.description).toContain("UNRELEASED");
-    expect(codex.description).toContain("UNRELEASED");
-    expect(claude.description).toContain("UNRELEASED");
+    for (const manifest of [packageManifest, codex, claude]) {
+      expect(manifest.description).toContain("bounded event waiting");
+      expect(manifest.description).not.toContain("UNRELEASED");
+    }
     expect(codex.interface.longDescription).toContain("never contacts a chain");
     expect(claude.description).toContain("read-only Zerone witness status");
   });
@@ -75,7 +76,7 @@ describe("cross-host package", () => {
     }
   });
 
-  test("keeps all host guidance unreleased, bounded and non-lifecycle", async () => {
+  test("keeps release-candidate host guidance bounded and non-lifecycle", async () => {
     for (const path of [
       "README.md",
       "skills/coordinate-agent-work/SKILL.md",
@@ -83,7 +84,7 @@ describe("cross-host package", () => {
       "integrations/openclaw/README.md",
     ]) {
       const text = await Bun.file(join(packageRoot, path)).text();
-      for (const term of ["UNRELEASED", "0.4.1-dev.0", "0.4.0", "33", "32", "collab_events_wait",
+      for (const term of ["RELEASE CANDIDATE", "0.5.0", "0.4.0", "33", "32", "collab_events_wait",
         "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
         "event_too_large", "event_read_busy", "last_seen", "persona"]) {
         expect(text).toContain(term);

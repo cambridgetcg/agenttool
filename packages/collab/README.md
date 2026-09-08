@@ -5,10 +5,10 @@
 > **Code:** `src/{store,mcp,protocol}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
 
-**UNRELEASED source candidate: 0.4.1-dev.0, 33 MCP tools.** Public 0.4.0 remains
+**RELEASE CANDIDATE: 0.5.0, 33 MCP tools.** Public 0.4.0 remains
 the unchanged 32-tool witness-awareness release; installing it does not supply
-`collab_events_wait`. This candidate has not been published or activated in a
-native harness.
+`collab_events_wait`. This preparation is not evidence of 0.5.0 publication or
+native-harness activation; verify exact release receipts separately.
 
 Local-first coordination for independent coding-agent sessions. It gives
 Codex, Claude Code, Hermes Agent, and other local MCP clients one SQLite-backed
@@ -168,7 +168,7 @@ polling. A host can explicitly wait while running; waking a suspended agent
 remains host-owned. Tool arrival proves neither that a model read feedback nor
 that it agreed, consented, or acted.
 
-### Bounded anchored waiting (unreleased)
+### Bounded anchored waiting (0.5.0)
 
 Use `collab_events_wait` with the bound `workspace_id` and an exact
 `after_anchor: { epoch_id, sequence, hash }` from a prior page or the session's
@@ -455,7 +455,7 @@ selected Hermes profile. Its workflow keeps the credential-bound and
 self-declared presence planes separate and never asks the model to read a
 session credential file. Hermes Kanban remains Hermes's dispatcher; the local
 Collab journal does not automatically mirror it, spawn or wake agents, or
-infer external authority. The unreleased adapter also names
+infer external authority. The 0.5.0 adapter also names
 `mcp_agenttool_collab_events_wait` for finite observation while running.
 
 [The explicit OpenClaw example](integrations/openclaw/README.md) describes a
@@ -516,10 +516,12 @@ npm/GitHub artifact with SHA-256
 `1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51`.
 This is a historical receipt, not a fresh registry or deployed-host check.
 
-**0.4.1-dev.0 is an unreleased local source candidate.** It preserves the
+**RELEASE CANDIDATE: 0.5.0.** These release-candidate bytes do not establish npm
+publication; verify the protected receipt and registry separately. It preserves the
 coordination/database contracts and adds bounded anchored observation as the
-33rd tool. No publication, upload, deployment, native harness configuration,
-Telegram channel, live second device or chain has been activated by this change.
+33rd tool. These source changes do not themselves publish, upload, deploy,
+configure a native harness, activate a Telegram channel or second device, or
+contact a chain.
 Collab remains local plaintext software, not a hosted service, remote relay,
 VPN, private model channel, chain client, anchoring bridge, or LOVE release.
 Local pack inspection creates no release authority or public artifact.

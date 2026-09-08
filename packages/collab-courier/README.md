@@ -55,8 +55,10 @@ The child still uses the absolute bound DB/session paths and verifies the
 resumed workspace's root; it does not discover a workspace from cwd. Runtime
 directories are removed on close/startup failure; an uncatchable parent crash
 can leave an orphan for explicit host cleanup. The handshake must return exactly
-the selected `0.4.0`
-or source `0.4.1-dev.0` version. Only dedicated DB/session references, isolated
+the selected `0.4.0` or `0.5.0` version. Collab **0.5.0 is a RELEASE CANDIDATE**.
+These release-candidate bytes do not establish npm publication; verify the
+protected receipt and registry separately. Public 0.4.0 is unchanged. This courier remains private
+at `0.1.0-dev.0`. Only dedicated DB/session references, isolated
 HOME/XDG_CONFIG_HOME, fixed PATH and TMPDIR reach the child. No network secret
 enters model-facing Collab tools. This is configuration/environment narrowing,
 not a sandbox for a malicious host binary or local filesystem owner.

@@ -5,7 +5,9 @@
 > **Code:** `../../src/mcp.ts`, `../../dist/agenttool-collab-mcp.js`.
 > **Tests:** `../../tests/events-wait.test.ts`, `../../tests/package.test.ts`.
 
-**UNRELEASED 0.4.1-dev.0, 33 tools.** Published 0.4.0 has 32 tools and no
+**RELEASE CANDIDATE 0.5.0, 33 tools.** These release-candidate bytes do not establish
+npm publication; verify the protected receipt and registry separately.
+Published 0.4.0 has 32 tools and no
 `collab_events_wait`. This example has not been exercised in live OpenClaw.
 It installs no plugin, service, heartbeat, global configuration or channel.
 

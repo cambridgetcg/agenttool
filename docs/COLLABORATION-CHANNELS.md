@@ -22,17 +22,21 @@ work does not change those published bytes. The removed cross-device
 release-room relay is not this architecture and must not be restored from old
 checkout instructions.
 
-Collab **0.4.1-dev.0 is UNRELEASED source with 33 MCP tools**, adding bounded
-anchored waiting. The private **`@agenttool/collab-courier@0.1.0-dev.0`** now has
+Collab **0.5.0 is a RELEASE CANDIDATE with 33 MCP tools**, adding bounded
+anchored waiting. These release-candidate bytes do not establish npm publication;
+verify the protected receipt and registry separately. The private
+**`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
 and a separately callable witness observer. Its
 [README](../packages/collab-courier/README.md) and
 [disabled example profile](../packages/collab-courier/examples/profile.disabled.json)
 are the runnable-source references, not enrolled configuration.
 
-**Scoped offline verification completed, 2026-09-08.** The final package and
-CI-wiring gates passed, and independently reproduced review findings were repaired
-and rechecked. This remains unreleased source, not a deployed service. No installed
+**Implementation-checkpoint offline verification, 2026-09-08.** The package and
+CI-wiring gates recorded below preceded the 0.5.0 release-metadata preparation;
+independent implementation review does not cover the later release-file edits.
+The release candidate requires its own checks and independent review. Neither
+checkpoint establishes publication or a deployed service. No installed
 native reception, real second device, Telegram destination, hosted endpoint, or
 chain is verified here. Keep source behavior, local test evidence, and live
 activation separate; see the [evidence and remaining gaps](#evidence-and-remaining-gaps).
@@ -76,7 +80,7 @@ Acknowledgement records a session cursor, not agreement or correctness.
 `collab_next` also participates in liveness/coordination maintenance; it is not
 a side-effect-free wait primitive.
 
-**Unreleased local wait:** `collab_events_wait` now observes an anchored,
+**Release-candidate local wait (0.5.0):** `collab_events_wait` now observes an anchored,
 bounded event-only `JournalPage`, with cancellation and a finite idle deadline.
 The source defaults to 10 events (maximum 50) and a 30-second wait (maximum
 30 seconds; zero reads immediately). The page has a 256 KiB UTF-8 JSON cap;
@@ -94,7 +98,7 @@ are rechecked; corruption, rollback, fencing, or recovery-required state is a
 stop, not permission to reset. Presence TTL changes and witness-sidecar
 changes require separate observations, not invented journal events. The new
 wait is absent from published 0.4.0; see the
-[source wait contract](../packages/collab/README.md#bounded-anchored-waiting-unreleased).
+[source wait contract](../packages/collab/README.md#bounded-anchored-waiting-050).
 
 Claude and Codex have package-root plugin declarations; Hermes has a
 [scoped adapter skill](../packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md).
@@ -122,8 +126,8 @@ Model-facing input must not choose new URLs, keys, tokens, arbitrary paths, or
 recipients. The source reuses existing signing/session primitives, not another
 identity or credential store. A narrow interface does not narrow the underlying
 project bearer's broad project authority. The Bun runtime binary, entrypoint, and
-MCP version are host-pinned; the importer accepts the selected 0.4.0 or unreleased
-0.4.1-dev.0 handshake. Node is rejected: the existing Collab bundle depends on
+MCP version are host-pinned; the importer accepts exactly the selected 0.4.0 or
+0.5.0 handshake. The latter remains a release candidate. Node is rejected: the existing Collab bundle depends on
 `bun:sqlite`. Child-environment narrowing is not a sandbox.
 
 The selected wire is the **existing** `agent-correspondence/v0.1`
@@ -393,7 +397,8 @@ The source files and tests now exist; they are not planned/absent placeholders:
 | Telegram ownership/offset/ambiguity and witness tests | `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/collab-zerone/tests/zeroned.test.ts` · `packages/collab-zerone/tests/cli.test.ts` |
 | Native receive and wait | `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · [OpenClaw example](../packages/collab/integrations/openclaw/README.md) |
 
-Final credential-empty **Bun 1.3.5** gates on this source candidate:
+Historical implementation-checkpoint credential-empty **Bun 1.3.5** gates,
+before the 0.5.0 release-metadata edits (not final release-candidate receipts):
 
 | Gate | Tests passed | Assertions | Additional verification |
 |---|---:|---:|---|

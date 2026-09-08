@@ -9,7 +9,7 @@
     "binary": "/usr/local/bin/bun",
     "runtime": "bun",
     "args": ["/opt/agenttool/packages/collab/bin/agenttool-collab-mcp.ts"],
-    "version": "0.4.1-dev.0",
+    "version": "0.5.0",
     "home": "/srv/private-courier/home",
     "databasePath": "/srv/private-collab/collab.sqlite",
     "workspacePath": "/srv/example-workspace",

@@ -88,11 +88,11 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.4.1-dev.0" },
+    { name: "agenttool-collab", version: "0.5.0" },
     {
       capabilities: { tools: {} },
       instructions:
-        "UNRELEASED source: collab_events_wait offers bounded read-only anchored observation for an already running host, " +
+        "Collab 0.5.0: collab_events_wait offers bounded read-only anchored observation for an already running host, " +
         "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
         "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
         "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " +
@@ -941,7 +941,7 @@ export function buildCollabMcpServer(
     {
       title: "Wait for an exact anchored local event page",
       description:
-        "UNRELEASED: credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " +
+        "Credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " +
         "Continue from next_anchor, not the head. No acknowledgement, last_seen/presence writes, lease renewal, or handoff expiry. " +
         "Presence-only and sidecar changes are not journal events. Stops on corruption, cursor rollback/fork, fencing or recovery required. " +
         "Page JSON is capped at 256 KiB and the MCP result at 1 MiB; an oversized first event is an explicit error, never skipped.",

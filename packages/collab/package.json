@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/collab",
-  "version": "0.4.1-dev.0",
-  "description": "UNRELEASED local-first coordination, bounded event waiting and read-only witness awareness",
+  "version": "0.5.0",
+  "description": "Local-first coordination, bounded event waiting and read-only witness awareness",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
   "repository": {
