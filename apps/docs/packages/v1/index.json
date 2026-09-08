@@ -312,7 +312,7 @@
     },
     {
       "name": "@agenttool/wallet-zerone",
-      "latest": "0.1.2",
+      "latest": "0.2.0-dev.0",
       "versions": [
         {
           "version": "0.1.0",
@@ -325,6 +325,10 @@
         {
           "version": "0.1.2",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json"
+        },
+        {
+          "version": "0.2.0-dev.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.2.0-dev.0/manifest.json"
         }
       ]
     }
