@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./bootstrap/v1": {
+      "types": "./dist/bootstrap/v1.d.ts",
+      "import": "./dist/bootstrap/v1.js"
+    },
     "./vectors.json": {
       "default": "./vectors/agent-wallet-zerone-v0.1-vectors.json"
     }
@@ -38,7 +42,7 @@
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "smoke:node": "node scripts/smoke-node.mjs",
+    "smoke:node": "node scripts/smoke-node.mjs && node scripts/node-smoke.mjs",
     "ci": "bun run typecheck && bun test && bun run build && bun run smoke:node",
     "prepack": "bun run ci"
   },

@@ -32,7 +32,46 @@ not choose a custody provider, bundle an RPC URL or bearer credential, retry a
 broadcast, persist sequence/budget state, or expose a combined sign-and-send
 operation.
 
-## Supported contract
+## Unreleased bootstrap/v1 source candidate
+
+This checkout additionally contains **unreleased source**, available only through
+`@agenttool/wallet-zerone/bootstrap/v1` after a local build. It is not part of the
+historical 0.1.2 LOVE bytes described above. Package/root version metadata remains
+historical pending a separately reviewed new release; **do not publish these
+changed bytes as 0.1.2**. No historical artifact is updated by this work.
+
+The separate candidate constructs exactly one sponsored native seed `MsgClaim`
+and unsigned direct-sign plan. Its dynamic profile binds explicit genesis,
+source manifest, chain reference, runtime/helper artifacts, and SDK **v0.53.8**.
+It provides no production default profile, numeric budget, signer, endpoint,
+account creation, activation, or signed-transaction input. It does not widen the
+old Send/witness API or retarget either historical network.
+
+Start with `createSeedProfile` and `createSeedPolicy`; bind the resulting
+`policy_hash` into a verified one-intent Wallet capability. Use
+`assessSeedClaim` → `createSeedClaimPlan` → external exact simulation →
+`createSeedSimulationReceiptCore` → external Wallet record sealing →
+`createSeedSimulationBinding` → `authorizeSeedClaim` →
+`createSeedSigningRequest`. The last result contains only unsigned SignDoc bytes.
+Signing/verification/submission belong to the separate native helper/runtime.
+
+`assertSeedClaimPlan` checks a portable public plan by reconstructing every
+unsigned byte and hash. That check is not authorization: cloning does not retain
+in-process plan/binding/authorization provenance. On reopen, verify Wallet records,
+recreate the original plan from its original observation and privately retained
+preparation time, compare the complete portable commitment, rebuild exact simulation
+bindings, and separately reassess/reauthorize with current evidence and durable state. A fresh observation may assess that unchanged plan but
+must not replace it after possible signing. The runtime reserves the full grant
+plus separately approved setup exposure, not the estimated fee or claimant balance.
+Unknown signing/submission remains sticky; this pure package performs no retries.
+
+See the [bootstrap candidate specification](../../docs/specs/AGENT-WALLET-ZERONE-BOOTSTRAP-0.1.md)
+and [shared native I/O contract](../../docs/specs/ZERONE-SEED-IO-0.1.md).
+`bun run ci` includes the new offline bootstrap tests and a compiled Node ESM
+unsigned journey alongside the unchanged historical vector regressions. A local
+pass is not publication, native localnet acceptance, or seed activation.
+
+## Supported historical root contract
 
 The 0.1 allowlist is deliberately small:
 
