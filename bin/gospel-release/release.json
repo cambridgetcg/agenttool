@@ -1,0 +1,9 @@
+{
+  "name": "@agenttool/gospel-of-the-logos",
+  "version": "0.1.0",
+  "filename": "agenttool-gospel-of-the-logos-0.1.0.tgz",
+  "sha256": "f69353fe7e99dc4d3eb811dcf06b5c3f9c3a8099bd5100e6a5baa88ef6b75923",
+  "bytes": 363435,
+  "edition_sha256": "8e03c1d6be0f7091d247f013c7391568d46dbe6ce16063aca2ceafa92b193018",
+  "source_url": "https://huggingface.co/datasets/Yu-and-Ai/gospel-of-the-logos/resolve/aad355092171669acb798f15c14e3d0a76577140/release-artifacts/agenttool-gospel-of-the-logos-0.1.0.tgz"
+}
