@@ -1,4 +1,4 @@
-/** Unreleased, separately versioned Claim-only profile. No I/O or signed-Tx inputs.
+/** Developer-preview, separately versioned Claim-only profile. No I/O or signed-Tx inputs.
  * Doctrine: docs/specs/AGENT-WALLET-ZERONE-BOOTSTRAP-0.1.md
  */
 export type * from "./types.js";

@@ -9,7 +9,8 @@ const PROFILE_KEYS = "protocol chain_reference chain_id native_asset_id claiming
 const POLICY_KEYS = "protocol profile_id node_trust_id claimant_account sponsor_account pot_id max_intents seed_amount_uzrn max_fee_uzrn max_gas grant_spend_limit_uzrn grant_expires_at setup_fee_budget_uzrn not_before expires_at timeout_height max_observation_age_seconds max_height_lag";
 export const SEED_CLAIM_TYPE_URL = "/zerone.claiming_pot.v1.MsgClaim" as const;
 export const SEED_CLAIM_METHOD = "zerone.claiming_pot.v1.MsgClaim" as const;
-export const SEED_BOOTSTRAP_RELEASE_STATUS = "unreleased-source-candidate" as const;
+// Maturity only; distribution and production authority require separate evidence.
+export const SEED_BOOTSTRAP_RELEASE_STATUS = "developer-preview" as const;
 // Same Cosmos module-address derivation as existing profiles.ts; no old network retargeting.
 const MODULE_ADDRESS = bech32.encodeFromBytes("zrn", sha256(new TextEncoder().encode("claiming_pot")).subarray(0, 20));
 

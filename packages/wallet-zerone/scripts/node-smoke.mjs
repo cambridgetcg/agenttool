@@ -7,7 +7,7 @@ import { base64UrlEncode, keyIdForPublicKey, sealWalletDescriptor, sealWalletCap
 import * as seed from "@agenttool/wallet-zerone/bootstrap/v1";
 import * as legacy from "@agenttool/wallet-zerone";
 
-assert.equal(seed.SEED_BOOTSTRAP_RELEASE_STATUS, "unreleased-source-candidate");
+assert.equal(seed.SEED_BOOTSTRAP_RELEASE_STATUS, "developer-preview");
 assert.equal(legacy.getZeroneProfile("mainnet").chain_reference, "zerone-1");
 assert.deepEqual(Object.keys(legacy).filter((name) => /seed/iu.test(name)), []);
 assert.deepEqual(Object.keys(seed).filter((name) => /signed|private|secret|signAndSend/iu.test(name)), []);

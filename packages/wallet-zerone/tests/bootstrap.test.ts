@@ -28,7 +28,7 @@ describe("separate unreleased profile and closed policy", () => {
     expect(Object.keys(api).filter((key) => /signed|signAndSend|fetch|private|secret/iu.test(key))).toEqual([]);
     expect(Object.keys(root).filter((key) => /seed/iu.test(key))).toEqual([]);
     expect(root.getZeroneProfile("mainnet").chain_reference).toBe("zerone-1");
-    expect(seed.SEED_BOOTSTRAP_RELEASE_STATUS).toBe("unreleased-source-candidate");
+    expect(seed.SEED_BOOTSTRAP_RELEASE_STATUS).toBe("developer-preview");
     const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json();
     expect(manifest.exports["./bootstrap/v1"]).toEqual({ types: "./dist/bootstrap/v1.d.ts", import: "./dist/bootstrap/v1.js" });
   });

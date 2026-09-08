@@ -1,5 +1,5 @@
 /**
- * Candidate, unreleased shared contract. Types only: no I/O, custody or authority.
+ * Developer-preview shared contract. Types only: no I/O, custody or authority.
  * Runtime validators must reject unknown fields; TypeScript alone is not a gate.
  * Doctrine: docs/specs/ZERONE-SEED-IO-0.1.md
  */
