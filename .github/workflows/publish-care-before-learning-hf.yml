@@ -1,0 +1,145 @@
+name: Publish Care Before Learning to HF
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: publish-care-before-learning-hf
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify admitted reference kit (Node ${{ matrix.node }})
+    if: github.repository == 'cambridgetcg/agenttool' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.18.0, 25.2.1]
+    steps:
+      - name: Check out the exact main commit without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /bin/care-before-learning-hf-release.py
+            /bin/care-before-learning-hf-requirements.txt
+            /bin/tests/test_care_before_learning_hf_release.py
+            /.github/workflows/publish-care-before-learning-hf.yml
+            /.github/workflows/ci.yml
+            /packages/hf-listening-room/hf/
+      - name: Set up exact Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Set up Python 3.12.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.12
+      - name: Test release boundaries without HF credentials or SDK installation
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Verify pinned inventories and execute only the exported reference runner
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B bin/care-before-learning-hf-release.py verify
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+      - name: Install and smoke the locked SDK without publication credentials
+        if: matrix.node == '22.18.0'
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          smoke_venv="$RUNNER_TEMP/care-hf-smoke"
+          env -i PATH="$PATH" LANG=C TZ=UTC python3 -I -B -m venv "$smoke_venv"
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            "$smoke_venv/bin/python" -I -B -m pip --isolated install \
+            --require-hashes --only-binary=:all: --no-input --disable-pip-version-check \
+            -r bin/care-before-learning-hf-requirements.txt
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B - <<'PY'
+          import inspect
+          import huggingface_hub
+          from huggingface_hub import HfApi, CommitOperationAdd, set_client_factory
+
+          assert huggingface_hub.__version__ == "1.29.0"
+          assert callable(set_client_factory)
+          assert {"operations", "parent_commit", "revision", "create_pr", "run_as_future"} <= set(
+              inspect.signature(HfApi.create_commit).parameters
+          )
+          operation = CommitOperationAdd(
+              path_in_repo="README.md", path_or_fileobj=b"offline-reference-smoke"
+          )
+          assert operation.path_in_repo == "README.md"
+          with operation.as_file() as content:
+              assert content.read() == b"offline-reference-smoke"
+          print("Hash-locked HF SDK import and offline API smoke passed.")
+          PY
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" GITHUB_SHA="$GITHUB_SHA" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Transfer only the exact reviewed Space and Dataset trees
+        if: matrix.node == '22.18.0'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: care-before-learning-${{ github.run_id }}-${{ github.run_attempt }}
+          path: packages/hf-listening-room/hf/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    name: Publish and verify private HF revisions
+    needs: verify
+    if: github.repository == 'cambridgetcg/agenttool' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # No candidate JavaScript, package scripts, or private source is executed here.
+      - name: Check out only reviewed release tooling at the same main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /bin/care-before-learning-hf-release.py
+            /bin/care-before-learning-hf-requirements.txt
+      - name: Set up Python 3.12.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.12
+      - name: Install hash-locked release wheels before token acquisition
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          python3 -I -B -m venv "$RUNNER_TEMP/care-hf-env"
+          env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u HF_TOKEN -u HUGGING_FACE_HUB_TOKEN -u HF_OIDC_RESOURCE -u HF_OIDC_ID_TOKEN "$RUNNER_TEMP/care-hf-env/bin/python" -I -B -m pip --isolated install --disable-pip-version-check --no-input --timeout 20 --retries 0 --require-hashes --only-binary=:all: -r bin/care-before-learning-hf-requirements.txt
+      - name: Download only this run's verified artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: care-before-learning-${{ github.run_id }}-${{ github.run_attempt }}
+          path: packages/hf-listening-room/hf
+      - name: Reverify bytes, preflight both targets, commit privately, and read back
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_REF="$GITHUB_REF" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" ACTIONS_ID_TOKEN_REQUEST_URL="$ACTIONS_ID_TOKEN_REQUEST_URL" ACTIONS_ID_TOKEN_REQUEST_TOKEN="$ACTIONS_ID_TOKEN_REQUEST_TOKEN" HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_PROGRESS_BARS=1 HF_HUB_DISABLE_XET=1 "$RUNNER_TEMP/care-hf-env/bin/python" -I -B bin/care-before-learning-hf-release.py publish | tee "$RUNNER_TEMP/care-hf-publication.jsonl"
+      - name: Retain sanitized partial or complete publication evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: care-hf-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/care-hf-publication.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
