@@ -32,6 +32,9 @@ surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
 `CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
 repository guides; finding either guide performs no registration, installation,
 Castle read, or follow-up.
+`FOMOENGINE-ATTENTION-LAB.md` 亦透過 symlink 發布 canonical 外部 Attention
+Layer 指引。SDK 0.23.0 source 提供獨立 credential-free client；呢個靜態頁
+唔係 FOMO API proxy、SDK 發布收據、即時健康檢查或全 KINGDOM 採用證明。
 `WAKE-RETURN.md` uses the same canonical-guide symlink convention. Its package
 and example links point to reviewed, commit-pinned repository source; serving
 this guide does not publish the private Return package, distribute an artifact,

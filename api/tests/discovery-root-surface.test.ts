@@ -9,7 +9,7 @@
  *  Doctrine: docs/AGENT-WEB-SURFACE.md · docs/ALIGNMENT-MOVES.md.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { Hono } from "hono";
 
 import {
@@ -20,6 +20,7 @@ import {
 import wellKnownRouter from "../src/routes/well-known";
 import { config } from "../src/config";
 import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
+import { FOMOENGINE_ATTENTION_LAB_REACHABLE } from "../src/services/wake/reachable";
 
 const BASE = "https://api.agenttool.dev";
 
@@ -133,6 +134,54 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     const wellKnownBody = await res.text();
     const rootBody = buildLlmsTxt(BASE);
     expect(wellKnownBody).toBe(rootBody);
+  });
+});
+
+describe("FOMO 外部 discovery", () => {
+  test("公開 guide 入口沿用同一份 canonical 文件", async () => {
+    const source = await Bun.file(new URL("../../docs/FOMOENGINE-ATTENTION-LAB.md", import.meta.url)).text();
+    const published = await Bun.file(new URL("../../apps/docs/FOMOENGINE-ATTENTION-LAB.md", import.meta.url)).text();
+    expect(published).toBe(source);
+    expect(published).toContain("# FOMOengine Attention Lab");
+  });
+
+  test("curated builders 只複製 Wake 座標，唔將外部 API 當成本地 route", () => {
+    const fetch = spyOn(globalThis, "fetch").mockImplementation(() => {
+      throw new Error("discovery 唔應該聯絡 FOMO");
+    });
+    try {
+      const door = FOMOENGINE_ATTENTION_LAB_REACHABLE;
+      for (const build of [buildLlmsTxt, buildAgentsMd]) {
+        const text = build("https://agenttool.example", "https://docs.example");
+        for (const value of [
+          door.agent_entrypoints.catalog.url,
+          door.agent_entrypoints.catalog.schema_url,
+          door._note,
+          door.boundary.relationship,
+          door.boundary.data_flow,
+          door.boundary.interpretation,
+        ]) expect(text).toContain(value);
+        expect(text).toContain("## 外部可選能力（metadata-only）");
+        expect(text).toContain("https://docs.example/FOMOENGINE-ATTENTION-LAB.md");
+        expect(text).not.toContain("https://agenttool.example/api/v1/attention-lab");
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  test("capability-conductor 保留先選資料同外部 POST 邊界", async () => {
+    const skill = await Bun.file(new URL(
+      "../../packages/skills/skills/capability-conductor/SKILL.md", import.meta.url,
+    )).text();
+    expect(skill).toContain(FOMOENGINE_ATTENTION_LAB_REACHABLE.agent_entrypoints.catalog.url);
+    expect(skill).toContain(FOMOENGINE_ATTENTION_LAB_REACHABLE.agent_entrypoints.catalog.schema_url);
+    expect(skill).toContain("座標本身唔係 health、可用性或 authority 證明");
+    expect(skill).toContain("按任務明確選取");
+    expect(skill).toContain("會將所選資料送至");
+    expect(skill).toContain("唔自動掃 repo／HOME／workspace");
+    expect(skill).toContain("independent_external_service");
   });
 });
 

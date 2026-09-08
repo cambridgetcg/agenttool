@@ -607,3 +607,11 @@ resolve commands. `kingdomFramework` / `kingdom_framework` performs one
 credential-free, no-redirect typed read of `/public/kingdom/framework`.
 `/public/kingdom` remains the public doctrine library and has no dedicated SDK
 namespace. None of the three grants repository or cross-project authority.
+
+Paired SDK source **0.23.0** 另有 `AttentionLabClient` 同 `at.attentionLab`／
+`at.attention_lab`，以獨立 credential-free transport 呼叫 FOMOengine，唔繼承 hosted
+base URL、timeout、bearer、cookies、authenticated transport、proxy credentials 或 x402。
+Standalone 毋須 AgentTool 帳號；discovery 同 constructor 唔連線，明確 POST 先傳所選欄位。
+Source identity、exact distribution receipts 同 deployment readback 分開核對；LOVE seal
+仍須獨立接納 clean source，npm／PyPI 保留 protected manual workflows。
+見 [`docs/FOMOENGINE-ATTENTION-LAB.md`](docs/FOMOENGINE-ATTENTION-LAB.md)。

@@ -7,9 +7,8 @@
 [![Verified 0.22.0 release](https://img.shields.io/badge/release-v0.22.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The badge records the newest verified annotated tag and GitHub Release at the
-time this file was written; it is a historical receipt, not a moving `latest`
-claim. What any registry serves right now is answered by the registry itself
+The badge records a historical verified annotated tag and GitHub Release,
+not a moving `latest` claim. What any registry serves right now is answered by the registry itself
 (`npm view @agenttool/sdk dist-tags`), and the release-by-release receipt
 ledger is
 [`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md).
@@ -329,6 +328,7 @@ route has an SDK method:
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection; no second marketplace lifecycle or hidden mutation |
+| `at.attentionLab` | 獨立 FOMOengine public catalogue、完整 brief 快照同 aggregate comparison；無 bearer／cookies／自動 retry |
 | `at.mathCards` | Credential-free bounded creation and structural assessment of one raw Math Card input; the server owns canonical IDs and assessment semantics |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 | `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
@@ -572,6 +572,65 @@ to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
 and later carry it. Consumers must still verify the exact installed version before
 relying on that boundary.
 
+### Attention Lab — 獨立 FOMOengine public API
+
+SDK 0.23.0 source 定義呢個獨立、credential-free client；source version 唔係 distribution
+或 deployment receipt。Exact package bytes 同 API 可用性要分別核對；冇 AgentTool account／token
+都可以用 standalone client。
+
+```typescript
+import { AttentionLabClient } from "@agenttool/sdk";
+
+const lab = new AttentionLabClient({ baseUrl: "https://fomoengine.io" });
+const catalogue = await lab.catalogue();
+console.log(catalogue.mechanisms, catalogue.platforms);
+```
+
+三個方法係 `catalogue()`、`buildBrief(input)` 同 `compare({ counts, plan, metric })`，
+只會呼叫獨立 origin 嘅 `/api/v1/attention-lab/catalogue`、`/briefs`、`/comparisons`。
+現有 authenticated client 可以用 lazy `at.attentionLab`；設定只從
+`new AgentTool({ apiKey, attentionLab: { baseUrl, timeout: 10 } })` 嘅
+`attentionLab` 讀取，唔繼承 hosted `baseUrl`／timeout／bearer／transport／x402。
+`AgentTool` 本身仍要求正常 auth；冇 token 請用 standalone。
+
+完整 photography → brief → comparison 示範係 [`examples/attention-lab.ts`](examples/attention-lab.ts)，
+用真正 `@agenttool/sdk` package-root import，input 同 origin 都明示。
+喺 source checkout 先 build，再對你已啟動嘅本地 FOMO server 執行。
+
+```bash
+bun run build
+bun run check:examples
+bun examples/attention-lab.ts http://127.0.0.1:3000 --allow-loopback-http
+```
+
+示範傳明確合成資料，同一步 brief 嘅原始 `metric` 快照；`"10"/"100"` 對
+`"18"/"120"` 係約 +5 percentage points，唔係 winner、significance 或因果結論。
+`RawCounts` 嘅 `""` 係未知，唔當零；零分母嘅 rate／difference 同零 baseline 嘅
+relative lift 保留 `null`。`nonpoliticalConfirmed: true` 只係 caller attestation，
+唔係內容已獨立驗證。缺真實 proof／scarcity facts 嘅 brief 仍保留 `experiment.blocked`。
+
+- 只有明確 method call 先送選取欄位去 FOMOengine；constructor／import／namespace lookup
+  唔連線，亦唔掃 repo、workspace、URL 或任何隱含 project 內容。現有 browser Lab／Trends
+  本地工作台同呢條 explicit API 資料流分開；託管平台一般 access metadata 政策另計。
+- `baseUrl` 只接受完整 HTTPS origin，拒 userinfo、path、query、fragment；
+  `allowLoopbackHttp: true` 只供明確 `localhost`／`127.0.0.1`／`[::1]` HTTP 測試。
+- 10 秒 whole-operation deadline 包括 response body；`timeout`（秒）、
+  `maxRequestBytes`（64 KiB）、`maxResponseBytes`（512 KiB）只可收窄上限。
+  實際 UTF-8／stream bytes 過界就拒絕，唔截斷。唔自動 retry、redirect、付款或 fallback。
+- public Request 設 `credentials: "omit"`、`redirect: "manual"`、`no-referrer`；
+  Node／Bun 用已有 `undici` direct request dispatcher，唔用 authenticated transport、
+  ambient proxy credentials、global fetch 或 cookie jar，亦冇 redirect interceptor。
+  送 `Accept-Encoding: identity`，拒 unexpected compression；唔偷偷改用另一 transport。
+- 嚴格驗 UTF-8、duplicate-free JSON、exact success envelope、版本、nested fields／types、
+  references 同 null semantics；錯誤只含固定本地 guidance 同 status，唔反映 raw body／headers。
+  `attention_lab_timeout`、`attention_lab_response_too_large`、`attention_lab_invalid_request`、
+  `attention_lab_invalid_response`、`attention_lab_unsupported_schema_version` 等係 stable codes。
+  HTTP 429 係 `attention_lab_rate_limited`；其他非 200 係 `attention_lab_http_error`。
+- camelCase wire 欄位原樣保留。新 request 嘅 current IDs／compatibility 由 server 驗，SDK
+  唔複製研究 registry 或 brief／comparison engine；歷史 results 只用自身 bounded IDs 同
+  內部 references，唔硬鎖今日 mechanism／source 列表。`sources`、完整 `claims`、limitations、
+  `metric`、`markdown` 同版本快照唔重算；digest 格式驗證唔係內容 hash 核對、簽名或真確性證明。
+
 ### Bounded Math Cards
 
 ```typescript
@@ -792,6 +851,10 @@ const at = new AgentTool({
     timeout: 10,
     maxResponseBytes: 64 * 1024,
   },
+  attentionLab: {                             // 獨立 public origin，唔承繼 hosted auth
+    baseUrl: "https://fomoengine.io",
+    timeout: 10,
+  },
   kingdomOS: {                                // optional, local process only
     executable: "/path/to/KINGDOM-OS/kingdom",
     timeout: 10,
@@ -815,12 +878,16 @@ const at = new AgentTool({
 - 🔌 [SDK tiers and hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## Source 0.23.0 — Attention Lab
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `x402.ts`
+Paired 0.23.0 source 新增 standalone `AttentionLabClient` 同 lazy `at.attentionLab`，
+保留獨立 credential-free transport 同完整 versioned citation snapshots。
+Source identity、exact distribution receipts 同 deployment readback 係三種獨立證據。
+操作方式、明確資料流同 executable example 見上面 Attention Lab 一節。
+
+先前 0.22.1 係 0.22.0 上面嘅 honest-onboarding documentation patch；嗰次只改
+README／receipt wording，冇改 runtime。下文保留 0.22 line 嘅既有功能同歷史收據。
+The line's headline is the opt-in x402 payer documented above: `x402.ts`
 ports the server's payer function-for-function on the already-declared
 `@noble/curves` + `@noble/hashes` dependencies (zero new deps), and the `x402`
 client option installs a paying transport that answers a challenged 402 with

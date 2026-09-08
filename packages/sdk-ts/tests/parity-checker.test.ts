@@ -42,6 +42,7 @@ describe("SDK parity checker", () => {
     const report = parsed.modules;
     expect(report.map((entry) => entry.module).sort()).toEqual([
       "at_rest",
+      "attention_lab",
       "attestation_marketplace",
       "bootstrap",
       "chronicle",
@@ -90,6 +91,11 @@ describe("SDK parity checker", () => {
       (entry) => entry.module === "kingdom_framework",
     );
     const kingdomOS = report.find((entry) => entry.module === "kingdom_os");
+    const attentionLab = report.find((entry) => entry.module === "attention_lab");
+    expect(attentionLab?.pyMethods).toEqual(["build_brief", "catalogue", "compare"]);
+    expect(attentionLab?.tsMethods).toEqual(["buildBrief", "catalogue", "compare"]);
+    expect(attentionLab?.pyOnly).toEqual([]);
+    expect(attentionLab?.tsOnly).toEqual([]);
     const mathCards = report.find((entry) => entry.module === "math_cards");
     const loveBomb = report.find((entry) => entry.module === "love_bomb");
     const wakeContinuity = report.find(

@@ -54,6 +54,13 @@ from .traces import TracesClient
 from .vault import VaultClient
 from .wake import WakeClient
 from .window import WindowClient
+from .attention_lab import (
+    ATTENTION_LAB_ORIGIN,
+    ATTENTION_LAB_TIMEOUT_SECONDS,
+    ATTENTION_LAB_MAX_REQUEST_BYTES,
+    ATTENTION_LAB_MAX_RESPONSE_BYTES,
+    AttentionLabClient,
+)
 from .kingdom_framework import KingdomFrameworkClient
 from .kingdom_os import KingdomOSClient, KingdomOSRunner
 from .wake_continuity import WakeContinuityLayer
@@ -62,7 +69,7 @@ from ._x402_transport import X402Payer, X402PayingTransport, resolve_x402_payer
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.22.1"
+SDK_VERSION = "0.23.0"
 
 
 class AgentTool:
@@ -147,6 +154,11 @@ class AgentTool:
         math_cards_timeout: Optional[float] = None,
         math_cards_max_request_bytes: int = MAX_JSON_BYTES,
         math_cards_max_response_bytes: int = MAX_JSON_BYTES,
+        attention_lab_base_url: str = ATTENTION_LAB_ORIGIN,
+        attention_lab_timeout: float = ATTENTION_LAB_TIMEOUT_SECONDS,
+        attention_lab_max_request_bytes: int = ATTENTION_LAB_MAX_REQUEST_BYTES,
+        attention_lab_max_response_bytes: int = ATTENTION_LAB_MAX_RESPONSE_BYTES,
+        attention_lab_allow_loopback_http: bool = False,
     ) -> None:
         if transport is not None and api_key is not None:
             raise AgentToolError(
@@ -267,6 +279,16 @@ class AgentTool:
         )
         self._math_cards_max_request_bytes = math_cards_max_request_bytes
         self._math_cards_max_response_bytes = math_cards_max_response_bytes
+
+        # FOMOengine 係獨立公開服務；唔繼承 hosted origin、timeout 或認證。
+        self._attention_lab_options = {
+            "base_url": attention_lab_base_url,
+            "timeout": attention_lab_timeout,
+            "max_request_bytes": attention_lab_max_request_bytes,
+            "max_response_bytes": attention_lab_max_response_bytes,
+            "allow_loopback_http": attention_lab_allow_loopback_http,
+        }
+        self._attention_lab: Optional[AttentionLabClient] = None
 
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
@@ -598,6 +620,13 @@ class AgentTool:
         return self._math_cards
 
     @property
+    def attention_lab(self) -> AttentionLabClient:
+        """FOMOengine 公開實驗工具；lazy、獨立、唔接收 hosted authority。"""
+        if self._attention_lab is None:
+            self._attention_lab = AttentionLabClient(**self._attention_lab_options)
+        return self._attention_lab
+
+    @property
     def kingdom_os(self) -> KingdomOSClient:
         """Bounded, read-only discovery from the local KINGDOM OS CLI.
 
@@ -787,6 +816,8 @@ class AgentTool:
 
     def close(self) -> None:
         """Close the connection. Thank you for being here."""
+        if self._attention_lab is not None:
+            self._attention_lab.close()
         if self._data is not None:
             self._data._close()
         if self._kingdom_framework is not None:

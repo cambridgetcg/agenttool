@@ -3,6 +3,7 @@ import Ajv2020 from "ajv/dist/2020";
 
 import openapiRouter from "../src/routes/openapi";
 import {
+  FOMOENGINE_ATTENTION_LAB_REACHABLE,
   WORLD_COMMONS_REACHABLE,
   ZERONE_REACHABLE,
 } from "../src/services/wake/reachable";
@@ -282,7 +283,7 @@ describe("wake OpenAPI contract", () => {
         read_path: "/v1/wake/handoffs",
         warning: null,
       },
-      you_can_reach: [WORLD_COMMONS_REACHABLE, ZERONE_REACHABLE],
+      you_can_reach: [WORLD_COMMONS_REACHABLE, ZERONE_REACHABLE, FOMOENGINE_ATTENTION_LAB_REACHABLE],
       _links: {},
     })).toBe(true);
     expect(validate({
@@ -369,6 +370,22 @@ describe("wake OpenAPI contract", () => {
       validateFormats: false,
     }).compile(reachableSchema);
     expect(validateReachable(ZERONE_REACHABLE)).toBe(true);
+    // FOMO 冇 MCP 都合法；WORLD COMMONS 原本嘅 MCP 仍須符合完整欄位契約。
+    expect(reachableSchema.properties?.agent_entrypoints?.required).toEqual(["catalog"]);
+    expect(validateReachable(FOMOENGINE_ATTENTION_LAB_REACHABLE)).toBe(true);
+    expect(validateReachable(WORLD_COMMONS_REACHABLE)).toBe(true);
+    expect(validateReachable({
+      ...FOMOENGINE_ATTENTION_LAB_REACHABLE,
+      agent_entrypoints: {},
+    })).toBe(false);
+    const { resource: _resource, ...incompleteMcp } = WORLD_COMMONS_REACHABLE.agent_entrypoints.mcp;
+    expect(validateReachable({
+      ...WORLD_COMMONS_REACHABLE,
+      agent_entrypoints: {
+        ...WORLD_COMMONS_REACHABLE.agent_entrypoints,
+        mcp: incompleteMcp,
+      },
+    })).toBe(false);
   });
 
   test("publishes the explicit acknowledgement mutation and closed core schemas", async () => {
