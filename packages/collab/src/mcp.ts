@@ -2,7 +2,15 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
-import type { EventCursor, SessionHandle, TaskStatus } from "./protocol.js";
+import {
+  DEFAULT_WAIT_EVENT_LIMIT,
+  MAX_WAIT_EVENT_LIMIT,
+  MAX_WAIT_MS,
+  MAX_WAIT_RESPONSE_BYTES,
+  type EventCursor,
+  type SessionHandle,
+  type TaskStatus,
+} from "./protocol.js";
 import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
@@ -80,10 +88,12 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.4.0" },
+    { name: "agenttool-collab", version: "0.4.1-dev.0" },
     {
       capabilities: { tools: {} },
       instructions:
+        "UNRELEASED source: collab_events_wait offers bounded read-only anchored observation for an already running host, " +
+        "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
         "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
         "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " +
         "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
@@ -102,6 +112,19 @@ export function buildCollabMcpServer(
         "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
     },
   );
+
+  const waitShutdown = new AbortController();
+  let activeWaits = 0;
+  const close = server.close.bind(server);
+  server.close = async () => {
+    waitShutdown.abort();
+    await close();
+  };
+  const onclose = server.server.onclose;
+  server.server.onclose = () => {
+    waitShutdown.abort();
+    onclose?.();
+  };
 
   const boundCredential = (allowCursorRecovery = false) => {
     if (!binding) {
@@ -914,6 +937,90 @@ export function buildCollabMcpServer(
   );
 
   server.registerTool(
+    "collab_events_wait",
+    {
+      title: "Wait for an exact anchored local event page",
+      description:
+        "UNRELEASED: credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " +
+        "Continue from next_anchor, not the head. No acknowledgement, last_seen/presence writes, lease renewal, or handoff expiry. " +
+        "Presence-only and sidecar changes are not journal events. Stops on corruption, cursor rollback/fork, fencing or recovery required. " +
+        "Page JSON is capped at 256 KiB and the MCP result at 1 MiB; an oversized first event is an explicit error, never skipped.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        after_anchor: eventAnchor,
+        event_limit: z.number().int().min(1).max(MAX_WAIT_EVENT_LIMIT).optional(),
+        wait_ms: z.number().int().min(0).max(MAX_WAIT_MS).optional()
+          .describe("Maximum idle wait; default 30000 ms, zero reads immediately"),
+      },
+    },
+    async ({ workspace_id, after_anchor, event_limit, wait_ms }, ctx) => {
+      let counted = false;
+      try {
+        requireWorkspace(workspace_id);
+        const credential = { ...boundCredential() };
+        const input = {
+          ...credential, workspace_id,
+          after_anchor: { ...after_anchor },
+          event_limit: event_limit ?? DEFAULT_WAIT_EVENT_LIMIT,
+        };
+        const duration = wait_ms ?? MAX_WAIT_MS;
+        if (!Number.isInteger(duration) || duration < 0 || duration > MAX_WAIT_MS) {
+          throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
+        }
+        if (activeWaits >= 8) throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
+        activeWaits += 1;
+        counted = true;
+        const signal = ctx.mcpReq?.signal;
+        const check = () => {
+          if (waitShutdown.signal.aborted) throw new CollabError("server_closed", "The MCP endpoint is closed");
+          if (signal?.aborted) throw new CollabError("wait_cancelled", "The event wait was cancelled");
+          const current = boundCredential();
+          if (current.session_id !== credential.session_id || current.generation !== credential.generation) {
+            throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+          }
+          // Another request may explicitly acknowledge while this wait sleeps.
+          // Carry that latest host anchor into every new authenticated snapshot.
+          input.last_cursor = current.last_cursor ? { ...current.last_cursor } : undefined;
+          requireWorkspace(workspace_id);
+        };
+        const deadline = performance.now() + duration;
+        while (true) {
+          check();
+          try {
+            // Authentication, recovery and anchor checks and paging share ONE short
+            // deferred snapshot on a zero-busy-timeout reader. Never collab_next.
+            const page = store.eventsAfterAnchorForSession(input);
+            check();
+            if (page.events.length || performance.now() >= deadline) {
+              const result = {
+                content: [{ type: "text" as const, text: JSON.stringify(page) }],
+                structuredContent: { ...page },
+              };
+              if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+                throw new CollabError("event_page_too_large", "The MCP result exceeds its byte limit");
+              }
+              check();
+              return result;
+            }
+          } catch (error) {
+            if (!(error instanceof CollabError) || error.code !== "event_read_busy" || performance.now() >= deadline) throw error;
+          }
+          await waitDelay(Math.min(100, Math.max(0, deadline - performance.now())), [signal, waitShutdown.signal]);
+        }
+      } catch (error) {
+        const result = failure(error);
+        if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+          return failure(new CollabError("event_page_too_large", "The MCP error result exceeds its byte limit"));
+        }
+        return result;
+      } finally {
+        if (counted) activeWaits -= 1;
+      }
+    },
+  );
+
+  server.registerTool(
     "collab_journal_verify",
     {
       title: "Verify the full local event journal",
@@ -947,6 +1054,19 @@ export function buildCollabMcpServer(
   );
 
   return server;
+}
+
+function waitDelay(ms: number, signals: Array<AbortSignal | undefined>): Promise<void> {
+  return new Promise(resolve => {
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals) signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    for (const signal of signals) signal?.addEventListener("abort", finish, { once: true });
+    if (signals.some(signal => signal?.aborted)) finish();
+  });
 }
 
 function leaseMutationSchema<T extends z.ZodRawShape>(extra: T) {

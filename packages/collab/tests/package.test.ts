@@ -14,7 +14,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.4.0");
+    expect(packageManifest.version).toBe("0.4.1-dev.0");
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
     expect(codex.skills).toBe("./skills/");
@@ -29,6 +29,10 @@ describe("cross-host package", () => {
       args: ["${CLAUDE_PLUGIN_ROOT}/dist/agenttool-collab-mcp.js"],
     });
     expect(codex.interface.capabilities).toContain("Read-only Zerone witness status");
+    expect(codex.interface.capabilities).toContain("Bounded read-only event waiting");
+    expect(packageManifest.description).toContain("UNRELEASED");
+    expect(codex.description).toContain("UNRELEASED");
+    expect(claude.description).toContain("UNRELEASED");
     expect(codex.interface.longDescription).toContain("never contacts a chain");
     expect(claude.description).toContain("read-only Zerone witness status");
   });
@@ -71,6 +75,30 @@ describe("cross-host package", () => {
     }
   });
 
+  test("keeps all host guidance unreleased, bounded and non-lifecycle", async () => {
+    for (const path of [
+      "README.md",
+      "skills/coordinate-agent-work/SKILL.md",
+      "integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+      "integrations/openclaw/README.md",
+    ]) {
+      const text = await Bun.file(join(packageRoot, path)).text();
+      for (const term of ["UNRELEASED", "0.4.1-dev.0", "0.4.0", "33", "32", "collab_events_wait",
+        "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
+        "event_too_large", "event_read_busy", "last_seen", "persona"]) {
+        expect(text).toContain(term);
+      }
+    }
+    const openclaw = await Bun.file(join(packageRoot, "integrations/openclaw/README.md")).text();
+    expect(openclaw).toContain("not a native lifecycle adapter");
+    expect(openclaw).toContain("has not been exercised in live OpenClaw");
+    expect(openclaw).toContain("AGENTOOL_COLLAB_DB");
+    expect(openclaw).toContain("structuredContent");
+    expect(openclaw).toContain("SOUL.md");
+    expect(openclaw).toContain("IDENTITY.md");
+    expect(openclaw).toContain("USER.md");
+  });
+
   test("ships an explicit Hermes adapter for separate presence and secure planes", async () => {
     const skill = await Bun.file(join(
       packageRoot,
@@ -89,6 +117,7 @@ describe("cross-host package", () => {
     expect(skill).toContain("mcp_agenttool_collab_session_start");
     expect(skill).toContain("mcp_agenttool_collab_session_end");
     expect(skill).toContain("mcp_agenttool_collab_cursor_ack");
+    expect(skill).toContain("mcp_agenttool_collab_events_wait");
     expect(skill).toContain("mcp_agenttool_collab_report_append");
     expect(skill).toContain("mcp_agenttool_collab_task_review");
     expect(skill).toContain("mcp_agenttool_collab_task_claim");

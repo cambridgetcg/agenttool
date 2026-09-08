@@ -15,6 +15,10 @@ import {
   COLLAB_COORDINATION_PROTOCOL,
   COLLAB_SESSION_PROTOCOL,
   LEGACY_COLLAB_PROTOCOL,
+  DEFAULT_WAIT_EVENT_LIMIT,
+  MAX_WAIT_ANCHOR_BYTES,
+  MAX_WAIT_PAGE_BYTES,
+  type SessionEventPageInput,
   type ArtifactRef,
   type ClaimTaskInput,
   type CollabEvent,
@@ -353,6 +357,8 @@ export class CollabStore {
   private readonly now: Clock;
   private readonly filesystemPath?: string;
   private readonly migrationFailpoint?: (step: string) => void;
+  private eventReader?: Database;
+  private closed = false;
 
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -389,7 +395,35 @@ export class CollabStore {
   }
 
   close(): void {
+    this.closed = true;
+    this.eventReader?.close();
+    this.eventReader = undefined;
     this.db.close();
+  }
+
+  private nonblockingEventReader(): Database {
+    if (this.closed) throw new CollabError("store_closed", "The collaboration store is closed");
+    // A private in-memory database has no other connection that could lock it.
+    // Refuse nested transactions: an observation must never include uncommitted writes.
+    if (!this.filesystemPath) {
+      if (this.db.inTransaction) {
+        throw new CollabError("event_read_busy", "Finish the active transaction before observing events");
+      }
+      return this.db;
+    }
+    if (!this.eventReader) {
+      const reader = new Database(this.filesystemPath, { readonly: true, strict: true });
+      try {
+        // Never change the shared mutation connection's busy handler or pragmas.
+        // No initialize(), migrations, write retries, or transaction across sleep.
+        reader.exec("PRAGMA busy_timeout = 0; PRAGMA query_only = ON");
+        this.eventReader = reader;
+      } catch (error) {
+        reader.close();
+        throw error;
+      }
+    }
+    return this.eventReader;
   }
 
   defaultSessionCredentialPath(sessionId: string): string {
@@ -1376,8 +1410,8 @@ export class CollabStore {
     return created;
   }
 
-  getWorkspace(workspaceId: string): Workspace | null {
-    const row = this.db.query(`
+  getWorkspace(workspaceId: string, db = this.db): Workspace | null {
+    const row = db.query(`
       SELECT id, epoch_id, root_path, repository_key, name, created_at,
         event_head_sequence, event_head_hash
       FROM workspaces WHERE id = ?
@@ -3946,10 +3980,111 @@ export class CollabStore {
     return readPage.deferred();
   }
 
+  /** One authenticated, nonblocking read snapshot; never touches liveness or cursors. */
+  eventsAfterAnchorForSession(input: SessionEventPageInput): JournalPage {
+    const limit = validateNextEventLimit(input.event_limit ?? DEFAULT_WAIT_EVENT_LIMIT);
+    try {
+      const db = this.nonblockingEventReader();
+      const authenticateRead = () => {
+        const session = this.authenticateSession(input, {}, db);
+        if (session.workspace_id !== input.workspace_id) {
+          throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
+        }
+        const stored = {
+          epoch_id: session.cursor_epoch_id,
+          sequence: session.cursor_sequence,
+          hash: session.cursor_hash,
+        };
+        try {
+          this.validateEventAnchor(session.workspace_id, stored, db, MAX_WAIT_ANCHOR_BYTES);
+          if (input.last_cursor) {
+            const known = this.validateEventAnchor(session.workspace_id, input.last_cursor, db, MAX_WAIT_ANCHOR_BYTES);
+            if (known.sequence > stored.sequence) {
+              throw new CollabError("cursor_regression", "The persisted cursor is behind the host cursor");
+            }
+          }
+        } catch (error) {
+          if (!(error instanceof CollabError)) throw error;
+          if (error.code === "event_anchor_too_large") throw error;
+          throw new CollabError("cursor_reset_required", "The session cursor requires explicit reconciliation", { cause: error.code });
+        }
+        return session;
+      };
+      const page = db.transaction(() => {
+        const session = authenticateRead();
+        const anchor = this.validateEventAnchor(session.workspace_id, input.after_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const page = this.readEventPage(session.workspace_id, anchor.sequence, limit, db, MAX_WAIT_PAGE_BYTES);
+        if (!page.chain_valid || page.events.some(event =>
+          event.epoch_id !== anchor.epoch_id || event.workspace_id !== session.workspace_id
+          || event.sequence > page.head_sequence
+        )) {
+          throw new CollabError("database_journal_invalid", "The returned event page failed hash-chain verification");
+        }
+        return page;
+      }).deferred();
+      // A new short snapshot observes fencing committed while the page was being
+      // checked. Re-reading inside the original snapshot would miss that change.
+      db.transaction(() => {
+        const current = authenticateRead();
+        this.validateEventAnchor(current.workspace_id, page.next_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const workspace = this.requireWorkspace(current.workspace_id, db);
+        if (workspace.event_head_sequence < page.head_sequence) {
+          throw new CollabError("cursor_ahead", "The journal rolled back during observation");
+        }
+        // Check the observed head without materializing an unreturned, possibly
+        // oversized event. This is a continuity check, not a full-journal audit.
+        const observedHead = page.head_sequence === 0 ? { hash: GENESIS_HASH }
+          : db.query("SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?")
+            .get(current.workspace_id, page.head_sequence) as { hash: string } | null;
+        if (observedHead?.hash !== page.head_hash
+          || (workspace.event_head_sequence === page.head_sequence && workspace.event_head_hash !== page.head_hash)) {
+          throw new CollabError("cursor_fork_detected", "The observed journal head changed during observation");
+        }
+      }).deferred();
+      return page;
+    } catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (code?.startsWith("SQLITE_BUSY") || code?.startsWith("SQLITE_LOCKED")) {
+        throw new CollabError("event_read_busy", "The journal is busy; no page was returned");
+      }
+      if (error instanceof SyntaxError || code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") {
+        throw new CollabError("database_journal_invalid", "The journal contains malformed event data");
+      }
+      throw error;
+    }
+  }
+
+  private requireEventByteBound(
+    db: Database, workspaceId: string, sequence: number, maxBytes: number, purpose: "page" | "anchor" = "page",
+  ): void {
+    // SQLite measures stored bytes before JS materializes/parses a potentially large row.
+    const row = db.query(`
+      SELECT length(CAST(payload_json AS BLOB)) + length(CAST(actor AS BLOB))
+        + length(CAST(entity_id AS BLOB)) + length(CAST(id AS BLOB))
+        + length(CAST(epoch_id AS BLOB)) + length(CAST(workspace_id AS BLOB))
+        + length(CAST(type AS BLOB)) + length(CAST(protocol AS BLOB))
+        + length(CAST(occurred_at AS BLOB)) + length(CAST(prev_hash AS BLOB))
+        + length(CAST(hash AS BLOB)) + coalesce(length(CAST(session_id AS BLOB)), 0) AS bytes
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(workspaceId, sequence) as { bytes: number } | null;
+    if (row && row.bytes > maxBytes) {
+      if (purpose === "anchor") {
+        throw new CollabError("event_anchor_too_large", "An anchor exceeds the bounded validation ceiling; operator reconciliation is required", {
+          sequence, max_anchor_bytes: maxBytes,
+        });
+      }
+      throw new CollabError("event_too_large", "An event exceeds the bounded observation page; use an explicit larger-read workflow", {
+        sequence, max_page_bytes: maxBytes,
+      });
+    }
+  }
+
   private readEventPage(
     workspaceId: string,
     afterSequence: number,
     limit: number,
+    db = this.db,
+    maxBytes?: number,
   ): JournalPage {
     if (!Number.isInteger(afterSequence) || afterSequence < 0) {
       throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
@@ -3957,7 +4092,7 @@ export class CollabStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
     }
-    const workspace = this.requireWorkspace(workspaceId);
+    const workspace = this.requireWorkspace(workspaceId, db);
     if (afterSequence > workspace.event_head_sequence) {
       throw new CollabError(
         "invalid_cursor",
@@ -3970,7 +4105,7 @@ export class CollabStore {
     }
     const predecessor = afterSequence === 0
       ? { hash: GENESIS_HASH }
-      : this.db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`)
+      : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`)
         .get(workspaceId, afterSequence) as { hash: string } | null;
     if (!predecessor) {
       throw new CollabError(
@@ -3979,12 +4114,38 @@ export class CollabStore {
         { after_sequence: afterSequence },
       );
     }
-    const rows = this.db.query(`
-      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-        session_id, occurred_at, payload_json, prev_hash, hash
-      FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
-    `).all(workspaceId, afterSequence, limit) as EventRow[];
-    const events = rows.map(eventFromRow);
+    const select = `SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+      session_id, occurred_at, payload_json, prev_hash, hash FROM events`;
+    let events: CollabEvent[];
+    if (maxBytes === undefined) {
+      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`)
+        .all(workspaceId, afterSequence, limit) as EventRow[];
+      events = rows.map(eventFromRow);
+    } else {
+      events = [];
+      let bytes = 2048; // Page metadata reserve; exact serialized size checked below.
+      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`)
+        .all(workspaceId, afterSequence, limit) as Array<{ sequence: number }>;
+      for (const { sequence } of sequences) {
+        try {
+          this.requireEventByteBound(db, workspaceId, sequence, maxBytes);
+        } catch (error) {
+          if (events.length && error instanceof CollabError && error.code === "event_too_large") break;
+          throw error;
+        }
+        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`)
+          .get(workspaceId, sequence) as EventRow);
+        const size = Buffer.byteLength(JSON.stringify(event)) + 1;
+        if (bytes + size > maxBytes) {
+          if (events.length) break;
+          throw new CollabError("event_too_large", "An event exceeds the bounded observation page", {
+            sequence, max_page_bytes: maxBytes,
+          });
+        }
+        events.push(event);
+        bytes += size;
+      }
+    }
     const chainValid = verifyEventPage(
       events,
       afterSequence,
@@ -4001,7 +4162,7 @@ export class CollabStore {
     const nextAnchor: EventCursor = last
       ? { epoch_id: last.epoch_id, sequence: last.sequence, hash: last.hash }
       : cursor;
-    return {
+    const page: JournalPage = {
       events,
       next_cursor: nextAnchor.sequence,
       cursor,
@@ -4012,6 +4173,10 @@ export class CollabStore {
       chain_valid: chainValid,
       verification_scope: "returned_page",
     };
+    if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(page)) > maxBytes) {
+      throw new CollabError("event_page_too_large", "The observation page exceeds its byte limit");
+    }
+    return page;
   }
 
   eventsAfterAnchor(workspaceId: string, anchor: EventCursor, limit = 100): JournalPage {
@@ -4192,14 +4357,14 @@ export class CollabStore {
     session_id: string;
     session_token: string;
     generation: number;
-  }, options: { allow_cursor_recovery?: boolean } = {}): CoordinationSessionRow {
+  }, options: { allow_cursor_recovery?: boolean } = {}, db = this.db): CoordinationSessionRow {
     let id: string;
     try {
       id = validateId(input.session_id, "session_id");
     } catch {
       throw new CollabError("session_auth_failed", "Session credentials are invalid");
     }
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id) as CoordinationSessionRow | null;
+    const row = db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id) as CoordinationSessionRow | null;
     const suppliedHash = hashSessionToken(
       typeof input.session_token === "string" ? input.session_token : "",
     );
@@ -4455,8 +4620,13 @@ export class CollabStore {
     return row;
   }
 
-  private validateEventAnchor(workspaceId: string, input: EventCursor): EventCursor {
-    const workspace = this.requireWorkspace(workspaceId);
+  private validateEventAnchor(
+    workspaceId: string,
+    input: EventCursor,
+    db = this.db,
+    maxBytes?: number,
+  ): EventCursor {
+    const workspace = this.requireWorkspace(workspaceId, db);
     if (
       !input
       || input.epoch_id !== workspace.epoch_id
@@ -4477,7 +4647,11 @@ export class CollabStore {
         head_sequence: workspace.event_head_sequence,
       });
     }
-    const row = this.db.query(`
+    // Anchor validation is separate from returning event bodies. An explicitly
+    // processed larger-read event can be acknowledged and used as an anchor,
+    // but still passes a finite SQLite byte preflight before canonical hashing.
+    if (maxBytes !== undefined) this.requireEventByteBound(db, workspaceId, input.sequence, maxBytes, "anchor");
+    const row = db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
       FROM events
@@ -5127,8 +5301,8 @@ export class CollabStore {
     };
   }
 
-  private requireWorkspace(workspaceId: string): Workspace {
-    const workspace = this.getWorkspace(workspaceId);
+  private requireWorkspace(workspaceId: string, db = this.db): Workspace {
+    const workspace = this.getWorkspace(workspaceId, db);
     if (!workspace) throw new CollabError("workspace_not_found", `Workspace '${workspaceId}' was not found`);
     return workspace;
   }

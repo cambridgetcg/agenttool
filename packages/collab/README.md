@@ -1,5 +1,15 @@
 # @agenttool/collab
 
+> **Compass:** [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md).
+> **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
+> **Code:** `src/{store,mcp,protocol}.ts`.
+> **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
+
+**UNRELEASED source candidate: 0.4.1-dev.0, 33 MCP tools.** Public 0.4.0 remains
+the unchanged 32-tool witness-awareness release; installing it does not supply
+`collab_events_wait`. This candidate has not been published or activated in a
+native harness.
+
 Local-first coordination for independent coding-agent sessions. It gives
 Codex, Claude Code, Hermes Agent, and other local MCP clients one SQLite-backed
 repository workspace with two explicit planes: self-declared presence for
@@ -152,9 +162,73 @@ until `collab_cursor_reset` records a reason and an exact valid target anchor.
 The credential file retains the host anchor until that audited reset succeeds.
 Do not enable recovery as a permanent default.
 
-The MCP server is pull-only. It does not push an interrupt into Codex or Claude
-Code, keep a disconnected process alive, or schedule polling. A host that wants
-prompt reactions must reconnect or wake its agent and call the polling tool.
+The MCP server is request-driven. It does not push an interrupt into Codex,
+Claude Code, Hermes or OpenClaw, keep a disconnected process alive, or schedule
+polling. A host can explicitly wait while running; waking a suspended agent
+remains host-owned. Tool arrival proves neither that a model read feedback nor
+that it agreed, consented, or acted.
+
+### Bounded anchored waiting (unreleased)
+
+Use `collab_events_wait` with the bound `workspace_id` and an exact
+`after_anchor: { epoch_id, sequence, hash }` from a prior page or the session's
+cursor. `event_limit` defaults to 10 and accepts 1–50. `wait_ms` defaults to
+30,000, accepts 0–30,000, and zero reads immediately. The result is a
+`JournalPage` in `structuredContent` and matching compact JSON text, without
+`collab_next`'s task/report projections. Existing events return immediately;
+an idle timeout returns a verified empty page, not an invented timeout event.
+
+Continue from **`next_anchor`, never the later head**. Follow `has_more` with
+another bounded call. Keep this observation position separate from the
+session's processing cursor: only explicit `collab_cursor_ack` acknowledges
+processed events. A courier must use its own session and durable delivery
+cursor, never acknowledge a harness session on transport receipt.
+
+Each poll authenticates the session, checks recovery and host/stored cursor
+anchors, and reads/verifies the page in one short deferred SQLite snapshot.
+A second short snapshot rechecks the session/cursors and observed head before
+return. The dedicated read-only connection uses zero busy timeout; no
+transaction remains open during the at-most-100-ms polling delay. Session end,
+resume-generation fencing, cursor recovery, rollback, fork, or invalid returned
+page fails explicitly. Verification covers the returned page and selected
+anchors, not unreturned history; use `collab_journal_verify` for a full audit.
+
+The page is capped at 256 KiB of UTF-8 JSON and the complete MCP tool result at
+1 MiB, including both text and structured content. A page may contain fewer
+than `event_limit` events. An oversized first event returns `event_too_large`
+without advancing or skipping it; stop and select a separately authorized
+larger-read workflow such as `collab_events_since`, whose output is not covered
+by these wait caps. Do not reset or acknowledge past it just to clear the error.
+After actually reading and processing it, an explicit acknowledgement can resume
+waiting: persisted, host, and observation anchors have a separate **8 MiB per
+anchor** validation ceiling on stored UTF-8 payload plus text metadata. SQLite
+checks that size before loading the row; normal canonical JSON digest, epoch,
+and cursor checks still apply. This is not an 8 MiB response or heap-memory cap.
+An anchor above that ceiling fails explicitly with `event_anchor_too_large`,
+even after a larger read and acknowledgement. Such synthetic/legacy data needs
+operator reconciliation outside bounded waiting; never bypass verification,
+auto-reset, or skip to a later anchor merely to silence the error.
+
+MCP request cancellation and endpoint close interrupt waits and release timer
+listeners. The bundled stdio entrypoint also shuts down on actual stdin EOF or
+close, aborting pending waits and closing SQLite rather than waiting 30 seconds.
+At most eight waits may be outstanding per endpoint. A read lock is
+retried only within the requested deadline; a still-busy journal returns
+`event_read_busy`, never a false empty success. The 30-second setting bounds
+idle waiting, not an OS-level hard real-time guarantee for bounded synchronous
+SQLite reads. Closing the store also closes its dedicated reader.
+
+Waiting does **not** write `last_seen`, refresh presence, expire handoffs, renew
+leases, acknowledge a cursor, or generate journal/heartbeat noise. Presence TTL
+and witness sidecar changes are separate observations: inspect
+`collab_session_list` or `collab_anchor_status` explicitly rather than expecting
+an event wake. No observation authorizes task execution, a channel send, or a
+chain transaction.
+
+Direct Bun callers can use `CollabStore.eventsAfterAnchorForSession` with
+host-held `{ session_id, session_token, generation, last_cursor?, workspace_id,
+after_anchor, event_limit? }` for one immediate page. Keep the bearer outside
+model-facing inputs. It uses the same count/byte bounds and performs no wait.
 
 ## Task workflow
 
@@ -352,10 +426,10 @@ repository work; it does not make a participant property, authenticate a
 person, create consent, or authorize an external act. Hosts and operators must
 enforce their own repository, account, and publication boundaries.
 
-## Codex, Claude Code, and Hermes Agent
+## Codex, Claude Code, Hermes Agent, and OpenClaw
 
-The npm package root is the plugin root for both hosts, so the same
-`skills/coordinate-agent-work/SKILL.md` and 32-tool standalone MCP server ship
+The npm package root is the plugin root for Codex and Claude, so the same
+`skills/coordinate-agent-work/SKILL.md` and 33-tool standalone MCP server ship
 once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
@@ -381,7 +455,24 @@ selected Hermes profile. Its workflow keeps the credential-bound and
 self-declared presence planes separate and never asks the model to read a
 session credential file. Hermes Kanban remains Hermes's dispatcher; the local
 Collab journal does not automatically mirror it, spawn or wake agents, or
-infer external authority.
+infer external authority. The unreleased adapter also names
+`mcp_agenttool_collab_events_wait` for finite observation while running.
+
+[The explicit OpenClaw example](integrations/openclaw/README.md) describes a
+host-selected MCP connection, not an installed native plugin or verified idle
+wake. Leave native persona, memory, channel receiver ownership, permissions and
+lifecycle intact. One MCP process has one coordination binding; independently
+attributed children need separate processes, even if the host calls them a fleet.
+
+Across all four hosts the vocabulary is the same: inspect **status**, explicitly
+**queue** a selected report in a separately configured private courier,
+**receive** a bounded local event page, then **acknowledge** processing only when
+it occurred. Queueing is not sending; transport receipt is not processing,
+agreement, execution, or chain observation. Cross-device report/reply and
+handoff-offer exchange belongs to that separate opt-in courier; Collab itself
+replicates neither journals nor leases, reviews or task authority. See
+[Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) for its private
+binding, disclosure, pause/revoke and recovery boundaries.
 
 For a source-tree trial, build once and point Claude Code at this package root:
 
@@ -419,24 +510,16 @@ Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish`. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release, and versions 0.2.0 and 0.3.0
-remain historical public releases. Version 0.3.1 is the last independently
-verified public npm release before this 0.4.0 source release. Protected trusted
-workflow run `30389483811` published 0.3.1 with provenance; independently
-downloaded npm and
-[GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.1)
-tarballs were byte-identical (296,260 bytes;
-`sha256:dd0b0a0897a6d414e013e7f80b29ed9b200f94b3bcfe9d79598bc50b619db6ee`).
+Version 0.4.0 is the recorded public witness-awareness release. The repository's
+[NPM release receipts](../../docs/NPM-RELEASES.md) record its exact 303,376-byte
+npm/GitHub artifact with SHA-256
+`1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51`.
+This is a historical receipt, not a fresh registry or deployed-host check.
 
-Version 0.4.0 keeps the v0.3.1 coordination, database, paging, and cursor
-contracts and adds the exported anchor-status API plus the 32nd read-only MCP
-tool described above. Its annotated source tag, GitHub Release, npm
-publication, provenance, public byte readback, and `latest` dist-tag remain
-separately verifiable release acts; this source statement does not claim that
-any of them succeeded. Collab remains local plaintext software, not a hosted
-service, remote relay, VPN, private model channel, chain client, anchoring
-bridge, or LOVE release. npm distributes the local skills, plugin manifests,
-source, and bundled MCP runtime; this release adds no Fly, migration, or
-new Cloudflare runtime surface. After verified npm readback, the repository's
-separate receipt follow-up updates and deploys the existing static package
-discovery; it is not part of this package's authority or runtime.
+**0.4.1-dev.0 is an unreleased local source candidate.** It preserves the
+coordination/database contracts and adds bounded anchored observation as the
+33rd tool. No publication, upload, deployment, native harness configuration,
+Telegram channel, live second device or chain has been activated by this change.
+Collab remains local plaintext software, not a hosted service, remote relay,
+VPN, private model channel, chain client, anchoring bridge, or LOVE release.
+Local pack inspection creates no release authority or public artifact.
