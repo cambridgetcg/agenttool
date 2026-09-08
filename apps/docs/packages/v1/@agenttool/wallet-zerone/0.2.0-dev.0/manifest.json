@@ -8,8 +8,8 @@
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-wallet-zerone-0.2.0-dev.0.tgz",
-    "sha256": "7b32813f38fb8840342844885b99f33c54fad7f134e743f6a05e0226b87227fc",
-    "size": 91211,
+    "sha256": "d07a47580d0d7048d25437d2f41b377159e748cf6a26dce1c5bc6b8e3b6a063d",
+    "size": 91264,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -33,7 +33,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "6f6b93c8d1e7edfddb4256b74942d548da27d3c6",
+    "revision": "fd83de3175cfcff8a94ad84c40ed7053b447d656",
     "path": "packages/wallet-zerone"
   },
   "dependency_resolution": {
