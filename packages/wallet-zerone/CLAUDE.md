@@ -89,7 +89,16 @@ after ensuring dependencies are cached.
 
 ## Release state
 
-Version `0.1.2` is the current exact LOVE release after independent
+Version `0.2.0-dev.0` is a developer preview with a separate pure
+`@agenttool/wallet-zerone/bootstrap/v1` subpath. Verify distribution against
+its exact `love-package/v1` manifest at
+`https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.2.0-dev.0/manifest.json`,
+including artifact SHA-256, size, and source revision. Source registration,
+publication, deployment, and production approval are separate facts; a preview
+or a published artifact does not establish production approval or activation.
+The historical root contract and its pins remain unchanged.
+
+Version `0.1.2` is a historical stable LOVE artifact after independent
 wire/package review. It declares `@agenttool/wallet ^0.1.2` as its consumer
 peer and locks the exact public `@agenttool/wallet@0.1.3` only for development
 and release checks. The immutable `0.1.1` LOVE artifact remains public. Its

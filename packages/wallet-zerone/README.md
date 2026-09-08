@@ -9,7 +9,7 @@ into exact Cosmos `SIGN_MODE_DIRECT` bytes, verifies the returned secp256k1
 signature and `TxRaw`, and supplies injected query, simulation, broadcast, and
 lookup boundaries.
 
-Version `0.1.2` is the current exact `love-package/v1` release. Its locked
+Version `0.1.2` is a historical stable `love-package/v1` artifact. Its locked
 development dependency is the exact public `@agenttool/wallet@0.1.3`, while
 the consumer peer remains the compatible `^0.1.2` range. It remains a local
 offline runtime and has not become a hosted bridge, signer, custody provider,
@@ -32,21 +32,23 @@ not choose a custody provider, bundle an RPC URL or bearer credential, retry a
 broadcast, persist sequence/budget state, or expose a combined sign-and-send
 operation.
 
-## 0.2.0-dev.0 developer-preview candidate
+## 0.2.0-dev.0 developer preview
 
-The current source version is **`0.2.0-dev.0`, a developer-preview candidate**.
-It is **not yet published or production-approved**. Its new
-`@agenttool/wallet-zerone/bootstrap/v1` entrypoint is available after a local build;
-it is not part of the historical 0.1.2 LOVE/npm artifacts described above.
-The exported `PACKAGE_VERSION` matches the source package version `0.2.0-dev.0`;
+Version **`0.2.0-dev.0` is a developer preview**. Its separate
+`@agenttool/wallet-zerone/bootstrap/v1` entrypoint is not part of the historical
+0.1.2 LOVE/npm artifacts described above.
+The exported `PACKAGE_VERSION` matches the package version `0.2.0-dev.0`;
 the existing root contract, protocol/network pins, and Send/witness behavior remain
 unchanged. No historical artifact is updated.
 
-A new exact LOVE manifest and artifact must be built from a clean source commit
-before registering this preview. Package registration, publication, and production
-approval remain separate steps; this metadata change performs none of them.
+Verify distribution against the [exact 0.2.0-dev.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.2.0-dev.0/manifest.json),
+including artifact SHA-256, size, and source revision. The manifest and artifact
+must be built from a clean source commit before registration. Source registration,
+publication, deployment, and production approval are separate facts. A developer
+preview or a published artifact does not establish production approval, host
+execution conformance, or chain activation; verify optional mirrors independently.
 
-The separate candidate constructs exactly one sponsored native seed `MsgClaim`
+The separate preview constructs exactly one sponsored native seed `MsgClaim`
 and unsigned direct-sign plan. Its dynamic profile binds explicit genesis,
 source manifest, chain reference, runtime/helper artifacts, and SDK **v0.53.8**.
 It provides no production default profile, numeric budget, signer, endpoint,
@@ -71,7 +73,7 @@ must not replace it after possible signing. The runtime reserves the full grant
 plus separately approved setup exposure, not the estimated fee or claimant balance.
 Unknown signing/submission remains sticky; this pure package performs no retries.
 
-See the [bootstrap candidate specification](../../docs/specs/AGENT-WALLET-ZERONE-BOOTSTRAP-0.1.md)
+See the [bootstrap developer-preview specification](../../docs/specs/AGENT-WALLET-ZERONE-BOOTSTRAP-0.1.md)
 and [shared native I/O contract](../../docs/specs/ZERONE-SEED-IO-0.1.md).
 `bun run ci` includes the new offline bootstrap tests and a compiled Node ESM
 unsigned journey alongside the unchanged historical vector regressions. A local

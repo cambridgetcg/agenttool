@@ -1,4 +1,4 @@
-# Agent Wallet Zerone Bootstrap 0.1 — unreleased source candidate
+# Agent Wallet Zerone Bootstrap 0.1 — developer preview
 
 > **Compass:** [Wallet core](AGENT-WALLET-0.1.md), [historical Zerone root](AGENT-WALLET-ZERONE-0.1.md), and [frozen Seed I/O contract](ZERONE-SEED-IO-0.1.md).
 > **Implements:** pure, source-bound, one-intent native seed Claim planning; not activation or custody.
@@ -8,13 +8,15 @@
 ## Release and trust boundary
 
 The new `@agenttool/wallet-zerone/bootstrap/v1` subpath implements the frozen
-`SeedPlannerApi`. Package source version **0.2.0-dev.0 is a developer-preview
-candidate, not yet published or production-approved**, and is not the immutable
-0.1.2 LOVE/npm artifact. The exported `PACKAGE_VERSION` matches package metadata
-0.2.0-dev.0; the existing root contract, networks, SDK pin, transaction
-implementation and byte vectors are unchanged. A new exact LOVE manifest/artifact must be built from a
-clean source commit before registration; publication and production approval
-remain separate. This work publishes or activates nothing.
+`SeedPlannerApi`. Package version **0.2.0-dev.0 is a developer preview**, distinct
+from the immutable historical stable 0.1.2 LOVE/npm artifact. The exported
+`PACKAGE_VERSION` matches package metadata 0.2.0-dev.0; the existing root contract,
+networks, SDK pin, transaction implementation and byte vectors are unchanged.
+Verify distribution against the [exact 0.2.0-dev.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.2.0-dev.0/manifest.json),
+including artifact SHA-256, size, and source revision. The manifest/artifact must
+be built from a clean source commit before registration. Source registration,
+publication, deployment, and production approval are separate facts; a preview
+or a published artifact does not establish production approval or activation.
 
 The profile requires explicit source-manifest, serialized-genesis, runtime and
 helper SHA256 digests, source revision, and mutually consistent CAIP identifiers.
