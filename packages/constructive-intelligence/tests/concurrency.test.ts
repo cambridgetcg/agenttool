@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { canonicalJson } from "../src/canonical.js";
 import { ConstructiveStore } from "../src/store.js";
 import { makeBody, makePin } from "./helpers.js";
+import { classifyCapturedOutput, classifyLinuxSyscall } from "./process-diagnostics.js";
 
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 const INTERNAL_SUCCESS_DEADLINE_MS = 10_000;
@@ -21,6 +22,9 @@ const MAX_OUTPUT_BYTES = 1_048_576;
 
 const runner = `
   import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
+
+  const classifyCapturedOutput = ${classifyCapturedOutput.toString()};
+  const classifyLinuxSyscall = ${classifyLinuxSyscall.toString()};
 
   const database = process.argv[1];
   const receiptPath = process.argv[2];
@@ -98,6 +102,7 @@ const runner = `
     try { process.kill(pid, 0); exists = true; }
     catch (error) { if (error?.code === "ESRCH") exists = false; }
     let state = null, wait_channel = null;
+    let syscall = { syscall: null, stdio_descriptor: null };
     if (process.platform === "linux") {
       try {
         const status = readFileSync("/proc/" + pid + "/status", "utf8");
@@ -106,14 +111,19 @@ const runner = `
         wait_channel = /^[a-zA-Z0-9_]{1,80}$/.test(channel) ? channel : null;
       } catch { /* Child exit or unavailable procfs is represented by nulls. */ }
     }
-    return { exists, state, wait_channel };
+    if (process.platform === "linux") {
+      try { syscall = classifyLinuxSyscall(readFileSync("/proc/" + pid + "/syscall", "utf8"), process.arch); }
+      catch { /* Access restrictions and exit races leave the closed fields null. */ }
+    }
+    return { exists, state, wait_channel, ...syscall };
   };
 
   const settle = (exitCode, reason) => {
     if (settlementPromise !== undefined) return settlementPromise;
     settlementPromise = (async () => {
-      // Capture before TERM/cancellation changes the evidence. Counts and
-      // lifecycle states only: never receipt bytes, child output, or paths.
+      // Capture before TERM/cancellation changes the evidence. Keep counts,
+      // lifecycle states, closed classifications, and known source coordinates;
+      // never retain receipt bytes, raw child output, or full paths.
       try {
         durableWriteNew(settlementPath + ".diagnostics", {
           reason,
@@ -124,6 +134,7 @@ const runner = `
             stdout_bytes: stdout.reduce((sum, chunk) => sum + chunk.byteLength, 0),
             stderr_bytes: stderr.reduce((sum, chunk) => sum + chunk.byteLength, 0),
             stdout_kind: classifyOutput(stdout), stderr_kind: classifyOutput(stderr),
+            stderr_diagnostics: classifyCapturedOutput(Buffer.concat(stderr).toString("utf8")),
           })),
           processes: processes.map(({ pid }) => observeProcess(pid)),
         });
@@ -351,8 +362,8 @@ type RunnerDiagnostics = {
   elapsed_ms: number;
   output_bytes: number;
   children: Array<{ exited: boolean; exit_code: number | null; stdout_done: boolean; stderr_done: boolean }>;
-  child_io: Array<{ stdout_bytes: number; stderr_bytes: number; stdout_kind: string; stderr_kind: string }>;
-  processes: Array<{ exists: boolean | null; state: string | null; wait_channel: string | null }>;
+  child_io: Array<{ stdout_bytes: number; stderr_bytes: number; stdout_kind: string; stderr_kind: string; stderr_diagnostics: ReturnType<typeof classifyCapturedOutput> }>;
+  processes: Array<{ exists: boolean | null; state: string | null; wait_channel: string | null } & ReturnType<typeof classifyLinuxSyscall>>;
 };
 
 function readJson<T>(path: string): T {
