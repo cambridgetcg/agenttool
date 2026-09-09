@@ -477,6 +477,91 @@ async function rejectionOf(promise: Promise<unknown>): Promise<any> {
 }
 
 describe("AgentBrowser core", () => {
+  test("isolates shared-process sessions and closes only their own contexts", async () => {
+    const contexts = [new FakeContext(), new FakeContext()];
+    const contextOptions: RuntimeContextOptions[] = [];
+    let sharedCloseCalls = 0;
+    const sharedBrowser: BrowserLike = {
+      async newContext(options) {
+        contextOptions.push(options);
+        const context = contexts[contextOptions.length - 1];
+        if (!context) throw new Error("unexpected extra context");
+        return context;
+      },
+      async close() {
+        sharedCloseCalls += 1;
+      },
+    };
+
+    const first = await AgentBrowser.launchEphemeralContext(sharedBrowser, {
+      authority: "public",
+    });
+    const second = await AgentBrowser.launchEphemeralContext(sharedBrowser, {
+      authority: "public",
+    });
+
+    expect(first.sessionId).not.toBe(second.sessionId);
+    expect(contextOptions).toHaveLength(2);
+    expect(contexts[0]!.routeHandler).not.toBeNull();
+    expect(contexts[1]!.routeHandler).not.toBeNull();
+    expect(contexts[0]!.routeHandler).not.toBe(contexts[1]!.routeHandler);
+    expect(contextOptions).toEqual([
+      expect.objectContaining({ serviceWorkers: "block" }),
+      expect.objectContaining({ serviceWorkers: "block" }),
+    ]);
+
+    await first.close();
+    await first.close();
+    expect(contexts[0]!.closeCalls).toBe(1);
+    expect(contexts[1]!.closeCalls).toBe(0);
+    expect(sharedCloseCalls).toBe(0);
+
+    await second.close();
+    expect(contexts[1]!.closeCalls).toBe(1);
+    expect(sharedCloseCalls).toBe(0);
+  });
+
+  test("shared-process sessions refuse persistent state and another runtime", async () => {
+    let contextCalls = 0;
+    const sharedBrowser: BrowserLike = {
+      async newContext() {
+        contextCalls += 1;
+        return new FakeContext();
+      },
+      async close() {},
+    };
+
+    await expect(
+      AgentBrowser.launchEphemeralContext(sharedBrowser, {
+        profile: {
+          mode: "persistent",
+          directory: "/private/tmp/agenttool-browser-persistent-refused",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_options" });
+    await expect(
+      AgentBrowser.launchEphemeralContext(sharedBrowser, {
+        runtime: new FakeRuntime(new FakeContext()),
+      }),
+    ).rejects.toMatchObject({ code: "invalid_options" });
+    await expect(
+      AgentBrowser.launchEphemeralContext(sharedBrowser, {
+        channel: "chrome",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_options" });
+    await expect(
+      AgentBrowser.launchEphemeralContext(sharedBrowser, {
+        executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_options" });
+    await expect(
+      AgentBrowser.launchEphemeralContext(sharedBrowser, {
+        headless: true,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_options" });
+    expect(contextCalls).toBe(0);
+  });
+
   test("defaults to public authority with blocked service workers and WebSockets", async () => {
     const { browser, context, runtime } = await launched();
     expect(runtime.launchOptions).toEqual({

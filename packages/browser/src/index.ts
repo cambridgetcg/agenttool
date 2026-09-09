@@ -64,6 +64,17 @@ export {
   serveBrowserMcpStdio,
   toBrowserAction,
 } from "./mcp.js";
+export {
+  BrowserMcpBroker,
+  checkedBrowserBrokerSocketPath,
+  DEFAULT_BROWSER_BROKER_MAX_CLIENTS,
+  MAX_BROWSER_BROKER_CLIENTS,
+  MAX_BROWSER_BROKER_MCP_LINE_BYTES,
+  MAX_BROWSER_BROKER_SOCKET_BYTES,
+} from "./mcp-broker.js";
+export {
+  relayBrowserMcpStdio,
+} from "./mcp-proxy.js";
 export { OBSERVATION_SCHEMA } from "./types.js";
 export { BROWSER_PACKAGE_VERSION } from "./version.js";
 export type * from "./errors.js";
@@ -90,3 +101,10 @@ export type {
   BrowserMcpStdioOptions,
   PublicBrowserError,
 } from "./mcp.js";
+export type {
+  BrowserMcpBrokerDependencies,
+  BrowserMcpBrokerOptions,
+} from "./mcp-broker.js";
+export type {
+  BrowserMcpProxyOptions,
+} from "./mcp-proxy.js";

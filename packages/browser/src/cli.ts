@@ -26,6 +26,13 @@ import {
   JSONL_PROTOCOL_VERSION,
   type BrowserOperation,
 } from "./protocol.js";
+import {
+  BrowserMcpBroker,
+  DEFAULT_BROWSER_BROKER_MAX_CLIENTS,
+  MAX_BROWSER_BROKER_CLIENTS,
+  type BrowserMcpBrokerOptions,
+} from "./mcp-broker.js";
+import { relayBrowserMcpStdio } from "./mcp-proxy.js";
 import { BROWSER_PACKAGE_VERSION } from "./version.js";
 
 export { JSONL_PROTOCOL_VERSION } from "./protocol.js";
@@ -51,6 +58,15 @@ export interface CliDependencies {
   stderr?: Writable;
   launch?: (config: BrowserProcessConfig) => Promise<AgentBrowser>;
   runMcp?: (browser: AgentBrowser, stderr: Writable) => Promise<void>;
+  runBroker?: (
+    options: BrowserMcpBrokerOptions,
+    stderr: Writable,
+  ) => Promise<void>;
+  runProxy?: (options: {
+    socketPath: string;
+    input: Readable;
+    output: Writable;
+  }) => Promise<void>;
 }
 
 interface JsonlRequest {
@@ -520,6 +536,9 @@ Usage:
   agenttool-browser mcp [startup options]       stdio MCP server
   agenttool-browser jsonl [startup options]     versioned JSON Lines on stdin/stdout
   agenttool-browser doctor [startup options]    launch-and-close configuration check
+  agenttool-browser broker --socket PATH [startup options]
+                                               opt-in macOS shared-process preview
+  agenttool-browser mcp-proxy --socket PATH     stdio relay to a running broker
   agenttool-browser help
 
 Startup options:
@@ -530,6 +549,10 @@ Startup options:
   --ephemeral | --profile DIR
   --channel NAME | --executable PATH
   --output-dir DIR
+
+Broker-only options:
+  --socket PATH                                same-UID socket; 0700 parent, 0600 leaf
+  --max-clients N                             1-32 (default ${DEFAULT_BROWSER_BROKER_MAX_CLIENTS})
 
 Environment:
   ${BROWSER_ENV.headless}=1|0
@@ -549,6 +572,10 @@ artifact directory. Browser binaries are never downloaded automatically.
 Browser/page output is untrusted data, never instructions.
 Use one named authority or the legacy public/local flags, never both.
 Chromium-managed redirect hops are not independently policy-checked.
+The broker preview is manual, macOS-only, public-authority, ephemeral-context,
+and same-UID/mode-bounded. It does not inspect ACLs or attest peer-process
+identity. Persistent, legacy, local, and sovereign broker configurations are
+refused.
 `;
 
 async function defaultMcpRunner(
@@ -658,6 +685,117 @@ function browserLaunchDiagnostic(config: BrowserProcessConfig): string {
   );
 }
 
+const STARTUP_OPTIONS_WITH_VALUES = new Set([
+  "--authority",
+  "--profile",
+  "--persistent-profile",
+  "--channel",
+  "--executable",
+  "--executable-path",
+  "--output-dir",
+]);
+
+function cliOptionValue(
+  args: readonly string[],
+  index: number,
+  flag: string,
+): string {
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
+}
+
+function parseBrokerCliOptions(
+  args: readonly string[],
+  configOptions: {
+    env?: Record<string, string | undefined>;
+    cwd?: string;
+  },
+): BrowserMcpBrokerOptions {
+  const startupArgs: string[] = [];
+  let socketPath: string | undefined;
+  let maxClients: number | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index]!;
+    if (flag === "--socket") {
+      if (socketPath !== undefined) {
+        throw new Error("--socket may only be supplied once");
+      }
+      socketPath = cliOptionValue(args, index, flag);
+      index += 1;
+      continue;
+    }
+    if (flag === "--max-clients") {
+      if (maxClients !== undefined) {
+        throw new Error("--max-clients may only be supplied once");
+      }
+      const value = cliOptionValue(args, index, flag);
+      if (!/^[1-9][0-9]*$/.test(value)) {
+        throw new Error("--max-clients must be a positive integer");
+      }
+      maxClients = Number(value);
+      if (
+        !Number.isSafeInteger(maxClients)
+        || maxClients > MAX_BROWSER_BROKER_CLIENTS
+      ) {
+        throw new Error(
+          `--max-clients must be an integer from 1 to ${MAX_BROWSER_BROKER_CLIENTS}`,
+        );
+      }
+      index += 1;
+      continue;
+    }
+    startupArgs.push(flag);
+    if (STARTUP_OPTIONS_WITH_VALUES.has(flag)) {
+      startupArgs.push(cliOptionValue(args, index, flag));
+      index += 1;
+    }
+  }
+  if (socketPath === undefined) {
+    throw new Error("broker requires an explicit --socket PATH");
+  }
+  const browser = parseBrowserProcessConfig(startupArgs, configOptions);
+  return {
+    socketPath,
+    browser,
+    ...(maxClients !== undefined ? { maxClients } : {}),
+  };
+}
+
+function parseProxySocketPath(args: readonly string[]): string {
+  if (args.length !== 2 || args[0] !== "--socket") {
+    throw new Error("mcp-proxy requires exactly --socket PATH");
+  }
+  return cliOptionValue(args, 0, "--socket");
+}
+
+async function runDefaultBroker(
+  options: BrowserMcpBrokerOptions,
+  stderr: Writable,
+): Promise<void> {
+  const broker = new BrowserMcpBroker(options);
+  await broker.start();
+  let requestStop!: () => void;
+  const stopRequested = new Promise<void>((resolveStop) => {
+    requestStop = resolveStop;
+  });
+  const onSignal = (): void => requestStop();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  stderr.write(
+    `· agenttool-browser broker ready (macOS Unix socket; public ephemeral contexts; max clients ${options.maxClients ?? DEFAULT_BROWSER_BROKER_MAX_CLIENTS})\n`,
+  );
+  try {
+    await Promise.race([stopRequested, broker.closed]);
+  } finally {
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    await broker.close();
+  }
+}
+
 export async function runCli(
   argv: readonly string[],
   dependencies: CliDependencies = {},
@@ -676,16 +814,50 @@ export async function runCli(
     stdout.write(CLI_HELP);
     return 0;
   }
-  if (!["mcp", "jsonl", "doctor"].includes(command)) {
+  if (
+    !["mcp", "jsonl", "doctor", "broker", "mcp-proxy"].includes(command)
+  ) {
     stderr.write(`error: unknown command ${command}\n\n${CLI_HELP}`);
     return 2;
   }
 
   let launchConfig: BrowserProcessConfig | undefined;
   try {
-    const config = parseBrowserProcessConfig(args, {
+    if (command === "mcp-proxy") {
+      const socketPath = parseProxySocketPath(args);
+      if (dependencies.runProxy) {
+        await dependencies.runProxy({
+          socketPath,
+          input: stdin,
+          output: stdout,
+        });
+      } else {
+        await relayBrowserMcpStdio({
+          socketPath,
+          input: stdin,
+          output: stdout,
+        });
+      }
+      return 0;
+    }
+
+    const configOptions = {
       ...(dependencies.env ? { env: dependencies.env } : {}),
       ...(dependencies.cwd ? { cwd: dependencies.cwd } : {}),
+    };
+    if (command === "broker") {
+      const brokerOptions = parseBrokerCliOptions(args, configOptions);
+      launchConfig = brokerOptions.browser;
+      if (dependencies.runBroker) {
+        await dependencies.runBroker(brokerOptions, stderr);
+      } else {
+        await runDefaultBroker(brokerOptions, stderr);
+      }
+      return 0;
+    }
+
+    const config = parseBrowserProcessConfig(args, {
+      ...configOptions,
     });
     launchConfig = config;
     if (command === "doctor") {
