@@ -15,6 +15,7 @@ import { createX402TopUpRouter } from "../src/routes/x402-top-up";
 import { ROUTE_CREDITS } from "../src/billing/route-credits";
 import { config } from "../src/config";
 import { isX402FacilitatorLocallyReady } from "../src/services/economy/facilitators/coinbase";
+import { setBuilderPayToResolver } from "../src/services/economy/x402-builder-split";
 import {
   DEFAULT_X402_FACILITATOR_URL,
   recoverableX402ProjectCreditPolicy,
@@ -37,6 +38,9 @@ const originalEnv = {
   x402Environment: process.env.AGENTTOOL_X402_ENVIRONMENT,
   nodeEnv: process.env.NODE_ENV,
   flyAppName: process.env.FLY_APP_NAME,
+  appCode: process.env.AGENTTOOL_X402_APP_CODE,
+  builderSplit: process.env.AGENTTOOL_X402_BUILDER_SPLIT,
+  baseRpc: process.env.AGENTTOOL_X402_BASE_RPC,
 };
 
 function restore(name: string, value: string | undefined): void {
@@ -55,6 +59,10 @@ afterEach(() => {
   restore("AGENTTOOL_X402_ENVIRONMENT", originalEnv.x402Environment);
   restore("NODE_ENV", originalEnv.nodeEnv);
   restore("FLY_APP_NAME", originalEnv.flyAppName);
+  restore("AGENTTOOL_X402_APP_CODE", originalEnv.appCode);
+  restore("AGENTTOOL_X402_BUILDER_SPLIT", originalEnv.builderSplit);
+  restore("AGENTTOOL_X402_BASE_RPC", originalEnv.baseRpc);
+  setBuilderPayToResolver(null);
 });
 
 function projectMiddleware(credits = 0) {
@@ -301,7 +309,38 @@ describe("production challenge eligibility", () => {
         },
       });
       expect(required.accepts[0].extra.facilitator).toBeUndefined();
+      expect(required.accepts[0].payTo).toBe(RECIPIENT);
+      expect(required.extensions).toBeUndefined();
     }
+  });
+
+  test("builder-code split stays on treasury unless armed with a resolver", async () => {
+    configureCustom();
+    process.env.AGENTTOOL_X402_APP_CODE = "bc_agenttool";
+    process.env.AGENTTOOL_X402_BUILDER_SPLIT = "1";
+    const headers = { "x-builder-code": "bc_yau" };
+    const unarmedResolver = await configuredApp().request(
+      "https://api.agenttool.dev/v1/scrape",
+      { method: "POST", headers },
+    );
+    const unarmed = JSON.parse(Buffer.from(
+      unarmedResolver.headers.get("payment-required")!,
+      "base64",
+    ).toString("utf-8"));
+    expect(unarmed.accepts[0].payTo).toBe(RECIPIENT);
+    expect(unarmed.extensions).toEqual({ a: "bc_agenttool", s: "bc_yau" });
+
+    setBuilderPayToResolver(() => "0x1111111111111111111111111111111111111111");
+    const armedRes = await configuredApp().request(
+      "https://api.agenttool.dev/v1/scrape",
+      { method: "POST", headers },
+    );
+    const armed = JSON.parse(Buffer.from(
+      armedRes.headers.get("payment-required")!,
+      "base64",
+    ).toString("utf-8"));
+    expect(armed.accepts[0].payTo).toBe("0x1111111111111111111111111111111111111111");
+    expect(armed.extensions).toEqual({ a: "bc_agenttool", s: "bc_yau" });
   });
 
   test("wallet errors, wrong methods, funded projects and invalid config never become payable", async () => {

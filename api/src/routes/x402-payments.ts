@@ -7,7 +7,8 @@ import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { getProductionX402PaymentStatus } from "../services/economy/x402-payments";
-import { storedX402NetworkMayApply } from "../services/economy/x402-policy";
+import { affiliationFromSettlement } from "../services/economy/x402-builder-split";
+import { resolveX402Recipient, storedX402NetworkMayApply } from "../services/economy/x402-policy";
 
 type StatusLoader = typeof getProductionX402PaymentStatus;
 
@@ -94,6 +95,11 @@ export function createX402PaymentsRouter(
       transaction: row.receipt?.transaction ?? null,
       receipt: row.receipt ?? null,
       credits_applied: row.creditsApplied ?? null,
+      affiliation: affiliationFromSettlement({
+        amountAtomic: row.amountAtomic,
+        payTo: row.payTo ?? "",
+        treasury: resolveX402Recipient().recipient,
+      }),
       reconciles: "payment_and_project_credit_only",
       next_action: nextAction,
       retry_after_seconds: retryAfterSeconds,
