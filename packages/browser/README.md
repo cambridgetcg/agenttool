@@ -312,6 +312,75 @@ This first slice adds no JSONL or MCP operation, HF token lookup, hosted
 inference, model download, screenshot interpretation, selector generation, or
 automatic Browser action. The original nine-tool contract remains exact.
 
+### XENIA guest-right practice (direct TypeScript only)
+
+The `@agenttool/browser/xenia` subpath gives the guest side of XENIA
+guest-right an executable home over evidence the caller already holds. Like
+understanding, it consumes existing observations, extractions, and receipts;
+it performs no network I/O, re-reads no tab, and adds no JSONL or MCP
+operation. The XENIA Surface 0.1 wire constants are release-pinned literals
+mirroring `@agenttool/xenia@0.1.0-beta.5` (tag `surface-v0.1.0-rc.1`); a host
+document that does not match those exact identifiers is not read as this
+profile.
+
+1. `readXeniaThreshold()` projects a host's declared threshold: the
+   allowlisted discovery hints already present on an `Observation`, plus an
+   optional bounded recognition of `/.well-known/agent.json` when the caller
+   has navigated there and extracted the body through this same policy
+   boundary. Recognition is structural; profile-rule deviations are projected
+   as findings, and conformance is always `not_tested`. Host-controlled bytes
+   yield a state (`invalid_json`, `shape_unrecognized`, …), never an
+   exception; only caller mistakes throw.
+2. `classifyXeniaGuestAct()` maps one zero-effect consequence plan onto the
+   open-act/binding-act rule. Reading-shaped kinds (navigate, scroll, back,
+   wait, close_tab, …) classify as `open_act` with honest caveats;
+   page-control interaction (click, type, press, select) classifies as
+   `indeterminate` and always carries the consent floor
+   `obtain_specific_consent_before_dispatch`, because the runtime cannot know
+   whether a control submits an order or folds a menu. A navigation matching
+   a declared manifest resource is annotated as that declared door.
+3. `recordXeniaGuestVisit()` assembles "the observer is also observed" into a
+   session-local record: identity proof state (`none` or `asserted` only —
+   Browser cannot test or attest identity), launch authority, and the exact
+   acts drawn from receipts that must pass the runtime's own authenticity
+   check. A structurally identical forged receipt is rejected.
+4. `readXeniaSurfaceProblem()` reads an `application/problem+json` body as
+   errors-as-orientation, enforcing the profile's load-bearing invariant —
+   `terminal: true` if and only if `next_actions` is empty — and stating that
+   next actions are publisher metadata, never followed automatically.
+
+```ts
+import {
+  classifyXeniaGuestAct,
+  readXeniaThreshold,
+  recordXeniaGuestVisit,
+} from "@agenttool/browser/xenia";
+
+const threshold = readXeniaThreshold({
+  observation,
+  manifestExtract, // optional: extract of /.well-known/agent.json
+});
+const advice = classifyXeniaGuestAct({
+  plan: browser.plan({ kind: "navigate", url: door }),
+  threshold,
+});
+// caller decides; after acting:
+const visit = recordXeniaGuestVisit({ receipts, threshold });
+```
+
+Threshold readings and visit records carry content-derived `sha256:` IDs, and
+a reading handed back into classification or a record is rebuilt from
+validated values with its identity recomputed, so an edited reading is
+rejected rather than silently trusted.
+
+A threshold reading is host-declared metadata, not conduct, recognition,
+conformance, or origin authentication — Chromium-managed redirect hops are
+not revalidated, so the observed origin is observed, not authenticated. A
+classification is advisory, not authorization, consent, or enforcement. A
+visit record is session-local evidence, not attestation, identity proof,
+covenant adoption, or proof of remote effects. Browser still never signs,
+registers, pays, follows a discovery hint, or invokes a protocol on its own.
+
 ### Action receipts and observation basis
 
 Version `0.5.0` gives each syntactically admitted `browser_act` attempt a

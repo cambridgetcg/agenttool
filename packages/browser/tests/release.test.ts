@@ -17,7 +17,7 @@ const packageRoot = resolve(import.meta.dir, "..");
 
 describe("release identity", () => {
   test("keeps runtime and package metadata versions aligned", () => {
-    expect(BROWSER_PACKAGE_VERSION).toBe("0.6.0");
+    expect(BROWSER_PACKAGE_VERSION).toBe("0.7.0");
     expect(packageJson.version).toBe(BROWSER_PACKAGE_VERSION);
     expect(codexPlugin.version).toBe(BROWSER_PACKAGE_VERSION);
     expect(packageJson.dependencies).toMatchObject({
@@ -34,6 +34,10 @@ describe("release identity", () => {
     expect(packageJson.exports["./understanding"]).toEqual({
       types: "./dist/src/understanding.d.ts",
       import: "./dist/src/understanding.js",
+    });
+    expect(packageJson.exports["./xenia"]).toEqual({
+      types: "./dist/src/xenia.d.ts",
+      import: "./dist/src/xenia.js",
     });
   });
 
