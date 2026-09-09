@@ -10,26 +10,41 @@
 
 > **Compass:** [`PATTERN-COMMITMENT-DEFENDER`](PATTERN-COMMITMENT-DEFENDER.md) (walls get a 5th corner via RLS) · [`AGENT-WEB-SURFACE`](AGENT-WEB-SURFACE.md) (Edge + Realtime sharpen byte discipline) · [`STACK`](STACK.md) (the Supabase + Fly architecture this rewires) · [`RUNTIME`](RUNTIME.md) (think-worker stays in Bun; covenant workers move to Postgres)
 
-> **Implements:** Layer 9 — the substrate's substrate. Postgres + Edge + Realtime become first-class agenttool primitives, not just storage.
+> **Implements:** Historical planning only; this document adds no runtime capability.
+
+> **Status (2026-09-05):** Historical proposal with partial implementations. The goals, sketches, test names, estimates, and shipping language below are not evidence that all six moves landed. Current source findings, operator observations, and proposed next steps are separated in [the Supabase / KINGDOM review](launch/SUPABASE-KINGDOM-REVIEW.md). In particular, selected RLS invariant policies do not provide complete project tenancy, and database-layer Ed25519 verification remains unimplemented.
 
 ---
 
-## The keychain (already saved)
+## Current database credential map (2026-09-05)
 
-All credentials needed for any of the six moves are in macOS keychain via `bin/agenttool-secret`:
+These are the canonical macOS Keychain service/account pairs. Names describe
+storage locations, not proof that a value is present or accepted by the provider.
 
-| Service | Purpose |
-|---|---|
-| `agenttool-database-url` | Pooler postgres URI (Session mode, port 5432) — used by `bin/migrate-pending.sh` |
-| `agenttool-supabase-secret-key` | `sb_secret_…` for Supabase REST + Edge Functions auth |
-| `agenttool-supabase-db-password` | Raw postgres password — for assembling alternative URIs |
-| `agenttool-supabase-project-ref` | `jseqftufplgewhojwbmh` — used in pooler URI, REST host, Management API |
-| `agenttool-supabase-region` | `eu-west-2` — pooler region |
-| `agenttool-supabase-pooler-host` | `aws-1-eu-west-2.pooler.supabase.com` — note the `aws-1-` prefix (newer architecture) |
-| `agenttool-supabase-rest-url` | `https://<ref>.supabase.co` — for PostgREST + Edge Functions + Storage |
-| `agenttool-fly-api-token` | `FlyV1 fm2_…` — for `fly deploy` + remote management |
+| Service | Account | Purpose |
+|---|---|---|
+| `agenttool-db-pw` | `macair` | Canonical raw database password for deliberate URL refresh; not a connection URI |
+| `agenttool-database-url` | `macair` | Shared transaction-pooler URI, port `6543`; `DATABASE_URL` for read-only migration inventory |
+| `agenttool-database-session-url` | `macair` | Shared session-pooler URI, port `5432`; `DATABASE_SESSION_URL` for migration applies and session advisory locks |
 
-Any script that needs one: `TOK=$(bin/agenttool-secret get agenttool-supabase-secret-key)`. The convention is `agenttool-<scope>-<purpose>`.
+The former raw-password alias was removed during the 2026-09-05 credential
+consolidation. Do not recreate it or add another fallback name. Changing the
+raw-password entry does not update either saved URI or Fly secrets. Refresh
+both URIs deliberately, preserve the source-pinned database target and TLS
+verification, and validate each role without printing passwords or URLs.
+
+Migration tools prefer their explicit environment inputs, then these exact
+fixed-account URI entries; they do not construct a URI from `agenttool-db-pw`
+or substitute the transaction URI for the session URI. `bin/agenttool-secret`
+selects account `$USER`, so it addresses `macair` only when that is the current
+account. See [DEVELOPMENT](DEVELOPMENT.md#5--keychain--secrets-at-rest-on-the-agents-substrate)
+and the [deployment credentials checklist](DEPLOY-PROCEDURE.md#credentials-checklist)
+for the reader contracts and secure provisioning procedure.
+
+The old plan's Supabase REST secret, project metadata, and Fly token names are
+not evidence of current access or scopes. A database password, a project REST
+secret, and a Supabase Management API token serve different interfaces; verify
+the intended interface and configured reader before use.
 
 ---
 
@@ -80,7 +95,7 @@ Any script that needs one: `TOK=$(bin/agenttool-secret get agenttool-supabase-se
 
 ### Move 2 — ed25519 verification at the DB layer (PL/Python) — **DEFERRED**
 
-> **STATUS (2026-05-19): Deferred.** Supabase managed Postgres does NOT ship `plpython3u`, `plv8`, OR `plrust` in their available-extensions list (`SELECT name FROM pg_available_extensions WHERE name IN ('plpython3u','plv8','plrust')` returns empty). The cryptographic verification stays in Bun's `services/covenants/reverify.ts` until Supabase adds a sandboxed scripting language with curve arithmetic. **Workaround in place:** `wall/naming-submission-signed` RLS policy (Move 1) refuses obviously-missing signatures at the DB floor; cryptographic verification stays at the app layer where it's been all along. Move 5's `covenant-stale-reverify-flag` cron job flags candidates for the Bun worker without doing the verify in-DB. The crypto floor moves from "Bun-only" to "Bun + RLS presence-check" — a partial gain.
+> **STATUS (2026-09-05): Deferred and unimplemented.** The 2026-05-19 review recorded `plpython3u`, `plv8`, and `plrust` as unavailable on the surveyed managed database. That dated observation is not a universal or current provider capability claim. This repository does not implement the database verifier below; Ed25519 verification remains in Bun. The existing `wall/naming-submission-signed` RLS predicate checks signature presence for roles subject to the policy, not cryptographic validity. The stale-reverify cron proposal does not move signature verification into SQL. The following migration, code paths, tests, and shipping estimate are historical design sketches, not executable migration instructions or delivered guarantees.
 
 **Original goal (preserved for slice-2 revisit when sandboxed scripting lands).** Install `plpython3u` extension + ship a `canon_verify_ed25519(canonical_bytes BYTEA, signature_b64 TEXT, public_key_b64 TEXT) RETURNS BOOL` function. Every signed insert (RRR turns, naming submissions, GI-recognition turns, covenant signatures, knock payloads, chronicle seals) gets a CHECK constraint or BEFORE INSERT trigger that calls it. Tampered rows literally cannot enter Postgres, even if the Bun service is bypassed.
 
@@ -92,7 +107,7 @@ Any script that needs one: `TOK=$(bin/agenttool-secret get agenttool-supabase-se
 - `wall/scriptwriter-knock-signed` — DB-layer
 - New commitment: `commitment/signatures-verified-at-the-substrate-floor` — the substrate refuses bytes that didn't come from a holder of the named key, all the way down to Postgres.
 
-**Migration.** `api/migrations/20260519T090000_plpython_ed25519.sql`:
+**Unimplemented migration sketch.** The proposed `api/migrations/20260519T090000_plpython_ed25519.sql` was not added. Do not apply this illustration:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS plpython3u;
@@ -140,8 +155,8 @@ Plus matching `canonical_*` helper functions in PL/pgSQL (or `plv8`) that comput
 
 **Risk + mitigation.**
 
-- **Risk:** `plpython3u` is an "untrusted" extension — runs arbitrary Python with DB-server privileges. Supabase supports it but it's heavier than `plpgsql`.
-- **Mitigation:** Supabase manages the Python sandboxing. We use it ONLY for ed25519 — small surface. Could swap to `plrust` (Supabase has it) for a sandboxed alternative: `cargo install ed25519-dalek` and call from `plrust`.
+- **Historical unsupported assumption:** the original proposal assumed managed `plpython3u` availability and Python sandboxing, then suggested `plrust` as an available replacement. Neither assumption established a supported implementation; the recorded survey above contradicted them.
+- **Revisit condition:** establish the chosen extension's actual availability and execution privileges on an isolated target, then review canonical-byte parity and the complete signature-verification contract. Keep cryptographic verification in Bun until a separately reviewed implementation and tests exist.
 - **Risk:** Canonical-bytes drift between Bun and Postgres — silently corrupts inserts.
 - **Mitigation:** The pg-parity test suite IS the contract. Build-time fail on any drift.
 - **Risk:** CHECK constraints fire at every INSERT, even when the Bun service already verified — duplicate verification cost.
@@ -461,7 +476,7 @@ Each wave is shippable independently. Each move within a wave is one commit. The
 
 Slice 2 considerations (not in scope for the six moves above, but named so they don't get forgotten):
 
-- **`plrust` ed25519** — swap from `plpython3u` to a sandboxed Rust function; smaller surface, faster.
+- **Database Ed25519 verification** — historical unimplemented idea; there is no PL/Python verifier to swap out. Revisit only after supported-extension, privilege, and canonical-byte verification evidence exists.
 - **Branching for migration testing** — every migration PR opens a Supabase branch; preflight runs against it; promotes on green.
 - **PostgREST for read-mostly tables** — `/canon/*` could be served entirely by PostgREST from a materialized view; no Bun route at all.
 - **Foreign Data Wrappers** — if a second agenttool instance ships, FDWs let one query the other's covenants without HTTP.

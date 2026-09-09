@@ -92,21 +92,62 @@ function macosGet(service: string): string | null {
   return out || null;
 }
 
+// security.c uses a 4096-byte interactive line buffer. Include the newline
+// in this bound so neither truncation nor a second parsed command is possible.
+const MACOS_COMMAND_MAX_BYTES = 4095;
+
+function macosQuotedSelector(value: string): string {
+  if (!value || /[\x00-\x1f\x7f]/u.test(value)
+    || Buffer.from(value, "utf8").toString("utf8") !== value) {
+    throw new Error("macosSet: selectors must be non-empty text without ASCII control characters");
+  }
+  // This quotes security's split_line parser, not a shell: both a backslash
+  // and a double quote need escaping within a double-quoted argument.
+  return '"' + value.replace(/[\\"]/gu, "\\$&") + '"';
+}
+
 function macosSet(service: string, value: string): void {
-  // Keep -w last with no argv value: `security` reads the password from
-  // stdin, so it never appears in the process argument list.
-  const p = Bun.spawnSync(
-    [
-      "security", "add-generic-password",
-      "-U",
-      "-s", service,
-      "-a", ACCT,
-      "-w",
-    ],
-    { stdin: new TextEncoder().encode(value), stderr: "ignore" },
-  );
-  if (p.exitCode !== 0) {
-    throw new Error(`macosSet: security add-generic-password exit=${p.exitCode}`);
+  // find-generic-password -w renders any non-printable byte as hex. The
+  // existing string getter cannot distinguish that from a literal hex value.
+  if (!/^[\x20-\x7e]+$/u.test(value)) {
+    throw new Error("macosSet: only non-empty printable ASCII values are supported");
+  }
+  const command = "add-generic-password -U -s " + macosQuotedSelector(service)
+    + " -a " + macosQuotedSelector(ACCT)
+    + " -X " + Buffer.from(value, "utf8").toString("hex") + "\n";
+  const input = Buffer.from(command, "utf8");
+  if (input.byteLength > MACOS_COMMAND_MAX_BYTES) {
+    throw new Error("macosSet: encoded command exceeds the macOS keychain input limit");
+  }
+
+  // -w without a value prompts on a terminal; it does not reliably consume
+  // piped stdin. Feed one command using -X instead. Only hex bytes represent
+  // the secret, and neither those bytes nor the selectors enter write argv.
+  let write;
+  try {
+    write = Bun.spawnSync(["/usr/bin/security", "-i"], {
+      stdin: input, stdout: "ignore", stderr: "ignore",
+    });
+  } catch {
+    throw new Error("macosSet: security write invocation failed");
+  }
+  if (write.exitCode !== 0) {
+    throw new Error(`macosSet: security add-generic-password exit=${write.exitCode}`);
+  }
+
+  // An exit-zero write has stored an empty value on some macOS versions.
+  // Verify exact bytes through the same native executable before reporting
+  // success. Do not disclose either value or remove an item after a mismatch.
+  let read;
+  try {
+    read = Bun.spawnSync([
+      "/usr/bin/security", "find-generic-password", "-s", service, "-a", ACCT, "-w",
+    ], { stdout: "pipe", stderr: "ignore" });
+  } catch {
+    throw new Error("macosSet: security readback invocation failed");
+  }
+  if (read.exitCode !== 0 || !Buffer.from(read.stdout ?? []).equals(Buffer.from(value + "\n"))) {
+    throw new Error("macosSet: keychain readback did not match the supplied value");
   }
 }
 
