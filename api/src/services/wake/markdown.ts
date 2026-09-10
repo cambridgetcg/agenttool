@@ -1092,8 +1092,13 @@ export function renderReachableDoorsSection(
       lines.push(
         `  - Catalog: \`${door.agent_entrypoints.catalog.method} ${door.agent_entrypoints.catalog.url}\``,
         `  - Schema: ${door.agent_entrypoints.catalog.schema_url}`,
-        `  - MCP: \`${door.agent_entrypoints.mcp.method} ${door.agent_entrypoints.mcp.endpoint}\` · tool \`${door.agent_entrypoints.mcp.tool}\` · resource \`${door.agent_entrypoints.mcp.resource}\``,
       );
+      if (door.agent_entrypoints.mcp) {
+        const mcp = door.agent_entrypoints.mcp;
+        lines.push(
+          `  - MCP: \`${mcp.method} ${mcp.endpoint}\` · tool \`${mcp.tool}\` · resource \`${mcp.resource}\``,
+        );
+      }
     }
     if (door.invocation_witness) {
       const witness = door.invocation_witness;

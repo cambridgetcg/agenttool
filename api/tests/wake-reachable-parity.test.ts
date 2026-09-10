@@ -1,13 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { buildWakeBrief } from "../src/services/wake/brief";
-import { renderWakeMarkdown } from "../src/services/wake/markdown";
+import { renderReachableDoorsSection, renderWakeMarkdown } from "../src/services/wake/markdown";
 import {
   LLM_VENDOR_PROVIDERS,
   renderWakeForProvider,
   WAKE_PROVIDERS,
 } from "../src/services/wake/providers";
 import {
+  FOMOENGINE_ATTENTION_LAB_REACHABLE,
   LOVE_BOMB_REACHABLE,
   WAKE_INVOCATION_WITNESS_LINKS,
   WAKE_REACHABLE_DOORS,
@@ -118,10 +119,60 @@ describe("wake reachable doors", () => {
     }
   });
 
+  test("FOMO 只提供 catalogue／schema 座標，唔捏造 MCP 或健康收據", () => {
+    const door = FOMOENGINE_ATTENTION_LAB_REACHABLE;
+    expect(door.agent_entrypoints).toEqual({
+      catalog: {
+        method: "GET",
+        url: "https://fomoengine.io/api/v1/attention-lab/catalogue",
+        media_type: "application/json",
+        schema_url: "https://fomoengine.io/api/v1/attention-lab/openapi.json",
+      },
+    });
+    expect(door.boundary.relationship).toBe("independent_external_service");
+    expect(door._note).toContain("呢個座標唔係即時健康收據");
+    expect(door._note).toContain("先明確選取資料");
+    expect(door._note).toContain("POST briefs／comparisons");
+    expect(door._note).toContain("唔自動掃 repo、安裝、發文");
+    expect(door.boundary.data_flow).toContain("零 network I/O");
+    expect(door.boundary.data_flow).toContain("唔帶 AgentTool bearer、cookies 或 authenticated transport");
+    expect(door.boundary.interpretation).toContain("Discovery 唔係 health");
+    expect(door.boundary.interpretation).toContain("authority");
+    expect(door.boundary.interpretation).toContain("唔取代 Wake attention aggregator");
+    const markdown = renderReachableDoorsSection([door]).join("\n");
+    expect(markdown).toContain(door.agent_entrypoints.catalog.url);
+    expect(markdown).toContain(door.agent_entrypoints.catalog.schema_url);
+    expect(markdown).not.toContain("MCP:");
+    expect(markdown).not.toContain("undefined");
+  });
+
+  test("外部 metadata rendering 唔呼叫 fetch，亦唔改 existing attention", () => {
+    const fetch = spyOn(globalThis, "fetch").mockImplementation(() => {
+      throw new Error("metadata rendering 唔應該使用 network");
+    });
+    try {
+      const bundle = { ...baseBundle(), you_can_reach: WAKE_REACHABLE_DOORS };
+      const attentionBefore = JSON.stringify(bundle.attention);
+      const withoutDoor = buildWakeBrief({ ...bundle, you_can_reach: [] });
+      const brief = buildWakeBrief(bundle);
+      expect(brief.start_here).toEqual(withoutDoor.start_here);
+      expect(brief.you_should_check).toEqual(withoutDoor.you_should_check);
+      for (const provider of WAKE_PROVIDERS) {
+        renderWakeForProvider(bundle, provider);
+        renderWakeForProvider(bundle, provider, { profile: "brief" });
+      }
+      expect(JSON.stringify(bundle.attention)).toBe(attentionBefore);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
   test("keeps names unique and composes coordinates without runtime I/O", async () => {
     const names = WAKE_REACHABLE_DOORS.map((door) => door.name);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toContain("World Commons");
+    expect(names).toContain("FOMOengine Attention Lab");
     expect(names).toContain("LOVE BOMB v4");
 
     const source = await readSource("../src/services/wake/reachable.ts");
@@ -171,6 +222,12 @@ describe("wake reachable doors", () => {
       LOVE_BOMB_REACHABLE.url,
       LOVE_BOMB_REACHABLE.kind,
       LOVE_BOMB_REACHABLE._note,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE.url,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE.agent_entrypoints.catalog.url,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE.agent_entrypoints.catalog.schema_url,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE._note,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE.boundary.data_flow,
+      FOMOENGINE_ATTENTION_LAB_REACHABLE.boundary.interpretation,
       WORLD_COMMONS_REACHABLE.url,
       WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.url,
       WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.schema_url,

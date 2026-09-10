@@ -132,6 +132,7 @@ function standaloneSplitTarget(
  *  missing modules. */
 const TARGETS: ParityTarget[] = [
   splitTarget("at-rest", "at_rest", "AtRestClient", "at_rest"),
+  splitTarget("attention-lab", "attention_lab", "AttentionLabClient", "attention_lab"),
   splitTarget(
     "attestation-marketplace",
     "attestation_marketplace",

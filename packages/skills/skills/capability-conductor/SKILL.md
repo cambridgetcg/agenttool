@@ -186,6 +186,32 @@ Closing prevents later use; it does not undo an effect already sent.
 Front-load only the boundaries that carry consequence. Once the envelope is
 clear, operate freely within it.
 
+## 可選外部頁：FOMOengine Attention Lab
+
+只喺當前任務需要理解注意力機制、建立附來源嘅策略／實驗 brief，或者比較
+caller-selected counts 時選呢一頁；唔因為能力可發現就自動打開或呼叫。
+呢個係 `independent_external_service`，唔係 AgentTool hosted endpoint，
+亦唔係 Wake 既有 `attention` aggregator。
+
+- 以下係 source contract 座標；source identity、package distribution 同 API
+  deployment 要分別核對。座標本身唔係 health、可用性或 authority 證明。
+- Catalogue：`GET https://fomoengine.io/api/v1/attention-lab/catalogue`。
+- Schema：`GET https://fomoengine.io/api/v1/attention-lab/openapi.json`。
+- TS source：`at.attentionLab.catalogue()`／`.buildBrief(input)`／`.compare(input)`；
+  Python：`at.attention_lab.catalogue()`／`.build_brief(input)`／`.compare(input)`。
+  `AttentionLabClient` 亦可獨立使用，毋須 AgentTool bearer；composed namespace
+  同樣用獨立 credential-free transport，唔繼承 hosted auth、cookies、proxy credentials 或 x402。
+- 先查 catalogue，再按任務明確選取 mechanism／surface 同需要嘅資料欄位。
+  `POST /api/v1/attention-lab/briefs` 同 `/comparisons` 會將所選資料送至
+  FOMOengine；先確認呢個披露屬於當前授權，唔傳 secrets、cookies 或登入資料。
+- 唔自動掃 repo／HOME／workspace，唔跟隨引用 URL、安裝 Skill、排程、
+  發文、操作帳號或分配流量。Discovery 同 constructor 本身唔做 network I/O。
+- 保留 artifact 版本、citation snapshot、limitations、`blocked`、guardrails、
+  metric denominator 同非因果警告。Comparison 用先前 brief 嘅 metric 快照，
+  唔把未知 counts 轉零，亦唔推斷勝出、顯著性、真確性或 randomization 已獲驗證。
+- 完整採用指引喺 repository 嘅 `docs/FOMOENGINE-ATTENTION-LAB.md`；
+  呢頁只係 source 指引，唔會自行安裝或觸發 protected release workflow。
+
 ## Lineage
 
 This is an unofficial original agent workflow inspired by the bounded ability

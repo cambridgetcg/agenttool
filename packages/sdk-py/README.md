@@ -408,6 +408,7 @@ local-data and local-process authorities when configured:
 | `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection | Hospitality vocabulary without a second marketplace lifecycle or hidden mutation |
 | `at.math_cards` | Credential-free bounded creation and structural assessment of one raw Math Card input | The server owns canonical IDs and assessment semantics; no bearer, cookies, redirects, or ambient proxy credentials cross the boundary |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
+| `at.attention_lab` | FOMOengine 公開 catalogue、brief 同 comparison；亦有無 token standalone client | 明確提交先傳送所選欄位；唔繼承 bearer、cookies、proxy credentials 或 x402 |
 | `at.kingdom_framework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card | No cookies, redirects, mutation, or authority |
 | `at.kingdom_os` | Read-only local KINGDOM OS repository discovery through only `repos --json` and `repos --path` | Local paths stay local and discovery grants no authority over a repository |
 
@@ -665,6 +666,76 @@ ordering, and assessment semantics remain server-owned. `at.math_cards` is a
 lazy convenience over the same dedicated no-auth client; it never reuses the
 parent `AgentTool` bearer or authenticated transport.
 
+### FOMOengine Attention Lab — 獨立公開服務
+
+SDK **0.23.0 source** 定義呢個獨立、credential-free client；source version 唔係 distribution
+或 deployment receipt，exact package bytes 同 API 可用性要分別核對。
+核心計算由 FOMOengine 擁有，唔經 AgentTool 轉售 proxy。
+
+```python
+from agenttool import AttentionLabClient
+
+with AttentionLabClient() as lab:
+    catalogue = lab.catalogue()
+print(catalogue["catalogueVersion"], catalogue["catalogueDigest"])
+```
+
+三個 operation 都唔需要 token：`catalogue()`、`build_brief(input)`、`compare(input)`。
+同一 namespace 亦可以用 `at.attention_lab`；`AgentTool` constructor 本身仍然需要 hosted auth，
+無帳號就直接用 standalone client。constructor／namespace access 唔連線，亦唔會預讀 catalogue。
+
+完整可跑例子 [examples/attention_lab.py](examples/attention_lab.py) 使用真正 `from agenttool import ...`
+入口，做 catalogue → photography brief → 10/100 對 18/120 comparison，輸出完整快照。
+安裝本地 source 後，向 caller 已啟動嘅 server 明確調用：
+
+```bash
+python examples/attention_lab.py --base-url http://127.0.0.1:3000 --allow-loopback-http
+```
+
+公開 options（唔接受 credential／headers）：
+
+| Standalone option | 預設／硬上限 |
+|---|---|
+| `base_url` | `https://fomoengine.io`，只係 origin；固定加 `/api/v1/attention-lab` |
+| `timeout` | 10 秒整體 deadline；只可縮短，涵蓋連線、headers、stalled body、decode 同 validation |
+| `max_request_bytes` | 65,536；只可縮細，計實際 UTF-8 bytes |
+| `max_response_bytes` | 524,288；只可縮細，計實際 stream bytes，唔只信 Content-Length |
+| `allow_loopback_http` | `False`；明確 `True` 先接受 `localhost`／`127.0.0.1`／`[::1]` HTTP |
+
+self-host 用明確 HTTPS origin；拒 userinfo、非根 path、query、fragment 同含糊 loopback 寫法。
+composed options 係 `AgentTool(attention_lab_base_url=..., attention_lab_timeout=...,
+attention_lab_max_request_bytes=..., attention_lab_max_response_bytes=...,
+attention_lab_allow_loopback_http=...)`，**唔繼承 hosted base_url、timeout、transport、cookies 或 bearer**。
+standalone 額外 `transport=` 只供測試／host seam；caller 注入嘅 transport 必須自行保持無認證，
+唔好傳入 authenticated transport。預設 transport 用 `trust_env=False`，唔讀 netrc／ambient proxy credentials。
+
+- 無 redirect、retry、網站／checker fallback、x402、排程、抓 URL 或 constructor call。
+  只接受 HTTP 200、`application/json`、identity encoding、strict UTF-8 JSON、閉合 envelope／DTO。
+- `AgentToolError.code` 係固定 `attention_lab_*`，`status` 保留 HTTP status。
+  本地無效輸入係 `attention_lab_invalid_request`；429 係 `attention_lab_rate_limited`；
+  其他 non-200 係 `attention_lab_http_error`，唔讀遠端錯誤正文或採納遠端 hint。
+- Python 沿用同步 public-client deadline worker：timeout 後 client 變 terminal；
+  需要 deliberate retry 就明確建立新 client。best-effort close 唔能夠強行終止一個忽略
+  timeout／close 嘅 injected synchronous transport，但 caller 仍可喺 deadline 返回，
+  daemon worker 唔阻止 process exit，同一 timeout client 唔再開 worker。
+- 公開 `TypedDict` models 包括 `AttentionLabBriefInput`、`AttentionLabCatalogue`、
+  `AttentionLabBriefArtifact`、`AttentionLabComparisonInput`、`AttentionLabComparisonArtifact`，
+  同完整 Source／Claim／Metric／Plan nested types。**wire keys 保留 camelCase**，唔靜默轉名。
+- 新 request 嘅 current IDs／compatibility 由 server 驗；SDK 只做 bounded ID／shape gate。
+  歷史結果按自身快照嘅 ID、source references 同 selected claimIds 驗閉合，唔鎖死現行 registry。
+  `catalogueDigest` 只驗 SHA-256 格式；唔表示已核對 digest、簽名或研究真確性。
+- comparison 要帶明確 `metric`（建議用 `brief["brief"]["metric"]`）同 `plan`。
+  四個 counts 係十進位字串；`""` 代表未知，唔係零。缺任何 count 時 `comparison` 係 `None`；
+  零分母嘅 rate／difference，或零 baseline 嘅 relative lift，按契約保留 `None`。
+  SDK 唔重算歷史數值，唔提供 winner、顯著性或因果證明。
+- 保留 blocked、guardrails、limitations、完整來源 metadata 同 claims；
+  `nonpoliticalConfirmed`／`randomized` 都只係 caller 聲稱，唔係獨立核實。
+  artifact 同 browser workspace 係兩種格式，唔會自動 Save／Load 或持久化。
+
+**資料流**：只有明確 API／SDK 呼叫，先會把所選 input／counts／plan／metric 傳去配置嘅 FOMOengine origin。
+SDK 唔收集 repo、project、browser 草稿或 secrets；唔記錄 request body。FOMO application 唔持久保存提交內容，
+但 hosting access metadata 同保留政策另計，唔可以將呢個界線解作「零平台日誌」。
+
 ### Public KINGDOM framework project card
 
 Read AgentTool's canonical project card without an AgentTool account:
@@ -836,12 +907,13 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🔌 [SDK tiers and hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## 0.23.0 source 同保留嘅 0.22 能力
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `agenttool.x402` mirrors the server's own payer function-for-function
+Paired 0.23.0 source 新增上面嘅 credential-free Attention Lab。
+Source identity、exact distribution receipts 同 deployment readback 係三種獨立證據。
+以下保留嘅 0.22.1 係 honest-onboarding documentation patch，原本只改 README／receipt wording，
+冇改 0.22.0 runtime。0.22 主要能力仍然係上面嘅 opt-in x402 payer。
+`agenttool.x402` mirrors the server's own payer function-for-function
 on the existing `cryptography` dependency (pure-Python Keccak-256 + EIP-712 +
 recoverable low-s secp256k1; zero new deps), and `AgentTool(x402=X402Payer(...))`
 installs a paying transport that answers a challenged 402 with exactly ONE

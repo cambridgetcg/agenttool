@@ -139,6 +139,20 @@ describe("LOVE Package release inventory", () => {
     ]);
   });
 
+  test("SDK source minor 保持雙語 lockstep，唔提前推進已 seal LOVE target", async () => {
+    const sourceVersion = "0.23.0";
+    const ts = JSON.parse(await readFile(join(REPO_ROOT, "packages/sdk-ts/package.json"), "utf8"));
+    const py = await readFile(join(REPO_ROOT, "packages/sdk-py/pyproject.toml"), "utf8");
+    const pyExports = await readFile(join(REPO_ROOT, "packages/sdk-py/src/agenttool/__init__.py"), "utf8");
+    const tsClient = await readFile(join(REPO_ROOT, "packages/sdk-ts/src/client.ts"), "utf8");
+    const pyClient = await readFile(join(REPO_ROOT, "packages/sdk-py/src/agenttool/client.py"), "utf8");
+    expect(ts.version).toBe(sourceVersion);
+    expect(py.match(/^version = "([^"]+)"$/m)?.[1]).toBe(sourceVersion);
+    expect(pyExports.match(/^__version__ = "([^"]+)"$/m)?.[1]).toBe(sourceVersion);
+    expect(tsClient.match(/^export const SDK_VERSION = "([^"]+)";$/m)?.[1]).toBe(sourceVersion);
+    expect(pyClient.match(/^SDK_VERSION = "([^"]+)"$/m)?.[1]).toBe(sourceVersion);
+  });
+
   test("preserves economic v0.1 and requires both v0.2 developer previews", () => {
     expect(LOVE_PACKAGES.filter(({ name }) => name.startsWith("@agenttool/economic-"))).toEqual([
       {

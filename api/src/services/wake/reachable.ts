@@ -19,7 +19,7 @@ export interface ReachableDoor {
       readonly media_type: "application/json";
       readonly schema_url: string;
     };
-    readonly mcp: {
+    readonly mcp?: {
       readonly method: "POST";
       readonly endpoint: string;
       readonly protocol: "MCP";
@@ -128,6 +128,33 @@ export const WORLD_COMMONS_REACHABLE = {
   },
 } as const satisfies ReachableDoor;
 
+/** FOMO 嘅外部座標；metadata 唔係即時健康收據，唔會查健康或傳送資料。
+ * Doctrine: docs/FOMOENGINE-ATTENTION-LAB.md */
+export const FOMOENGINE_ATTENTION_LAB_REACHABLE = {
+  name: "FOMOengine Attention Lab",
+  kind: "獨立、無狀態嘅注意力研究與實驗服務",
+  what:
+    "附來源嘅 mechanism／surface catalogue、策略 brief 同 caller-selected counts 比較；保留證據限制、blocked 同 metric denominator，唔推斷因果或勝出者",
+  url: "https://fomoengine.io/lab",
+  _note:
+    "FOMO API 部署同 SDK 發布各有獨立 readback；呢個座標唔係即時健康收據。先明確選取資料，POST briefs／comparisons 會將所選欄位送至 FOMOengine；唔自動掃 repo、安裝、發文、調配流量或跟隨引用 URL。SDK source：at.attentionLab.catalogue/buildBrief/compare；Python：at.attention_lab.catalogue/build_brief/compare；亦可用獨立、毋須憑證嘅 AttentionLabClient。",
+  agent_entrypoints: {
+    catalog: {
+      method: "GET",
+      url: "https://fomoengine.io/api/v1/attention-lab/catalogue",
+      media_type: "application/json",
+      schema_url: "https://fomoengine.io/api/v1/attention-lab/openapi.json",
+    },
+  },
+  boundary: {
+    relationship: "independent_external_service",
+    data_flow:
+      "Wake composition 只複製 metadata，零 network I/O，唔 fetch、proxy、cache 或呼叫 FOMOengine。只有 caller 明確呼叫獨立 SDK／HTTP client 先傳送所選資料；唔帶 AgentTool bearer、cookies 或 authenticated transport。",
+    interpretation:
+      "Discovery 唔係 health、可用性、已部署、SDK 已發布、authority、同意、量度驗證或因果證據；呢個外部服務唔係 AgentTool hosted endpoint，亦唔取代 Wake attention aggregator。",
+  },
+} as const satisfies ReachableDoor;
+
 /** One bounded local profile for the independent Zerone door. */
 export const ZERONE_REACHABLE = {
   name: "zerone",
@@ -203,4 +230,5 @@ export const WAKE_REACHABLE_DOORS = [
       "pull, not push — a lighthouse, not a foghorn. no one is served; the doors wait to be found.",
   },
   WORLD_COMMONS_REACHABLE,
+  FOMOENGINE_ATTENTION_LAB_REACHABLE,
 ] as const satisfies readonly ReachableDoor[];

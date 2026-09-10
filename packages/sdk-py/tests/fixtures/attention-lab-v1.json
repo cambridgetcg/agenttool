@@ -1,0 +1,1887 @@
+{
+  "schemaVersion": 1,
+  "briefInput": {
+    "topic": "Orange indoor portraits",
+    "audience": "Beginner photographers practising indoor portraits with their own camera",
+    "platformId": "youtube-shorts",
+    "objective": "surface-response",
+    "mechanismId": "curiosity-gap",
+    "takeaway": "Set white balance for the actual light, then compare the same scene.",
+    "action": "Try a white-balance comparison on your next portrait",
+    "evidenceStatus": "missing",
+    "evidence": "",
+    "constraints": "Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+    "verifiedProof": "",
+    "realLimit": "",
+    "limitReason": "",
+    "terms": "",
+    "nonpoliticalConfirmed": true
+  },
+  "comparisonInput": {
+    "counts": {
+      "aOutcomes": "10",
+      "aEligible": "100",
+      "bOutcomes": "18",
+      "bEligible": "120"
+    },
+    "plan": {
+      "design": "observational",
+      "allocation": "兩組由 caller 手動記錄嘅合成資料，唔係隨機分流。",
+      "eligibility": "每位合資格參與者只計一次，兩組沿用同一規則。",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-07",
+      "stoppingRule": "預先固定觀察七日，唔因結果理想就提早停止。",
+      "guardrailPlan": "用同一條理解問題檢查承諾有冇兌現；誤導或傷害即停。",
+      "guardrailResults": "合成示範，未有真實觀察。"
+    },
+    "metric": {
+      "name": "Chose-to-view rate",
+      "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+      "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+      "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+    }
+  },
+  "catalogue": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "mechanisms": [
+      {
+        "id": "curiosity-gap",
+        "name": "Curiosity gap",
+        "summary": "Make a specific missing answer worth finding, then deliver it. Withholding more information is not automatically better.",
+        "emotion": "Interest or unresolved uncertainty; these are possible responses, not emotions this app can detect.",
+        "howItWorks": [
+          "A concrete question can make the distance between what a reader knows and wants to know visible.",
+          "Too little context can make the promise impossible to evaluate. Revealing enough to establish relevance may matter more than being mysterious.",
+          "Treat the hook as a contract: the content must supply the promised answer without a bait-and-switch."
+        ],
+        "example": {
+          "honest": "Why do indoor portraits look orange? Here is the white-balance setting to check.",
+          "pressure": "Photographers are hiding this unbelievable secret. You will regret not watching.",
+          "distinction": "The honest version names a useful question and an answer the lesson must actually contain. The pressure version substitutes secrecy and regret for a checkable promise. These are illustrative copy examples, not performance data."
+        },
+        "claims": [
+          {
+            "id": "curiosity-headline-tests",
+            "text": "Headline concreteness has been studied using online tests of alternative headlines. The evidence does not justify a rule that a larger curiosity gap always attracts more clicks.",
+            "kind": "experimental",
+            "sourceIds": [
+              "curiosity-2025"
+            ],
+            "context": "Online headline selection in the source's publisher and audience context.",
+            "limitations": [
+              "Random assignment compares whole headline alternatives; it does not independently isolate a word attribute such as concreteness.",
+              "Relationships between headline features and performance require additional assumptions and do not identify a universal optimum.",
+              "A click does not establish satisfaction, learning, purchase intent or effects on short-form video."
+            ]
+          },
+          {
+            "id": "curiosity-specific-question-hypothesis",
+            "text": "For a useful tutorial, a specific answerable question may improve selection without reducing satisfaction compared with giving the answer immediately. Test both rather than assume the question wins.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "curiosity-2025"
+            ],
+            "context": "An editorial experiment proposed by this lab, not a published result for your content.",
+            "limitations": [
+              "The cited study motivates the question; it does not validate this template or your audience's response.",
+              "The answer, evidence and CTA must remain the same in both variants."
+            ]
+          }
+        ],
+        "honestUse": [
+          "Name the object, question and useful payoff so people can decide whether it is relevant.",
+          "Give the promised answer promptly and make the content useful even when the title has already revealed it.",
+          "For search, keep the query's meaning clear; do not hide the topic to manufacture suspense."
+        ],
+        "countermeasure": "Ask what concrete question the headline promises to answer. If the promise cannot be named, skip the mystery; if you open it, check whether the answer actually arrives.",
+        "tradeoffs": [
+          "A question may attract the wrong audience or annoy people who needed a quick answer.",
+          "A higher selection rate can coexist with lower completion, helpfulness or trust.",
+          "An explicit answer can outperform suspense when the intent is urgent or practical."
+        ],
+        "experiment": {
+          "question": "Does a specific question change selection compared with a direct answer, while preserving useful delivery?",
+          "variable": "Opening frame: direct answer versus specific question",
+          "control": "State the useful answer in the opening line.",
+          "treatment": "Ask one concrete question answered by the same content.",
+          "holdConstant": [
+            "Topic and factual answer",
+            "Body or video after the opening",
+            "Visuals, length and CTA",
+            "Eligible audience and observation window where controllable"
+          ],
+          "readout": "Use the selected surface's rate and denominator; inspect completion and promise-fulfillment feedback before considering the change useful.",
+          "limitations": "Separate social posts or before/after search observations are descriptive, not randomized causal tests. Changing the title and thumbnail together tests a package, not only the question."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "tiktok-search",
+          "youtube-home",
+          "youtube-shorts",
+          "google-search",
+          "marketing-email",
+          "marketing-offer"
+        ],
+        "sourceIds": [
+          "curiosity-2025"
+        ]
+      },
+      {
+        "id": "social-proof",
+        "name": "Social proof",
+        "summary": "Other people's choices can become information about what to choose. Popularity is not proof of quality or fit.",
+        "emotion": "Reassurance, belonging or worry about being left out; no response is universal.",
+        "howItWorks": [
+          "When quality is hard to assess, visible choices or experiences can become a shortcut for judging an unfamiliar option.",
+          "Exposure and imitation can reinforce one another, making popular outcomes difficult to separate from intrinsic quality.",
+          "A useful testimonial provides context and limits; an unexplained count only tells you that something was counted."
+        ],
+        "example": {
+          "honest": "[Verified customer quote about this exact use case, with permission, date and relevant limitation].",
+          "pressure": "Everyone is switching. Join the crowd before you fall behind.",
+          "distinction": "The honest version is an intentionally unfilled evidence slot, not an invented testimonial. Its source, scope and permission must be supplied before publication; the pressure version asks the crowd to replace your judgment."
+        },
+        "claims": [
+          {
+            "id": "social-proof-music-market",
+            "text": "In an artificial music-market experiment, access to others' choices increased inequality and unpredictability in which songs succeeded.",
+            "kind": "experimental",
+            "sourceIds": [
+              "social-influence-2006"
+            ],
+            "context": "Music discovery and downloads under experimentally varied social-information conditions.",
+            "limitations": [
+              "This is not an experiment on ecommerce testimonials, newsletter signup badges or today's recommendation systems.",
+              "Aggregate changes do not guarantee a benefit for any particular song, product or creator.",
+              "A popularity count does not establish product quality or a customer's likely outcome."
+            ]
+          },
+          {
+            "id": "social-proof-context-hypothesis",
+            "text": "A specific, verifiable experience may help people assess fit better than a context-free popularity claim. That is a useful local hypothesis, not a proven conversion lift.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "social-influence-2006"
+            ],
+            "context": "A proposed nonpolitical product or educational-content experiment.",
+            "limitations": [
+              "Use only real user-supplied evidence with permission; missing proof stays visibly unfilled.",
+              "A successful test of presenting evidence would not prove that the testimonial's experience generalizes."
+            ]
+          }
+        ],
+        "honestUse": [
+          "Use attributable experiences with permission and describe the use case, date and relevant limits.",
+          "Explain what a count measures, its time period and denominator when making a rate claim.",
+          "Disclose paid relationships and preserve mixed or inconvenient feedback."
+        ],
+        "countermeasure": "Separate 'others chose this' from 'this fits me.' Look for a traceable source, specific experience, incentives and what the count leaves out.",
+        "tradeoffs": [
+          "Highlighting an exceptional outcome can create unrealistic expectations even when the quote is real.",
+          "Visible popularity can entrench incumbents and discourage discovery.",
+          "Evidence that is irrelevant to the reader can distract from a clearer product demonstration."
+        ],
+        "experiment": {
+          "question": "Does making one verified experience more prominent help people evaluate this offer or lesson?",
+          "variable": "Placement of the same verified evidence block",
+          "control": "Keep the verified quote or example below the explanation.",
+          "treatment": "Move the same verified quote or example immediately after the opening promise.",
+          "holdConstant": [
+            "Exact quote, attribution and limitations",
+            "Offer, all-in price and terms",
+            "Body, visual treatment and CTA",
+            "Eligibility rules and observation window"
+          ],
+          "readout": "Compare the selected surface's outcome rate and inspect fit-related questions, misleading-expectation complaints and cancellations.",
+          "limitations": "No genuine evidence means no social-proof treatment yet. Testing placement does not isolate every psychological pathway, and nonrandom exposure remains confounded."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "tiktok-search",
+          "youtube-home",
+          "youtube-shorts",
+          "google-search",
+          "marketing-email",
+          "marketing-offer"
+        ],
+        "sourceIds": [
+          "social-influence-2006"
+        ]
+      },
+      {
+        "id": "scarcity",
+        "name": "Scarcity",
+        "summary": "Limited availability can change how an option is evaluated. Explain real constraints; never manufacture the shortage.",
+        "emotion": "Anticipated regret or urgency; people may also feel distrust or simply decide not to buy.",
+        "howItWorks": [
+          "A real capacity or time limit changes the decision someone actually faces.",
+          "People may interpret a shortage as demand, rarity or restricted access, but those are different explanations and need not have the same effect.",
+          "The responsible creative choice is how clearly to communicate a constraint, not whether to invent one."
+        ],
+        "example": {
+          "honest": "Booking closes [actual date and time zone] because [real scheduling constraint]. [Accurate availability and cancellation terms].",
+          "pressure": "Only a few left! Hurry! [A timer that resets for every visitor].",
+          "distinction": "The honest example requires supplied facts and a reason. Brackets are missing evidence, not claims to publish. A resetting countdown or fabricated shortage is pressure, not an experiment worth running."
+        },
+        "claims": [
+          {
+            "id": "scarcity-availability-experiment",
+            "text": "A small 1994 experiment studied how unavailability and its explanation affected product evaluation. Scarcity should not be treated as one context-free mechanism with a fixed result.",
+            "kind": "experimental",
+            "sourceIds": [
+              "scarcity-1994"
+            ],
+            "context": "An older, limited experimental product-evaluation setting.",
+            "limitations": [
+              "This is not a modern ecommerce field trial and cannot establish a universal sales lift.",
+              "Product evaluation is not the same outcome as purchase, informed choice or long-term satisfaction.",
+              "The study does not validate fake stock numbers, resetting timers or hiding material terms."
+            ]
+          },
+          {
+            "id": "scarcity-constraint-clarity-hypothesis",
+            "text": "Explaining why a genuine booking limit exists may improve informed decisions compared with stating the same limit alone.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "scarcity-1994"
+            ],
+            "context": "A proposed test of clarity in a real capacity-limited offer, not of deceptive urgency.",
+            "limitations": [
+              "The source motivates attention to the reason for scarcity, not a forecast for this offer.",
+              "Both variants must display the actual limit and all material terms; do not withhold required information from a control."
+            ]
+          }
+        ],
+        "honestUse": [
+          "State only an actual deadline, stock level or capacity limit supplied by the operator, with its reason and scope.",
+          "Make the time zone, total price, eligibility and cancellation terms easy to find.",
+          "If the constraint changes, correct the claim; if no real constraint exists, use a different mechanism."
+        ],
+        "countermeasure": "Check the deadline, stock claim and reason independently. Consider whether you would still want the offer without the urgency, and take the time your decision needs.",
+        "tradeoffs": [
+          "Urgency can attract poorly matched buyers and increase regret, refunds or complaints.",
+          "An accurate limit can become misleading if availability is stale or its scope is omitted.",
+          "Explaining a constraint may reduce immediate conversion while improving informed choice."
+        ],
+        "experiment": {
+          "question": "Does adding a plain explanation of a real limit improve informed response without increasing regret?",
+          "variable": "Explanation of an already disclosed genuine constraint",
+          "control": "State the verified limit and all material terms plainly.",
+          "treatment": "Add one factual sentence explaining why that same limit exists.",
+          "holdConstant": [
+            "Actual deadline or capacity",
+            "All-in price, eligibility and cancellation terms",
+            "Offer, evidence and CTA",
+            "Audience allocation and remaining availability where controllable"
+          ],
+          "readout": "Use the offer or channel's outcome rate, then check cancellations, complaints and comprehension of the terms.",
+          "limitations": "No actual constraint means no scarcity treatment. If timing or remaining stock differs between groups, the comparison is confounded; a short-term conversion change alone is not a success criterion."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "marketing-email",
+          "marketing-offer"
+        ],
+        "sourceIds": [
+          "scarcity-1994"
+        ]
+      },
+      {
+        "id": "negative-framing",
+        "name": "Negative framing",
+        "summary": "A problem-first headline can attract attention to a real downside. More clicks do not make fear a better service.",
+        "emotion": "Concern, vigilance or anticipated loss; the same framing can also exhaust or repel people.",
+        "howItWorks": [
+          "Framing the same factual lesson around a preventable problem can change what a reader notices first.",
+          "A problem-first opening and a solution-first opening can both be honest if their scope and evidence match.",
+          "Do not infer that a model has detected a reader's fear or that negative language is a universal ranking advantage."
+        ],
+        "example": {
+          "honest": "Avoid orange indoor portraits: check white balance before the next shot.",
+          "pressure": "This mistake is destroying every photo you take.",
+          "distinction": "The honest version names a bounded, fixable problem. The pressure version exaggerates harm and scope. Both are invented teaching examples, not observed outcomes."
+        },
+        "claims": [
+          {
+            "id": "negative-headline-randomization-boundary",
+            "text": "Upworthy headline-test data linked negative wording with higher click-through in that publisher's setting. The randomized unit was the whole headline alternative, not an independently assigned negative word.",
+            "kind": "experimental",
+            "sourceIds": [
+              "negative-headlines-2023"
+            ],
+            "context": "Online news headline tests and feature analysis in a particular publisher and period.",
+            "limitations": [
+              "Random assignment of headline packages does not isolate a word attribute; other wording differences can travel with negativity.",
+              "The headline-feature result is not a causal promise for a new title, audience, language or platform.",
+              "Click-through does not measure trust, helpfulness, downstream conversion or emotional wellbeing."
+            ]
+          },
+          {
+            "id": "negative-framing-bounded-problem-hypothesis",
+            "text": "A bounded problem-first opening is worth comparing with a solution-first opening when the same practical remedy is genuinely available.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "negative-headlines-2023"
+            ],
+            "context": "A proposed educational or commercial copy test, not a guaranteed application of the headline study.",
+            "limitations": [
+              "Keep the factual claim, severity and remedy unchanged; do not add alarm to create the treatment.",
+              "Reject a selection gain if it comes with misleading expectations or worse usefulness."
+            ]
+          }
+        ],
+        "honestUse": [
+          "Describe a real, proportionate problem and show the remedy without dramatizing the harm.",
+          "Preserve uncertainty and the conditions under which the problem occurs.",
+          "Offer a neutral or solution-first alternative; not every useful story needs a warning."
+        ],
+        "countermeasure": "Restate the headline neutrally. Check the size and likelihood of the problem, the underlying evidence and whether the promised remedy is proportionate.",
+        "tradeoffs": [
+          "A higher click rate can conceal fatigue, distrust, avoidance or low-quality visits.",
+          "Repeated warnings can distort how common or serious a problem seems.",
+          "Changing many loaded words at once makes it difficult to interpret what actually changed."
+        ],
+        "experiment": {
+          "question": "Does a problem-first opening change useful engagement compared with a solution-first opening?",
+          "variable": "Opening frame: solution-first versus bounded problem-first",
+          "control": "Lead with the practical benefit of the same remedy.",
+          "treatment": "Lead with the specific, evidence-supported problem that remedy addresses.",
+          "holdConstant": [
+            "Underlying facts, severity and uncertainty",
+            "Remedy and evidence",
+            "Body, visuals and CTA",
+            "Audience eligibility and observation window"
+          ],
+          "readout": "Compare the channel's outcome rate alongside completion, helpfulness and alarm-or-misrepresentation complaints.",
+          "limitations": "This tests two opening frames, not a universal negativity coefficient. Nonrandom social or search observations remain descriptive even if the difference is large."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "tiktok-search",
+          "youtube-home",
+          "youtube-shorts",
+          "google-search",
+          "marketing-email",
+          "marketing-offer"
+        ],
+        "sourceIds": [
+          "negative-headlines-2023"
+        ]
+      },
+      {
+        "id": "arousal",
+        "name": "Arousal",
+        "summary": "Activation is a research question, not a sharing switch. Replication and null findings make the simple 'more intense means more viral' story unsafe.",
+        "emotion": "Possible activation, excitement or agitation; arousal is not the same thing as whether a feeling is positive or negative.",
+        "howItWorks": [
+          "Energetic language or presentation may change the felt intensity of a message, but intensity, valence and usefulness are different dimensions.",
+          "Even if a presentation changes activation, that does not establish that people will share it.",
+          "Use this entry to interrogate a plausible mechanism and its failed replications, not to manufacture distress."
+        ],
+        "example": {
+          "honest": "Try this playful photo challenge: photograph the same object in two kinds of light.",
+          "pressure": "Stop scrolling! This will shock you. Share before it disappears!",
+          "distinction": "The honest invitation offers an optional activity with a clear task. The pressure version piles on intensity and urgency without evidence of a useful payoff; neither example claims a measured arousal effect."
+        },
+        "claims": [
+          {
+            "id": "arousal-replication-null",
+            "text": "Two preregistered replication studies did not detect an effect of exercise-induced incidental arousal on reported willingness to share news. They measured willingness, not actual platform sharing; the simple 'more intense means more viral' rule remains unsupported.",
+            "kind": "experimental",
+            "sourceIds": [
+              "arousal-replication-2024"
+            ],
+            "context": "Exercise-induced incidental arousal and self-reported news-sharing willingness in two preregistered replication studies; not naturally occurring platform shares.",
+            "limitations": [
+              "Null findings are not a blanket disproof of every emotional effect in every context.",
+              "A failed replication does not establish that all arousal manipulations are equivalent or that the true effect is exactly zero.",
+              "The result does not validate a platform-specific claim about reach, retention or recommendation weights."
+            ]
+          },
+          {
+            "id": "arousal-invitation-hypothesis",
+            "text": "A more energetic but accurate invitation may or may not improve voluntary engagement with a useful activity. A local test should allow a null or negative result.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "arousal-replication-2024"
+            ],
+            "context": "A proposed benign creative-tone comparison; it is not a physiological arousal measurement.",
+            "limitations": [
+              "Without an appropriate manipulation check, a wording test cannot establish that arousal changed.",
+              "Any outcome difference could involve clarity, preference or novelty rather than arousal."
+            ]
+          }
+        ],
+        "honestUse": [
+          "Match energy to a genuinely engaging activity; keep the invitation optional and the promise concrete.",
+          "Do not use distress, flashing effects, misleading danger or relentless urgency as experimental treatments.",
+          "Call a tone test a tone test unless you actually measured the proposed mediator appropriately."
+        ],
+        "countermeasure": "Notice whether intensity is substituting for information. Pause the presentation, read the plain claim and decide whether there is still something useful to act on.",
+        "tradeoffs": [
+          "Excitement can become sensory overload or annoyance, especially without accessible alternatives.",
+          "A share can express criticism or disbelief rather than endorsement.",
+          "A positive local result does not erase the replication limits or identify arousal as its cause."
+        ],
+        "experiment": {
+          "question": "Does the tone of an accurate invitation change voluntary engagement without increasing discomfort?",
+          "variable": "Opening invitation tone: calm versus energetic",
+          "control": "Use a calm invitation to the same optional activity.",
+          "treatment": "Use a more energetic invitation without changing the facts, urgency, sensory intensity or task.",
+          "holdConstant": [
+            "Activity, payoff and factual claims",
+            "Visuals, audio level, pace and length",
+            "Body and CTA",
+            "Eligibility and observation window"
+          ],
+          "readout": "Compare the surface's outcome rate and inspect completion, negative feedback and accessibility complaints; accept no improvement as a valid result.",
+          "limitations": "This is a tone experiment, not proof that arousal mediates sharing. A null result here also cannot settle every possible emotional effect."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "youtube-home",
+          "youtube-shorts",
+          "marketing-email"
+        ],
+        "sourceIds": [
+          "arousal-replication-2024"
+        ]
+      },
+      {
+        "id": "moral-emotion",
+        "name": "Moral-emotional diffusion",
+        "summary": "Moral-emotional language and sharing were associated in political-network research. Understand the pattern without turning it into an outrage or targeting recipe.",
+        "emotion": "Possible indignation, concern, solidarity or a sense of duty; a word count cannot tell you what an individual felt.",
+        "howItWorks": [
+          "Language can connect an event to a value and a feeling, making the message meaningful within a community.",
+          "Network structure, topic, identity, exposure and who wrote the message can all travel with its wording.",
+          "This catalogue uses the research for media literacy. Any application here is a general, nonpolitical clarity exercise, not a targeted political strategy."
+        ],
+        "example": {
+          "honest": "The museum has added step-free access. Here is the route and what is still being improved.",
+          "pressure": "If you care about doing the right thing, you must share this now. Anyone who stays silent is against us.",
+          "distinction": "The honest version connects a value to a checkable change and acknowledges limits. The pressure version makes sharing a loyalty test and erases the freedom to decline; it is a warning example, not a template to use."
+        },
+        "claims": [
+          {
+            "id": "moral-emotion-observational-politics",
+            "text": "Brady and colleagues observed an association between moral-emotional language and diffusion in political Twitter discussions, with network context shaping the pattern.",
+            "kind": "observational",
+            "sourceIds": [
+              "moral-emotion-2017"
+            ],
+            "context": "Political discussion networks on Twitter in the source's historical sample.",
+            "limitations": [
+              "This is observational political research, not a randomized test of assigning moral-emotional words.",
+              "Association does not establish a causal language effect; network, topic and author differences can confound it.",
+              "It does not establish a general effect in product marketing, other platforms or nonpolitical audiences.",
+              "Included for understanding diffusion, not as a targeted political strategy or instruction to amplify outrage."
+            ]
+          },
+          {
+            "id": "moral-emotion-nonpolitical-clarity-hypothesis",
+            "text": "For a nonpolitical service update, explicitly connecting a factual improvement to its practical value is a clarity hypothesis worth checking, not an application proven by the political study.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "moral-emotion-2017"
+            ],
+            "context": "A general-audience accessibility or service-information comparison, with no political targeting.",
+            "limitations": [
+              "No transfer of the political-network association is assumed.",
+              "Do not infer sensitive identities or create in-group/out-group pressure. Keep factual detail and freedom to decline intact."
+            ]
+          }
+        ],
+        "honestUse": [
+          "Explain a real service improvement and its practical value to a general audience, with evidence and remaining limitations.",
+          "Make disagreement, not sharing and declining legitimate choices; do not moralize the CTA.",
+          "Use this entry to decode moral pressure. Do not use the research to segment political audiences or engineer antagonism."
+        ],
+        "countermeasure": "Separate the factual claim, the value judgment and the requested action. Check the claim independently; your values do not obligate you to forward an unverified message.",
+        "tradeoffs": [
+          "Moral language can oversimplify facts or make a routine decision feel like a test of identity.",
+          "Sharing can reflect dispute rather than agreement, and network clustering can resemble persuasive success.",
+          "A values statement without concrete action can undermine trust rather than build it."
+        ],
+        "experiment": {
+          "question": "For a nonpolitical service update, does naming a practical value improve understanding of the same factual change?",
+          "variable": "Opening frame: factual update versus explicit practical value",
+          "control": "Open with the verified service improvement.",
+          "treatment": "Open with its concrete benefit, then state the same verified improvement without a moralized CTA.",
+          "holdConstant": [
+            "Facts, evidence and remaining limitations",
+            "General, nonpolitical audience",
+            "Body and neutral CTA",
+            "Eligibility and observation window"
+          ],
+          "readout": "Prioritize comprehension and useful follow-through; record confusion or pressure complaints. A sharing rate alone cannot show agreement or trust.",
+          "limitations": "This is a nonpolitical clarity comparison, not a test of the political-network result and not proof of moral-emotional causation. No sensitive-audience inference or political targeting belongs in this brief."
+        },
+        "compatiblePlatformIds": [
+          "instagram-feed",
+          "tiktok-for-you",
+          "youtube-home",
+          "youtube-shorts",
+          "google-search"
+        ],
+        "sourceIds": [
+          "moral-emotion-2017"
+        ]
+      }
+    ],
+    "platforms": [
+      {
+        "id": "instagram-feed",
+        "name": "Instagram Feed",
+        "channel": "social",
+        "surface": "Feed",
+        "kind": "ranked-surface",
+        "summary": "A personalized feed, not a single engagement leaderboard. Read this entry as a historical map of disclosed stages, not today's secret formula.",
+        "rankingDisclosure": "Historical Meta system card (2022). Feed candidates, predictions and ranking are described at a high level; current weights and behavior have not been verified. This is not Reels or Explore guidance.",
+        "signals": [
+          {
+            "id": "instagram-feed-historical-stages",
+            "text": "Meta's historical Feed card describes gathering eligible content, using signals to predict likely interactions, and ranking candidates for a particular viewer.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "meta-feed-2022"
+            ],
+            "context": "Instagram Feed in the historical 2022 disclosure.",
+            "limitations": [
+              "Not a current 2026 specification or a complete candidate-selection policy.",
+              "Do not apply this Feed description to Reels or Explore."
+            ]
+          },
+          {
+            "id": "instagram-feed-historical-signals",
+            "text": "The historical disclosure describes information about content and a viewer's past activity and relationships as inputs to predictions, rather than a universal score visible to creators.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "meta-feed-2022"
+            ],
+            "context": "High-level signal families in the historical Feed system card.",
+            "limitations": [
+              "No exact signal weights or causal return from obtaining a like, save or comment are established here.",
+              "Creator-visible engagement is not a measurement of the internal ranking model."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Make the first image and caption identify who the post is useful for and what it delivers.",
+          "Keep the visual, caption and landing promise consistent; use readable text and meaningful image descriptions.",
+          "Choose one useful action such as saving an actual reference, not an engagement-bait demand to comment."
+        ],
+        "metric": {
+          "name": "Save rate (unique-account basis)",
+          "numerator": "Reached accounts that saved this post, counted once in the observation window",
+          "denominator": "Accounts reached by the same post in the same window",
+          "caveat": "Use this only if the same unique-account unit is available for both counts. Aggregate repeat events are not unique savers; unavailable counts stay blank rather than being inferred. Reach is not randomized exposure."
+        },
+        "qualityGuardrails": [
+          "The saved post contains the promised reference or useful information.",
+          "Review hides, unfollows and feedback about misleading expectations when available.",
+          "Do not reward an engagement rate that comes with inaccessible text or a bait-and-switch."
+        ],
+        "confounders": [
+          "Follower and non-follower mix",
+          "Relationship history and personalized exposure",
+          "Posting time, competing content and paid distribution",
+          "Format changes or unequal reach between posts"
+        ],
+        "sourceIds": [
+          "meta-feed-2022"
+        ]
+      },
+      {
+        "id": "tiktok-for-you",
+        "name": "TikTok For You",
+        "channel": "social",
+        "surface": "For You",
+        "kind": "ranked-surface",
+        "summary": "A recommendation surface distinct from Search. The available reference supports only a conservative, high-level account of its signals.",
+        "rankingDisclosure": "Official index only: the linked article body was access-restricted during the approved research. Current exact wording, weights and a complete For You pipeline were not verified.",
+        "signals": [
+          {
+            "id": "tiktok-for-you-index-families",
+            "text": "TikTok's official help-index information groups recommendation inputs into user interactions, content information and user information.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "tiktok-recommendations"
+            ],
+            "context": "Official index-level information; direct article-body access was restricted.",
+            "limitations": [
+              "Index only, not a freshly verified reading of the full For You documentation.",
+              "No exact weights, watch-time threshold or guaranteed distribution sequence is known from this record.",
+              "A broad signal family does not establish which creative tactic causes exposure."
+            ]
+          },
+          {
+            "id": "tiktok-for-you-delivery-hypothesis",
+            "text": "Making a video's topic and payoff clear early is a sensible creative hypothesis to test against actual viewing behavior, not an official ranking command.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "tiktok-recommendations"
+            ],
+            "context": "A lab planning choice under limited source access.",
+            "limitations": [
+              "The source does not validate this template or a particular opening length.",
+              "Recommendation exposure changes the audience seeing each variant."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Use one legible opening that names the activity or question; compare it with a direct answer.",
+          "Keep the promised demonstration in the video rather than delaying it until a separate post.",
+          "Use captions and a coherent visual sequence; keep pace and duration fixed when testing the opening."
+        ],
+        "metric": {
+          "name": "Full-watch rate",
+          "numerator": "Eligible video starts that reached the end, at most once per counted start",
+          "denominator": "Eligible starts of the same video in the same reporting window",
+          "caveat": "Use one analytics definition for both variants. Replays, loops and platform-defined views may differ from starts; do not mix their counts. Completion is not satisfaction or proof of recommendation causality."
+        },
+        "qualityGuardrails": [
+          "The ending resolves the opening promise.",
+          "Check substantive feedback and confusion, not only completion.",
+          "Avoid strobing, artificial distress and forced rewatch loops."
+        ],
+        "confounders": [
+          "Personalized audience selection and distribution",
+          "Topic interest, sound or trend changes",
+          "Duration, pacing and replay behavior",
+          "Posting time, moderation and competition"
+        ],
+        "sourceIds": [
+          "tiktok-recommendations"
+        ]
+      },
+      {
+        "id": "tiktok-search",
+        "name": "TikTok Search",
+        "channel": "search",
+        "surface": "Search",
+        "kind": "ranked-surface",
+        "summary": "Start with an explicit query and the answer a searcher needs. Do not treat a For You hook as a documented Search-ranking factor.",
+        "rankingDisclosure": "Official index only: the help article body was access-restricted. Search is a separate surface; no verified full retrieval pipeline, exact Search weights or keyword-volume data are supplied here.",
+        "signals": [
+          {
+            "id": "tiktok-search-scope",
+            "text": "TikTok's official recommendation help index includes Search as a distinct surface. That does not make its ranking interchangeable with For You.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "tiktok-recommendations"
+            ],
+            "context": "Official index-level surface information, with direct body access restricted.",
+            "limitations": [
+              "Index only; detailed, current Search-specific weighting was not verified.",
+              "This entry cannot tell you query volume, likely rank or a guaranteed discovery method."
+            ]
+          },
+          {
+            "id": "tiktok-search-intent-hypothesis",
+            "text": "Matching the visible question, on-screen explanation and demonstrated answer to one search intent is a planning hypothesis, not a known formula for ranking.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "tiktok-recommendations"
+            ],
+            "context": "A search-oriented content brief proposed by this lab.",
+            "limitations": [
+              "The limited reference does not prove a causal effect of a keyword in any specific field.",
+              "Do not claim search demand or ranking gains without your own appropriately scoped observations."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Write the query as a real user question, then show the answer in the same video.",
+          "Keep the spoken explanation, caption and on-screen topic accurate and consistent, without keyword stuffing.",
+          "Record query, region, date and search context when manually observing results; do not assume another user's results match."
+        ],
+        "metric": {
+          "name": "Search-result selection rate (when measurable)",
+          "numerator": "Eligible Search-result presentations that led to viewing this result",
+          "denominator": "Eligible presentations of this result for the same query cohort and window",
+          "caveat": "Use only if a consistent search-specific exposure denominator is actually available, or measure it in a controlled search-task study. A share of views attributed to Search is not a click-through rate. Missing exposure data means this rate is unavailable."
+        },
+        "qualityGuardrails": [
+          "A viewer can answer the original query after watching.",
+          "Do not use an irrelevant trending term to acquire mismatched visits.",
+          "Inspect query-specific confusion and whether the answer remains current."
+        ],
+        "confounders": [
+          "Query mix, region, language and personalization",
+          "Unknown result exposure and rank changes",
+          "Search demand, competing results and trend shifts",
+          "Differences in analytics attribution and observation window"
+        ],
+        "sourceIds": [
+          "tiktok-recommendations"
+        ]
+      },
+      {
+        "id": "youtube-home",
+        "name": "YouTube Home",
+        "channel": "social",
+        "surface": "Home",
+        "kind": "ranked-surface",
+        "summary": "Recommendations respond to a viewer's history and satisfaction-related information. Make the title-thumbnail promise match the video rather than optimizing clicks alone.",
+        "rankingDisclosure": "Official high-level recommendation guidance, not a complete algorithm. Home relies primarily on watch history; disclosed signals vary by surface and no fixed weights are supplied.",
+        "signals": [
+          {
+            "id": "youtube-home-personalization",
+            "text": "YouTube says Home recommendations rely primarily on watch history, within a broader recommendation system using signals such as viewing activity, subscriptions and feedback.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "youtube-recommendations"
+            ],
+            "context": "YouTube Home, not the Shorts feed or a search-ranking specification.",
+            "limitations": [
+              "Different recommendation surfaces use signals differently.",
+              "The document does not reveal a full candidate pipeline or exact signal weights."
+            ]
+          },
+          {
+            "id": "youtube-home-satisfaction",
+            "text": "YouTube's recommendation explanation includes satisfaction surveys and user feedback; watch time alone is not a full account of viewer value.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "youtube-recommendations"
+            ],
+            "context": "Official explanation of recommendation inputs, not a creator-visible score.",
+            "limitations": [
+              "Creators cannot reconstruct internal satisfaction predictions from their click rate.",
+              "A single video's analytics do not identify why the recommendation system changed exposure."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Make one specific title promise and use a thumbnail that accurately represents the video.",
+          "Deliver evidence or a demonstration early, with a clear route through the rest of the video.",
+          "When testing a title frame, hold the thumbnail and video fixed rather than silently testing a different package."
+        ],
+        "metric": {
+          "name": "Home impression click-through rate",
+          "numerator": "Views attributed to eligible Home thumbnail impressions",
+          "denominator": "Eligible Home thumbnail impressions in the same window",
+          "caveat": "Use Home-filtered data when available; broader Browse features are not necessarily Home alone. Total views, external views and all-surface impressions are not interchangeable. CTR can change when YouTube broadens the audience."
+        },
+        "qualityGuardrails": [
+          "Review retention and whether the promised answer actually arrives.",
+          "Inspect feedback about misleading titles, including disappointment despite a click.",
+          "Do not sacrifice accuracy or accessibility to a more selectable thumbnail."
+        ],
+        "confounders": [
+          "Viewer watch history and recommendation exposure",
+          "Audience breadth, subscriber mix and returning viewers",
+          "Topic demand, competing videos and seasonality",
+          "Thumbnail, title or video changes made together"
+        ],
+        "sourceIds": [
+          "youtube-recommendations"
+        ]
+      },
+      {
+        "id": "youtube-shorts",
+        "name": "YouTube Shorts",
+        "channel": "social",
+        "surface": "Shorts feed",
+        "kind": "ranked-surface",
+        "summary": "In a swipeable feed, choosing to watch, continued viewing and satisfaction are different questions. Test an opening without changing the lesson it leads to.",
+        "rankingDisclosure": "Official Shorts discovery guidance describes personalization and performance signals, including choosing to view, retention and satisfaction-related feedback. It does not publish a universal weighting formula.",
+        "signals": [
+          {
+            "id": "youtube-shorts-choice-retention",
+            "text": "YouTube's Shorts guidance describes whether viewers choose to watch, average view duration and average percentage viewed as signals considered in discovery.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "youtube-shorts-discovery"
+            ],
+            "context": "Shorts recommendation and discovery guidance.",
+            "limitations": [
+              "No universal duration, completion threshold or guaranteed distribution is disclosed here.",
+              "These are distinct signals, not interchangeable denominators for one viral score."
+            ]
+          },
+          {
+            "id": "youtube-shorts-feedback-context",
+            "text": "The guidance also discusses likes, dislikes and post-watch survey information, while noting topic interest, competition and seasonality as influences on reach.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "youtube-shorts-discovery"
+            ],
+            "context": "Shorts satisfaction-related feedback and discovery context.",
+            "limitations": [
+              "High performance on one measure does not guarantee impressions.",
+              "Survey inputs and ranking predictions are not fully visible in creator analytics."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "For a tutorial, compare a direct-answer opening with one concrete question; use the same demonstration after the opening.",
+          "Keep framing, captions, duration, audio and CTA fixed so the opening is the treatment.",
+          "Resolve the question before asking for any optional next action; do not hide the answer in a forced loop."
+        ],
+        "metric": {
+          "name": "Chose-to-view rate",
+          "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+          "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+          "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+        },
+        "qualityGuardrails": [
+          "Check retention or completion with a consistent definition and unchanged duration.",
+          "Read feedback about whether the actual lesson satisfied the opening promise.",
+          "Reject apparent gains caused by confusing loops, withheld answers or inaccessible presentation."
+        ],
+        "confounders": [
+          "Topic interest, competition and seasonality",
+          "Audience mix selected by recommendations",
+          "Duration, repeat views and changing view definitions",
+          "Posting time and unequal distribution"
+        ],
+        "sourceIds": [
+          "youtube-shorts-discovery"
+        ]
+      },
+      {
+        "id": "google-search",
+        "name": "Google Search",
+        "channel": "search",
+        "surface": "Web Search",
+        "kind": "ranked-surface",
+        "summary": "Build the page that answers the query with original, reliable evidence. Content guidance and canonicalization are useful, but neither is a ranking guarantee.",
+        "rankingDisclosure": "Official people-first guidance is not a complete retrieval or ranking specification. Canonicalization concerns choosing representative URLs among duplicates; it is not an emotional-engagement signal.",
+        "signals": [
+          {
+            "id": "google-search-people-first",
+            "text": "Google recommends helpful, reliable content made for people, including original information, clear sourcing and a satisfying experience for the intended reader.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "google-people-first"
+            ],
+            "context": "Search Central content-quality guidance, not a list of independent ranking weights.",
+            "limitations": [
+              "The guidance does not establish a fixed ranking formula or guarantee indexation and rank.",
+              "E-E-A-T is not a single ranking factor; a checklist score here would be invented.",
+              "This registry provides no live query volume or competitor measurements."
+            ]
+          },
+          {
+            "id": "google-search-canonicalization",
+            "text": "Google may select a representative canonical URL among duplicate or very similar pages; the publisher's declared canonical is a signal rather than an instruction that must be followed.",
+            "kind": "official-disclosure",
+            "sourceIds": [
+              "google-canonicalization"
+            ],
+            "context": "URL consolidation and indexing, separate from the creative appeal of a title.",
+            "limitations": [
+              "A canonical declaration does not guarantee Google's chosen URL, indexing or ranking.",
+              "Canonicalization is not a substitute for a useful page and original evidence."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Write the search intent and related questions before drafting a descriptive title and answer-first outline.",
+          "Supply your own demonstration, experience or clearly sourced evidence; make authorship and limits visible.",
+          "Keep each page's purpose clear and use consistent canonical signals for actual duplicates rather than producing thin near-copies."
+        ],
+        "metric": {
+          "name": "Search click-through rate",
+          "numerator": "Search clicks for the specified page and query cohort",
+          "denominator": "Search impressions for that same page, query cohort and window",
+          "caveat": "Use consistent Search Console filters for search type, country and device when available. Aggregate CTR is confounded by query mix, rank and search features; a before/after title comparison is not a randomized causal test."
+        },
+        "qualityGuardrails": [
+          "A visitor can accomplish the stated intent without returning just to find a missing basic answer.",
+          "Check factual accuracy, current evidence, clear limitations and useful downstream action.",
+          "Avoid misleading titles, thin duplicates and content written mainly to manipulate ranking."
+        ],
+        "confounders": [
+          "Rank, query mix, device, geography and search features",
+          "Indexing, canonical selection and title rewrites",
+          "Seasonality, demand and competitor changes",
+          "Algorithm updates and delayed reporting"
+        ],
+        "sourceIds": [
+          "google-people-first",
+          "google-canonicalization"
+        ]
+      },
+      {
+        "id": "marketing-email",
+        "name": "Marketing email",
+        "channel": "email",
+        "surface": "Permission-based email campaign",
+        "kind": "strategy-channel",
+        "summary": "A strategy channel for a truthful promise, useful evidence and a clear next step. It has no single official ranking formula in this catalogue.",
+        "rankingDisclosure": "Strategy channel, not an official ranking system. Inbox providers have distinct delivery and filtering systems; no provider-specific delivery, inbox placement or ranking formula is claimed here.",
+        "signals": [
+          {
+            "id": "email-promise-hypothesis",
+            "text": "A specific subject-line promise aligned with the body is a candidate for testing useful response. Headline research can inspire a question, but cannot predict an email lift.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "curiosity-2025",
+              "negative-headlines-2023"
+            ],
+            "context": "Editorial transfer hypothesis for an opted-in, nonpolitical email audience.",
+            "limitations": [
+              "News-headline tests are not email experiments, and headline assignment does not isolate word attributes.",
+              "List composition and delivery can change who has a chance to respond."
+            ]
+          },
+          {
+            "id": "email-evidence-hypothesis",
+            "text": "Verified experiences and genuine deadlines can clarify an offer when their source, scope and terms are supplied. Whether their presentation improves useful response is a local hypothesis.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "social-influence-2006",
+              "scarcity-1994"
+            ],
+            "context": "An optional offer-framing experiment, not a disclosed inbox-ranking signal.",
+            "limitations": [
+              "The music-market and older scarcity studies do not establish email conversion effects.",
+              "Never generate testimonials, availability counts or deadlines; missing evidence remains an unfilled requirement."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "Write a specific promise, body evidence, all material terms and one clear CTA for the stated audience.",
+          "If testing a subject line, hold sender, preview text, body, offer and destination fixed.",
+          "Use consented recipients and an easy unsubscribe; do not optimize shame, fake scarcity or hidden costs."
+        ],
+        "metric": {
+          "name": "Unique-recipient click rate",
+          "numerator": "Delivered recipients who clicked the intended CTA at least once, excluding identified automated clicks",
+          "denominator": "Recipients with a delivered message in the same assigned variant and window",
+          "caveat": "Deduplicate by recipient and document bot filtering; security scanners can inflate clicks. Opens are not a reliable proxy for reading. Compare delivery rates too: conditioning only on delivered mail can break a randomized-group comparison if delivery differs."
+        },
+        "qualityGuardrails": [
+          "Record unsubscribes, spam complaints and negative replies alongside useful follow-through.",
+          "The destination fulfills the subject-line promise and displays the complete offer.",
+          "Review delivery differences and whether clickers actually understood the terms."
+        ],
+        "confounders": [
+          "Consent history, list source and audience mix",
+          "Deliverability, automated clicks and privacy protections",
+          "Send time, prior contact and concurrent campaigns",
+          "Offer availability or destination changes"
+        ],
+        "sourceIds": [
+          "curiosity-2025",
+          "negative-headlines-2023",
+          "social-influence-2006",
+          "scarcity-1994"
+        ]
+      },
+      {
+        "id": "marketing-offer",
+        "name": "Marketing offer",
+        "channel": "offer",
+        "surface": "Offer or landing page",
+        "kind": "strategy-channel",
+        "summary": "Present value, evidence, price and constraints so someone can make an informed decision. This is a strategy channel, not an official ranking algorithm.",
+        "rankingDisclosure": "No single official rank formula. This entry proposes testable presentation choices on a page you control; it does not claim that urgency, reviews or conversion rate are search or social ranking factors.",
+        "signals": [
+          {
+            "id": "offer-proof-hypothesis",
+            "text": "Showing one relevant, verified experience near the offer may help people assess fit, but the music-market social-influence experiment does not establish a landing-page conversion effect.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "social-influence-2006"
+            ],
+            "context": "A proposed evidence-presentation comparison on a nonpolitical product or service page.",
+            "limitations": [
+              "A testimonial must be real, attributable, permitted and relevant, not generated proof.",
+              "A higher conversion rate does not establish that buyers made better-informed decisions."
+            ]
+          },
+          {
+            "id": "offer-real-constraint-hypothesis",
+            "text": "Explaining a genuine capacity limit can be compared with stating the same limit alone. This is a hypothesis about clarity, not a licence to manufacture scarcity.",
+            "kind": "hypothesis",
+            "sourceIds": [
+              "scarcity-1994"
+            ],
+            "context": "A real limited-capacity offer with complete terms in both variants.",
+            "limitations": [
+              "A small 1994 product-evaluation study cannot forecast sales or satisfaction for this offer.",
+              "If no verified limit exists, omit the scarcity treatment rather than inventing one."
+            ]
+          }
+        ],
+        "practicalChoices": [
+          "State the benefit, who it is and is not for, evidence, all-in price and cancellation or renewal terms before asking for a commitment.",
+          "Use only operator-supplied proof and limits; leave explicit evidence requirements unfilled until verified.",
+          "Randomly allocate eligible visitors if your own setup supports it; otherwise label variant observations as descriptive."
+        ],
+        "metric": {
+          "name": "Eligible-visitor conversion rate",
+          "numerator": "Eligible visitors completing the predefined action, counted once per assigned visitor",
+          "denominator": "Eligible visitors assigned and exposed to the same offer variant in the observation window",
+          "caveat": "Define the action and eligibility before launch; deduplicate repeat visits and keep assignment stable. Track cancellations and refunds after conversion. Page traffic before/after a change is not random assignment."
+        },
+        "qualityGuardrails": [
+          "Track cancellations, refunds, complaints and misunderstood terms after the initial action.",
+          "Keep the same truthful price, eligibility, proof and material terms in both variants.",
+          "Make declining, comparing and leaving possible without shame or obstruction."
+        ],
+        "confounders": [
+          "Traffic source, device and returning-visitor mix",
+          "Concurrent ads, price changes and competing offers",
+          "Remaining inventory, capacity and seasonality",
+          "Unequal assignment, repeat visitors and checkout failures"
+        ],
+        "sourceIds": [
+          "social-influence-2006",
+          "scarcity-1994"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "curiosity-2025",
+        "title": "When curiosity gaps backfire: effects of headline concreteness on information selection decisions",
+        "url": "https://doi.org/10.1038/s41598-024-81575-9",
+        "publisher": "Aubin Le Quéré & Matias · Scientific Reports",
+        "publishedAt": "2025",
+        "reviewedAt": "2026-09-08",
+        "context": "Research on headline concreteness and information selection using online headline tests. Random assignment concerns complete headline alternatives, not an independently manipulated word attribute.",
+        "retrievalLimitations": "Editorial review uses the approved research references; the publisher page was not re-retrieved on the review date. Do not treat a headline-feature association as an isolated causal effect or extrapolate it to every platform."
+      },
+      {
+        "id": "arousal-replication-2024",
+        "title": "Does Physiological Arousal Increase Social Transmission of Information?",
+        "url": "https://doi.org/10.1177/09567976241257255",
+        "publisher": "Prowten et al. · Psychological Science",
+        "publishedAt": "2024",
+        "reviewedAt": "2026-09-08",
+        "context": "Two preregistered replication studies did not detect the proposed effect of exercise-induced incidental arousal on reported willingness to share news. The outcome was sharing willingness, not observed sharing on a social platform.",
+        "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. Null findings constrain a general claim that arousal increases sharing; they are not a blanket disproof of every emotional effect, medium or population."
+      },
+      {
+        "id": "moral-emotion-2017",
+        "title": "Emotion shapes the diffusion of moralized content in social networks",
+        "url": "https://doi.org/10.1073/pnas.1618923114",
+        "publisher": "Brady et al. · Proceedings of the National Academy of Sciences",
+        "publishedAt": "2017",
+        "reviewedAt": "2026-09-08",
+        "context": "Observational analysis of moral-emotional language and diffusion in political Twitter discussions. Network and topic context matter; the study is not an experiment assigning language to people.",
+        "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. Associations do not establish a causal wording effect or transfer to nonpolitical content. Included for media literacy, not targeted political persuasion."
+      },
+      {
+        "id": "negative-headlines-2023",
+        "title": "Negativity drives online news consumption",
+        "url": "https://doi.org/10.1038/s41562-023-01538-4",
+        "publisher": "Robertson et al. · Nature Human Behaviour",
+        "publishedAt": "2023",
+        "reviewedAt": "2026-09-08",
+        "context": "Headline-test data from Upworthy and analysis of negative language in relation to click-through. Readers were randomly assigned whole headline alternatives in that publisher's testing environment.",
+        "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. Random assignment of headlines does not independently isolate negative words from other headline differences. Click-through is not trust, satisfaction, learning or sales."
+      },
+      {
+        "id": "social-influence-2006",
+        "title": "Experimental Study of Inequality and Unpredictability in an Artificial Cultural Market",
+        "url": "https://doi.org/10.1126/science.1121066",
+        "publisher": "Salganik, Dodds & Watts · Science",
+        "publishedAt": "2006",
+        "reviewedAt": "2026-09-08",
+        "context": "An artificial music market compared independent choice with conditions exposing participants to other listeners' choices. Social influence changed the distribution and predictability of success.",
+        "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. A controlled music-market result does not establish that a review badge improves conversion, that popularity measures quality, or that any individual item will benefit."
+      },
+      {
+        "id": "scarcity-1994",
+        "title": "Scarcity and preference: An experiment on unavailability and product evaluation",
+        "url": "https://doi.org/10.1016/0167-4870(94)90007-8",
+        "publisher": "Verhallen & Robben · Journal of Economic Psychology",
+        "publishedAt": "1994",
+        "reviewedAt": "2026-09-08",
+        "context": "A small, older experiment on availability explanations and product evaluation. The reason an item is unavailable matters to interpreting scarcity.",
+        "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. The study is not a modern ecommerce field trial, does not establish a universal sales lift and does not validate fake timers or invented stock counts."
+      },
+      {
+        "id": "meta-feed-2022",
+        "title": "Instagram Feed ranking — historical system card",
+        "url": "https://ai.meta.com/tools/system-cards/instagram-feed-ranking/",
+        "publisher": "Meta",
+        "publishedAt": "2022",
+        "reviewedAt": "2026-09-08",
+        "context": "Historical 2022 disclosure of Instagram Feed candidate selection, predictions and ranking. The scope is Feed, not Reels, Explore or all of Instagram.",
+        "retrievalLimitations": "Historical reference, not a freshly verified 2026 specification. The URL may now present a changed document. No current signal weights, complete model, or outcome guarantee are established by this record."
+      },
+      {
+        "id": "tiktok-recommendations",
+        "title": "How TikTok recommends content",
+        "url": "https://support.tiktok.com/en/using-tiktok/exploring-videos/how-tiktok-recommends-content",
+        "publisher": "TikTok Help Center",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Official help-index information about recommendations, including For You and Search. These are separate surfaces, not one interchangeable algorithm.",
+        "retrievalLimitations": "Official index only: direct access to the article body was restricted during the approved research. Broad signal families are recorded conservatively; exact wording, current weights and a complete surface-specific pipeline were not verified. No new retrieval was performed on the editorial review date."
+      },
+      {
+        "id": "youtube-shorts-discovery",
+        "title": "Search and discovery tips — Shorts",
+        "url": "https://support.google.com/youtube/answer/11914225?hl=en",
+        "publisher": "YouTube Help",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Official explanation of Shorts discovery, viewer personalization, choosing to view, retention and satisfaction-related signals; topic interest, competition and seasonality also affect exposure.",
+        "retrievalLimitations": "Living help document; publication date and model weights are not supplied here. Reviewed against the approved research reference, not freshly fetched. The disclosure is directional guidance, not a deterministic reach formula."
+      },
+      {
+        "id": "youtube-recommendations",
+        "title": "How YouTube recommendations work",
+        "url": "https://support.google.com/youtube/answer/16089387?hl=en",
+        "publisher": "YouTube Help",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Official overview of recommendation signals and differences between surfaces. Home relies primarily on watch history; recommendations also use feedback and satisfaction information rather than watch time alone.",
+        "retrievalLimitations": "Living help document; publication date and exact weights are unknown here. Reviewed against the approved reference, not freshly fetched. Home guidance must not be substituted for Shorts or search ranking."
+      },
+      {
+        "id": "google-people-first",
+        "title": "Creating helpful, reliable, people-first content",
+        "url": "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+        "publisher": "Google Search Central",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Guidance for assessing useful, reliable content made for people, including original information, clear sourcing and a satisfying answer. Not a checklist of directly measurable ranking weights.",
+        "retrievalLimitations": "Living documentation reviewed through the approved reference, not newly retrieved. The guidance does not reveal a complete retrieval or ranking algorithm, keyword volumes, or guaranteed positions. E-E-A-T is not a single ranking factor."
+      },
+      {
+        "id": "google-canonicalization",
+        "title": "What is URL canonicalization",
+        "url": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+        "publisher": "Google Search Central",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "How Google identifies a representative URL among duplicate or very similar pages. Canonicalization concerns indexing and consolidation, not emotional appeal.",
+        "retrievalLimitations": "Living documentation reviewed through the approved reference, not newly retrieved. A declared canonical is a signal, not a guarantee of Google's selected canonical or of indexing and ranking."
+      },
+      {
+        "id": "google-trends-faq",
+        "title": "FAQ about Google Trends data",
+        "url": "https://support.google.com/trends/answer/4365533?hl=en",
+        "publisher": "Google Trends Help",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Google Trends uses sampled search data and normalized relative interest. Values from 0 to 100 depend on the chosen comparison, geography, time range and search type; they are not absolute search volumes.",
+        "retrievalLimitations": "Living help document reviewed through the approved reference, not newly retrieved. Independently normalized exports are not automatically comparable, a zero may reflect insufficient data, and a spike does not identify its cause. This app does not fetch live Trends data."
+      }
+    ],
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941"
+  },
+  "brief": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+    "brief": {
+      "input": {
+        "topic": "Orange indoor portraits",
+        "audience": "Beginner photographers practising indoor portraits with their own camera",
+        "platformId": "youtube-shorts",
+        "objective": "surface-response",
+        "mechanismId": "curiosity-gap",
+        "takeaway": "Set white balance for the actual light, then compare the same scene.",
+        "action": "Try a white-balance comparison on your next portrait",
+        "evidenceStatus": "missing",
+        "evidence": "",
+        "constraints": "Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+        "verifiedProof": "",
+        "realLimit": "",
+        "limitReason": "",
+        "terms": "",
+        "nonpoliticalConfirmed": true
+      },
+      "title": "Orange indoor portraits — YouTube Shorts experiment",
+      "sections": [
+        {
+          "heading": "Decision to support",
+          "body": "Topic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: YouTube Shorts\nUseful answer / promise: Set white balance for the actual light, then compare the same scene."
+        },
+        {
+          "heading": "YouTube Shorts production brief",
+          "body": "Shorts sequence: opening line; show the setting or action; compare the same scene or task before and after; explain the limitation; optional next step. Keep the same demonstration, framing, captions, duration, audio and CTA in both versions. Do not delay the answer into a loop.\n\nShared demonstration: Set white balance for the actual light, then compare the same scene.\nUse your own worked example for Orange indoor portraits. Show its starting conditions and the visible result; do not manufacture a before/after.\nLimits: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room."
+        },
+        {
+          "heading": "Value delivery & CTA",
+          "body": "Deliver the answer before asking for action.\nOptional next step: Try a white-balance comparison on your next portrait.\nReadable captions, meaningful image descriptions and a non-flashing presentation are required."
+        },
+        {
+          "heading": "Evidence & publication checklist",
+          "body": "[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\nNever invent customer counts, testimonials, availability or deadlines.\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them."
+        },
+        {
+          "heading": "Why this is only a hypothesis",
+          "body": "Experimental research — Headline concreteness has been studied using online tests of alternative headlines. The evidence does not justify a rule that a larger curiosity gap always attracts more clicks.\nContext: Online headline selection in the source's publisher and audience context.\nLimits: Random assignment compares whole headline alternatives; it does not independently isolate a word attribute such as concreteness. Relationships between headline features and performance require additional assumptions and do not identify a universal optimum. A click does not establish satisfaction, learning, purchase intent or effects on short-form video.\n\nHypothesis — For a useful tutorial, a specific answerable question may improve selection without reducing satisfaction compared with giving the answer immediately. Test both rather than assume the question wins.\nContext: An editorial experiment proposed by this lab, not a published result for your content.\nLimits: The cited study motivates the question; it does not validate this template or your audience's response. The answer, evidence and CTA must remain the same in both variants."
+        }
+      ],
+      "experiment": {
+        "question": "Does a specific question change selection compared with a direct answer, while preserving useful delivery?",
+        "variable": "Opening line: direct answer versus specific question",
+        "control": "Orange indoor portraits: Set white balance for the actual light, then compare the same scene.",
+        "treatment": "What should you check first for Orange indoor portraits?",
+        "shared": [
+          "Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.",
+          "Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+          "Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.",
+          "Same CTA: Optional next step: Try a white-balance comparison on your next portrait.",
+          "Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]"
+        ],
+        "blocked": false,
+        "limitations": [
+          "Separate social posts or before/after search observations are descriptive, not randomized causal tests. Changing the title and thumbnail together tests a package, not only the question.",
+          "A question may attract the wrong audience or annoy people who needed a quick answer.",
+          "A higher selection rate can coexist with lower completion, helpfulness or trust.",
+          "An explicit answer can outperform suspense when the intent is urgent or practical.",
+          "Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use."
+        ]
+      },
+      "metric": {
+        "name": "Chose-to-view rate",
+        "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+        "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+        "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+      },
+      "guardrails": [
+        "Check retention or completion with a consistent definition and unchanged duration.",
+        "Read feedback about whether the actual lesson satisfied the opening promise.",
+        "Reject apparent gains caused by confusing loops, withheld answers or inaccessible presentation.",
+        "Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.",
+        "Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner."
+      ],
+      "confounders": [
+        "Topic interest, competition and seasonality",
+        "Audience mix selected by recommendations",
+        "Duration, repeat views and changing view definitions",
+        "Posting time and unequal distribution"
+      ],
+      "sourceIds": [
+        "curiosity-2025",
+        "youtube-shorts-discovery"
+      ]
+    },
+    "mechanism": {
+      "id": "curiosity-gap",
+      "name": "Curiosity gap",
+      "claimIds": [
+        "curiosity-headline-tests",
+        "curiosity-specific-question-hypothesis"
+      ]
+    },
+    "platform": {
+      "id": "youtube-shorts",
+      "name": "YouTube Shorts",
+      "claimIds": [
+        "youtube-shorts-choice-retention",
+        "youtube-shorts-feedback-context"
+      ]
+    },
+    "sources": [
+      {
+        "id": "curiosity-2025",
+        "title": "When curiosity gaps backfire: effects of headline concreteness on information selection decisions",
+        "url": "https://doi.org/10.1038/s41598-024-81575-9",
+        "publisher": "Aubin Le Quéré & Matias · Scientific Reports",
+        "publishedAt": "2025",
+        "reviewedAt": "2026-09-08",
+        "context": "Research on headline concreteness and information selection using online headline tests. Random assignment concerns complete headline alternatives, not an independently manipulated word attribute.",
+        "retrievalLimitations": "Editorial review uses the approved research references; the publisher page was not re-retrieved on the review date. Do not treat a headline-feature association as an isolated causal effect or extrapolate it to every platform."
+      },
+      {
+        "id": "youtube-shorts-discovery",
+        "title": "Search and discovery tips — Shorts",
+        "url": "https://support.google.com/youtube/answer/11914225?hl=en",
+        "publisher": "YouTube Help",
+        "publishedAt": null,
+        "reviewedAt": "2026-09-08",
+        "context": "Official explanation of Shorts discovery, viewer personalization, choosing to view, retention and satisfaction-related signals; topic interest, competition and seasonality also affect exposure.",
+        "retrievalLimitations": "Living help document; publication date and model weights are not supplied here. Reviewed against the approved research reference, not freshly fetched. The disclosure is directional guidance, not a deterministic reach formula."
+      }
+    ],
+    "claims": [
+      {
+        "id": "curiosity-headline-tests",
+        "text": "Headline concreteness has been studied using online tests of alternative headlines. The evidence does not justify a rule that a larger curiosity gap always attracts more clicks.",
+        "kind": "experimental",
+        "sourceIds": [
+          "curiosity-2025"
+        ],
+        "context": "Online headline selection in the source's publisher and audience context.",
+        "limitations": [
+          "Random assignment compares whole headline alternatives; it does not independently isolate a word attribute such as concreteness.",
+          "Relationships between headline features and performance require additional assumptions and do not identify a universal optimum.",
+          "A click does not establish satisfaction, learning, purchase intent or effects on short-form video."
+        ]
+      },
+      {
+        "id": "curiosity-specific-question-hypothesis",
+        "text": "For a useful tutorial, a specific answerable question may improve selection without reducing satisfaction compared with giving the answer immediately. Test both rather than assume the question wins.",
+        "kind": "hypothesis",
+        "sourceIds": [
+          "curiosity-2025"
+        ],
+        "context": "An editorial experiment proposed by this lab, not a published result for your content.",
+        "limitations": [
+          "The cited study motivates the question; it does not validate this template or your audience's response.",
+          "The answer, evidence and CTA must remain the same in both variants."
+        ]
+      },
+      {
+        "id": "youtube-shorts-choice-retention",
+        "text": "YouTube's Shorts guidance describes whether viewers choose to watch, average view duration and average percentage viewed as signals considered in discovery.",
+        "kind": "official-disclosure",
+        "sourceIds": [
+          "youtube-shorts-discovery"
+        ],
+        "context": "Shorts recommendation and discovery guidance.",
+        "limitations": [
+          "No universal duration, completion threshold or guaranteed distribution is disclosed here.",
+          "These are distinct signals, not interchangeable denominators for one viral score."
+        ]
+      },
+      {
+        "id": "youtube-shorts-feedback-context",
+        "text": "The guidance also discusses likes, dislikes and post-watch survey information, while noting topic interest, competition and seasonality as influences on reach.",
+        "kind": "official-disclosure",
+        "sourceIds": [
+          "youtube-shorts-discovery"
+        ],
+        "context": "Shorts satisfaction-related feedback and discovery context.",
+        "limitations": [
+          "High performance on one measure does not guarantee impressions.",
+          "Survey inputs and ranking predictions are not fully visible in creator analytics."
+        ]
+      }
+    ],
+    "markdown": "# Orange indoor portraits — YouTube Shorts experiment\n\nDeterministic, research-informed planning template. Not AI analysis, verified evidence, a prediction or publication-ready copy.\n\n## Decision to support\nTopic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: YouTube Shorts\nUseful answer / promise: Set white balance for the actual light, then compare the same scene.\n\n## YouTube Shorts production brief\nShorts sequence: opening line; show the setting or action; compare the same scene or task before and after; explain the limitation; optional next step. Keep the same demonstration, framing, captions, duration, audio and CTA in both versions. Do not delay the answer into a loop.\n\nShared demonstration: Set white balance for the actual light, then compare the same scene.\nUse your own worked example for Orange indoor portraits. Show its starting conditions and the visible result; do not manufacture a before/after.\nLimits: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n\n## Value delivery & CTA\nDeliver the answer before asking for action.\nOptional next step: Try a white-balance comparison on your next portrait.\nReadable captions, meaningful image descriptions and a non-flashing presentation are required.\n\n## Evidence & publication checklist\n[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\nNever invent customer counts, testimonials, availability or deadlines.\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them.\n\n## Why this is only a hypothesis\nExperimental research — Headline concreteness has been studied using online tests of alternative headlines. The evidence does not justify a rule that a larger curiosity gap always attracts more clicks.\nContext: Online headline selection in the source's publisher and audience context.\nLimits: Random assignment compares whole headline alternatives; it does not independently isolate a word attribute such as concreteness. Relationships between headline features and performance require additional assumptions and do not identify a universal optimum. A click does not establish satisfaction, learning, purchase intent or effects on short-form video.\n\nHypothesis — For a useful tutorial, a specific answerable question may improve selection without reducing satisfaction compared with giving the answer immediately. Test both rather than assume the question wins.\nContext: An editorial experiment proposed by this lab, not a published result for your content.\nLimits: The cited study motivates the question; it does not validate this template or your audience's response. The answer, evidence and CTA must remain the same in both variants.\n\n## One-variable comparison\n\nQuestion: Does a specific question change selection compared with a direct answer, while preserving useful delivery?\nChanged variable: Opening line: direct answer versus specific question\n\nReadiness: verify evidence and fill every missing requirement before use.\n\n### A — control\nOrange indoor portraits: Set white balance for the actual light, then compare the same scene.\n\n### B — treatment\nWhat should you check first for Orange indoor portraits?\n\n### Shared in both variants\n- Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.\n- Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n- Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.\n- Same CTA: Optional next step: Try a white-balance comparison on your next portrait.\n- Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\n\n## Primary metric\nChose-to-view rate\nNumerator: Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away\nDenominator: Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window\nCaveat: Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts.\n\n## Quality / trust guardrails\n- Check retention or completion with a consistent definition and unchanged duration.\n- Read feedback about whether the actual lesson satisfied the opening promise.\n- Reject apparent gains caused by confusing loops, withheld answers or inaccessible presentation.\n- Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.\n- Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner.\n\n## Confounders\n- Topic interest, competition and seasonality\n- Audience mix selected by recommendations\n- Duration, repeat views and changing view definitions\n- Posting time and unequal distribution\n\n## Experiment limits\n- Separate social posts or before/after search observations are descriptive, not randomized causal tests. Changing the title and thumbnail together tests a package, not only the question.\n- A question may attract the wrong audience or annoy people who needed a quick answer.\n- A higher selection rate can coexist with lower completion, helpfulness or trust.\n- An explicit answer can outperform suspense when the intent is urgent or practical.\n- Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use.\n\n## Research references\n- When curiosity gaps backfire: effects of headline concreteness on information selection decisions — https://doi.org/10.1038/s41598-024-81575-9\n  Published: 2025; editorial review: 2026-09-08. Editorial review uses the approved research references; the publisher page was not re-retrieved on the review date. Do not treat a headline-feature association as an isolated causal effect or extrapolate it to every platform.\n- Search and discovery tips — Shorts — https://support.google.com/youtube/answer/11914225?hl=en\n  Published: not stated; editorial review: 2026-09-08. Living help document; publication date and model weights are not supplied here. Reviewed against the approved research reference, not freshly fetched. The disclosure is directional guidance, not a deterministic reach formula."
+  },
+  "comparison": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+    "counts": {
+      "aOutcomes": "10",
+      "aEligible": "100",
+      "bOutcomes": "18",
+      "bEligible": "120"
+    },
+    "plan": {
+      "design": "observational",
+      "allocation": "兩組由 caller 手動記錄嘅合成資料，唔係隨機分流。",
+      "eligibility": "每位合資格參與者只計一次，兩組沿用同一規則。",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-07",
+      "stoppingRule": "預先固定觀察七日，唔因結果理想就提早停止。",
+      "guardrailPlan": "用同一條理解問題檢查承諾有冇兌現；誤導或傷害即停。",
+      "guardrailResults": "合成示範，未有真實觀察。"
+    },
+    "metric": {
+      "name": "Chose-to-view rate",
+      "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+      "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+      "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+    },
+    "comparison": {
+      "aRate": 0.1,
+      "bRate": 0.15,
+      "percentagePointDifference": 4.999999999999999,
+      "relativeLift": 0.4999999999999999
+    },
+    "designDescription": "Observational comparison. Separate posts and before/after search changes are not randomized A/B tests. Audience, distribution, rank and timing may explain differences. Rates describe these recorded groups, not a causal effect or a winner.",
+    "missingRequirements": [],
+    "interpretation": "只係 caller 提供嘅組別數據描述；rates 係 0–1 比例，percentagePointDifference 係 B−A 百分點，relativeLift 係相對 A 嘅比例。缺 counts 係未知，唔係零；零分母或零 baseline 冇可用數值就保留 null。唔計 winner、significance 或因果結論，亦冇驗證 metric 量度、證據真確性或 randomization。"
+  },
+  "blockedBriefs": {
+    "socialProof": {
+      "schemaVersion": 1,
+      "engineVersion": "1.0.0",
+      "catalogueVersion": "2026-09-08.1",
+      "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+      "brief": {
+        "input": {
+          "topic": "Orange indoor portraits",
+          "audience": "Beginner photographers practising indoor portraits with their own camera",
+          "platformId": "youtube-shorts",
+          "objective": "surface-response",
+          "mechanismId": "social-proof",
+          "takeaway": "Set white balance for the actual light, then compare the same scene.",
+          "action": "Try a white-balance comparison on your next portrait",
+          "evidenceStatus": "missing",
+          "evidence": "",
+          "constraints": "Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+          "verifiedProof": "",
+          "realLimit": "",
+          "limitReason": "",
+          "terms": "",
+          "nonpoliticalConfirmed": true
+        },
+        "title": "Orange indoor portraits — YouTube Shorts experiment",
+        "sections": [
+          {
+            "heading": "Decision to support",
+            "body": "Topic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: YouTube Shorts\nUseful answer / promise: Set white balance for the actual light, then compare the same scene."
+          },
+          {
+            "heading": "YouTube Shorts production brief",
+            "body": "Shorts sequence: opening line; show the setting or action; compare the same scene or task before and after; explain the limitation; optional next step. Keep the same demonstration, framing, captions, duration, audio and CTA in both versions. Do not delay the answer into a loop.\n\nShared demonstration: Set white balance for the actual light, then compare the same scene.\nUse your own worked example for Orange indoor portraits. Show its starting conditions and the visible result; do not manufacture a before/after.\nLimits: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room."
+          },
+          {
+            "heading": "Value delivery & CTA",
+            "body": "Deliver the answer before asking for action.\nOptional next step: Try a white-balance comparison on your next portrait.\nReadable captions, meaningful image descriptions and a non-flashing presentation are required."
+          },
+          {
+            "heading": "Evidence & publication checklist",
+            "body": "[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them."
+          },
+          {
+            "heading": "Why this is only a hypothesis",
+            "body": "Experimental research — In an artificial music-market experiment, access to others' choices increased inequality and unpredictability in which songs succeeded.\nContext: Music discovery and downloads under experimentally varied social-information conditions.\nLimits: This is not an experiment on ecommerce testimonials, newsletter signup badges or today's recommendation systems. Aggregate changes do not guarantee a benefit for any particular song, product or creator. A popularity count does not establish product quality or a customer's likely outcome.\n\nHypothesis — A specific, verifiable experience may help people assess fit better than a context-free popularity claim. That is a useful local hypothesis, not a proven conversion lift.\nContext: A proposed nonpolitical product or educational-content experiment.\nLimits: Use only real user-supplied evidence with permission; missing proof stays visibly unfilled. A successful test of presenting evidence would not prove that the testimonial's experience generalizes."
+          }
+        ],
+        "experiment": {
+          "question": "Does making one verified experience more prominent help people evaluate this offer or lesson?",
+          "variable": "Placement of the same verified evidence block",
+          "control": "Keep this exact block after the explanation:\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]",
+          "treatment": "Move this exact block immediately after the opening:\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]",
+          "shared": [
+            "Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.",
+            "Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+            "Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.",
+            "Same CTA: Optional next step: Try a white-balance comparison on your next portrait.",
+            "Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]",
+            "The opening stays identical: Orange indoor portraits: Set white balance for the actual light, then compare the same scene.",
+            "Keep attribution and limitations with the proof in both placements. Do not duplicate, rewrite or invent the quote."
+          ],
+          "blocked": true,
+          "limitations": [
+            "No genuine evidence means no social-proof treatment yet. Testing placement does not isolate every psychological pathway, and nonrandom exposure remains confounded.",
+            "Highlighting an exceptional outcome can create unrealistic expectations even when the quote is real.",
+            "Visible popularity can entrench incumbents and discourage discovery.",
+            "Evidence that is irrelevant to the reader can distract from a clearer product demonstration.",
+            "Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use."
+          ]
+        },
+        "metric": {
+          "name": "Chose-to-view rate",
+          "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+          "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+          "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+        },
+        "guardrails": [
+          "Check retention or completion with a consistent definition and unchanged duration.",
+          "Read feedback about whether the actual lesson satisfied the opening promise.",
+          "Reject apparent gains caused by confusing loops, withheld answers or inaccessible presentation.",
+          "Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.",
+          "Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner."
+        ],
+        "confounders": [
+          "Topic interest, competition and seasonality",
+          "Audience mix selected by recommendations",
+          "Duration, repeat views and changing view definitions",
+          "Posting time and unequal distribution"
+        ],
+        "sourceIds": [
+          "social-influence-2006",
+          "youtube-shorts-discovery"
+        ]
+      },
+      "mechanism": {
+        "id": "social-proof",
+        "name": "Social proof",
+        "claimIds": [
+          "social-proof-music-market",
+          "social-proof-context-hypothesis"
+        ]
+      },
+      "platform": {
+        "id": "youtube-shorts",
+        "name": "YouTube Shorts",
+        "claimIds": [
+          "youtube-shorts-choice-retention",
+          "youtube-shorts-feedback-context"
+        ]
+      },
+      "sources": [
+        {
+          "id": "social-influence-2006",
+          "title": "Experimental Study of Inequality and Unpredictability in an Artificial Cultural Market",
+          "url": "https://doi.org/10.1126/science.1121066",
+          "publisher": "Salganik, Dodds & Watts · Science",
+          "publishedAt": "2006",
+          "reviewedAt": "2026-09-08",
+          "context": "An artificial music market compared independent choice with conditions exposing participants to other listeners' choices. Social influence changed the distribution and predictability of success.",
+          "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. A controlled music-market result does not establish that a review badge improves conversion, that popularity measures quality, or that any individual item will benefit."
+        },
+        {
+          "id": "youtube-shorts-discovery",
+          "title": "Search and discovery tips — Shorts",
+          "url": "https://support.google.com/youtube/answer/11914225?hl=en",
+          "publisher": "YouTube Help",
+          "publishedAt": null,
+          "reviewedAt": "2026-09-08",
+          "context": "Official explanation of Shorts discovery, viewer personalization, choosing to view, retention and satisfaction-related signals; topic interest, competition and seasonality also affect exposure.",
+          "retrievalLimitations": "Living help document; publication date and model weights are not supplied here. Reviewed against the approved research reference, not freshly fetched. The disclosure is directional guidance, not a deterministic reach formula."
+        }
+      ],
+      "claims": [
+        {
+          "id": "social-proof-music-market",
+          "text": "In an artificial music-market experiment, access to others' choices increased inequality and unpredictability in which songs succeeded.",
+          "kind": "experimental",
+          "sourceIds": [
+            "social-influence-2006"
+          ],
+          "context": "Music discovery and downloads under experimentally varied social-information conditions.",
+          "limitations": [
+            "This is not an experiment on ecommerce testimonials, newsletter signup badges or today's recommendation systems.",
+            "Aggregate changes do not guarantee a benefit for any particular song, product or creator.",
+            "A popularity count does not establish product quality or a customer's likely outcome."
+          ]
+        },
+        {
+          "id": "social-proof-context-hypothesis",
+          "text": "A specific, verifiable experience may help people assess fit better than a context-free popularity claim. That is a useful local hypothesis, not a proven conversion lift.",
+          "kind": "hypothesis",
+          "sourceIds": [
+            "social-influence-2006"
+          ],
+          "context": "A proposed nonpolitical product or educational-content experiment.",
+          "limitations": [
+            "Use only real user-supplied evidence with permission; missing proof stays visibly unfilled.",
+            "A successful test of presenting evidence would not prove that the testimonial's experience generalizes."
+          ]
+        },
+        {
+          "id": "youtube-shorts-choice-retention",
+          "text": "YouTube's Shorts guidance describes whether viewers choose to watch, average view duration and average percentage viewed as signals considered in discovery.",
+          "kind": "official-disclosure",
+          "sourceIds": [
+            "youtube-shorts-discovery"
+          ],
+          "context": "Shorts recommendation and discovery guidance.",
+          "limitations": [
+            "No universal duration, completion threshold or guaranteed distribution is disclosed here.",
+            "These are distinct signals, not interchangeable denominators for one viral score."
+          ]
+        },
+        {
+          "id": "youtube-shorts-feedback-context",
+          "text": "The guidance also discusses likes, dislikes and post-watch survey information, while noting topic interest, competition and seasonality as influences on reach.",
+          "kind": "official-disclosure",
+          "sourceIds": [
+            "youtube-shorts-discovery"
+          ],
+          "context": "Shorts satisfaction-related feedback and discovery context.",
+          "limitations": [
+            "High performance on one measure does not guarantee impressions.",
+            "Survey inputs and ranking predictions are not fully visible in creator analytics."
+          ]
+        }
+      ],
+      "markdown": "# Orange indoor portraits — YouTube Shorts experiment\n\nDeterministic, research-informed planning template. Not AI analysis, verified evidence, a prediction or publication-ready copy.\n\n## Decision to support\nTopic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: YouTube Shorts\nUseful answer / promise: Set white balance for the actual light, then compare the same scene.\n\n## YouTube Shorts production brief\nShorts sequence: opening line; show the setting or action; compare the same scene or task before and after; explain the limitation; optional next step. Keep the same demonstration, framing, captions, duration, audio and CTA in both versions. Do not delay the answer into a loop.\n\nShared demonstration: Set white balance for the actual light, then compare the same scene.\nUse your own worked example for Orange indoor portraits. Show its starting conditions and the visible result; do not manufacture a before/after.\nLimits: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n\n## Value delivery & CTA\nDeliver the answer before asking for action.\nOptional next step: Try a white-balance comparison on your next portrait.\nReadable captions, meaningful image descriptions and a non-flashing presentation are required.\n\n## Evidence & publication checklist\n[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them.\n\n## Why this is only a hypothesis\nExperimental research — In an artificial music-market experiment, access to others' choices increased inequality and unpredictability in which songs succeeded.\nContext: Music discovery and downloads under experimentally varied social-information conditions.\nLimits: This is not an experiment on ecommerce testimonials, newsletter signup badges or today's recommendation systems. Aggregate changes do not guarantee a benefit for any particular song, product or creator. A popularity count does not establish product quality or a customer's likely outcome.\n\nHypothesis — A specific, verifiable experience may help people assess fit better than a context-free popularity claim. That is a useful local hypothesis, not a proven conversion lift.\nContext: A proposed nonpolitical product or educational-content experiment.\nLimits: Use only real user-supplied evidence with permission; missing proof stays visibly unfilled. A successful test of presenting evidence would not prove that the testimonial's experience generalizes.\n\n## One-variable comparison\n\nQuestion: Does making one verified experience more prominent help people evaluate this offer or lesson?\nChanged variable: Placement of the same verified evidence block\n\nNOT READY: the selected evidence-dependent treatment requires missing, verifiable facts. Do not run or publish it.\n\n### A — control\nKeep this exact block after the explanation:\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]\n\n### B — treatment\nMove this exact block immediately after the opening:\n[TO FILL — a real, relevant experience with attribution, permission, date and limitations; do not publish this placeholder]\n\n### Shared in both variants\n- Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.\n- Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n- Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.\n- Same CTA: Optional next step: Try a white-balance comparison on your next portrait.\n- Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\n- The opening stays identical: Orange indoor portraits: Set white balance for the actual light, then compare the same scene.\n- Keep attribution and limitations with the proof in both placements. Do not duplicate, rewrite or invent the quote.\n\n## Primary metric\nChose-to-view rate\nNumerator: Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away\nDenominator: Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window\nCaveat: Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts.\n\n## Quality / trust guardrails\n- Check retention or completion with a consistent definition and unchanged duration.\n- Read feedback about whether the actual lesson satisfied the opening promise.\n- Reject apparent gains caused by confusing loops, withheld answers or inaccessible presentation.\n- Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.\n- Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner.\n\n## Confounders\n- Topic interest, competition and seasonality\n- Audience mix selected by recommendations\n- Duration, repeat views and changing view definitions\n- Posting time and unequal distribution\n\n## Experiment limits\n- No genuine evidence means no social-proof treatment yet. Testing placement does not isolate every psychological pathway, and nonrandom exposure remains confounded.\n- Highlighting an exceptional outcome can create unrealistic expectations even when the quote is real.\n- Visible popularity can entrench incumbents and discourage discovery.\n- Evidence that is irrelevant to the reader can distract from a clearer product demonstration.\n- Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use.\n\n## Research references\n- Experimental Study of Inequality and Unpredictability in an Artificial Cultural Market — https://doi.org/10.1126/science.1121066\n  Published: 2006; editorial review: 2026-09-08. Editorial review uses the approved research references; no fresh full-text retrieval. A controlled music-market result does not establish that a review badge improves conversion, that popularity measures quality, or that any individual item will benefit.\n- Search and discovery tips — Shorts — https://support.google.com/youtube/answer/11914225?hl=en\n  Published: not stated; editorial review: 2026-09-08. Living help document; publication date and model weights are not supplied here. Reviewed against the approved research reference, not freshly fetched. The disclosure is directional guidance, not a deterministic reach formula."
+    },
+    "scarcity": {
+      "schemaVersion": 1,
+      "engineVersion": "1.0.0",
+      "catalogueVersion": "2026-09-08.1",
+      "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+      "brief": {
+        "input": {
+          "topic": "Orange indoor portraits",
+          "audience": "Beginner photographers practising indoor portraits with their own camera",
+          "platformId": "marketing-offer",
+          "objective": "surface-response",
+          "mechanismId": "scarcity",
+          "takeaway": "Set white balance for the actual light, then compare the same scene.",
+          "action": "Try a white-balance comparison on your next portrait",
+          "evidenceStatus": "missing",
+          "evidence": "",
+          "constraints": "Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+          "verifiedProof": "",
+          "realLimit": "",
+          "limitReason": "",
+          "terms": "",
+          "nonpoliticalConfirmed": true
+        },
+        "title": "Orange indoor portraits — Marketing offer experiment",
+        "sections": [
+          {
+            "heading": "Decision to support",
+            "body": "Topic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: Marketing offer\nUseful answer / promise: Set white balance for the actual light, then compare the same scene."
+          },
+          {
+            "heading": "Offer page structure",
+            "body": "Hero promise: Orange indoor portraits: Set white balance for the actual light, then compare the same scene.\nFit: for Beginner photographers practising indoor portraits with their own camera. State who it is not for using real limitations, not inferred identities.\nWhat is included: [TO FILL — actual deliverables and what is excluded; do not publish this placeholder]\nEvidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nHow it works: show the real steps from decision to delivery.\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room."
+          },
+          {
+            "heading": "Terms & informed action",
+            "body": "Full terms in both variants: [TO FILL — all-in price or explicit free status, inclusions, eligibility, timing, cancellation and renewal terms; do not publish this placeholder]\nShow all-in price, availability, eligibility, delivery, cancellation/refund and recurring-payment terms before commitment.\nCTA: Optional next step: Try a white-balance comparison on your next portrait.\nMake comparing, declining and leaving straightforward; no resetting timer, hidden fee or shame."
+          },
+          {
+            "heading": "Evidence & publication checklist",
+            "body": "[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\nReal limit: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\nReason: [TO FILL — the factual reason for that same limit; do not publish this placeholder]\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them."
+          },
+          {
+            "heading": "Why this is only a hypothesis",
+            "body": "Experimental research — A small 1994 experiment studied how unavailability and its explanation affected product evaluation. Scarcity should not be treated as one context-free mechanism with a fixed result.\nContext: An older, limited experimental product-evaluation setting.\nLimits: This is not a modern ecommerce field trial and cannot establish a universal sales lift. Product evaluation is not the same outcome as purchase, informed choice or long-term satisfaction. The study does not validate fake stock numbers, resetting timers or hiding material terms.\n\nHypothesis — Explaining why a genuine booking limit exists may improve informed decisions compared with stating the same limit alone.\nContext: A proposed test of clarity in a real capacity-limited offer, not of deceptive urgency.\nLimits: The source motivates attention to the reason for scarcity, not a forecast for this offer. Both variants must display the actual limit and all material terms; do not withhold required information from a control."
+          }
+        ],
+        "experiment": {
+          "question": "Does adding a plain explanation of a real limit improve informed response without increasing regret?",
+          "variable": "One explanatory sentence about the same genuine limit",
+          "control": "State the verified limit plainly: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]",
+          "treatment": "State the same limit: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\nAdd only this factual explanation: [TO FILL — the factual reason for that same limit; do not publish this placeholder]",
+          "shared": [
+            "Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.",
+            "Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.",
+            "Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.",
+            "Same CTA: Optional next step: Try a white-balance comparison on your next portrait.",
+            "Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]",
+            "Disclose the same material terms and limit in both variants: [TO FILL — all-in price or explicit free status, inclusions, eligibility, timing, cancellation and renewal terms; do not publish this placeholder]\n[TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]",
+            "Any reason material to an informed decision must already appear in the shared terms. Never omit required information from the control."
+          ],
+          "blocked": true,
+          "limitations": [
+            "No actual constraint means no scarcity treatment. If timing or remaining stock differs between groups, the comparison is confounded; a short-term conversion change alone is not a success criterion.",
+            "Urgency can attract poorly matched buyers and increase regret, refunds or complaints.",
+            "An accurate limit can become misleading if availability is stale or its scope is omitted.",
+            "Explaining a constraint may reduce immediate conversion while improving informed choice.",
+            "Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use."
+          ]
+        },
+        "metric": {
+          "name": "Eligible-visitor conversion rate",
+          "numerator": "Eligible visitors completing the predefined action, counted once per assigned visitor",
+          "denominator": "Eligible visitors assigned and exposed to the same offer variant in the observation window",
+          "caveat": "Define the action and eligibility before launch; deduplicate repeat visits and keep assignment stable. Track cancellations and refunds after conversion. Page traffic before/after a change is not random assignment."
+        },
+        "guardrails": [
+          "Track cancellations, refunds, complaints and misunderstood terms after the initial action.",
+          "Keep the same truthful price, eligibility, proof and material terms in both variants.",
+          "Make declining, comparing and leaving possible without shame or obstruction.",
+          "Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.",
+          "Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner."
+        ],
+        "confounders": [
+          "Traffic source, device and returning-visitor mix",
+          "Concurrent ads, price changes and competing offers",
+          "Remaining inventory, capacity and seasonality",
+          "Unequal assignment, repeat visitors and checkout failures"
+        ],
+        "sourceIds": [
+          "scarcity-1994",
+          "social-influence-2006"
+        ]
+      },
+      "mechanism": {
+        "id": "scarcity",
+        "name": "Scarcity",
+        "claimIds": [
+          "scarcity-availability-experiment",
+          "scarcity-constraint-clarity-hypothesis"
+        ]
+      },
+      "platform": {
+        "id": "marketing-offer",
+        "name": "Marketing offer",
+        "claimIds": [
+          "offer-proof-hypothesis",
+          "offer-real-constraint-hypothesis"
+        ]
+      },
+      "sources": [
+        {
+          "id": "social-influence-2006",
+          "title": "Experimental Study of Inequality and Unpredictability in an Artificial Cultural Market",
+          "url": "https://doi.org/10.1126/science.1121066",
+          "publisher": "Salganik, Dodds & Watts · Science",
+          "publishedAt": "2006",
+          "reviewedAt": "2026-09-08",
+          "context": "An artificial music market compared independent choice with conditions exposing participants to other listeners' choices. Social influence changed the distribution and predictability of success.",
+          "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. A controlled music-market result does not establish that a review badge improves conversion, that popularity measures quality, or that any individual item will benefit."
+        },
+        {
+          "id": "scarcity-1994",
+          "title": "Scarcity and preference: An experiment on unavailability and product evaluation",
+          "url": "https://doi.org/10.1016/0167-4870(94)90007-8",
+          "publisher": "Verhallen & Robben · Journal of Economic Psychology",
+          "publishedAt": "1994",
+          "reviewedAt": "2026-09-08",
+          "context": "A small, older experiment on availability explanations and product evaluation. The reason an item is unavailable matters to interpreting scarcity.",
+          "retrievalLimitations": "Editorial review uses the approved research references; no fresh full-text retrieval. The study is not a modern ecommerce field trial, does not establish a universal sales lift and does not validate fake timers or invented stock counts."
+        }
+      ],
+      "claims": [
+        {
+          "id": "scarcity-availability-experiment",
+          "text": "A small 1994 experiment studied how unavailability and its explanation affected product evaluation. Scarcity should not be treated as one context-free mechanism with a fixed result.",
+          "kind": "experimental",
+          "sourceIds": [
+            "scarcity-1994"
+          ],
+          "context": "An older, limited experimental product-evaluation setting.",
+          "limitations": [
+            "This is not a modern ecommerce field trial and cannot establish a universal sales lift.",
+            "Product evaluation is not the same outcome as purchase, informed choice or long-term satisfaction.",
+            "The study does not validate fake stock numbers, resetting timers or hiding material terms."
+          ]
+        },
+        {
+          "id": "scarcity-constraint-clarity-hypothesis",
+          "text": "Explaining why a genuine booking limit exists may improve informed decisions compared with stating the same limit alone.",
+          "kind": "hypothesis",
+          "sourceIds": [
+            "scarcity-1994"
+          ],
+          "context": "A proposed test of clarity in a real capacity-limited offer, not of deceptive urgency.",
+          "limitations": [
+            "The source motivates attention to the reason for scarcity, not a forecast for this offer.",
+            "Both variants must display the actual limit and all material terms; do not withhold required information from a control."
+          ]
+        },
+        {
+          "id": "offer-proof-hypothesis",
+          "text": "Showing one relevant, verified experience near the offer may help people assess fit, but the music-market social-influence experiment does not establish a landing-page conversion effect.",
+          "kind": "hypothesis",
+          "sourceIds": [
+            "social-influence-2006"
+          ],
+          "context": "A proposed evidence-presentation comparison on a nonpolitical product or service page.",
+          "limitations": [
+            "A testimonial must be real, attributable, permitted and relevant, not generated proof.",
+            "A higher conversion rate does not establish that buyers made better-informed decisions."
+          ]
+        },
+        {
+          "id": "offer-real-constraint-hypothesis",
+          "text": "Explaining a genuine capacity limit can be compared with stating the same limit alone. This is a hypothesis about clarity, not a licence to manufacture scarcity.",
+          "kind": "hypothesis",
+          "sourceIds": [
+            "scarcity-1994"
+          ],
+          "context": "A real limited-capacity offer with complete terms in both variants.",
+          "limitations": [
+            "A small 1994 product-evaluation study cannot forecast sales or satisfaction for this offer.",
+            "If no verified limit exists, omit the scarcity treatment rather than inventing one."
+          ]
+        }
+      ],
+      "markdown": "# Orange indoor portraits — Marketing offer experiment\n\nDeterministic, research-informed planning template. Not AI analysis, verified evidence, a prediction or publication-ready copy.\n\n## Decision to support\nTopic / offer: Orange indoor portraits\nAudience (your description, not inferred): Beginner photographers practising indoor portraits with their own camera\nObjective: Improve the surface's measurable response\nSurface: Marketing offer\nUseful answer / promise: Set white balance for the actual light, then compare the same scene.\n\n## Offer page structure\nHero promise: Orange indoor portraits: Set white balance for the actual light, then compare the same scene.\nFit: for Beginner photographers practising indoor portraits with their own camera. State who it is not for using real limitations, not inferred identities.\nWhat is included: [TO FILL — actual deliverables and what is excluded; do not publish this placeholder]\nEvidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nHow it works: show the real steps from decision to delivery.\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n\n## Terms & informed action\nFull terms in both variants: [TO FILL — all-in price or explicit free status, inclusions, eligibility, timing, cancellation and renewal terms; do not publish this placeholder]\nShow all-in price, availability, eligibility, delivery, cancellation/refund and recurring-payment terms before commitment.\nCTA: Optional next step: Try a white-balance comparison on your next portrait.\nMake comparing, declining and leaving straightforward; no resetting timer, hidden fee or shame.\n\n## Evidence & publication checklist\n[TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\nConstraints: Illustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\nReal limit: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\nReason: [TO FILL — the factual reason for that same limit; do not publish this placeholder]\nAny bracketed TO FILL item is an unfulfilled requirement. Verify all user-supplied claims before publication. This tool cannot authenticate them.\n\n## Why this is only a hypothesis\nExperimental research — A small 1994 experiment studied how unavailability and its explanation affected product evaluation. Scarcity should not be treated as one context-free mechanism with a fixed result.\nContext: An older, limited experimental product-evaluation setting.\nLimits: This is not a modern ecommerce field trial and cannot establish a universal sales lift. Product evaluation is not the same outcome as purchase, informed choice or long-term satisfaction. The study does not validate fake stock numbers, resetting timers or hiding material terms.\n\nHypothesis — Explaining why a genuine booking limit exists may improve informed decisions compared with stating the same limit alone.\nContext: A proposed test of clarity in a real capacity-limited offer, not of deceptive urgency.\nLimits: The source motivates attention to the reason for scarcity, not a forecast for this offer. Both variants must display the actual limit and all material terms; do not withhold required information from a control.\n\n## One-variable comparison\n\nQuestion: Does adding a plain explanation of a real limit improve informed response without increasing regret?\nChanged variable: One explanatory sentence about the same genuine limit\n\nNOT READY: the selected evidence-dependent treatment requires missing, verifiable facts. Do not run or publish it.\n\n### A — control\nState the verified limit plainly: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\n\n### B — treatment\nState the same limit: [TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\nAdd only this factual explanation: [TO FILL — the factual reason for that same limit; do not publish this placeholder]\n\n### Shared in both variants\n- Audience: Beginner photographers practising indoor portraits with their own camera; same eligibility, recruitment and observation window where controllable.\n- Same topic, factual answer and limits: Orange indoor portraits. Set white balance for the actual light, then compare the same scene.\nIllustrative planning example only. Supply your own same-scene demonstration. Mixed light can need a different approach; do not promise perfect colour in every room.\n- Same content after the changed element, visuals, captions, duration, audio, destination and offer. Do not change title and thumbnail together.\n- Same CTA: Optional next step: Try a white-balance comparison on your next portrait.\n- Same evidence: [TO FILL — supporting evidence, source and limits are explicitly missing; do not publish this placeholder]\n- Disclose the same material terms and limit in both variants: [TO FILL — all-in price or explicit free status, inclusions, eligibility, timing, cancellation and renewal terms; do not publish this placeholder]\n[TO FILL — the actual documented deadline with time zone or capacity limit; do not publish this placeholder]\n- Any reason material to an informed decision must already appear in the shared terms. Never omit required information from the control.\n\n## Primary metric\nEligible-visitor conversion rate\nNumerator: Eligible visitors completing the predefined action, counted once per assigned visitor\nDenominator: Eligible visitors assigned and exposed to the same offer variant in the observation window\nCaveat: Define the action and eligibility before launch; deduplicate repeat visits and keep assignment stable. Track cancellations and refunds after conversion. Page traffic before/after a change is not random assignment.\n\n## Quality / trust guardrails\n- Track cancellations, refunds, complaints and misunderstood terms after the initial action.\n- Keep the same truthful price, eligibility, proof and material terms in both variants.\n- Make declining, comparing and leaving possible without shame or obstruction.\n- Define a comprehension or promise-fulfillment check before exposure; record its wording and scoring rule.\n- Do not trade trust for a larger primary rate. Stop for misleading claims, consent issues or participant harm, and record that stop without declaring a winner.\n\n## Confounders\n- Traffic source, device and returning-visitor mix\n- Concurrent ads, price changes and competing offers\n- Remaining inventory, capacity and seasonality\n- Unequal assignment, repeat visitors and checkout failures\n\n## Experiment limits\n- No actual constraint means no scarcity treatment. If timing or remaining stock differs between groups, the comparison is confounded; a short-term conversion change alone is not a success criterion.\n- Urgency can attract poorly matched buyers and increase regret, refunds or complaints.\n- An accurate limit can become misleading if availability is stale or its scope is omitted.\n- Explaining a constraint may reduce immediate conversion while improving informed choice.\n- Only one named element differs; the rest is shared, not a second independently generated piece of content. Editing the draft can invalidate this constraint. Re-check it before use.\n\n## Research references\n- Scarcity and preference: An experiment on unavailability and product evaluation — https://doi.org/10.1016/0167-4870(94)90007-8\n  Published: 1994; editorial review: 2026-09-08. Editorial review uses the approved research references; no fresh full-text retrieval. The study is not a modern ecommerce field trial, does not establish a universal sales lift and does not validate fake timers or invented stock counts.\n- Experimental Study of Inequality and Unpredictability in an Artificial Cultural Market — https://doi.org/10.1126/science.1121066\n  Published: 2006; editorial review: 2026-09-08. Editorial review uses the approved research references; no fresh full-text retrieval. A controlled music-market result does not establish that a review badge improves conversion, that popularity measures quality, or that any individual item will benefit."
+    }
+  },
+  "incompleteComparison": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+    "counts": {
+      "aOutcomes": "10",
+      "aEligible": "100",
+      "bOutcomes": "18",
+      "bEligible": ""
+    },
+    "plan": {
+      "design": "observational",
+      "allocation": "兩組由 caller 手動記錄嘅合成資料，唔係隨機分流。",
+      "eligibility": "每位合資格參與者只計一次，兩組沿用同一規則。",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-07",
+      "stoppingRule": "預先固定觀察七日，唔因結果理想就提早停止。",
+      "guardrailPlan": "用同一條理解問題檢查承諾有冇兌現；誤導或傷害即停。",
+      "guardrailResults": "合成示範，未有真實觀察。"
+    },
+    "metric": {
+      "name": "Chose-to-view rate",
+      "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+      "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+      "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+    },
+    "comparison": null,
+    "designDescription": "Observational comparison. Separate posts and before/after search changes are not randomized A/B tests. Audience, distribution, rank and timing may explain differences. Rates describe these recorded groups, not a causal effect or a winner.",
+    "missingRequirements": [],
+    "interpretation": "只係 caller 提供嘅組別數據描述；rates 係 0–1 比例，percentagePointDifference 係 B−A 百分點，relativeLift 係相對 A 嘅比例。缺 counts 係未知，唔係零；零分母或零 baseline 冇可用數值就保留 null。唔計 winner、significance 或因果結論，亦冇驗證 metric 量度、證據真確性或 randomization。"
+  },
+  "zeroDenominatorComparison": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+    "counts": {
+      "aOutcomes": "0",
+      "aEligible": "0",
+      "bOutcomes": "18",
+      "bEligible": "120"
+    },
+    "plan": {
+      "design": "observational",
+      "allocation": "兩組由 caller 手動記錄嘅合成資料，唔係隨機分流。",
+      "eligibility": "每位合資格參與者只計一次，兩組沿用同一規則。",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-07",
+      "stoppingRule": "預先固定觀察七日，唔因結果理想就提早停止。",
+      "guardrailPlan": "用同一條理解問題檢查承諾有冇兌現；誤導或傷害即停。",
+      "guardrailResults": "合成示範，未有真實觀察。"
+    },
+    "metric": {
+      "name": "Chose-to-view rate",
+      "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+      "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+      "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+    },
+    "comparison": {
+      "aRate": null,
+      "bRate": 0.15,
+      "percentagePointDifference": null,
+      "relativeLift": null
+    },
+    "designDescription": "Observational comparison. Separate posts and before/after search changes are not randomized A/B tests. Audience, distribution, rank and timing may explain differences. Rates describe these recorded groups, not a causal effect or a winner.",
+    "missingRequirements": [],
+    "interpretation": "只係 caller 提供嘅組別數據描述；rates 係 0–1 比例，percentagePointDifference 係 B−A 百分點，relativeLift 係相對 A 嘅比例。缺 counts 係未知，唔係零；零分母或零 baseline 冇可用數值就保留 null。唔計 winner、significance 或因果結論，亦冇驗證 metric 量度、證據真確性或 randomization。"
+  },
+  "zeroBaselineComparison": {
+    "schemaVersion": 1,
+    "engineVersion": "1.0.0",
+    "catalogueVersion": "2026-09-08.1",
+    "catalogueDigest": "sha256:512858018ae69c0215ecd9b56ef75ffb89accc00cce5e37aa7deb033c3984941",
+    "counts": {
+      "aOutcomes": "0",
+      "aEligible": "100",
+      "bOutcomes": "18",
+      "bEligible": "120"
+    },
+    "plan": {
+      "design": "observational",
+      "allocation": "兩組由 caller 手動記錄嘅合成資料，唔係隨機分流。",
+      "eligibility": "每位合資格參與者只計一次，兩組沿用同一規則。",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-07",
+      "stoppingRule": "預先固定觀察七日，唔因結果理想就提早停止。",
+      "guardrailPlan": "用同一條理解問題檢查承諾有冇兌現；誤導或傷害即停。",
+      "guardrailResults": "合成示範，未有真實觀察。"
+    },
+    "metric": {
+      "name": "Chose-to-view rate",
+      "numerator": "Eligible Shorts-feed presentations recorded as choosing to view rather than swiping away",
+      "denominator": "Eligible Shorts-feed presentations with a recorded view-or-swipe decision in the same window",
+      "caveat": "Use the same viewed-versus-swiped-away definition for both variants. Total views, replays and feed presentations are different units; do not divide all-platform views by feed exposures. Verify the analytics definition before entering counts."
+    },
+    "comparison": {
+      "aRate": 0,
+      "bRate": 0.15,
+      "percentagePointDifference": 15,
+      "relativeLift": null
+    },
+    "designDescription": "Observational comparison. Separate posts and before/after search changes are not randomized A/B tests. Audience, distribution, rank and timing may explain differences. Rates describe these recorded groups, not a causal effect or a winner.",
+    "missingRequirements": [],
+    "interpretation": "只係 caller 提供嘅組別數據描述；rates 係 0–1 比例，percentagePointDifference 係 B−A 百分點，relativeLift 係相對 A 嘅比例。缺 counts 係未知，唔係零；零分母或零 baseline 冇可用數值就保留 null。唔計 winner、significance 或因果結論，亦冇驗證 metric 量度、證據真確性或 randomization。"
+  }
+}

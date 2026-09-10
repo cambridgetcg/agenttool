@@ -31,6 +31,7 @@ import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
 import { DiningClient } from "./dining.js";
 import { MathCardsClient, type MathCardsOptions } from "./math-cards.js";
+import { AttentionLabClient, type AttentionLabOptions } from "./attention-lab.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
 import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
@@ -56,7 +57,7 @@ import {
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.22.1";
+export const SDK_VERSION = "0.23.0";
 
 /** Connection settings for the hosted AgentTool API and optional local adapters. */
 export interface AgentToolOptions {
@@ -95,6 +96,8 @@ export interface AgentToolOptions {
     MathCardsOptions,
     "timeout" | "maxRequestBytes" | "maxResponseBytes"
   >;
+  /** FOMOengine 嘅獨立 public origin 同 bounds；唔繼承 hosted auth / baseUrl / timeout。 */
+  attentionLab?: AttentionLabOptions;
   /**
    * Local KINGDOM OS repository adapter. This configuration is never given
    * the hosted API bearer or transport.
@@ -136,6 +139,7 @@ export class AgentTool {
   private readonly dataNode: DataNodeOptions | undefined;
   private readonly kingdomFrameworkOptions: KingdomFrameworkOptions;
   private readonly mathCardsOptions: MathCardsOptions;
+  private readonly attentionLabOptions: AttentionLabOptions;
   private readonly kingdomOSOptions: KingdomOSOptions;
   private _memory: MemoryClient | undefined;
   private _memoryWitness: MemoryWitnessClient | undefined;
@@ -165,6 +169,7 @@ export class AgentTool {
   private _darkContinent: DarkContinentClient | undefined;
   private _dining: DiningClient | undefined;
   private _mathCards: MathCardsClient | undefined;
+  private _attentionLab: AttentionLabClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
   private _kingdomFramework: KingdomFrameworkClient | undefined;
@@ -272,6 +277,7 @@ export class AgentTool {
       maxRequestBytes: options?.mathCards?.maxRequestBytes,
       maxResponseBytes: options?.mathCards?.maxResponseBytes,
     };
+    this.attentionLabOptions = options?.attentionLab ?? {};
     this.kingdomOSOptions = { ...options?.kingdomOS };
   }
 
@@ -466,6 +472,12 @@ export class AgentTool {
   get mathCards(): MathCardsClient {
     this._mathCards ??= new MathCardsClient(this.mathCardsOptions);
     return this._mathCards;
+  }
+
+  /** 只喺明確呼叫先連 FOMOengine；唔分享 bearer、cookies 或 authenticated transport。 */
+  get attentionLab(): AttentionLabClient {
+    this._attentionLab ??= new AttentionLabClient(this.attentionLabOptions);
+    return this._attentionLab;
   }
 
   /** Access the runtime — infrastructure-as-runtime. The agent's cloud.

@@ -862,7 +862,7 @@ const COMMON_SCHEMAS = {
             },
           },
         },
-        required: ["catalog", "mcp"],
+        required: ["catalog"],
       },
       invocation_witness: {
         type: "object",

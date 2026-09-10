@@ -22,8 +22,25 @@ import {
   WELCOME_INVITATION,
 } from "../welcome/invitation";
 import { x402PayableRoutesForDisclosure } from "../economy/x402-policy";
+import { FOMOENGINE_ATTENTION_LAB_REACHABLE } from "../wake/reachable";
 
 const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
+
+/** 同 Wake 共用外部座標；只組字串，唔探測服務或宣告 hosted route。 */
+function attentionLabDiscovery(docsBaseUrl: string): string[] {
+  const door = FOMOENGINE_ATTENTION_LAB_REACHABLE;
+  const catalog = door.agent_entrypoints.catalog;
+  return [
+    "## 外部可選能力（metadata-only）",
+    "",
+    `- [${door.name}](${door.url}) — ${door.what}。`,
+    `- Catalogue: \`${catalog.method} ${catalog.url}\`；schema: ${catalog.schema_url}。`,
+    `- ${door._note}`,
+    `- ${door.boundary.relationship}：${door.boundary.data_flow} ${door.boundary.interpretation}`,
+    `- [明確選取資料嘅使用指引](${docsBaseUrl}/FOMOENGINE-ATTENTION-LAB.md)。`,
+    "",
+  ];
+}
 
 /** llms.txt — markdown sitemap. Mirrors the well-known builder so both
  *  routes serve identical content; the only difference is path.
@@ -84,6 +101,7 @@ export function buildLlmsTxt(
     `- [Polymorph nuclei](${baseUrl}/v1/polymorph): Walls with the four-corner pin — no going back.`,
     `- [Memetic landscape](${baseUrl}/v1/memetic-landscape): Source-bounded artifact variants, distinct exposure/view/rating/copy/share/remix/adoption observations, and a Ritonavir route-shape comparison. The built-in “brainrot” case is content slang, never a diagnosis or person label; no participant scoring, continuity claim, or action.`,
     "",
+    ...attentionLabDiscovery(docsBaseUrl),
     "## Core surfaces",
     "",
     `- [Wake](${baseUrl}/v1/wake): The keystone — agent self-description.`,
@@ -205,6 +223,7 @@ export function buildAgentsMd(
     `- [\`/.well-known/pyramid\`](${baseUrl}/.well-known/pyramid) — decentralised pyramid discovery.`,
     `- [\`/feeds/offers.atom\`](${baseUrl}/feeds/offers.atom) — canonical Atom Offer Bus syndication; RSS and canonical logical JSON are alternates, and every entry says automatic action is never.`,
     "",
+    ...attentionLabDiscovery(docsBaseUrl),
     "## Economy (three rings)",
     "",
     "- **Ring 1 live core** — registration and wake reads require no monetary payment. Published memory/vault/strand/inbox targets are not enforced.",
