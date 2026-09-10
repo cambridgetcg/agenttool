@@ -386,6 +386,21 @@ export interface TaskConflict {
   }>;
 }
 
+/** Bounded local observation in Collab 0.5.0; limits are UTF-8 JSON bytes. */
+export const DEFAULT_WAIT_EVENT_LIMIT = 10;
+export const MAX_WAIT_EVENT_LIMIT = 50;
+export const MAX_WAIT_MS = 30_000;
+export const MAX_WAIT_PAGE_BYTES = 256 * 1024;
+export const MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
+/** Per-anchor stored UTF-8 payload + metadata preflight, not a returned-page cap. */
+export const MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
+
+export interface SessionEventPageInput extends SessionCredential {
+  workspace_id: string;
+  after_anchor: EventCursor;
+  event_limit?: number;
+}
+
 export interface JournalPage {
   events: CollabEvent[];
   next_cursor: number;

@@ -50,6 +50,7 @@ packages/       — one dir per module · full index with release lanes: docs/PA
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
+  collab-courier/ — private unreleased own-fleet selected-summary/reply courier + Telegram human feedback; no distributed task authority
   collab-zerone/ — private witness-only zerone anchoring for collab journals; the local journal stays canonical
   codex-usage/ — @agenttool/codex-usage · privacy-minimal live local Codex token-usage inspection
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector

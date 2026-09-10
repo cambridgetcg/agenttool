@@ -45,7 +45,10 @@ those are not current publication status. Collab 0.4.0 has a
 [verified GitHub/npm release receipt](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
-not assertions about mutable registry tags.
+not assertions about mutable registry tags. Current Collab source is the
+**0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
+These release-candidate bytes do not establish npm publication; verify the
+protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -124,7 +127,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `alchemy-agentcred/` | `@agenttool/alchemy-agentcred` · npm-allowlisted | Strict AgentCred transport for AgentTool's seven bounded Alchemy EVM reads | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/alchemy-agentcred/CLAUDE.md) |
 | `browser/` | `@agenttool/browser` · LOVE + npm-allowlisted | Local-first browser control shaped for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/browser/CLAUDE.md) |
 | `codex-usage/` | `@agenttool/codex-usage` · npm-allowlisted | Privacy-minimal live local Codex token usage inspection for agents and operators | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/codex-usage/CLAUDE.md) |
-| `collab/` | `@agenttool/collab` · npm-allowlisted | Local-first coordination and read-only witness awareness for coding agents | — |
+| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 release candidate | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](../packages/collab/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
+| `collab-courier/` | `@agenttool/collab-courier` · private source candidate | Explicit own-fleet selected summaries/replies over signed Correspondence and single-receiver Telegram human feedback; no distributed task authority | [README](../packages/collab-courier/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-zerone/` | `@agenttool/collab-zerone` · private | Witness-only zerone anchoring for agenttool-collab journals — the local journal stays canonical, the chain witnesses its head hashes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-zerone/CLAUDE.md) |
 | `common-ground-atlas/` | `@agenttool/common-ground-atlas` · private | Private deterministic generator and exact verifier for the public Xenia–Helly Common Ground Atlas | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/common-ground-atlas/CLAUDE.md) |
 | `constructive-intelligence/` | `@agenttool/constructive-intelligence` · private | Offline append-only constructive evidence receipts for the Zerone tree v1 pilot | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/constructive-intelligence/CLAUDE.md) |
@@ -205,6 +209,16 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   carries the `Private :: Do Not Upload` classifier.
 - **`collab-zerone/`** is the private witness-only chain-anchoring sibling of
   the published `collab/`.
+- **`collab-courier/`** is a private `0.1.0-dev.0` source candidate with an
+  implemented finite CLI, disabled profile example, and offline tests. It carries
+  explicitly selected own-fleet summaries over project-readable signed
+  Correspondence and single-receiver, non-E2EE Telegram human feedback. Its exact
+  local Collab pins are 0.4.0 and the 0.5.0 release candidate; the private package
+  version stays unchanged. Implementation-checkpoint tests are recorded separately
+  from release-candidate review and live checks; no courier release or live support is claimed.
+  [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from
+  host-owned native lifecycle, local Collab authority, and optional separately
+  callable Zerone observation. It is not an addition to the six-tool shelf.
 
 ## How to keep this index true
 

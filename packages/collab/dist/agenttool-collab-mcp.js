@@ -28523,6 +28523,18 @@ function journalHashAtSequence(store, workspaceId, sequence) {
   }
 }
 
+// src/protocol.ts
+var COLLAB_PROTOCOL = "agenttool.collab/0.1";
+var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
+var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
+var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
+var DEFAULT_WAIT_EVENT_LIMIT = 10;
+var MAX_WAIT_EVENT_LIMIT = 50;
+var MAX_WAIT_MS = 30000;
+var MAX_WAIT_PAGE_BYTES = 256 * 1024;
+var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
+var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
+
 // src/session-file.ts
 import {
   chmodSync,
@@ -28705,10 +28717,22 @@ var localDestructiveMutation = {
 };
 function buildCollabMcpServer(store, options = {}) {
   let binding = options.resumed_session ?? null;
-  const server = new McpServer({ name: "agenttool-collab", version: "0.4.0" }, {
+  const server = new McpServer({ name: "agenttool-collab", version: "0.5.0" }, {
     capabilities: { tools: {} },
-    instructions: "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
+    instructions: "Collab 0.5.0: collab_events_wait offers bounded read-only anchored observation for an already running host, " + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
   });
+  const waitShutdown = new AbortController;
+  let activeWaits = 0;
+  const close = server.close.bind(server);
+  server.close = async () => {
+    waitShutdown.abort();
+    await close();
+  };
+  const onclose = server.server.onclose;
+  server.server.onclose = () => {
+    waitShutdown.abort();
+    onclose?.();
+  };
   const boundCredential = (allowCursorRecovery = false) => {
     if (!binding) {
       throw new CollabError("session_not_bound", "Start a credential-bound session first or provide legacy actor mode explicitly");
@@ -29260,6 +29284,82 @@ Rationale: ${input.rationale}` : ""}`,
     }
     return after_anchor ? store.eventsAfterAnchor(workspace_id, after_anchor, limit ?? 100) : store.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100);
   }));
+  server.registerTool("collab_events_wait", {
+    title: "Wait for an exact anchored local event page",
+    description: "Credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " + "Continue from next_anchor, not the head. No acknowledgement, last_seen/presence writes, lease renewal, or handoff expiry. " + "Presence-only and sidecar changes are not journal events. Stops on corruption, cursor rollback/fork, fencing or recovery required. " + "Page JSON is capped at 256 KiB and the MCP result at 1 MiB; an oversized first event is an explicit error, never skipped.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      after_anchor: eventAnchor,
+      event_limit: exports_external.number().int().min(1).max(MAX_WAIT_EVENT_LIMIT).optional(),
+      wait_ms: exports_external.number().int().min(0).max(MAX_WAIT_MS).optional().describe("Maximum idle wait; default 30000 ms, zero reads immediately")
+    }
+  }, async ({ workspace_id, after_anchor, event_limit, wait_ms }, ctx) => {
+    let counted = false;
+    try {
+      requireWorkspace(workspace_id);
+      const credential = { ...boundCredential() };
+      const input = {
+        ...credential,
+        workspace_id,
+        after_anchor: { ...after_anchor },
+        event_limit: event_limit ?? DEFAULT_WAIT_EVENT_LIMIT
+      };
+      const duration3 = wait_ms ?? MAX_WAIT_MS;
+      if (!Number.isInteger(duration3) || duration3 < 0 || duration3 > MAX_WAIT_MS) {
+        throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
+      }
+      if (activeWaits >= 8)
+        throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
+      activeWaits += 1;
+      counted = true;
+      const signal = ctx.mcpReq?.signal;
+      const check2 = () => {
+        if (waitShutdown.signal.aborted)
+          throw new CollabError("server_closed", "The MCP endpoint is closed");
+        if (signal?.aborted)
+          throw new CollabError("wait_cancelled", "The event wait was cancelled");
+        const current = boundCredential();
+        if (current.session_id !== credential.session_id || current.generation !== credential.generation) {
+          throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+        }
+        input.last_cursor = current.last_cursor ? { ...current.last_cursor } : undefined;
+        requireWorkspace(workspace_id);
+      };
+      const deadline = performance.now() + duration3;
+      while (true) {
+        check2();
+        try {
+          const page = store.eventsAfterAnchorForSession(input);
+          check2();
+          if (page.events.length || performance.now() >= deadline) {
+            const result = {
+              content: [{ type: "text", text: JSON.stringify(page) }],
+              structuredContent: { ...page }
+            };
+            if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+              throw new CollabError("event_page_too_large", "The MCP result exceeds its byte limit");
+            }
+            check2();
+            return result;
+          }
+        } catch (error51) {
+          if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy" || performance.now() >= deadline)
+            throw error51;
+        }
+        await waitDelay(Math.min(100, Math.max(0, deadline - performance.now())), [signal, waitShutdown.signal]);
+      }
+    } catch (error51) {
+      const result = failure(error51);
+      if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+        return failure(new CollabError("event_page_too_large", "The MCP error result exceeds its byte limit"));
+      }
+      return result;
+    } finally {
+      if (counted)
+        activeWaits -= 1;
+    }
+  });
   server.registerTool("collab_journal_verify", {
     title: "Verify the full local event journal",
     description: "Recompute the mixed-version hash chain. Integrity detects edits; it does not prove recorded claims true.",
@@ -29277,6 +29377,21 @@ Rationale: ${input.rationale}` : ""}`,
     inputSchema: { workspace_id: workspaceId }
   }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store, workspace_id)));
   return server;
+}
+function waitDelay(ms, signals) {
+  return new Promise((resolve2) => {
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals)
+        signal?.removeEventListener("abort", finish);
+      resolve2();
+    };
+    const timer = setTimeout(finish, ms);
+    for (const signal of signals)
+      signal?.addEventListener("abort", finish, { once: true });
+    if (signals.some((signal) => signal?.aborted))
+      finish();
+  });
 }
 function leaseMutationSchema(extra) {
   return {
@@ -29358,12 +29473,6 @@ function sortValue(value) {
   }
   return value;
 }
-
-// src/protocol.ts
-var COLLAB_PROTOCOL = "agenttool.collab/0.1";
-var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
-var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
-var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 
 // src/repository.ts
 import { createHash } from "crypto";
@@ -29727,6 +29836,8 @@ class CollabStore {
   now;
   filesystemPath;
   migrationFailpoint;
+  eventReader;
+  closed = false;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
@@ -29761,7 +29872,31 @@ class CollabStore {
     }
   }
   close() {
+    this.closed = true;
+    this.eventReader?.close();
+    this.eventReader = undefined;
     this.db.close();
+  }
+  nonblockingEventReader() {
+    if (this.closed)
+      throw new CollabError("store_closed", "The collaboration store is closed");
+    if (!this.filesystemPath) {
+      if (this.db.inTransaction) {
+        throw new CollabError("event_read_busy", "Finish the active transaction before observing events");
+      }
+      return this.db;
+    }
+    if (!this.eventReader) {
+      const reader = new Database(this.filesystemPath, { readonly: true, strict: true });
+      try {
+        reader.exec("PRAGMA busy_timeout = 0; PRAGMA query_only = ON");
+        this.eventReader = reader;
+      } catch (error51) {
+        reader.close();
+        throw error51;
+      }
+    }
+    return this.eventReader;
   }
   defaultSessionCredentialPath(sessionId2) {
     if (!this.filesystemPath) {
@@ -30647,8 +30782,8 @@ class CollabStore {
     this.tightenFileModes();
     return created;
   }
-  getWorkspace(workspaceId2) {
-    const row = this.db.query(`
+  getWorkspace(workspaceId2, db = this.db) {
+    const row = db.query(`
       SELECT id, epoch_id, root_path, repository_key, name, created_at,
         event_head_sequence, event_head_hash
       FROM workspaces WHERE id = ?
@@ -32345,30 +32480,143 @@ class CollabStore {
     const readPage = this.db.transaction(() => this.readEventPage(workspaceId2, afterSequence, limit));
     return readPage.deferred();
   }
-  readEventPage(workspaceId2, afterSequence, limit) {
+  eventsAfterAnchorForSession(input) {
+    const limit = validateNextEventLimit(input.event_limit ?? DEFAULT_WAIT_EVENT_LIMIT);
+    try {
+      const db = this.nonblockingEventReader();
+      const authenticateRead = () => {
+        const session = this.authenticateSession(input, {}, db);
+        if (session.workspace_id !== input.workspace_id) {
+          throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
+        }
+        const stored = {
+          epoch_id: session.cursor_epoch_id,
+          sequence: session.cursor_sequence,
+          hash: session.cursor_hash
+        };
+        try {
+          this.validateEventAnchor(session.workspace_id, stored, db, MAX_WAIT_ANCHOR_BYTES);
+          if (input.last_cursor) {
+            const known = this.validateEventAnchor(session.workspace_id, input.last_cursor, db, MAX_WAIT_ANCHOR_BYTES);
+            if (known.sequence > stored.sequence) {
+              throw new CollabError("cursor_regression", "The persisted cursor is behind the host cursor");
+            }
+          }
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          if (error51.code === "event_anchor_too_large")
+            throw error51;
+          throw new CollabError("cursor_reset_required", "The session cursor requires explicit reconciliation", { cause: error51.code });
+        }
+        return session;
+      };
+      const page = db.transaction(() => {
+        const session = authenticateRead();
+        const anchor = this.validateEventAnchor(session.workspace_id, input.after_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const page2 = this.readEventPage(session.workspace_id, anchor.sequence, limit, db, MAX_WAIT_PAGE_BYTES);
+        if (!page2.chain_valid || page2.events.some((event) => event.epoch_id !== anchor.epoch_id || event.workspace_id !== session.workspace_id || event.sequence > page2.head_sequence)) {
+          throw new CollabError("database_journal_invalid", "The returned event page failed hash-chain verification");
+        }
+        return page2;
+      }).deferred();
+      db.transaction(() => {
+        const current = authenticateRead();
+        this.validateEventAnchor(current.workspace_id, page.next_anchor, db, MAX_WAIT_ANCHOR_BYTES);
+        const workspace = this.requireWorkspace(current.workspace_id, db);
+        if (workspace.event_head_sequence < page.head_sequence) {
+          throw new CollabError("cursor_ahead", "The journal rolled back during observation");
+        }
+        const observedHead = page.head_sequence === 0 ? { hash: GENESIS_HASH } : db.query("SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?").get(current.workspace_id, page.head_sequence);
+        if (observedHead?.hash !== page.head_hash || workspace.event_head_sequence === page.head_sequence && workspace.event_head_hash !== page.head_hash) {
+          throw new CollabError("cursor_fork_detected", "The observed journal head changed during observation");
+        }
+      }).deferred();
+      return page;
+    } catch (error51) {
+      const code = error51?.code;
+      if (code?.startsWith("SQLITE_BUSY") || code?.startsWith("SQLITE_LOCKED")) {
+        throw new CollabError("event_read_busy", "The journal is busy; no page was returned");
+      }
+      if (error51 instanceof SyntaxError || code === "SQLITE_CORRUPT" || code === "SQLITE_NOTADB") {
+        throw new CollabError("database_journal_invalid", "The journal contains malformed event data");
+      }
+      throw error51;
+    }
+  }
+  requireEventByteBound(db, workspaceId2, sequence, maxBytes, purpose = "page") {
+    const row = db.query(`
+      SELECT length(CAST(payload_json AS BLOB)) + length(CAST(actor AS BLOB))
+        + length(CAST(entity_id AS BLOB)) + length(CAST(id AS BLOB))
+        + length(CAST(epoch_id AS BLOB)) + length(CAST(workspace_id AS BLOB))
+        + length(CAST(type AS BLOB)) + length(CAST(protocol AS BLOB))
+        + length(CAST(occurred_at AS BLOB)) + length(CAST(prev_hash AS BLOB))
+        + length(CAST(hash AS BLOB)) + coalesce(length(CAST(session_id AS BLOB)), 0) AS bytes
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(workspaceId2, sequence);
+    if (row && row.bytes > maxBytes) {
+      if (purpose === "anchor") {
+        throw new CollabError("event_anchor_too_large", "An anchor exceeds the bounded validation ceiling; operator reconciliation is required", {
+          sequence,
+          max_anchor_bytes: maxBytes
+        });
+      }
+      throw new CollabError("event_too_large", "An event exceeds the bounded observation page; use an explicit larger-read workflow", {
+        sequence,
+        max_page_bytes: maxBytes
+      });
+    }
+  }
+  readEventPage(workspaceId2, afterSequence, limit, db = this.db, maxBytes) {
     if (!Number.isInteger(afterSequence) || afterSequence < 0) {
       throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
     }
-    const workspace = this.requireWorkspace(workspaceId2);
+    const workspace = this.requireWorkspace(workspaceId2, db);
     if (afterSequence > workspace.event_head_sequence) {
       throw new CollabError("invalid_cursor", "Event cursor is ahead of the workspace journal", {
         after_sequence: afterSequence,
         head_sequence: workspace.event_head_sequence
       });
     }
-    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : this.db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId2, afterSequence);
+    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId2, afterSequence);
     if (!predecessor) {
       throw new CollabError("cursor_mismatch", "The cursor does not resolve to an event in this journal", { after_sequence: afterSequence });
     }
-    const rows = this.db.query(`
-      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
-        session_id, occurred_at, payload_json, prev_hash, hash
-      FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
-    `).all(workspaceId2, afterSequence, limit);
-    const events = rows.map(eventFromRow);
+    const select = `SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+      session_id, occurred_at, payload_json, prev_hash, hash FROM events`;
+    let events;
+    if (maxBytes === undefined) {
+      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId2, afterSequence, limit);
+      events = rows.map(eventFromRow);
+    } else {
+      events = [];
+      let bytes = 2048;
+      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId2, afterSequence, limit);
+      for (const { sequence } of sequences) {
+        try {
+          this.requireEventByteBound(db, workspaceId2, sequence, maxBytes);
+        } catch (error51) {
+          if (events.length && error51 instanceof CollabError && error51.code === "event_too_large")
+            break;
+          throw error51;
+        }
+        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`).get(workspaceId2, sequence));
+        const size = Buffer.byteLength(JSON.stringify(event)) + 1;
+        if (bytes + size > maxBytes) {
+          if (events.length)
+            break;
+          throw new CollabError("event_too_large", "An event exceeds the bounded observation page", {
+            sequence,
+            max_page_bytes: maxBytes
+          });
+        }
+        events.push(event);
+        bytes += size;
+      }
+    }
     const chainValid = verifyEventPage(events, afterSequence, predecessor.hash, workspace.event_head_sequence, workspace.event_head_hash);
     const cursor = {
       epoch_id: workspace.epoch_id,
@@ -32377,7 +32625,7 @@ class CollabStore {
     };
     const last = events.at(-1);
     const nextAnchor = last ? { epoch_id: last.epoch_id, sequence: last.sequence, hash: last.hash } : cursor;
-    return {
+    const page = {
       events,
       next_cursor: nextAnchor.sequence,
       cursor,
@@ -32388,6 +32636,10 @@ class CollabStore {
       chain_valid: chainValid,
       verification_scope: "returned_page"
     };
+    if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(page)) > maxBytes) {
+      throw new CollabError("event_page_too_large", "The observation page exceeds its byte limit");
+    }
+    return page;
   }
   eventsAfterAnchor(workspaceId2, anchor, limit = 100) {
     const validated = this.validateEventAnchor(workspaceId2, anchor);
@@ -32509,14 +32761,14 @@ class CollabStore {
     this.tightenFileModes();
     return response;
   }
-  authenticateSession(input, options = {}) {
+  authenticateSession(input, options = {}, db = this.db) {
     let id;
     try {
       id = validateId(input.session_id, "session_id");
     } catch {
       throw new CollabError("session_auth_failed", "Session credentials are invalid");
     }
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
+    const row = db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
     const suppliedHash = hashSessionToken(typeof input.session_token === "string" ? input.session_token : "");
     const expectedHash = row?.token_hash ?? "0".repeat(64);
     const tokenMatches = safeDigestEqual(suppliedHash, expectedHash);
@@ -32662,8 +32914,8 @@ class CollabStore {
       throw new CollabError("worktree_not_found", `Worktree '${id}' was not found`);
     return row;
   }
-  validateEventAnchor(workspaceId2, input) {
-    const workspace = this.requireWorkspace(workspaceId2);
+  validateEventAnchor(workspaceId2, input, db = this.db, maxBytes) {
+    const workspace = this.requireWorkspace(workspaceId2, db);
     if (!input || input.epoch_id !== workspace.epoch_id || !Number.isInteger(input.sequence) || input.sequence < 0 || typeof input.hash !== "string") {
       throw new CollabError("cursor_mismatch", "The cursor does not belong to this journal");
     }
@@ -32678,7 +32930,9 @@ class CollabStore {
         head_sequence: workspace.event_head_sequence
       });
     }
-    const row = this.db.query(`
+    if (maxBytes !== undefined)
+      this.requireEventByteBound(db, workspaceId2, input.sequence, maxBytes, "anchor");
+    const row = db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
       FROM events
@@ -33131,8 +33385,8 @@ class CollabStore {
       completed_at: row.completed_at
     };
   }
-  requireWorkspace(workspaceId2) {
-    const workspace = this.getWorkspace(workspaceId2);
+  requireWorkspace(workspaceId2, db = this.db) {
+    const workspace = this.getWorkspace(workspaceId2, db);
     if (!workspace)
       throw new CollabError("workspace_not_found", `Workspace '${workspaceId2}' was not found`);
     return workspace;
@@ -33805,6 +34059,9 @@ async function main() {
   };
   process.once("SIGINT", () => void shutdown(0));
   process.once("SIGTERM", () => void shutdown(0));
+  process.stdin.once("end", () => void shutdown(0));
+  process.stdin.once("close", () => void shutdown(0));
+  process.stdin.once("error", () => void shutdown(1));
   await server.connect(transport);
   process.stderr.write(`\xB7 agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""})
 `);

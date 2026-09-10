@@ -14,7 +14,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + private Collab courier + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # public GET smoke; requires AGENTTOOL_BASE
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -153,6 +153,8 @@ packages_gate() {
     bash -c 'cd packages/codex-usage && bun run ci'
   run "collab-zerone witness bridge (hash conformance + broadcast ambiguity discipline)" \
     bash -c 'cd packages/collab-zerone && bun run ci'
+  run "private Collab courier (signed replay, Telegram and witness fixtures; no live channels)" \
+    bash -c 'cd packages/collab-courier && bun run ci'
   run "local-first agent browser (fake/fixture tests; no browser download)" \
     bash -c 'cd packages/browser && bun run ci'
   run "local read-only Hugging Face metadata and provenance scout" \

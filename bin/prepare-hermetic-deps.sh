@@ -30,11 +30,15 @@ HF_HOST_VENV_INCOMPLETE=0
 # shellcheck source=bin/hermetic-env.sh
 source "$REPO_ROOT/bin/hermetic-env.sh"
 
+# The offline reconciliation CLI imports Wallet Zerone source helpers. Its
+# frozen development lock supplies the public Wallet 0.1.3 artifact and peers;
+# no local Wallet build, root install, or runtime dependency download is needed.
 readonly -a API_WORKSPACES=(
   api
   packages/data-protocol
   packages/sdk-ts
   packages/kingdom
+  packages/wallet-zerone
 )
 
 # Install independent/local-provider workspaces first. Consumers whose
@@ -71,6 +75,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/collab
   packages/codex-usage
   packages/collab-zerone
+  packages/collab-courier
   packages/browser
   packages/hf-scout
   packages/hf-training-garden
