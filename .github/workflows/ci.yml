@@ -316,6 +316,71 @@ jobs:
             --disable-prefetching \
             --no-parallel
 
+  care-before-learning:
+    name: Care before learning (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22.18.0", "25.2.1"]
+    steps:
+      - name: Check out exact CI source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          package-manager-cache: false
+      - name: Set up Python 3.12.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.12"
+      - name: Test release tooling without credentials
+        run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Verify the fixed public artifact inventory
+        run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify
+      - name: Run the public Dataset conformance reference
+        run: env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+      - name: Smoke the hash-locked Linux HF SDK without provider calls
+        if: ${{ matrix.node-version == '22.18.0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_venv="$RUNNER_TEMP/care-hf-smoke"
+          env -i PATH="$PATH" LANG=C TZ=UTC python3 -I -B -m venv "$smoke_venv"
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            "$smoke_venv/bin/python" -I -B -m pip --isolated install \
+            --require-hashes --only-binary=:all: --no-input --disable-pip-version-check \
+            -r bin/care-before-learning-hf-requirements.txt
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B - <<'PY'
+          import inspect
+          import huggingface_hub
+          from huggingface_hub import HfApi, CommitOperationAdd, set_client_factory
+
+          assert huggingface_hub.__version__ == "1.29.0"
+          assert callable(set_client_factory)
+          assert {"operations", "parent_commit", "revision", "create_pr", "run_as_future"} <= set(
+              inspect.signature(HfApi.create_commit).parameters
+          )
+          operation = CommitOperationAdd(
+              path_in_repo="README.md", path_or_fileobj=b"offline-reference-smoke"
+          )
+          assert operation.path_in_repo == "README.md"
+          with operation.as_file() as content:
+              assert content.read() == b"offline-reference-smoke"
+          print("Hash-locked HF SDK import and offline API smoke passed.")
+          PY
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" GITHUB_SHA="$GITHUB_SHA" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B -m unittest discover \
+            -s bin/tests -p test_care_before_learning_hf_release.py
+
   api-protocol:
     # Keep this display name stable for the protected-branch status context.
     # The required result fails unless all independent prerequisite jobs pass.
@@ -328,6 +393,7 @@ jobs:
       - launch-core
       - launch-browser
       - native-macos-secret
+      - care-before-learning
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -339,6 +405,7 @@ jobs:
           LAUNCH_CORE_RESULT: ${{ needs.launch-core.result }}
           LAUNCH_BROWSER_RESULT: ${{ needs.launch-browser.result }}
           NATIVE_MACOS_SECRET_RESULT: ${{ needs.native-macos-secret.result }}
+          CARE_BEFORE_LEARNING_RESULT: ${{ needs.care-before-learning.result }}
         run: |
           set -euo pipefail
           test "$API_PROTOCOL_LINUX_RESULT" = "success"
@@ -347,6 +414,7 @@ jobs:
           test "$LAUNCH_CORE_RESULT" = "success"
           test "$LAUNCH_BROWSER_RESULT" = "success"
           test "$NATIVE_MACOS_SECRET_RESULT" = "success"
+          test "$CARE_BEFORE_LEARNING_RESULT" = "success"
 
   witnessed-agent-economy:
     # Keep this display name stable for the protected-branch status context.

@@ -1,0 +1,211 @@
+name: Care Before Learning — verify and probe HF
+
+on:
+  push:
+    branches: [ci/care-before-learning-hf-probe-20260908]
+
+permissions: {}
+
+concurrency:
+  group: care-before-learning-hf-probe
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify reference kit (Node ${{ matrix.node }})
+    if: github.repository == 'cambridgetcg/agenttool' && github.ref == 'refs/heads/ci/care-before-learning-hf-probe-20260908'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.18.0, 25.2.1]
+    steps:
+      - name: Check out the triggering commit without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: packages/hf-listening-room/hf
+      - name: Set up exact Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Verify reviewed inventories and immutable manifest roots
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          env -u DATABASE_URL -u NODE_OPTIONS -u NODE_PATH python3 -I -B - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          roots = {
+              'space': (14, '95ebec847b597d71f212f317884882d261ad3b9605a7629f2ee5df4392d5c92e'),
+              'dataset': (15, 'e573ac0674d947d3b5afbdb0e0d7d3ec44b4eaa561c6feec95190305da2a9044'),
+          }
+          base = Path('packages/hf-listening-room/hf')
+          for path in [Path('packages'), base.parent, base]:
+              assert stat.S_ISDIR(path.lstat().st_mode), 'Non-directory artifact ancestor'
+          for kind, (count, digest) in roots.items():
+              root = base / kind
+              assert stat.S_ISDIR(root.lstat().st_mode), 'Non-directory artifact root'
+              def bounded(path):
+                  info = path.lstat()
+                  assert stat.S_ISREG(info.st_mode) and info.st_size <= 204800, 'Invalid artifact file'
+                  with path.open('rb') as stream:
+                      data = stream.read(204801)
+                  assert len(data) == info.st_size, 'Artifact changed or exceeded bound'
+                  return data
+              manifest_bytes = bounded(root / 'hash-manifest.json')
+              assert hashlib.sha256(manifest_bytes).hexdigest() == digest, 'Reviewed manifest root mismatch'
+              manifest = json.loads(manifest_bytes)
+              entries = {entry['path']: entry for entry in manifest['files']}
+              assert len(entries) == len(manifest['files']) == count - 1
+              expected = set(entries) | {'hash-manifest.json'}
+              allowed_dirs = {str(parent) for name in expected for parent in Path(name).parents if str(parent) != '.'}
+              found = set()
+              total = 0
+              def inspect(directory, prefix=''):
+                  for index, item in enumerate(os.scandir(directory)):
+                      assert index < 32, 'Directory entry bound exceeded'
+                      name = prefix + item.name
+                      info = item.stat(follow_symlinks=False)
+                      if stat.S_ISDIR(info.st_mode):
+                          assert name in allowed_dirs, 'Unexpected artifact directory'
+                          inspect(Path(item.path), name + '/')
+                      else:
+                          assert stat.S_ISREG(info.st_mode) and name in expected, 'Unexpected artifact file'
+                          found.add(name)
+              inspect(root)
+              assert found == expected, 'Incomplete artifact inventory'
+              for name in sorted(expected):
+                  data = bounded(root / name)
+                  total += len(data)
+                  assert total <= 1048576, 'Artifact aggregate bound exceeded'
+                  if name != 'hash-manifest.json':
+                      assert len(data) == entries[name]['bytes']
+                      assert hashlib.sha256(data).hexdigest() == entries[name]['sha256'], 'Artifact byte mismatch'
+              print(json.dumps({'artifact': kind, 'files': len(found), 'bytes': total, 'reviewed_hashes': 'matched'}))
+          PY
+      - name: Run exported reference checks without credentials or installs
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+
+  probe:
+    name: Probe HF OIDC — no Hub writes
+    needs: verify
+    if: github.repository == 'cambridgetcg/agenttool' && github.ref == 'refs/heads/ci/care-before-learning-hf-probe-20260908'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      id-token: write
+    steps:
+      # No checkout or candidate-code execution in this credential-bearing job.
+      - name: Exchange ephemeral identity and read only exact target metadata
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          python3 -I -B - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+          class ProbeError(Exception):
+              pass
+
+          def request(url, headers=None, body=None):
+              raw = None if body is None else json.dumps(body).encode()
+              req = urllib.request.Request(url, data=raw, headers=headers or {})
+              try:
+                  response = opener.open(req, timeout=15)
+              except urllib.error.HTTPError as error:
+                  response = error
+              with response:
+                  payload = response.read(65537)
+                  if len(payload) > 65536:
+                      raise ProbeError('response_bound')
+                  request_id = response.headers.get('X-Request-Id', '')
+                  if not re.fullmatch(r'[A-Za-z0-9_=;:./-]{0,200}', request_id):
+                      request_id = ''
+                  try:
+                      data = json.loads(payload)
+                  except (ValueError, UnicodeError):
+                      data = {}
+                  if not isinstance(data, dict):
+                      data = {}
+                  return response.status, data, request_id
+
+          def token_field(data, field):
+              value = data.get(field)
+              if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_.~-]{20,20000}', value):
+                  raise ProbeError('invalid_token_response')
+              return value
+
+          results = []
+          for kind, name in [('spaces', 'isness-listening-room'), ('datasets', 'isness-host-conformance')]:
+              resource = f'{kind}/Yu-and-Ai/{name}'
+              result = {'resource': resource, 'authentication': 'blocked', 'metadata': 'unassessed', 'hub_writes': False}
+              oidc = token = None
+              try:
+                  endpoint = urllib.parse.urlsplit(os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'])
+                  if endpoint.scheme != 'https' or not (endpoint.hostname or '').endswith('.actions.githubusercontent.com'):
+                      raise ProbeError('unexpected_oidc_endpoint')
+                  query = urllib.parse.parse_qsl(endpoint.query, keep_blank_values=True)
+                  query = [(key, value) for key, value in query if key != 'audience'] + [('audience', 'https://huggingface.co')]
+                  url = urllib.parse.urlunsplit(endpoint._replace(query=urllib.parse.urlencode(query)))
+                  status, data, request_id = request(url, {'Authorization': 'Bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+                  if status != 200:
+                      raise ProbeError('github_oidc_failed')
+                  oidc = token_field(data, 'value')
+                  status, data, request_id = request('https://huggingface.co/oauth/token', {'Content-Type': 'application/json'}, {
+                      'grant_type': 'urn:ietf:params:oauth:grant-type:token-exchange',
+                      'subject_token_type': 'urn:ietf:params:oauth:token-type:id_token',
+                      'subject_token': oidc,
+                      'resource': resource,
+                  })
+                  result['exchange_http_status'] = status
+                  if request_id:
+                      result['request_id'] = request_id
+                  if status != 200:
+                      code = data.get('error')
+                      result['error'] = code if code in ['invalid_request', 'invalid_grant', 'access_denied', 'unauthorized_client'] else 'exchange_rejected'
+                  else:
+                      token = token_field(data, 'access_token')
+                      result['authentication'] = 'exchanged'
+                      status, data, request_id = request('https://huggingface.co/api/' + resource, {'Authorization': 'Bearer ' + token})
+                      result['metadata_http_status'] = status
+                      if status == 200 and data.get('id') == 'Yu-and-Ai/' + name and isinstance(data.get('private'), bool):
+                          result['metadata'] = 'matched_target'
+                          result['private'] = data['private']
+                          if isinstance(data.get('sha'), str) and re.fullmatch(r'[0-9a-f]{40}', data['sha']):
+                              result['revision'] = data['sha']
+                      else:
+                          result['metadata'] = 'unverified'
+              except ProbeError as error:
+                  result['error'] = error.args[0]
+              except Exception:
+                  # Never print exceptions, response bodies, headers, or tokens.
+                  result['error'] = 'transport_or_runtime_failure'
+              finally:
+                  oidc = token = None
+              results.append(result)
+              print(json.dumps(result, sort_keys=True))
+          print('Probe only: no HF upload, repository creation, visibility change, or Collection write occurred.')
+          print('HF trust must match repository cambridgetcg/agenttool, branch ci/care-before-learning-hf-probe-20260908, workflow care-before-learning-hf-probe.yml.')
+          print('Diagnostic branch trust is not protected-main release authorization; account CI identities cannot substitute for repo trust.')
+          raise SystemExit(0 if all(item['authentication'] == 'exchanged' and item['metadata'] == 'matched_target' for item in results) else 1)
+          PY

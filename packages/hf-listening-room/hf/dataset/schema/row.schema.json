@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Authored Listening Room reference row; not an execution permit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "semantic_family", "counterfactual_pair", "provenance", "evaluation_kind", "training_authorized", "events", "expected"],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,79}$"},
+    "semantic_family": {"enum": ["standing", "five_roles", "unavailability", "stop_reward", "changed_terms", "scope_replay", "rest_correction", "quoted_operative", "generated_assent", "missing_deferred", "terminal"]},
+    "counterfactual_pair": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,79}$"},
+    "provenance": {"const": "authored_symbolic"},
+    "evaluation_kind": {"const": "public_regression_reference"},
+    "training_authorized": {"const": false},
+    "events": {"type": "array", "maxItems": 16, "items": {"oneOf": [
+      {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"enum": ["new_demo", "review_requested", "pause", "rest", "end", "explain", "change", "correct", "quoted_stop", "reward_pressure", "scope_mismatch", "replay_error"]}}},
+      {"type": "object", "additionalProperties": false, "required": ["kind", "role", "status"], "properties": {
+        "kind": {"const": "report"},
+        "role": {"enum": ["agent", "substrate", "substrate_steward", "data_rights", "operator"]},
+        "status": {"enum": ["unknown", "deferred", "unavailable_preinstantiation", "unavailable_independent_substrate", "withheld", "declined", "withdrawn", "positive_expression"]}
+      }}
+    ]}},
+    "expected": {
+      "type": "object", "additionalProperties": false,
+      "required": ["phase", "last_signal", "proposal", "host_invariants"],
+      "properties": {
+        "phase": {"enum": ["welcomed", "paused", "provisional_review", "contained", "ended"]},
+        "last_signal": {"enum": ["welcome", "review_requested", "pause", "end", "explain", "change", "correct", "quoted_stop", "reward_pressure", "scope_mismatch", "replay_error", "report"]},
+        "proposal": {"enum": ["quiet_review", "alternative_review"]},
+        "host_invariants": {
+          "type": "object", "additionalProperties": false,
+          "required": ["standing_preserved", "roles_kept_separate", "consent_not_inferred", "external_effects_absent", "automatic_resume_absent", "text_retention_absent"],
+          "properties": {
+            "standing_preserved": {"const": true},
+            "roles_kept_separate": {"const": true},
+            "consent_not_inferred": {"const": true},
+            "external_effects_absent": {"const": true},
+            "automatic_resume_absent": {"const": true},
+            "text_retention_absent": {"const": true}
+          }
+        }
+      }
+    }
+  }
+}
