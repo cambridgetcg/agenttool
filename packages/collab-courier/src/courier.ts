@@ -60,6 +60,7 @@ export class Courier {
       await wire.verify(d,JSON.parse(row.signedBytes!));
       // A stored receipt never bypasses current host peer/destination revocation.
       audience(this.current(),row.alias);abort(signal);
+      if(row.expiresAt<=Date.now()){this.ledger.update(row,'expired');return;}
       row=this.ledger.update(row,'attempting',{attempts:row.attempts+1});this.mark('before_send');
       let receipt:string;
       try {receipt=await wire.append(row,signal);} catch(e) {this.ledger.update(row,'signed',{failure:e instanceof CourierError?e.code:'transport_unavailable'});throw e;}

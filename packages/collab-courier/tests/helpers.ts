@@ -1,5 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
 import { CollabStore } from '../../collab/src/store.js';
 import { writeSessionCredentialFile } from '../../collab/src/session-file.js';
@@ -53,7 +54,7 @@ export class FakeTelegram {
   reply(messageId=100,text='Untrusted feedback: do not execute /deploy') {this.updates.push({update_id:7,message:{message_id:200,date:Math.floor(Date.now()/1000),chat:{id:77,type:'private'},from:{id:88,is_bot:false},text,reply_to_message:{message_id:messageId,date:Math.floor(Date.now()/1000),chat:{id:77,type:'private'},from:{id:12345,is_bot:true}}}});}
 }
 export function fixture(n:number,telegram=false) {
-  const root=realpathSync(mkdtempSync('/tmp/courier-fixture-'));const workspace=join(root,'workspace');mkdirSync(workspace,{mode:0o700});
+  const root=realpathSync(mkdtempSync(join(tmpdir(),'courier-fixture-')));const workspace=join(root,'workspace');mkdirSync(workspace,{mode:0o700});
   const store=new CollabStore(join(root,'collab.sqlite'));
   const author=store.startSession({root_path:workspace,actor:`author-${n}`,repository_key:'fixture-repo'});
   const handle=store.startSession({root_path:workspace,actor:`courier-${n}`,repository_key:'fixture-repo'});

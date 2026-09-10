@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { fixture, FakeNetwork, FakeTelegram, key, sender } from './helpers.js';
 import { parseBinding, summary, decimal, bindingKey, readBinding, until, type Binding } from '../src/binding.js';
 import { Ledger, ExclusiveOwner, type Ingress, type Selection } from '../src/ledger.js';
-import { CorrespondenceWire, wakeHint } from '../src/correspondence.js';
+import { CorrespondenceWire, signSelection, wakeHint } from '../src/correspondence.js';
 import { createSignedCorrespondenceEvent } from '@agenttool/sdk';
 import { McpImporter } from '../src/importer.js';
 
@@ -287,6 +287,34 @@ function stubImporter(f:ReturnType<typeof fixture>) {
     async source(){this.sourceCalls++;return f.source;},
     async append(){this.appendCalls++;return {id:'synthetic-import',from_session_id:this.sessionId};},async close(){}};
 }
+
+for(const state of ['queued','signed'] as const)for(const offset of [-1,0,1])test(`selection deadline after verification: ${state} at expiry ${offset}`,async()=>{
+  const f=fixture(1),importer=stubImporter(f),network=new FakeNetwork(),realNow=Date.now,verify=CorrespondenceWire.prototype.verify;
+  let now=realNow(),signedBytes:string|undefined,verifications=0,reopened:Ledger|undefined;
+  try {
+    Date.now=()=>now;
+    const expiresAt=now+300,input={...selectionInput(f),expiresAt};
+    const id=await selectReport(f.b,f.ledger,importer,input,AbortSignal.timeout(1000));
+    if(state==='signed') {
+      const row=f.ledger.get<Selection>(id)!;
+      signedBytes=f.ledger.sign(row,sequence=>signSelection(f.b,f.b.destinations[0],row,sequence,key(1).seed)).signedBytes;
+    }
+    CorrespondenceWire.prototype.verify=async function(...args){
+      await verify.apply(this,args);verifications++;now=expiresAt+offset;
+    };
+    const courier=new Courier(f.ledger,{current:()=>f.b,importer,transport:network,signingKey:key(1).seed,checkpoint:stage=>{if(stage==='after_sign')signedBytes=f.ledger.get<Selection>(id)!.signedBytes;}});
+    await courier.runOnce(AbortSignal.timeout(1000));
+    expect(verifications).toBe(1);expect(Date.now()).toBe(expiresAt+offset);
+    expect(f.b.expiresAt).toBeGreaterThan(now);expect(f.b.destinations[0].expiresAt).toBeGreaterThan(now);expect(f.b.correspondence.peers[0].expiresAt).toBeGreaterThan(now);
+    expect(network.posts).toHaveLength(offset<0?1:0);
+    const stored=f.ledger.get<Selection>(id)!;
+    expect(stored.state).toBe(offset<0?'provider_accepted':'expired');expect(stored.attempts).toBe(offset<0?1:0);
+    expect(signedBytes).toBeDefined();expect(stored.signedBytes).toBe(signedBytes);expect(f.ledger.meta('sequence')).toBe('1');
+    if(offset<0)expect(network.posts[0]).toBe(signedBytes!);
+    expect(importer.appendCalls).toBe(0);
+    reopened=new Ledger(f.b);expect(reopened.get<Selection>(id)).toEqual(stored);
+  } finally {CorrespondenceWire.prototype.verify=verify;Date.now=realNow;reopened?.close();await f.close();}
+});
 
 for(const target of lifecycleTargets)test(`${target.id}: same expiry and decreases persist; every increase fails live and across reopen`,async()=>{
   const f=fixture(1,true);let ledger:Ledger|undefined;

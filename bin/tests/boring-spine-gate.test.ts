@@ -842,6 +842,7 @@ describe("boring test spine", () => {
       "packages/data-protocol",
       "packages/sdk-ts",
       "packages/kingdom",
+      "packages/wallet-zerone",
     ]);
     const packageWorkspaces = readBashArray("PACKAGE_WORKSPACES");
     expect(packageWorkspaces).toEqual([
