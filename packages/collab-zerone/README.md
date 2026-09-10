@@ -66,12 +66,43 @@ bun bin/collab-zerone.ts resolve --workspace ws_…   # settle submitted/ambiguo
 Exit codes are part of the contract: `0` ok, `1` error, `2`
 integrity/verification failure, `3` anchor(s) in flight but unresolved.
 `verify --check-chain` gates the exit code too — every confirmed anchor must
-be found on chain with code 0 and a byte-identical memo, or verify exits 2.
-`resolve` upgrades submitted/ambiguous entries **only on positive on-chain
-proof** (found, code 0, memo matches); absence of evidence never downgrades an
-entry and never authorises a re-broadcast. `anchor` refuses to run over an
+have an explicitly successful integer code 0, a positive safe-integer inclusion
+height, a returned transaction hash matching the requested hash, a byte-identical
+memo matching its recorded workspace/epoch/sequence/hash,
+and a valid recomputed local prefix, or verify exits 2. Missing or malformed
+transaction fields (including a missing returned hash) remain unknown, never
+code/height 0 defaults. `resolve`
+upgrades submitted/ambiguous entries **only on this positive observation**;
+absence of evidence never downgrades an entry and never authorises a re-broadcast.
+`anchor` refuses to run over an
 `anchor_conflict` without `--force`, because a fresh anchor would launder
 tamper evidence into green.
+
+**Unreleased source hardening:** the JSON verification report also names the
+journal epoch. A zero exit with an empty anchor list is only an empty check;
+it is not evidence for a selected transaction. Consumers must inspect the
+selected record and distinguish a local sidecar report from a separately
+requested RPC observation. The private courier observer uses this read-only
+`verify` path with fixed host bindings and a fresh private HOME/cwd under the
+host-selected scratch parent. It disables dotenv and Bun runtime configuration
+(`--config=/dev/null`, no global config), so a nearby `bunfig.toml` preload cannot
+replace the pinned verifier. Temporary runtime directories are removed afterward.
+It never invokes `anchor`, `resolve`, or a keyring operation.
+
+The outer verifier's combined pipes and, separately, the cumulative combined
+pipes of its nested queries have the configured output ceiling (at most 1 MiB
+each). `verify` uses asynchronous streaming queries: over-cap chunks and query
+stderr are never retained, and each query has a kill deadline. Native
+`Bun.spawnSync` buffering is not used on this read-only path. The outer POSIX
+process group owns cancellation/teardown of all query descendants. The default
+courier runner refuses Windows rather than claiming query-child teardown there.
+These limits do not change the separate broadcast/keyring runner.
+
+The observer labels network provenance `network_source: "host_binding"`:
+it does not independently query chain ID, validate consensus, or establish
+trustless finality. The returned transaction hash is checked against the query,
+not cryptographically recomputed from raw transaction bytes. Normal courier
+operation does not perform a remote check.
 
 Signing shells out to the `zeroned` CLI (`ZERONED_BIN`, then
 `~/.zerone-agent/bin/zeroned`, then `$PATH`) with the same

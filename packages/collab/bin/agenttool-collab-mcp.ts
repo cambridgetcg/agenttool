@@ -52,6 +52,11 @@ async function main(): Promise<void> {
   };
   process.once("SIGINT", () => void shutdown(0));
   process.once("SIGTERM", () => void shutdown(0));
+  // The pinned SDK transport only subscribes to stdin data/error, not EOF.
+  // A closed host pipe must abort active waits and close SQLite immediately.
+  process.stdin.once("end", () => void shutdown(0));
+  process.stdin.once("close", () => void shutdown(0));
+  process.stdin.once("error", () => void shutdown(1));
 
   await server.connect(transport);
   process.stderr.write(

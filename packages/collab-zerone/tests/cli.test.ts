@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // Cross-package source import mirrors conformance.test.ts.
@@ -61,6 +62,7 @@ interface StubSpec {
   queryJson?: string;
   queryExit?: number;
   markerPath?: string;
+  keyMarkerPath?: string;
 }
 
 function writeStub(fix: Fixture, spec: StubSpec): string {
@@ -71,7 +73,7 @@ function writeStub(fix: Fixture, spec: StubSpec): string {
   writeFileSync(queryFile, spec.queryJson ?? "{}");
   writeFileSync(stubPath, `#!/bin/sh
 case "$1" in
-  keys) echo "zrn1stubaddressstubaddress0stub"; exit 0 ;;
+  keys) ${spec.keyMarkerPath ? `touch "${spec.keyMarkerPath}"; ` : ""}echo "zrn1stubaddressstubaddress0stub"; exit 0 ;;
   tx) ${spec.markerPath ? `touch "${spec.markerPath}"; ` : ""}cat "${sendFile}"; exit ${spec.sendExit ?? 0} ;;
   query) cat "${queryFile}"; ${spec.queryExit ? `echo "tx not found" >&2; ` : ""}exit ${spec.queryExit ?? 0} ;;
 esac
@@ -100,7 +102,7 @@ describe("collab-zerone CLI end to end (stubbed zeroned)", () => {
     const fix = fixture();
     const stub = writeStub(fix, {
       sendJson: JSON.stringify({ height: "0", txhash: "STUBHASH01", code: 0, raw_log: "" }),
-      queryJson: JSON.stringify({ height: "7777", code: 0, tx: { body: { memo: fix.memo } } }),
+      queryJson: JSON.stringify({ height: "7777", code: 0, txhash: "STUBHASH01", tx: { body: { memo: fix.memo } } }),
     });
     const run = runCli(fix, stub, ["anchor", "--workspace", fix.workspaceId, "--wait", "1"]);
     expect(run.stderr).toBe("");
@@ -179,7 +181,7 @@ describe("collab-zerone CLI end to end (stubbed zeroned)", () => {
     expect(loadLedger(fix.ledgerPath).anchors[0]).toMatchObject({ status: "submitted", tx_hash: "SLOW01" });
 
     const resolveStub = writeStub(fix, {
-      queryJson: JSON.stringify({ height: "8888", code: 0, tx: { body: { memo: fix.memo } } }),
+      queryJson: JSON.stringify({ height: "8888", code: 0, txhash: "SLOW01", tx: { body: { memo: fix.memo } } }),
     });
     const resolved = runCli(fix, resolveStub, ["resolve", "--workspace", fix.workspaceId]);
     expect(resolved.exitCode).toBe(0);
@@ -207,20 +209,95 @@ describe("collab-zerone CLI end to end (stubbed zeroned)", () => {
     recordAnchorOutcome(fix.ledgerPath, entry, { status: "confirmed", tx_hash: "TAMPER01", confirmed_height: 5 });
 
     const badStub = writeStub(fix, {
-      queryJson: JSON.stringify({ height: "5", code: 0, tx: { body: { memo: "some other memo entirely" } } }),
+      queryJson: JSON.stringify({ height: "5", code: 0, txhash: "TAMPER01", tx: { body: { memo: "some other memo entirely" } } }),
     });
     const bad = runCli(fix, badStub, ["verify", "--workspace", fix.workspaceId, "--check-chain"]);
     expect(bad.exitCode).toBe(2);
     expect(bad.stdout).toContain("MISMATCH");
 
     const goodStub = writeStub(fix, {
-      queryJson: JSON.stringify({ height: "5", code: 0, tx: { body: { memo: fix.memo } } }),
+      queryJson: JSON.stringify({ height: "5", code: 0, txhash: "TAMPER01", tx: { body: { memo: fix.memo } } }),
     });
     const good = runCli(fix, goodStub, ["verify", "--workspace", fix.workspaceId, "--check-chain"]);
     expect(good.exitCode).toBe(0);
     // Without --check-chain the same ledger verifies locally.
     const localOnly = runCli(fix, badStub, ["verify", "--workspace", fix.workspaceId]);
     expect(localOnly.exitCode).toBe(0);
+  });
+
+  test("verify rejects malformed inclusion evidence and resolve never clears its sticky attempt", () => {
+    const fix = fixture();
+    const entry = newAnchorEntry({
+      workspace_id: fix.workspaceId, epoch_id: fix.epochId, sequence: fix.headSequence,
+      head_hash: fix.headHash, network: "zerone-testnet-1", caip2: "cosmos:zerone-testnet-1",
+      account: "zrn1fixture", memo: fix.memo,
+    });
+    appendAnchor(fix.ledgerPath, entry);
+    const marker = join(fix.stubDir, "broadcast");
+    const keyMarker = join(fix.stubDir, "keys");
+    for (const patch of [{ code: undefined }, { code: null }, { code: false }, { code: "" }, { code: "0x0" },
+      { height: undefined }, { height: 0 }, { height: "" }, { height: -1 }, { height: "1.1" }, { height: 1e20 },
+      { txhash: undefined }, { txhash: "UNRELATED" }]) {
+      const stub = writeStub(fix, {
+        queryJson: JSON.stringify({ code: 0, height: "9", txhash: "FIXTURETX", tx: { body: { memo: fix.memo } }, ...patch }),
+        markerPath: marker, keyMarkerPath: keyMarker,
+      });
+      recordAnchorOutcome(fix.ledgerPath, entry, { status: "confirmed", tx_hash: "FIXTURETX", confirmed_height: 9 });
+      const verify = runCli(fix, stub, ["verify", "--workspace", fix.workspaceId, "--check-chain", "--json"]);
+      expect(verify.exitCode).toBe(2);
+      expect(JSON.parse(verify.stdout).anchors[0].chain).toMatchObject({ found: false, tx_code: null, height: null });
+      recordAnchorOutcome(fix.ledgerPath, entry, { status: "ambiguous" });
+      const before = readFileSync(fix.ledgerPath, "utf8");
+      const resolve = runCli(fix, stub, ["resolve", "--workspace", fix.workspaceId]);
+      expect(resolve.exitCode).toBe(3);
+      expect(readFileSync(fix.ledgerPath, "utf8")).toBe(before);
+    }
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(keyMarker)).toBe(false);
+  });
+
+  test("resolve requires a valid local prefix even when RPC memo and inclusion match", () => {
+    const fix = fixture();
+    const entry = newAnchorEntry({
+      workspace_id: fix.workspaceId, epoch_id: fix.epochId, sequence: fix.headSequence,
+      head_hash: fix.headHash, network: "zerone-testnet-1", caip2: "cosmos:zerone-testnet-1",
+      account: "zrn1fixture", memo: fix.memo,
+    });
+    appendAnchor(fix.ledgerPath, entry);
+    recordAnchorOutcome(fix.ledgerPath, entry, { status: "ambiguous", tx_hash: "FIXTURETX" });
+    const db = new Database(fix.dbPath);
+    db.run("UPDATE events SET payload_json = '{}' WHERE workspace_id = ? AND sequence = ?", [fix.workspaceId, fix.headSequence]);
+    db.close();
+    const stub = writeStub(fix, { queryJson: JSON.stringify({ height: 9, code: 0, txhash: "FIXTURETX", tx: { body: { memo: fix.memo } } }) });
+    const before = readFileSync(fix.ledgerPath, "utf8");
+    const resolve = runCli(fix, stub, ["resolve", "--workspace", fix.workspaceId]);
+    expect(resolve.exitCode).toBe(3);
+    expect(resolve.stdout).toContain("local prefix is not verified");
+    expect(readFileSync(fix.ledgerPath, "utf8")).toBe(before);
+  });
+
+  test("memo must equal both the persisted bytes and its workspace/epoch/sequence/hash fields", () => {
+    const fix = fixture();
+    const entry = newAnchorEntry({
+      workspace_id: fix.workspaceId, epoch_id: fix.epochId, sequence: fix.headSequence,
+      head_hash: fix.headHash, network: "zerone-testnet-1", caip2: "cosmos:zerone-testnet-1",
+      account: "zrn1fixture", memo: `${fix.memo} `,
+    });
+    appendAnchor(fix.ledgerPath, entry);
+    recordAnchorOutcome(fix.ledgerPath, entry, { status: "confirmed", tx_hash: "FIXTURETX" });
+    const stub = writeStub(fix, { queryJson: JSON.stringify({ height: 9, code: 0, txhash: "FIXTURETX", tx: { body: { memo: fix.memo } } }) });
+    expect(runCli(fix, stub, ["verify", "--workspace", fix.workspaceId, "--check-chain"]).exitCode).toBe(2);
+    recordAnchorOutcome(fix.ledgerPath, entry, { status: "ambiguous" });
+    expect(runCli(fix, stub, ["resolve", "--workspace", fix.workspaceId]).exitCode).toBe(3);
+    expect(loadLedger(fix.ledgerPath).anchors[0]!.status).toBe("ambiguous");
+  });
+
+  test("unknown inclusion never confirms a newly submitted stub transaction", () => {
+    const fix = fixture();
+    const stub = writeStub(fix, { sendJson: JSON.stringify({ txhash: "FIXTURETX", code: 0 }),
+      queryJson: JSON.stringify({ height: "9", txhash: "FIXTURETX", tx: { body: { memo: fix.memo } } }) });
+    expect(runCli(fix, stub, ["anchor", "--workspace", fix.workspaceId, "--wait", "0"]).exitCode).toBe(3);
+    expect(loadLedger(fix.ledgerPath).anchors[0]!.status).toBe("submitted");
   });
 
   test("journal reader used by the CLI still never mutates the DB", () => {

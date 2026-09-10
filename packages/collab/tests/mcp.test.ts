@@ -145,6 +145,7 @@ describe("MCP surface", () => {
       "collab_cursor_reset",
       "collab_decision_record",
       "collab_events_since",
+      "collab_events_wait",
       "collab_handoff_offer",
       "collab_handoff_respond",
       "collab_journal_verify",
@@ -188,6 +189,7 @@ describe("MCP surface", () => {
     const readOnly = [
       "collab_anchor_status",
       "collab_events_since",
+      "collab_events_wait",
       "collab_journal_verify",
       "collab_report_list",
       "collab_session_list",
@@ -814,8 +816,8 @@ describe("MCP surface", () => {
     const reviewer = new StdioMcpHarness(bundlePath, databasePath);
     cleanup.push(() => reviewer.close());
     const reviewerInit = await reviewer.initialize();
-    expect(implementerInit.serverInfo.version).toBe("0.4.0");
-    expect(reviewerInit.serverInfo.version).toBe("0.4.0");
+    expect(implementerInit.serverInfo.version).toBe("0.5.0");
+    expect(reviewerInit.serverInfo.version).toBe("0.5.0");
 
     const implementerJoin = await implementer.callTool("collab_session_start", {
       root_path: root,

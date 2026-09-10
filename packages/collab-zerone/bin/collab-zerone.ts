@@ -25,6 +25,7 @@ import { computeAnchorStatus, type AnchorStatusReport } from "../src/status.js";
 import {
   bankSendAnchorArgs,
   broadcastAnchor,
+  createReadOnlyTxLookup,
   defaultZeronedBin,
   lookupTx,
   resolveKeyAddress,
@@ -121,6 +122,7 @@ function statusIcon(status: AnchorStatusReport["status"]): string {
 function memoMatchesEntry(memo: string | undefined, entry: AnchorEntry): boolean {
   const parsed = memo ? parseAnchorMemo(memo) : null;
   return parsed !== null
+    && memo === entry.memo && memo.length <= 256
     && parsed.workspace_id === entry.workspace_id
     && parsed.epoch_id === entry.epoch_id
     && parsed.sequence === entry.sequence
@@ -186,7 +188,7 @@ function commandStatus(options: CliOptions): void {
   }
 }
 
-function commandVerify(options: CliOptions): void {
+async function commandVerify(options: CliOptions): Promise<void> {
   if (!options.workspace) fail("verify requires --workspace <id>");
   const reader = new JournalReader(options.db);
   try {
@@ -194,23 +196,27 @@ function commandVerify(options: CliOptions): void {
     const journal = reader.verify(workspace.id);
     const { ledger, note } = loadLedgerSafe(options.ledger);
     const entries = anchorsForWorkspace(ledger, workspace.id, workspace.epoch_id, options.network);
-    const runner = options.checkChain ? systemZeronedRunner(defaultZeronedBin()) : null;
-    const anchorChecks = entries.map(entry => {
+    const lookup = options.checkChain ? createReadOnlyTxLookup(defaultZeronedBin(), {
+      max_output_bytes: Number(process.env.COLLAB_ZERONE_QUERY_MAX_OUTPUT_BYTES ?? 262_144),
+      timeout_ms: Number(process.env.COLLAB_ZERONE_QUERY_TIMEOUT_MS ?? 10_000),
+    }) : null;
+    const anchorChecks = [];
+    for (const entry of entries) {
       let localMatch = false;
       let localDetail: string;
       if (!journal.valid) {
         localDetail = `journal itself failed verification (${journal.failure})`;
       } else {
         const prefix = reader.verify(workspace.id, entry.sequence);
-        localMatch = prefix.valid && prefix.hash_at_sequence === entry.head_hash;
+        localMatch = prefix.valid && prefix.head_consistent && prefix.hash_at_sequence === entry.head_hash;
         localDetail = prefix.valid
           ? (localMatch ? "recomputed hash matches anchor" : "recomputed hash DIFFERS from anchor")
           : `prefix verification failed (${prefix.failure})`;
       }
       let chain: { found: boolean; height: number | null; tx_code: number | null; memo_matches: boolean; detail: string | null } | null = null;
-      if (runner && entry.tx_hash) {
+      if (lookup && entry.tx_hash) {
         const network = resolveNetwork(options, entry.network);
-        const found = lookupTx(runner, network, entry.tx_hash);
+        const found = await lookup(network, entry.tx_hash);
         chain = {
           found: found.found,
           height: found.height ?? null,
@@ -219,17 +225,20 @@ function commandVerify(options: CliOptions): void {
           detail: found.detail ?? null,
         };
       }
-      return { anchor: entry, local_match: localMatch, local_detail: localDetail, chain };
-    });
+      anchorChecks.push({ anchor: entry, local_match: localMatch, local_detail: localDetail, chain });
+    }
     const localOk = journal.valid && anchorChecks.every(check =>
       check.anchor.status !== "confirmed" || check.local_match);
     // --check-chain gates the exit code too: a confirmed anchor must be found
     // on chain with code 0 and a byte-identical memo, or verification fails.
     const chainOk = !options.checkChain || anchorChecks.every(check =>
       check.anchor.status !== "confirmed"
-      || (check.chain !== null && check.chain.found && check.chain.tx_code === 0 && check.chain.memo_matches));
+      || (check.local_match && check.chain !== null && check.chain.found
+        && check.chain.tx_code === 0 && Number.isSafeInteger(check.chain.height)
+        && check.chain.height !== null && check.chain.height > 0 && check.chain.memo_matches));
     const result = {
       workspace_id: workspace.id,
+      epoch_id: workspace.epoch_id,
       journal_valid: journal.valid,
       journal_detail: journal.valid
         ? `${journal.checked_events} events verified; head consistent`
@@ -354,7 +363,7 @@ async function commandAnchor(options: CliOptions): Promise<void> {
     fail(`broadcast rejected: ${broadcast.detail ?? "unknown"}`);
   }
   if (broadcast.outcome === "ambiguous") {
-    recordAnchorOutcome(options.ledger, entry, { status: "ambiguous", note: broadcast.detail });
+    recordAnchorOutcome(options.ledger, entry, { status: "ambiguous", tx_hash: broadcast.tx_hash, note: broadcast.detail });
     fail(`broadcast outcome ambiguous — the tx may or may not exist on ${network.name}; entry ${entry.id} kept for 'collab-zerone resolve': ${broadcast.detail ?? ""}`, 3);
   }
   recordAnchorOutcome(options.ledger, entry, { tx_hash: broadcast.tx_hash });
@@ -395,13 +404,24 @@ function commandResolve(options: CliOptions): void {
   if (note) fail(`refusing to resolve with an unreadable ledger: ${note}`);
   const reader = new JournalReader(options.db);
   let workspace: JournalWorkspace;
+  let open: AnchorEntry[];
+  const localMatches = new Set<string>();
   try {
     workspace = requireWorkspace(reader, options.workspace);
+    open = anchorsForWorkspace(ledger, workspace.id, workspace.epoch_id, options.network)
+      .filter(entry => entry.status === "submitted" || entry.status === "ambiguous");
+    const journal = reader.verify(workspace.id);
+    if (journal.valid) {
+      for (const entry of open) {
+        const prefix = reader.verify(workspace.id, entry.sequence);
+        if (prefix.valid && prefix.head_consistent && prefix.hash_at_sequence === entry.head_hash) {
+          localMatches.add(entry.id);
+        }
+      }
+    }
   } finally {
     reader.close();
   }
-  const open = anchorsForWorkspace(ledger, workspace.id, workspace.epoch_id, options.network)
-    .filter(entry => entry.status === "submitted" || entry.status === "ambiguous");
   if (open.length === 0) {
     console.log("nothing to resolve: no submitted or ambiguous anchors for this workspace/epoch");
     return;
@@ -412,6 +432,11 @@ function commandResolve(options: CliOptions): void {
     if (!entry.tx_hash) {
       unresolved += 1;
       console.log(`🟠 ${entry.id} (seq ${entry.sequence}, ${entry.status}) has no tx hash — cannot be resolved from chain; inspect the ledger note and re-anchor if the head moved on`);
+      continue;
+    }
+    if (!localMatches.has(entry.id)) {
+      unresolved += 1;
+      console.log(`${entry.id} (seq ${entry.sequence}) local prefix is not verified; left ${entry.status}`);
       continue;
     }
     const network = resolveNetwork(options, entry.network);
@@ -425,7 +450,7 @@ function commandResolve(options: CliOptions): void {
         confirmed_height: lookup.height,
       });
       console.log(`🟢 ${entry.id} (seq ${entry.sequence}) confirmed at height ${lookup.height} on ${entry.network}`);
-    } else if (lookup.found && lookup.code !== 0) {
+    } else if (lookup.found && lookup.code !== 0 && memoMatchesEntry(lookup.memo, entry)) {
       recordAnchorOutcome(options.ledger, entry, {
         status: "failed",
         note: `included at height ${lookup.height} but execution failed with code ${lookup.code}`,

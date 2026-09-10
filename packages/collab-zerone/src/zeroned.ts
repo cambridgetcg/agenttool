@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import {
   ANCHOR_SEND_AMOUNT,
   DEFAULT_FEE_UZRN,
@@ -34,6 +35,66 @@ export function systemZeronedRunner(bin: string): ZeronedRunner {
         stderr: result.stderr.toString(),
       };
     },
+  };
+}
+
+export interface QueryRunLimits {
+  /** Combined stdout/stderr budget shared by this verifier's read-only queries. */
+  max_output_bytes: number;
+  /** Maximum duration of one query; the courier separately bounds the whole CLI. */
+  timeout_ms: number;
+}
+
+/** Read-only streaming path. Never buffer a query through spawnSync. */
+export function createReadOnlyTxLookup(bin: string, limits: QueryRunLimits = { max_output_bytes: 262_144, timeout_ms: 10_000 }):
+  (network: ZeroneNetworkConfig, txHash: string) => Promise<TxLookup> {
+  if (!Number.isSafeInteger(limits.max_output_bytes) || limits.max_output_bytes < 1 || limits.max_output_bytes > 1_048_576
+    || !Number.isSafeInteger(limits.timeout_ms) || limits.timeout_ms < 1 || limits.timeout_ms > 30_000) {
+    throw new Error("invalid read-only query limits");
+  }
+  let remaining = limits.max_output_bytes;
+  const timeout = limits.timeout_ms;
+  return async (network, txHash) => {
+    const failed = (): TxLookup => ({ found: false, detail: "query failed or exceeded its execution bounds" });
+    if (remaining < 1) return failed();
+    try {
+      return await new Promise<TxLookup>(resolve => {
+        // Inherit the verifier's group: the courier owns teardown of this
+        // process and all query descendants on every outer completion path.
+        const child = spawn(bin, queryTxArgs(network, txHash), { stdio: ["ignore", "pipe", "pipe"], shell: false });
+        const chunks: Buffer[] = [];
+        let settled = false;
+        let code: number | undefined;
+        let stdoutDone = false;
+        let stderrDone = false;
+        const finish = (success: boolean) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          child.kill("SIGKILL");
+          child.stdout.destroy(); child.stderr.destroy();
+          resolve(success ? parseTxLookup({ exit_code: 0, stdout: Buffer.concat(chunks).toString("utf8"), stderr: "" }, txHash) : failed());
+        };
+        const timer = setTimeout(() => finish(false), timeout);
+        const checkDone = () => { if (code !== undefined && stdoutDone && stderrDone) finish(code === 0); };
+        const read = (chunk: Buffer, retain: boolean) => {
+          if (settled) return;
+          remaining -= chunk.byteLength;
+          if (remaining < 0) { finish(false); return; }
+          // Copy only admitted stdout bytes; never retain stderr or an over-cap
+          // chunk. Native sync maxBuffer can overshoot by hundreds of KiB.
+          if (retain) chunks.push(Buffer.from(chunk));
+        };
+        child.stdout.on("data", chunk => read(chunk, true));
+        child.stderr.on("data", chunk => read(chunk, false));
+        child.stdout.once("end", () => { stdoutDone = true; checkDone(); });
+        child.stderr.once("end", () => { stderrDone = true; checkDone(); });
+        child.stdout.once("error", () => finish(false));
+        child.stderr.once("error", () => finish(false));
+        child.once("error", () => finish(false));
+        child.once("exit", exitCode => { code = exitCode ?? -1; checkDone(); });
+      });
+    } catch { return failed(); }
   };
 }
 
@@ -114,7 +175,10 @@ export function broadcastAnchor(runner: ZeronedRunner, args: string[]): Broadcas
   }
   const parsed = extractJson(result.stdout);
   if (parsed && typeof parsed.txhash === "string") {
-    const code = typeof parsed.code === "number" ? parsed.code : Number(parsed.code ?? 0);
+    const code = parseUnsignedInteger(parsed.code);
+    if (code === null) {
+      return { outcome: "ambiguous", tx_hash: parsed.txhash, detail: "missing or malformed CheckTx code" };
+    }
     if (code === 0) return { outcome: "accepted", tx_hash: parsed.txhash, code };
     return {
       outcome: "rejected",
@@ -134,12 +198,15 @@ export function broadcastAnchor(runner: ZeronedRunner, args: string[]): Broadcas
   };
 }
 
-export interface TxLookup {
-  found: boolean;
-  height?: number;
-  code?: number;
-  memo?: string;
-  detail?: string;
+export type TxLookup =
+  | { found: true; height: number; code: number; memo: string; detail?: string }
+  | { found: false; height?: never; code?: never; memo?: never; detail?: string };
+
+/** JSON numbers and decimal integer strings only; never coerce null/bools/empty. */
+function parseUnsignedInteger(value: unknown): number | null {
+  if (typeof value !== "number" && (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value))) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }
 
 export function queryTxArgs(network: ZeroneNetworkConfig, txHash: string): string[] {
@@ -151,19 +218,34 @@ export function lookupTx(
   network: ZeroneNetworkConfig,
   txHash: string,
 ): TxLookup {
-  const result = runner.run(queryTxArgs(network, txHash));
+  let result: ZeronedRunResult;
+  try {
+    result = runner.run(queryTxArgs(network, txHash));
+  } catch {
+    return { found: false, detail: "query tx invocation failed" };
+  }
+  return parseTxLookup(result, txHash);
+}
+
+function parseTxLookup(result: ZeronedRunResult, txHash: string): TxLookup {
   if (result.exit_code !== 0) {
-    return { found: false, detail: result.stderr.trim().split("\n")[0] };
+    return { found: false, detail: "query tx failed or transaction not found" };
   }
   const parsed = extractJson(result.stdout);
   if (!parsed) return { found: false, detail: "unparseable query tx output" };
-  const tx = parsed.tx as { body?: { memo?: string } } | undefined;
-  return {
-    found: true,
-    height: Number(parsed.height ?? 0),
-    code: typeof parsed.code === "number" ? parsed.code : Number(parsed.code ?? 0),
-    memo: tx?.body?.memo,
-  };
+  const height = parseUnsignedInteger(parsed.height);
+  const code = parseUnsignedInteger(parsed.code);
+  const tx = parsed.tx as { body?: { memo?: unknown } } | null | undefined;
+  const memo = tx?.body?.memo;
+  if (height === null || height <= 0 || code === null || typeof memo !== "string") {
+    return { found: false, detail: "missing or malformed transaction evidence" };
+  }
+  // Positive evidence must explicitly echo the transaction this query selected.
+  // A legacy response omitting txhash is unknown, not proof by request alone.
+  if (typeof parsed.txhash !== "string" || parsed.txhash.toUpperCase() !== txHash.toUpperCase()) {
+    return { found: false, detail: "transaction hash does not match query" };
+  }
+  return { found: true, height, code, memo };
 }
 
 export async function waitForTx(
@@ -188,7 +270,9 @@ function extractJson(output: string): Record<string, unknown> | null {
   const start = output.indexOf("{");
   if (start === -1) return null;
   try {
-    return JSON.parse(output.slice(start)) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(output.slice(start));
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown> : null;
   } catch {
     return null;
   }

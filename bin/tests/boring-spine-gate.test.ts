@@ -877,6 +877,7 @@ describe("boring test spine", () => {
       "packages/collab",
       "packages/codex-usage",
       "packages/collab-zerone",
+      "packages/collab-courier",
       "packages/browser",
       "packages/hf-scout",
       "packages/hf-training-garden",
@@ -1421,9 +1422,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(64);
+      expect(calls).toHaveLength(65);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        54,
+        55,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
@@ -1555,6 +1556,37 @@ exit 94
     expect(npmReleases).toMatch(
       /aggregate statistics\s+capability changed from false during an earlier readback to true in a later one/,
     );
+  });
+
+  test("keeps the private courier gate offline and outside publication", async () => {
+    const source = await readFile(join(ROOT, ".github/workflows/collab-courier.yml"), "utf8");
+    const workflow = Bun.YAML.parse(source) as {
+      permissions: Record<string, string>;
+      jobs: Record<string, { "timeout-minutes": number; steps: Array<{
+        uses?: string; run?: string; with?: Record<string, unknown>;
+      }> }>;
+    };
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(workflow.jobs)).toEqual(["offline-collaboration"]);
+    const job = workflow.jobs["offline-collaboration"];
+    expect(job["timeout-minutes"]).toBeLessThanOrEqual(12);
+    expect(job.steps[0].with).toEqual({ "persist-credentials": false });
+    expect(job.steps[1].with).toEqual({ "bun-version": "1.3.5" });
+    for (const step of job.steps.filter((step) => step.uses)) {
+      expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
+    }
+    for (const step of job.steps.filter((step) => step.run)) {
+      expect(step.run).toContain("env -i PATH=");
+      expect(step.run).toContain("collab collab-zerone collab-courier");
+      expect(step.run).toContain("bun --no-env-file");
+      const syntax = run(["bash", "-n", "-c", step.run!]);
+      expect(syntax.code, syntax.stderr).toBe(0);
+    }
+    expect(source).toContain("install --frozen-lockfile --ignore-scripts");
+    expect(source).toContain("run ci");
+    expect(source).not.toMatch(/secrets\.|id-token:|publish|deploy|continue-on-error/);
+    const publisher = await readFile(join(ROOT, ".github/workflows/publish-npm.yml"), "utf8");
+    expect(publisher).not.toContain("collab-courier");
   });
 
   test("keeps software npm publication manual, exact-artifact, and protected", async () => {
