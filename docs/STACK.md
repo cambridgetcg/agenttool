@@ -376,6 +376,13 @@ and private Fly home must be installed while the generation is still absent:
 the preactivation guard uses that same boundary to prove provider absence
 before the first B2 deploy, and configured mode keeps using it thereafter.
 
+The additional exact `macair`/UID501 profile at `/Users/macair` supports only
+the absent-before-activation state, with OS account/home checks and the same
+pinned-tool/private-configuration boundary. It cannot adopt a configured B1
+receipt or invoke the original signed-native ceremony path. Provisioning and
+cross-host coordination limits are in
+[`DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md#macair-preactivation-deployment-operator).
+
 If an independently authorised incident or recovery path has already left the
 Fly registry empty, keep admission closed and prepare a separate, reviewed
 recovery plan. No generic empty-registry restoration mode is supported, and an

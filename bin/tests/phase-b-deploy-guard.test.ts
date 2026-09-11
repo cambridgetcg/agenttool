@@ -21,6 +21,7 @@ import {
   PhaseBGuardError,
   readCanonicalPrivateJsonFileForGuard,
   readStablePrivateFileForGuard,
+  resolvePhaseBOperator,
   runBoundedReadOnlyChildForTest,
   runPhaseBDeployGuard,
   serializePhaseBDeployProof,
@@ -275,6 +276,7 @@ function about(state: "configured" | "absent_fail_closed") {
 }
 
 class FakeDependencies implements PhaseBGuardDependencies {
+  operatorMode: PhaseBGuardDependencies["operatorMode"] = "ceremony";
   authorityReads: unknown[];
   receiptReads: Array<unknown | null>;
   providerReads: unknown[];
@@ -375,7 +377,231 @@ async function expectRefusal(
   expect(dependencies.closeCount).toBe(1);
 }
 
+function observedOperator(
+  name: "yournameisai" | "macair",
+): Parameters<typeof resolvePhaseBOperator>[0] {
+  const home = `/Users/${name}`;
+  return {
+    home,
+    realHome: home,
+    environmentHome: home,
+    osHome: home,
+    osUsername: name,
+    user: name,
+    logname: name,
+    uid: 501,
+    platform: "darwin",
+    arch: "arm64",
+  };
+}
+
+describe("Phase-B operator profiles", () => {
+  test("distinguishes the exact ceremony host from the preactivation-only host", () => {
+    expect(resolvePhaseBOperator(observedOperator("yournameisai"))).toBe("ceremony");
+    expect(resolvePhaseBOperator(observedOperator("macair"))).toBe("preactivation_only");
+  });
+
+  test("rejects mixed environment, real-home, and OS identity fields in either profile", () => {
+    for (const name of ["yournameisai", "macair"] as const) {
+      const observed = observedOperator(name);
+      const other = observedOperator(name === "macair" ? "yournameisai" : "macair");
+      for (const field of [
+        "home", "realHome", "environmentHome", "osHome", "osUsername", "user", "logname",
+      ] as const) {
+        expect(() => resolvePhaseBOperator({ ...observed, [field]: other[field] }))
+          .toThrow("canonical_home");
+        expect(() => resolvePhaseBOperator({ ...observed, [field]: "" }))
+          .toThrow("canonical_home");
+      }
+      for (const field of ["environmentHome", "user", "logname"] as const) {
+        expect(() => resolvePhaseBOperator({ ...observed, [field]: undefined }))
+          .toThrow("canonical_home");
+      }
+      for (const field of ["home", "realHome", "environmentHome", "osHome"] as const) {
+        for (const value of [`/Users/${name}/`, `/Users/${name}/../${name}`, `/users/${name}`]) {
+          expect(() => resolvePhaseBOperator({ ...observed, [field]: value }))
+            .toThrow("canonical_home");
+        }
+      }
+    }
+  });
+
+  test("rejects unreviewed users, UIDs, platforms, and architectures", () => {
+    for (const name of ["yournameisai", "macair"] as const) {
+      const observed = observedOperator(name);
+      for (const uid of [undefined, 0, 500, 502, 501.5, NaN]) {
+        expect(() => resolvePhaseBOperator({ ...observed, uid }))
+          .toThrow("canonical_home");
+      }
+      for (const platform of ["linux", "win32", "Darwin", ""]) {
+        expect(() => resolvePhaseBOperator({ ...observed, platform }))
+          .toThrow("canonical_home");
+      }
+      for (const arch of ["x64", "aarch64", "ARM64", ""]) {
+        expect(() => resolvePhaseBOperator({ ...observed, arch }))
+          .toThrow("canonical_home");
+      }
+    }
+    expect(() => resolvePhaseBOperator({
+      ...observedOperator("macair"),
+      home: "/Users/operator",
+      realHome: "/Users/operator",
+      environmentHome: "/Users/operator",
+      osHome: "/Users/operator",
+      osUsername: "operator",
+      user: "operator",
+      logname: "operator",
+    })).toThrow("canonical_home");
+  });
+});
+
 describe("Phase-B deploy guard", () => {
+  test("rejects a missing or unknown operator mode before any dependency read", async () => {
+    for (const mode of [undefined, null, "", "macair", "CEREMONY", "configured", true, {}]) {
+      const dependencies = new FakeDependencies("absent_fail_closed");
+      dependencies.operatorMode = mode as PhaseBGuardDependencies["operatorMode"];
+      await expectRefusal(dependencies, undefined, "operator_profile");
+      expect(dependencies.authorityReads).toHaveLength(2);
+      expect(dependencies.receiptReads).toHaveLength(2);
+      expect(dependencies.providerReads).toHaveLength(2);
+      expect(dependencies.fleetReads).toHaveLength(2);
+      expect(dependencies.verified).toEqual([]);
+      expect(dependencies.sourceRevisions).toEqual([]);
+      expect(dependencies.publicRequests).toEqual([]);
+      expect(dependencies.pauseCount).toBe(0);
+    }
+  });
+
+  test("allows macair absent-state preflight and postflight without ceremony access", async () => {
+    for (const request of [
+      { phase: "preflight", revision: null },
+      { phase: "postflight", revision: REVISION },
+    ] satisfies GuardRequest[]) {
+      const dependencies = new FakeDependencies("absent_fail_closed");
+      dependencies.operatorMode = resolvePhaseBOperator(observedOperator("macair"));
+      const proof = await runPhaseBDeployGuard(request, dependencies);
+      expect(proof).toEqual({
+        allowed_origins_count: 0,
+        authoritative_v2_rows: 0,
+        durable_hold: false,
+        fleet_verified: false,
+        observed_revision: request.revision,
+        phase: request.phase,
+        provider_secret_status: "Absent",
+        reserved_generation_rows: 0,
+        runtime_verified_count: 0,
+        schema: PHASE_B_PROOF_SCHEMA,
+        source_floor_verified: false,
+        standby_bound: false,
+        state: "absent_fail_closed",
+      });
+      expect(dependencies.authorityReads).toEqual([]);
+      expect(dependencies.receiptReads).toEqual([]);
+      expect(dependencies.providerReads).toEqual([]);
+      expect(dependencies.fleetReads).toEqual([]);
+      expect(dependencies.verified).toEqual([]);
+      expect(dependencies.sourceRevisions).toEqual([]);
+      expect(dependencies.publicRequests).toHaveLength(6);
+      expect(dependencies.publicRequests.every((read) =>
+        read.expectedRevision === request.revision
+      )).toBe(true);
+      expect(dependencies.pauseCount).toBe(2);
+      expect(dependencies.closeCount).toBe(1);
+    }
+  });
+
+  test("blocks macair configured or malformed receipts before provider reads or receipt parsing", async () => {
+    let receiptPropertyReads = 0;
+    const opaqueReceipt = new Proxy({}, {
+      get(_target, property) {
+        // Async dependency return values may be checked for Promise assimilation.
+        if (property === "then") return undefined;
+        receiptPropertyReads += 1;
+        throw new Error("receipt contents must not be inspected");
+      },
+      ownKeys() {
+        receiptPropertyReads += 1;
+        throw new Error("receipt contents must not be enumerated");
+      },
+    });
+    for (const request of [
+      { phase: "preflight", revision: null },
+      { phase: "postflight", revision: REVISION },
+    ] satisfies GuardRequest[]) {
+      for (const receipt of [configuredReceipt(), {}, [], "invalid", false, 0, undefined, opaqueReceipt]) {
+        const dependencies = new FakeDependencies("configured");
+        dependencies.operatorMode = "preactivation_only";
+        dependencies.receiptReads = [receipt];
+        await expectRefusal(dependencies, request, "operator_authority_state");
+        expect(dependencies.receiptReads).toEqual([]);
+        expect(dependencies.providerReads).toHaveLength(2);
+        expect(dependencies.fleetReads).toHaveLength(2);
+        expect(dependencies.verified).toEqual([]);
+        expect(dependencies.sourceRevisions).toEqual([]);
+        expect(dependencies.publicRequests).toEqual([]);
+        expect(dependencies.pauseCount).toBe(0);
+      }
+    }
+    expect(receiptPropertyReads).toBe(0);
+  });
+
+  test("does not mask a macair receipt-read refusal as an absent receipt", async () => {
+    const dependencies = new FakeDependencies("absent_fail_closed");
+    dependencies.operatorMode = "preactivation_only";
+    dependencies.readFinalReceipt = async () => {
+      throw new PhaseBGuardError("private_receipt_read_refused");
+    };
+    await expectRefusal(dependencies, undefined, "private_receipt_read_refused");
+    expect(dependencies.providerReads).toHaveLength(2);
+    expect(dependencies.fleetReads).toHaveLength(2);
+    expect(dependencies.verified).toEqual([]);
+    expect(dependencies.sourceRevisions).toEqual([]);
+    expect(dependencies.publicRequests).toEqual([]);
+  });
+
+  test("refuses a late macair receipt before another provider or fleet read", async () => {
+    for (const receipt of [configuredReceipt(), {}, false, undefined]) {
+      const dependencies = new FakeDependencies("absent_fail_closed");
+      dependencies.operatorMode = "preactivation_only";
+      dependencies.receiptReads = [null, receipt];
+      await expectRefusal(dependencies, undefined, "operator_authority_state");
+      expect(dependencies.providerReads).toHaveLength(1);
+      expect(dependencies.fleetReads).toHaveLength(1);
+      expect(dependencies.verified).toEqual([]);
+      expect(dependencies.sourceRevisions).toEqual([]);
+      expect(dependencies.publicRequests).toHaveLength(6);
+    }
+  });
+
+  test("keeps macair provider, database, fleet, and public drift fail-closed", async () => {
+    const providerDrift = new FakeDependencies("absent_fail_closed");
+    providerDrift.operatorMode = "preactivation_only";
+    providerDrift.providerReads = [[], [{ Name: GENERATION_SECRET, Status: "Deployed" }]];
+    await expectRefusal(providerDrift, undefined, "phase_b_state_drift");
+
+    const databaseDrift = new FakeDependencies("absent_fail_closed");
+    databaseDrift.operatorMode = "preactivation_only";
+    databaseDrift.authorityReads = [authority(false), authority(true)];
+    await expectRefusal(databaseDrift, undefined, "phase_b_state_drift");
+
+    const fleetDrift = new FakeDependencies("absent_fail_closed");
+    fleetDrift.operatorMode = "preactivation_only";
+    const overridden = fleet();
+    (overridden[0].config.env as Record<string, string>)[GENERATION_SECRET] =
+      "opaque-value-must-never-appear";
+    fleetDrift.fleetReads = [fleet(), overridden];
+    await expectRefusal(fleetDrift, undefined, "absent_fleet_generation_override");
+
+    const publicDrift = new FakeDependencies("absent_fail_closed");
+    publicDrift.operatorMode = "preactivation_only";
+    publicDrift.publicState = "configured";
+    await expectRefusal(publicDrift);
+    for (const dependencies of [providerDrift, databaseDrift, fleetDrift, publicDrift]) {
+      expect(dependencies.verified).toEqual([]);
+      expect(dependencies.sourceRevisions).toEqual([]);
+    }
+  });
+
   test("accepts only the two exact CLI forms", () => {
     expect(parseGuardArguments(["preflight"]))
       .toEqual({ phase: "preflight", revision: null });

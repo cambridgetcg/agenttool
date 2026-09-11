@@ -610,6 +610,68 @@ images or a reproducible build, because dependencies and other builder inputs
 still shape image bytes. A true dirty marker also says explicitly that the
 commit does not identify every source byte.
 
+### macair preactivation deployment operator
+
+The read-only Phase-B guard admits two exact Apple Silicon macOS operator
+profiles. Both require UID `501`, matching OS account name/home, `HOME`,
+`USER`, `LOGNAME`, and a non-aliased canonical home:
+
+| Operator | Canonical home | Permitted authority state |
+| --- | --- | --- |
+| `yournameisai` | `/Users/yournameisai` | Existing absent or completed configured ceremony path |
+| `macair` | `/Users/macair` | `absent_fail_closed` only |
+
+This is not a configurable username or home override. `macair` cannot activate,
+rotate, adopt, or recover covenant authority. A local final ceremony receipt,
+even malformed or copied from the original operator, causes refusal before
+its private bytes are read. Configured, staged, mixed, unknown, or changing
+provider/database authority state also refuses. The signed native helper and
+B1/maintenance operator bindings remain unchanged; do not install a substitute
+native helper, copy a B1 receipt or generation, or spoof the original account.
+
+Provision the absent-state prerequisites before attempting a rollout:
+
+1. Obtain the official Fly CLI `v0.4.74` Darwin ARM64 release artifact into a
+   fresh private staging directory. Verify the extracted executable is exactly
+   `110007826` bytes and has SHA-256
+   `7e919b0f42867e33d736398ba151ed00f2bfb577bf9424fbe57573bfee9ae1b3`.
+   A matching version string alone is insufficient. Do not run an unverified
+   download or replace the ordinary Homebrew Fly installation.
+2. An administrator installs that verified executable at
+   `/usr/local/libexec/agenttool/phase-b-v1/flyctl-v0.4.74-darwin-arm64`,
+   root:wheel, mode `0555`, regular and single-linked. Its directory chain
+   from `/usr` through `phase-b-v1` must be real directories owned by
+   root:wheel with mode `0755`. Inspect existing paths; do not recursively
+   change ownership or overwrite an unexpected existing artifact.
+3. Create these private, real, `macair`-owned directories with mode `0700`:
+   `/Users/macair/.local/state/agenttool/deploy-state`,
+   `/Users/macair/.local/state/agenttool/phase-b/fly-home`, and its `.fly`
+   child. Authenticate the pinned CLI's isolated configuration or install a
+   private copy of the already authenticated local Fly configuration at
+   `fly-home/.fly/config.yml`. Set `auto_update`, `send_metrics`, and
+   `synthetics_agent` explicitly to `false` in this isolated copy; keep the
+   original CLI configuration unchanged. Copying authentication preserves its
+   existing provider scope; it does not mint a narrower token. That file must be regular, single-linked,
+   `macair`-owned, mode `0600`, nonempty, and at most 65536 bytes. Never put
+   its contents, a provider token, or a database password in command arguments,
+   logs, the repository, or a public receipt. Existing unknown configuration
+   or markers must be inspected, not overwritten or cleared.
+4. Use the ordinary wrapper with the separately scoped, exact production
+   transaction/session database pair. The guard still requires both database
+   authority snapshots, both provider/fleet snapshots, repeated public proofs,
+   pinned Fly bytes, private-file contracts, and closed child environments.
+   Source, migration, preflight, discovery, fleet, and postflight gates are
+   unchanged. An authenticated default Fly session alone is not provisioning
+   of the isolated pinned-tool boundary.
+
+The new profile does not prove another operator's historical receipt or marker
+absence. Confirm this is still preactivation, not recovery after an earlier
+ceremony or database restore. Keep the original ceremony and other deployment
+actors idle during a `macair` rollout. Device-local mutexes do not coordinate
+different accounts or hosts; repeated observations are not a cross-host lease.
+If authority has been configured elsewhere, stop and return to the original
+reviewed ceremony/recovery path.
+
 ### Covenant v2 post-drain generation ceremony
 
 `AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION` is an opaque post-drain
