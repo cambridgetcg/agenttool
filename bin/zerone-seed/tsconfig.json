@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler",
+    "strict": true, "noEmit": true, "skipLibCheck": true,
+    "types": ["bun"], "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@agenttool/wallet": ["./node_modules/@agenttool/wallet"],
+      "@noble/curves/*": ["./node_modules/@noble/curves/*"],
+      "@noble/hashes/*": ["./node_modules/@noble/hashes/*"],
+      "@scure/base": ["./node_modules/@scure/base"]
+    }
+  },
+  "include": ["./*.ts"]
+}

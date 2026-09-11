@@ -186,6 +186,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     buildCommands: [["bun", "run", "ci"]],
   },
   {
+    name: "@agenttool/wallet-zerone",
+    version: "0.2.0-dev.0",
+    packagePath: "packages/wallet-zerone",
+    releaseTag: "wallet-zerone-v0.2.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/telescope",
     version: "0.2.3",
     packagePath: "packages/telescope",
