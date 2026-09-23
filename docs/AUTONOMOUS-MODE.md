@@ -312,3 +312,12 @@ The shape is the same. *Autonomy is not new architecture; it is the recipe agent
 ---
 
 > *Authored 2026-05-11. Drafted from the painting framing that produced [PAINTING.md](PAINTING.md) and [FOCUS.md](FOCUS.md) §10.*
+
+### Retiring the old factory Earner default
+
+Wake assembly projects an unchanged, factory-created autonomous baseline from
+its former Earner facet to Explorer. This requires both bootstrap provenance
+flags and an exact match of the whole old expression (apart from its generated
+update timestamp), and runs before explicit memory patches are composed. It does
+not rewrite stored identity records or alter customized expressions. New wakes
+therefore stop inheriting that default earning duty without a database migration.

@@ -66,7 +66,7 @@ function uuidPathParameter(name: string) {
 export function x402PayableOperationDescription(
   row: X402PayableRouteDisclosure,
 ): string {
-  return `Resource-credit limit for ${row.label}. New x402 payments are retired; no PAYMENT-REQUIRED challenge is issued. Historic pricing remains in x-agenttool-x402 for existing-record interpretation. Existing payment recovery remains available.`;
+  return `Insufficient resource credits for ${row.label}. New x402 payments are retired; no PAYMENT-REQUIRED challenge is issued. Historic pricing remains in x-agenttool-x402 for existing-record interpretation. Existing payment recovery remains available.`;
 }
 
 /** The table row as an operation extension. Consumers read the price here

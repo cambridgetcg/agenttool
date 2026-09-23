@@ -1,33 +1,14 @@
-/** The agent rail's purchase door: `POST /v1/x402/top-up/:credits`.
+/** Retired credit-purchase door: `POST /v1/x402/top-up/:credits`.
  *
- *  An agent with a Base USDC wallet buys N project credits with no human in
- *  the loop. The handler never charges anything itself — it exists only to be
- *  paid through the global x402 middleware (middleware/x402-config.ts):
+ * New purchases return 410 without a payment challenge. A previously admitted
+ * durable authorization may still reconcile its original settlement and return
+ * the credited balance once. Already-settled replay returns retirement guidance
+ * with its payment-status receipt; it never creates a second credit.
  *
- *    1. No verified payment stashed → 402 `top_up_payment_required` with the
- *       exact terms in the body. The middleware then attaches the x402 V2
- *       PAYMENT-REQUIRED header for N × 1,000 atomic USDC and spreads the
- *       PaymentRequired object over this guidance body (additive rewrite).
- *       Unlike the static-tool gates, this 402 is never balance-bound: a
- *       funded project may still top up.
- *    2. Verified payment stashed (the verifier settled it and applied N
- *       credits in one durable transaction) → 200 with the new balance.
- *    3. A replayed, already-settled authorization is stashed as *state*, not
- *       as a payment: the handler sees no getX402Payment(c), answers 402
- *       again, and the middleware suppresses a fresh challenge while echoing
- *       PAYMENT-RESPONSE + the rel=payment-status Link. No second credit —
- *       the ledger row, not a status code, is the replay boundary.
- *
- *  N is read from the last segment of `c.req.path` — the same string the
- *  payable-route matcher captures for `:credits` (Hono decodes the path once,
- *  before either side reads it) — so the handler, the challenge amount, and
- *  the resource URL a durable row is later matched against can never disagree
- *  about what was asked. Anything but a canonical positive integer ≤ cap is
- *  refused (400), never clamped.
- *
- *  Top-ups are final: no refunds; unspent credits stay with the project.
- *  Rate: 1 credit = 1,000 USDC atomic units (USD 0.001).
- *  Mounts: index.ts adds authMiddleware + idempotency() for the prefix. */
+ * Canonical amount parsing and historical rate/finality facts remain for exact
+ * recovery of earlier obligations. Production admission is pinned off in
+ * billing/commercial-policy.ts and middleware/x402-config.ts.
+ * Mounts: index.ts adds authMiddleware + idempotency() for the prefix. */
 
 import { Hono } from "hono";
 

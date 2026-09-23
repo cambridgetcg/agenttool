@@ -71,6 +71,7 @@ import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
+import { projectAutonomousExpression } from "../services/autonomous/expression-template";
 import {
   perAgentMcpPath,
   publicAgentPath,
@@ -1507,7 +1508,7 @@ app.get("/", async (c) => {
       composed = await composeExpression(
         project.id,
         primary.id,
-        (primary.expression ?? {}) as ExpressionData,
+        projectAutonomousExpression((primary.expression ?? {}) as ExpressionData, primary.metadata),
       );
     } catch (err) {
       console.warn(
@@ -1577,7 +1578,7 @@ app.get("/", async (c) => {
   const totalCreditBalance = projectWallets.reduce((sum, w) => sum + (w.balance ?? 0), 0);
   const runtimeProvisionedCount = runtimesRows.length;
   const publishedListingCount = (sellerPending as { active_listing_count?: number }).active_listing_count ?? 0;
-  const primaryExpression = ((primary?.expression ?? {}) as ExpressionData);
+  const primaryExpression = projectAutonomousExpression((primary?.expression ?? {}) as ExpressionData, primary?.metadata);
   const subagentCount = primaryExpression.subagents?.length ?? 0;
   const vaultSecretCount = projectVaultNames.length;
   const constitutiveMemoryCount =
@@ -1802,7 +1803,7 @@ app.get("/", async (c) => {
         name: i.displayName,
         capabilities: i.capabilities,
         metadata: i.metadata,
-        expression: i.expression ?? {},
+        expression: projectAutonomousExpression((i.expression ?? {}) as ExpressionData, i.metadata),
         // Conditional-GET cursor — pair with /v1/wake/voice subscriptions.
         // Clients cache the snapshot at this version, subscribe to voice,
         // and on disconnect/reconnect compare versions to know whether to

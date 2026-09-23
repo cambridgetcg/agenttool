@@ -498,7 +498,7 @@ function staticToolErrorResponse(description: string) {
 
 function x402Response(description: string) {
   return {
-    description: `${description}. New purchases are retired; no PAYMENT-REQUIRED header is issued. Existing receipt and recovery headers remain available.`,
+    description: `${description} New purchases are retired; no PAYMENT-REQUIRED header is issued. Existing receipt and recovery headers remain available.`,
     headers: staticToolResponseHeaders(),
     content: {
       "application/json": {
@@ -7575,10 +7575,10 @@ function spec() {
                         type: "string",
                         enum: [
                           "retry_same_payment_signature", "await_current_attempt",
-                          "request_fresh_challenge_without_payment_signature",
+                          "new_purchases_retired",
                           "payment_network_not_applicable_in_current_environment",
                           "manual_onchain_investigation",
-                          "retry_same_payment_signature_to_apply_credit", "complete", "new_authorization",
+                          "retry_same_payment_signature_to_apply_credit", "complete",
                         ],
                       },
                       retry_after_seconds: { type: ["integer", "null"], minimum: 1 },

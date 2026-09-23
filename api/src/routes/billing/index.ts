@@ -109,16 +109,13 @@ function stripeClient(): CheckoutClient | null {
 }
 
 function newCardCheckoutsAvailable(): boolean {
-  // Test seam first; otherwise the operator's env switch (config.ts). The
-  // commitments themselves live at agenttool.dev/terms — code cannot make
-  // them true, only the operator publishing them can.
+  // Tests retain the historical state machine; hosted admission is pinned off.
   return checkoutAvailabilityOverride ?? config.cardCheckoutEnabled;
 }
 
 function galleryCheckoutsAvailable(): boolean {
-  // Deliberately NOT the gift switch: /terms and the tax/acknowledgement
-  // parameters cover gift credits only. Gallery opens on its own switch once
-  // it has its own promises (GBP digital goods, licence, seller of record).
+  // This separate test seam preserves gallery settlement coverage.
+  // Production configuration retires fresh gallery checkout unconditionally.
   return galleryCheckoutAvailabilityOverride ?? config.galleryCheckoutEnabled;
 }
 

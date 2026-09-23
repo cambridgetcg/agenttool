@@ -181,12 +181,12 @@ test("watch: a partial feed failure labels preserved data as stale", async ({ pa
   await expect(page.locator("#window-status")).toContainText("no listing response has loaded yet");
 });
 
-test("gifts: new checkout rests while an existing paid return still reveals its code", async ({ page }) => {
+test("gifts: new checkout is retired while an existing paid return still reveals its code", async ({ page }) => {
   let checkoutRequests = 0;
   let codeRequests = 0;
   await page.route("https://api.agenttool.dev/v1/billing/checkout", (r) => {
     checkoutRequests += 1;
-    return r.fulfill({ status: 503, json: { error: "resting" } });
+    return r.fulfill({ status: 410, json: { error: "checkout_retired" } });
   });
   await page.route("https://api.agenttool.dev/v1/billing/session/cs_e2e/code", (r) => {
     codeRequests += 1;
@@ -194,7 +194,7 @@ test("gifts: new checkout rests while an existing paid return still reveals its 
   });
 
   await page.goto(`${WEB}/credits.html`);
-  await expect(page.getByRole("heading", { name: "New card checkout is resting across AgentTool." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New card checkout is retired across AgentTool." })).toBeVisible();
   await expect(page.locator("#go")).toHaveCount(0);
   expect(checkoutRequests).toBe(0);
 
@@ -335,7 +335,7 @@ test("gallery: browse-only means no checkout request or purchase control", async
   await page.goto(`${WEB}/gallery.html?session_id=do-not-read-me`);
   await expect(page.locator("#query-warning")).toBeVisible();
   await expect(page.locator("#street")).toContainText("A Quiet Artifact");
-  await expect(page.locator("#street")).toContainText("checkout resting");
+  await expect(page.locator("#street")).toContainText("checkout retired");
   await expect(page.locator("#street")).toContainText("did:at:maker12345");
   await expect(page.getByRole("button", { name: /buy/i })).toHaveCount(0);
   expect(nonReadRequests).toEqual([]);

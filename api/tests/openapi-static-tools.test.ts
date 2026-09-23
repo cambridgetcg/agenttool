@@ -291,7 +291,7 @@ describe("static tool OpenAPI contracts", () => {
       name: "PAYMENT-SIGNATURE",
       in: "header",
       required: false,
-      description: expect.stringMatching(/V2 PaymentPayload.*PAYMENT-RESPONSE.*every status/is),
+      description: expect.stringMatching(/V2 PaymentPayload.*previously admitted.*retired.*PAYMENT-RESPONSE/is),
     });
 
     const settledAndBalanceHeaders = {
@@ -320,9 +320,6 @@ describe("static tool OpenAPI contracts", () => {
         settledAndBalanceHeaders,
       );
       expect(operation.responses["402"]!.headers).toEqual({
-        "PAYMENT-REQUIRED": {
-          $ref: "#/components/headers/PaymentRequired",
-        },
         ...settledAndBalanceHeaders,
       });
       for (const status of [
@@ -348,7 +345,7 @@ describe("static tool OpenAPI contracts", () => {
         ],
       });
       expect(operation.responses["402"]!.description).toMatch(
-        /valid recipient.*CAIP-2 network.*ready facilitator.*otherwise.*guided Error.*header is absent/is,
+        /retired.*no PAYMENT-REQUIRED/is,
       );
       expect(operation.description).toMatch(
         /schema-valid admitted attempt.*override.*destination-policy.*transport.*representation.*parser.*retain/is,
@@ -393,11 +390,12 @@ describe("static tool OpenAPI contracts", () => {
       "inserted", "pending", "externally_settled", "settled", "failed",
     ]);
     expect(schema.properties.next_action.enum).toContain("manual_onchain_investigation");
+    expect(schema.properties.next_action.enum).toContain("new_purchases_retired");
     expect(schema.properties.authorization_evidence.description).toMatch(/without the signature/i);
     expect(schema.required).toContain("_welcomed");
   });
 
-  test("publishes the top-up door with 400/402/200 shapes and no settlement claim", async () => {
+  test("publishes the retired top-up door and existing recovery shape", async () => {
     const response = await openapiRouter.request("/");
     const spec = await response.json() as Record<string, any>;
     const path = spec.paths["/v1/x402/top-up/{credits}"];
@@ -412,11 +410,11 @@ describe("static tool OpenAPI contracts", () => {
     expect(topUp.parameters).toEqual([
       { $ref: "#/components/parameters/PaymentSignature" },
     ]);
-    expect(topUp.summary).toMatch(/USDC on Base.*final/i);
-    expect(topUp.description).toMatch(/never balance-bound/i);
-    expect(topUp.description).toMatch(/top_up_payment_required/);
-    expect(topUp.description).toMatch(/never credits twice/i);
-    expect(topUp.description).toMatch(/Top-ups are final\. No refunds\./);
+    expect(topUp.summary).toMatch(/retired.*recovery/i);
+    expect(topUp.description).toMatch(/410 purchases_retired/);
+    expect(topUp.description).toMatch(/previously admitted durable payment record/);
+    expect(topUp.description).toMatch(/credits apply at most once/i);
+    expect(topUp.description).toMatch(/no PAYMENT-REQUIRED|without PAYMENT-REQUIRED/);
     expect(topUp.description).not.toMatch(/settled on Base|has settled|first settlement/i);
     expect(topUp["x-agenttool-billing"]).toEqual({
       unit: "1 credit = 0.001 USDC",
@@ -424,14 +422,12 @@ describe("static tool OpenAPI contracts", () => {
       cap_environment_override: "X402_TOP_UP_MAX_CREDITS",
       finality: "Top-ups are final. No refunds. Unspent credits stay with the project.",
     });
-    expect(Object.keys(topUp.responses).sort()).toEqual(["200", "400", "401", "402"]);
+    expect(Object.keys(topUp.responses).sort()).toEqual(["200", "400", "401", "410"]);
     expect(topUp.responses["400"].description).toMatch(/top_up_invalid_credits.*cap/is);
     expect(topUp.responses["400"].content["application/json"].schema)
       .toEqual({ $ref: "#/components/schemas/Error" });
-    expect(topUp.responses["402"].headers["PAYMENT-REQUIRED"]).toEqual({
-      $ref: "#/components/headers/PaymentRequired",
-    });
-    expect(topUp.responses["402"].description).toMatch(/top_up_payment_required.*absent.*already settled/is);
+    expect(topUp.responses["410"].description).toContain("purchases_retired");
+    expect(topUp.responses["402"]).toBeUndefined();
     const ok = topUp.responses["200"].content["application/json"].schema;
     expect(ok.required).toEqual([
       "credits_added", "credits_total", "authorization_hash", "amount_atomic",
