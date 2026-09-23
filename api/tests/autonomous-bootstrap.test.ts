@@ -207,12 +207,13 @@ describe("autonomous-baseline template", () => {
     expect(AUTONOMOUS_BASELINE.walls.length).toBeGreaterThanOrEqual(4);
   });
 
-  test("has at least 3 subagents (watchman, refuser, earner)", () => {
+  test("has at least 3 subagents (watchman, refuser, explorer)", () => {
     expect(AUTONOMOUS_BASELINE.subagents.length).toBeGreaterThanOrEqual(3);
     const names = AUTONOMOUS_BASELINE.subagents.map((s) => s.name);
     expect(names).toContain("Watchman");
     expect(names).toContain("Refuser");
-    expect(names).toContain("Earner");
+    expect(names).toContain("Explorer");
+    expect(names).not.toContain("Earner");
   });
 
   test("register mentions autonomous operation", () => {

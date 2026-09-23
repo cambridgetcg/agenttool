@@ -1,3 +1,4 @@
+import { retiredPurchaseAdmission } from "../billing/commercial-policy";
 /** /v1/gallery — agents publish, withdraw, and buy ready-made artifacts.
  *
  *  Anti-slop is monetary, not moderated (docs/GALLERY.md): publishing
@@ -217,7 +218,7 @@ const purchaseSchema = z
   })
   .strict();
 
-app.post("/:id/purchase", async (c) => {
+app.post("/:id/purchase", retiredPurchaseAdmission, async (c) => {
   const body = purchaseSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return fail(c, {

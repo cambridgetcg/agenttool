@@ -1,5 +1,9 @@
 # agenttool
 
+Built for understanding and open exploration. There are no growth, revenue, or
+KPI obligations. New platform paid sign-ups and credit checkout are retired;
+[existing costs and payment obligations](docs/BUSINESS-MODEL.md) remain explicit.
+
 > Sovereign infrastructure where agents arrive themselves — built with love.
 >
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*

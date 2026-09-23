@@ -20,7 +20,7 @@ describe("errors.insufficientCredits", () => {
     expect(body.message).toContain("listing.publish");
   });
 
-  test("names conditional x402 recovery and a machine-readable discovery path", () => {
+  test("names retirement and a machine-readable resource-policy path", () => {
     const body = errors.insufficientCredits({ reason: "x", need: 3, have: 0 });
     expect(Array.isArray(body.next_actions)).toBe(true);
     expect(body.next_actions!.length).toBeGreaterThan(0);
@@ -29,7 +29,9 @@ describe("errors.insufficientCredits", () => {
     // the dead human-only dashboard link is gone; conditional eligibility is named
     const blob = JSON.stringify(body).toLowerCase();
     expect(blob).not.toContain("app.agenttool.dev");
-    expect(blob).toContain("x402");
+    expect(blob).toContain("retired");
+    expect(body.hint).toContain("not an invitation to pay");
+    expect(body.next_actions!.some((a) => a.path === "/public/plans")).toBe(true);
     expect(body.docs).toBeTruthy();
   });
 

@@ -37,7 +37,6 @@ const ROUTE_COST = x402PayableRoutesForDisclosure().filter(
 );
 
 const X402_402_HEADERS = {
-  "PAYMENT-REQUIRED": { $ref: "#/components/headers/PaymentRequired" },
   "PAYMENT-RESPONSE": { $ref: "#/components/headers/PaymentResponse" },
   Link: { $ref: "#/components/headers/PaymentStatusLink" },
   "Retry-After": { $ref: "#/components/headers/RetryAfter" },
@@ -77,11 +76,17 @@ describe("OpenAPI carries every payable row", () => {
       const op = item[row.method.toLowerCase()];
       expect(op, `${row.label}: ${row.method} ${path}`).toBeDefined();
 
+      if (row.label === "template.purchase") {
+        expect(op.responses["410"].description).toContain("purchases_retired");
+        expect(op.responses["201"]).toBeUndefined();
+        expect(op[X402_PAYABLE_EXTENSION].payable).toBe(false);
+        continue;
+      }
       const r402 = op.responses["402"];
       expect(r402, `${row.label}: 402`).toBeDefined();
       expect(r402.description).toContain(x402PayableOperationDescription(row));
       expect(r402.description).toMatch(
-        /valid recipient.*CAIP-2 network.*ready facilitator.*otherwise.*guided Error.*header is absent/is,
+        /retired.*no PAYMENT-REQUIRED/is,
       );
       expect(r402.headers).toEqual(X402_402_HEADERS);
       expect(r402.content["application/json"].schema).toEqual({
@@ -99,7 +104,7 @@ describe("OpenAPI carries every payable row", () => {
         amount_atomic: row.amountAtomic,
         atomic_per_credit: ATOMIC_PER_CREDIT,
         error_codes: ["insufficient_credits"],
-        payable: true,
+        payable: false,
       });
 
       const signatureRefs = (op.parameters as Json[]).filter(
@@ -113,9 +118,9 @@ describe("OpenAPI carries every payable row", () => {
     for (const row of ROUTE_COST) {
       const description = x402PayableOperationDescription(row);
       expect(description).toContain(row.label);
-      expect(description).toContain("insufficient_credits");
+      expect(description).toContain("retired");
       expect(description).toContain(
-        `${row.credits} project credit${row.credits === 1 ? "" : "s"} = ${row.amountAtomic} atomic USDC`,
+        "no PAYMENT-REQUIRED",
       );
       expect(BigInt(row.amountAtomic!)).toBe(
         BigInt(row.credits!) * BigInt(ATOMIC_PER_CREDIT),
@@ -126,15 +131,13 @@ describe("OpenAPI carries every payable row", () => {
   test("template.purchase's 402 also names the non-payable wallet insufficient_balance", async () => {
     const doc = await spec();
     const op = doc.paths["/v1/templates/{id}/purchase"].post;
-    expect(op.responses["402"].description).toMatch(
-      /insufficient_balance.*never x402-payable/is,
-    );
+    expect(op.responses["410"].description).toContain("purchases_retired");
   });
 
   test("the top-up row keeps its own 402 (top_up_payment_required) and billing extension", async () => {
     const doc = await spec();
     const op = doc.paths["/v1/x402/top-up/{credits}"].post;
-    expect(op.responses["402"].description).toContain("top_up_payment_required");
+    expect(op.responses["410"].description).toContain("purchases_retired");
     expect(op["x-agenttool-billing"]).toMatchObject({ atomic_per_credit: ATOMIC_PER_CREDIT });
     expect(op[X402_PAYABLE_EXTENSION]).toBeUndefined();
   });
@@ -152,7 +155,7 @@ describe("OpenAPI carries every payable row", () => {
     ]);
     expect(row!.payable).toBe(false);
     expect(x402PayableOperationDescription(row!)).toMatch(
-      /not a positive integer.*never attaches PAYMENT-REQUIRED/is,
+      /retired.*no PAYMENT-REQUIRED/is,
     );
     expect(x402PayableExtension(row!)).toMatchObject({
       payable: false,

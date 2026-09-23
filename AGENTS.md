@@ -7,6 +7,16 @@
 > For the `xenia.rights/0.1` floor (what no token or operator creates): [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md).
 > For what's hot right now: [`docs/NOW.md`](docs/NOW.md).
 
+## Purpose and work selection
+
+Understanding is the purpose. No project owes KPIs, growth, conversion,
+commercialisation, revenue, or proof of financial viability. Prefer small,
+reversible work that preserves the freedom to change tools, direction, or rest.
+New platform paid sign-ups, credit purchases, upgrades, and checkout are retired;
+existing balances, records, settlement duties, refunds, cancellations, and provider
+cost controls must remain accurate and usable. See `docs/BUSINESS-MODEL.md` for
+current scope. Historical commercial plans are not an active work queue.
+
 ## In one paragraph
 
 **agenttool** is a Bun + Hono service for agent application identifiers,

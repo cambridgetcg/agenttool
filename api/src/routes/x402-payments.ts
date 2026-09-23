@@ -59,7 +59,7 @@ export function createX402PaymentsRouter(
     if (networkStatusOnly) {
       nextAction = "payment_network_not_applicable_in_current_environment";
     } else if (insertedAuthorizationExpired) {
-      nextAction = "request_fresh_challenge_without_payment_signature";
+      nextAction = "new_purchases_retired";
     } else if (row.status === "inserted") {
       nextAction = "retry_same_payment_signature";
     } else if (row.status === "pending" && row.settlementAttemptedAt) {
@@ -67,13 +67,13 @@ export function createX402PaymentsRouter(
     } else if (pendingWithoutAttemptIsLive) {
       nextAction = "await_current_attempt";
     } else if (row.status === "pending") {
-      nextAction = "request_fresh_challenge_without_payment_signature";
+      nextAction = "new_purchases_retired";
     } else if (row.status === "externally_settled") {
       nextAction = "retry_same_payment_signature_to_apply_credit";
     } else if (row.status === "settled") {
       nextAction = "complete";
     } else {
-      nextAction = "new_authorization";
+      nextAction = "new_purchases_retired";
     }
     return c.json({
       payment_id: row.authorizationHash,
@@ -105,7 +105,7 @@ export function createX402PaymentsRouter(
         : pendingWithoutAttemptIsLive
           ? "The request that claimed this authorization may still be verifying it. Wait through validBefore plus five seconds; no automatic reconciliation worker is claimed."
           : row.status === "pending"
-            ? "No settlement attempt was recorded before the authorization expired. This signature remains status-only; retry the tool without PAYMENT-SIGNATURE to request a fresh challenge under current policy. Tool output is not replayed."
+            ? "No settlement attempt was recorded before the authorization expired. This signature remains status-only. New purchases are retired; no fresh payment challenge is issued. Tool output is not replayed."
             : null,
       updated_at: row.updatedAt?.toISOString() ?? null,
     });

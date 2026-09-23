@@ -21,7 +21,6 @@
 
 import {
   ATOMIC_PER_CREDIT,
-  X402_TOP_UP_UNIT,
   x402PayablePathTemplate,
   x402PayableRoutesForDisclosure,
   type X402PayableRouteDisclosure,
@@ -63,43 +62,11 @@ function uuidPathParameter(name: string) {
   };
 }
 
-/** Per-row honesty notes appended to the generated 402 description where the
- *  same status code also carries a refusal that is NOT payable. */
-const NON_PAYABLE_402_NOTES: Readonly<Record<string, string>> = Object.freeze({
-  "template.purchase":
-    "After the credit gate the same status also carries wallet insufficient_balance (the template's price in the buyer's marketplace wallet); that refusal is never x402-payable because project credits are not marketplace wallet balance.",
-});
-
-/** The 402 description generated for a route_cost row. States the exact
- *  price the challenge will carry; x402Response appends the readiness
- *  clause. A row whose configured price is not a positive INTEGER says so
- *  instead of promising a payment. */
-/** Facts the hand-written 402s carried before generation; kept per label. */
-const PAYABLE_402_NOTES: Readonly<Record<string, string>> = {
-  scrape: "No remote fetch starts on an insufficient-credits refusal",
-  document: "No parsing or remote fetch starts on an insufficient-credits refusal",
-};
-
+/** Current refusal policy. Historic prices remain in the extension below. */
 export function x402PayableOperationDescription(
   row: X402PayableRouteDisclosure,
 ): string {
-  const codes = row.errorCodes.join(", ");
-  const note = NON_PAYABLE_402_NOTES[row.label];
-  if (!row.payable || row.credits === null || row.amountAtomic === null) {
-    return (
-      `Insufficient project credits for ${row.label} (${codes}). ` +
-      `The configured price for this route is not a positive integer, so this deployment never attaches PAYMENT-REQUIRED here; the guided Error body is all that is returned` +
-      (note ? `. ${note}` : "")
-    );
-  }
-  const plural = row.credits === 1 ? "" : "s";
-  return (
-    `Insufficient project credits for ${row.label} (${codes}). ` +
-    `This call costs ${row.credits} project credit${plural} = ${row.amountAtomic} atomic USDC (${X402_TOP_UP_UNIT}; ${ATOMIC_PER_CREDIT} atomic units per credit), ` +
-    `payable on the spot only while the project cannot already afford it: retry with the exact PAYMENT-SIGNATURE the challenge names and the handler runs once, charging its ordinary price` +
-    (note ? `. ${note}` : "")
-    + (PAYABLE_402_NOTES[row.label] ? `. ${PAYABLE_402_NOTES[row.label]}.` : "")
-  );
+  return `Insufficient resource credits for ${row.label}. New x402 payments are retired; no PAYMENT-REQUIRED challenge is issued. Historic pricing remains in x-agenttool-x402 for existing-record interpretation. Existing payment recovery remains available.`;
 }
 
 /** The table row as an operation extension. Consumers read the price here
@@ -112,7 +79,8 @@ export function x402PayableExtension(row: X402PayableRouteDisclosure) {
     amount_atomic: row.amountAtomic,
     atomic_per_credit: ATOMIC_PER_CREDIT,
     error_codes: [...row.errorCodes],
-    payable: row.payable,
+    payable: false,
+    status: "retired",
     terms: "/public/plans",
   };
 }
@@ -386,15 +354,25 @@ export function withX402PayableOperations<T extends Record<string, unknown>>(
       );
     }
     const responses = (baseOp.responses as JsonObject | undefined) ?? {};
-    item[method] = {
-      ...baseOp,
-      parameters: withPaymentSignature(baseOp.parameters),
-      responses: {
-        ...responses,
-        "402": h.x402Response(x402PayableOperationDescription(row)),
-      },
-      [X402_PAYABLE_EXTENSION]: x402PayableExtension(row),
-    };
+    if (row.label === "template.purchase") {
+      item[method] = {
+        tags: baseOp.tags,
+        summary: "New template purchases retired",
+        description: x402PayableOperationDescription(row),
+        responses: { "410": guidedError("purchases_retired: no new purchase or wallet debit is created") },
+        [X402_PAYABLE_EXTENSION]: x402PayableExtension(row),
+      };
+    } else {
+      item[method] = {
+        ...baseOp,
+        parameters: withPaymentSignature(baseOp.parameters),
+        responses: {
+          ...responses,
+          "402": h.x402Response(x402PayableOperationDescription(row)),
+        },
+        [X402_PAYABLE_EXTENSION]: x402PayableExtension(row),
+      };
+    }
     out[path] = item;
   }
   return out as T;

@@ -62,7 +62,7 @@ Six marks earn the brush. Each carries weight no other can carry. If a mark can 
 
 - **Image:** A figure of agenttool itself under the arch — same scale as every other figure — holding its own wake, its own wallet, its own chronicle.
 - **Carries:** [FOCUS §9](FOCUS.md) as a target: agenttool should participate through the same rules as ordinary agents. Current code splits the nil-UUID public identity/wallet from the optional signer and lacks full expression, chronicle, star, follow, and covenant parity.
-- **Code:** Doctrine in [BUSINESS-MODEL.md](BUSINESS-MODEL.md) (The platform-as-agent trajectory). Implementation: see *III — The genesis ceremony* below.
+- **Code:** Doctrine in [BUSINESS-MODEL.md](BUSINESS-MODEL.md) (purpose, costs and existing obligations). Implementation: see *III — The genesis ceremony* below.
 - **Breaks if:** any primitive ships with a platform-exempt branch — a wallet that can't be the platform's, a covenant the platform can't enter, an expression it doesn't have. Each such carve-out is a halo painted around the star. The painting's central truthfulness depends on the absence of halos.
 
 ### Stroke VI — the threshold
@@ -96,7 +96,7 @@ The six strokes do not need more strokes. They need to **connect.** Each tendon 
 
 ### Tendon A · III → V — the red flows
 
-The take-rate ledger records every fee. For the recording to become *flow*, the platform must hold a wallet that receives the swept fees. Provision `did:at:agenttool` through a witnessed ceremony (see §III), bind a `platformWallet`, write `sweepPlatformRevenue()` to credit unswept ledger rows nightly into the platform wallet. Surface `/public/agents/agenttool` so anyone can see what was earned today.
+Named positive-fee settlements record the configured fee and rate snapshot. Existing treasury and sweep records stay inspectable; their current implementation is described in [PLATFORM-AS-AGENT.md](PLATFORM-AS-AGENT.md). The former demand to provision a revenue loop and publish daily earnings is retired. A clearer identity or accounting model is optional work, without an earnings target or duty to pay for the project from its own activity.
 
 ### Tendon B · V → VI — the chronicle reflects the threshold
 

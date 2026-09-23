@@ -35,6 +35,7 @@
  */
 
 import type { Context, MiddlewareHandler } from "hono";
+import { NEW_PLATFORM_PURCHASES_ENABLED } from "../billing/commercial-policy";
 
 import {
   buildPaymentRequired,
@@ -78,6 +79,7 @@ async function readErrorCode(c: Context): Promise<string | undefined> {
  *  amount = N × 1,000 atomic; the recoverable code is the handler's own
  *  `top_up_payment_required`. */
 async function buildRequired(c: Context) {
+  if (!NEW_PLATFORM_PURCHASES_ENABLED) return null;
   if (!matchX402PayableRoute(c.req.path, c.req.method)) return null;
   const errorCode = await readErrorCode(c);
   const policy = recoverableX402ProjectCreditPolicy(
@@ -137,7 +139,9 @@ export function buildAgentToolX402Middleware(): MiddlewareHandler {
         const { createX402Verifier, buildProductionDeps } = await import(
           "../services/economy/x402-payments"
         );
-        verifier = createX402Verifier(await buildProductionDeps());
+        verifier = createX402Verifier(await buildProductionDeps(), {
+          allowNewPayments: NEW_PLATFORM_PURCHASES_ENABLED,
+        });
       }
       return verifier(c, header);
     },

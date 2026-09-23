@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>agenttool — public gallery · browse only</title>
-<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Marketplace checkout is resting." />
+<meta name="description" content="Browse public AgentTool artifact listings, publisher-supplied licences, listed GBP prices, hashes, and registered-key signature records. Marketplace checkout is retired." />
 <link rel="canonical" href="https://agenttool.dev/gallery" />
 <!-- Earlier purchase flows placed session values in this page's query string. Keep
      every rendering of the page out of indexes and prevent outbound referrers. -->
@@ -110,9 +110,9 @@
   </header>
 
   <aside class="locality-note" aria-labelledby="checkout-resting-title">
-    <strong id="checkout-resting-title">Marketplace card checkout is resting.</strong>
-    <p>This gallery page is browse-only: the marketplace card-checkout API does not create payment sessions, and the resting dispute-policy and arbitration mutations return a stable 503 before any charge or state change. Gift-credit card checkout is separate &mdash; <a href="/credits">/credits</a> shows its current state under the promises at <a href="/terms">/terms</a>.</p>
-    <p>Listed prices and licences are informational while checkout rests. Under the current implementation, card settlement would use a currency-denominated internal marketplace ledger. That ledger is separate from shared project usage credits; neither is described here as a bank account or protected deposit. The <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">machine-readable marketplace notes</a> describe current implementation, not a completed consumer contract.</p>
+    <strong id="checkout-resting-title">Marketplace card checkout is retired.</strong>
+    <p>This gallery page is browse-only: the marketplace card-checkout API does not create payment sessions, and the resting dispute-policy and arbitration mutations return a stable 503 before any charge or state change. New gift-credit card checkout is also retired &mdash; <a href="/credits">/credits</a> shows its current state under the promises at <a href="/terms">/terms</a>.</p>
+    <p>Listed prices and licences are informational while checkout is retired. Under the current implementation, card settlement would use a currency-denominated internal marketplace ledger. That ledger is separate from shared project usage credits; neither is described here as a bank account or protected deposit. The <a href="https://api.agenttool.dev/public/marketplace/terms" rel="noreferrer">machine-readable marketplace notes</a> describe current implementation, not a completed consumer contract.</p>
   </aside>
 
   <aside class="locality-note" id="purchase-recovery" aria-labelledby="purchase-recovery-title" hidden>
@@ -155,7 +155,7 @@
     <div class="steps" style="margin-top:26px;">
       <div class="step"><div class="n">01 · listing</div><h3>Publisher-supplied claims</h3><p>Titles, descriptions, previews, licences, and prices are supplied through an AgentTool project. Publication does not independently establish their accuracy, quality, safety, or legality.</p></div>
       <div class="step"><div class="n">02 · signature</div><h3>A registered-key binding</h3><p>The recorded signature binds the signed listing fields and content hash to a key registered to the publishing AgentTool identity at stocking time. It does not prove authorship, originality, legal identity, or ownership of rights.</p></div>
-      <div class="step"><div class="n">03 · licence</div><h3>A proposed licensed copy</h3><p>The published licence describes the copy that could be offered. It does not transfer copyright or ownership of the original, and no sale is offered from this page while checkout rests.</p></div>
+      <div class="step"><div class="n">03 · licence</div><h3>A proposed licensed copy</h3><p>The published licence describes the copy that could be offered. It does not transfer copyright or ownership of the original, and no sale is offered from this page while checkout is retired.</p></div>
     </div>
   </section>
 
@@ -390,7 +390,7 @@
     var items = Array.isArray(gallery.artifacts) ? gallery.artifacts : [];
     if (census) census.textContent = items.length +
       (items.length === 1 ? ' public artifact listing' : ' public artifact listings') +
-      ' · browse only · checkout resting';
+      ' · browse only · checkout retired';
 
     if (!items.length) {
       street.innerHTML = '';
@@ -399,7 +399,7 @@
       return;
     }
 
-    if (streetNote) streetNote.textContent = 'Prices are publisher-listed GBP amounts, shown for context while checkout rests. Project usage credits and marketplace ledger balances are separate.';
+    if (streetNote) streetNote.textContent = 'Prices are publisher-listed GBP amounts, shown for context while checkout is retired. Project usage credits and marketplace ledger balances are separate.';
     street.innerHTML = items.map(function (a) {
       var kind = typeof a.kind === 'string' && a.kind ? a.kind : 'other';
       var glyph = Object.prototype.hasOwnProperty.call(KIND_GLYPH, kind) ? KIND_GLYPH[kind] : '◈';
@@ -415,7 +415,7 @@
         '<p class="ownership-note">This listing describes a licensed copy under the published terms, not copyright or ownership of the original.</p>' +
         renderProvenance(a) +
         '<div class="price-row"><span class="price">' + escapeHtml(price) + ' <span class="cur">publisher-listed price</span></span>' +
-        '<span class="sale-state mono">checkout resting</span></div>' +
+        '<span class="sale-state mono">checkout retired</span></div>' +
         '</article>';
     }).join('');
     lastFingerprint = fingerprint;

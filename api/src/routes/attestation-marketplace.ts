@@ -1,3 +1,4 @@
+import { retiredPurchaseAdmission } from "../billing/commercial-policy";
 /** /v1/attestation-listings + /v1/attestation-grants — Slice 3 routes.
  *
  *  Two routers exported. Mount in api/src/index.ts at
@@ -168,7 +169,7 @@ const purchaseSchema = z.object({
   evidence: z.record(z.unknown()).nullish(),
 });
 
-listingsRouter.post("/:id/purchase", async (c) => {
+listingsRouter.post("/:id/purchase", retiredPurchaseAdmission, async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
   const parsed = purchaseSchema.safeParse(await c.req.json().catch(() => null));

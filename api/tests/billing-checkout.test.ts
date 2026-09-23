@@ -28,7 +28,7 @@ function stubStripe(capture: { params?: Record<string, unknown> }) {
 }
 
 describe("POST /v1/billing/checkout", () => {
-  test("rests before validation or Stripe for gift and gallery checkout", async () => {
+  test("retires before validation or Stripe for gift and gallery checkout", async () => {
     const capture: { params?: Record<string, unknown> } = {};
     setStripeForTests(stubStripe(capture));
 
@@ -38,13 +38,13 @@ describe("POST /v1/billing/checkout", () => {
         headers: { "content-type": "application/json" },
         body: "{}",
       });
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(410);
       expect(res.headers.get("cache-control")).toContain("no-store");
       expect(res.headers.get("referrer-policy")).toBe("no-referrer");
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("x-robots-tag")).toContain("noindex");
       const body = await res.json();
-      expect(body.error).toBe("checkout_resting");
+      expect(body.error).toBe("checkout_retired");
       expect(body.hint).toContain("No payment session was created");
     }
     expect(capture.params).toBeUndefined();
@@ -101,21 +101,21 @@ describe("POST /v1/billing/checkout", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ artifact_id: "00000000-0000-0000-0000-000000000000" }),
     });
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe("checkout_resting");
+    expect(res.status).toBe(410);
+    expect((await res.json()).error).toBe("checkout_retired");
     expect(capture.params).toBeUndefined();
   });
 
-  test("resting message points at the published commitments", async () => {
+  test("retirement message preserves earlier obligations", async () => {
     const res = await billing.request("/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ amount_minor: 2000 }),
     });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(410);
     const body = await res.json();
-    expect(body.message).toContain("https://agenttool.dev/terms");
-    expect(body.message).toContain("https://agenttool.dev/privacy");
+    expect(body.message).toContain("retired");
+    expect(body.message).toContain("recovery remain available");
   });
 
   test("guides on out-of-bounds amounts", async () => {

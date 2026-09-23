@@ -1,3 +1,4 @@
+import { retiredTemplatePurchaseAdmission } from "../billing/commercial-policy";
 /** /v1/templates — capability template authoring + adoption.
  *
  *  Doctrine: docs/MARKETPLACE.md.
@@ -208,7 +209,7 @@ const purchaseSchema = z.object({
   buyer_identity_id: z.string().uuid(),
 }).strict();
 
-app.post("/:id/purchase", async (c) => {
+app.post("/:id/purchase", retiredTemplatePurchaseAdmission, async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
   const parsed = purchaseSchema.safeParse(body);
@@ -387,8 +388,7 @@ adoptionRouter.post("/", async (c) => {
         {
           error: msg,
           hint:
-            "this template is priced. POST /v1/templates/:id/purchase first, " +
-            "then re-POST /v1/identities/from-template with the returned purchase_id.",
+            "New template purchases are retired. Existing purchasers may re-POST /v1/identities/from-template with their original purchase_id; free-template adoption remains available.",
         },
         402,
       );

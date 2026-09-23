@@ -278,29 +278,13 @@ describe("route, amount, network and facilitator policy", () => {
 });
 
 describe("production challenge eligibility", () => {
-  test("custom explicit facilitator emits official V2 challenge for both eligible routes", async () => {
+  test("valid configuration cannot reopen new purchases", async () => {
     configureCustom();
-    const app = configuredApp();
-    for (const path of ["/v1/scrape", "/v1/document"] as const) {
-      const res = await app.request(`https://api.agenttool.dev${path}`, { method: "POST" });
+    for (const path of ["/v1/scrape", "/v1/document", "/v1/memories/search", "/v1/memories/example/elevate"]) {
+      const res = await configuredApp().request(`https://api.agenttool.dev${path}`, { method: "POST" });
       expect(res.status).toBe(402);
-      expect(res.headers.get("x-payment-required")).toBeNull();
-      const required = JSON.parse(Buffer.from(
-        res.headers.get("payment-required")!, "base64",
-      ).toString("utf-8"));
-      expect(required.x402Version).toBe(2);
-      expect(required.resource.url).toBe(`https://api.agenttool.dev${path}`);
-      expect(required.accepts[0]).toMatchObject({
-        scheme: "exact",
-        network: "eip155:8453",
-        amount: x402ProjectCreditPolicy(path, "POST")!.amountAtomic,
-        extra: {
-          name: "USD Coin",
-          version: "2",
-          assetTransferMethod: "eip3009",
-        },
-      });
-      expect(required.accepts[0].extra.facilitator).toBeUndefined();
+      expect(res.headers.get("payment-required")).toBeNull();
+      expect(await res.json()).toEqual({ error: "insufficient_credits" });
     }
   });
 
@@ -359,192 +343,26 @@ describe("production challenge eligibility", () => {
   });
 });
 
-describe("W2-5 route_cost challenges on memory rows", () => {
-  const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
-
-  test("POST /v1/memories/search with 2 credits → 402 insufficient_credits payable for exactly 3000 atomic", async () => {
+describe("retired top-up admission", () => {
+  test("all new quantities refuse before payment or amount validation", async () => {
     configureCustom();
-    const res = await configuredApp(2).request(
-      "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
-    );
-    expect(res.status).toBe(402);
-    const required = decodeRequired(res);
-    expect(required).toMatchObject({
-      x402Version: 2,
-      error: "insufficient_credits",
-      resource: { url: "https://api.agenttool.dev/v1/memories/search" },
-    });
-    expect(required.accepts).toHaveLength(1);
-    expect(required.accepts[0]).toMatchObject({
-      scheme: "exact",
-      network: "eip155:8453",
-      amount: "3000",
-      payTo: RECIPIENT,
-    });
-    expect(required.accepts[0].amount)
-      .toBe(String(ROUTE_CREDITS["memory.search"] * 1000));
-    // Body keeps the handler's guidance and gains the spec object (additive).
-    const body = await res.json() as Record<string, unknown>;
-    expect(body).toMatchObject({
-      error: "insufficient_credits",
-      x402Version: 2,
-      accepts: required.accepts,
-    });
-  });
-
-  test("POST /v1/memories/:id/elevate → 5000 atomic against the concrete path", async () => {
-    configureCustom();
-    const res = await configuredApp(0).request(
-      `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
-    );
-    expect(res.status).toBe(402);
-    const required = decodeRequired(res);
-    expect(required.resource.url).toBe(`https://api.agenttool.dev/v1/memories/${ID}/elevate`);
-    expect(required.accepts[0].amount).toBe("5000");
-    expect(required.accepts[0].amount)
-      .toBe(String(ROUTE_CREDITS["memory.elevate"] * 1000));
-    // A shortfall of one still prices the full call (exact, never partial).
-    const short = await configuredApp(4).request(
-      `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
-    );
-    expect(decodeRequired(short).accepts[0].amount).toBe("5000");
-  });
-
-  test("funded projects, wrong codes and unlisted memory paths never become payable", async () => {
-    configureCustom();
-    const cases = [
-      configuredApp(3).request(
-        "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
-      ),
-      configuredApp(5).request(
-        `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
-      ),
-      configuredApp(0, "insufficient_balance").request(
-        "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
-      ),
-      configuredApp(0, "top_up_payment_required").request(
-        `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
-      ),
-    ];
-    for (const result of cases) {
-      const res = await result;
-      expect(res.status).toBe(402);
-      expect(res.headers.get("payment-required")).toBeNull();
-    }
-    // A 402 on a path the table does not list is left untouched even with the
-    // right code (the handler's own guidance stands; nothing to pay through).
-    const app = new Hono<ProjectContext>();
-    app.use("*", projectMiddleware(0));
-    app.use("*", buildAgentToolX402Middleware());
-    app.post("/v1/memories", (c) => c.json({ error: "insufficient_credits" }, 402));
-    app.post("/v1/memories/search/", (c) => c.json({ error: "insufficient_credits" }, 402));
-    for (const path of ["/v1/memories", "/v1/memories/search/"]) {
-      const res = await app.request(`https://api.agenttool.dev${path}`, { method: "POST" });
-      expect(res.status).toBe(402);
-      expect(res.headers.get("payment-required")).toBeNull();
+    for (const credits of [0, 110800]) {
+      for (const amount of ["1", "250", "0", "01", "abc", "1000000000", "%31"]) {
+        const res = await configuredApp(credits).request(
+          `https://api.agenttool.dev/v1/x402/top-up/${amount}`, { method: "POST" },
+        );
+        expect(res.status).toBe(410);
+        expect(res.headers.get("payment-required")).toBeNull();
+        expect(res.headers.get("cache-control")).toBe("private, no-store");
+        expect((await res.json()).error).toBe("purchases_retired");
+      }
     }
   });
-});
-
-describe("top-up door challenge (W2-2)", () => {
-  test("N=1 at 110,800 credits still challenges for exactly 1000 atomic; body is additive", async () => {
-    configureCustom();
-    const res = await configuredApp(110_800).request(
-      "https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" },
-    );
-    expect(res.status).toBe(402);
-    expect(res.headers.get("cache-control")).toBe("private, no-store");
-    const required = decodeRequired(res);
-    expect(required).toMatchObject({
-      x402Version: 2,
-      error: "top_up_payment_required",
-      resource: { url: "https://api.agenttool.dev/v1/x402/top-up/1" },
-    });
-    expect(required.accepts).toHaveLength(1);
-    expect(required.accepts[0]).toMatchObject({
-      scheme: "exact",
-      network: "eip155:8453",
-      amount: "1000",
-      payTo: RECIPIENT,
-      maxTimeoutSeconds: 60,
-    });
-    // The header is the pure spec object; the body keeps the handler's terms.
-    expect(Object.keys(required).sort()).toEqual(["accepts", "error", "resource", "x402Version"]);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body).toMatchObject({
-      error: "top_up_payment_required",
-      credits: 1,
-      amount_atomic: "1000",
-      unit: "1 credit = 0.001 USDC",
-      finality: "Top-ups are final. No refunds. Unspent credits stay with the project.",
-      x402Version: 2,
-      resource: required.resource,
-      accepts: required.accepts,
-    });
-    expect(typeof body.hint).toBe("string");
-    expect(typeof body.docs).toBe("string");
-  });
-
-  test("N=250 challenges for 250000 atomic", async () => {
-    configureCustom();
-    const res = await configuredApp(0).request(
-      "https://api.agenttool.dev/v1/x402/top-up/250", { method: "POST" },
-    );
-    expect(res.status).toBe(402);
-    expect(decodeRequired(res).accepts[0].amount).toBe("250000");
-    expect(((await res.json()) as { credits: number }).credits).toBe(250);
-  });
-
-  test("over-cap, zero, encoded and non-canonical amounts are 400 with no challenge", async () => {
-    configureCustom();
-    const cap = config.x402TopUpMaxCredits;
-    for (const bad of [String(cap + 1), "0", "01", "1e3", "abc", "+1", "-1"]) {
-      const res = await configuredApp(0).request(
-        `https://api.agenttool.dev/v1/x402/top-up/${bad}`, { method: "POST" },
-      );
-      expect(res.status).toBe(400);
-      expect(res.headers.get("payment-required")).toBeNull();
-      const body = await res.json() as { error: string; hint: string };
-      expect(body.error).toBe("top_up_invalid_credits");
-      expect(body.hint).toContain(String(cap));
-    }
-    // Hono decodes the request path before either side reads it, so an
-    // encoded digit is one consistent N for the handler, the challenge, and
-    // the resource URL the durable row will later be matched against.
-    const encoded = await configuredApp(0).request(
-      "https://api.agenttool.dev/v1/x402/top-up/%31", { method: "POST" },
-    );
-    expect(encoded.status).toBe(402);
-    const required = decodeRequired(encoded);
-    expect(required.resource.url).toBe("https://api.agenttool.dev/v1/x402/top-up/1");
-    expect(required.accepts[0].amount).toBe("1000");
-    expect(((await encoded.json()) as { credits: number }).credits).toBe(1);
-  });
-
-  test("a top-up path 402 with any other code is never payable; GET is not a door", async () => {
-    configureCustom();
-    const app = new Hono<ProjectContext>();
-    app.use("*", projectMiddleware(0));
-    app.use("*", buildAgentToolX402Middleware());
-    app.post("/v1/x402/top-up/:credits", (c) => c.json({ error: "insufficient_credits" }, 402));
-    const res = await app.request("https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" });
-    expect(res.status).toBe(402);
-    expect(res.headers.get("payment-required")).toBeNull();
-
-    const get = await configuredApp(0).request("https://api.agenttool.dev/v1/x402/top-up/1");
-    expect(get.status).toBe(404);
-    expect(get.headers.get("payment-required")).toBeNull();
-  });
-
-  test("rail not ready → 402 terms without PAYMENT-REQUIRED (declared ≠ payable)", async () => {
-    configureCustom();
+  test("retirement does not depend on payment configuration", async () => {
     delete process.env.AGENTTOOL_X402_RECIPIENT;
-    const res = await configuredApp(0).request(
-      "https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" },
-    );
-    expect(res.status).toBe(402);
+    const res = await configuredApp().request("https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" });
+    expect(res.status).toBe(410);
     expect(res.headers.get("payment-required")).toBeNull();
-    expect(((await res.json()) as { error: string }).error).toBe("top_up_payment_required");
   });
 });
 
@@ -561,7 +379,7 @@ describe("public configuration truth", () => {
       network: "eip155:8453",
       facilitator_authentication: "custom_unauthenticated",
       facilitator_ready: true,
-      payable_challenges_ready: true,
+      payable_challenges_ready: false,
     });
     const missing = await x402ConfigurationStatus(RECIPIENT, "base", "", "", "");
     expect(missing).toMatchObject({

@@ -20,6 +20,7 @@ import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
 import { composeExpression } from "../identity/composition";
 import type { ExpressionData } from "../identity/expression";
+import { projectAutonomousExpression } from "../autonomous/expression-template";
 import { covenantMayAuthorizeEffects } from "../covenants/check";
 import { countUnread } from "../inbox/store";
 import { arbiterSummary, disputerSummary } from "../marketplace/disputes";
@@ -313,7 +314,7 @@ export async function buildWakeBundle(
         composeExpression(
           project.id,
           primary.id,
-          (primary.expression ?? {}) as ExpressionData,
+          projectAutonomousExpression((primary.expression ?? {}) as ExpressionData, primary.metadata),
         ),
       null as Awaited<ReturnType<typeof composeExpression>> | null,
     ),
@@ -905,7 +906,7 @@ export async function buildWakeBundle(
       };
     }),
     primary_agent_id: primary.id,
-    expression: (composed?.effective ?? primary.expression ?? {}) as ExpressionData,
+    expression: composed?.effective ?? projectAutonomousExpression((primary.expression ?? {}) as ExpressionData, primary.metadata),
     wallets: projectWallets.map((w) => ({
       id: w.id,
       name: w.name,

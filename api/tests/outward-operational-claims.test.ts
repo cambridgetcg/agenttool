@@ -97,13 +97,16 @@ describe("current outward operational claims", () => {
     expect(errors).toMatch(/body is not one universal schema/i);
     expect(errors).toMatch(/no live Seed\/Grow\/Scale subscription ladder/i);
     expect(errors).toMatch(
-      /eligible static-tool.*insufficient_credits.*x402 V2.*PAYMENT-REQUIRED.*without that header.*not payable/is,
+      /insufficient_credits.*does not authorize a new purchase.*top-ups and x402 paid retries are retired/is,
     );
-    expect(errors).not.toMatch(/All error responses use.*detail/is);
+    expect(errors).toMatch(/Earlier.*PAYMENT-RESPONSE.*payment-status records.*recovery/is);
+    expect(errors).not.toMatch(/can carry.*PAYMENT-REQUIRED|All error responses use.*detail/is);
     expect(wallets).toMatch(
       /x402 project-credit payment does not fund a marketplace wallet/is,
     );
-    expect(wallets).not.toMatch(/any metered endpoint.*PAYMENT-SIGNATURE/is);
+    expect(wallets).toMatch(/New credit top-ups, paid retries and checkout are retired/i);
+    expect(wallets).toMatch(/GET \/v1\/x402\/payments\/:payment_id.*existing payment status/is);
+    expect(wallets).not.toMatch(/buy credits proactively|paying that exact requirement adds project credits|any metered endpoint.*PAYMENT-SIGNATURE/is);
   });
 
   test("live route examples no longer point at retired doors", () => {

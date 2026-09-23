@@ -1,3 +1,4 @@
+import { NEW_PLATFORM_PURCHASES_ENABLED } from "../../billing/commercial-policy";
 /** RFC 9727 API catalog — AgentTool's public product passport.
  *
  *  The document is deliberately only links. Discovery does not authenticate a
@@ -159,6 +160,7 @@ export function buildApiCatalog(
   /** `payment` links for a product path, present iff the payable table has a
    *  route_cost row for it with a positive INTEGER price. */
   const payment = (path: string, method = "POST") => {
+    if (!NEW_PLATFORM_PURCHASES_ENABLED) return {};
     const match = matchX402PayableRoute(path, method);
     if (!match || match.row.kind !== "route_cost") return {};
     const [row] = x402PayableRoutesForDisclosure([match.row]);

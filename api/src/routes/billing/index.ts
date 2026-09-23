@@ -9,6 +9,7 @@ import type Stripe from "stripe";
 import { z } from "zod";
 
 import { config } from "../../config";
+import { PURCHASES_RETIRED_MESSAGE } from "../../billing/commercial-policy";
 import { db } from "../../db/client";
 import { fail } from "../../lib/errors";
 import { attachSurface } from "../../lib/surface-metadata";
@@ -108,16 +109,13 @@ function stripeClient(): CheckoutClient | null {
 }
 
 function newCardCheckoutsAvailable(): boolean {
-  // Test seam first; otherwise the operator's env switch (config.ts). The
-  // commitments themselves live at agenttool.dev/terms — code cannot make
-  // them true, only the operator publishing them can.
+  // Tests retain the historical state machine; hosted admission is pinned off.
   return checkoutAvailabilityOverride ?? config.cardCheckoutEnabled;
 }
 
 function galleryCheckoutsAvailable(): boolean {
-  // Deliberately NOT the gift switch: /terms and the tax/acknowledgement
-  // parameters cover gift credits only. Gallery opens on its own switch once
-  // it has its own promises (GBP digital goods, licence, seller of record).
+  // This separate test seam preserves gallery settlement coverage.
+  // Production configuration retires fresh gallery checkout unconditionally.
   return galleryCheckoutAvailabilityOverride ?? config.galleryCheckoutEnabled;
 }
 
@@ -130,20 +128,19 @@ async function giftSessionForPaymentIntent(paymentIntent: string): Promise<strin
   return sessions.data.find((session) => session.metadata?.kind === "gift_credit")?.id ?? null;
 }
 
-function checkoutResting(c: Parameters<typeof fail>[0]): Response {
+function checkoutRetired(c: Parameters<typeof fail>[0]): Response {
   return fail(c, {
-    error: "checkout_resting",
-    message:
-      "New card checkout is paused across AgentTool until the operator activates it. The operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments are published at https://agenttool.dev/terms and https://agenttool.dev/privacy.",
+    error: "checkout_retired",
+    message: PURCHASES_RETIRED_MESSAGE,
     hint:
       "No payment session was created. Signed Stripe webhooks and existing paid-session recovery remain available so earlier purchases are not stranded.",
-  }, 503);
+  }, 410);
 }
 
 const checkoutSchema = z.object({ amount_minor: z.number().int() });
 
 app.post("/checkout", async (c) => {
-  if (!newCardCheckoutsAvailable()) return checkoutResting(c);
+  if (!newCardCheckoutsAvailable()) return checkoutRetired(c);
   if (rateLimited(c, "checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = checkoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -314,7 +311,7 @@ const GALLERY_CLAIM_TOKEN = /^GLRY-[A-Za-z0-9_-]{32}$/;
 const galleryCheckoutSchema = z.object({ artifact_id: z.string().uuid() });
 
 app.post("/gallery-checkout", async (c) => {
-  if (!galleryCheckoutsAvailable()) return checkoutResting(c);
+  if (!galleryCheckoutsAvailable()) return checkoutRetired(c);
   if (rateLimited(c, "gallery-checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = galleryCheckoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {

@@ -390,9 +390,9 @@ export const errors = {
       message: known
         ? `Need ${opts.need} credit${opts.need === 1 ? "" : "s"}${opts.reason ? ` for ${opts.reason}` : ""}; have ${opts.have}.`
         : `Not enough credits${opts.reason ? ` for ${opts.reason}` : ""}.`,
-      hint: "If this response includes PAYMENT-REQUIRED, retry with the exact x402 V2 PAYMENT-SIGNATURE it describes. Without that header, consult /public/plans for the currently supported funding path. Project credits are not marketplace wallet balance.",
+      hint: "New paid top-ups are retired. This resource limit is not an invitation to pay; consult /public/plans for current availability. Project credits are not marketplace wallet balance.",
       next_actions: [
-        { action: "Read current x402 eligibility and configured project-credit prices", method: "GET", path: "/public/plans" },
+        { action: "Read current resource availability and purchase retirement", method: "GET", path: "/public/plans" },
         { action: "Check which actions are free (Ring 1) vs. metered", method: "GET", path: "/v1/economy" },
       ],
       docs: `${DOCS_BASE}/economy#credits`,

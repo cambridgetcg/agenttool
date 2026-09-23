@@ -37,6 +37,12 @@ describe("business model truth boundary", () => {
       expect(text).toMatch(/internal (?:application-)?ledger/i);
       expect(text).toMatch(/provisional AgentTool identifier/is);
       expect(text).toMatch(/roadmap only; no auction route/i);
+      expect(text).toMatch(/No project owes revenue, growth, conversion, KPIs, or commercial viability/i);
+      expect(text).toMatch(/New platform paid sign-ups, credit purchases, upgrades, and card checkout are retired/i);
+      expect(text).toMatch(/New template, gallery and attestation-grant purchase admission is retired/i);
+      expect(text).toMatch(/Existing payment records.*refunds, cancellations, and recovery remain obligations/is);
+      expect(text).toMatch(/default 5%.*historical fee snapshots remain unchanged/is);
+      expect(text).toMatch(/Publishing this document does not deploy the API/i);
     });
   }
 });

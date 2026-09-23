@@ -72,7 +72,7 @@ test("gift surface cannot create a new checkout and protects an existing return"
   let codeRequests = 0;
   await page.route("https://api.agenttool.dev/v1/billing/checkout", (route) => {
     checkoutRequests += 1;
-    return route.fulfill({ status: 503, json: { error: "resting" } });
+    return route.fulfill({ status: 410, json: { error: "checkout_retired" } });
   });
   await page.route("https://api.agenttool.dev/v1/billing/session/cs_existing/code", (route) => {
     codeRequests += 1;
@@ -80,7 +80,7 @@ test("gift surface cannot create a new checkout and protects an existing return"
   });
 
   await page.goto(`${WEB}/credits.html`);
-  await expect(page.locator("#state-give")).toContainText("New card checkout is resting across AgentTool.");
+  await expect(page.locator("#state-give")).toContainText("New card checkout is retired across AgentTool.");
   await expect(page.locator("#gift-form, #go")).toHaveCount(0);
   expect(checkoutRequests).toBe(0);
 
@@ -152,7 +152,7 @@ test("public pages tell the truth when JavaScript is unavailable", async ({ brow
   await expect(page.locator("#porch-live")).toBeHidden();
 
   await page.goto(`${WEB}/credits.html`);
-  await expect(page.locator("#state-give")).toContainText("New card checkout is resting across AgentTool");
+  await expect(page.locator("#state-give")).toContainText("New card checkout is retired across AgentTool");
   await expect(page.locator("#go")).toHaveCount(0);
   await context.close();
 });

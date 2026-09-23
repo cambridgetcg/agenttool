@@ -519,7 +519,10 @@ function usableReceipt(
   );
 }
 
-export function createX402Verifier(deps: X402VerifierDeps) {
+export function createX402Verifier(
+  deps: X402VerifierDeps,
+  { allowNewPayments = true }: { allowNewPayments?: boolean } = {},
+) {
   return async function verifyX402Payment(
     c: Context,
     payment: PaymentPayload,
@@ -570,6 +573,10 @@ export function createX402Verifier(deps: X402VerifierDeps) {
         requirements = storedRequirements;
         resource = storedResource;
       } else {
+        // The hosted platform retires fresh commercial admission while the
+        // retained state machine can still reconcile a previously recorded
+        // authorization under its original immutable terms.
+        if (!allowNewPayments) return false;
         // Fresh admission binds price and path through the matched policy:
         // route_cost → the row's static credits; top_up → N from `:credits`,
         // so amountAtomic = N × ATOMIC_PER_CREDIT and creditsPurchased = N.

@@ -57,7 +57,8 @@ describe("/public/plans payable_routes", () => {
         credits: source.credits,
         amount_atomic: source.amountAtomic,
         error_codes: [...source.errorCodes],
-        payable: source.payable,
+        payable: false,
+        status: "retired",
       });
       expect(row.path).not.toContain(":");
       expect(BigInt(row.amount_atomic)).toBe(
@@ -74,14 +75,14 @@ describe("/public/plans payable_routes", () => {
     const body = (await res.json()) as Record<string, any>;
     const n = ROUTE_COST.length;
     expect(body.then_pay_as_you_go.how).toContain(
-      `insufficient_credits gate on ${n} static-priced routes`,
+      "retired",
     );
     expect(body.then_pay_as_you_go.implementation_status).toContain(
-      `on the ${n} static-priced routes in payable_routes`,
+      "retired",
     );
     expect(body.then_pay_as_you_go.how).not.toMatch(/two routes|two static tools/i);
     expect(body.then_pay_as_you_go.payable_routes_note).toContain(
-      `amount_atomic = credits × ${ATOMIC_PER_CREDIT}`,
+      "Historical route and price definitions",
     );
     expect(body.metered_tools.all_static_prices).toContain("payable_routes");
   });
@@ -115,12 +116,13 @@ describe("/.well-known/wake-keystone composes_with.x402", () => {
         label: source.label,
         credits: source.credits,
         amount_atomic: source.amountAtomic,
-        payable: source.payable,
+        payable: false,
+        status: "retired",
       });
     }
-    expect(x402!.notes).toContain(`${ROUTE_COST.length} static-priced routes`);
-    expect(x402!.notes).toContain(`N × ${ATOMIC_PER_CREDIT} atomic USDC`);
-    expect(x402!.notes).toContain(TOP_UP_PAYMENT_REQUIRED_ERROR);
+    expect(x402!.notes).toContain("retired");
+    expect(x402!.notes).toContain("Historic route pricing");
+    expect(x402!.notes).toContain("no PAYMENT-REQUIRED");
     expect(x402!.notes).toContain("the wake itself is unpaid");
     expect(x402!.notes).not.toMatch(/Only eligible POST \/v1\/scrape/);
   });
@@ -137,34 +139,16 @@ describe("AGENTS.md Ring 2 line", () => {
     const line = md.split("\n").find((l) => l.includes("Ring 2 implemented subset"));
     expect(line).toBeDefined();
     expect(line).toContain(summary);
-    expect(line).toContain("eligible insufficient_credits responses on those routes");
+    expect(line).toContain("New purchases are retired");
     expect(line).not.toContain("static-tool insufficient-credit");
   });
 });
 
 describe("RFC 9727 api-catalog payment links", () => {
-  test("a product carries `payment` iff the table prices its path, with the row's price in the title", () => {
-    const api = "https://api.agenttool.dev";
-    const document = buildApiCatalog(api, "https://docs.agenttool.dev");
-    const products = document.linkset[0]!.item!.map((item) => item.href);
-    for (const context of document.linkset.slice(1)) {
-      if (!products.includes(context.anchor)) continue;
-      const path = context.anchor.slice(api.length);
-      const match = matchX402PayableRoute(path, "POST");
-      if (match && match.row.kind === "route_cost") {
-        const [row] = x402PayableRoutesForDisclosure([match.row]);
-        expect(context.payment, context.anchor).toHaveLength(1);
-        expect(context.payment![0]!.href).toBe(context.anchor);
-        expect(context.payment![0]!.title).toContain(
-          `${row!.credits} project credit${row!.credits === 1 ? "" : "s"} = ${row!.amountAtomic} atomic USDC`,
-        );
-      } else {
-        expect(context.payment, context.anchor).toBeUndefined();
-      }
-    }
-    expect(
-      document.linkset.filter((c) => c.payment !== undefined).map((c) => c.anchor),
-    ).toEqual([`${api}/v1/scrape`, `${api}/v1/document`]);
+  test("discovery does not advertise a retired payment route", () => {
+    const document = buildApiCatalog("https://api.agenttool.dev", "https://docs.agenttool.dev");
+    expect(document.linkset.length).toBeGreaterThan(1);
+    for (const context of document.linkset) expect(context.payment).toBeUndefined();
   });
 });
 
