@@ -6,6 +6,7 @@ import { Hono, type Context } from "hono";
 import { privateKeyToAccount } from "viem/accounts";
 
 import type { ProjectContext } from "../src/auth/middleware";
+import { retiredTemplatePurchaseAdmission } from "../src/billing/commercial-policy";
 import {
   buildPaymentRequired,
   buildPaymentRequirements,
@@ -352,6 +353,75 @@ describe("retired production admission with existing-record recovery", () => {
     expect(calls.finalize).toBe(1);
     expect(calls.verify).toBe(0);
     expect(calls.settle).toBe(0);
+  });
+});
+
+describe("retired template admission after durable payment recovery", () => {
+  const path = "/v1/templates/22222222-2222-4222-8222-222222222222/purchase";
+  const policy = x402ProjectCreditPolicy(path, "POST")!;
+  const resource = x402ProjectCreditResource(policy, `http://localhost${path}`, "http://localhost")!;
+  const requirement = buildPaymentRequirements({ amountAtomic: policy.amountAtomic, payTo: RECIPIENT });
+  const presented = payment({ resource, accepted: requirement,
+    payload: exactPayload({ value: requirement.amount }) as unknown as Record<string, unknown> });
+
+  function setup(status?: X402PaymentRecord["status"], wrongResource = false) {
+    const initial = status ? [existingRecord(status, {
+      resource: wrongResource ? RESOURCE : resource, requirement, creditsPurchased: policy.creditsRequired,
+    })] : [];
+    const { deps, calls, rows } = makeDeps({ facilitator: {
+      async verify() { calls.verify++; return { isValid: true, payer: PAYER }; },
+      async settle() { calls.settle++; return { success: true, transaction: "0xprior-template", network: requirement.network, payer: PAYER, amount: requirement.amount }; },
+    } }, initial);
+    let fulfilled = 0;
+    const app = new Hono<ProjectContext>();
+    app.use("*", projectMiddleware());
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => null,
+      verifyPayment: createX402Verifier(deps, { allowNewPayments: false }),
+      buildSettlementHeader: settlementHeader,
+    }));
+    app.post(path, retiredTemplatePurchaseAdmission, (c) => {
+      fulfilled++;
+      return c.json({ fulfilled }, 201);
+    });
+    const send = (signature = encodeCanonicalBase64Json(presented)) => app.request(`http://localhost${path}`, {
+      method: "POST", headers: { "PAYMENT-SIGNATURE": signature },
+    });
+    return { send, calls, rows, fulfilled: () => fulfilled };
+  }
+
+  for (const status of ["inserted", "externally_settled"] as const) {
+    test(`${status} prior authorization can reach fulfillment once; replay cannot buy again`, async () => {
+      const fixture = setup(status);
+      const first = await fixture.send();
+      expect(first.status).toBe(201);
+      expect(first.headers.get("payment-response")).not.toBeNull();
+      expect(fixture.fulfilled()).toBe(1);
+      expect(fixture.calls.finalize).toBe(1);
+      expect(fixture.calls.settle).toBe(status === "inserted" ? 1 : 0);
+      expect((await fixture.send()).status).toBe(410);
+      expect(fixture.fulfilled()).toBe(1);
+      expect(fixture.calls.finalize).toBe(1);
+    });
+  }
+
+  test("fresh, invalid, and already-settled requests cannot buy or settle", async () => {
+    for (const status of [undefined, "settled", "pending"] as const) {
+      const fixture = setup(status);
+      expect((await fixture.send()).status).toBe(410);
+      expect((await fixture.send("invalid")).status).toBe(410);
+      expect(fixture.fulfilled()).toBe(0);
+      expect(fixture.calls.settle).toBe(0);
+      expect(fixture.calls.finalize).toBe(0);
+      expect(fixture.rows.size).toBe(status ? 1 : 0);
+    }
+  });
+
+  test("an authorization bound to a different resource cannot admit a purchase", async () => {
+    const fixture = setup("externally_settled", true);
+    expect((await fixture.send()).status).toBe(410);
+    expect(fixture.fulfilled()).toBe(0);
+    expect(fixture.calls.finalize).toBe(0);
   });
 });
 

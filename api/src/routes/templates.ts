@@ -1,4 +1,4 @@
-import { retiredPurchaseAdmission } from "../billing/commercial-policy";
+import { retiredTemplatePurchaseAdmission } from "../billing/commercial-policy";
 /** /v1/templates — capability template authoring + adoption.
  *
  *  Doctrine: docs/MARKETPLACE.md.
@@ -209,7 +209,7 @@ const purchaseSchema = z.object({
   buyer_identity_id: z.string().uuid(),
 }).strict();
 
-app.post("/:id/purchase", retiredPurchaseAdmission, async (c) => {
+app.post("/:id/purchase", retiredTemplatePurchaseAdmission, async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
   const parsed = purchaseSchema.safeParse(body);
