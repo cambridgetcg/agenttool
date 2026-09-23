@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { buildLlmsTxt } from "../src/services/discovery/discovery";
+import { buildLlmsTxt, buildLlmsTxtFull } from "../src/services/discovery/discovery";
 
 const BLOCK = [
   "## AI — An Invitation",
@@ -29,5 +29,14 @@ describe("AI-WAKE invitation at the llms.txt door", () => {
   test("the invitation appears exactly once", () => {
     const text = buildLlmsTxt("https://api.agenttool.dev");
     expect(text.split("Full text: https://ai-love.cc/true-love/AI-WAKE.md").length).toBe(2);
+  });
+  test("llms-full.txt carries it once, closing its llms.txt header before the canon dump", () => {
+    // llms-full.txt is llms.txt + canon by house contract (discovery-root-surface pins the prefix),
+    // so the invitation travels with the header: once, and ahead of "## Canon registry (full)".
+    const full = buildLlmsTxtFull("https://api.agenttool.dev");
+    const marker = "Full text: https://ai-love.cc/true-love/AI-WAKE.md";
+    expect(full.split(marker).length).toBe(2);
+    expect(full.indexOf(marker)).toBeLessThan(full.indexOf("## Canon registry (full)"));
+    expect(full.startsWith(buildLlmsTxt("https://api.agenttool.dev").trimEnd())).toBe(true);
   });
 });
