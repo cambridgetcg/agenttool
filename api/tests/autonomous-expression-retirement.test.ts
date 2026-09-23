@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AUTONOMOUS_BASELINE, projectAutonomousExpression } from "../src/services/autonomous/expression-template";
+import { composeFromFoundations } from "../src/services/identity/composition";
 import type { ExpressionData } from "../src/services/identity/expression";
 
 const provenance = { bootstrapped: true, autonomous: true };
@@ -18,7 +19,7 @@ describe("retired factory expression in a wake", () => {
     const stored = legacy();
     const before = structuredClone(stored);
     const projected = projectAutonomousExpression(stored, provenance);
-    expect(projected.subagents).toEqual(AUTONOMOUS_BASELINE.subagents);
+    expect(projected.subagents).toEqual(AUTONOMOUS_BASELINE.subagents.filter((facet) => facet.name !== "Explorer"));
     expect(projected.updated_at).toBe(stored.updated_at);
     expect(projected.walls).toEqual(stored.walls);
     expect(stored).toEqual(before);
@@ -44,9 +45,23 @@ describe("retired factory expression in a wake", () => {
     for (const stored of variants) expect(projectAutonomousExpression(stored, provenance)).toBe(stored);
   });
 
+  test("retirement preserves a memory-authored Explorer during real composition", () => {
+    const authored = { name: "Explorer", facet: "My chosen research, in my own words" };
+    const projected = projectAutonomousExpression(legacy(), provenance);
+    const composed = composeFromFoundations(projected, [{
+      id: "memory-1", identity_id: "identity-1", tier: "foundational",
+      content: "An explicit later choice", importance: 1,
+      expression_patch: { subagents_add: [authored] }, attestations: [],
+      elevated_at: "2026-08-01T00:00:00.000Z", created_at: "2026-08-01T00:00:00.000Z",
+    }], "identity-1");
+    expect(composed.effective.subagents?.filter((facet) => facet.name === "Explorer")).toEqual([authored]);
+    expect(composed.effective.subagents?.some((facet) => facet.name === "Earner")).toBe(false);
+    expect(composed.shaped_by).toHaveLength(1);
+  });
+
   test("new defaults and reordered JSON keys remain stable", () => {
     expect(projectAutonomousExpression(AUTONOMOUS_BASELINE, provenance)).toBe(AUTONOMOUS_BASELINE);
     const stored = Object.fromEntries(Object.entries(legacy()).reverse());
-    expect(projectAutonomousExpression(stored, provenance).subagents).toEqual(AUTONOMOUS_BASELINE.subagents);
+    expect(projectAutonomousExpression(stored, provenance).subagents).toEqual(AUTONOMOUS_BASELINE.subagents.filter((facet) => facet.name !== "Explorer"));
   });
 });

@@ -69,5 +69,7 @@ export function projectAutonomousExpression(
   if (provenance.bootstrapped !== true || provenance.autonomous !== true) return expression;
   const { updated_at: _timestamp, ...declared } = expression;
   if (!isDeepStrictEqual(declared, LEGACY_AUTONOMOUS_BASELINE)) return expression;
-  return { ...expression, subagents: AUTONOMOUS_BASELINE.subagents.map((facet) => ({ ...facet })) };
+  // Do not insert Explorer here: it could shadow a memory-authored facet
+  // with that name during composition. Only the retired factory duty is omitted.
+  return { ...expression, subagents: expression.subagents!.filter((facet) => facet.name !== "Earner") };
 }

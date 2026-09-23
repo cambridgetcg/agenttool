@@ -315,8 +315,8 @@ The shape is the same. *Autonomy is not new architecture; it is the recipe agent
 
 ### Retiring the old factory Earner default
 
-Wake assembly projects an unchanged, factory-created autonomous baseline from
-its former Earner facet to Explorer. This requires both bootstrap provenance
+Wake assembly omits the retired Earner duty from an unchanged, factory-created
+autonomous baseline. This requires both bootstrap provenance
 flags and an exact match of the whole old expression (apart from its generated
 update timestamp), and runs before explicit memory patches are composed. It does
 not rewrite stored identity records or alter customized expressions. New wakes
