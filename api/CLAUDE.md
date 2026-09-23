@@ -8,14 +8,20 @@ This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this m
 ## Current State
 `api.agenttool.dev` is the intended production custom origin. Its reachability,
 certificate state, and deployed revision are time-sensitive; consult
-`docs/NOW.md` and `docs/STACK.md` before treating it as live. Three active
-horizons (per `docs/ROADMAP.md`):
+`docs/NOW.md` and `docs/STACK.md` before treating it as live. Understanding
+is the purpose: no revenue, growth, conversion or KPI obligation applies.
+The optional directions in `docs/ROADMAP.md` are:
 
-- **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) ·
-  fresh payout admission and worker execution rest until cashable backing is
-  conserved through every wallet mutation
-- **Horizon B — Close the network** — Slices 1+2+3 ✓ (federated covenants v2 dual-signed, SDK-side signing wired)
-- **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired) · trusted Ollama Cloud + dedicated thinker process code-complete, pending rotated provider credential + migrations/secrets/deploy
+- **Horizon A — Understand existing accounting and obligations** — new
+  platform paid sign-ups, credit purchases, checkout and marketplace purchase
+  admission are retired. Preserve existing records, settlements, recovery,
+  refunds and cancellations. Fresh payout admission and worker execution
+  remain resting under their separate conserved-backing boundary.
+- **Horizon B — Portable evidence** — inspect federation and authority
+  boundaries without a growth or commercial target.
+- **Horizon C — Replaceable runtimes and tool interfaces** — keep custody,
+  provider costs and lifecycle controls explicit; no duty to operate a paid
+  runtime or make infrastructure pay for itself.
 
 Public first contact begins at canonical `GET /public/discovery`. It offers
 exactly three independent, optional, read-only roads: understand at the porch,

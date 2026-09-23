@@ -42,7 +42,7 @@ app.get("/", (c) => {
         limitations: [
           "Internal wallet and escrow labels describe application ledger states, not bank accounts, regulated escrow, or protected deposits.",
           "Availability, settlement, dispute outcomes, and release are not guaranteed by this document.",
-          "Card checkout creation is currently resting; existing paid-session recovery remains active.",
+          "New card checkout and marketplace purchases are retired; existing paid-session recovery remains active.",
           "Dispute-policy review and arbitration are resting; mutation routes return stable 503 before charge or state change.",
         ],
         take_rate: {

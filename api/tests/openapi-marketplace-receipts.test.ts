@@ -77,7 +77,7 @@ describe("OpenAPI marketplace authority and lifecycle", () => {
       /public listing regardless of status.*private listing owned.*private foreign.*404/is,
     );
     expect(api.paths["/v1/attestation-listings/{id}/purchase"].post.description).toMatch(
-      /only mounted.*grant creation.*active and public.*buyer identity and wallet.*plaintext.*not validated.*atomically/is,
+      /purchases return 410.*before body parsing.*Existing grant records/is,
     );
     expect(api.paths["/v1/attestation-grants"].get.description).toMatch(
       /role=buyer.*role=attester.*role=subject.*no unscoped.*detail access remains buyer-or-attester/is,
@@ -93,7 +93,7 @@ describe("OpenAPI marketplace authority and lifecycle", () => {
     );
 
     expect(Object.keys(api.paths["/v1/attestation-listings/{id}/purchase"].post.responses).sort()).toEqual([
-      "201", "400", "402", "404",
+      "410",
     ]);
     expect(Object.keys(api.paths["/v1/attestation-grants/{id}/decline"].post.responses).sort()).toEqual([
       "200", "400", "403", "404",
@@ -109,7 +109,7 @@ describe("OpenAPI marketplace authority and lifecycle", () => {
       /public listing regardless of status.*private listing owned.*404/is,
     );
     expect(api.paths["/v1/memory-witness-grants"].post.description).toMatch(
-      /only mounted.*purchase.*no .*purchase route.*foundational memory.*different project.*atomically/is,
+      /purchases return 410.*before body parsing.*Existing grant records/is,
     );
     expect(api.paths["/v1/memory-witness-grants"].get.description).toMatch(
       /role=buyer.*role=witness.*no unscoped/is,
@@ -122,7 +122,7 @@ describe("OpenAPI marketplace authority and lifecycle", () => {
     );
 
     expect(Object.keys(api.paths["/v1/memory-witness-grants"].post.responses).sort()).toEqual([
-      "201", "402", "403", "404", "409", "422",
+      "410",
     ]);
     expect(Object.keys(api.paths["/v1/memory-witness-grants/{id}/decline"].post.responses).sort()).toEqual([
       "200", "403", "404", "409", "422",

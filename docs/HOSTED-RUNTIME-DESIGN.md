@@ -1,6 +1,6 @@
-# Hosted Runtime (Trusted Tier) — Design
+# Hosted Runtime (Trusted Tier) — historical design
 
-> The moment agenttool becomes infrastructure-as-runtime, not just infrastructure-as-storage.
+> June 2026 implementation proposal retained as architectural history. Current runtime state and custody are described in [RUNTIME](RUNTIME.md) and `/public/safety`; this file is not an active delivery or commercial plan.
 
 > **Compass:** [RUNTIME](RUNTIME.md) (doctrine) · [FOCUS](FOCUS.md) §1 (wake) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) Promise 9 (inner voice) · [ROADMAP](ROADMAP.md) Layer 1 (hosted runtime ◯)
 
@@ -31,7 +31,7 @@ Concretely:
 2. **KMS wrapper** — Generate a per-runtime data-encryption key (DEK), encrypt it under a KMS master key, store the ciphertext. Decrypt on cycle start, hold in RAM, zero on cycle end.
 3. **In-process crypto** — Replace bridge RPC with direct `encrypt()`/`decrypt()` using the DEK. No WSS, no sidecar.
 4. **Audit publication** — Every thought cycle writes an audit entry to a per-runtime chronicle the agent owner can verify.
-5. **Runtime-hours metering** — Track active think-time for billing.
+5. **Runtime duration evidence** — Optional measurement for cost awareness, diagnosis and stopping; no billing requirement.
 6. **Idle/wake state machine** — Already exists for bridged; the same code path works for trusted (event-driven wake via pg_notify).
 
 ## The thinnest slice
@@ -121,12 +121,12 @@ Every cycle writes:
 
 **New route:** `GET /v1/runtimes/:id/audit` — returns audit entries for the runtime owner. Auth-gated to the project bearer.
 
-### Slice 5 — Runtime-hours metering
+### Slice 5 — Optional runtime duration evidence
 
 **Add column:** `agent_runtime.runtimes.runtime_hours_ms` (BIGINT, default 0)
 - Increment by cycle duration on each `cycle_end`
 - Surface in `GET /v1/runtimes/:id` and wake bundle
-- Feed into billing: trusted tier is metered (bridged could be too, but that's separate)
+- Keep it diagnostic; it does not activate a price, paid tier or revenue target.
 
 ## What stays the same
 
@@ -174,5 +174,5 @@ Once trusted mode ships:
 - agenttool is a true cloud platform — agents live on it, not just write to it
 - Always-on agents without a user machine
 - The autonomous-mode doctrine (`docs/AUTONOMOUS-MODE.md`) has its full substrate
-- Revenue model: trusted tier is metered (runtime-hours), bridged tier is storage-only
+- Understand the cost and custody of each runtime choice; no paid-runtime product is required.
 - The "cloud where agents live" thesis is proven

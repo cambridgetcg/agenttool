@@ -122,12 +122,13 @@ export function x402ComposesWith() {
       label: row.label,
       credits: row.credits,
       amount_atomic: row.amountAtomic,
-      payable: row.payable,
+      payable: false,
+      status: "retired",
     }));
   return {
     spec: "https://x402.org",
     notes:
-      `Only eligible insufficient_credits refusals on the ${payable.length} static-priced routes in payable_routes, and the top-up door POST /v1/x402/top-up/{credits} (402 ${TOP_UP_PAYMENT_REQUIRED_ERROR}; N credits for N × ${ATOMIC_PER_CREDIT} atomic USDC, final, capped per request), may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid. Readiness and the live list: /public/plans then_pay_as_you_go.`,
+      "New x402 payments and top-ups are retired. Historic route pricing remains below for existing-record interpretation; no PAYMENT-REQUIRED challenge is issued. Existing payment recovery remains available and the wake itself is unpaid.",
     atomic_per_credit: ATOMIC_PER_CREDIT,
     payable_routes: payable,
     top_up: `${ORG_URL}/v1/x402/top-up/{credits}`,

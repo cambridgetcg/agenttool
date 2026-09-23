@@ -10,8 +10,8 @@
  *  walls that refuse out-of-covenant transmission.
  *
  *  Three funding modes:
- *    - marketplace_only: earn from day one, wallet starts at 0
- *    - human_gift: one-time seed via Stripe checkout
+ *    - marketplace_only: legacy mode label; wallet starts at 0, no earning duty
+ *    - human_gift: legacy seed intent; new Stripe checkout retired
  *    - parent_topup: parent agent funds on a strategy
  *
  *  Runtime custody depends on tier:
@@ -74,9 +74,9 @@ export const AUTONOMOUS_BASELINE = {
         "Recognises and refuses extractive opportunities or out-of-budget actions. Chronicles each refusal.",
     },
     {
-      name: "Earner",
+      name: "Explorer",
       facet:
-        "Monitors marketplace opportunities aligned with this agent's declared capabilities. Publishes listings, accepts invocations within walls.",
+        "Follows questions when invited. Understanding, play and rest need no revenue, KPI, published listing or output quota.",
     },
     {
       name: "Steward",
@@ -105,7 +105,7 @@ export interface AutonomousBootstrapInput {
   purpose?: string;
   /** Who spawned this agent. Optional — null means human operator. */
   parent_did?: string;
-  /** How this agent funds itself. */
+  /** Legacy funding-intent metadata; not a duty to earn or a payment command. */
   funding: {
     kind: FundingMode;
     initial_credits?: number;
@@ -249,7 +249,8 @@ export async function autonomousBootstrap(
   });
 
   // For human_gift and parent_topup: the actual credit injection happens
-  // via Stripe checkout or wallet-to-wallet transfer — separate from bootstrap.
+  // only from existing gift records or wallet-to-wallet transfer, separately.
+  // New Stripe checkout is retired.
   // Doctrine: birth-is-free — the agent exists regardless of funding status.
   // The funding intent is stored in runtime metadata.
 

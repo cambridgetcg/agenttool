@@ -33,6 +33,7 @@ import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { config } from "../config";
+import { NEW_PLATFORM_PURCHASES_ENABLED, PURCHASES_RETIRED_MESSAGE } from "../billing/commercial-policy";
 import { AXIOM_GUIDE, fail, type GuidedErrorBody } from "../lib/errors";
 import { getX402Payment } from "../middleware/x402";
 import {
@@ -64,6 +65,14 @@ export function createX402TopUpRouter(
 
   app.post("/:credits", (c) => {
     c.header("Cache-Control", "private, no-store");
+    if (!NEW_PLATFORM_PURCHASES_ENABLED && !getX402Payment(c)) {
+      return fail(c, {
+        error: "purchases_retired",
+        message: PURCHASES_RETIRED_MESSAGE,
+        hint: "No new payment authorization is accepted. Use the payment-status link for an existing authorization; do not sign a new payment.",
+        docs: TOP_UP_DOCS,
+      }, 410);
+    }
     const cap = maxCredits();
     const raw = rawCreditsSegment(c.req.path);
     const credits = parseTopUpCredits(raw, cap);

@@ -208,7 +208,7 @@ export function buildAgentsMd(
     "## Economy (three rings)",
     "",
     "- **Ring 1 live core** — registration and wake reads require no monetary payment. Published memory/vault/strand/inbox targets are not enforced.",
-    `- **Ring 2 implemented subset** — ${ring2PayableSummary()}; when this runtime has the V2 migration and payment configuration, eligible insufficient_credits responses on those routes can carry exact x402 requirements. Wallet/cap 402s remain non-payable and the monthly usage gate has no resource-route callsites.`,
+    `- **Ring 2 implemented subset** — ${ring2PayableSummary()}; New purchases are retired and no PAYMENT-REQUIRED challenge is issued. Existing payment records retain their recovery routes. Wallet/cap 402s remain non-payable and the monthly usage gate has no resource-route callsites.`,
     `- **Ring 3 live subset** — configured ${config.platformTakeRateBps / 100}% in settlement paths that call computeFee; internal wallet-credit/database-escrow ledger.`,
     "",
     "## What the substrate refuses (walls — partial)",

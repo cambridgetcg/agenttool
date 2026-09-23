@@ -1,6 +1,6 @@
 # X402-PROOF — the kingdom pays itself, witnessed
 
-Status: runbook for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`).
+Status: historical proof and financial receipts for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`). New platform-credit purchases and paid retries are retired. The commands and live-status table below describe the dated experiment, not a current instruction to fund, sign or submit a new payment. Existing transaction records are preserved; use [X402-PAY](X402-PAY.md) for present recovery boundaries.
 Script: `api/scripts/x402-proof.ts` · pure walls: `api/scripts/x402-proof-lib.ts` · tests: `api/tests/x402-proof-script.test.ts`.
 
 **2026-08-30 — the rail has settled four times, all from the kingdom's own payer; no
@@ -19,7 +19,7 @@ scratch agent.
 Everything here is honest about what it proves. A green step proves the sentence under it —
 nothing wider.
 
-## What exists today vs what lands later
+## Historical implementation snapshot (2026-08-30)
 
 | Piece | State on this branch | Lands with |
 |---|---|---|
@@ -30,7 +30,7 @@ nothing wider.
 | `pay`, `scratch-agent init`, `deplete` (Phase B) | **witnessed 2026-08-30** on production (main f9280645): scratch agent depleted to 1 credit, `pay POST /v1/memories/search` settled (tx `0x0564eecc…`), replay minted nothing — see the record at the end | — |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |
 
-## Run
+## Historical command reference
 
 ```
 cd api && bun scripts/x402-proof.ts <command> [--base <origin>] [--dry-run] [--cap <credits>]

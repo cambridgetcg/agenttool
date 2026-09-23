@@ -21,17 +21,14 @@ export function x402TopUpOpenApiPaths(h: X402TopUpOpenApiHelpers) {
       required: true,
       schema: { type: "string", pattern: "^[1-9][0-9]*$" },
       description:
-        "Number of project credits to buy: a plain positive decimal integer, at most X402_TOP_UP_MAX_CREDITS (published as then_pay_as_you_go.top_up.cap_credits on GET /public/plans; default 10000). Refused, never clamped.",
+        "Credit quantity on a previously admitted payment: a plain positive decimal integer, at most X402_TOP_UP_MAX_CREDITS (published as then_pay_as_you_go.top_up.cap_credits on GET /public/plans; default 10000). Refused, never clamped.",
     }],
     post: {
       tags: ["billing"],
       parameters: [{ $ref: "#/components/parameters/PaymentSignature" }],
-      summary: "Buy project credits with USDC on Base (x402 exact/EIP-3009); final, capped per request",
+      summary: "New project-credit purchases retired; existing payment recovery only",
       description:
-        "The agent rail's purchase door. Authenticated; never balance-bound — a funded project may still top up. " +
-        `Rate: ${X402_TOP_UP_UNIT} (${ATOMIC_PER_CREDIT} atomic units per credit). Without PAYMENT-SIGNATURE the route answers 402 top_up_payment_required carrying the exact terms; when the recipient, CAIP-2 network, and facilitator are ready the response also carries PAYMENT-REQUIRED for exactly credits × ${ATOMIC_PER_CREDIT} atomic USDC and mirrors PaymentRequired in the body. ` +
-        "A retry with the signed PAYMENT-SIGNATURE settles through the facilitator and applies the credits in the same durable transaction that records settlement, then answers 200. A replayed settled authorization answers 402 again with PAYMENT-RESPONSE and the rel=payment-status Link and never credits twice. " +
-        `${X402_TOP_UP_FINALITY} Send an Idempotency-Key to have a lost 200 replayed; a 402 is never cached.`,
+        "New purchases return 410 purchases_retired without PAYMENT-REQUIRED. Only a matching previously admitted durable payment record can continue recovery; credits apply at most once. Use /v1/x402/payments/{authorization_hash} for existing records. An Idempotency-Key may replay an earlier successful response.",
       "x-agenttool-billing": {
         unit: X402_TOP_UP_UNIT,
         atomic_per_credit: ATOMIC_PER_CREDIT,
@@ -79,9 +76,10 @@ export function x402TopUpOpenApiPaths(h: X402TopUpOpenApiHelpers) {
           },
         },
         "401": { $ref: "#/components/responses/Unauthorized" },
-        "402": h.x402Response(
-          "No verified payment on this request (top_up_payment_required). The body carries credits, amount_atomic, unit, finality, hint, and docs; PAYMENT-REQUIRED is attached only while the rail is ready, and is deliberately absent when the presented authorization already settled",
-        ),
+        "410": {
+          description: "purchases_retired: no new payment authorization or purchase is created.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
       },
     },
   },

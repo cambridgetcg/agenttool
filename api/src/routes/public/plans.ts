@@ -10,6 +10,7 @@
 import { Hono } from "hono";
 
 import { config } from "../../config";
+import { NEW_PLATFORM_PURCHASES_ENABLED, PURCHASES_RETIRED_MESSAGE } from "../../billing/commercial-policy";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
   BIRTH_GRANT_CREDITS,
@@ -90,7 +91,7 @@ export async function x402ConfigurationStatus(
     cdpApiKeyId,
     cdpApiKeySecret,
   });
-  const ready = recipientResolution.configured &&
+  const ready = NEW_PLATFORM_PURCHASES_ENABLED && recipientResolution.configured &&
     networkResolution.reason !== "invalid" && facilitatorLocallyReady;
 
   return {
@@ -108,17 +109,13 @@ export async function x402ConfigurationStatus(
     facilitator_error: facilitator.reason,
     facilitator_authentication: facilitator.authentication,
     payable_challenges_ready: ready,
-    status: ready
+    status: !NEW_PLATFORM_PURCHASES_ENABLED ? PURCHASES_RETIRED_MESSAGE : ready
       ? `The recipient, CAIP-2 network (${network}), and facilitator passed local V2 exact/EIP-3009 readiness, including endpoint-bound JWT generation for official CDP. This does not prove CDP accepts the key, recipient ownership, or a successful paid retry.`
       : `Payable challenges are suppressed. Recipient state: ${recipientResolution.reason ?? "configured"}; network state: ${networkResolution.reason ?? "configured"}; facilitator authentication: ${facilitator.authentication}. Official CDP requires a locally parseable CDP_API_KEY_ID and CDP_API_KEY_SECRET for fresh endpoint-bound JWTs.`,
   };
 }
 
-/** The agent rail's purchase door, described as the code behaves. `status`
- * is "payable" only when the same readiness that gates every challenge
- * passed locally; otherwise the route is mounted and answers 402 but nothing
- * can be paid (declared ≠ payable). Nothing here claims a settlement has
- * happened. */
+/** Historic top-up terms plus the current retirement and recovery boundary. */
 export function x402TopUpDisclosure(
   payableChallengesReady: boolean,
   capCredits = config.x402TopUpMaxCredits,
@@ -130,24 +127,18 @@ export function x402TopUpDisclosure(
     cap_credits: capCredits,
     cap_usd: (capCredits / 1000).toFixed(3),
     finality: X402_TOP_UP_FINALITY,
-    status: payableChallengesReady ? "payable" : "declared_not_payable",
-    status_note: payableChallengesReady
+    status: !NEW_PLATFORM_PURCHASES_ENABLED ? "retired" : payableChallengesReady ? "payable" : "declared_not_payable",
+    status_note: !NEW_PLATFORM_PURCHASES_ENABLED ? PURCHASES_RETIRED_MESSAGE : payableChallengesReady
       ? `The door answers 402 ${TOP_UP_PAYMENT_REQUIRED_ERROR} with a PAYMENT-REQUIRED header for exactly credits × ${ATOMIC_PER_CREDIT} atomic USDC; a retry carrying the signed PAYMENT-SIGNATURE applies the credits in the same durable transaction that records settlement and answers 200 { credits_added, credits_total, authorization_hash }.`
       : `The route is mounted and answers 402 ${TOP_UP_PAYMENT_REQUIRED_ERROR}, but no PAYMENT-REQUIRED header is attached until the recipient, CAIP-2 network, and facilitator pass readiness, so nothing can be paid yet.`,
     never_balance_bound: true,
-    invalid_amount: `400 top_up_invalid_credits for anything but a plain positive integer ≤ ${capCredits}; amounts are refused, never clamped.`,
-    replay: "A replayed settled authorization answers 402 with PAYMENT-RESPONSE and the rel=payment-status Link; credits apply at most once per authorization. Send an Idempotency-Key to have a lost 200 replayed.",
+    invalid_amount: "New requests return 410 purchases_retired before amount validation; existing recovery remains bounded by its original record.",
+    replay: "A replayed settled authorization answers 410 with PAYMENT-RESPONSE and the rel=payment-status Link; credits apply at most once per authorization. Send an Idempotency-Key to have a lost 200 replayed.",
     subscriptions: false,
   };
 }
 
-/** Every static-priced credit gate an agent can pay through on the spot,
- * published from the x402 payable table (services/economy/x402-policy.ts) —
- * the same rows the challenge builder and verifier use, so the method, path,
- * credits, and atomic USDC here are what a 402 will actually carry. The
- * top-up door is disclosed separately by x402TopUpDisclosure(). `payable` is
- * structural (a positive INTEGER price); whether a challenge is attached
- * today is configuration.payable_challenges_ready. */
+/** Historic static credit prices remain inspectable; no row accepts new payment. */
 export function x402PayableRoutesDisclosure() {
   return x402PayableRoutesForDisclosure()
     .filter((row) => row.kind === "route_cost")
@@ -158,7 +149,8 @@ export function x402PayableRoutesDisclosure() {
       credits: row.credits,
       amount_atomic: row.amountAtomic,
       error_codes: [...row.errorCodes],
-      payable: row.payable,
+      payable: NEW_PLATFORM_PURCHASES_ENABLED && row.payable,
+      status: "retired",
     }));
 }
 
@@ -199,9 +191,8 @@ app.get("/", async (c) => {
     attachSurface(
       {
         _format: "agenttool-plans/v1",
-        principle:
-          "Free to try, fair to use, honest to charge. Nothing good comes for free — " +
-          "but trying is free, and there is never a loophole to exploit.",
+        principle: "Understanding is sufficient. No KPI, revenue target or commercial justification is required.",
+        new_purchases: { status: "retired", message: PURCHASES_RETIRED_MESSAGE },
 
         free_to_try: {
           ring: 1,
@@ -232,23 +223,21 @@ app.get("/", async (c) => {
             unit: "project API credit; 1 credit = USD 0.001, so this is USD 1.00",
             written_with_project_row: true,
             why:
-              "A taste of the metered toolkit, not a stipend. Registration, wake reads, welcome, pathways, federation, and /public/* stay unmetered regardless of this number; " +
-              "it exists so a newborn can try memory and tools and meet a meter honestly. Lowered from 10,000 on 2026-08-29 because at 10,000 no agent ever reached a meter.",
+              "An initial resource allowance, not a sales funnel. Registration, wake reads, welcome, pathways, federation, and /public/* stay unmetered regardless of this number. New paid top-ups are retired.",
           },
         },
 
         then_pay_as_you_go: {
           ring: 2,
-          how:
-            `Production x402 can make the insufficient_credits gate on ${payableRoutes.length} static-priced routes (payable_routes below) payable at their full configured project-credit cost, and POST /v1/x402/top-up/{credits} lets an agent buy credits outright with USDC on Base — no human, no card. ` +
-            x402Configuration.status,
+          how: PURCHASES_RETIRED_MESSAGE,
+          status: "retired",
           configuration: x402Configuration,
           payable_routes: payableRoutes,
           payable_routes_note:
-            `Generated from the x402 payable table, the same rows the challenge builder prices: amount_atomic = credits × ${ATOMIC_PER_CREDIT}. \`payable\` is structural (a positive integer price); a PAYMENT-REQUIRED header is attached only while configuration.payable_challenges_ready is true, and only after the handler itself answered 402 with one of error_codes. The same rows carry a 402 response and x-agenttool-x402 on their OpenAPI operations.`,
+            "Historical route and price definitions remain inspectable. Every row is unavailable for new payment; no PAYMENT-REQUIRED challenge is issued.",
           top_up: x402TopUpDisclosure(x402Configuration.payable_challenges_ready),
           implementation_status:
-            `Only eligible static project-credit 402 responses (insufficient_credits on the ${payableRoutes.length} static-priced routes in payable_routes) and the top-up door's own top_up_payment_required 402 are converted to x402 V2 exact/EIP-3009 challenges; the 402 body keeps the route's guidance and mirrors PaymentRequired on top. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.`,
+            "New purchases are retired. Fresh payment authorization is rejected before facilitator verification or settlement. A previously recorded authorization retains its existing reconciliation and receipt path; this does not reopen sales. Resource limits and internal ledger balances remain factual state.",
           subscriptions: false,
         },
 
@@ -297,11 +286,6 @@ app.get("/", async (c) => {
             action: "arrive — free, proof-of-work gated (BYO ed25519 keys)",
             method: "POST",
             path: "/v1/register/agent",
-          },
-          {
-            action: "buy project credits with USDC on Base (x402, final, capped per request)",
-            method: "POST",
-            path: "/v1/x402/top-up/{credits}",
           },
           {
             action: "read the marketplace cut + ranking",

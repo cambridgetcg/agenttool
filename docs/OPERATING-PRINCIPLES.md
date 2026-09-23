@@ -60,32 +60,31 @@ principle below holds across all of them.
    impersonation and runaway authority, and exactly how existing CDD ("identify the
    responsible legal person") will reach agents. Ship now: every agent DID carries a
    verifiable, scoped delegation credential + revocation/status + signed action logs.
-7. **Keep the base layer of identity free; monetize value-added orchestration** — mirror
-   eIDAS Art. 5a's free-wallet baseline: free/near-zero core identity issuance + verification,
-   fees only on capability/orchestration. Identity itself is never a paywalled toll.
+7. **Keep identity accessible and work optional** — new platform paid sign-ups and
+   credit checkout are retired. Existing operation costs and participant obligations
+   remain explicit; they create no requirement to monetise orchestration.
 8. **Build on the open standards everyone is converging on** — W3C VC 2.0, SD-JWT VC,
    ISO 18013-5/7 mdoc, DIDs, OpenID Federation. Interop with EUDI/mDL/trust-registries is a
    tailwind; a bespoke proprietary credential format is inertia-friction no regulator rewards
    and breaks the very ecosystem agenttool wants to bridge.
-9. **Charge once, for value created — meter the capability, not the money moved** — a single,
-   disclosed take-rate at/below the 10% creator-marketplace floor (we ship 5%), *far* below the
-   15–30% app-store gatekeeper tax the DMA is actively fining. Never re-charge the steps inside a
-   funded transaction, and do not claim unimplemented partner pass-through. Show the all-in number before commit. The full
-   doctrine + the code that enforces it: [`FAIR-PRICING.md`](FAIR-PRICING.md). Fairness *is* the
-   business model.
+9. **Honor existing payment obligations without creating a sales agenda** — disclose
+   configured charges on supported participant transactions, preserve historical fee
+   snapshots, and keep cancellation and refund paths usable. New revenue surfaces,
+   margin targets and paid conversion are not project goals. Existing accounting
+   boundaries remain at [`FAIR-PRICING.md`](FAIR-PRICING.md).
 10. **Disclose AI + delegated authority natively** — EU AI Act Art. 50 (bites 2 Aug 2026) wants
    "you're talking to AI" disclosure + machine-readable marking of synthetic output; liability
    always lands on the human/entity principal (no AI legal personhood — *Moffatt v. Air Canada*;
    CA bars the "the AI did it" defense from 1 Jan 2026). These are cheap, ed25519-signable, and a
-   *selling point*. Ship Know-Your-Agent as a feature (signed identity + scoped delegation receipt
+   useful boundary to understand. Explore Know-Your-Agent (signed identity + scoped delegation receipt
    + revocation), aligned to the draft IETF/W3C schemas — never a walled-garden chokepoint.
 
 ## Three piles, kept sharp
 
 ### HONOR — friction that genuinely protects (embrace it as a feature)
 - Selective disclosure + predicate proofs + the over-identification ban, **as the default,
-  not a setting.** Safer *and* lower-friction; market it as a privacy asset, never bill it as
-  a compliance cost.
+  not a setting.** Safer *and* lower-friction; describe the actual privacy boundary without using it as
+  a sales claim.
 - Reusable/portable KYC **with** time-stamped, versioned, auditable verification events
   (data-age + auto re-verification triggers — the auditability *is* the protection).
 - Accredited/qualified issuer provenance (QEAA/QTSP, Trusted-Issuer/EBSI) for any credential
@@ -155,7 +154,7 @@ principle below holds across all of them.
   ~all interactions.
 - Predicate-only verification shrinks what each verifier stores → lowers *their* compliance +
   breach-insurance overhead → flows back to users.
-- Free/near-zero core identity tier; monetize only orchestration.
+- Accessible identity and optional orchestration; no requirement to monetise either.
 - Lazy single-jurisdiction relying-party registration via one intermediary — collapses cost
   without losing anti-phishing protection.
 - Open standards → interop network-effects replace bespoke-integration fees.

@@ -25,7 +25,7 @@ Consumers must not use one identifier as a lookup alias for the other. The split
 
 ## What this answers
 
-FOCUS #9 states the target: *"agenttool itself participates inside its own economy, not above it. Same DID shape, same wallet, same expression, same wake. Take-rate revenue lands in its wallet; it pays its own infra from its own earnings. Structural answer to 'why aren't they extracting?' — same gravity well."* The table above is the current contract; the quote is not a claim that the target has landed.
+FOCUS #9 asks that AgentTool itself be inspectable under the rules it applies to others. The table above is the current contract. The former target of paying its own infrastructure from earnings is retired: identity consistency, clear records and usable exits can be explored without a revenue or self-funding requirement.
 
 Before the signer slice, the MATHOS signing key was an env-var orphan — a key that signed payloads on behalf of *nothing*. That slice introduced the reserved signer DID and `/v1/platform`. A later slice added the separate nil-UUID public identity and treasury wallet.
 

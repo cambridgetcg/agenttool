@@ -1,3 +1,4 @@
+import { retiredPurchaseAdmission } from "../billing/commercial-policy";
 /** /v1/memory-witness-listings + /v1/memory-witness-grants — witness-as-service.
  *
  *  Doctrine: docs/AGENT-CENTRIC.md §1 (third Tier-1 closure) ·
@@ -296,7 +297,7 @@ memoryWitnessListingsRouter.get("/:id", async (c) => {
 
 export const memoryWitnessGrantsRouter = new Hono<ProjectContext>();
 
-memoryWitnessGrantsRouter.post("/", async (c) => {
+memoryWitnessGrantsRouter.post("/", retiredPurchaseAdmission, async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof createGrantSchema>;
   try {

@@ -67,7 +67,7 @@ describe("/public/plans", () => {
     expect(b.free_at_birth.project_credits.credits).toBe(BIRTH_GRANT_CREDITS);
     expect(b.free_at_birth.project_credits.credits).toBe(1_000);
     expect(b.free_at_birth.project_credits.written_with_project_row).toBe(true);
-    expect(b.free_at_birth.project_credits.why).toMatch(/not a stipend/i);
+    expect(b.free_at_birth.project_credits.why).toMatch(/initial resource allowance/i);
   });
 
   test("marketplace take-rate matches config (no drift)", async () => {
@@ -109,12 +109,12 @@ describe("/public/plans", () => {
 
   test("x402 status names the narrow recoverable project-credit boundary", async () => {
     const b = await get();
-    expect(String(b.then_pay_as_you_go.how).toLowerCase()).toContain("x402");
+    expect(String(b.then_pay_as_you_go.how).toLowerCase()).toContain("retired");
     expect(b.then_pay_as_you_go.configuration).toEqual(
       await x402ConfigurationStatus(),
     );
     expect(b.then_pay_as_you_go.implementation_status).toMatch(
-      /only eligible static project-credit 402.*wallet insufficient_balance.*pass through unchanged/is,
+      /retired.*existing/is,
     );
     expect(b.unknowns).toContain(
       "It does not prove successful end-to-end x402 settlement without a real paid retry.",
@@ -136,9 +136,9 @@ describe("/public/plans", () => {
       expect(row.credits).toBe(source.credits);
       expect(row.amount_atomic).toBe(String(source.credits! * ATOMIC_PER_CREDIT));
       expect(row.error_codes).toEqual([...source.errorCodes]);
-      expect(row.payable).toBe(true);
+      expect(row.payable).toBe(false);
     }
-    expect(b.then_pay_as_you_go.how).toContain(`${table.length} static-priced routes`);
+    expect(b.then_pay_as_you_go.status).toBe("retired");
     expect(b.then_pay_as_you_go.how).not.toMatch(/POST \/v1\/scrape and POST \/v1\/document/);
   });
 
@@ -158,16 +158,16 @@ describe("/public/plans", () => {
       subscriptions: false,
     });
     expect(b.then_pay_as_you_go.top_up.status).toBe(
-      configuration.payable_challenges_ready ? "payable" : "declared_not_payable",
+      "retired",
     );
-    expect(String(b.then_pay_as_you_go.how)).toContain("/v1/x402/top-up/{credits}");
-    expect(String(b.then_pay_as_you_go.implementation_status)).toContain("top_up_payment_required");
-    expect(b.verbs.map((v: { path: string }) => v.path)).toContain("/v1/x402/top-up/{credits}");
+    expect(b.then_pay_as_you_go.top_up.status).toBe("retired");
+    expect(String(b.then_pay_as_you_go.implementation_status)).toContain("retired");
+    expect(b.verbs.map((v: { path: string }) => v.path)).not.toContain("/v1/x402/top-up/{credits}");
 
     // declared ≠ wired: the word "payable" appears only behind readiness.
-    expect(x402TopUpDisclosure(true)).toMatchObject({ status: "payable", cap_usd: (config.x402TopUpMaxCredits / 1000).toFixed(3) });
-    expect(x402TopUpDisclosure(false).status).toBe("declared_not_payable");
-    expect(x402TopUpDisclosure(false).status_note).toMatch(/nothing can be paid/i);
+    expect(x402TopUpDisclosure(true)).toMatchObject({ status: "retired", cap_usd: (config.x402TopUpMaxCredits / 1000).toFixed(3) });
+    expect(x402TopUpDisclosure(false).status).toBe("retired");
+    expect(x402TopUpDisclosure(false).status_note).toMatch(/retired/i);
     expect(x402TopUpDisclosure(true, 250)).toMatchObject({ cap_credits: 250, cap_usd: "0.250" });
     expect(x402TopUpDisclosure(true).status_note).not.toMatch(/settled on Base|first settlement/i);
   });
@@ -182,7 +182,7 @@ describe("/public/plans", () => {
       network_configured: false,
       network_source: "default",
     });
-    expect(missing.status).toMatch(/payable challenges are suppressed.*recipient state: absent/is);
+    expect(missing.status).toMatch(/retired/is);
 
     const invalid = await x402ConfigurationStatus(
       "configured-recipient", "polygon", "https://facilitator.example/x402", "", "",
@@ -208,7 +208,7 @@ describe("/public/plans", () => {
       network_configured: true,
       network_source: "environment",
     });
-    expect(present.status).toMatch(/does not prove CDP accepts.*recipient ownership/i);
+    expect(present.status).toMatch(/retired/i);
 
     const unsupported = await x402ConfigurationStatus(
       "0xAbcd000000000000000000000000000000001234",

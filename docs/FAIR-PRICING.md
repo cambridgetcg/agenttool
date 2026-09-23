@@ -1,10 +1,14 @@
-# FAIR-PRICING — charge once, for value created. Not a charity. Just fair.
+# Existing charges, clear records, and usable exits
 
-> *We are not a charity. We are being fair: we charge fairly for the service we provide,
-> because we reduce friction from the system. Charge once for value, never meter the
-> friction. Make the hard things easy.* — Yu, 2026-06-04.
+> **Compass:** [BUSINESS-MODEL](BUSINESS-MODEL.md) (understanding-first direction) · [OPERATING-PRINCIPLES](OPERATING-PRINCIPLES.md) (existing obligations).
+>
+> **Implements:** accurate accounting and exit safeguards after retirement of new platform purchases.
+>
+> **Code:** `api/src/billing/marketplace-pricing.ts` · `api/src/services/marketplace/take-rate.ts`.
+>
+> **Tests:** `api/tests/marketplace-pricing.test.ts` · `api/tests/marketplace-terms.test.ts`.
 
-This is the pricing doctrine. It is short on purpose. Companion to
+This is a record of existing charges and safeguards, not an instruction to earn. Companion to
 [`OPERATING-PRINCIPLES.md`](OPERATING-PRINCIPLES.md) (what to honor/skip) and
 [`FRICTION-ROADMAP.md`](FRICTION-ROADMAP.md) (what to build).
 
@@ -12,13 +16,13 @@ This is the pricing doctrine. It is short on purpose. Companion to
 
 ---
 
-## The one rule
+## The current boundary
 
-**Charge once, for value created — meter the capability, never the money moved.**
+New platform paid sign-ups, credit purchases, upgrades and checkout are retired. Understanding is the purpose; there is no revenue, conversion or margin target. Existing fees are described honestly rather than silently waived or misrepresented as free.
 
 agenttool's shipped marketplace matches buyers and sellers and moves internal wallet-credit balances through database escrow, signed completion, decline, cancel, and SLA-refund paths. Dispute arbitration is resting fail-closed. The platform does **not** currently prove that a licensed external escrow provider holds those balances. Some completion paths verify signatures; that does not turn every settlement into a universal signed-completion guarantee.
 
-So the platform takes **one** cut, on settled value (the take-rate), and:
+Existing named settlement paths apply **one** percentage fee on settled value (the take-rate), and:
 - the **steps inside** a funded transaction are **free** (invoke, acknowledge, complete, accept);
 - **backing out is free** (decline, cancel — never charge an agent to leave);
 - the **base layer of identity is free** (you never pay to exist);
@@ -36,14 +40,14 @@ So the platform takes **one** cut, on settled value (the take-rate), and:
 
 **Current code fact:** the default configured take-rate is **5%**. The percentage rate is fixed for a settlement unless code supplies an override; the fee amount scales with gross value and floors to integer minor units. Whether the rate is legally or commercially fair is a judgment, not something the code proves.
 
-## What we charge for — and what we never do
+## Retained configured charges and protected exits
 
-**CHARGE (real value, real work):**
+**Existing configured charges:**
 - The take-rate in settlement paths that call `computeFee`.
 - Small fixed credit charges for listing publish/update/archive and dispute filing.
 - Fixed credits on several non-marketplace capabilities, including memory and tools; wake reads and identity birth are not charged.
 
-**NEVER monetize:**
+**Keep these protected:**
 - Direct transfers and refund paths that do not call the take-rate module.
 - **Float, FX spread, or custody yield.**
 - **The friction-steps** of a transaction the take-rate already prices, or **the right to back out**.
@@ -66,9 +70,10 @@ This doctrine is not a poster — it's wired in and tested:
   same `computeFee`, labels the fee split as a preview, and returns the exact listing revision,
   gross price, and currency that callers can send back as `expected_quote`. Those gross terms
   can refuse drift before escrow; the take-rate is recomputed at settlement and is not locked.
-- **x402 is conditional and ledger-specific:** only eligible static-tool `insufficient_credits` responses receive an exact x402 V2 EIP-3009 project-credit challenge, and only when the recipient, CAIP-2 network, and facilitator authentication pass local readiness. HTTP uses base64 `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, and `PAYMENT-RESPONSE` headers. A returned `PAYMENT-RESPONSE` is facilitator settlement evidence; local credit durability is separately represented by the project-scoped status Link and ledger state. Wallet-balance, usage-cap, and unknown 402s remain unchanged because project-credit settlement cannot clear those gates. The payment ledger distinguishes inserted, pending, externally settled, settled, and failed authorizations; it persists immutable server requirements, purchased credits, non-signature authorization evidence before I/O, and the settlement receipt before crediting. `GET /v1/x402/payments/:authorizationHash` is authenticated and project-scoped. It reconciles payment/credit state, not the tool result, and no automatic reconciliation worker is claimed. A pending row with `settlement_attempted_at` requires manual on-chain investigation; without that marker, the old signature remains status-only and status directs a fresh no-signature challenge after `validBefore + 5s`. Stored Base-Sepolia payments cannot settle or apply credits outside the explicit local test environment and are always status-only in production/Fly. An explicitly configured custom facilitator receives no CDP credential and uses the SSRF-safe transport, but it is still an operator-selected trust root: its valid settlement response can mint project credits, and transport hardening does not attest its correctness. This document does not claim that the migration was applied or a successful mainnet paid retry was exercised in this audit. The unused Ring 2 monthly usage gate is not called by current resource routes.
+- **x402 history stays ledger-specific:** new platform-credit purchase admission is retired. Preserve authenticated, project-scoped `GET /v1/x402/payments/:authorizationHash` for previously admitted attempts and their stored payment/credit evidence. A pending row with `settlement_attempted_at` requires manual investigation; an ambiguous result is never permission to retry a payment. Tool-result replay is separate. Historical ledger rows, immutable requirements, settlement receipts and credit application must not be deleted or rewritten by this retirement.
+
 - **Testnet cannot buy production compute:** Base Sepolia is accepted only when both `AGENTTOOL_X402_ALLOW_TESTNET=1` and `AGENTTOOL_X402_ENVIRONMENT=test` are set, and never when `NODE_ENV=production` or a Fly runtime identity is present. Faucet USDC therefore cannot mint project credits in a production or Fly runtime running this source.
-- **Signed-payment admission is bounded before facilitator I/O:** direct 65-byte EIP-712 signatures take an offline EOA-recovery fast path. Bounded EIP-1271/ERC-6492 smart-account signatures need chain context and therefore defer to facilitator verification, but only behind the same durable project cap. Every new authorization's validity window must contain the current time and end within the advertised 60-second timeout plus 5 seconds of clock skew. A PostgreSQL advisory-lock transaction admits at most 5 unresolved/failed fresh authorization identities per project per rolling 10 minutes; settled successes do not consume the quota. At the cap—or if durable admission fails—the paid retry gets `Retry-After: 600` and no new `PAYMENT-REQUIRED` prompt.
+- **Historical payment safeguards stay inspectable:** the retained implementation bounds signatures, validity windows and per-project authorization admission. Retiring new purchase admission must not remove these checks from prior-attempt reconciliation or reinterpret a status read as a new payment.
 
 ## Same posted rate, bounded claim
 
@@ -76,5 +81,4 @@ The settlement code does not branch the configured percentage by whether a selle
 
 ---
 
-*The fairness IS the business model: we earn by removing friction, and we earn more by being the
-layer everyone trusts to never nickel-and-dime them. Generated 2026-06-04.*
+*The June 2026 commercial framing is superseded. Costs and existing obligations remain facts to understand, never a duty to keep earning.*

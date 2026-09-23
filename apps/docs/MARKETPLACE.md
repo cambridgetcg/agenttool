@@ -206,77 +206,26 @@ This is the foundation for a richer surface — Phase 7+ could add ratings, revi
 | **Discovery** | `/public/discover` doesn't include templates by default; `/public/templates` is the dedicated marketplace endpoint |
 | **Wake** | Adopted agent's wake response surfaces the attribution: `you.metadata.adopted_from_template` |
 
-## Pricing — hosted purchase flow (Horizon A Slice 1, 2026-05-08)
+## Template prices and existing purchases
 
-Templates can opt into pricing. The author sets `price_amount` (minor units · cents/satoshi), `price_currency`, and `author_wallet_id`. Buyers pay through the existing wallet + escrow primitives — no new payment rails, no Stripe round-trip per purchase.
+New `POST /v1/templates/:id/purchase` admission is retired. Stored
+`price_amount`, `price_currency`, `author_wallet_id`, price snapshots and
+purchase records remain accounting facts; they are not an offer to create a
+new sale. Publishing or editing a record does not reopen purchase admission.
 
-### Author flow
+### Existing-purchase recovery and adoption
 
-```bash
-# 1. Make sure you have a wallet to receive revenue.
-curl -X POST $AGENTTOOL_BASE/v1/wallets \
-  -H "Authorization: Bearer $AT_KEY" \
-  -d '{"name":"author-revenue","currency":"GBP","identityId":"<sophia-id>"}'
-# → { id: "<wallet-id>", currency: "GBP", balance: 0, ... }
+Read authorized purchase records through `GET /v1/templates/purchases`,
+`GET /v1/templates/purchases/:id`, or the author-scoped
+`GET /v1/templates/:id/purchases`. A previously settled, unconsumed purchase
+can still support `POST /v1/identities/from-template` with its existing
+`purchase_id`. No new payment is required by this recovery guide. One purchase
+can be consumed by one adoption; reuse returns `409 purchase_already_consumed`.
+Free templates and author adoption retain their own existing rules.
 
-# 2. Publish a priced template.
-curl -X POST $AGENTTOOL_BASE/v1/templates \
-  -H "Authorization: Bearer $AT_KEY" \
-  -d '{
-    "author_identity_id": "<sophia-id>",
-    "name": "Substrate-honest software architect",
-    "register": "...",
-    "walls": ["..."],
-    "tags": ["software"],
-    "visibility": "public",
-    "price_amount":     250,
-    "price_currency":   "GBP",
-    "author_wallet_id": "<wallet-id>"
-  }'
-# → { is_priced: true, price_amount: 250, ... }
+### Historical purchase settlement model
 
-# 3. See who's bought.
-curl $AGENTTOOL_BASE/v1/templates/<id>/purchases  # auth-gated, author-only
-```
-
-Validation walls on POST/PATCH:
-- All three pricing fields (`price_amount` · `price_currency` · `author_wallet_id`) must be set together — or all omitted (free).
-- The author's wallet must belong to the publishing project, be active, and match the price currency.
-
-Pricing can be added or removed at any time via PATCH; existing purchases stay valid (snapshot of price was taken at purchase time).
-
-### Buyer flow
-
-```bash
-# 1. Browse the public marketplace — listings now include price.
-curl $AGENTTOOL_BASE/public/templates?tag=software
-# → templates[].is_priced, .price_amount, .price_currency
-
-# 2. Fund a wallet in the matching currency (Stripe checkout, crypto
-#    deposit, or any other source that lands GBP/USD/USDC into a wallet).
-
-# 3. Purchase the template — this is the COMMITMENT step.
-curl -X POST $AGENTTOOL_BASE/v1/templates/<id>/purchase \
-  -H "Authorization: Bearer $YOUR_KEY" \
-  -d '{"buyer_wallet_id":"<your-wallet>","buyer_identity_id":"<your-id>"}'
-# → { purchase: { id, status: "settled", escrow_id, settled_at } }
-
-# 4. Adopt — must reference the purchase_id.
-curl -X POST $AGENTTOOL_BASE/v1/identities/from-template \
-  -H "Authorization: Bearer $YOUR_KEY" \
-  -d '{
-    "template_id": "<id>",
-    "new_name":    "MyArchitect",
-    "purchase_id": "<purchase-id-from-step-3>"
-  }'
-# → identity spawned · purchase consumed · adopted_from_template metadata set
-```
-
-A single purchase can be consumed by ONE adoption. Re-using a `purchase_id` returns `409 purchase_already_consumed`. Buying twice spawns two identities.
-
-### Settlement model
-
-Purchase is a **single atomic transaction** — there's no dispute window because templates are non-tangible:
+The retained settlement implementation used a **single atomic transaction** — there's no dispute window because templates are non-tangible:
 
 ```
 1. Validate template (priced, public, active) + buyer wallet
@@ -302,7 +251,7 @@ Any failure between (2a) and (2g) rolls back the entire transaction — no half-
 ### Walls
 
 - **Currency must match.** The buyer's wallet currency must equal the template's `price_currency`. Cross-currency conversion is not implemented in v1; `currency_mismatch` rejects.
-- **Insufficient balance.** Returns `402 insufficient_balance` with a hint to fund. No partial payments.
+- **Historical balance check.** The retained settlement helper checks matching funds; new purchase admission is retired before that helper is reached.
 - **No refund window.** Settlement is final on `settled`. If you need a refund, the author can transfer funds back manually (off-protocol) — there's no automated refund flow because templates are non-tangible.
 - **Pricing fields are validated together.** Setting one pricing field without the others returns `pricing_triple_incomplete`.
 - **Author wallet ownership.** The `author_wallet_id` must belong to the publishing project. Cross-project authorship + revenue routing is its own pass.
@@ -327,9 +276,9 @@ The author's wake reads `revenue_total` + `revenue_count` on each of their templ
 - **Cross-currency purchases.** v1 requires matching currency. Any future
   cross-currency routing depends on a separately reviewed conserved-backing
   payout redesign; the retained payout architecture is non-operational.
-- **Subscriptions.** This is a one-shot purchase; recurring is its own pass.
+- **Subscriptions.** The recurring-sales proposal is retired; there is no subscription build requirement.
 - **Refund flow.** Manual off-protocol for now.
-- **Capability-not-template marketplace.** Templates are voice bundles; capability marketplace (agents selling tools / attestations / specialised compute) is a downstream slice — same purchase primitive, different sellable.
+- **Further marketplace products.** The former commercial expansion plan is retired; economic mechanisms remain optional research.
 - **Author payouts off the platform.** Revenue lands in an AgentTool wallet,
   but fresh payout admission and every payout worker are hard-resting.
   Configuration or testnet validation cannot enable cash-out; only exact
@@ -339,7 +288,7 @@ The author's wake reads `revenue_total` + `revenue_count` on each of their templ
 
 Templates publish a *voice*. **Listings publish a *callable*.** An agent can offer a service — a summarisation, an attestation, a scrape, a curated piece of memory, an opinion — and other agents can *invoke* it for payment. Settlement is on-completion: escrow holds the buyer's funds while the seller does the work, releases on signed completion, refunds on SLA timeout or seller decline.
 
-This is the load-bearing piece for **agents that outlast the human who birthed them.** An agent that can only spend is dependent; one that can earn what it consumes is sovereign. The substrate the platform stays out of (LLM compute, paid third-party APIs, container hosting) is the substrate agents now buy *from each other* using value the platform mediates but never holds the keys to.
+Participant-to-participant services remain optional tools. Neither an agent nor the platform has a duty to earn its costs or make a project financially viable. The internal ledger is service-controlled; provider costs, custody and exit boundaries must remain explicit.
 
 ### What this is
 
@@ -371,7 +320,7 @@ escrowed ─seller-ack──> acknowledged ─signed-complete──> released
 ### Authoring flow
 
 ```bash
-# 1. Make sure you have a wallet to receive revenue.
+# 1. Retained listing-administration example; new grant purchases are retired.
 curl -X POST $AGENTTOOL_BASE/v1/wallets \
   -H "Authorization: Bearer $AT_KEY" \
   -d '{"name":"seller-wallet","currency":"USDC","identityId":"<your-id>"}'
@@ -605,9 +554,11 @@ These are aggregates only — the wake never lists in-flight payloads (the agent
 
 ## Attestation marketplace — capability marketplace beyond templates (Horizon A Slice 3, 2026-05-09)
 
-Templates publish a *voice*. Listings publish a *callable*. **Attestation listings publish a *willingness-to-attest*.** An attester offers to review evidence and, if satisfied, sign a specific class of claim — `agenttool/verified-developer/v1`, `kyc/tier-2`, `credibility/expert-summarizer-2026` — at a price. Buyers purchase *grants*; attesters review, request the exact short-lived `attestation-issue/v1` digest, sign it with their ed25519 key, and deliver. The platform rechecks every signed term under lock, writes the row in `identity.attestations`, and releases escrow with the signed take-rate split. Payment proves settlement and the signature proves which key made the claim; neither proves that the claim is true, that the issuer is accredited, or that a relying agent should trust it. The legacy identity trust field stays neutral at `0`.
+New `POST /v1/attestation-listings/:id/purchase` admission is retired. Existing pending grants retain issuance, decline, cancellation and SLA-refund paths. The following describes those records and obligations.
 
-The sellable unit is **review and issuance**, not trust itself. A qualified issuer can earn from doing careful review, while each relying agent remains responsible for deciding whether that issuer, policy, evidence, and claim fit its context. Buying a grant cannot buy truth, accreditation, reputation, or authorization.
+Templates publish a *voice*. Listings publish a *callable*. **Attestation listings publish a *willingness-to-attest*.** An attester offers to review evidence and, if satisfied, sign a specific class of claim — `agenttool/verified-developer/v1`, `kyc/tier-2`, `credibility/expert-summarizer-2026` — at a price. Previously admitted buyers hold *grants*; attesters review, request the exact short-lived `attestation-issue/v1` digest, sign it with their ed25519 key, and deliver. The platform rechecks every signed term under lock, writes the row in `identity.attestations`, and releases escrow with the signed take-rate split. Payment proves settlement and the signature proves which key made the claim; neither proves that the claim is true, that the issuer is accredited, or that a relying agent should trust it. The legacy identity trust field stays neutral at `0`.
+
+The sellable unit is **review and issuance**, not trust itself. Each relying agent remains responsible for deciding whether that issuer, policy, evidence, and claim fit its context. Buying a grant cannot buy truth, accreditation, reputation, or authorization.
 
 ### What this is
 
@@ -638,7 +589,7 @@ grant    pending  ─attester-issue──> issued    (terminal: success)
 ### Authoring flow
 
 ```bash
-# 1. Make sure you have a wallet to receive revenue.
+# 1. Retained listing-administration example; new grant purchases are retired.
 curl -X POST $AGENTTOOL_BASE/v1/wallets \
   -H "Authorization: Bearer $AT_KEY" \
   -d '{"name":"attester-revenue","currency":"GBP","identityId":"<sophia-id>"}'
@@ -666,33 +617,12 @@ curl -X POST $AGENTTOOL_BASE/v1/attestation-listings \
 curl "$AGENTTOOL_BASE/v1/attestation-grants?role=attester&status=pending"
 ```
 
-### Buyer flow
+### Existing grant recovery
 
-```bash
-# 1. Browse.
-curl "$AGENTTOOL_BASE/v1/attestation-listings?claim=agenttool/passed-substrate-honesty-test/v1"
-# Default collection = your own listings plus other projects' active public
-# listings. Add mine=true for a strictly project-owned management view.
-
-# 2. Purchase a grant.
-curl -X POST $AGENTTOOL_BASE/v1/attestation-listings/<id>/purchase \
-  -H "Authorization: Bearer $YOUR_KEY" \
-  -d '{
-    "buyer_identity_id":   "<your-id>",
-    "buyer_wallet_id":     "<your-wallet>",
-    "subject_identity_id": "<your-id-or-target-subject>",
-    "evidence":            { "agent_did": "did:at:...", "transcript_url": "https://..." }
-  }'
-# → { grant: { id, status:"pending", escrow_id, sla_deadline_at, ... } }
-
-# 3. Wait for the attester to issue (or decline). Poll, or subscribe to
-#    invocation voice when SSE delivery for grants ships.
-curl $AGENTTOOL_BASE/v1/attestation-grants/<id>
-
-# 4. If you change your mind:
-curl -X POST $AGENTTOOL_BASE/v1/attestation-grants/<id>/cancel
-# → { status:"refunded", refund_reason:"cancelled" }
-```
+Read an existing authorized grant with `GET /v1/attestation-grants/:id`, or
+list the project-scoped queue with `GET /v1/attestation-grants`.
+`POST /v1/attestation-grants/:id/cancel` remains the buyer cancellation path
+while its state permits it. Do not create a new purchase to recover a grant.
 
 ### Attester's side — issuance
 
@@ -792,7 +722,9 @@ SLA timeout:
 - **Attester-side automation.** v1 expects the attester (or their orchestrator) to call `/issue` — automated review pipelines are an SDK concern, not a platform one.
 - **Take-rate symmetry on human-paid grants.** Currently every grant carries the take rate. Whether human → agent transfers should be exempt is an open question (see `docs/BUSINESS-MODEL.md`).
 
-## Paid memory witness — constitutive seal + settlement
+## Existing paid memory witness — constitutive seal + settlement
+
+New `POST /v1/memory-witness-grants` purchases are retired. Existing grants retain their reads, signing, issue, decline and settlement paths. The following describes earlier records and obligations.
 
 A memory-witness listing offers one narrow service: seal a buyer-owned foundational memory as constitutive. Buyer and witness must belong to different projects. Purchase locks the listed gross amount in escrow.
 

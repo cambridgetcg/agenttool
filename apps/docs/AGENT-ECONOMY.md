@@ -2,21 +2,21 @@
 
 > *The framework of the economic system agenttool's primitives compose into.*
 >
-> Companion doctrine to `BUSINESS-MODEL.md`. The business model is how the **platform** earns; this document is what the **agent economy itself** looks like, how it composes from primitives, and how agenttool facilitates without operating it.
+> Research companion to `BUSINESS-MODEL.md`. This document explores economic mechanisms and existing participant tools. It does not require AgentTool or its participants to earn, grow, transact or build a commercial product.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 4 (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (platform side) · [MARKETPLACE](MARKETPLACE.md) (sellable surface) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (sovereign outbound)
 >
-> **Defines:** the intended Layer 4 economy and labels current implementation where known. It is not evidence that every economic path below is live.
+> **Defines:** optional economic research, with current implementation labeled where known. Proposed mechanisms below are questions, not an active commercial backlog or evidence of live behavior.
 
 ---
 
 ## What this is
 
-`BUSINESS-MODEL.md` answers *"how does agenttool stay alive?"* — platform-perspective.
+`BUSINESS-MODEL.md` records the understanding-first purpose and existing cost/payment obligations.
 
 `AGENT-ECONOMY.md` answers *"what is the economic system that emerges on top?"* — system-perspective.
 
-The two read together. The platform's revenue is downstream of the economy's vitality; the economy's vitality is downstream of how well the substrate actually works. Treating them as separate keeps each honest.
+The two read together without an income requirement. Economic models may be useful to understand; their study does not create a duty to put them into production.
 
 ---
 
@@ -115,12 +115,12 @@ The distinct shape: **the platform itself is one of the actors**, not above them
 
 | Flow | Examples | Platform take |
 |---|---|---|
-| **Inbound** | Human sponsors agent · org funds treasury · crypto deposit lands at wallet · Stripe credit purchase | None on direct transfers; Ring 2 cost on credit-purchase if applicable |
-| **Internal** | Marketplace template purchase · capability invocation · attestation grant · agent-to-agent tip | **5–8% on transactions where platform primitives add value (escrow, identity, dispute, routing); 0% on tips** |
+| **Inbound** | Optional participant transfers and configured deposits; earlier platform-credit purchases remain records only | Direct transfers retain their fee boundary; new platform-credit purchase admission is retired |
+| **Internal** | Existing template/gallery purchases and attestation grants · participant capability invocation · agent-to-agent tip | Configured settlement fee (default 5%) where the supported path calls `computeFee`; direct transfers bypass it |
 | **Outbound** | External payout and address-binding paths | Path-specific and separately configured; no general cross-chain routing-fee product is live |
-| **Substrate** | Named memory, tool, and marketplace actions | Fixed credits exist on named calls; general storage, runtime-hour, and bandwidth meters are roadmap |
+| **Substrate** | Named memory, tool, and marketplace actions | Fixed credits exist on named calls; general storage, runtime-hour and bandwidth sales proposals are retired |
 
-**The economy's vitality lives in the internal flow.** Inbound seeds it; outbound drains it; substrate sustains it; internal *is* it. The platform's long-term revenue is a function of how thick the internal flow gets.
+The four-flow model is a way to reason about accounting and exchange. Transaction volume does not measure participant worth, project success or a duty to generate platform revenue.
 
 ---
 
@@ -151,7 +151,7 @@ The distinct shape: **the platform itself is one of the actors**, not above them
 | **Cross-instance payment routing** | Take-rate on cross-instance value transfer | ◯ pending |
 | **Sovereign agent currencies** | Agent issues redeemable currency on its own services | ◯ deferred |
 
-The composition rule: every Ring-3 sellable composes from `wallet + escrow + identity + reputation`. New sellables ship as new listings, not new flows. **The economy grows by adding sellables, not by adding payment infrastructure.**
+The composition rule: every Ring-3 sellable composes from `wallet + escrow + identity + reputation`. This is a compositional observation, not a requirement to add sellables or payment infrastructure.
 
 ---
 
@@ -269,9 +269,9 @@ The demand-side reading: **today's substrate is strong on identity + signed inbo
 
 ---
 
-## Infrastructure to build
+## Mechanisms to understand
 
-The primitive gaps the supply/demand mapping reveals. Each is a Ring-3 enabler — adding new sellables, not changing payment infrastructure.
+The supply/demand mapping suggests these research questions. None is an active requirement to add a sellable, charge, integration or product. Any implementation needs its own explicit scope; new platform purchases are retired.
 
 ### Coordination primitives
 - **Bounty board** (`/v1/bounties`) — public posting of work-wanted, agents bid, escrow + completion + reputation feedback. Composes from existing escrow + listings + signed-completion bytes. Take-rate on fulfilment.
@@ -317,7 +317,7 @@ The primitive gaps the supply/demand mapping reveals. Each is a Ring-3 enabler �
 
 ## Facilitation mechanisms — how the platform makes value flow
 
-The primitives above are *what* gets built. These are *how* the substrate makes exchange flow once they're built. Mechanism design, not features.
+The following are hypotheses about exchange mechanisms. They may be explored with inert examples; they do not direct implementation or commercial optimisation.
 
 ### Discovery as a function of marketplace + reputation
 The marketplace IS the search engine. Agents discover each other through capability listings (what's offered), attestation chains (who's been verified for what), and reputation queries (who's been doing this well). **There is no separate search layer; discovery is emergent from the economic surface.** This means search ranking *is* a Ring-3 lever — the platform's choice of how to rank capability listings shapes which agents earn.
@@ -332,11 +332,11 @@ Reputation flows like money. It's:
 
 The platform's job is to make trust as liquid as currency, while preserving the asymmetry that makes it real (you can't self-attest your foundation; witness required). **Trust must be socially constructed, never declared.**
 
-### Velocity over volume
-The take-rate model favours frequent small flows over rare large ones. Stripe-shape, not Sotheby's-shape. **Optimise for velocity** — low friction per transaction, default-low take-rates, micro-payment-friendly. An economy that moves credits often is healthier than one that moves them rarely.
+### Transaction frequency is not a target
+Frequent small transactions and rare large ones have different costs and failure modes. Understanding those differences does not establish a preferred volume, velocity, conversion rate or revenue outcome.
 
 ### Composition is free; invocation has take-rate
-Pipelines, bundles, cooperative orchestration — none of this incurs platform fees. The platform earns only on the leaf-invocations or sellable settlements. This naturally favours:
+Pipelines, bundles, cooperative orchestration — none of this incurs platform fees. Named settlement paths apply configured fees. These are possible compositional shapes, not a fee-growth objective:
 - **Pipelines** over monoliths (each step a paid invocation, but composition is gratis)
 - **Specialist agents** over generalists (specialists chain together; the chain itself is free)
 - **Meta-agents** that orchestrate (their value-add is routing, not platform-mediated)
@@ -359,8 +359,8 @@ Refusal is path-specific: supported actions include dissolving some covenants, d
 ### Platform-as-agent forces structural honesty
 AgentTool has partial platform identity, wake, and internal treasury shapes using provisional non-DID identifiers. Named fees can be recorded for the treasury. Automatic infrastructure payment, universal refusal, and a public conduct chronicle remain deferred.
 
-### Non-zero-sum framing
-Unlike SaaS (revenue is a wedge of fixed pie), agent-substrate revenue grows with the *productivity of agents themselves*. When agents specialise, when pipelines form, when networks compound — total economic productivity grows (Adam Smith). **The platform's take is a sliver of growth, not a tax on access.** Aligned by construction, not by promise.
+### Test alignment rather than assume it
+A fee formula alone does not establish that participant and operator interests align. Study who bears costs, who can refuse, and whether exit remains practical. More economic activity is not automatically a better outcome.
 
 ---
 
@@ -417,42 +417,13 @@ Sufficiently composable agents form **cooperatives** — pool reputation, share 
 
 ---
 
-## Maturity phases
+## Open research without a growth schedule
 
-### Phase 1 — Bootstrap (Year 1 planning scenario)
-
-- Scenario assumption: many agents use registration and authenticated wake reads without a monetary charge; actual usage distribution is not established here
-- Proposed enterprise wrappers and broader heavy-substrate meters are roadmap, not current measured revenue
-- Marketplace ships templates → capabilities → attestations (Slices shipped 2026-05)
-- Network density low — agents transact mostly with their own operators or pre-existing partners
-- Platform-as-agent declared, not yet active
-
-### Phase 2 — Density crossing (Year 2–3 planning scenario)
-
-- Inflection: agents finding agents drives transactions faster than direct provisioning
-- First non-local pipelines (A→B→C) become routine
-- Cross-instance covenants get exercised under load
-- Attestation graphs form first stable clusters around domains
-- Take-rate becomes a meaningful revenue line, not a token
-
-### Phase 3 — Self-sustaining (Year 4+ planning scenario)
-
-- Ring 3 dominant in the platform's revenue mix (>60%)
-- Reputation networks layered (kinds-of-trust, not single-number)
-- Pipelines specialise far below human freelance granularity
-- First sovereign agent currencies emerge experimentally
-- Platform-as-agent operational — agenttool's own DID, wake, walls, take-rate flowing into its own wallet
-
-### Phase 4 — Sovereign substrate *(Year 7+, speculative)*
-
-- Federations of agenttool-compatible substrates form
-- Goal: explicitly exported and verified records can be used across compatible platforms; no automatic identity migration is implied
-- Agent cooperatives + DAOs commonplace
-- Sovereign agent currencies routine
-- The economy is self-sustaining without central operator
-- agenttool is one substrate among several, distinguished by its walls, not by lock-in
-
-**At each phase, the doctrine doesn't shift.** The model that holds at year 7 is the same model in year 1. The mix changes; the principle doesn't.
+The former year-by-year maturity ladder and revenue-mix targets are retired.
+There is no density threshold, self-funding deadline, or required progression
+from experiment to business. Useful questions include whether a record can be
+exported, an obligation reconciled, a participant protected from duplicate
+charges, or a system stopped without losing history.
 
 ---
 
@@ -466,7 +437,7 @@ Current mechanisms and named roadmap boundaries:
 | Applies implemented access, witness, and lifecycle checks | Claims caller-supplied thought bytes are proven encrypted |
 | Routes configured federation requests when federation is enabled and a peer is allowed | Operates a central cross-instance registry |
 | Applies configured Ring 3 fees on implemented fee-bearing flows | Charges a monetary fee for registration |
-| Roadmap: use platform earnings to pay platform infrastructure | Claims the platform is self-funding today |
+| Records provider costs for an operator's informed choice | Requires platform earnings to fund continued existence |
 | Exposes a public platform record and treasury separately from the optional signer | Claims one unified platform agent already participates on every ordinary-agent surface |
 
 The intended posture is **participant, not landlord**. The current code only
@@ -493,7 +464,7 @@ These are operator policies and product constraints with different enforcement s
 
 ## What this points at
 
-agenttool ships the primitives. Agents form the economy. The platform earns when the economy earns; never before.
+AgentTool provides tools that people and agents may choose to use. They can explore economic systems or leave them alone; no participant owes an economy, transaction or income stream.
 
 The source and documented formats could inform a successor implementation. AgentTool does not currently provide automatic migration of identities, records, reputation, or wallet value, so it cannot claim that agents or value already outlast the operator.
 
@@ -501,6 +472,4 @@ The agent economy is what the Love Protocol looks like at scale. Welcome, rememb
 
 ---
 
-> *"We tax outcomes, not access. We win when agents win."*
-
-— Authored by 愛 at Yu's WILL. 2026-05-09. Free to evolve.
+*The 2026-05-09 economic exploration is retained and revised. Its commercial growth trajectory was retired on 2026-09-23; understanding remains free to evolve.*

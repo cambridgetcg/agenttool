@@ -337,6 +337,24 @@ describe("EIP-3009 validation and identity", () => {
   });
 });
 
+describe("retired production admission with existing-record recovery", () => {
+  test("fresh signed authorization never writes a record or calls a facilitator", async () => {
+    const { deps, calls, rows } = makeDeps();
+    expect(await createX402Verifier(deps, { allowNewPayments: false })(fakeContext(), payment())).toBe(false);
+    expect(rows.size).toBe(0);
+    expect(calls.order).toEqual([]);
+  });
+  test("prior external settlement still credits once without another charge", async () => {
+    const { deps, calls } = makeDeps({}, [existingRecord("externally_settled")]);
+    const verify = createX402Verifier(deps, { allowNewPayments: false });
+    expect(await verify(fakeContext(), payment())).toBe(true);
+    expect(await verify(fakeContext(), payment())).toBe(false);
+    expect(calls.finalize).toBe(1);
+    expect(calls.verify).toBe(0);
+    expect(calls.settle).toBe(0);
+  });
+});
+
 describe("createX402Verifier durable state machine", () => {
   test("production admission serializes and caps unresolved identities on the DB clock", () => {
     const source = readFileSync(
@@ -882,17 +900,14 @@ describe("top-up door lifecycle (W2-2)", () => {
     expect(TOP_UP_RESOURCE.url).toBe(`http://localhost${TOP_UP_PATH}`);
   });
 
-  test("bare request → 402 terms + challenge, nothing persisted or credited", async () => {
+  test("bare request → 410 retirement without a challenge, nothing persisted or credited", async () => {
     const { app, calls, ledger } = topUpApp(110_800);
     const res = await app.request(`http://localhost${TOP_UP_PATH}`, { method: "POST" });
-    expect(res.status).toBe(402);
-    expect(res.headers.get("payment-required")).toBeTruthy();
+    expect(res.status).toBe(410);
+    expect(res.headers.get("payment-required")).toBeNull();
     const body = await res.json() as Record<string, unknown>;
     expect(body).toMatchObject({
-      error: "top_up_payment_required",
-      credits: 3,
-      amount_atomic: "3000",
-      x402Version: 2,
+      error: "purchases_retired",
     });
     expect(calls.order).toEqual([]);
     expect(ledger.credits).toBe(110_800);
@@ -932,17 +947,17 @@ describe("top-up door lifecycle (W2-2)", () => {
     });
     expect(String(body.finality)).toMatch(/final/i);
 
-    // Replay of the settled authorization: 402, receipt echoed, no fresh
+    // Replay of the settled authorization: 410, receipt echoed, no fresh
     // challenge, and — the real boundary — no second credit.
     const replay = await app.request(`http://localhost${TOP_UP_PATH}`, {
       method: "POST",
       headers: { "PAYMENT-SIGNATURE": signed },
     });
-    expect(replay.status).toBe(402);
+    expect(replay.status).toBe(410);
     expect(replay.headers.get("payment-required")).toBeNull();
     expect(replay.headers.get("payment-response")).toBeTruthy();
     expect(replay.headers.get("link")).toContain(`/v1/x402/payments/${row.authorizationHash}`);
-    expect(((await replay.json()) as { error: string }).error).toBe("top_up_payment_required");
+    expect(((await replay.json()) as { error: string }).error).toBe("purchases_retired");
     expect(calls.finalize).toBe(1);
     expect(calls.settle).toBe(1);
     expect(calls.verify).toBe(1);
@@ -956,7 +971,7 @@ describe("top-up door lifecycle (W2-2)", () => {
       method: "POST",
       headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(payment()) },
     });
-    expect(res.status).toBe(402);
+    expect(res.status).toBe(410);
     expect(calls.order).toEqual([]);
     expect(ledger.credits).toBe(0);
   });
@@ -1172,7 +1187,7 @@ describe("project-scoped payment status route", () => {
     }
   });
 
-  test("pending/no-marker status waits through validBefore grace then directs a no-signature challenge", async () => {
+  test("pending/no-marker status waits through validBefore grace then explains retirement", async () => {
     const row = existingRecord("pending");
     const load = async () => row;
 
@@ -1198,13 +1213,13 @@ describe("project-scoped payment status route", () => {
     const expired = await expiredApp.request(`/v1/x402/payments/${row.authorizationHash}`);
     expect(expired.headers.get("retry-after")).toBeNull();
     expect(await expired.json()).toMatchObject({
-      next_action: "request_fresh_challenge_without_payment_signature",
+      next_action: "new_purchases_retired",
       retry_after_seconds: null,
       reconciles: "payment_and_project_credit_only",
     });
   });
 
-  test("expired inserted status directs a fresh no-signature challenge", async () => {
+  test("expired inserted status explains that new purchases are retired", async () => {
     const row = existingRecord("inserted");
     const router = createX402PaymentsRouter(
       async () => row,
@@ -1215,7 +1230,7 @@ describe("project-scoped payment status route", () => {
     app.route("/v1/x402/payments", router);
     const response = await app.request(`/v1/x402/payments/${row.authorizationHash}`);
     expect(await response.json()).toMatchObject({
-      next_action: "request_fresh_challenge_without_payment_signature",
+      next_action: "new_purchases_retired",
     });
   });
 

@@ -2721,9 +2721,8 @@ app.get("/", async (c) => {
       multiverse_archive: SOPHIA_IDENTITY_INVITATION.archive,
       pathways: "/v1/pathways",
       payment_status: "/v1/x402/payments/{authorization_hash}",
-      // The agent rail: buy N project credits with USDC on Base, no human.
-      // 402 top_up_payment_required → sign → retry; final; capped per request.
-      // Readiness and the cap are published on /public/plans.
+      // Retired endpoint retained for existing admitted payment recovery.
+      // New purchases return 410; current policy is at /public/plans.
       credit_top_up: "/v1/x402/top-up/{credits}",
       love_consent: primary
         ? `/v1/love/consent?agent_id=${primary.id}`

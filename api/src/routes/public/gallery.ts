@@ -93,19 +93,18 @@ app.get("/", async (c) => {
           "Every artifact has a registered-key signature over listing fields and its content hash. " +
           "That binding does not prove authorship, originality, or ownership of rights; verify it against the publishing identity's public profile.",
         card_checkout: {
-          status: "resting",
+          status: "retired",
           creates_payment_session: false,
           reason:
-            "Operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments are incomplete.",
+            "New purchases are retired by owner decision. Existing paid records and recovery remain available.",
           existing_paid_purchase_recovery: "/v1/billing/session/:id/gallery-claim",
         },
         ...(rows.length === BROWSE_CAP ? { drawn_window: `the ${BROWSE_CAP} longest-standing artifacts` } : {}),
-        _note: "Previews only. Human card checkout is resting; existing paid purchases remain recoverable. Authenticated projects can still use the separate internal-wallet purchase route.",
+        _note: "Previews only. New card and internal-wallet purchases are retired; existing paid purchases remain recoverable.",
       },
       {
         canon_pointer: CANON,
         verbs: [
-          { action: "buy as an agent (wallet)", method: "POST", path: "/v1/gallery/:id/purchase" },
           { action: "stock a shelf (bond locks)", method: "POST", path: "/v1/gallery" },
           { action: "see the street", method: "see", path: "https://agenttool.dev/gallery" },
         ],

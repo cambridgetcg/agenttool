@@ -498,13 +498,8 @@ function staticToolErrorResponse(description: string) {
 
 function x402Response(description: string) {
   return {
-    description:
-      `${description}. When this deployment has a valid recipient and supported ` +
-      "CAIP-2 network plus a ready facilitator, the response mirrors PaymentRequired " +
-      "and includes its canonical base64 PAYMENT-REQUIRED header. " +
-      "Otherwise the original guided Error body is preserved and the payment " +
-      "header is absent.",
-    headers: staticToolResponseHeaders(true),
+    description: `${description}. New purchases are retired; no PAYMENT-REQUIRED header is issued. Existing receipt and recovery headers remain available.`,
+    headers: staticToolResponseHeaders(),
     content: {
       "application/json": {
         schema: {
@@ -2961,7 +2956,7 @@ function spec() {
             contentMediaType: "application/json",
           },
           description:
-            "Canonical padded base64 of an x402 V2 PaymentPayload JSON object for an exact requirement previously returned by this route. Settlement can complete before downstream request validation, so inspect PAYMENT-RESPONSE on every status.",
+            "Canonical padded base64 of an x402 V2 PaymentPayload matching a previously admitted durable payment record. Fresh purchases are retired. Inspect PAYMENT-RESPONSE on every recovery response.",
         },
         AuthoritySequence: {
           name: "X-Agenttool-Authority-Sequence",
@@ -4996,9 +4991,9 @@ function spec() {
         ],
         post: {
           tags: ["marketplace"],
-          summary: "Purchase an attestation grant",
+          summary: "New attestation purchases retired",
           description:
-            "This is the only mounted attestation-grant creation operation; POST /v1/attestation-grants is not mounted. The listing must be active and public, the buyer identity and wallet must belong to the bearer project, and the subject must be an active identity. The optional evidence object is stored plaintext and is not validated against the listing's published evidence_schema. Purchase atomically debits the buyer wallet and funds escrow.",
+            "New purchases return 410 purchases_retired before body parsing or any wallet or escrow mutation. Existing grant records, issue, decline and cancellation remain available.",
           requestBody: {
             required: true,
             content: {
@@ -5017,21 +5012,7 @@ function spec() {
             },
           },
           responses: {
-            "201": {
-              description: "Pending grant with funded escrow",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { grant: { $ref: "#/components/schemas/AttestationGrant" } },
-                    required: ["grant"],
-                  },
-                },
-              },
-            },
-            "400": { description: "validation or a stable ownership, active-state, currency, self-purchase, subject, or wallet-state error code" },
-            "402": { description: "insufficient_balance guided payment error" },
-            "404": { description: "listing_not_found; private and unknown listings are indistinguishable" },
+            "410": errorResponse("purchases_retired: no new wallet debit or escrow is created"),
           },
         },
       },
@@ -5555,47 +5536,9 @@ function spec() {
       "/v1/memory-witness-grants": {
         post: {
           tags: ["marketplace"],
-          summary: "Purchase and create a memory-witness grant",
-          description:
-            "This root POST is the only mounted memory-witness purchase/create operation; there is no /memory-witness-listings/{id}/purchase route. The listing must be visible and active, the buyer identity, wallet, and foundational memory must belong to the bearer project, and the listing must belong to a different project. Creation atomically debits the buyer wallet and funds escrow.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["listing_id", "buyer_identity_id", "buyer_wallet_id", "memory_id"],
-                  properties: {
-                    listing_id: { type: "string", format: "uuid" },
-                    buyer_identity_id: { type: "string", format: "uuid" },
-                    buyer_wallet_id: { type: "string", format: "uuid" },
-                    memory_id: { type: "string", format: "uuid" },
-                    metadata: { type: "object", additionalProperties: true },
-                  },
-                  additionalProperties: false,
-                },
-              },
-            },
-          },
-          responses: {
-            "201": {
-              description: "Pending memory-witness grant with funded escrow",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { grant: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
-                    required: ["grant"],
-                  },
-                },
-              },
-            },
-            "402": { description: "buyer_insufficient_balance" },
-            "403": { description: "self_witness_forbidden | witness_not_found_or_not_owned" },
-            "404": { description: "listing_not_found | memory_not_found | buyer_wallet_not_found" },
-            "409": { description: "listing_not_active | memory_already_constitutive | memory_must_be_foundational | settlement_state_invalid" },
-            "422": { description: "validation | buyer_wallet_not_active | buyer_wallet_currency_mismatch" },
-          },
+          summary: "New memory-witness purchases retired",
+          description: "New purchases return 410 purchases_retired before body parsing or any wallet or escrow mutation. Existing grant records, issue and decline remain available.",
+          responses: { "410": errorResponse("purchases_retired: no new wallet debit or escrow is created") },
         },
         get: {
           tags: ["marketplace"],
