@@ -19,20 +19,28 @@ Fly rolls the machines behind health checks, `/health.build` proves what is live
 
 ## What it refuses
 
-- **Pending migrations.** If any file under `api/migrations/` differs between the live revision
-  and the commit, the gate fails with the list. Apply them by hand first
-  (`bin/migrate-pending.sh`, see `DEPLOY-PROCEDURE.md` Phase 1), then re-run. Migrations stay a
-  deliberate act; this workflow never runs SQL.
-- **Missing token.** `FLY_API_TOKEN` must be an app-scoped Fly *deploy* token for `agenttool`
-  (`fly tokens create deploy -a agenttool -n github-actions-deploy-api`). It can build and deploy
-  this app and nothing else.
+- **Pending migrations.** Every run asks the production migration journal through the repo's own
+  `bin/migrate-pending.sh --dry-run`, using the read-only Postgres role `migration_survey`
+  (it can `SELECT meta._migrations` and nothing else; URL in the `MIGRATION_SURVEY_DATABASE_URL`
+  secret and in the keychain as `agenttool-migration-survey-url`). Any pending or checksum-drifted
+  file refuses the deploy, whatever git says. Apply by hand first (`DEPLOY-PROCEDURE.md` Phase 1),
+  then re-run: once the journal is clean the same commit deploys. This workflow never runs SQL.
+- **Missing secrets.** Without `MIGRATION_SURVEY_DATABASE_URL` the gate refuses (it cannot ask the
+  journal, so it fails closed). `FLY_API_TOKEN` must be an app-scoped Fly *deploy* token for
+  `agenttool` (`fly tokens create deploy -a agenttool -n github-actions-deploy-api`); it can build
+  and deploy this app and nothing else.
+- **Unknown live revision.** If `/health` reports a revision this clone does not have, the no-op
+  optimisation is skipped and the commit deploys, still behind the journal survey and the tests.
 
 ## What it proves
 
 The image is built remotely from the exact commit with `AGENTTOOL_GIT_REVISION=<sha>` and
-`AGENTTOOL_SOURCE_DIRTY=false`. The verify step polls `/health` until `build.revision` equals the
-commit and `build.dirty` is `false`; the run's step summary is the receipt and lists the fleet
-as it was before, with the rollback command.
+`AGENTTOOL_SOURCE_DIRTY=false`. After the rollout, every started `app` Machine is asked directly
+(`fly-force-instance-id`) for `/health` until it reports that exact commit with `dirty=false`, and
+then for `/public/window`, a route that reads Postgres, so a deploy whose image cannot reach the
+database does not pass. A live build marked `dirty=true` is never treated as a no-op; it is replaced
+by a clean build. The run's step summary is the receipt and lists the fleet as it was before, with
+the rollback command.
 
 ## Rollback
 

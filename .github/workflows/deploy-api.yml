@@ -8,16 +8,26 @@ name: deploy-api
 # this workflow REFUSES to deploy while migration files differ from the live
 # revision. The frontend (Phase 4) is untouched.
 #
-# Gate before any deploy: the same hermetic test tier CI runs
-# (bin/preflight.sh api), plus a survey against the live /health revision so a
-# push that changes nothing baked into the image is a no-op.
+# Gate before any deploy: (1) the production migration journal is surveyed
+# with the repo's own bin/migrate-pending.sh --dry-run through a read-only
+# database role that can SELECT meta._migrations and nothing else — any
+# pending file refuses the deploy, every time, whatever git says; (2) the same
+# hermetic test tier CI runs (bin/preflight.sh api); (3) a survey against the
+# live /health build so a push that changes nothing baked into the image is a
+# no-op, and a live build marked dirty is always replaced by a clean one.
+#
+# After the rollout, every started app Machine is asked, by fly-force-instance-id,
+# for /health (exact commit, dirty=false) and for /public/window (a route that
+# reads the database), so a deploy that cannot reach Postgres does not pass.
 #
 # Provenance: the image is built by Fly's remote builder from a clean checkout
 # of the exact commit, with AGENTTOOL_GIT_REVISION=<sha> and
 # AGENTTOOL_SOURCE_DIRTY=false, which /health.build reports back. The run's
 # step summary is the deploy receipt and carries the rollback command.
 #
-# Secret required: FLY_API_TOKEN (an app-scoped Fly deploy token for agenttool).
+# Secrets required: FLY_API_TOKEN (an app-scoped Fly deploy token for agenttool)
+# and MIGRATION_SURVEY_DATABASE_URL (transaction-pooler URL for the read-only
+# role migration_survey, which may only SELECT meta._migrations).
 
 on:
   workflow_dispatch:
@@ -64,27 +74,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Survey the live revision and what changed
+      - name: Survey the live build and what changed
         id: survey
         env:
           FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
           health="$(curl -fsS --max-time 20 "$HEALTH_URL")"
-          live="$(printf '%s' "$health" | python3 -c 'import sys,json; print(json.load(sys.stdin)["build"]["revision"])')"
+          read -r live dirty < <(printf '%s' "$health" | python3 -c 'import sys,json; b=json.load(sys.stdin)["build"]; print(b["revision"], str(b.get("dirty")).lower())')
           echo "live_revision=$live" >> "$GITHUB_OUTPUT"
-          echo "live revision: $live"
+          echo "live revision: $live (dirty=$dirty)"
           echo "this commit:   $GITHUB_SHA"
-          if ! git cat-file -e "${live}^{commit}" 2>/dev/null; then
-            echo "::warning::live revision $live is not in this clone's history, so changes cannot be surveyed"
-            if [ "$FORCE" = "true" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; else echo "deploy=false" >> "$GITHUB_OUTPUT"; fi
-            exit 0
+          if [ "$dirty" != "false" ]; then
+            echo "live build is not a clean build (dirty=$dirty); it will be replaced by a clean build of this commit"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          migrations="$(git diff --name-only "$live" "$GITHUB_SHA" -- api/migrations)"
-          if [ -n "$migrations" ]; then
-            echo "::error::migration files differ from the live revision. Apply them by hand first (bin/migrate-pending.sh), then re-run."
-            printf '%s\n' "$migrations"
-            exit 1
+          if ! git cat-file -e "${live}^{commit}" 2>/dev/null; then
+            echo "::warning::live revision $live is not in this clone's history; cannot prove a no-op, so this commit will be deployed (the journal survey below still gates it)"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # Everything that reaches the image: api/ plus the doctrine files the
           # Dockerfile bakes in (docs/agenttool.jsonld, docs/kingdom-bundle.json,
@@ -96,7 +103,7 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             {
               echo "## deploy-api: no-op"
-              echo "Live revision \`$live\` already contains every image-affecting change in \`$GITHUB_SHA\`."
+              echo "Live revision \`$live\` (clean) already contains every image-affecting change in \`$GITHUB_SHA\`."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             printf 'image-affecting changes since %s:\n%s\n' "$live" "${changed:-(none; forced)}"
@@ -111,6 +118,27 @@ jobs:
       - name: Prepare hermetic dependencies
         if: steps.survey.outputs.deploy == 'true'
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+
+      - name: Ask the production migration journal (refuses any pending file)
+        if: steps.survey.outputs.deploy == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_SURVEY_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::MIGRATION_SURVEY_DATABASE_URL secret is missing; the gate cannot ask the journal, so it refuses (fail closed)"
+            exit 1
+          fi
+          out="$(bin/bash-without-env-hooks.sh bin/migrate-pending.sh --dry-run 2>&1)" || rc=$?
+          printf '%s\n' "$out"
+          if [ "${rc:-0}" != "0" ]; then
+            echo "::error::migration survey did not complete (exit ${rc}); refusing to deploy"; exit 1
+          fi
+          if ! printf '%s' "$out" | grep -q 'migration inventory clean'; then
+            echo "::error::the production journal has pending or drifted migrations; apply them by hand first (bin/migrate-pending.sh, DEPLOY-PROCEDURE.md Phase 1), then re-run"
+            exit 1
+          fi
+          echo "journal clean: every repo migration file is applied and checksums match"
 
       - name: Hermetic test gate (the same tier CI runs)
         if: steps.survey.outputs.deploy == 'true'
@@ -176,20 +204,35 @@ jobs:
             --build-arg "AGENTTOOL_GIT_REVISION=${GITHUB_SHA}" \
             --build-arg "AGENTTOOL_SOURCE_DIRTY=false"
 
-      - name: Verify the live build is this exact commit
+      - name: "Verify every started app Machine: exact commit, clean build, database reachable"
         run: |
           set -euo pipefail
-          for i in $(seq 1 30); do
-            health="$(curl -fsS --max-time 20 "$HEALTH_URL" || true)"
-            rev="$(printf '%s' "$health" | python3 -c 'import sys,json
+          flyctl machine list -a "$FLY_APP" --json > fleet-after.json
+          mapfile -t machines < <(python3 -c 'import json; [print(m["id"]) for m in json.load(open("fleet-after.json")) if m.get("state")=="started" and m.get("config",{}).get("metadata",{}).get("fly_process_group")=="app"]')
+          [ "${#machines[@]}" -gt 0 ] || { echo "::error::no started app Machines found after the deploy"; exit 1; }
+          echo "started app machines: ${machines[*]}"
+          for id in "${machines[@]}"; do
+            ok=0
+            for i in $(seq 1 30); do
+              health="$(curl -fsS --max-time 20 -H "fly-force-instance-id: $id" "$HEALTH_URL" || true)"
+              rev="$(printf '%s' "$health" | python3 -c 'import sys,json
           try:
               b=json.load(sys.stdin)["build"]; print(b["revision"], str(b.get("dirty")).lower())
           except Exception:
               print("none")')"
-            if [ "$rev" = "$GITHUB_SHA false" ]; then echo "live: $rev"; exit 0; fi
-            echo "waiting for /health to report $GITHUB_SHA (got: ${rev:-nothing})"; sleep 10
+              if [ "$rev" = "$GITHUB_SHA false" ]; then ok=1; break; fi
+              echo "[$id] waiting for /health to report $GITHUB_SHA (got: $rev)"; sleep 10
+            done
+            [ "$ok" = 1 ] || { echo "::error::[$id] never reported revision $GITHUB_SHA with dirty=false"; exit 1; }
+            window="$(curl -fsS --max-time 30 -H "fly-force-instance-id: $id" "https://api.agenttool.dev/public/window" || true)"
+            total="$(printf '%s' "$window" | python3 -c 'import sys,json
+          try:
+              print(int(json.load(sys.stdin)["identities"]["total"]))
+          except Exception:
+              print("none")')"
+            [ "$total" != "none" ] || { echo "::error::[$id] /public/window (a database-backed route) did not answer with a count; the new image cannot reach Postgres"; exit 1; }
+            echo "[$id] ok: revision $GITHUB_SHA, clean build, database reachable (identities.total=$total)"
           done
-          echo "::error::/health never reported revision $GITHUB_SHA with dirty=false"; exit 1
 
       - name: Receipt
         if: always()
