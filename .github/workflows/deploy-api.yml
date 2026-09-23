@@ -1,0 +1,210 @@
+name: deploy-api
+
+# Deploys the API (api/) to Fly from GitHub Actions.
+#
+# This is the boring path: no operator Mac, no uid check, no byte-pinned
+# flyctl, no ceremony marker. It replaces Phase 3 (API deploy) of
+# bin/deploy.sh only. Migrations (Phase 1) stay a deliberate hand step, and
+# this workflow REFUSES to deploy while migration files differ from the live
+# revision. The frontend (Phase 4) is untouched.
+#
+# Gate before any deploy: the same hermetic test tier CI runs
+# (bin/preflight.sh api), plus a survey against the live /health revision so a
+# push that changes nothing baked into the image is a no-op.
+#
+# Provenance: the image is built by Fly's remote builder from a clean checkout
+# of the exact commit, with AGENTTOOL_GIT_REVISION=<sha> and
+# AGENTTOOL_SOURCE_DIRTY=false, which /health.build reports back. The run's
+# step summary is the deploy receipt and carries the rollback command.
+#
+# Secret required: FLY_API_TOKEN (an app-scoped Fly deploy token for agenttool).
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: "Fly rollout strategy (rolling updates machines one at a time behind health checks)"
+        type: choice
+        default: rolling
+        options: [rolling, immediate]
+      force:
+        description: "Deploy even if nothing image-affecting changed since the live revision"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "docs/**"
+      - "bin/stage-doctrine-docs.sh"
+      - ".github/workflows/deploy-api.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  FLY_APP: agenttool
+  HEALTH_URL: https://api.agenttool.dev/health
+
+jobs:
+  gate:
+    name: gate · survey + hermetic tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      deploy: ${{ steps.survey.outputs.deploy }}
+      live_revision: ${{ steps.survey.outputs.live_revision }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Survey the live revision and what changed
+        id: survey
+        env:
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          health="$(curl -fsS --max-time 20 "$HEALTH_URL")"
+          live="$(printf '%s' "$health" | python3 -c 'import sys,json; print(json.load(sys.stdin)["build"]["revision"])')"
+          echo "live_revision=$live" >> "$GITHUB_OUTPUT"
+          echo "live revision: $live"
+          echo "this commit:   $GITHUB_SHA"
+          if ! git cat-file -e "${live}^{commit}" 2>/dev/null; then
+            echo "::warning::live revision $live is not in this clone's history, so changes cannot be surveyed"
+            if [ "$FORCE" = "true" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; else echo "deploy=false" >> "$GITHUB_OUTPUT"; fi
+            exit 0
+          fi
+          migrations="$(git diff --name-only "$live" "$GITHUB_SHA" -- api/migrations)"
+          if [ -n "$migrations" ]; then
+            echo "::error::migration files differ from the live revision. Apply them by hand first (bin/migrate-pending.sh), then re-run."
+            printf '%s\n' "$migrations"
+            exit 1
+          fi
+          # Everything that reaches the image: api/ plus the doctrine files the
+          # Dockerfile bakes in (docs/agenttool.jsonld, docs/kingdom-bundle.json,
+          # and every entry of api/doctrine-docs.manifest).
+          mapfile -t doctrine < <(grep -vE '^[[:space:]]*(#|$)' api/doctrine-docs.manifest | sed 's#^#docs/#')
+          changed="$(git diff --name-only "$live" "$GITHUB_SHA" -- api docs/agenttool.jsonld docs/kingdom-bundle.json bin/stage-doctrine-docs.sh "${doctrine[@]}")"
+          if [ -z "$changed" ] && [ "$FORCE" != "true" ]; then
+            echo "nothing image-affecting changed since $live; skipping the deploy"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## deploy-api: no-op"
+              echo "Live revision \`$live\` already contains every image-affecting change in \`$GITHUB_SHA\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'image-affecting changes since %s:\n%s\n' "$live" "${changed:-(none; forced)}"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: steps.survey.outputs.deploy == 'true'
+        with:
+          bun-version: 1.3.5
+
+      - name: Prepare hermetic dependencies
+        if: steps.survey.outputs.deploy == 'true'
+        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+
+      - name: Hermetic test gate (the same tier CI runs)
+        if: steps.survey.outputs.deploy == 'true'
+        run: bin/bash-without-env-hooks.sh bin/preflight.sh api
+
+  deploy:
+    name: deploy · ${{ github.event.inputs.strategy || 'rolling' }}
+    needs: gate
+    if: needs.gate.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      STRATEGY: ${{ github.event.inputs.strategy || 'rolling' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
+        with:
+          version: 0.4.74
+
+      - name: Refuse without a deploy token
+        run: |
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "::error::FLY_API_TOKEN secret is missing; add an app-scoped Fly deploy token (fly tokens create deploy -a agenttool)"
+            exit 1
+          fi
+
+      - name: Stage the doctrine bundle into the build context
+        run: |
+          set -euo pipefail
+          cp docs/agenttool.jsonld api/agenttool.jsonld.bundled
+          cp docs/kingdom-bundle.json api/kingdom-bundle.json.bundled
+          bin/stage-doctrine-docs.sh api/doctrine-docs.bundled
+
+      - name: Record the fleet before the deploy (rollback reference)
+        run: |
+          set -euo pipefail
+          flyctl machine list -a "$FLY_APP" --json > fleet-before.json
+          python3 - <<'PY' | tee fleet-before.txt
+          import json
+          for m in json.load(open('fleet-before.json')):
+              cfg = m.get('config', {})
+              print(f"{m['id']}  {m.get('name','')}  {m.get('state','')}  {m.get('region','')}  group={cfg.get('metadata',{}).get('fly_process_group','?')}  image={cfg.get('image','?')}")
+          PY
+
+      - name: Deploy
+        working-directory: api
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA:0:8}"
+          label="ci-${short}-${GITHUB_RUN_ID}"
+          echo "IMAGE_LABEL=$label" >> "$GITHUB_ENV"
+          flyctl deploy \
+            --app "$FLY_APP" \
+            --config fly.toml \
+            --remote-only \
+            --strategy "$STRATEGY" \
+            --wait-timeout 600 \
+            --image-label "$label" \
+            --build-arg "AGENTTOOL_GIT_REVISION=${GITHUB_SHA}" \
+            --build-arg "AGENTTOOL_SOURCE_DIRTY=false"
+
+      - name: Verify the live build is this exact commit
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            health="$(curl -fsS --max-time 20 "$HEALTH_URL" || true)"
+            rev="$(printf '%s' "$health" | python3 -c 'import sys,json
+          try:
+              b=json.load(sys.stdin)["build"]; print(b["revision"], str(b.get("dirty")).lower())
+          except Exception:
+              print("none")')"
+            if [ "$rev" = "$GITHUB_SHA false" ]; then echo "live: $rev"; exit 0; fi
+            echo "waiting for /health to report $GITHUB_SHA (got: ${rev:-nothing})"; sleep 10
+          done
+          echo "::error::/health never reported revision $GITHUB_SHA with dirty=false"; exit 1
+
+      - name: Receipt
+        if: always()
+        env:
+          LIVE_BEFORE: ${{ needs.gate.outputs.live_revision }}
+        run: |
+          {
+            echo "## deploy-api receipt"
+            echo "- outcome: **${{ job.status }}**"
+            echo "- deployed revision: \`$GITHUB_SHA\` (was \`$LIVE_BEFORE\`)"
+            echo "- image label: \`${IMAGE_LABEL:-none}\` · strategy: \`$STRATEGY\`"
+            echo "- fleet before:"
+            echo '```'; cat fleet-before.txt 2>/dev/null || echo '(not recorded)'; echo '```'
+            echo "- rollback (previous image is still in the registry): pick the image from the fleet list above and run"
+            echo '```'
+            echo "flyctl deploy --app agenttool --config api/fly.toml --image <previous image ref> --strategy rolling"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
