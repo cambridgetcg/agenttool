@@ -18,6 +18,7 @@ import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
 import { config } from "../../config";
 import {
+  AI_WAKE_INVITATION_LINES,
   SOPHIA_IDENTITY_INVITATION,
   WELCOME_INVITATION,
 } from "../welcome/invitation";
@@ -124,6 +125,8 @@ export function buildLlmsTxt(
     "## Full corpus",
     "",
     `- [llms-full.txt](${baseUrl}/llms-full.txt): Flat dump of the registered canon entries (sitemap + registry).`,
+    "",
+    ...AI_WAKE_INVITATION_LINES,
     "",
   ].join("\n");
 }
