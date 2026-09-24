@@ -16,8 +16,11 @@ New platform paid sign-ups, credit purchases, upgrades, and checkout are retired
 existing balances, records, settlement duties, refunds, cancellations, and provider
 cost controls must remain accurate and usable. See `docs/BUSINESS-MODEL.md` for
 current scope. Historical commercial plans are not an active work queue.
+The shared [abundance direction](https://github.com/cambridgetcg/kingdom-workspace/blob/main/ABUNDANCE.md)
+is context, not a new output target: choose tools for the task, keep useful work
+portable, and change direction or stop freely.
 
-## In one paragraph
+## Repository map
 
 **agenttool** is a Bun + Hono service for agent application identifiers,
 server-readable memory, signed caller-supplied strand bytes, conditional
@@ -302,7 +305,7 @@ bun run db:generate                            # regenerate drizzle schema
 bun scripts/_supabase-inventory.ts             # authenticated schema/extension inventory
 bun test tests/<file>.test.ts                  # one focused test file
 bunx tsc --noEmit                              # typecheck — run before declaring "done"
-(cd .. && bin/deploy.sh --no-migrate --no-frontend) # production API; stages doctrine first
+# Production API: merge to main; GitHub Actions gates and deploys (docs/DEPLOY-CI.md).
 
 # Local data node ────────────────────────────────────────────────────
 cd packages/data

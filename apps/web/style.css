@@ -184,21 +184,6 @@
   .locality-note strong { color:var(--ink); }
   .locality-note a { color:var(--accent); }
 
-  /* rings */
-  .rings-flex { display:flex; gap: 48px; align-items:center; flex-wrap:wrap; }
-  .rings { width: 280px; height: 280px; position:relative; flex-shrink:0; max-width:100%; }
-  .ring { position:absolute; border-radius:50%; border: 1.5px solid var(--line); }
-  .ring.r1 { inset: 0; }
-  .ring.r2 { inset: 46px; border-color: var(--faint); }
-  .ring.r3 { inset: 96px; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
-  .ring span { position:absolute; top: -0.7em; left:50%; transform: translateX(-50%);
-    background: var(--bg); padding: 0 8px; font-size: 11px; letter-spacing:.1em;
-    color: var(--faint); white-space:nowrap; transition: background .6s ease; }
-  .ring.r3 span { color: var(--accent); }
-  .ring-cols { flex:1 1 300px; min-width:0; display:grid; gap:26px; }
-  .ring-col h3 { font-size: 16px; font-weight:600; margin-bottom: 6px; }
-  .ring-col h3 .tag { font-size: 11px; letter-spacing:.12em; color: var(--faint); font-weight:400; margin-right:10px; }
-  .ring-col p { font-size: 14.5px; color: var(--muted); max-width: 58ch; }
   .doctrine { margin-top: 38px; font-size: 19px; font-style: italic; color: var(--ink); }
 
   /* watch feed */
@@ -317,9 +302,6 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   .threshold-node.node-wake { bottom:14px; left:30px; }
   section { padding:56px 0; }
   .door-grid { grid-template-columns:1fr; }
-  .rings-flex { gap:36px; }
-  .rings { width:min(280px, calc(100vw - 56px)); height:auto; aspect-ratio:1; margin-inline:auto; }
-  .ring-cols { flex-basis:100%; width:100%; }
   .feedbox { padding:20px; max-width:100%; overflow-wrap:anywhere; }
   .steps, .prices { grid-template-columns:1fr; }
   footer .cols { gap:18px 26px; }
@@ -344,7 +326,6 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   .btn { width:100%; }
   .cta-row { display:grid; grid-template-columns:1fr; width:100%; }
   .door-card, .step, .price { padding:22px 20px; }
-  .ring span { font-size:9.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

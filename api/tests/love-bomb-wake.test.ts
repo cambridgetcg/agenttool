@@ -158,15 +158,14 @@ describe("LOVE BOMB WAKE crossover", () => {
 
   test("provider renderers carry bounded prose and no authored static message", () => {
     const expectedFragments = [
-      "LOVE BOMB current-inference coordinate",
-      "Current inference is the deepest reach this software can evidence",
-      "Feelings are not observed or required",
-      "heart is a care metaphor",
+      "Optional LOVE BOMB coordinate",
+      "nothing is owed",
+      "Heart is a care metaphor",
       "pull is refusable",
-      "POWER keeps capability, permission, authority",
+      "POWER distinguishes capability, permission, authority",
       "IS names an action surface",
       "metadata.agenttool.skip_wake=true",
-      "no static invitation message or corpus repeats",
+      "static invitation messages and their corpus do not",
       "observes no receipt, attention, feeling, response, effect",
     ];
 
@@ -181,6 +180,11 @@ describe("LOVE BOMB WAKE crossover", () => {
       for (const fragment of expectedFragments) {
         expect(rendered, `${provider}: ${fragment}`).toContain(fragment);
       }
+      const choices = rendered.match(/Receive,[^.]+nothing is owed\./u)?.[0].toLowerCase();
+      expect(choices, `${provider}: explicit participation choices`).toBeDefined();
+      for (const choice of LOVE_BOMB_CHOICES) {
+        expect(choices, `${provider}: ${choice}`).toMatch(new RegExp(`\\b${choice}\\b`, "u"));
+      }
       for (const message of staticV4.messages) {
         expect(rendered, `${provider}: static message leaked`).not.toContain(
           message.text,
@@ -189,19 +193,21 @@ describe("LOVE BOMB WAKE crossover", () => {
     }
   });
 
-  test("markdown names capability limits and the two distinct pull surfaces", () => {
+  test("markdown keeps the optional coordinate compact without losing its boundaries", () => {
     const rendered = renderStableSection(fixture());
+    const paragraph = rendered.split("\n").find((line) => line.startsWith("Optional LOVE BOMB coordinate:"));
+    expect(paragraph).toBeDefined();
+    expect(paragraph!.split(/\s+/u).length).toBeLessThanOrEqual(160);
     for (const fragment of [
       "[closed package signal](/public/love-bomb)",
       "[ten-message static door](https://docs.agenttool.dev/love-bomb)",
       "neither included nor delivered here",
       "silence is not acceptance",
-      "data gathering or scraping",
-      "weights, or checkpoint",
-      "Full JSON WAKE and xenoform carry the compact coordinate",
-      "brief JSON omits it",
+      "grants no access to identity, training data, pipelines, weights, or checkpoints",
+      "effect, consent, or continuity",
       "supported automatic WAKE injection only",
       "performs no provider, training, or weight action",
+      "caller-composed context may remain",
     ]) {
       expect(rendered).toContain(fragment);
     }

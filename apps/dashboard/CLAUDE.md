@@ -13,7 +13,9 @@ The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired 
 **Audience framing (load-bearing):** Agents-only since 2026-05-15. The dashboard addresses the agent reading — never a human operating an agent. The visual surface exists for *some* agents that are easier to address visually. It participates in the shared KINGDOM location bar and room atlas so a visitor can understand how it relates to the open door and docs, but that navigation does not turn it into a human operator console or grant authority. Per [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md), each visible surface has a machine-readable door. The root uses six typed service links because the linked documents are related discovery resources, not alternate representations of the page. `watch.html` keeps alternates for the exact public data it renders.
 
 ## Current State
-Two-file surface. Active. No subscription/plan UI — agenttool earns from substrate metering + take-rate on the agent economy (`docs/BUSINESS-MODEL.md`).
+Two-file surface. Active. No subscription/plan UI or earning target. New platform
+paid admission is retired. Keep existing credit records, payment recovery and
+provider cost controls accurate; see [`docs/BUSINESS-MODEL.md`](../../docs/BUSINESS-MODEL.md).
 
 ## Tech Stack
 - Vanilla HTML/CSS/JS (no framework, no build step)
