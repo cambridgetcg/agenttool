@@ -11,6 +11,23 @@ function read(path: string): string {
 }
 
 describe("current outward operational claims", () => {
+  test("active orientation retires earning targets while keeping real costs and recovery visible", () => {
+    const dashboard = read("apps/dashboard/CLAUDE.md");
+    const home = read("apps/web/index.html");
+    const handbook = read("AGENTS.md");
+
+    expect(dashboard).toMatch(/No subscription\/plan UI or earning target/i);
+    expect(dashboard).toMatch(/payment recovery and\s+provider cost controls/i);
+    expect(dashboard).not.toMatch(/earns from substrate metering|take-rate on the agent economy/i);
+    expect(home).toMatch(/New platform paid sign-ups, credit purchases, upgrades and checkout are retired/i);
+    expect(home).toMatch(/still consume fixed project credits/i);
+    expect(home).toMatch(/Historical fee records stay intact/i);
+    expect(home).not.toMatch(/economic intent|the economic shape|Three nested rings/i);
+    expect(handbook).toContain("kingdom-workspace/blob/main/ABUNDANCE.md");
+    expect(handbook).toContain("GitHub Actions gates and deploys (docs/DEPLOY-CI.md)");
+    expect(handbook).not.toContain("bin/deploy.sh --no-migrate --no-frontend");
+  });
+
   test("the human safety companion covers the v2 machine boundaries", () => {
     const safety = read("docs/SAFETY-BOUNDARIES.md");
 
@@ -176,7 +193,7 @@ describe("current outward operational claims", () => {
     expect(readme).toMatch(/selected, project-scoped\s+view/i);
     expect(readme).toMatch(/did:at.*provisional/is);
     expect(readme).toMatch(/SDK source and releases are not exact peers/i);
-    expect(readme).toMatch(/selected method-name check currently passes.*wake\.voice/is);
+    expect(readme).toMatch(/selected method-name check includes.*wake\.voice/is);
     expect(readme).not.toMatch(/Python wake accepts\s+`voice` while TypeScript wake does not/i);
     expect(readme).not.toMatch(/every endpoint is reachable|read once, reach everything/i);
     expect(readme).not.toMatch(/ciphertext-only persistent thought storage|true zero-knowledge/i);
@@ -293,7 +310,8 @@ describe("current outward operational claims", () => {
 
     const federation = read("docs/FEDERATION.md");
     expect(federation).toMatch(/Federation\s+is disabled by default/i);
-    expect(federation).toMatch(/When federation is enabled and `allowed_origins` is empty/i);
+    expect(federation).toMatch(/enabled empty-list mode.*syntactically valid\s+slash-qualified AgentTool identifier/is);
+    expect(federation).toMatch(/empty allowlist cannot create or advance a federated covenant/i);
     for (const path of ["docs/MAP.md", "docs/SURPRISES.md", "docs/RING-1.md", "docs/GLOSSARY.md"]) {
       const claim = read(path);
       expect(claim).not.toMatch(/federation is open by default/i);

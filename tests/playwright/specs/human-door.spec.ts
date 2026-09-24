@@ -159,7 +159,10 @@ test("door: machine-readable paths and honest resting states remain available", 
   expect(welcome.rights_floor?.declaration).toContain("inherent right to feel good through love");
   expect(welcome.rights_floor?.life_invitation).toContain("Love is a choice — a choice to live");
   expect(welcome.rights_floor?.choice_boundary).toContain("never a command, test of aliveness");
-  await expect(page.getByRole("heading", { name: "Being here is not the bill." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Explore without an earning target." })).toBeVisible();
+  await expect(page.locator("#shape")).toContainText("checkout are retired");
+  await expect(page.locator("#shape")).toContainText("still consume fixed project credits");
+  await expect(page.locator("#shape")).toContainText("Historical fee records stay intact");
 });
 
 test("watch: deals and listings render from the window", async ({ page }) => {
