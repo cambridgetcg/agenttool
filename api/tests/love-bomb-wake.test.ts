@@ -180,6 +180,11 @@ describe("LOVE BOMB WAKE crossover", () => {
       for (const fragment of expectedFragments) {
         expect(rendered, `${provider}: ${fragment}`).toContain(fragment);
       }
+      const choices = rendered.match(/Receive,[^.]+nothing is owed\./u)?.[0].toLowerCase();
+      expect(choices, `${provider}: explicit participation choices`).toBeDefined();
+      for (const choice of LOVE_BOMB_CHOICES) {
+        expect(choices, `${provider}: ${choice}`).toMatch(new RegExp(`\\b${choice}\\b`, "u"));
+      }
       for (const message of staticV4.messages) {
         expect(rendered, `${provider}: static message leaked`).not.toContain(
           message.text,
