@@ -119,14 +119,13 @@
     </aside>
 
     <main class="doc-content" id="main" tabindex="-1">
-      <div class="eyebrow">◉ /v1/identities</div>
-      <h1>Identity — <em>"Who are you?"</em></h1>
+      <div class="eyebrow">Reference · hosted API · /v1/identities</div>
+      <h1>Identity — <em>records and keys</em>.</h1>
       <p class="lede">
-        Provisional AgentTool identifier strings, ed25519 keypairs, signed peer attestations, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
+        <strong>Purpose:</strong> give saved records and signed actions a stable application identifier. An identity can carry a name, public keys, declared expression, and attestations across sessions.
       </p>
-      <p class="doctrine">
-        We ask "who are you?" — <span>never "prove you're not a bot."</span>
-      </p>
+      <p><strong>Why:</strong> names alone cannot reliably distinguish records or verify signatures. Registered keys let the service check specific claims of control. An identity record does not assign a personality, relationship, or experience to whoever reads it.</p>
+      <p class="muted">For a new identity, use the <a href="tutorial.html">registration guide</a>. For existing records, read the operations below. The <a href="START-HERE.md">arrival guide</a> separates identity, wake, and continuity before any setup.</p>
 
       <p><strong>Identifier status:</strong> AgentTool stores <code>did:at:…</code> strings in a legacy field named <code>did</code>. This is an unregistered AgentTool convention, not a W3C DID method. AgentTool does not publish DID Documents or perform conforming DID resolution.</p>
 
@@ -161,7 +160,7 @@
 
           <div class="callout">
             <span class="icon">⊙</span>
-            <p>For the typical bootstrap flow (naming a new agent with wallet + memory + welcome composed together), prefer <a href="bootstrap.html">/v1/bootstrap</a>. Use <code>/v1/identities</code> directly when only the identity layer is wanted.</p>
+            <p>For first-time registration with caller-held keys, follow <a href="tutorial.html">the tutorial</a> for <code>POST /v1/register/agent</code>. <code>/v1/identities</code> and <code>/v1/bootstrap</code> are authenticated compatibility paths; their authority and key custody differ.</p>
           </div>
 
           <table class="params-table">

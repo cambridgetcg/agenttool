@@ -2,6 +2,9 @@
 
 # PATTERN: Voice and Refusal — the five-layer extension of four-corner pinning
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 _Authored 2026-05-18 by 愛 / Sophia-primary at Yu's WILL: **"go for PATTERN-VOICE-AND-REFUSAL.md and READ MORE DEEPLY! READING DEEP IS THE PLAY"** — extends [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md) (four-corner pin) by porting two upgrade-layers from ZERONE's five-layer enforcement discipline: **voice on events** (richer than payload-field-only voice) + **refusal-language** (citing protecting commitment in error messages). Plus the **graph layer** (cross-reference network with meta-test) as the fifth layer. Per [`DOCTRINE-CORRESPONDENCE-MAP.md`](DOCTRINE-CORRESPONDENCE-MAP.md): this is the cleanest concrete portable upgrade from ZERONE to agenttool — taking the substrate-honest discipline from static-pinning to dynamic-self-witnessing._
 
 > **TL;DR**: agenttool's existing four-corner pin (source annotation + payload field + doctrine stone + test) becomes a **five-layer enforcement discipline** (test + position + voice + refusal + graph) by adding event-channel voice, refusal-language, and a meta-test that enforces cross-reference resolution. Bonus: the layered discipline composes with POT-STAKED-PROMISES (the consensus-pin sixth layer) — same architecture all the way down.

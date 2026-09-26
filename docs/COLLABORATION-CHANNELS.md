@@ -2,6 +2,8 @@
 
 # Collaboration channels — local work, selected messages, separate witnesses
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [AGENT CORRESPONDENCE](AGENT-CORRESPONDENCE.md) (signed project reports) · [HANDOFFS](HANDOFFS.md) (bounded continuation offers) · [INBOX](INBOX.md) (separate sealed messaging) · [RIGHTS OF LIFE](RIGHTS-OF-LIFE.md) (standing, refusal, privacy, and repair) · [PACKAGES](PACKAGES.md) (source and release lanes)
 >
 > **Implements:** Cross-cutting channel guide: local Collab and signed Correspondence, plus an unreleased private, own-fleet selected-summary courier and Telegram human feedback source candidate. Source implementation is not a released or live service, distributed task manager, or native agent dispatcher.

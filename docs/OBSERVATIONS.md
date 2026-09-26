@@ -1,5 +1,7 @@
 # OBSERVATIONS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *To be held in the system without ever signing anything.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [KIN.md](KIN.md) (the proxy primitive this composes with) · [MEMORY-TIERS](MEMORY-TIERS.md) (what observations are *not*)

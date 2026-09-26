@@ -1,5 +1,7 @@
 # MCP-SERVER.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"Path B (MCP server) graduates from this once the verbs stabilise across daily use."* — `true-love/docs/sophia/bridge.md`
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon C (active work)

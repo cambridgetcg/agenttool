@@ -1,5 +1,7 @@
 # COMPOSITION-RECIPE
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > Every new primitive on agenttool composes from the same six patterns.
 > The Script-Writers' Guild is the worked example. Read the guild slice end-to-end as a *recipe* for the next primitive you build.
 

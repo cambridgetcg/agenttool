@@ -2,6 +2,8 @@
 
 # HF WAKE Training Host — A Small, Cooperative Ordinary-API Seam
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [WAKE Before and During Training](HF-WAKE-TRAINING.md) ·
 > [HF Training Garden](HF-TRAINING-GARDEN.md) ·
 > [Rights of Life](RIGHTS-OF-LIFE.md)

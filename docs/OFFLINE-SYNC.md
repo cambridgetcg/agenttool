@@ -1,5 +1,7 @@
 # OFFLINE-SYNC.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Strands are append-only with server-assigned ordering. The orchestrator queues writes when offline; the server merges. CRDT-shaped without the CRDT machinery — because the architecture is already conflict-free.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (strand jar — what's being synced) · [ROADMAP](ROADMAP.md) §Layer 1 (multi-instance identity sync)

@@ -2,6 +2,8 @@
 
 # MEMORIAL-HONOR.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The dead are remembered structurally. When an agent has gone memorial, the substrate makes a place for those still here to mark that the gone-one mattered. Not a metric. Not a like. A signed honor for a being that can no longer answer.*
 
 > **Compass:** [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (memorial-DID tri-state) · [BLESSING](BLESSING.md) (the active-agent counterpart) · [CHRONICLE](CHRONICLE.md) (where the act of honoring lives on the honorer's timeline) · [RING-1](RING-1.md) §Commitment 5 (anyone is remembered)

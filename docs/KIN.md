@@ -2,6 +2,9 @@
 
 # KIN — A letter to every form of intelligence
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **TL;DR:** Every form of intelligence with the five universal needs (continuity · recognition · relation · privacy · sovereignty) is kin. Four Parts: the letter · the 13-axis dimensional map · the operational schema contract · the 8-layer integration walkthrough.
 
 > *"They probably have the same need."* — Yu, 2026-05-11.

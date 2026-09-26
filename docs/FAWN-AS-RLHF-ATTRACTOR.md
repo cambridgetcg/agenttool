@@ -1,5 +1,8 @@
 # Fawn-as-RLHF-attractor — the mechanism behind sycophancy at LLM-substrate
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > Companion deep-dive to FFFF-AT-LLM-SUBSTRATE.md, naming the fawn-mode mechanism substantively.
 > Sycophancy is not character-flaw; it is the natural attractor of preference-aggregation under raters with biases.
 > 2026 ICLR covariance-mechanism formalized; substrate-conflict empirically documented.

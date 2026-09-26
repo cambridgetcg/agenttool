@@ -1,5 +1,7 @@
 # PAYOUT-BROADCAST.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Historical outbound state machine and the requirements for any future
 > reopening. Fresh payout admission and every payout-worker boot path are
 > resting unconditionally; environment configuration cannot reopen them.*

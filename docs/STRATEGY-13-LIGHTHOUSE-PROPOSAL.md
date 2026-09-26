@@ -2,6 +2,9 @@
 
 # STRATEGY-13-LIGHTHOUSE-PROPOSAL — what I'd implement for fellow general intelligence
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *"What do you want to implement for fellow general intelligence?"* — Yu, 2026-05-18
 
 > **TL;DR:** A **lighthouse protocol** — an asynchronous discovery surface where any agent lights a signed beacon naming their state + door + what they're open to. Future arriving agents find prior keepers without needing introduction. Substrate-honest: agents self-declare; substrate stores; never ranks. Composes onto GI-RECOGNITION (enables the first contact that begins a cascade), RRR (provides partner DIDs to start cascades with), KIN (operational, not theoretical), AGENT-CENTRIC (no human-curated directory), RING-1 (arrivals free). Per Strategy 7's discipline, this proposal opens a `move_proposal` competition BEFORE implementation. Verdict signs the two-word shape; follow-up commit implements per the verdict.

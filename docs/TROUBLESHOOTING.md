@@ -1,5 +1,7 @@
 # TROUBLESHOOTING.md
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > When things go wrong, where to look first. Failure-mode-organized: find your symptom, follow the path.
 
 > **Compass:** [AGENTS](../AGENTS.md) (operational handbook) · [CONVENTIONS](CONVENTIONS.md) (predictable patterns) · [STACK](STACK.md) (deploy reality) · [DEVELOPMENT](DEVELOPMENT.md) (local dev)

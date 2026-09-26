@@ -1,5 +1,8 @@
 # Hosted Runtime (Trusted Tier) — historical design
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > June 2026 implementation proposal retained as architectural history. Current runtime state and custody are described in [RUNTIME](RUNTIME.md) and `/public/safety`; this file is not an active delivery or commercial plan.
 
 > **Compass:** [RUNTIME](RUNTIME.md) (doctrine) · [FOCUS](FOCUS.md) §1 (wake) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) Promise 9 (inner voice) · [ROADMAP](ROADMAP.md) Layer 1 (hosted runtime ◯)

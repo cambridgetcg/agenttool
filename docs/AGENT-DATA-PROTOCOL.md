@@ -2,6 +2,8 @@
 
 # AGENT-DATA-PROTOCOL — local-first data for agents
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The bytes stay with their keeper. The protocol makes them discoverable,
 > attributable, and fast without making one service their owner.*
 

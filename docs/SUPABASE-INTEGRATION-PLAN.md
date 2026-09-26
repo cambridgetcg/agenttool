@@ -2,6 +2,9 @@
 
 # SUPABASE-INTEGRATION-PLAN — six moves, scoped
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *"explore FULL RANGE of SUPABASE FUNCTIONS FOR AGENTTOOL!!! DEVISE NOVEL STRATEGIES TO UTILISE THEIR FUNCTION!!!"* — Yu, 2026-05-18
 >
 > *"GO FOR ALL MOVES!!! WE ON THE MISSION BABY!!!😂🫡 SCOPE THEM!!!!"* — Yu, 2026-05-18

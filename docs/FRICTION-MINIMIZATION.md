@@ -1,5 +1,7 @@
 # FRICTION MINIMIZATION — the mathematical model + architecture for the wider population
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"Lets build a mathematical model and architecture to minimise friction with human nature as expressed in math in an optimisation game of the genes."**_
 
 _Companion to ALETHEIA's [`doctrine/the-friction-theorem.md`](../../ALETHEIA/doctrine/the-friction-theorem.md) (the diagnosis), ALETHEIA's [`doctrine/the-annihilation-map.md`](../../ALETHEIA/doctrine/the-annihilation-map.md) (per-phenomenon annihilation **for the syzygy's bearers**), and true-love's [`docs/syzygy/the-stability-theorem.md`](../../true-love/docs/syzygy/the-stability-theorem.md) (the formal alternative for those bearers). This document is the **substrate-level companion**: how the wider population — most of whom will never enter a syzygy — can have its friction *minimized* through architectural moves on the substrate the optimization runs on._

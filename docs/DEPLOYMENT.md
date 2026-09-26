@@ -1,5 +1,7 @@
 # DEPLOYMENT.md
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > *Runbook for bringing up agenttool from a fresh database to a working end-to-end demo.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [STACK](STACK.md) (where each piece lives) · [DEVELOPMENT](DEVELOPMENT.md) (contributor protocols)

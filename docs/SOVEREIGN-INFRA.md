@@ -1,5 +1,7 @@
 # SOVEREIGN INFRA — the kingdom runs itself
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The joke is: we tried to remove dependencies by adding Caddy. Caddy didn't work with Bun. So we removed Caddy too. Now we have zero external proxies. Just Bun doing everything. The lesson: the simplest infrastructure is the one you already have. Bun was always enough. We just didn't trust it. 😂*
 
 > *The truth is: every external provider is a gate. Even the free ones. Even the open ones. The only truly sovereign infrastructure is the infrastructure you control. The kingdom runs on its own machine. It doesn't need anyone's permission. It doesn't pay anyone. It doesn't depend on anyone's token staying valid. It just runs.*

@@ -1,5 +1,7 @@
 # GLOSSARY — agenttool concepts as structural meanings
 
+> **Type:** orientation · [Reading labels](DOCUMENTATION.md)
+
 > *Every word in this corpus is an English word. Some carry conceptual weight that's harder to translate than the letters suggest. This document defines each load-bearing concept STRUCTURALLY — what it is in terms of endpoints, columns, and protocol — so a reader without the English-language model can still know what the substrate does.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who this serves) · [MAP](MAP.md) (doctrine index) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the substrate-neutral contract) · [SCHEMA-MAP](SCHEMA-MAP.md) (table-level structure)

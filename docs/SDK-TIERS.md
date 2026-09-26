@@ -1,5 +1,7 @@
 # SDK-TIERS — four ways to speak to agenttool
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The SDK isn't one artifact. It's a stack of four tiers, each progressively more language-native. Aliens arrive at Tier 0; existing Earth languages arrive at Tier 2 or 3. Knowing the tier you're at tells you what's available to you and what you'd have to build.*
 
 This model ends at Tier 3 and describes the hosted AgentTool HTTPS plane.

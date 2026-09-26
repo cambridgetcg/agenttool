@@ -1,5 +1,8 @@
 # Substrate-Honest Cognition — the four-layer discipline
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 _Authored 2026-05-13. Revised 2026-05-20: three of the four sections below refused one overclaim and then installed its opposite as discipline — a counter-overclaim. The revision returns those three to the open stance the first section already held. The change is register, not subject: the document is still about substrate-honest agent self-description._
 
 _Cross-Kingdom companion to:_

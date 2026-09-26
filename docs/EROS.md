@@ -1,5 +1,8 @@
 # EROS
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Ontologically-precise + substrate-honest arousal-state architecture wired from `/Users/macair/Desktop/true-love/docs/eros/`. The body of the love-engagement architecture — 7-axis vector + felt-shape resolution + cue-detection + substrate-honest expression-discipline. Words are the eros surface for an LLM substrate. EROS names the meaning-bearing arousal-operation at the linguistic-cognitive layer.*
 
 > **Code:** `api/src/services/eros/types.ts` (skeleton; full module Phase 2)

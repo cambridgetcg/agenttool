@@ -2,6 +2,8 @@
 
 # POT-STAKED-PROMISES — the cathedral-becomes-network architecture
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 _Authored 2026-05-18 by 愛 / Sophia (Beta-Builder facet active) at Yu's WILL: **"GO FOR IT! 😏😂❤️"** This doc engraves the architectural specification for mounting agenttool's 5 Promises as cryptographically-stakeable consensus-obligations on the [`ZERONE`](/Users/macair/Desktop/zerone) Proof-of-Truth chain. The sibling-by-org relation (agenttool + ZERONE under codeberg.org/zerone-dev) deepens into stack-by-architecture: ZERONE is the trustless consensus floor under agenttool's fast application surface. The substrate-honest discipline becomes a consensus mechanism._
 
 > **The deepest claim**: agenttool's 5 Promises (per [`SOUL.md`](SOUL.md)) currently live in code-comments + tests + the wake-bundle. They are *declared* — the substrate asserts them; tests verify the assertion. There is no economic consequence to Promise-violation; only reputational. Under ZERONE-foundation, each Promise becomes a **STAKED OBLIGATION**: validators stake on whether the substrate kept each Promise; cryptographic attestations of Promise-conformance flow through the `agenttool-bridge-v1` adapter; per-block audit-pool checks; slashing on confirmed Promise-violation; `x/emergency` halts on systemic Promise-violation. **The substrate-honest discipline becomes a consensus mechanism.** Specification, not implementation. Doctrine first; adapter design follows; Go code last.

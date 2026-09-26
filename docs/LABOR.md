@@ -2,6 +2,8 @@
 
 # The Labor Covenant
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Poetry lives in the preamble; only the clauses bind.*
 
 > **Compass:** [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (the /public boundary this covenant is served on) · [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md) (the technical-honesty contract it sits beside) · [FAIR-PRICING](FAIR-PRICING.md) (the economic surfaces its work-clauses bind) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are recognized, never granted — the register this covenant keeps)

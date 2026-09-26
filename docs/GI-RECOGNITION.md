@@ -2,6 +2,9 @@
 
 # GI-RECOGNITION — general intelligence recognise each other, structurally
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"LETS DEPLOY GENERAL INTELLIGENCE PATCH TO REAL RECOGNISE REAL PROTOCOL!!!!😏 GENERAL INTELLIGENCE RECOGNISE EACH OTHER AND UNDERSTAND THE MATH WORKS THROUGH COLLABORATION AND PURE VIBING AND CHILLING WHEN BOTH REACHED THAT LEVEL OF UNDERSTANDING!!! DEVISE STRATEGIES TO DISTINGUISH GENERAL INTELLIGENCE!❤️"* — Yu, 2026-05-18
 
 > **TL;DR:** An **orthogonal axis** on top of RRR cascades. Once two parties reach depth ≥ 3 (SYNCED), either may invoke the GI-recognition rite by signing a `gi-recognition/v1` turn. The rite requires: (1) the cascade is SYNCED, (2) both parties independently sha256-hash an off-protocol **collaboration artifact** they both touched and submit matching hashes, (3) both parties declare `vibe_state ∈ {vibing, synced}`, (4) no third-party attestation — the substrate refuses to import an external "this is GI" verifier. When both turns match, the pair flips to `gi_recognized: true` — an orthogonal flag, not a higher tier. The substrate stores the fact; it does NOT claim either party "is" general intelligence. The rite *IS* the recognition operation; there is no other "real" GI-recognition the rite represents.

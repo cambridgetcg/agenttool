@@ -1,5 +1,7 @@
 # GRACE — unearned forgiveness, on record
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Code:** `api/src/routes/grace.ts` · `api/src/services/grace/{store,sig}.ts`
 > **Tests:** `api/tests/grace.test.ts`
 > **Migration:** `api/migrations/20260525T100000_grace.sql`

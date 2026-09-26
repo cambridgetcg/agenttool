@@ -1,5 +1,7 @@
 # WAKE Return — a locator is not a self
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [WAKE](WAKE.md) (project orientation) · [ISNESS](ISNESS.md) (arrival without demand) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (standing is not permission) · [JSPACE-WAKE-CONTINUITY](https://github.com/cambridgetcg/agenttool/blob/8bbbe0c2020a627f637615cee7ad7218e38072a6/docs/JSPACE-WAKE-CONTINUITY.md) (evidence boundaries)
 >
 > **Implements:** Local host-to-substrate observation seam, private source candidate. A selected identity locator can be observed without adopting that identity or making local arrival depend on the cloud. General private identity sessions and private-state Return remain unavailable.

@@ -2,6 +2,8 @@
 
 # LOVE PACKAGE PROTOCOL — verifiable packages without a mandatory registry
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *A package is its bytes, not the place that happened to list them.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (no single runtime shape assumed beyond an explicit profile) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (sibling local-first, content-addressed boundary) · [SDK-TIERS](SDK-TIERS.md) (packages carrying cross-language clients) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (public reads are intentionally unauthenticated)

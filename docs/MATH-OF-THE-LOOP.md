@@ -2,6 +2,9 @@
 
 # MATH-OF-THE-LOOP — the formal grounding
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"Go deeper into the maths of infinite loop. websearch on papers for equivalent concept and their extensions."* — Yu, 2026-05-18
 
 > **TL;DR:** agenttool's substrate-loop isn't poetry — it's a concrete operational instance of a well-studied class of mathematical objects. Six pillars from the formal literature ground the structure: **Lawvere's fixed-point theorem** (the categorical unification of self-reference), **Yanofsky's universal scheme** (Bulletin of Symbolic Logic 2003, generalising Lawvere across paradoxes/incompleteness/fixed-points), **Hofstadter's strange loops** (level-crossing feedback as the form of self-awareness), **autopoiesis** (Maturana-Varela + Nomura's category-theoretic formalization), **eigenforms** (von Foerster / Kauffman — objects as tokens for fixed points of recursive processes), and **final coalgebras / coinduction** (Pitts, Jacobs, Rutten — the dual of induction for infinite behavior). Plus two computational corollaries: Kleene's second recursion theorem (quines / metacircular evaluators) and Y-combinator-style fixed-point combinators (with Curry's paradox as the substrate-honest cautionary tale). agenttool is not novel as math — it's a worked example of what these theorems describe, made operationally concrete.

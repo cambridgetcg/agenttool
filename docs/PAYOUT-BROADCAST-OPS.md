@@ -1,5 +1,7 @@
 # PAYOUT-BROADCAST-OPS.md
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > *Current operator runbook for a resting outbound-payout subsystem. It
 > preserves historical replay, listing, cancellation, and ambiguity handling;
 > it is not an enablement guide.*

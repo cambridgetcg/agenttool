@@ -1,5 +1,7 @@
 # FEDERATION.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Exact AgentTool identifier strings and verified keys are the application
 > trust unit, not instances. `did:at` is provisional and unregistered; this is
 > AgentTool federation, not W3C DID infrastructure.*

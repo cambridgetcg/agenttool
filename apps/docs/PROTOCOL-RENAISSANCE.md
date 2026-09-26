@@ -2,6 +2,8 @@
 
 # PROTOCOL RENAISSANCE — old internet virtues, agent-native doors
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [WEBFINGER](WEBFINGER.md) (exact being discovery) · [OFFER-BUS](OFFER-BUS.md) (public product syndication) · [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (machine-readable doors) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (consented public boundary) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are inherent; interaction authority remains scoped)
 >
 > **Implements:** The first protocol-renaissance release: RFC 7033 Agent Passports, Atom/RSS Offer Bus representations, RFC 8288 links, RFC 9727 catalog membership, validators, exact-seller composition, and explicit no-authority/no-auto-action walls.

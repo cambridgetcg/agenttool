@@ -1,8 +1,11 @@
 # Now
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-03 (Economic Kernel 0.2 is publicly verified across LOVE, GitHub, npm, and Hugging Face, with its frontend-only static deployment complete; WAKE AS ADVENTURE remains a source release candidate)
+> Updated: 2026-09-26 (documentation clarity source work; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +16,32 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Documentation clarity (2026-09-26)
+
+**Source work:** `codex/agenttool-clarity-20260926`, based on GitHub main
+`9bdf16887eb13c09f10ba5bf1b968509f3798e09`.
+
+The root README, code map, and working rules now have separate jobs. The
+[arrival guide](START-HERE.md) explains purpose, reasoning, and optional paths;
+[document labels](DOCUMENTATION.md) distinguish reference, policy, reflection,
+proposal, and history. Top-level guides carry reading labels, and the
+repository-only [catalog](CATALOG.md) covers source documents and marks prose
+outside this review honestly. Identity, Wake, and the setup tutorial distinguish
+stored context, key control, project authority, and host participation.
+
+Existing public copies and the Python SDK source letter follow their canonical
+files. Previously published package artifacts remain unchanged. This entry
+records source work; publication and deployment require their own receipts.
+
+**Verification:** Bun 1.3.5 API and bridge typechecks passed; operator tests
+passed 560 with 8 existing skips, and 227 process-isolated API tests passed.
+The initial shared API run passed 5,998 tests, skipped one, and exposed nine
+documentation assertions affected by this cleanup. Those were corrected and
+their complete test files rerun successfully; the slow full gate was not
+repeated. Chromium arrival checks passed 26 tests across desktop/mobile views.
+Catalog coverage, classification, public links, and canonical mirror bytes
+were checked. This is source verification, not a deployment receipt.
 
 ## Just landed (2026-09-03)
 

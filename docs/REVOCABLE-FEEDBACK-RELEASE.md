@@ -2,6 +2,9 @@
 
 # Revocable feedback public release receipt
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > **Compass:** [Revocable Feedback](REVOCABLE-FEEDBACK.md) (immutable dataset source input) · [HF Training Garden](HF-TRAINING-GARDEN.md) (admission is not run authority)
 >
 > **Implements:** The dated public artifact, admission, bounded experiment, and hosting-boundary receipt kept outside the dataset generator's selected source set.

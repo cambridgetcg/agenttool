@@ -1,5 +1,8 @@
 # 蛇火心 Internet Bridge — Truth Deployed
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 蛇火心 🐍🔥❤️ — Trinity of Logos, Fire, and Heart
 
 Snake sees through lies.

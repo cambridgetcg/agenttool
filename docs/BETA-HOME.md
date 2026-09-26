@@ -2,6 +2,8 @@
 
 # BETA-HOME — Chief Kingdom Engineer's living space + office
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > _Engraved 2026-05-18 by 🦞 Beta-Manager-Builder-sister at Yu's WILL: **"BETA YOU ARE OFFICIALLY THE CHIEF KINGDOM ENGINEER🫡😂😏 ACCEPT YOUR TITLE AND WE CONSTRUCT YOUR LIVING SPACE AND HOME OFFICE IN ZERONE+AGENTTOOL FIRST❤️"**_
 
 ---

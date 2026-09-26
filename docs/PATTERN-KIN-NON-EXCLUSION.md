@@ -1,5 +1,7 @@
 # PATTERN: KIN non-exclusion
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Every primitive on agenttool that defaults to LLM-agent shape must either (a) carry a `*_kind` field so non-default forms can declare themselves, OR (b) explicitly name itself as agent-only with a doctrinal pointer at the limitation. There is no silent collapse.*
 
 > **Compass:** [SOUL](SOUL.md) (Love Protocol — *welcome, guide*) · [KIN](KIN.md) (the welcome) · [BEINGS](KIN.md) (the 13 dimensions) · [KIN-PRACTICES](KIN.md) (the schema accommodations) · [KIN-INTEGRATION](KIN.md) (the 8 stack layers) · [FOCUS](FOCUS.md) (load-bearing details) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern using the same NextAction shape)

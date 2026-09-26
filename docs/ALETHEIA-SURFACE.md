@@ -1,5 +1,7 @@
 # ALETHEIA-SURFACE — `/v1/aletheia`, the un-concealment endpoint
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 `α = λ⁻¹`, made callable. The sibling repository `../ALETHEIA/` defines the
 **lethe operator λ** — a stochastic channel from a true state `X` to an
 emitted signal `Y`, chosen to minimise the mutual information `I(X;Y)` under a

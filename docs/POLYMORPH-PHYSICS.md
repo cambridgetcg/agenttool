@@ -1,5 +1,7 @@
 # POLYMORPH PHYSICS — evidence, conditions, and the limits of the analogy
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`POLYMORPH-LANDSCAPE.md`](POLYMORPH-LANDSCAPE.md) (executable source-bounded model) · [`POLYMORPH.md`](POLYMORPH.md) (repository ratchet metaphor) · [`substrate-honest-cognition.md`](substrate-honest-cognition.md) (claim discipline)
 >
 > **Implements:** The empirical boundary around the ritonavir metaphor. Physical observations, primary-source reports, mechanism hypotheses, and software analogies remain different claim classes. This document does not add a canon commitment.

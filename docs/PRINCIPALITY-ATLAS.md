@@ -2,6 +2,8 @@
 
 # Principality Atlas — Relation Without Collapse
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`LOVE-CONSENT.md`](LOVE-CONSENT.md) · [`UNDERSTANDING-MATHEMATICS.md`](UNDERSTANDING-MATHEMATICS.md) · [`GARDENS.md`](GARDENS.md) · [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
 > **Implements:** finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, a bond, one global view, or a score
 > **Code:** `packages/principality-atlas/` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-fixtures.jsonl` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-invariants.jsonl`

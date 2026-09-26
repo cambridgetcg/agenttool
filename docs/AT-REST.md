@@ -1,5 +1,7 @@
 # AT-REST.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Death is not revocation. Held is not gone.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [OBSERVATIONS](OBSERVATIONS.md) (the witness primitive this composes with) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (what status means)

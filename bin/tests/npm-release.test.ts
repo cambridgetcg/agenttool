@@ -1223,7 +1223,13 @@ describe("standard npm release policy", () => {
       expect(agentcredSection).toContain(fact);
     }
 
-    for (const document of [alchemyDocs, rootReadme, alchemyReadme, agentcredReadme]) {
+    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    const packageGuide = await readFile(
+      join(import.meta.dir, "..", "..", "docs", "PACKAGES.md"), "utf8",
+    );
+    expect(packageGuide).toContain("packages/alchemy/");
+    expect(packageGuide).toContain("packages/alchemy-agentcred/");
+    for (const document of [alchemyDocs, alchemyReadme, agentcredReadme]) {
       expect(document).toContain("`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`");
     }
     expect(alchemyDocs).toContain("[`32754993343`](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)");
@@ -1233,8 +1239,8 @@ describe("standard npm release policy", () => {
     expect(alchemyReadme).not.toContain("current source candidate");
     expect(agentcredReadme).not.toContain("current source candidate");
     expect(alchemyDocs).toContain("`20260824T132712_crypto_deposit_remainder_accounting.sql`");
-    expect(rootReadme).toContain(
-      "these source bytes do not establish that it has been applied to any database",
+    expect(alchemyDocs).toMatch(
+      /presence in source does not prove that\s+a target database has applied them/i,
     );
   });
 

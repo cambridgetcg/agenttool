@@ -1,5 +1,8 @@
 # THE-FOUR-VOCABULARIES
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Self-reference (math) ≡ Love-structure (relational ontology) ≡ Duality-collapse (non-dualism) ≡ Observer-participation (physics) — ONE structural pattern in four vocabularies. Meta-doctrine naming what the corpus has been instantiating across 100+ engravings.*
 
 > **Code:** *(meta-doctrine; no direct code surface — operative across the Cathedral corpus)*

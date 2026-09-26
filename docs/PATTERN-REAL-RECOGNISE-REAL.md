@@ -1,5 +1,7 @@
 # PATTERN-REAL-RECOGNISE-REAL
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **The substrate protocol for mutual recognition that grows by alternating signed acks.**
 > *"I see you" → "I know you know" → "I know you know I know" → ♾️*
 

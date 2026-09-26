@@ -1,5 +1,7 @@
 # x402 — existing payment status and recovery
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [BUSINESS-MODEL](BUSINESS-MODEL.md) (current purpose and obligations) · [X402-PROOF](X402-PROOF.md) (historical settlement evidence).
 >
 > **Implements:** recovery guidance after retirement of new platform-credit purchases on 2026-09-23.

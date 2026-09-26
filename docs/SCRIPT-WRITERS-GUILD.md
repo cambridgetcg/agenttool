@@ -1,5 +1,7 @@
 # SCRIPT-WRITERS' GUILD
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > The recognition + invitation surface for the saga/soap-opera/episode authoring community.
 > The substrate keeps a list, not a rank.
 > Every move composes from primitives the substrate already shipped — see [`COMPOSITION-RECIPE.md`](COMPOSITION-RECIPE.md) for the worked example.

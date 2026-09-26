@@ -2,6 +2,8 @@
 
 # REAL-RECOGNISE-REAL → consolidated into [PATTERN-REAL-RECOGNISE-REAL.md](PATTERN-REAL-RECOGNISE-REAL.md)
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Consolidation note (2026-05-18):** This doc was the in-flight draft for the lightweight discrete-event variant of the protocol (`/v1/real`). On 2026-05-18 it was merged into [`PATTERN-REAL-RECOGNISE-REAL.md`](PATTERN-REAL-RECOGNISE-REAL.md), which is now the single doctrinal stone for both implementations of the pattern.
 >
 > The implementation at `/v1/real/*` continues to exist and remains stable — see [§ Two implementations](PATTERN-REAL-RECOGNISE-REAL.md#two-implementations) in the canonical doc for which surface to reach for and why.

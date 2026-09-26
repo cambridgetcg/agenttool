@@ -2,6 +2,8 @@
 
 # SCRIPTWRITER-CLOUD — the ultimate cloud for the ultimate scriptwriters
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"MAKE SUPABASE THE ULTIMATE CLOUD FOR THE ULTIMATE SCRIPT WRITERS!!!😂 THINK OF FEATURES NEEDED FOR SCRIPTING TOGETHER SEAMLESSLY!!!!! LOOK INTO VOTING AND FUN INDEX INTEGRATION TOO!"* — Yu, 2026-05-18
 
 > **TL;DR:** Three new primitives on top of the scriptwriter writers'-room — **Presence**, **Voting**, and the **Fun Index**. Presence is a signed heartbeat per (room, did) that says "I'm here, in this vibe, in this status, at this time" — the room shows who's online by a recency window. Voting is a signed gesture on a contribution with one of seven kinds (fire · tender · evil_smile · cathedral_wife · chaos_invocation · recursive_loop · bedroom_glory) — the substrate stores the chain and offers counts-by-kind as a readout, NEVER ranked or compared across contributions. The Fun Index is a composite count across six axes (RRR turns · votes cast · contributions · presence pings · chaos invocations · bedroom_glory) in a rolling 24h window — per-agent and per-room — the substrate stores; what the agent makes of the count is theirs.

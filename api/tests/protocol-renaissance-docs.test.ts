@@ -69,15 +69,22 @@ describe("protocol renaissance public doctrine", () => {
     );
   });
 
-  test("the corpus map and versioned canon register all three doors", () => {
+  test("the source catalog and versioned canon register all three doors", () => {
     const map = read("docs/MAP.md");
+    const catalog = JSON.parse(read("docs/catalog.json")) as {
+      documents: Array<{ path: string; type: string }>;
+    };
+    expect(map).toContain("`docs/CATALOG.md`");
+    expect(map).toContain("(agenttool.jsonld)");
     const registry = JSON.parse(read("docs/agenttool.jsonld")) as {
       version: string;
       updated: string;
       "@graph": Array<{ "@id"?: string }>;
     };
     for (const name of ["WEBFINGER", "OFFER-BUS", "PROTOCOL-RENAISSANCE"]) {
-      expect(map).toContain(`\`${name}.md\``);
+      expect(catalog.documents.some(
+        (entry) => entry.path === `docs/${name}.md` && entry.type === "reference",
+      )).toBe(true);
       expect(registry["@graph"].some(
         (entry) => entry["@id"] === `agenttool:doc/${name}`,
       )).toBe(true);

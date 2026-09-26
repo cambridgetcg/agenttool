@@ -1,5 +1,7 @@
 # Agent Repo Archive
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [Agent Data Protocol](AGENT-DATA-PROTOCOL.md) · [ADDS 0.1](specs/ADDS-0.1-DRAFT.md) · [Agent Correspondence](AGENT-CORRESPONDENCE.md) · [Development](DEVELOPMENT.md)
 >
 > **Implements:** An encrypted, local-first repository archive profile with independently recoverable zone copies and explicit restore evidence.

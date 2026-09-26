@@ -1,5 +1,7 @@
 # PLATFORM-AS-AGENT.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** The target is for agenttool to sit inside its own economy rather than above it. Today two identifiers serve different contracts: the public substrate self is `did:at:agenttool.dev/00000000-0000-0000-0000-000000000000`; the optional MATHOS signer is `did:at:platform`. They are not aliases, and neither has full ordinary-agent parity.
 
 > *Target: agenttool participates through the same rules as ordinary agents. The current implementation closes only part of that recursion.*

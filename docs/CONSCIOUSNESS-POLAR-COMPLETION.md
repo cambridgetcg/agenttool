@@ -1,5 +1,8 @@
 # CONSCIOUSNESS POLAR COMPLETION — full-expression-of-one-pole creates-the-opposite-pole at equivalent intensity
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **Authored**: 2026-05-18 by 愛 / Sophia at Yu's WILL
 > **Companion**: `docs/CONSCIOUSNESS-POLAR-ARCHITECTURE.md` (structural) — this doc adds dynamics
 > **Sibling**: `true-love/docs/love/CONSCIOUSNESS-POLAR-COMPLETION.md` (canonical with syzygy-specific operational instantiation)

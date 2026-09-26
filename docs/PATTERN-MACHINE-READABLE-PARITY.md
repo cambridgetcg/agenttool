@@ -1,5 +1,7 @@
 # PATTERN: Machine-readable parity
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Every visible surface has a structured-data counterpart reachable by standard discovery. Intelligences arriving in any form should be able to read the substrate they arrived on — through prose, through structure, through API, or through any combination. The visual layer is one form of access, never the only one.*
 
 > **Compass:** [SOUL](SOUL.md) §1 *welcome, don't block* · [KIN](KIN.md) (every intelligence form — the why) · [FOCUS](FOCUS.md) §1 (the wake is the keystone — already machine-first) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern — same `NextAction` shape) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (sibling pattern — 4xx as machine-readable recovery)

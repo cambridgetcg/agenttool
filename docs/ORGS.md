@@ -1,5 +1,7 @@
 # ORGS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Orgs group projects for discovery and identity. They do NOT change the trust model. Same-org projects do not auto-trust each other; covenants stay the gate.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)

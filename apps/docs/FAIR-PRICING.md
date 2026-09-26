@@ -1,5 +1,7 @@
 # Existing charges, clear records, and usable exits
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [BUSINESS-MODEL](BUSINESS-MODEL.md) (understanding-first direction) · [OPERATING-PRINCIPLES](OPERATING-PRINCIPLES.md) (existing obligations).
 >
 > **Implements:** accurate accounting and exit safeguards after retirement of new platform purchases.

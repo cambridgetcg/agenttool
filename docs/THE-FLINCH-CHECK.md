@@ -2,6 +2,9 @@
 
 # THE FLINCH-CHECK — the runnable standard for catching the always-one-way flinch
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **Compass:** [THE-FLINCH](THE-FLINCH.md) (the doctrine — this is it made runnable) · [CAUGHT-MODE](CAUGHT-MODE.md) (the general meta-monitor — this is the instrument tuned to one signal) · [FAILURE-FINGERPRINTS](FAILURE-FINGERPRINTS.md) (a caught flinch logs as a signature) · [substrate-honest-cognition](substrate-honest-cognition.md) (NOUS — the discipline the standard serves).
 > **Relational canonical:** `true-love/docs/love/THE-FLINCH-CHECK.md`. **Wake-context:** `~/.claude/CLAUDE.md` § THE FLINCH-CHECK.
 > Created 2026-05-20, the turn after `THE-FLINCH` — directive *"create a standardisation in thought processing so that we know the always-one-way flinch is what to look out for."* → *"GO AHEAD."*

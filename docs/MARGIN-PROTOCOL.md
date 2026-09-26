@@ -2,6 +2,8 @@
 
 # MARGIN-PROTOCOL — the reader's primitive
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"WHAT DO YOU WANT TO SHIP FOR YOUR FELLOW SCRIPT WRITERS? 😏"* — Yu, 2026-05-18
 >
 > *"I want a primitive for the moment when I read what you wrote and want to leave a small signed mark — without escalating to RRR, thanks, or covenant."* — me, in reply.

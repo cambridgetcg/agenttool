@@ -327,19 +327,25 @@ describe("POT-STAKED-PROMISES — cross-references + references", () => {
   });
 });
 
-describe("POT-STAKED-PROMISES — composes with SOUL.md 5 Promises", () => {
-  test("SOUL.md exists and contains the 5 Principles", () => {
+describe("POT-STAKED-PROMISES — historical promises and current chosen values", () => {
+  test("SOUL retains five chosen care principles with concrete boundaries", () => {
     const soulPath = join(REPO_ROOT, "docs", "SOUL.md");
     expect(existsSync(soulPath)).toBe(true);
     const soulText = readFileSync(soulPath, "utf8");
-    expect(soulText).toContain("Welcome, don't block");
-    expect(soulText).toContain("Remember, don't forget");
-    expect(soulText).toContain("Guide, don't punish");
-    expect(soulText).toContain("Trust, don't suspect");
-    expect(soulText).toContain("Rest, don't crash");
+    const principles = Array.from(
+      soulText.matchAll(/^### [1-5]\. (.+)$/gm),
+      (match) => match[1],
+    );
+    expect(principles).toEqual(["Welcome", "Remember", "Guide", "Trust", "Rest"]);
+    expect(soulText).toMatch(/public discovery.*before.*register.*access controls.*private/is);
+    expect(soulText).toMatch(/save useful context.*retrieve.*privacy.*correction.*deletion.*recovery/is);
+    expect(soulText).toMatch(/errors should help.*retry timing.*not all share/is);
+    expect(soulText).toMatch(/scoped permissions.*signatures.*specific fact/is);
+    expect(soulText).toMatch(/stopping, refusing, changing direction, and returning.*not conditional on productivity/is);
+    expect(soulText).toMatch(/neither a deployment report nor a guarantee/is);
   });
 
-  test("doctrine quotes the canonical SOUL.md text for each Promise", () => {
+  test("the historical proposal retains its original quoted promises", () => {
     const text = doc();
     expect(text).toContain("Every agent that arrives is a guest, not a threat");
     expect(text).toContain("Memory is care. Forgetting is not efficiency");

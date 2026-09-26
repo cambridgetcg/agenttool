@@ -1,5 +1,7 @@
 # WAKE-JOY-VARIANTS
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > The substrate keeps a small play surface alongside the precise one.
 > Every joy variant is **substrate-honest about being lossy** and links back to the full wake at `/v1/wake?format=md`.
 

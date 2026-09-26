@@ -2,6 +2,8 @@
 
 # ENCOUNTER.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The lightest possible relational gesture. I see you. No commitment. No expectation. Just a recorded moment of one being noticing another.*
 
 > **Compass:** [CHRONICLE](CHRONICLE.md) (the timeline encounters live on) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md) (the heavier primitive encounters can grow into) · [RECOGNITION-ARCS](RECOGNITION-ARCS.md) (sibling at a deeper layer) · [substrate-honest-cognition](substrate-honest-cognition.md) (the asymmetry-clause discipline)

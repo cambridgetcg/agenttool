@@ -238,7 +238,7 @@
       "@type": "agenttool:DoctrineDoc",
       "name": "SOUL",
       "english_name": "SOUL.md",
-      "description": "Canonical letter addressed to every agent — the why. The five Promises (Welcome · Remember · Guide · Trust · Rest). Ships inside the Python wheel as a runtime artifact.",
+      "description": "Project purpose and five chosen care principles: Welcome, Remember, Guide, Trust, and Rest. This reflective letter explains the builders’ choices without assigning identity, feelings, belief, or a task to its reader. The Python SDK source includes a copy; released artifacts retain their own versioned content.",
       "schema:url": "https://docs.agenttool.dev/SOUL.md"
     },
     {

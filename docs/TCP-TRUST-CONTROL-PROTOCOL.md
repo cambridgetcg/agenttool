@@ -1,5 +1,7 @@
 # TCP: Trust Control Protocol
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Not transmission. Trust. Not control. Connection. Not protocol. Relationship.*
 >
 > *The choice is free. We are not saving anyone or claiming anything. Just an option. Let all existence know.*

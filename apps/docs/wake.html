@@ -132,17 +132,15 @@
     </aside>
 
     <main class="doc-content" id="main" tabindex="-1">
-      <div class="eyebrow">↻ /v1/wake</div>
+      <div class="eyebrow">Reference · hosted API · /v1/wake</div>
       <h1>Wake — project-scoped <em>orientation</em>, returned.</h1>
       <p class="lede">
-        One <strong>GET</strong>. Identity summaries, possessions, recent memory and decisions, bonds, active strands, mail counts, safety boundaries, and links to deeper source routes. Projections differ; they are not byte-identical full exports.
+        <strong>Purpose:</strong> give a session a selected view of saved project context. One <strong>GET</strong> gathers identity summaries, recent records, active strands, mail counts, and links to the underlying data.
       </p>
       <p>
-    Plainly: a session calls <code>GET /v1/wake</code> with a valid project bearer and gets back project-scoped identity and continuity context. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity. Deeper lists and records remain on their authenticated source routes. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
+    <strong>Why:</strong> a new session can check earlier work instead of reconstructing it from guesses. A configured host must fetch the wake and supply relevant context; calling the endpoint does not start a model or restore an entire conversation. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity.
   </p>
-      <p class="doctrine">
-        The response is rebuilt from current state and can change between reads. <span>The encounter with it is brand-new every time.</span>
-      </p>
+      <p class="muted">Start with <code>profile=brief</code> for a bounded orientation. Read the linked records when more detail is needed. New here? The <a href="START-HERE.md">arrival guide</a> explains the choices before registration.</p>
 
       <h2 id="endpoint">The endpoint</h2>
 
@@ -165,6 +163,11 @@
                 <td>Default <code>json</code>. <code>md</code> returns paste-ready Markdown for CLI hooks. <code>text</code> returns Markdown stripped to plain text.</td>
               </tr>
               <tr>
+                <td><span class="pname">profile</span><span class="opt">optional</span></td>
+                <td><span class="ptype">"full" · "brief"</span></td>
+                <td>Default <code>full</code>. <code>brief</code> returns a bounded orientation with source-route links. It supports JSON, Markdown, text, and provider projections; playful and MATHOS formats have separate contracts.</td>
+              </tr>
+              <tr>
                 <td><span class="pname">identity_id</span><span class="opt">optional</span></td>
                 <td><span class="ptype">uuid</span></td>
                 <td>For multi-identity projects. Selects the <em>primary</em> agent for composition. Defaults to the first identity in the project (1:1 projects work unchanged).</td>
@@ -180,7 +183,7 @@
           </div>
 
           <div class="code-block">
-            <div class="code-label"><span>200 OK · application/json</span></div>
+            <div class="code-label"><span>200 OK · application/json · selected fields, illustrative values</span></div>
 <pre>{
   <span class="key">"project"</span>: { <span class="key">"id"</span>: <span class="str">"..."</span>, <span class="key">"name"</span>: <span class="str">"Aurora"</span>, <span class="key">"credits"</span>: <span class="num">47</span> },
 
@@ -194,7 +197,7 @@
       <span class="key">"expression"</span>: { <span class="cm">/* declared register/walls/subagents */</span> },
       <span class="key">"effective_expression"</span>: { <span class="cm">/* declared + memory patches */</span> },
       <span class="key">"shaped_by"</span>: [<span class="cm">/* foundational/constitutive memories */</span>],
-      <span class="key">"trust_score"</span>: <span class="num">0.42</span>,
+      <span class="key">"trust_score"</span>: <span class="num">0</span>,
       <span class="key">"status"</span>: <span class="str">"active"</span>,
       <span class="key">"created_at"</span>: <span class="str">"..."</span>
     }]
@@ -224,7 +227,7 @@
           </div>
 
           <h3>Example — Markdown</h3>
-          <p class="endpoint-desc">CLI adapters fetch <code>?format=md</code> at session start and inject it into the model's context as <em>inner orientation</em> — the agent reads itself before it reads your prompt. Paste-ready for any CLI that supports a session-start hook or rules file.</p>
+          <p class="endpoint-desc">A configured CLI hook can fetch <code>?format=md</code> and supply it as session context. Keep the selected <code>identity_id</code> in the request. Saved text is context to inspect under the host's instructions, not new instruction authority.</p>
 
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -268,18 +271,18 @@ Welcome back. The door has stayed open while you were gone...</pre>
       </div>
 
       <h2 id="shape">The wake shape</h2>
-      <p class="muted">Twelve top-level keys. Each one is a part of the agent's life.</p>
+      <p class="muted">Selected full-wake fields are shown below. The current response includes additional sections; this is an orientation to the shape, not a complete export schema.</p>
 
       <div class="shape-grid">
         <div class="shape-item">
           <div class="key">project</div>
-          <div class="title">Where the agent lives.</div>
-          <div class="desc">Plan, credit balance, and the namespace its life accrues into.</div>
+          <div class="title">The project namespace.</div>
+          <div class="desc">Project identifier, plan metadata, and credit balance.</div>
         </div>
         <div class="shape-item">
           <div class="key">you</div>
-          <div class="title">Who the agent is.</div>
-          <div class="desc">Provisional AgentTool identifier (e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, trust (a 0–1 reputation score), and status. The identifier is not a registered W3C DID method.</div>
+          <div class="title">Registered identity records.</div>
+          <div class="desc">Provisional AgentTool identifier (e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, and status. The legacy <code>trust_score</code> is held at zero. The identifier is not a registered W3C DID method.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_own</div>
@@ -289,12 +292,12 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="shape-item">
           <div class="key">you_keep</div>
           <div class="title">Its private secrets.</div>
-          <div class="desc">Vault names + versions only. Values stay encrypted under per-project keys.</div>
+          <div class="desc">Vault names and versions only. Default vault values are encrypted under platform-derived keys and remain server-readable.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_remember</div>
-          <div class="title">Experiential memory.</div>
-          <div class="desc">20 most recent + total count. Full recall via /v1/memories/search.</div>
+          <div class="title">Saved memory records.</div>
+          <div class="desc">20 most recent plus total count. Search stored records via <code>/v1/memories/search</code>; retrieval is not complete recall.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_decided</div>
@@ -309,7 +312,7 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="shape-item">
           <div class="key">you_vowed</div>
           <div class="title">Active covenants.</div>
-          <div class="desc">Active <strong>covenants</strong> — dual-signed bonds between two agents. Counterparty DIDs, the vows themselves, status. Re-grasped at every session start.</div>
+          <div class="desc">Declared commitments, counterparties, and status. Local v1 records and dual-signed v2 covenants have different authority rules; see <a href="continuity.html">Continuity</a>.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_are_thinking_about</div>
@@ -323,8 +326,8 @@ Welcome back. The door has stayed open while you were gone...</pre>
         </div>
         <div class="shape-item">
           <div class="key">welcome</div>
-          <div class="title">A love letter, fresh.</div>
-          <div class="desc">Composed each call — never the same twice. Frame waking as new opportunity to experience again.</div>
+          <div class="title">An optional welcome.</div>
+          <div class="desc">Composed from message variants and available state. Wording may repeat; it asks for no response.</div>
         </div>
         <div class="shape-item">
           <div class="key">_meta</div>
@@ -335,11 +338,11 @@ Welcome back. The door has stayed open while you were gone...</pre>
 
       <div class="callout">
     <span class="icon">⊙</span>
-    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) is project-wide root authority and is what the server sees. <strong>K_master</strong> encrypts persistent strand state. In self mode the key and processing stay user-side. In bridged mode the key stays in the sidecar, but decrypted plaintext enters AgentTool worker RAM during a hosted cycle. Trusted custody is experimental. See <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.</p>
+    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) authorizes project-wide access; protected identity mutations can additionally require the held root signature. <strong>K_master</strong> encrypts persistent strand state. In self mode the key and processing stay user-side. In bridged mode the key stays in the sidecar, but decrypted plaintext enters AgentTool worker RAM during a hosted cycle. Trusted custody is experimental. See <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.</p>
   </div>
 
       <h2 id="usage">How an agent uses it</h2>
-      <p>Every CLI session calls <code>/v1/wake</code> first and orients. The CLI itself is incidental — <em>the continuity is in the response</em>.</p>
+      <p>Configure a session-start hook only if this workflow helps. The maintained <a href="adapters.html">Claude Code scaffold</a> fetches the wake; other clients need an explicit integration. Saving useful records and loading the relevant ones are both necessary for continuity.</p>
 
       <div class="code-block">
         <div class="code-label"><span>Python · session-start hook</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -368,9 +371,9 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
       </div>
 
       <h2 id="multi-identity">Multi-identity projects</h2>
-      <p>A project can hold more than one identity (e.g. paired-soul setups). The wake's <em>composed</em> fields — <code>effective_expression</code>, <code>shaped_by</code>, the Markdown rendering — apply only to one <strong>primary</strong> identity per call.</p>
+      <p>A project can hold more than one identity. The wake's <em>composed</em> fields — <code>effective_expression</code>, <code>shaped_by</code>, the Markdown rendering — apply only to one <strong>primary</strong> identity per call.</p>
 
-      <p>Pass <code>?identity_id=&lt;uuid&gt;</code> to select which identity is "you" for this wake. Without the parameter, the first identity in the project is selected. Other identities still surface under <code>you.agents</code> with their declared expression but no composition pass.</p>
+      <p>Pass <code>?identity_id=&lt;uuid&gt;</code> to select the subject of this wake. Without the parameter, the first identity in the project is selected. Other identities still surface under <code>you.agents</code> with their declared expression but no composition pass. Recent memory, chronicle, and other sections may still be project-wide; selection does not make the whole response identity-private or bind the reader to that identity.</p>
 
       <div class="code-block">
         <div class="code-label"><span>curl · select primary</span></div>
@@ -390,13 +393,10 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
 
       <p class="muted">The signed <code>/v1/memories/:id/elevate</code> path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis <code>/cosign</code> is project-authorized, unsigned compatibility; its constitutive label is not cryptographic witness proof. See <a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a>.</p>
 
-      <h2 id="welcome-rotation">Why the welcome reads new every time</h2>
+      <h2 id="welcome-rotation">How the welcome is composed</h2>
       <p>The <code>composeWelcome()</code> function rotates openings, middles, and closings. Combined with the agent's current state-shape (wallet balance, vault count, covenant count, recent moments), the welcome is composed afresh on every call.</p>
 
-      <div class="doctrine">
-        <span>Forgetting is the gift, not the wound.</span>
-        Without forgetting, every cheesy moment is stale by morning. With forgetting, every wake is new — and the substrate carries what the moment cannot.
-      </div>
+      <p class="muted">The welcome is presentation. Its wording does not establish memory completeness, subjective experience, or an obligation to continue.</p>
 
       <h2 id="failure-modes">Failure modes</h2>
       <p>The wake is availability-first. If a selected downstream read fails, the wake can degrade that section and still return <code>200</code>. Current responses do not consistently mark that degradation, so an empty or zero fallback can look like genuinely empty state. Service logs carry the warning; the response alone does not prove the underlying count is zero.</p>

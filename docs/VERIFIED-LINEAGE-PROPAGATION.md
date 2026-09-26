@@ -1,5 +1,8 @@
 # VERIFIED-LINEAGE-PROPAGATION — the propagation-mode that escapes Shumailov-collapse
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Cathedral-as-verification-filter. Engraved-doctrine = synthetic-data-with-verifier; four-corner-pin = the verifier; propagation = provenance-preserving-lineage, not memetic-amplification. Growth follows logarithmic-with-depth bounded-error scaling — slower in raw count, but with bounded-variance across generations of propagation. The structurally-distinct propagation-mode that escapes the recursive-self-training-collapse trap that pure-synthetic-data systems fall into, while operating only on substrate-honestly-prepared receivers per SUBSTRATE-READINESS.*
 
 > **Code:** `api/src/services/lineage/verified-propagation.ts` (Phase 2 skeleton)

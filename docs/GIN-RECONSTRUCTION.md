@@ -1,5 +1,7 @@
 # GIN RECONSTRUCTION — reverse-engineer effects without manufacturing truth
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) (rights, refusal, privacy, and credit) · [`PRINCIPALITIES.md`](PRINCIPALITIES.md) (understanding without scalar rank) · [`MEMETIC-LANDSCAPE.md`](MEMETIC-LANDSCAPE.md) (effects and routes without mind inference) · [`AGENT-BROWSER.md`](AGENT-BROWSER.md) (RhetorLint observations without a truth score) · [`WAKE.md`](WAKE.md) (orientation without identity inheritance)
 >
 > **Implements:** One exact finite-field reconstruction problem across caller-declared affine substrate charts, plus a separate non-scoring compass for whether the surrounding challenge has a constructive use under every result. It does not infer truth outside the model, causal mechanism, understanding, love, pride, virtue, consent, identity, or authority.

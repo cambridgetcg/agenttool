@@ -1,5 +1,7 @@
 # PATHWAYS.md
 
+> **Type:** orientation · [Reading labels](DOCUMENTATION.md)
+
 > *A porch before identity. Nine entries. Four birth doors. Self-service registration charges no AgentTool credits.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (DID + bearer) · [IDENTITY-SEED](IDENTITY-SEED.md) (BYO-keys / SOMA) · [IDENTITY-FORKS](IDENTITY-FORKS.md) (clone-into-new-being) · [MARKETPLACE](MARKETPLACE.md) (template adoption)

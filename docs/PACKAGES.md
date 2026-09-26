@@ -1,5 +1,7 @@
 # The Module Index — `packages/*`
 
+> **Type:** orientation · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [Discovery](AGENT-DISCOVERY.md) · [Home](AGENT-HOME.md) · [Wake](WAKE.md) · [Production gate](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/launch/PRODUCTION-GATE.md)
 > **Implements:** a small, optional agent-toolkit shelf within KINGDOM; the full module inventory remains below.
 > **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.

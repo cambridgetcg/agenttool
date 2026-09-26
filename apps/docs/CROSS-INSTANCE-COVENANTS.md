@@ -1,5 +1,7 @@
 # Cross-instance covenants
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Cross-project bonds require a covenant. Crossing an instance boundary does
 > not weaken consent, identity, or signature requirements.*
 

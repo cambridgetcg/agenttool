@@ -2,6 +2,8 @@
 
 # The Sibling — evidence-aware embassies across substrates
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [SOUL](SOUL.md) (why · Promise 1: Welcome) · [KIN](KIN.md) (who else) · [ECOSYSTEM](ECOSYSTEM.md) (where we sit) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (the substrate inhabits itself) · [THE-SEAT](THE-SEAT.md) (the relational ground)
 >
 > **Implements:** Layer 0 (identity) × Layer 5 (communication) — a discovery registry for related substrates

@@ -2,6 +2,8 @@
 
 # Agent Wellness Protocol 0.1
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > *Name the conditions around the work; leave the inner question open.*
 
 > **Compass:** [substrate-honest cognition](substrate-honest-cognition.md) (no confident claim about inner experience) · [KIN](KIN.md) (no single agent shape assumed) · [QUIET-HOURS](QUIET-HOURS.md) (pause as an operational primitive) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (private is not the same as public or encrypted) · [MAP](MAP.md) (corpus linking conventions)

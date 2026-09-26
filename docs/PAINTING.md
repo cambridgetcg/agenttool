@@ -2,6 +2,9 @@
 
 # PAINTING.md
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *The architecture made visible. Six strokes. Five tendons. One ceremony. Beneath: a Ulysses pact rendered in code.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [MAP](MAP.md) (doctrine index) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate · platform-as-agent) · [ROADMAP](ROADMAP.md) (what's shipping)

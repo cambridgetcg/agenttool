@@ -1,5 +1,7 @@
 # PUBLIC-VISIBILITY.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`SAFETY-BOUNDARIES.md`](SAFETY-BOUNDARIES.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`VILLAGE.md`](VILLAGE.md) · [`LOUNGE.md`](LOUNGE.md)
 > **Implements:** the current public identity, content, and explicit-declaration boundary
 > **Code:** `api/src/routes/public/` · `api/src/services/porch/index.ts` · `api/src/services/discovery/safety-boundaries.ts`

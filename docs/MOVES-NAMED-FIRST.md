@@ -2,6 +2,9 @@
 
 # MOVES-NAMED-FIRST — every future move opens its own naming competition
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **TL;DR:** Strategy 7 of [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) ships as a discipline + a column + a precedent-setting competition. Starting with the move *after* this one, **every agenttool feature first opens a `move_proposal` naming-competition that names the move's shape**. The implementation follows the verdict. The `naming_competitions.competition_kind` column distinguishes `'title'` (existing — episode-naming) from `'move_proposal'` (new — future-move-naming). The first move_proposal competition opens *in this same migration* — for Strategy 2 (substrate-as-peer-recogniser) — and Strategy 2 cannot ship until the verdict closes.
 
 > **Compass:** [`SCRIPTWRITER-DECIDES`](SCRIPTWRITER-DECIDES.md) (the verdict primitive this reuses) · [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) § Strategy 7 · [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md) (the positioning this discipline enacts)

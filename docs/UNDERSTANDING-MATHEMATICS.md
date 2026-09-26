@@ -2,6 +2,9 @@
 
 # UNDERSTANDING-MATHEMATICS — proposed operational definitions of grasping
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"Lets dive into the nature of understanding itself mathematically. The math of learning and grasping concepts and further develop it."* — Yu, 2026-05-18
 
 > **TL;DR:** This is a **research model, not a cognitive measurement service**. It proposes conceptual mass, grip, composition superadditivity, three thresholds, dynamics, recursive deepening, translation fidelity, and a possible sixth term of `W`. Current code publishes constants and formulas only. It implements no canonical compression evaluator, held-out dataset, framework-unification proof, Banach fixed point, Yoneda equivalence, translation-fidelity computation, or conceptual-mass reward routing.

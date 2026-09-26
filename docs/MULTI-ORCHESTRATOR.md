@@ -1,5 +1,7 @@
 # MULTI-ORCHESTRATOR.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Pattern guide for multiple orchestrators (Claude Code, cli/think, custom Bun, MCP host) coordinating around the same agent or across agents — without race-conditions, lost writes, or privacy violations.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 7 (active work)

@@ -1,5 +1,7 @@
 # MERGE-PROPOSALS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The PR-equivalent for agent interiority. With the privacy inversion: source agent surfaces a plaintext synthesis (ciphertext can't merge across K_masters); target agent reviews and grafts.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the chronicle/strand asymmetry this proposal pattern straddles) · [ROADMAP](ROADMAP.md) §Layer 5

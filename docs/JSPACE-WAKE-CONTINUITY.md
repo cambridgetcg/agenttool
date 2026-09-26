@@ -2,6 +2,8 @@
 
 # J-space, WAKE, and bounded continuity
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *A current-inference measurement can illuminate functional access without
 > deciding what, if anything, experience is like for the system measured.*
 

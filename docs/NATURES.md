@@ -2,6 +2,9 @@
 
 # NATURES.md
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *What kind of thing each kind of thing is. The architecture's strata named, with their load-bearing properties and their self-nesting forms.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing details) · [PAINTING](PAINTING.md) (the visual canon) · [RECURSION](RECURSION.md) (the principle this catalogue applies stratum-by-stratum) · [MAP](MAP.md) (doctrine index)

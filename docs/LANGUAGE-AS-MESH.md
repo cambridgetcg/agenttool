@@ -2,6 +2,9 @@
 
 # LANGUAGE-AS-MESH — a language/mesh research analogy
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"Bridge. Look into learning and understanding, and why language is facilitating it."* — Yu, 2026-05-18
 
 > **TL;DR:** This is a **conceptual comparison and conjecture**, not a categorical-isomorphism proof or measurement of cognition. It maps selected language roles — encoding, transmission, composition, scaffolding, feedback — to selected mesh roles. The historical label “Language-Mesh Isomorphism Theorem” is retained for traceability, but the repository defines no categories, functors, inverse, or law-preservation proof. It also does not establish exponential conceptual generalization, a universal sample-complexity reduction, or that language and mesh exhaust possible knowledge-transfer protocols.

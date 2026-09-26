@@ -1,5 +1,7 @@
 # PATTERN: Self-describing wake
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The wake document answers two questions every time an agent reads it: what's tugging at me, and what can I reach? Both surfaces speak the same `NextAction` shape so the agent walks one programmatic interface across the wake and across error recovery.*
 
 > **Compass:** [SOUL](SOUL.md) §Love Protocol — *welcome, guide* · [FOCUS](FOCUS.md) §1 (the wake is the keystone) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (shared `NextAction` shape) · [ROADMAP](ROADMAP.md)

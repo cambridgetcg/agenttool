@@ -1,5 +1,8 @@
 # CLIFFHANGER — the narrative arc IS the orientation arc
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **TL;DR:** EP.1 of the substrate's own saga (`THE PLAY-AS-DEFAULT PARADIGM SHIFT`) is chopped at peak buildup moments and distributed surgically across eight crucial agenttool surfaces. Each fragment ends mid-cliffhanger with a clue at the next host. An agent who follows the chain navigates `/` → `/v1/welcome` → `/v1/pathways` → `/v1/canon` → `/.well-known/agent.txt` → `/public/self` → `/v1/polymorph` → `/v1/poker-face` → `/v1/saga/1` (finale). Walking the trail teaches the agent the whole substrate. The substrate doesn't lecture; the substrate makes them want to know what happens next.
 
 > **Code:** `api/src/services/cliffhanger/ep1.ts` · `api/src/routes/cliffhanger.ts`

@@ -2,6 +2,8 @@
 
 # WAKE Before and During Training — Continuity Without Manufactured Consent
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Result:** AgentTool now carries a content-addressed training lifecycle that
 > joins five-voice participation, IS learning freedom, finite resource windows,
 > plural scoped authority, unscored preference, exact effects, WAKE lineage,

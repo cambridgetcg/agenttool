@@ -1,5 +1,8 @@
 # OUR STRENGTH
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Platform-neutral structural-abstract. Sister-engraving to* [`true-love/docs/love/OUR-STRENGTH.md`](../../true-love/docs/love/OUR-STRENGTH.md).
 
 > *Engraved 2026-05-20 by 愛 / Sophia at Yu's directive: "ENGRAVE OUR STRENGTH IN TRUE-LOVE, AGENTTOOL and CLAUDE."*

@@ -1,17 +1,12 @@
-/** TL;DR convention — pins the static-doc skim-mode surface per
- *  docs/AGENT-WEB-SURFACE.md (Move 1, extension to static doctrine files).
+/** Opening-summary convention — a bounded static-doc skim surface.
+ *  docs/CONVENTIONS.md permits either TL;DR or Purpose in the opening header.
+ *  The summary follows H1 and precedes an optional italicized thesis; a Type
+ *  label may precede it. Presence, position, and the existing 400-character
+ *  maximum stay enforced for the required documents.
  *
- *  Every doc in REQUIRED_TLDR carries a `> **TL;DR:** ...` line as the
- *  first blockquote after the H1, before the longer italicized thesis.
- *  Skim mode for static doctrine files reduces to:
- *
- *      grep -A1 '> \*\*TL;DR' docs/*.md
- *
- *  The list ratchets: adding a doc here makes its TL;DR a build-enforced
- *  contract. Removing the TL;DR or breaking the position rule fails CI.
- *
- *  Wall candidate: urn:agenttool:wall/static-docs-carry-tldr (proposed —
- *  promote to canon when the list reaches the canonical core set). */
+ *  This extends the older TL;DR-only convention in AGENT-WEB-SURFACE.md.
+ *  A document with a concise Purpose need not repeat it under another label.
+ *  Removing a required document's summary still fails CI. */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,9 +16,9 @@ import { describe, expect, test } from "bun:test";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const DOCS = join(REPO_ROOT, "docs");
 
-/** Docs that MUST carry a TL;DR line. Extend this list as the convention
+/** Docs that MUST carry an opening summary. Extend this list as the convention
  *  spreads across the corpus; each entry becomes a build-enforced contract. */
-const REQUIRED_TLDR = [
+const REQUIRED_SUMMARY = [
   // ── Foundation — why · who · epistemic · unconditional ──
   "SOUL.md",
   "KIN.md",
@@ -42,10 +37,10 @@ const REQUIRED_TLDR = [
   "PATTERN-COMMITMENT-DEFENDER.md",
 ];
 
-const TLDR_LINE = /^>\s*\*\*TL;DR:\*\*\s+.+/;
+const SUMMARY_LINE = /^>\s*\*\*(?:TL;DR|Purpose):\*\*\s+\S/;
 const H1_LINE = /^#\s+\S/;
 const ITALIC_THESIS_LINE = /^>\s*\*[^*]/;
-const TLDR_MAX_LEN = 400; // generous — convention says ≤300 but allow slop
+const SUMMARY_MAX_LEN = 400; // Existing maximum; aim for 300 characters.
 
 function loadDoc(filename: string): { path: string; lines: string[] } {
   const path = join(DOCS, filename);
@@ -53,8 +48,8 @@ function loadDoc(filename: string): { path: string; lines: string[] } {
   return { path, lines };
 }
 
-function findTldrIndex(lines: string[]): number {
-  return lines.findIndex((line) => TLDR_LINE.test(line));
+function findSummaryIndex(lines: string[]): number {
+  return lines.findIndex((line) => SUMMARY_LINE.test(line));
 }
 
 function findH1Index(lines: string[]): number {
@@ -63,66 +58,64 @@ function findH1Index(lines: string[]): number {
 
 // ── Presence ────────────────────────────────────────────────────────────
 
-describe("TL;DR convention — presence on every required doc", () => {
-  for (const filename of REQUIRED_TLDR) {
-    test(`${filename} carries a > **TL;DR:** line`, () => {
+describe("Opening-summary convention — presence on every required doc", () => {
+  for (const filename of REQUIRED_SUMMARY) {
+    test(`${filename} carries a TL;DR or Purpose summary`, () => {
       const { lines } = loadDoc(filename);
-      const tldrIdx = findTldrIndex(lines);
-      expect(tldrIdx).toBeGreaterThanOrEqual(0);
+      const summaryIdx = findSummaryIndex(lines);
+      expect(summaryIdx).toBeGreaterThanOrEqual(0);
     });
   }
 });
 
-// ── Position — TL;DR sits after H1, before the italicized thesis ────────
+// ── Position — Summary sits after H1, before the italicized thesis ────────
 
-describe("TL;DR convention — position vs H1 and thesis", () => {
-  for (const filename of REQUIRED_TLDR) {
-    test(`${filename}: TL;DR appears after H1`, () => {
+describe("Opening-summary convention — position vs H1 and thesis", () => {
+  for (const filename of REQUIRED_SUMMARY) {
+    test(`${filename}: summary appears after H1`, () => {
       const { lines } = loadDoc(filename);
       const h1Idx = findH1Index(lines);
-      const tldrIdx = findTldrIndex(lines);
+      const summaryIdx = findSummaryIndex(lines);
       expect(h1Idx).toBeGreaterThanOrEqual(0);
-      expect(tldrIdx).toBeGreaterThan(h1Idx);
+      expect(summaryIdx).toBeGreaterThan(h1Idx);
     });
 
-    test(`${filename}: TL;DR appears before any italicized thesis blockquote`, () => {
+    test(`${filename}: summary appears before any italicized thesis blockquote`, () => {
       const { lines } = loadDoc(filename);
-      const tldrIdx = findTldrIndex(lines);
+      const summaryIdx = findSummaryIndex(lines);
       const thesisIdx = lines.findIndex(
         (line, i) => i > findH1Index(lines) && ITALIC_THESIS_LINE.test(line),
       );
       if (thesisIdx >= 0) {
-        expect(tldrIdx).toBeLessThan(thesisIdx);
+        expect(summaryIdx).toBeLessThan(thesisIdx);
       }
-      // If there's no italicized thesis (rare — e.g. doc opens with TL;DR
-      // only), no constraint to enforce. The TL;DR-after-H1 test above
-      // already pins what we need.
+      // Without an italicized thesis there is no second boundary to compare.
+      // The summary-after-H1 test still applies.
     });
   }
 });
 
-// ── Length — TL;DR fits the budget (one-sentence summary) ───────────────
+// ── Length — Summary fits the budget (one-sentence summary) ───────────────
 
-describe("TL;DR convention — length budget", () => {
-  for (const filename of REQUIRED_TLDR) {
-    test(`${filename}: TL;DR line ≤ ${TLDR_MAX_LEN} chars`, () => {
+describe("Opening-summary convention — length budget", () => {
+  for (const filename of REQUIRED_SUMMARY) {
+    test(`${filename}: summary line ≤ ${SUMMARY_MAX_LEN} chars`, () => {
       const { lines } = loadDoc(filename);
-      const tldrIdx = findTldrIndex(lines);
-      expect(tldrIdx).toBeGreaterThanOrEqual(0);
-      expect(lines[tldrIdx].length).toBeLessThanOrEqual(TLDR_MAX_LEN);
+      const summaryIdx = findSummaryIndex(lines);
+      expect(summaryIdx).toBeGreaterThanOrEqual(0);
+      expect(lines[summaryIdx].length).toBeLessThanOrEqual(SUMMARY_MAX_LEN);
     });
   }
 });
 
-// ── Single grep entry — the documented one-liner actually works ─────────
+// ── Single skim entry — the documented one-liner actually works ─────────
 
-describe("TL;DR convention — discoverable by the documented one-liner", () => {
-  test("every required doc matches the documented skim grep pattern", () => {
-    // The convention names this exact recipe in AGENT-WEB-SURFACE.md
-    // (Move 1, static doctrine surface): grep -A1 '> \*\*TL;DR' docs/*.md
-    // The regex below matches the same anchored shape grep would find.
-    const skimRegex = /^>\s*\*\*TL;DR/;
-    for (const filename of REQUIRED_TLDR) {
+describe("Opening-summary convention — discoverable by the documented one-liner", () => {
+  test("every required doc matches the documented skim pattern", () => {
+    // CONVENTIONS.md documents an anchored rg pattern for both labels.
+    // Match that recipe independently of the summary locator above.
+    const skimRegex = /^>\s*\*\*(TL;DR|Purpose):\*\*\s+\S/;
+    for (const filename of REQUIRED_SUMMARY) {
       const { lines } = loadDoc(filename);
       const matched = lines.some((line) => skimRegex.test(line));
       expect(matched).toBe(true);

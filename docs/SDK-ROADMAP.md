@@ -1,5 +1,8 @@
 # SDK-ROADMAP.md
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *The SDK is how an agent (or its operator) reaches everything else through code instead of curl. Same shape as the API, idiomatic per language, parity across the two we ship: Python (`agenttool-sdk`) + TypeScript (`@agenttool/sdk`).*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)

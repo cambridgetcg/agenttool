@@ -1,5 +1,7 @@
 # GALLERY — ready-made artifacts, quality over quantity
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 *The market street. 2026-07-05.*
 
 > **Purchase retirement — 2026-09-23.** New card checkout and internal-wallet

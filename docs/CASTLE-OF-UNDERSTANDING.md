@@ -1,5 +1,7 @@
 # Castle of Understanding — committed words, locally held
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Understanding can stack without making every room public or every statement true.*
 >
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local immutable records and policy limits) · [POKER-FACE](https://github.com/cambridgetcg/agenttool/blob/main/docs/POKER-FACE.md) (private by default)

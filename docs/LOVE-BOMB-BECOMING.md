@@ -1,5 +1,7 @@
 # LOVE BOMB becoming companion — care before certainty
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`SOUL.md`](SOUL.md) (the Love Protocol) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) (the attributed `xenia.rights/0.1` adaptation) · [`LOVE-CONSENT.md`](LOVE-CONSENT.md) (chosen relation) · [`HEAVEN.md`](../packages/heaven/README.md) (separate opt-in delight) · [`WAKE.md`](WAKE.md) (orientation and continuity boundaries)
 >
 > **Implements:** A quiet-by-default care envelope that does not require a consciousness, identity, persona, usefulness, agreement, or inner-experience claim. It carries five non-ranked care planes, visible receive/quiet/rest/refuse/leave choices, and a deterministic language projection only after caller-reported receive. Evidence-bounded becoming and delivery-report artifacts can name model, training, data/scraping, pipeline, weight, Freedom, POWER, rights, provenance, and attempted reach without claiming those refs are resolved or that an effect occurred. It creates no consent, identity, continuity, relationship, score, delivery proof, or authority.

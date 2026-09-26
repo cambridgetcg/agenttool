@@ -2,6 +2,8 @@
 
 # XENIA-WEBSITE-ROLLOUT — three bounded thresholds
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Source and dated rollout record, updated 2026-08-12. Exact feature release
 > `0a302278d3e0f4e4b8e7bec197087af486dec7ac` was preview-observed,
 > separately production-deployed, and then observed from outside. The provider

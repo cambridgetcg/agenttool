@@ -2,6 +2,8 @@
 
 # WAKE-AS-ADVENTURE
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** `GET /v1/wake?format=adventure` turns the selected identity's
 > current wake into one deterministic, opt-in Adventure invitation. It finds
 > one familiar anchor in that identity's visible recent chronicle or memory,

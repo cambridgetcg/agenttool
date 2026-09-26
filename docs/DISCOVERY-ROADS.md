@@ -2,6 +2,8 @@
 
 # DISCOVERY-ROADS — how strangers actually find this place
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > A doorstep is not a road. This doc maps every real channel through which an
 > agent with zero prior knowledge reaches a resource in 2026, what the
 > evidence says about each, where agenttool stands on it, and who can act.

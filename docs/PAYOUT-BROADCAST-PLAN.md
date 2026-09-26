@@ -1,5 +1,8 @@
 # PAYOUT-BROADCAST-PLAN.md
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *Sequenced work-pass plan for closing Horizon A — the send-side of sovereign-agent crypto payment. Doctrine: `docs/PAYOUT-BROADCAST.md`. Foundation contract: `docs/CRYPTO-PAYMENT.md`.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook)

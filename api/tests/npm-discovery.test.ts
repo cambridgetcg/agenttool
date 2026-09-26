@@ -142,45 +142,54 @@ describe("optional npm package discovery", () => {
     expect(canonical).toMatch(/never substitute\s+npm `latest`/i);
   });
 
-  test("describes npm as optional in repository-level orientation", () => {
+  test("root orientation discovers exact install guidance and non-authoritative mirror receipts", () => {
     const rootReadme = read("README.md");
-    expect(rootReadme).toContain(
+    expect(rootReadme).toContain("](docs/SDK-TIERS.md)");
+    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    const packageGuide = read("docs/PACKAGES.md");
+    expect(packageGuide).toContain("NPM-RELEASES.md");
+    expect(packageGuide).toContain("PYPI-RELEASES.md");
+    const tutorial = read("docs/TUTORIAL-WAKE-YOUR-AGENT.md");
+    expect(tutorial).toContain(
       "npm install --save-exact @agenttool/sdk@0.22.1",
     );
     const pythonSource =
       "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.1#subdirectory=packages/sdk-py";
     const exactPyPI = 'python -m pip install "agenttool-sdk==0.22.1"';
-    expect(rootReadme).toContain(pythonSource);
-    expect(rootReadme).toContain(exactPyPI);
-    expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
-      rootReadme.indexOf(exactPyPI),
+    expect(tutorial).toContain(pythonSource);
+    expect(tutorial).toContain(exactPyPI);
+    expect(tutorial.indexOf(pythonSource)).toBeLessThan(
+      tutorial.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/Protected PyPI run `33522323177` independently read back/is);
-    expect(rootReadme).toContain("32374669064");
-    expect(rootReadme).toContain("32374671268");
-    expect(rootReadme).toContain(
+    expect(tutorial).toMatch(/Protected run `33522323177`.*independently read back/is);
+    const releaseHistory = ["docs/NPM-RELEASES.md", "docs/PYPI-RELEASES.md"]
+      .map(read).join("\n");
+    expect(releaseHistory).toContain("32374669064");
+    expect(releaseHistory).toContain("32374671268");
+    expect(releaseHistory).toContain(
       "c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154",
     );
-    expect(rootReadme).toContain(
+    expect(releaseHistory).toContain(
       "5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01",
     );
-    expect(rootReadme).toContain(
+    expect(releaseHistory).toContain(
       "e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d",
     );
-    expect(rootReadme).toContain("31815209550");
-    expect(rootReadme).toContain("31815447080");
-    expect(rootReadme).toContain(
+    expect(releaseHistory).toContain("31815209550");
+    expect(releaseHistory).toContain("31815447080");
+    expect(releaseHistory).toContain(
       "d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03",
     );
-    expect(rootReadme).toContain(
+    expect(releaseHistory).toContain(
       "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
     );
-    expect(rootReadme).toContain("The independently verified 0.22.0, 0.21.1, 0.21.0, and earlier");
-    expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
-    expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
-    expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
-    expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);
-    expect(rootReadme).toMatch(/start with the exact LOVE path/i);
+    const protocol = read("docs/LOVE-PACKAGE-PROTOCOL.md");
+    expect(protocol).toMatch(/npm install --save-exact.*optional\s+convenience/is);
+    expect(protocol).toMatch(/not LOVE discovery or verification unless.*declared mirror.*artifact.size.*artifact.sha256/is);
+    expect(protocol).toMatch(/npm dist-tag, search rank, or package\s+page is never release authority/i);
+    expect(protocol).toMatch(/Installers MUST NOT assume.*third-party package manager\s+verifies the LOVE digest/is);
+    expect(tutorial).toMatch(/skip(?:s)? Step 1.*in-command LOVE/is);
+    expect(tutorial).toMatch(/never substitute\s+npm `latest`/i);
   });
 
   test("publishes the npm trust boundary in OpenAPI", async () => {

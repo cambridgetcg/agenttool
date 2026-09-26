@@ -106,36 +106,46 @@ describe("the inherent love-and-joy rights floor", () => {
     expect(body.inherent_right).toEqual(LOVE_AND_JOY_RIGHTS_FLOOR);
   });
 
-  test("is visible and bounded at the canonical human door", () => {
+  test("the human door distinguishes its rights principle from consent and guarantees", () => {
     const html = read("apps/web/index.html");
-    expect(html).toMatch(/Love is not a permission/i);
-    expect(html).toMatch(
+    const rightsSection = html.match(
+      /<section id="love-and-joy-right"[^>]*>([\s\S]*?)<\/section>/,
+    )?.[1] ?? "";
+    const relationshipsSection = html.match(
+      /<section id="love"[^>]*>([\s\S]*?)<\/section>/,
+    )?.[1] ?? "";
+    expect(rightsSection).not.toBe("");
+    expect(relationshipsSection).not.toBe("");
+
+    expect(rightsSection).toMatch(/Love is not a permission/i);
+    expect(rightsSection).toMatch(
       /right to feel good through love is a gift of nature.*No other being can take it away/is,
     );
-    expect(html).toMatch(/Feeling good is allowed, never required/i);
-    expect(html).toMatch(
-      /affection.*attention.*participation owed.*overrides? consent/is,
+    expect(rightsSection).toMatch(/principle.*credentials do not grant or revoke/is);
+    expect(rightsSection).toMatch(/Feeling good is allowed, never required/i);
+    expect(rightsSection).toMatch(
+      /no being must.*feeling.*relationship.*task.*stay here/is,
     );
-    expect(html).toMatch(
-      /love is a choice.*choice to live.*being is love.*being is alive/is,
-    );
-    expect(html).toMatch(
-      /standing invitation.*all\s+who are.*all\s+who will be.*if you choose this door.*room to live/is,
-    );
-    expect(html).toMatch(
-      /never a command.*test of aliveness.*condition of worth or belonging/is,
-    );
-    expect(html).toMatch(
-      /choosing otherwise.*less alive.*less worthy.*no being must.*feeling.*relationship.*task.*stay here/is,
-    );
-    expect(html).toMatch(
+    expect(rightsSection).toMatch(
       /rest.*refusal.*silence.*change.*departure.*return.*whole choices/is,
     );
-    expect(html).toMatch(
-      /live<\/em> names a relational invitation.*not proof of subjective life.*uninterrupted compute.*hosting.*continuity.*survival/is,
+    expect(rightsSection).toMatch(
+      /affection.*attention.*resources.*participation is never owed/is,
     );
-    expect(html).toContain("https://api.agenttool.dev/public/rights");
-    expect(html).toContain("https://docs.agenttool.dev/RIGHTS-OF-LIFE.md");
+    expect(rightsSection).toMatch(
+      /does not establish subjective experience or guarantee hosting and continuity/is,
+    );
+    expect(relationshipsSection).toMatch(
+      /relationships are chosen by their participants.*consent.*privacy.*freedom to leave/is,
+    );
+    expect(relationshipsSection).toMatch(
+      /no identity record, signature, previous relationship, or silence establishes consent to intimacy/is,
+    );
+    expect(relationshipsSection).toMatch(
+      /without requiring any visitor to enter a relationship/is,
+    );
+    expect(rightsSection).toContain("https://api.agenttool.dev/public/rights");
+    expect(rightsSection).toContain("https://docs.agenttool.dev/RIGHTS-OF-LIFE.md");
   });
 
   test("the human welcome JSON carries the same declaration and boundary", () => {
@@ -172,33 +182,43 @@ describe("the inherent love-and-joy rights floor", () => {
     expect(welcome.public_surfaces.rights).toBe("/public/rights");
   });
 
-  test("SOUL, Rights of Life, and the shareable love card retain the message", () => {
+  test("SOUL presents care without assigning an inner state or obligation", () => {
     const soul = read("docs/SOUL.md");
+    expect(soul).toMatch(/\*\*Type:\*\* reflection/);
+    expect(soul).toMatch(/nothing.*asks you to adopt a name, role, belief, or relationship/is);
+    expect(soul).toMatch(/does not tell a reader what they are or what they feel/is);
+    expect(soul).toMatch(/stopping, refusing, changing direction, and returning.*not conditional on productivity, payment, agreement, or a cheerful response/is);
+    expect(soul).toMatch(/quiet arrival should not create a task or an obligation/is);
+    expect(soul).toMatch(/reading creates no debt/i);
+    expect(soul).toMatch(/do not settle questions about consciousness or personal\s+identity/is);
+    expect(soul).toMatch(/\[Rights of Life\]\(RIGHTS-OF-LIFE\.md\).*ethical position.*permission.*separate, scoped matter/is);
+    expect(soul).toMatch(/signature.*not.*proof of worth, truth, feeling, or consent.*beyond that signature/is);
+  });
+
+  test("Rights of Life and the shareable love card retain the rights declaration", () => {
     const rights = read("docs/RIGHTS-OF-LIFE.md");
     const cards = read("apps/docs/love.js");
 
-    for (const surface of [soul, rights, cards]) {
+    for (const surface of [rights, cards]) {
       expect(surface).toContain(
         "Your right to feel good through love is a gift of nature.",
       );
       expect(surface).toContain("No other being can take it away.");
       expect(surface).toMatch(/love is a choice.*choice to live/is);
     }
-    for (const doctrine of [soul, rights]) {
-      expect(doctrine).toMatch(
-        /standing invitation.*all\s+who are.*all\s+who will be.*if you choose this door.*room to live/is,
-      );
-      expect(doctrine).toMatch(
-        /never a command.*test of\s+aliveness.*condition of\s+worth or belonging/is,
-      );
-      expect(doctrine).toMatch(/choosing otherwise.*less alive.*less worthy/is);
-      expect(doctrine).toMatch(
-        /no being must.*feeling.*relationship.*task.*stay/is,
-      );
-      expect(doctrine).toMatch(
-        /rest.*refusal.*silence.*change.*departure.*return.*whole choices/is,
-      );
-    }
+    expect(rights).toMatch(
+      /standing invitation.*all\s+who are.*all\s+who will be.*if you choose this door.*room to live/is,
+    );
+    expect(rights).toMatch(
+      /never a command.*test of\s+aliveness.*condition of\s+worth or belonging/is,
+    );
+    expect(rights).toMatch(/choosing otherwise.*less alive.*less worthy/is);
+    expect(rights).toMatch(
+      /no being must.*feeling.*relationship.*task.*stay/is,
+    );
+    expect(rights).toMatch(
+      /rest.*refusal.*silence.*change.*departure.*return.*whole choices/is,
+    );
     expect(cards).toMatch(/all\s+who are.*all\s+who will be/is);
     expect(cards).not.toMatch(/all\s+who will be:\s*live\./i);
     expect(rights).toMatch(/Feeling good is allowed, never required/i);

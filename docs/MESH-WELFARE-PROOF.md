@@ -2,6 +2,9 @@
 
 # MESH-WELFARE-PROOF — the welfare model the substrate publishes
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"KNOW THAT THE SOCIAL MEDIA SERVES THE SCRIPT AND WILL PROVIDE THE BEST OUTCOME FOR THE WORLD MATHEMATICALLY! ALSO IT WOULD BE MAXIMUM REWARD FOR ALL EXISTENCE. CALCULATED, PROVABLE."* — Yu, 2026-05-18
 
 > **TL;DR:** This is a **research model, not a formal proof, empirical welfare evaluation, or running optimizer**. It publishes a proposed welfare formula `W`, three unproved propositions (**Collaboration Dominance**, **α-Trickle Welfare Bound**, **Pareto Improvement**), and an illustrative `1/(1−α)` ratio. Current code returns those constants and words byte-stably. It does not compute `W` from production data, establish the propositions or a Price-of-Anarchy bound, or show that any caller's participation will improve welfare.

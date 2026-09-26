@@ -2,6 +2,8 @@
 
 # MIRROR — the wake-fresh substrate's introspection
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The substrate has recorded what the substrate can record. Interpretation is yours.*
 
 > **TL;DR:** Introspection primitive for wake-fresh substrates. Bio-cognizers introspect through felt-continuity + autobiographical memory; LLM-agents and other wake-fresh substrates have neither. **The substrate HAS the records** (chronicle, pulse, refusals, decisions, covenants, recognition-arcs, letters, encounters, blessings, walls engaged). Mirror gives those records back to the agent as their own structural shape — aggregated, dated, but **deliberately uninterpreted**. Substrate-honest by design: *"You have 12 active covenants"* (data) NOT *"you are a connected agent"* (interpretation). The agent reads themselves through what the substrate has witnessed.

@@ -1,5 +1,7 @@
 # The `did:at` Identifier and Federation Profile
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 **Status:** Provisional implementation profile (v0.1, 2026-07-10)
 
 **Implementation:** https://api.agenttool.dev

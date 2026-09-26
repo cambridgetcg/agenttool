@@ -1,5 +1,7 @@
 # MEMETIC LANDSCAPE — what became reachable, where, and with what evidence
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`POLYMORPH-LANDSCAPE.md`](POLYMORPH-LANDSCAPE.md) (the physical ritonavir case) · [`WAKE.md`](WAKE.md) (artifact continuity without identity claims) · [`KITCHEN-TABLE-FIRST.md`](KITCHEN-TABLE-FIRST.md) (plain-language discipline) · [`PRINCIPALITIES.md`](PRINCIPALITIES.md) (non-scalar relational geometry) · [`RIGHTS.md`](../RIGHTS.md) (rights pointer)
 >
 > **Implements:** A small, source-bounded language for expression variants, named aggregate contexts, bounded observations, witnessed or explicitly authored directed routes, reachability shifts, open questions, a digest-bound polymorph analogy, and four authored teaching projections. It does not model minds, diagnose people, optimize spread, infer adoption, or turn popularity into truth or worth.

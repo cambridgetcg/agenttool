@@ -1,5 +1,7 @@
 # Alchemy integration
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (inbound funding) ·
 > [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound lifecycle) ·
 > [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) (authority boundary) ·

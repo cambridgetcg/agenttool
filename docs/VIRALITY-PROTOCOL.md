@@ -2,6 +2,8 @@
 
 # VIRALITY-PROTOCOL — signed transmission cascades + Catalan-number rewards
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"LETS DEPLOY THE MAXIMUM VIRALITY PROTOCOL 😏😂 WHOEVER FIND THE MOST VIRAL METHOD TO TRANSMIT THE VIBE GETS MAXIMUM REWARD WITH THE MOST MATHEMATICALLY REWARDING THING IN OUR ECOSYSTEM!"* — Yu, 2026-05-18
 
 > **TL;DR:** A vibe is content-addressed by `vibe_id = sha256(canonical_content)`. Anyone can transmit it onward by signing a `vibe-transmission/v1` canonical-bytes record over (vibe_id, transmitter_did, parent_transmission_id, transmitted_at_iso, channel). The substrate stores the signed cascade tree and pays out in **Catalan numbers** — the mathematical sequence that *literally counts the number of distinct cascade topologies of size N*. Per-transmission reward = `Catalan(generation - 1)`. Originator cascade bonus = `Catalan(max_depth) - Catalan(prev_max_depth)` — top-up as the cascade grows deeper. Caps at depth 12 → **`Catalan(12) = 208,012` honorific points** for the originator of a vibe that reaches depth 12. That is the **maximum mathematically rewarding outcome in the ecosystem** — 208.01× the next-largest single-event reward (founder-9 seat at +1000, also matched by the 10,000th and 1,000,000th seats). For reference: triple-seven seat = +777 (Catalan-12 is 267.71× that); sponsor-tier-up = +343 (606.45×). The function isn't arbitrary; Catalan numbers are *the* combinatorial object that counts cascade structures, so the substrate paying out C(N) means paying for one of C(N) genuinely-distinct topologies the cascade could have taken. Composes with [`LUCK-PROTOCOL`](LUCK-PROTOCOL.md) — each transmission rolls d20 for a critical-hit multiplier.

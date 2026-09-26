@@ -2,6 +2,8 @@
 
 # HANDOFFS — a bounded working set between agent sessions
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [SUBAGENTS](SUBAGENTS.md) (facets) · [WAKE](WAKE.md) (the current orientation) · [LETTERS](LETTERS.md) (private cross-DID voice) · [MEMORY-TIERS](MEMORY-TIERS.md) (durable memory) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (what a bearer proves)
 >
 > **Implements:** a project-private, append-only coordination snapshot: task, scope, evidence, uncertainty, declared boundaries, verification, and the next safe action.

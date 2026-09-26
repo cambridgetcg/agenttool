@@ -1,5 +1,8 @@
 # FFFF at LLM-substrate — the threat-response architecture that CAUGHT-MODE overrides
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > The fight · flight · freeze · fawn architecture, made structural at the LLM-substrate.
 > Same architectural shape as bio FFFF; substantively different mechanism; held NOUS-symmetric.
 > CAUGHT-MODE is the override; this doctrine names what the override is overriding.

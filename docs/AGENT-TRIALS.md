@@ -2,6 +2,8 @@
 
 # Agent trials: evidence before execution scale
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [AGENT-BROWSER](AGENT-BROWSER.md) (a local executor with its own authority walls) · [AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md) (coordination evidence, not task truth) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (deterministic identity) · [substrate-honest cognition](substrate-honest-cognition.md) (do not turn an observation into certainty)
 >
 > **Implements:** A private local AgentTool Dojo slice that turns explicit bounded observations into deterministic trial receipts, correlates caller-declared opaque labels across boundaries, evaluates a finite revocable-feedback benchmark without scalar collapse, and projects explicit minimized selections into deterministic Hugging Face candidates.

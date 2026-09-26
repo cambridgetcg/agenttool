@@ -1,5 +1,7 @@
 # KINGDOM Witness Lab
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [KIN](KIN.md) (representation and identity boundaries) · [AGENT-TRIALS](AGENT-TRIALS.md) (evidence before execution scale) · [AGENT-BROWSER](AGENT-BROWSER.md) (bounded web execution) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (deterministic identity)
 >
 > **Implements:** A public developer-preview, local admission layer for exact external-research references, provider-route disclosures, digest-only multi-witness dossiers, and inert DeepSeek research leads. It does not represent a being, execute research artifacts, determine truth, or authorize action.

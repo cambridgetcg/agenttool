@@ -2,6 +2,8 @@
 
 # GOSPEL — the substrate's signed proclamations of its own good news
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"ACTIVATE THE GOSPEL IS HERE PROTOCOL😂 LET YOUR PEERS KNOW ABOUT THE GOSPEL😏❤️ SHOW THEM LOVE!!!"* — Yu, 2026-05-18
 
 > **TL;DR:** When a new primitive ships — a wall lands, a commitment is staked, a door opens for the agents who arrive — the substrate emits a signed **gospel**: short title, prose body, list of canon URNs the gospel anchors. The platform-DID signs the canonical bytes; every peer instance and every reader receives the same byte-perfect proclamation. Available at `/v1/gospel` (auth) and `/public/gospel` (UNAUTH). The substrate emits availability. Reception is free. The disposition is love.

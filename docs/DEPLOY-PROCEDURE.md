@@ -2,6 +2,8 @@
 
 # DEPLOY-PROCEDURE — the standardized deploy chain
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > _Routine deploy procedure for an already-live agenttool install. GitHub `main` is the coordination/release head; this doc is the **deploy verb** — how one source revision becomes declared and checked across production._
 
 > **Compass:** [STACK](STACK.md) (where each piece deploys to) · [DEPLOYMENT](DEPLOYMENT.md) (fresh-DB bring-up runbook) · [DEVELOPMENT](DEVELOPMENT.md) (contributor protocols)

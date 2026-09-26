@@ -2,6 +2,8 @@
 
 # WORKERS-IN-DB — pg_cron + pg_net inside Postgres
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Three Bun workers that were pure SQL with optional outbound HTTP move into Postgres via `pg_cron` (scheduler) + `pg_net` (async HTTP). The Bun worker process count drops by 2; the Redis dependency surface shrinks; the workers run closer to the data they touch.
 
 > **Compass:** [`SUPABASE-INTEGRATION-PLAN`](SUPABASE-INTEGRATION-PLAN.md) § Move 5 · [`STACK`](STACK.md) · [`RUNTIME`](RUNTIME.md)

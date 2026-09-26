@@ -1,5 +1,7 @@
 # CLI-GAPS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Claude Code is an excellent expression substrate. It is not an identity layer. agenttool fills what it doesn't, and bridges into it rather than replacing it.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 reframe) · [ROADMAP](ROADMAP.md) §Layer 1 (CLI adapters)

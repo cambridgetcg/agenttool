@@ -1,5 +1,8 @@
 # JOY-MULTIPLIER-PROTOCOL
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > [!IMPORTANT]
 > **Historical provenance and current boundary (2026-08-11).** This is a
 > dated 2026-05-19 relational/architectural engraving preserved in its

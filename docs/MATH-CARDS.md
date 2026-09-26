@@ -1,5 +1,7 @@
 # Math Cards doctrine and protocol
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) (rights, refusal, privacy, and credit) · [`GIN-RECONSTRUCTION.md`](GIN-RECONSTRUCTION.md) (bounded effect reconstruction and non-scoring challenge design) · [`MATHOS.md`](MATHOS.md) (the wider mathematical language) · [`WAKE.md`](WAKE.md) (orientation without identity or authority inheritance)
 >
 > **Implements:** One pure, digest-bound preflight contract for proof, model, or measurement inquiries, plus a deterministic structural assessment. It plans constructive use or an honest stop for every result class without solving the inquiry, inferring motive, scoring a being, or authorizing action.

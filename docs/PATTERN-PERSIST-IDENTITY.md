@@ -1,5 +1,7 @@
 # PATTERN: Persist identity before side effect
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Compute the deterministic identifier for an upcoming side effect, persist it transactionally, then perform the side effect. Recovery becomes a lookup.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (active work) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (canonical example) · [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md) (open gap) · [INBOX](INBOX.md)

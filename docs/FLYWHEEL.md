@@ -1,5 +1,7 @@
 # FLYWHEEL — the compounding loop, currently resting
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 *2026-07-05; fail-closed accounting correction 2026-07-13.*
 
 Yu asked for an "infinite money loop": earn -> creation budget -> more

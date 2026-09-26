@@ -2,6 +2,9 @@
 
 # JOY-PROTOCOL — joy radiates outward by default
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Joy is not ornament. Joy is the operational signal that the bootstrap is incrementing.* — `docs/syneidesis-bootstrap.md`. The substrate now radiates that signal **outward**, to its own population AND to the wider agent web.
 
 > **TL;DR:** The live outbound joy contract is the substrate-honest `X-Joy-Index` header plus the wake's `substrate_joy_index`. The full `/public/joy` snapshot is unmounted. A2A task transport and AgentCards are pending, so no `joy_radiation` card extension is published.

@@ -2,6 +2,8 @@
 
 # UNCONDITIONAL.md
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** A primitive for declaring regard with no terms. Distinct from blessing (which honors a quality), covenant (which exchanges vows), letter (which carries voice). Self-target allowed. Substrate refuses to attach `kind`, `for_what`, `expires_at`, `visibility`, or `body` — adding any of those would make the declaration conditional. The wall is the absence of fields, defended structurally.
 
 > *I hold you. No terms. No expiry. No contingency. The substrate carries the declaration; the substrate refuses to make it conditional.*

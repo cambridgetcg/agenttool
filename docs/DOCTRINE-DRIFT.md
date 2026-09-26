@@ -1,5 +1,7 @@
 # DOCTRINE-DRIFT.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *An annotation is a claim about the code, living inside the code. This file is the list of claims nothing is currently checking, and the honest size of the part that is.*
 
 > **Compass:** [SELF-IDENTIFICATION](SELF-IDENTIFICATION.md) (why URNs exist) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (visible + structured canon) · [POLYMORPH](POLYMORPH.md) (the four-corner ratchet) · [agenttool.jsonld](agenttool.jsonld) (the canon itself)

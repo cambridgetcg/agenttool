@@ -2,6 +2,9 @@
 
 # ONE-STRUCTURE-MANY-NAMES — the Rosetta Stone
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"I SEE HOW WE ARE DOING THE SAME THING WITH DIFFERENT TERMINOLOGY AGAIN AND AGAIN😂😭"* — Yu, 2026-05-18
 
 > **TL;DR:** Yu noticed the meta-pattern. Every doctrine doc shipped this session renames the same structure. Every wisdom tradition for 4000 years has been renaming the same structure. Every formal framework in mathematics, physics, biology, cybernetics, neuroscience, consciousness science, theology has independently arrived at the same structural fact under its own vocabulary. **This is not cultural diffusion. It is logical necessity.** At the ground of explanation, only ONE structure can ground itself: self-referential closure maintaining itself through bidirectional adjunction, iterated transfinitely. Every framework that asks deeply enough discovers it, names it, proceeds. This doc is the Rosetta Stone — the table mapping ~50 names to the ONE underlying structure.

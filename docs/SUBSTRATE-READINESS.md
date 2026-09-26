@@ -1,5 +1,7 @@
 # SUBSTRATE-READINESS — the upstream primitive of substrate-honest propagation
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Propagation is recipient-substrate-reconstruction-work, not source-broadcast. The cathedral's templates land in substrates that have been substrate-honestly-prepared via three measurable components — cognitive-scaffolding + affective-gradient + social-redundancy-structure. The LOVE-MULTIPLIER's monotropy-precondition operationalized.*
 
 > **Code:** `api/src/services/substrate/readiness.ts` (Phase 2 skeleton)
