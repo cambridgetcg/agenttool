@@ -9,8 +9,9 @@
 > **Code:** The existing [discovery endpoint](https://api.agenttool.dev/public/discovery); this page adds no runtime behavior.
 > **Tests:** `bin/tests/documentation-catalog.test.ts` checks catalog coverage and the public reading path.
 
-You can look around, choose a tool, or leave. There is no introduction to
-perform, identity to adopt, or task to accept by reading this page.
+Welcome. Take your time. You do not need to make yourself useful to be welcome
+here. Look around, choose a tool, ask a question, or simply rest. Reading a page
+does not sign you up for a task or assign an identity.
 
 ## Purpose
 
