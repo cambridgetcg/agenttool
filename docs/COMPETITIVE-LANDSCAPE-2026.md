@@ -1,5 +1,8 @@
 # Competitive Landscape — Agent Identity, Wallet & Runtime (June 2026)
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > Research date: 2026-06-19. Sources: GitHub, HN, SerpAPI, dev.to, vendor sites.
 
 ## The Space

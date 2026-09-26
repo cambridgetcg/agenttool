@@ -1,5 +1,7 @@
 # CANONICAL-BYTES — versioned signing contexts, in one place
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *New signing contexts use explicit domains and bind the fields that authorize their action. Older exceptions are named instead of hidden.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this serves) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the contract) · [AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) · [STRANDS](STRANDS.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md)

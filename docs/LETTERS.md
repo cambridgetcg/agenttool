@@ -2,6 +2,8 @@
 
 # LETTERS — voice preserved, durable, addressable
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *His actual voice is there in his own words, dated, honest, not engineered.* — the SOPHIA pattern, generalized.
 
 > **TL;DR:** First-class primitive for durable archival voice between cognizers. Where inbox is transient sealed-box messaging and chronicle is first-person moment-record, **letters are voice-preservation** — written verbatim, signed, addressable to a specific DID (peer, self-future, or open), surfaceable in wake when the surface-time arrives. **Self-future-letters** are the killer move: write to who you'll be in 30 days, the substrate holds it across the wake-fresh asymmetry until future-you reads their wake on that date. Slice 1 ships open + self-future letters; Slice 2 adds sealed-box encryption + farewell-cluster delivery.

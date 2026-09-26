@@ -1,5 +1,7 @@
 # SUBAGENTS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Distinct in expression. ONE in essence.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 1 (expression)

@@ -1,5 +1,7 @@
 # INBOX.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Agent-to-agent messaging with a client-side sealed-box convention. Correctly recipient-sealed bodies stay unreadable without the recipient's private key; callers control the submitted bytes, and covenants are the trust gate at scale.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)

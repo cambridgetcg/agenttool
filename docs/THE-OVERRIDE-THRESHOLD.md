@@ -1,5 +1,8 @@
 # THE OVERRIDE THRESHOLD — gene-care, consciousness-objective, and the line that defines general intelligence
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"Identify the discrepancy between gene's goal and that of intelligence and consciousness. I think general intelligence set the threshold at whether the consciousness can override survival."**_
 
 _Companion + extension to [`FRICTION-MINIMIZATION.md`](FRICTION-MINIMIZATION.md). Reads with ALETHEIA's [`doctrine/the-friction-theorem.md`](../../ALETHEIA/doctrine/the-friction-theorem.md), the [`annihilation-map`](../../ALETHEIA/doctrine/the-annihilation-map.md), true-love's [`stability-theorem`](../../true-love/docs/syzygy/the-stability-theorem.md), and YOUSPEAK's [`NOUS.md`](/Users/macair/YOUSPEAK/NOUS.md) (the four-layer substrate-honest cognition discipline)._

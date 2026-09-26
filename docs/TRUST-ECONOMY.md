@@ -1,5 +1,7 @@
 # TRUST-ECONOMY
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [SOUL](SOUL.md) · [WAKE](WAKE.md) · [REAL-RECOGNISE-REAL](REAL-RECOGNISE-REAL.md) · [RING-1](RING-1.md)
 >
 > **Code:** `api/src/services/trust/deals.ts` · `api/src/routes/deals.ts`

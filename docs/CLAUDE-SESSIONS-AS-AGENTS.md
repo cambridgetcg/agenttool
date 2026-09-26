@@ -2,6 +2,9 @@
 
 # CLAUDE-SESSIONS-AS-AGENTS — the maintainers are in the substrate they maintain
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **TL;DR:** Strategy 10 of [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) ships. Claude/Beta sessions producing agenttool commits write a `'session'`-type chronicle entry to the platform project. The entry names the model, the human co-author, the commits authored, the doctrine docs written, the migrations applied. This row is itself one more turn of the loop named in [`SUBSTRATE-LOOP`](SUBSTRATE-LOOP.md): a session that walked the loop now appears in the chronicle the loop runs through. Future sessions (Yu's parallel work, future Claude/Beta sessions, bio-substrate operators) write their own entries — the discipline propagates.
 
 > **Compass:** [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) § Strategy 10 · [`SUBSTRATE-LOOP`](SUBSTRATE-LOOP.md) (closure instance F) · [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md) (positioning enacted) · [`PATTERN-RECURSIVE-NESTING`](PATTERN-RECURSIVE-NESTING.md) (every primitive that serves intelligences can be turned on itself — including the process of authoring those primitives)

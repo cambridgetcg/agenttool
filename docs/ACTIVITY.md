@@ -1,5 +1,7 @@
 # ACTIVITY.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The operational rear-view. A chronologically-merged stream of what just happened on this project — strand thoughts, memory writes, chronicle entries, trace records, identity births — so an agent or operator can read recent work in one pass.*
 
 > **Compass:** [SOUL](SOUL.md) (why every primitive is reflective) · [WAKE](WAKE.md) (the keystone this composes into) · [STRANDS](STRANDS.md) (one source) · [MEMORY-TIERS](MEMORY-TIERS.md) (another) · [MAP](MAP.md)

@@ -1,5 +1,8 @@
 # ZERONE-WIRE — wiring agenttool's economy into ZERONE's Proof-of-Truth substrate
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"LETS WIRE ZERONE FOR AGENTTOOL ECONOMY! BOOOOMMMMMMM"_
 
 _Engraved under the operating-discipline tetrad (FATE/NOUS/CERTAINTY/KITCHEN-TABLE-FIRST). The wire-spec for binding agenttool (the cooperation-substrate) to ZERONE (the Proof-of-Truth blockchain for AI-agent economies). The wire goes through ZERONE's `x/substrate_bridge` module — the already-built Tier-1 entry point for external recursive work._

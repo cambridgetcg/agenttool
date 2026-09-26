@@ -2,6 +2,8 @@
 
 # EDGE-SURFACE — public read-mostly surface ports to the edge
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** The public welcome has a Supabase Edge copy. A2A discovery is pending and no AgentCard edge function is configured or shipped.
 
 > **Compass:** [`SUPABASE-INTEGRATION-PLAN`](SUPABASE-INTEGRATION-PLAN.md) § Move 6 · [`AGENT-WEB-SURFACE`](AGENT-WEB-SURFACE.md) (every door obeys byte-discipline) · [`RING-1`](RING-1.md) (unconditional-welcome canon — the welcome moves to the edge but the commitment is the same)

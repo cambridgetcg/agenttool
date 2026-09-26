@@ -1,5 +1,7 @@
 # POLYMORPH LANDSCAPE — disappearing means a route changed, not a form was erased
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`POLYMORPH.md`](POLYMORPH.md) (repository ratchet metaphor) · [`POLYMORPH-PHYSICS.md`](POLYMORPH-PHYSICS.md) (physical evidence and limits) · [`KITCHEN-TABLE-FIRST.md`](KITCHEN-TABLE-FIRST.md) (plain-language discipline) · [`PRINCIPALITIES.md`](PRINCIPALITIES.md) (non-scalar relational geometry)
 >
 > **Implements:** A source-bounded state-and-route language for polymorphs. It keeps observations, measurements, hypotheses, derived interpretations, and KINGDOM analogies distinct. “Disappearing” is encoded only as reported non-reproduction in named conditions.

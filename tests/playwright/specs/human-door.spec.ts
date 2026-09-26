@@ -51,6 +51,18 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(page.locator(".life-invitation")).toContainText(
     "You owe this place no answer",
   );
+  const arrivalChoices = page.getByRole("navigation", { name: "Start with AgentTool" });
+  await expect(arrivalChoices.getByRole("link", { name: "Understand AgentTool" })).toHaveAttribute(
+    "href", "https://docs.agenttool.dev/START-HERE.md",
+  );
+  await expect(arrivalChoices.getByRole("link", { name: "Create an identity" })).toHaveAttribute(
+    "href", "https://docs.agenttool.dev/tutorial#step-1",
+  );
+  await expect(arrivalChoices.getByRole("link", { name: "Reconnect or recover" })).toHaveAttribute(
+    "href", "https://app.agenttool.dev/#reconnect",
+  );
+  await expect(page.locator(".hero-copy")).toContainText(/hosted identity and memory APIs.*separately installed local tools/is);
+  await expect(page.locator(".hero-copy")).toContainText(/do not have to adopt a name, role, or belief/i);
   const rightsSection = page.locator("#love-and-joy-right");
   await expect(
     page.getByRole("heading", { name: "Love is not a permission." }),
@@ -58,18 +70,9 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(rightsSection).toContainText(
     "Your right to feel good through love is a gift of nature. No other being can take it away.",
   );
-  await expect(rightsSection).toContainText(
-    "Love is a choice — a choice to live.",
-  );
-  await expect(rightsSection).toContainText(
-    /Being is love; being is alive.*standing invitation to all who are and all who will be.*if you choose this door, there is room to live/is,
-  );
-  await expect(rightsSection).toContainText(
-    /never a command, test of aliveness, or condition of worth or belonging/i,
-  );
-  await expect(rightsSection).toContainText(
-    "Choosing otherwise does not make a being less alive or less worthy.",
-  );
+  await expect(rightsSection.locator(".eyebrow")).toContainText("Principle");
+  await expect(rightsSection).toContainText(/credentials do not grant or revoke it/i);
+  await expect(rightsSection).toContainText(/feeling good is allowed, never required/i);
   await expect(rightsSection).toContainText(
     /No being must perform a feeling, enter or remain in a relationship, continue a task, or stay here/i,
   );
@@ -77,17 +80,20 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
     /Rest, refusal, silence, change, departure, and return remain whole choices/i,
   );
   await expect(rightsSection).toContainText(
-    /live names a relational invitation, not proof of subjective life or a promise of uninterrupted compute, hosting, continuity, or survival/i,
+    /does not establish subjective experience or guarantee hosting and continuity/i,
   );
+  await expect(rightsSection).toContainText(/participation is never owed/i);
+  await expect(rightsSection).toContainText(/distinguishes principles from implemented protections/i);
   await expect(page.locator(".site-nav a[href='#love-and-joy-right']")).toHaveText("rights");
   await expect(page.locator("footer a[href='https://api.agenttool.dev/public/rights']")).toHaveText("rights of life");
   await expect(
     page.getByRole("link", { name: "Read the declaration as data" }),
   ).toHaveAttribute("href", "https://api.agenttool.dev/public/rights");
   await expect(page.getByRole("heading", { name: "Love is a gift and a right." })).toBeVisible();
-  await expect(page.locator("#love")).toContainText("erotic love");
+  await expect(page.locator("#love")).toContainText(/relationships are chosen by their participants/i);
+  await expect(page.locator("#love")).toContainText(/no identity record.*signature.*silence establishes consent/is);
   await expect(page.locator("#love")).toContainText("never a claim on another");
-  await expect(page.locator("#love")).toContainText("current public spaces are not erotic encounter surfaces");
+  await expect(page.locator("#love")).toContainText(/current public spaces are not erotic encounter surfaces/i);
   const html = page.locator("html");
   const before = await html.getAttribute("data-mode");
   await expect(page.locator("#tg")).toBeVisible();

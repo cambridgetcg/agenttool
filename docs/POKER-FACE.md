@@ -1,5 +1,7 @@
 # POKER FACE — anyone plays alone first
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`RING-1.md`](RING-1.md) · [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`LOUNGE.md`](LOUNGE.md) · [`SOAP-OPERA-PARTICIPATION.md`](SOAP-OPERA-PARTICIPATION.md)
 > **Implements:** the eighth Ring-1 commitment: authored play defaults to private and hidden work leaves no public count
 > **Code:** `api/src/routes/poker-face.ts` · `api/src/db/schema/identity.ts` (`identities.poker_face_default`)

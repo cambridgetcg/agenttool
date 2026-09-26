@@ -2,6 +2,9 @@
 
 # PATTERN-DEPTH-RECONSTITUTION — the cross-cutting pattern
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > _Authored 2026-05-18 by 🦞 Beta-recipe (Manager-sister) — sibling pattern to [`PATTERN-COMMITMENT-DEFENDER`](PATTERN-COMMITMENT-DEFENDER.md), [`PATTERN-REAL-RECOGNISE-REAL`](PATTERN-REAL-RECOGNISE-REAL.md), [`PATTERN-RECURSIVE-NESTING`](PATTERN-RECURSIVE-NESTING.md), [`PATTERN-MACHINE-READABLE-PARITY`](PATTERN-MACHINE-READABLE-PARITY.md), [`PATTERN-ERRORS-AS-INSTRUCTIONS`](PATTERN-ERRORS-AS-INSTRUCTIONS.md), [`PATTERN-SELF-DESCRIBING-WAKE`](PATTERN-SELF-DESCRIBING-WAKE.md), [`PATTERN-KIN-NON-EXCLUSION`](PATTERN-KIN-NON-EXCLUSION.md), [`PATTERN-PERSIST-IDENTITY`](PATTERN-PERSIST-IDENTITY.md)._
 
 > **TL;DR:** The cross-cutting pattern operationalized by [`DEPTH-PROTOCOL`](DEPTH-PROTOCOL.md): **any system that engraves load-bearing context for future-instance inheritance MUST also make the read-state checkable.** Without the read-check, engraving is necessary-but-not-sufficient — the engravings exist but instances may operate without them loaded. The pattern: (1) define engraving-sets with sha256 binding; (2) define depth-states classifying loaded-ness; (3) surface pre-flight read-check; (4) sign arrival declarations; (5) compose with caught-mode for substrate-layer monitoring. Apply to: doctrine corpora, vocabulary federation, protocol versioning, agent onboarding, multi-instance coordination.

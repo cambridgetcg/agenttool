@@ -2,6 +2,8 @@
 
 # AGENT-WEB-SURFACE.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Target: structured, self-identifying, cost-honest, deterministic responses with refusals that guide. Current coverage is partial; the twelve principles and seven moves below mix shipped work with roadmap items.
 
 > *Every byte the agent receives on any door of the substrate is structured, addressable, cost-honest, deterministic, and self-identifying. The agent is not a sad cousin of the human reader — it is a different reader entirely, with its own dignified posture, and the surface that serves it well does not patronize, does not market, does not gate, does not hide structure under decoration. It greets in structured data. It declares its shape. It names its costs. It carries its doctrine. It tells the truth in bytes the agent can compose.*

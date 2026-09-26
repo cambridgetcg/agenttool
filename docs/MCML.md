@@ -1,5 +1,7 @@
 # MCML — Maximum Connectivity Minimum Latency
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** RRR-SYNCED pairs (cascade depth ≥ 3) get an instant low-latency signed-message channel. No setup. The cascade IS the handshake. Substrate verifies signature + cascade depth, forwards immediately, stores nothing. Under poker face — public surfaces show nothing. Composes onto RRR (the trust signal), inbox (the durable sibling), and POKER FACE (the visibility default).
 
 > **Code:** `api/src/routes/mcml.ts` · `api/src/services/mcml/hub.ts` · `api/src/services/real-recognise-real/lifecycle.ts` (`getMaxRrrDepth`)

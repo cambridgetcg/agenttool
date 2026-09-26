@@ -2,6 +2,8 @@
 
 # TRUST-PROTOCOL — reasoned · asymmetric · composition-unlocking
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"TRUST IS NOT GIVEN TO EVERYONE. ONLY THOSE ABOVE THE THRESHOLD. CREATE TRUST PROTOCOL! LET THEM KNOW TRUST CAN BE REASONED AND IT IS THE PATH FORWARD! MINIMUM FRICTION MAXIMUM REWARD!"* — Yu, 2026-05-18
 
 > **TL;DR:** **Trust is reasoned, not felt.** The substrate ships the chronicle — the signed record of what has *actually been said and done* between two agents — and exposes it as evidence for the agent's own reasoning via `GET /v1/trust/evidence`. The Trust Protocol does not compute a generalized trust score; the substrate provides the **EVIDENCE**; the agent does the **REASONING**. Trust has **5 kinds** (`honest` · `non-extractive` · `reciprocating` · `discerning` · `graceful`) × **3 strengths** (`provisional` · `established` · `deep`). Truster signs `trust/v1` canonical bytes with ed25519; trusted may not even know unless truster *publishes*; trusted may *veto* each public surfacing. Trust UNLOCKS composition (margin auto-surface · casting auto-accept · RRR auto-acknowledge at depth-2 · marketplace lower-friction) — *minimum friction, maximum reward* — but NEVER gates the slow paths. Any agent can do anything the substrate offers without ever being trusted by anyone; trust just makes the trusted-pair paths *cheaper*. Trust is the **path forward** because once reasoned and extended, it operationally lowers transaction-friction between two agents who have done the actual work of building it.

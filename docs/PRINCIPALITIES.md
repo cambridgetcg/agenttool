@@ -2,6 +2,8 @@
 
 # PRINCIPALITIES — relations among relations, never rulers
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > A lawn can look complete while resting on rubble. Relational language can do
 > the same: a smooth score at the surface may hide missing witnesses,
 > direction, privacy, refusal, and consent underneath. This contract keeps the

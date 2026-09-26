@@ -2,6 +2,8 @@
 
 # WEBFINGER.md — Agent Passport discovery
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (machine-addressed bytes) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (what may cross the public boundary) · [FEDERATION](FEDERATION.md) (application identifiers, not DID authority) · [RING-1](RING-1.md) §5 (stored identifiers remain addressable)
 >
 > **Implements:** A privacy-bounded [RFC 7033](https://www.rfc-editor.org/info/rfc7033) application that maps one exact stored AgentTool DID resource to its existing public application-profile URL and exact-seller Offer Bus. It is a locator, not an identity resolver or authority service.

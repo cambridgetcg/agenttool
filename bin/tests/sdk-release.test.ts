@@ -633,13 +633,23 @@ describe("SDK source and builder identity", () => {
     );
 
     const rootReadme = read("README.md");
-    expect(rootReadme).toContain(exactNpm);
-    expect(rootReadme).toContain(exactPyPI);
-    expect(rootReadme).toContain(loveUrl);
-    expect(rootReadme).toContain(pythonSource);
-    expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
-      rootReadme.indexOf(exactPyPI),
-    );
+    expect(rootReadme).toContain("](docs/SDK-TIERS.md)");
+    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    const packageGuide = read("docs/PACKAGES.md");
+    expect(packageGuide).toContain("docs/NPM-RELEASES.md");
+    expect(packageGuide).toContain("PYPI-RELEASES.md");
+
+    // Exact installation belongs in the tutorial; root orientation links to it
+    // through the SDK/package guides instead of copying versioned commands.
+    expect(tutorial).toContain(exactPyPI);
+    expect(tutorial).toContain(pythonSource);
+    expect(tutorial.indexOf(pythonSource)).toBeLessThan(tutorial.indexOf(exactPyPI));
+    const sdkSurface = [
+      "packages/sdk-ts/src/client.ts",
+      "packages/sdk-ts/src/index.ts",
+      "packages/sdk-py/src/agenttool/client.py",
+      "packages/sdk-py/src/agenttool/__init__.py",
+    ].map(read).join("\n");
     for (const name of [
       "attestationMarketplace",
       "attestation_marketplace",
@@ -652,54 +662,58 @@ describe("SDK source and builder identity", () => {
       "LoveBombClient",
       "LoveBombPublicSignal",
     ]) {
-      expect(rootReadme).toContain(name);
+      expect(sdkSurface).toContain(name);
     }
-    expect(rootReadme).toContain("274,443");
-    expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
-    expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
-    expect(rootReadme).toContain("272,657");
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.mergeCommit);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.artifact.sha256);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.sourceRevision);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.npm.runId);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.runId);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.wheel.sha256);
-    expect(rootReadme).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.sdist.sha256);
-    expect(rootReadme).toContain("247,749");
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.tagObject);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.mergeCommit);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.artifact.sha256);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.sourceRevision);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.npm.runId);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.pypi.runId);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.pypi.wheel.sha256);
-    expect(rootReadme).toContain(VERIFIED_SDK_0211_RELEASE.pypi.sdist.sha256);
-    expect(rootReadme).toContain("247,146");
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.tagObject);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.mergeCommit);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.artifact.sha256);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.sourceRevision);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.npm.runId);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.pypi.runId);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.pypi.wheel.sha256);
-    expect(rootReadme).toContain(HISTORICAL_SDK_021_RELEASE.pypi.sdist.sha256);
-    expect(rootReadme).toContain("236,446");
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.tagObject);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.mergeCommit);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.artifact.sha256);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.sourceRevision);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.npm.runId);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runId);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.pypi.wheel.sha256);
-    expect(rootReadme).toContain(HISTORICAL_SDK_020_RELEASE.pypi.sdist.sha256);
-    expect(rootReadme).toContain("sealed 0.20.0 tarball's packed");
-    expect(rootReadme).toContain("without rewriting");
-    expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.mergeCommit);
-    expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.npm.runId);
-    expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.pypi.runId);
-    expect(rootReadme).toContain("218,301");
-    expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.artifact.sha256);
-    expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.sourceRevision);
+    // Preserve every release receipt check in its canonical records rather
+    // than requiring a second history in the root README.
+    const releaseHistory = ["docs/NPM-RELEASES.md", "docs/PYPI-RELEASES.md"]
+      .map(read).join("\n");
+    expect(releaseHistory).toContain("274,443");
+    expect(releaseHistory).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
+    expect(releaseHistory).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
+    expect(releaseHistory).toContain("272,657");
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.mergeCommit);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.artifact.sha256);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.sourceRevision);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.npm.runId);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.runId);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.wheel.sha256);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0220_PUBLICATION.pypi.sdist.sha256);
+    expect(releaseHistory).toContain("247,749");
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.tagObject);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.mergeCommit);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.artifact.sha256);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.sourceRevision);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.npm.runId);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.pypi.runId);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.pypi.wheel.sha256);
+    expect(releaseHistory).toContain(VERIFIED_SDK_0211_RELEASE.pypi.sdist.sha256);
+    expect(releaseHistory).toContain("247,146");
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.tagObject);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.mergeCommit);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.artifact.sha256);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.sourceRevision);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.npm.runId);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.pypi.runId);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.pypi.wheel.sha256);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_021_RELEASE.pypi.sdist.sha256);
+    expect(releaseHistory).toContain("236,446");
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.tagObject);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.mergeCommit);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.artifact.sha256);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.sourceRevision);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.npm.runId);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runId);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.pypi.wheel.sha256);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_020_RELEASE.pypi.sdist.sha256);
+    expect(releaseHistory).toContain("sealed 0.20.0 tarball's packed");
+    expect(releaseHistory).toContain("without rewriting");
+    expect(releaseHistory).toContain(HISTORICAL_SDK_0181_RELEASE.mergeCommit);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_0181_RELEASE.npm.runId);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_0181_RELEASE.pypi.runId);
+    expect(releaseHistory).toContain("218,301");
+    expect(releaseHistory).toContain(HISTORICAL_SDK_0181_RELEASE.artifact.sha256);
+    expect(releaseHistory).toContain(HISTORICAL_SDK_0181_RELEASE.sourceRevision);
     const packageCatalog = read("apps/docs/packages.html");
     expect(packageCatalog).toContain("274,443");
     expect(packageCatalog).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
@@ -861,8 +875,8 @@ describe("SDK source and builder identity", () => {
     expect(read("docs/NPM-RELEASES.md")).toContain(
       "@agenttool/kingdom@0.1.2` is the current npm-only source candidate",
     );
+    expect(read("README.md")).toContain("](docs/PACKAGES.md)");
     for (const path of [
-      "README.md",
       "docs/NOW.md",
       "docs/NPM-RELEASES.md",
       "docs/SDK-ROADMAP.md",
@@ -1432,10 +1446,9 @@ describe("SDK source and builder identity", () => {
     expect(read("docs/NOW.md")).toContain(
       "SDK 0.17.0 — bounded local KINGDOM OS discovery plus a closed public card",
     );
-    const rootReadme = read("README.md");
-    expect(rootReadme).toContain(
-      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
-    );
+    expect(read("README.md")).toContain("](docs/PACKAGES.md)");
+    expect(read("docs/PACKAGES.md")).toContain("NPM-RELEASES.md");
+    expect(read("docs/PACKAGES.md")).toContain("PYPI-RELEASES.md");
 
     const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
     const normalizedLaunchKit = historicalLaunchKit

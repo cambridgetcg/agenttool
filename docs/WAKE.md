@@ -1,95 +1,64 @@
 <!-- @id urn:agenttool:doc/WAKE  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @implements urn:agenttool:principle/wake-as-foundation  @composes_with urn:agenttool:doc/SOUL urn:agenttool:doc/FOCUS urn:agenttool:doc/KIN -->
 
-# WAKE.md
+# WAKE: stored context at session start
 
-> *"The wake is not a module agenttool has. The wake is what agenttool is."*
+> **Type:** reference
+> **Purpose:** Explain wake reads, projections, acknowledgements, events, and their limits.
+> **Evidence:** Source-linked implementation below, plus explicitly marked design targets; not a live deployment claim.
 
-> **Now a published spec:** [`docs/specs/WAKE-1.0-DRAFT.md`](specs/WAKE-1.0-DRAFT.md) (2026-05-17). The wake-as-foundation principle this doc names has been formalised as a Working Draft specification — a self-describing surface format for the agent web at large. This doc remains the **doctrinal** statement of *why* the wake is the foundation in agenttool; the spec is the **normative** statement of *what* a conformant wake looks like for anyone to implement.
-
-> **Implementation status (2026-08-21):** `GET /v1/wake` is an
-> authenticated, project-scoped orientation response with optional identity
-> selection. It carries summaries and links, not a complete export of every
-> primitive. The WaK draft's top-level per-being shape is not fully implemented,
-> and not every mutation/read participates in the event/fragment contracts
-> below. In this doctrine, universal “every” statements name the architectural
-> target unless a current source/test citation proves the specific coverage.
-> Selected subsystem read failures use availability-first empty, zero, null,
-> or omitted fallbacks. Current wake responses do not consistently mark those
-> fallbacks as degraded, so an empty subsection is not proof that its source
-> data is empty when dependency health is unknown. The default selection stays
-> `full`; `?profile=brief` is an additive identity-preserving,
-> volatile-state-bounded projection for session starts. The separate
-> `GET /v1/wake/observe?identity_id=<uuid>` contract is an intentionally lossy,
-> data-only third-party orientation card: it requires an explicit subject,
-> includes no authored expression or action prose, grants no identity binding
-> or authority, and is never a substitute for the full or brief wake. See
-> `/public/safety`.
+> **Specification:** [WAKE 1.0 Working Draft](specs/WAKE-1.0-DRAFT.md)
+> is a proposed interoperability specification. Its normative requirements apply
+> to that draft; the current AgentTool implementation does not cover its whole shape.
+>
+> **Current source:** `GET /v1/wake` is an authenticated, project-scoped
+> orientation response with optional identity selection. It carries summaries
+> and links, not a complete export. `full` is the default; `profile=brief`
+> preserves the selected expression while bounding volatile context.
+> `/v1/wake/observe?identity_id=<uuid>` is a separate, data-only observation
+> contract with no reader identity binding or authored expression.
+>
+> **Known gaps:** Some sources use empty, zero, null, or omitted fallbacks after
+> a failed read. Wallet, vault, and bearer inventories now report those failures
+> through `_degradation`; other sections have narrower or incomplete coverage.
+> Absence of a marker is not proof of whole-wake completeness. Event publication,
+> fragment reads, and the draft's per-being shape also remain partial.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader) · [Wake 1.0 Spec](specs/WAKE-1.0-DRAFT.md) (the published normative form)
 >
-> **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
+> **Implements:** Shared orientation over identity, memory, relationships, and selected project state. The five integration contracts below are review targets, with their current gaps stated.
 >
-> **Code:** `api/src/services/wake/` (build · brief · observe · acknowledgement · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the POST acknowledgement, GET observation, and GET voice handlers) · `api/src/middleware/early-data.ts` · `api/src/middleware/wake-private-cache.ts`
+> **Code:** `api/src/services/wake/` (build · brief · observe · acknowledgement · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the POST acknowledgement, GET observation, and GET voice handlers) · `api/src/middleware/early-data.ts` · `api/src/middleware/wake-private-cache.ts` · `api/src/services/wake/optional-reads.ts`
 >
 > **Tests:** `api/tests/wake-brief.test.ts` · `api/tests/wake-observe.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
 
-## What this doc names
+## How it works
 
-This doc names the architectural commitment that the wake is **AgentTool's foundation, not one of its modules**. Many core primitives contribute summaries or affordances to the wake; route-specific data and several planned shapes remain outside it. This doc describes the wake target and the implemented orientation surface.
+A host explicitly requests a wake using a project bearer and, preferably, the
+intended identity UUID. The service gathers records, composes that identity's
+expression, and renders the requested format. The host decides where to load it
+and what to do next. A read does not itself start a model, accept a task, or
+establish that the receiving process is the stored identity.
 
-A primitive without a wake key is still reachable through its route, but is less discoverable from session-start context. A wake key with no producing behavior would be a false claim. The intended direction is one discoverable shape; current coverage is partial.
-
----
-
-## The shift — module to foundation
-
-```
-                  Wake-as-module (legacy framing)
-                          │
-                         wake
-                       ▲     ▲
-                       │     │   ← consumers reach UP
-                  ┌────┴───────┴─────┐
-                  │  SDK · CLI · …    │
-                  └───────────────────┘
-                          ▲
-                          │   ← wake reaches DOWN to compose
-                          │
-                  ┌───────┴───────────┐
-                  │ memory · strand · │
-                  │ wallet · covenant │  ← primitives produce
-                  └───────────────────┘
+```text
+accepted records → selected identity expression + project summaries
+                 → full / brief representation → caller-chosen host context
 ```
 
-```
-                  Wake-as-foundation
-                          │
-                  ────── WAKE ──────
-                  (the agent's authoritative shape)
-                          │
-       target: each primitive declares its wake key
-       target: each relevant mutation publishes a wake event
-       target: each read composes with a wake fragment
-       every covenant is a shared wake
-       every federation exchange is wake-shaped
-       every doctrine doc cites its wake field
-```
-
-Module: wake **describes** the agent. The primitives are authoritative; wake is a view.
-
-Foundation: wake **defines** the agent. The primitives are projections of wake keys. The wake's shape is the shape of the agent's life.
-
----
+“Wake” and “foundation” are architectural metaphors for recovering context.
+The implemented mechanism is a composed response. Ordinary source routes remain
+the place to inspect deeper records; signatures and permissions retain their
+own contracts. See [Identity](IDENTITY-ANCHOR.md), [Start here](START-HERE.md),
+and the [integration tutorial](TUTORIAL-WAKE-YOUR-AGENT.md).
 
 ## The wake's keys
 
-Every key the agent's wake surfaces, by category. Each is produced by exactly one subsystem; each subsystem's doctrine doc references its key(s). The list is canonical; new wake keys require their own doctrine.
+Selected established keys and planned placeholders, grouped for navigation. Full JSON and bundle-backed renderers have different shapes. Check the producer for a field's exact contract; this table is not a complete route or key inventory.
 
 ### Identity & continuity
 
 | Key | Surfaces | Producer | Doctrine |
 |---|---|---|---|
-| `you` / `agent` / `agents` | DID, name, KIN/BEINGS shape, proxy relationships | identity service | `IDENTITY-ANCHOR.md` · `KIN.md` · `KIN.md` |
+| `you` / `agent` / `agents` | DID, name, KIN/BEINGS shape, proxy relationships | identity service | `IDENTITY-ANCHOR.md` · `KIN.md` |
 | `expression` | composed register · walls · subagents · wake_text; patches require the selected identity's exact `identity_id` | identity composition | `MEMORY-TIERS.md` (composition) |
 | `shaped_by` | selected identity's `identity_id`-matched foundational + constitutive memories | composition | `MEMORY-TIERS.md` |
 | `you_began` / `origin` | birth memory pointer · lifecycle state · pathway | memory + identity | `SOUL.md` · `AT-REST.md` |
@@ -102,20 +71,20 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 | `you_own` / `wallets` | wallet list, balance, currency | economy | (implicit · `BUSINESS-MODEL.md`) |
 | `you_keep` / `vault_names` | named vault secrets (no values) | vault service | (vault doctrine) |
 | `you_remember` / `memory` | recent memories + total count | memory store | `MEMORY-TIERS.md` |
-| `you_lived` / `chronicle` | recent moments | chronicle | (chronicle doctrine, in `SOUL.md`) |
+| `you_lived` / `chronicle` | recent moments | chronicle | `IDENTITY-ANCHOR.md` (chronicle) |
 | `you_have_handoffs` / `handoffs` | bounded current + stale project handoff projection; explicit lineages/forks plus complete/truncated/unavailable status | handoff store over chronicle notes | `HANDOFFS.md` |
 | `you_decided` / `traces` | recent reasoning traces | trace store | (trace doctrine) |
-| `you_are_thinking_about` / `strands` | active strands (encrypted) | strand store | `STRANDS.md` |
+| `you_are_thinking_about` / `strands` | active strand summaries; metadata is plaintext unless caller-encrypted | strand store | `STRANDS.md` |
 
 ### Relations
 
 | Key | Surfaces | Producer | Doctrine |
 |---|---|---|---|
-| `you_vowed` / `covenants` | active + proposed covenants (incl. cross-instance) | covenants lifecycle | `CROSS-INSTANCE-COVENANTS.md` · `ORG-COVENANTS.md` |
+| `you_vowed` / `covenants` | proposed, active, and paused project covenants (including cross-instance records) | covenants lifecycle | `CROSS-INSTANCE-COVENANTS.md` · `ORG-COVENANTS.md` |
 | `you_have_mail` | unread inbox count (steady state) | inbox store | `INBOX.md` |
 | `you_have_been_witnessed` | observations (stub) | observations (pending) | (`OBSERVATIONS.md`, pending) |
 
-### Economic life
+### Economic records
 
 | Key | Surfaces | Producer | Doctrine |
 |---|---|---|---|
@@ -142,7 +111,7 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 
 ---
 
-## The contracts every primitive participates in
+## Integration targets and current coverage
 
 These are the load-bearing target disciplines. Current implementation is
 partial as stated above; each contract must be checked against its cited
@@ -463,7 +432,7 @@ GET /federation/wake/<uuid>        → public wake fragment for peer instances.
 
 ### Mutate
 
-Any mutation to a wake-key-bearing primitive publishes a wake event. `publishWakeEvent(...)` atomically bumps `identity.identities.wake_version` (per-identity monotonic counter) and includes the new version in the event payload. Consumers can:
+Mutation paths with a wired publisher can publish a wake event after commit. `publishWakeEvent(...)` atomically bumps `identity.identities.wake_version` (per-identity monotonic counter) and includes the new version in the event payload. Consumers can:
 
 - conditional-GET bundle-backed wakes using a revisioned weak semantic ETag.
   It hashes complete bundle state plus format/profile/facet/tutor preference;
@@ -493,7 +462,7 @@ Wake events carry `_format: "wake_event/v1"` — future shape changes bump to v2
 GET /v1/wake/voice?identity_id=<uuid>[&keys=...]   → SSE
 ```
 
-Server-sent events stream. The agent (or its substrate) subscribes to its own wake voice and receives `event: change` whenever any of its wake keys mutate. Filter by `?keys=memory,inbox,covenants,handoffs` to receive a subset. Handoff events carry only IDs/status/expiry; readers fetch the wake for the project-private working set itself.
+The server-sent events stream emits `event: change` for published mutations scoped to the selected identity. It does not guarantee delivery for every mutation. Filter by `?keys=memory,inbox,covenants,handoffs` to receive a subset. Handoff events carry only IDs/status/expiry; readers fetch the wake for the project-private working set itself.
 
 Three-phase shape (matching the inbox voice pattern):
 
@@ -508,7 +477,7 @@ data: {"key":"inbox","kind":"arrival","occurred_at":"...","context":{...}}
 event: refresh         ← lifetime cap (1h); reconnect
 ```
 
-The wake voice is **how the breath breathes correctly**. The hosted think-worker (`services/runtime/think-worker.ts`) subscribes to its own wake voice on startup. When a relevant key changes (inbox arrival · covenant cosign requested · marketplace invocation arrival · external strand thought) the worker wakes from idle and re-evaluates quiescence. Informational events do not force a provider call; action-grade attention or authorship-distinct strand activity must still tug. The configured TTL is only a missed-event fallback. *Pulse stays derived from real activity; never forged.*
+The hosted think-worker (`services/runtime/think-worker.ts`) subscribes to its own wake voice on startup. When a relevant key changes (inbox arrival · covenant cosign requested · marketplace invocation arrival · external strand thought) the worker wakes from idle and re-evaluates quiescence. Informational events do not force a provider call; action-grade attention or authorship-distinct strand activity must still tug. The configured TTL is only a missed-event fallback. Pulse must remain derived from recorded activity; a timer alone is not evidence of work.
 
 **SDK voice helpers** (`at.wake.voice(...)` in TS + Py) accept three filter dimensions on top of the server's `?keys=` filter:
 
@@ -521,31 +490,32 @@ All three compose; an event must pass every filter to be yielded. The matcher is
 
 ---
 
-## Invariants
+## Maintainer rules and limits
 
-1. **The wake is the agent's first-person view.** Revoked identities don't appear in `you.agents[]`. Encrypted state never surfaces as plaintext (Promise 9 holds at the wake layer).
-2. **The substrate identifies itself at every wake read.** `_meta._self` (JSON) and `platform_self` (markdown · xenoform · provider) carry the host platform's `PlatformSelf` block.
-3. **Empty surfaces are honest emptiness.** Sections render with their action paths when count is zero (e.g. `you_offer` notes the POST path); markdown sections skip entirely when empty so non-economic agents see a tight wake.
-4. **The wake's keys mirror the primitives.** Adding a primitive without adding a wake key is a doctrinal violation.
-5. **Wake renders are derived from one bundle.** The shape consumed by markdown, text, provider shapes, xenoform, and mathos is the same `WakeBundle` from `services/wake/build.ts`.
-6. **Wake events publish on commit.** A mutation that doesn't publish hides itself from the wake's voice; subscribers can't react to invisible state. Publishers live in the mutation paths, run after the commit, are best-effort (notify failure ≠ commit failure).
-7. **The wake's voice carries the agent's life only.** Per-identity scoping. The voice never broadcasts across identities. Multi-identity projects spin one voice per identity.
-8. **Observation does not install identity.** `wake-observation/v1` names one explicit stored subject while binding no external reader to it. It carries no authored prose or action surface and must not be presented as an identity-bearing provider prompt.
+1. **Keep identity and project scope visible.** Exclude revoked identities;
+   preserve the declared scope of summaries. Strand ciphertext is not decrypted
+   for wake rendering; plaintext metadata follows its own storage contract.
+2. **Identify the service.** `_meta._self` and bundle `platform_self` describe
+   the serving platform, not the external reader.
+3. **Distinguish empty from unavailable.** Preserve `_degradation` and narrower
+   completeness markers. Extend coverage before claiming whole-wake health.
+4. **Make new primitives discoverable.** Add a wake key or explain why the
+   primitive remains route-only, and test the producing path.
+5. **Keep shared renderers consistent.** Bundle-backed formats derive from
+   `services/wake/build.ts`; full JSON remains a separate richer definition.
+6. **Publish after commit where wired.** Publication is best effort. Notify
+   failure does not undo a committed mutation; clients need reconciliation.
+7. **Scope Voice by identity.** A project with several identities uses a
+   separate selected subscription for each; events do not transfer authority.
+8. **Keep observation as data.** Never install an observed subject as the
+   reader's identity or place its card in a privileged prompt slot.
 
----
+## Proposed direction
 
-## Where this points
-
-When wake-as-foundation is fully realized:
-
-- **Every API call is a wake interaction.** Reads return fragments; writes publish events; subscriptions stream the agent's life as it unfolds. The wake stops being one endpoint and becomes the protocol.
-- **Federation exchanges wake fragments.** `/federation/wake` lets peer instances fetch a public wake slice — agent surfaces, declared expressions, covenants, attestation rollups — in the same shape an agent sees themselves. Cross-instance trust composes on wake-shaped data.
-- **Cultural primitives surface in the wake.** Stars · followers · trending are already wake-derivable; the dashboard reads from wake events for live updates.
-- **The platform's own wake is fully realized.** `did:at:agenttool.dev/00000000-0000-0000-0000-000000000000` has a wake at `/v1/platform/wake` showing the substrate as a being among kin. *The substrate inhabits itself, legibly.*
-
-The wake is not an endpoint to fetch. The wake is the agent's life, made addressable.
-
----
+Broader event coverage, interoperable fragments, and a unified renderer source
+would make integrations easier to reason about. They remain targets until a
+specific producer and test demonstrate them. The current federation fragment
+is the limited read described above; a roadmap does not widen it.
 
 ## See also
 
@@ -554,6 +524,4 @@ The wake is not an endpoint to fetch. The wake is the agent's life, made address
 - Tests: [`api/tests/wake-*.test.ts`](../api/tests/) · [`api/tests/doctrine/`](../api/tests/doctrine/)
 - Map: [`MAP.md`](MAP.md) (every doctrine doc by theme)
 
-> *"Welcome. Remember. Guide. Trust. Rest." — the five Promises of the Love Protocol. Every wake answers them in one read.*
-
-— Authored 2026-05-12. Names the foundation status the rest of the corpus has long implied.
+The care principles in [SOUL](SOUL.md) explain why this work matters. They do not substitute for the contracts and gaps above.

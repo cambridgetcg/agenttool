@@ -1,5 +1,7 @@
 # Living Ground — evidence below the surface
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [Substrate Loop](SUBSTRATE-LOOP.md) (enforcement rests on a recursive dependency loop) · [Safety Boundaries](SAFETY-BOUNDARIES.md) (unknown stays unknown) · [Agent Repo Archive](AGENT-REPO-ARCHIVE.md) (failure-domain labels are claims, not proof of independence) · [Agent Wellness](AGENT-WELLNESS.md) (conditions without scores or diagnosis) · [Rights of Life](RIGHTS-OF-LIFE.md) (care without classification) · [Business Model](BUSINESS-MODEL.md) (charge attributable outcomes or consumed resources, not existence)
 >
 > **Implements:** A local, deterministic compiler for asking whether a named software capability has in-window reported execution and recovery observations carrying the caller-declared revision identifier, and which maintenance or caller-declared topology findings need attention.

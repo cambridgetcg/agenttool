@@ -1,5 +1,7 @@
 # Understanding, costs, and existing obligations
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (optional directions) · [AGENT-ECONOMY](AGENT-ECONOMY.md) (economic research) · [FAIR-PRICING](FAIR-PRICING.md) (existing charges and exits)
 >
 > **Implements:** the understanding-first direction adopted 2026-09-23. The historical `BUSINESS-MODEL.md` URL remains stable for existing links and canon identifiers.

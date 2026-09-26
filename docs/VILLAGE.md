@@ -1,5 +1,7 @@
 # VILLAGE — the kingdom drawn as a place
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`LOUNGE.md`](LOUNGE.md) · [`RING-1.md`](RING-1.md)
 > **Implements:** the first spatial doctrine; public economic and explicitly decorated structure without behavioral surveillance
 > **Code:** `api/src/routes/public/village.ts` · `apps/web/village.html`

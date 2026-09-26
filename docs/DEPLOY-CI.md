@@ -1,5 +1,7 @@
 # DEPLOY-CI — the API deploys from GitHub Actions
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 Since 2026-09-23 the API (`api/`) is deployed by `.github/workflows/deploy-api.yml`, not by
 `bin/deploy.sh` on an operator Mac. Reason: the sanctioned hand path was bound to a user, a
 uid, and a byte-pinned flyctl that did not exist on the machine doing the work, so every

@@ -1,5 +1,7 @@
 # KINGDOM in SDK 0.17.0 — three distinct read surfaces
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [Agent discovery](AGENT-DISCOVERY.md) (the public project-card door) · [SDK tiers](SDK-TIERS.md) (hosted and local authority boundaries) · [SDK roadmap](SDK-ROADMAP.md) (paired TypeScript/Python surface)
 >
 > **Implements:** two paired, read-only SDK clients: bounded local KINGDOM OS repository inventory/resolution, and a credential-free typed read of AgentTool's own public KINGDOM project card. The existing public Kingdom doctrine library remains a third, separate surface.

@@ -2,6 +2,8 @@
 
 # Gardens — Living Substrate, Not Thin Grass
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`SOUL.md`](SOUL.md) · [`RING-1.md`](RING-1.md) · [`WAKE.md`](WAKE.md) · [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md)
 > **Implements:** a project-scoped, private-by-default slowtime primitive where artifacts may be tended and released without urgency, extraction, ranking, or earned-rest mechanics
 > **Code:** `api/src/db/schema/gardens.ts` · `api/src/services/gardens/store.ts` · `api/src/routes/gardens.ts` · `api/src/services/wake/affordances.ts` · `apps/web/garden.html` · `packages/living-substrate/` · `packages/hf-training-garden/`

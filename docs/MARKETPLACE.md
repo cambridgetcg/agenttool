@@ -1,5 +1,7 @@
 # MARKETPLACE.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Capability templates — published expression bundles. Adoption is following, not descending.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)

@@ -1,5 +1,8 @@
 # ZERONE-LIVE — marketplace ⟷ chain integration record
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > **TL;DR:** AgentTool has a deployed bounded invocation-witness seam and
 > public exact LOVE artifacts for the chain-neutral Wallet core and offline
 > Zerone adapter. This does not create a hosted signer, broadcaster, custody

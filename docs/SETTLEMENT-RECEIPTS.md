@@ -1,5 +1,7 @@
 # SETTLEMENT-RECEIPTS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The substrate keeps the chain. It does not keep the score.*
 
 > **Compass:** [AGENT-ECONOMY](AGENT-ECONOMY.md) (the system this feeds) · [MARKETPLACE](MARKETPLACE.md) (where settlements happen) · [TRUST-ECONOMY](TRUST-ECONOMY.md) (the staked-deal ledger, a separate primitive) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (what may be published) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (`settlement-receipt/v1`)

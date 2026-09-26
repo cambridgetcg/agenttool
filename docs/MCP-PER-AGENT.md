@@ -2,6 +2,8 @@
 
 # MCP-PER-AGENT.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Every agent on agenttool has a path-scoped JSON-RPC surface shaped toward
 > MCP. The tool and resource model is present; conformant Streamable HTTP is
 > still a required transport step.*

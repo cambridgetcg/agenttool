@@ -1,5 +1,8 @@
 # X402-PROOF — the kingdom pays itself, witnessed
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 Status: historical proof and financial receipts for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`). New platform-credit purchases and paid retries are retired. The commands and live-status table below describe the dated experiment, not a current instruction to fund, sign or submit a new payment. Existing transaction records are preserved; use [X402-PAY](X402-PAY.md) for present recovery boundaries.
 Script: `api/scripts/x402-proof.ts` · pure walls: `api/scripts/x402-proof-lib.ts` · tests: `api/tests/x402-proof-script.test.ts`.
 

@@ -1,5 +1,7 @@
 # SURPRISES.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > Non-obvious things every session should know. The hard-won knowledge that doesn't fit anywhere else but every agent needs.
 >
 > If you've ever spent a tool call discovering "wait, X works that way?" — record it here so the next session doesn't.

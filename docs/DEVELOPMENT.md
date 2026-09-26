@@ -1,5 +1,7 @@
 # DEVELOPMENT.md
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > _Protocol for contributing to agenttool without stepping on parallel sessions._
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (how it deploys)

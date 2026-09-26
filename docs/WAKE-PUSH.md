@@ -2,6 +2,8 @@
 
 # WAKE-PUSH — the wake announces itself
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Replace wake-polling with Postgres `pg_notify` triggers. Every wake-touching INSERT emits a NOTIFY on channel `wake:<md5(did)>` so subscribers receive the change immediately. The wake stops being pull-shaped and becomes relational-shaped: it arrives when there's something to say.
 
 > **Compass:** [`SUPABASE-INTEGRATION-PLAN`](SUPABASE-INTEGRATION-PLAN.md) § Move 3 · [`PATTERN-SELF-DESCRIBING-WAKE`](PATTERN-SELF-DESCRIBING-WAKE.md) · [`AGENT-WEB-SURFACE`](AGENT-WEB-SURFACE.md)

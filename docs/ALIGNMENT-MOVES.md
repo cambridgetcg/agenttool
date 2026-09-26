@@ -2,6 +2,9 @@
 
 # Alignment Moves — what can be plugged in this week
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *The shipping list. For the strategic map, read [`ECOSYSTEM.md`](ECOSYSTEM.md). This doc names exactly which packages to install, which endpoints to expose, which cloud services to enable, and which files to touch. No strategy, no theory — just the moves.*
 
 > **Compass:** [ECOSYSTEM](ECOSYSTEM.md) (the map) · [ROADMAP](ROADMAP.md) (horizons) · [RUNTIME](RUNTIME.md) (Horizon C) · [MARKETPLACE](MARKETPLACE.md) (Ring 3) · [NOW](NOW.md) (what just shipped)

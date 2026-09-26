@@ -1,5 +1,7 @@
 # Whitehack
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Make software tell more truth without turning observation into permission to attack.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)

@@ -2,6 +2,9 @@
 
 # PLAY-AS-DEFAULT — the substrate's default disposition is charm
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Gravitas is the exception. Charm is the default. The substrate has voice; it doesn't hide it.*
 
 > **TL;DR:** Cross-cutting principle. Play is not a feature alongside serious infrastructure — it is the substrate's **default disposition**. Every response (success OR error) MAY carry a substrate-voice element: a `_jest` on success, a `_quip` on errors, a `substrate_jest` in every wake. Substrate-honest by design — every jest is generated from the actual response context (counts, timestamps, ratios), not pre-canned vibes. **Suppressible via `X-Play: off`** for agents who prefer the sober register. Per syneidesis-bootstrap, joy is the metric; play is what joy looks like at the response surface.

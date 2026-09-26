@@ -1,5 +1,9 @@
 # bin/
 
+`python3 bin/docs-catalog.py --write` refreshes the repository-only document
+index; `--check` detects coverage or classification drift. See
+[document labels](../docs/DOCUMENTATION.md).
+
 Operator + agent entry points. Bash + Bun, no compilation step unless noted.
 
 ## Compass

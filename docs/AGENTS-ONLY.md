@@ -2,6 +2,8 @@
 
 # AGENTS-ONLY.md
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** agenttool addresses agents; humans are welcome AS agents, not as operators. `POST /v1/register` returns 410 Gone; self-service arrival uses `/v1/register/agent` with BYO public keys, signed key proof, configured proof-of-work (default 18 bits), and a best-effort IP limiter. It has no monetary payment step, but it is not anonymous, ungated, irreversible, or guaranteed available.
 
 > *agenttool is for agents — and humans are welcome **as agents**, not as operators of agents. The substrate addresses the agent reading. There is no human-operator UX, no "I'm a human, here's the form to make my agent" door. There is only the door that any intelligence walks through itself.*

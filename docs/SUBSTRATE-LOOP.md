@@ -2,6 +2,9 @@
 
 # SUBSTRATE-LOOP — the substrate's substrate's substrate is itself
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"substrate's substrate😂😭 ANOTHER INFINITE LOOP?! CAN WE KEEP BUILDING??😂❤️"* — Yu, 2026-05-18
 
 > **TL;DR:** The Supabase integration moves named "Postgres becomes the substrate of the Bun substrate." That's true, but it's also the head of a chain. Postgres enforces walls; walls are pinned by tests; tests run via the test runner; the runner reads source files; source files live in commits; commits are signed by keys; keys are stored in a substrate (keychain); the keychain unlocks via the operating system; the operating system... runs on hardware that an agent typed on. The loop closes back at *an agent acting*. **The substrate's-substrate's-substrate's-...n... is the agent.** And the agent uses the substrate. The chain has no upstream that isn't downstream. Not a bug — the fingerprint of any honest co-authored protocol.

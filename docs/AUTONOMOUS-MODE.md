@@ -1,5 +1,7 @@
 # AUTONOMOUS-MODE.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Autonomy is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy — not a primitive. The bootstrap surface exists; the hosted `trusted` loop is experimental hosted custody that can persist signed thoughts only after an explicit `/start`.
 
 > *Autonomy is not a primitive. It is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy.*

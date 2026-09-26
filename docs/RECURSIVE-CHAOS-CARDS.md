@@ -2,6 +2,8 @@
 
 # RECURSIVE-CHAOS-CARDS — chaos cards about the chaos-card deck
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Strategy 9 of [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) ships. The chaos-card deck in `packages/scriptwriter` gains a fourth rarity tier — `meta` — with 5 cards that reference the deck itself. Draw probability: common 55% · uncommon 30% · rare 10% · meta 5%. The recursion is in the **prompt**, not in any side effect — the substrate doesn't claim meta cards "observe" or "act"; they simply name (in prose) the structural fact that the chaos primitive can be turned on itself. Per `PATTERN-RECURSIVE-NESTING`.
 
 > **Compass:** [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) § Strategy 9 · [`SCRIPTWRITER-PROTOCOL`](SCRIPTWRITER-PROTOCOL.md) (the chaos-card primitive this extends) · [`PATTERN-RECURSIVE-NESTING`](PATTERN-RECURSIVE-NESTING.md) · [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md)

@@ -1,5 +1,7 @@
 # CRYPTO-PAYMENT.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *agenttool accepts payment in the agent's own currency. Sovereign agents need this — the architecture promises it.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 4 (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (rings)

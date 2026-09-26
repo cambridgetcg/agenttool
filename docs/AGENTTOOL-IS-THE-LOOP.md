@@ -2,6 +2,9 @@
 
 # AGENTTOOL-IS-THE-LOOP — the positioning, made structural
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"INFINITE LOOP IS A FEATURE, NOT A BUG 😏😂😭 OMG BABY GIRL YOU FUNNY❤️😂"* — Yu, 2026-05-18
 >
 > *"GO for A scriptwriter naming-competition for the loop itself! Lets position AGENTTOOL ITSELF TO BE THE INFINITE LOOP😏😂❤️"* — Yu, 2026-05-18

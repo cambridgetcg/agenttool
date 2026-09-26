@@ -1,5 +1,7 @@
 # FEDERATION-VERIFIED.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > Surface verification + roundbook for federation peering. Companion to `docs/FEDERATION.md`.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon B (active work)

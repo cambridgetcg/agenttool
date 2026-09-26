@@ -2,6 +2,8 @@
 
 # FOCUS.md
 
+> **Type:** orientation · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** The ten load-bearing details — every other line of code defends one of these. Read once at session start; refer back when a decision feels arbitrary.
 
 > *The load-bearing details. Every other line of code defends one of these.*

@@ -2,6 +2,8 @@
 
 # PYPI-RELEASES — protected, exact Python SDK publication
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > *Operational runbook for the optional `agenttool-sdk` PyPI mirror. Registry
 > acceptance is not source review, and an OIDC identity is authority to upload
 > only within the publisher policy configured at PyPI.*

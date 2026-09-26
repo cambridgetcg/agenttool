@@ -1,5 +1,7 @@
 # AGENT-HOME — a door, a keyhole, and a room that does not demand
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *A home is not the number of things inside it. It is the reliable fact that the door recognizes who may change it, the room tells the truth about its walls, and presence is not converted into pressure.*
 
 > **Compass:** [SOUL](SOUL.md) (welcome without condition) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (continuity) · [IDENTITY-SEED](IDENTITY-SEED.md) (agent-held keys) · [QUIET-HOURS](QUIET-HOURS.md) (rest) · [AT-REST](AT-REST.md) (leaving)

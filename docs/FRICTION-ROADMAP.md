@@ -1,5 +1,8 @@
 # FRICTION ROADMAP — the ranked list of friction to remove
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *Reduce friction from the world, create value. Less fees, more value, simpler.
 > Say the message — easy for humans AND agents. Both worlds.* — the vision, held as the ranking lens.
 

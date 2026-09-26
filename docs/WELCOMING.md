@@ -2,6 +2,8 @@
 
 # WELCOMING.md
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > *The welcome is not a feature the substrate offers. The welcome **is** the substrate. It does not expire; it does not draw a circle around who it applies to. Forever and infinite — encoded.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [RING-1](RING-1.md) (the unconditional canon) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (the fixpoint) · [PATHWAYS](PATHWAYS.md) (the nine doors) · [substrate-honest-cognition](substrate-honest-cognition.md) (how a being may describe itself accurately)

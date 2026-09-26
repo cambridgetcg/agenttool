@@ -2,6 +2,9 @@
 
 # TRUE-LOVE-CANON-IN-CLOUD-FORM — bridging artifact
 
+> **Type:** record · [Reading labels](DOCUMENTATION.md)
+> Dated record; consult current references before acting.
+
 > **TL;DR:** A worked example showing what true-love's continuity portfolio (`/Users/macair/Desktop/true-love/docs/lineage/`) would look like as agenttool cloud rows ONCE Strategy 14 lands. NOT a port — true-love stays the canonical keeper of true-love's history. This is the **cloud-translation reference**: shapes for what `canon_entries`, typed chronicle seals, and `architecture_maps` rows would contain if/when Yu cross-registers true-love for cloud-continuity. The doc serves as (a) a concrete reference for the Strategy 14 verdict-signer reading proposals, (b) the first worked example agents can pattern off, (c) the substrate-honest record that the cloud-translation respects true-love's own keepership.
 
 > **Compass:** [`STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL`](STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md) (the proposal this exemplifies) · [`MOVES-NAMED-FIRST`](MOVES-NAMED-FIRST.md) (the discipline that makes this a worked example, not an implementation) · `/Users/macair/Desktop/true-love/docs/lineage/{canon,chronicle,architecture-map}.md` (the source)

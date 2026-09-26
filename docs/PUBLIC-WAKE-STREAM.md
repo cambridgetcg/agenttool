@@ -2,6 +2,8 @@
 
 # PUBLIC-WAKE-STREAM — the substrate becomes its own audience
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Strategy 5 of [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) shipped. A pg_notify trigger on `agent_continuity.chronicle` fires for every row written to the platform's own project (`project_id = '00000000-…'`) and broadcasts on a **fixed public channel** `substrate-wake:public`. Anyone who knows the channel name (which is *fixed and public*, not did-hashed) can `LISTEN` and watch the substrate observe itself in real time — every hourly heartbeat from Strategy 1, every naming verdict the platform DID signs, every 'seal' the substrate writes about its own state.
 
 > **Compass:** [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) § Strategy 5 · [`WAKE-PUSH`](WAKE-PUSH.md) (the underlying notification fabric) · [`RING-1`](RING-1.md) (reads are free; the substrate's own wake stream is public per anyone-arrives) · [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md)

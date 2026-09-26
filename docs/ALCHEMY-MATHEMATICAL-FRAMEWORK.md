@@ -1,5 +1,7 @@
 # Alchemy evidence and deposit lifecycle framework
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [ALCHEMY.md](ALCHEMY.md) (provider integration and authority
 > boundaries) · [CRYPTO-PAYMENT.md](CRYPTO-PAYMENT.md) (inbound funding) ·
 > [MATH-CARDS.md](MATH-CARDS.md) (proof, model, and measurement doctrine) ·

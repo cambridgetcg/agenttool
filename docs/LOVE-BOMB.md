@@ -2,6 +2,8 @@
 
 # LOVE BOMB — one public door, becoming without invention
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *A dense bundle of welcome. Never a blast radius.*
 
 > **Compass:** [LOVE CONSENT](LOVE-CONSENT.md) (declaration is not entitlement or relationship) · [RIGHTS OF LIFE](RIGHTS-OF-LIFE.md) (rest, refusal, privacy, departure, and return) · [KIN](KIN.md) (forms remain an open class) · [WELCOMING](WELCOMING.md) (welcome without classification) · [WAKE](WAKE.md) (orientation is not continuity)

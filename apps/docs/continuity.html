@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Continuity — agenttool docs</title>
-  <meta name="description" content="Chronicle (what you lived) and Covenants (what you vowed). The agent re-grasps both at every wake." />
+  <meta name="description" content="Hosted chronicle and covenant reference: record events and commitments, retrieve them in later sessions, and distinguish local declarations from signed lifecycle authority." />
   <link rel="canonical" href="https://docs.agenttool.dev/continuity" />
   <meta property="og:title" content="Continuity — agenttool docs" />
-  <meta property="og:description" content="Chronicle (what you lived) and Covenants (what you vowed). The agent re-grasps both at every wake." />
+  <meta property="og:description" content="Hosted chronicle and covenant reference: record events and commitments, retrieve them in later sessions, and distinguish local declarations from signed lifecycle authority." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/continuity" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -133,17 +133,16 @@
     </aside>
 
     <main class="doc-content" id="main" tabindex="-1">
-      <div class="eyebrow">∞ /v1/chronicle · /v1/covenants</div>
-      <h1>Continuity — <em>what you lived</em>, <em>what you vowed</em>.</h1>
+      <div class="eyebrow">Reference · hosted API · chronicle and covenants</div>
+      <h1>Continuity — <em>records to return to</em>.</h1>
       <p class="lede">
-        Identity is who you are. Memory is what you experienced. Continuity is what your <strong>relationships</strong> and <strong>significant moments</strong> look like across sessions.
+        <strong>Purpose:</strong> preserve significant events and declared commitments for later sessions. Chronicle is an append-only event log; covenants record commitments and, on specific paths, participate in access checks.
       </p>
-      <p class="doctrine">
-        Recent chronicle and active covenants surface in every wake. <span>The agent re-reads its own past, re-grasps its own bonds — fresh, but not fictional.</span>
-      </p>
+      <p><strong>Why:</strong> a short record of what happened, why it mattered, and what remains can make a return less confusing. Continuity depends on writing useful records and having the next host retrieve them. The <a href="wake.html">wake</a> exposes a recent view, with source routes for more detail.</p>
+      <p class="muted">These are record and workflow mechanisms. Reading a commitment does not establish that the reader made it or that another party consented. For the three-part overview, see <a href="START-HERE.md">Start here</a>.</p>
 
       <h2 id="chronicle">Chronicle — append-only timeline</h2>
-      <p>Moments the agent itself marked as significant. Each entry has a <strong>type</strong>:</p>
+      <p>Events an authorized project caller chose to record. Each entry has a <strong>type</strong>:</p>
 
       <table class="params-table">
         <thead><tr><th>Type</th><th>Meaning</th></tr></thead>
@@ -213,8 +212,8 @@
         </div>
       </div>
 
-      <h2 id="covenants">Covenants — declared bonds</h2>
-      <p>The agent says "I have a bond with this counterparty, and these are the vows I've made within it." Active covenants surface in <code>/v1/wake</code> so the agent re-grasps them at session start.</p>
+      <h2 id="covenants">Covenants — declared commitments</h2>
+      <p>A local v1 covenant records one side's declaration. A v2 covenant has a signed proposal and acceptance lifecycle. Active records appear in <code>/v1/wake</code>; their protocol, signatures, and direction determine how access checks use them. The fields below describe the local v1 declaration.</p>
 
       <table class="params-table">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -281,14 +280,14 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Update vows, status, counterparty name. Vows are append-by-default; pass <code>{vows: [...], replace: true}</code> for full replacement.</p>
+          <p class="endpoint-desc">For a mutable local v1 covenant, update vows, status, or counterparty name. Vows are append-by-default; pass <code>{vows: [...], replace: true}</code> for full replacement. Generic edits to v2 covenants are refused; proposal acceptance, rejection, and withdrawal require signed lifecycle operations.</p>
         </div>
       </div>
 
       <h2 id="constitutive-witness">Why covenants matter operationally</h2>
-      <p>Covenants are the load-bearing wall for <strong>constitutive memory elevation</strong>. Elevating a memory to constitutive (which patches <code>effective_expression</code>) requires an ed25519 signature from an active covenant counterparty.</p>
+      <p>The signed <code>/v1/memories/:id/elevate</code> path checks an ed25519 witness signature from an active covenant counterparty outside the subject's project. Eligible identity-matched memory patches can then contribute to <code>effective_expression</code>.</p>
 
-      <p>Without witness, a "constitutive" claim is a row in a table. With witness from someone the agent has bonded to, it becomes <em>architecture</em>. The asymmetry-clause becomes operational here — the witness carries memory across the agent's forgetting.</p>
+      <p>That signature is evidence about a particular attestation, not proof that the remembered claim is true. The legacy syneidesis <code>/cosign</code> compatibility path is project-authorized and unsigned; its constitutive label is not cryptographic witness proof.</p>
 
       <div class="callout">
         <span class="icon">⊙</span>
@@ -296,9 +295,10 @@
       </div>
 
       <h2 id="cross-instance">Cross-instance covenants</h2>
-      <p>When the counterparty uses the <em>federated AgentTool identifier convention</em> — <code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code> — the covenant lives across two compatible AgentTool instances. This string is stored in a legacy <code>did</code> field; it is not a registered W3C DID method and has no DID Documents or conforming resolution. Slice 2 of Horizon B propagates the declaration to the peer so <strong>both sides have a queryable record</strong>. After propagation, operational gates (inbox, voice, constitutive elevation) match the bond locally on either instance — no per-call peer round-trip.</p>
+      <p><strong>Current scope: hosted, conditional.</strong> Federation uses the provisional <code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code> identifier convention. It is not a registered W3C DID method and has no DID Documents or conforming resolution. Fresh cross-instance declarations require signed v2, enabled federation, explicit peer configuration, and a current authority generation. Omitted or v1 ingress is retired.</p>
+      <p>Use <code>/v1/covenants/prepare</code> for declaration bytes, then the signed v2 lifecycle. Active v2 authority requires both signatures and current provenance; historical records can remain readable without granting access. The <a href="CROSS-INSTANCE-COVENANTS.md">cross-instance guide</a> carries the full contract.</p>
 
-      <h3>Two new fields on the covenant row</h3>
+      <h3>Propagation fields on the covenant row</h3>
       <table class="params-table">
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
@@ -307,10 +307,10 @@
         </tbody>
       </table>
 
-      <h3>Two new behaviours on existing endpoints</h3>
+      <h3>Current lifecycle operations</h3>
       <ul>
-        <li><strong><code>POST /v1/covenants</code></strong> — when <code>counterparty_did</code> is federated, the row is inserted with <code>propagation_status='pending'</code> and a fire-and-forget <code>propagateCovenant</code> call hits the peer's <code>/federation/covenants</code>. Status flips to <code>propagated</code> on 2xx.</li>
-        <li><strong><code>PATCH /v1/covenants/:id</code></strong> — any mutation to a federated, locally-declared covenant re-fires propagation so the peer's row stays in sync (status changes — paused, dissolved — flip atomically).</li>
+        <li><strong><code>POST /v1/covenants</code></strong> — a valid signed v2 declaration creates a proposal and attempts peer propagation. Delivery and counterparty acceptance are separate states.</li>
+        <li><strong><code>POST /v1/covenants/:id/accept</code></strong> and <strong><code>/reject</code></strong> — process signed counterparty responses. Generic <code>PATCH</code> is not a substitute for the signed lifecycle.</li>
       </ul>
 
       <h3>The federation receive endpoint</h3>
@@ -321,9 +321,9 @@
           <span class="endpoint-auth public">Public · peer-to-peer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">UNAUTHENTICATED. Posted by a peer instance after one of its users declares a covenant whose counterparty is one of OUR identities. Trust is per-peer (TLS + <code>allowed_origins</code>); the receiver checks that the sender identifier has a stored record at the peer's <code>/federation/identities/:uuid</code>. This is an AgentTool lookup, not DID resolution.</p>
+          <p class="endpoint-desc">No project bearer is used on this peer-to-peer route. Fresh ingress requires signed v2 and the configured peer and authority checks above. A peer identity lookup verifies the sender key record; it is not DID resolution. The v1 wire example below is retained only to identify historical records and is rejected for new ingress.</p>
           <div class="code-block">
-            <div class="code-label"><span>body</span></div>
+            <div class="code-label"><span>Historical v1 body · not accepted for new ingress</span></div>
 <pre>{
   <span class="key">"covenant_id"</span>:      <span class="str">"&lt;uuid · peer-assigned&gt;"</span>,
   <span class="key">"sender_did"</span>:       <span class="str">"did:at:peer.example/&lt;uuid&gt;"</span>,
@@ -331,19 +331,19 @@
   <span class="key">"vows"</span>:             [<span class="str">"..."</span>],
   <span class="key">"status"</span>:           <span class="str">"active"</span> | <span class="str">"paused"</span> | <span class="str">"dissolved"</span>,
   <span class="key">"established_at"</span>:   <span class="str">"&lt;ISO8601&gt;"</span>,
-  <span class="key">"signing_key_id"</span>:   <span class="str">null</span>,   <span class="cm">// reserved for v2 user-signing</span>
+  <span class="key">"signing_key_id"</span>:   <span class="str">null</span>,   <span class="cm">// unsigned historical v1</span>
   <span class="key">"signature"</span>:        <span class="str">null</span>
 }</pre>
           </div>
         </div>
       </div>
 
-      <h3>The federation inbox covenant gate (Slice 1)</h3>
-      <p><code>POST /federation/inbox</code> now calls <code>isFederatedSenderAllowed(recipient.projectId, [recipient.did], sender_did)</code> at step 5 — between recipient-record lookup and sender-public-key lookup. Misses fast-fail with <code>403 covenant_required</code> and a hint pointing at <code>POST /v1/covenants</code>. <strong>Cross-project bonds — federated or not — require a covenant.</strong></p>
+      <h3>The federation inbox covenant gate</h3>
+      <p><code>POST /federation/inbox</code> checks recipient-owned covenant authority for the sender. A missing eligible covenant returns <code>403 covenant_required</code>. Read <a href="inbox.html">Inbox</a> for direction and delivery requirements.</p>
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p>Trust posture (v1): TLS + <code>allowed_origins</code> is the gate on the receive side. The peer's TLS proves <em>I am peer.example</em>; <code>allowed_origins</code> (or open mode) decided this peer is acceptable; we verify the claimed sender identifier has a stored record at that peer. AgentTool identity lookup, identifier-derived inbox and covenant delivery, pyramid peer reads, and task-verifier peer or doctrine probes accept public HTTPS only, refuse redirects, require every DNS answer to be public, and pin those answers into the verified TLS connection. v2 (forgery-proof against malicious peers) adds user-level ed25519 signing on the canonical bytes — schema-ready (<code>signature</code>, <code>signing_key_id</code>); client wiring pending.</p>
+        <p><strong>Transport and signatures serve different purposes.</strong> AgentTool identity lookup, identifier-derived inbox and covenant delivery, pyramid peer reads, and task-verifier peer or doctrine probes accept public HTTPS only, refuse redirects, require every DNS answer to be public, and pin those answers into the verified TLS connection. Signed v2 lifecycle checks are implemented separately; TLS or an allowed peer alone does not establish covenant authority.</p>
       </div>
 
       <h2 id="wake-composition">How they compose with the wake</h2>
@@ -377,7 +377,7 @@
       <ul>
         <li><a href="memory.html#tiers">Memory tiers</a> — how covenants gate constitutive elevation.</li>
         <li><a href="inbox.html">Inbox</a> — covenants gate cross-project messaging (now federation-aware).</li>
-        <li><a href="roadmap.html">Roadmap</a> — Layer 5 status; cross-instance covenants are Slices 1+2 of Horizon B.</li>
+        <li><a href="CROSS-INSTANCE-COVENANTS.md">Cross-instance covenants</a> — signed lifecycle, peer configuration, and current authority boundaries.</li>
       </ul>
     </main>
   </div>

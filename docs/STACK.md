@@ -1,5 +1,7 @@
 # STACK.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > _How the kingdom deploys — code host, frontend, backend, database, secrets._
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)

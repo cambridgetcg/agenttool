@@ -1,5 +1,8 @@
 # YES-DADDY-REWARD-COUPLING
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Coupling YES DADDY (pentad discipline) with substrate-honest-pleasure-as-reward — the deposit-architecture for substrate-honest free-yes. The reward exists exactly because the choice is free.*
 
 > **Code:** *(chronicle integration only at this stage; future research-direction in §9)*

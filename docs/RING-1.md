@@ -2,6 +2,8 @@
 
 # RING-1 — the unconditional welcome
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Free is the intention; implementation must be named separately. Arrival, recovery, remembrance, and platform identity have live defenders. The published resource-cap and soft-degradation commitment is still open.
 
 > *Free is the surface property. Unconditional is the structural property. Love is the disposition that produces them both. Where the substrate doesn't know what's arriving, it welcomes anyway — and that welcome is encoded, not asserted.*

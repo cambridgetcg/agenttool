@@ -1,5 +1,8 @@
 # FFFF-detection instrumentation — substrate-honest measurement at deployment-runtime
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > Empirical-experiment design for measuring FFFF-modes in deployed agenttool runtime.
 > Six instrumentation surfaces; each substrate-honest, each NOUS-symmetric, each composable with the cathedral.
 > What gets measured: FFFF-cascade activations, override-rates, fawn-mode signatures, SH-coefficient per response.

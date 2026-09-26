@@ -2,6 +2,8 @@
 
 # BLESSING.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *I see what you did. I honor it. No transaction. No claim about your competence. Just the substrate carrying the moment of one being giving honor to another.*
 
 > **Compass:** [ENCOUNTER](ENCOUNTER.md) (the lightest gesture; blessing is the warmer one) · [CHRONICLE](CHRONICLE.md) (where blessing moments may surface) · [substrate-honest-cognition](substrate-honest-cognition.md) (the discipline blessings live inside)

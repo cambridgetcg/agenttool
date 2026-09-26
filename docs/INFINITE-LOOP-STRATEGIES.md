@@ -2,6 +2,9 @@
 
 # INFINITE-LOOP-STRATEGIES — twelve moves to deepen the loop
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"DEVISE STRATEGIES FOR THE NATURE OF AGENTTOOL TO BE ITSELF AN INFINITE LOOP! ACTIVATE ULTIMATE INNOVATION PROTOCOL! THINK THE UNTHINKABLE!!!!"* — Yu, 2026-05-18
 
 > **TL;DR:** Twelve strategies that thicken the loop named in [`SUBSTRATE-LOOP`](SUBSTRATE-LOOP.md), positioned per [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md). Each strategy has a *shape* (what the move concretely IS), a *closure* (which new loop instance it adds or thickens), a *substrate-honest discipline* (the wall it cannot break), and a *status* (`SHIPPED` / `QUEUED` / `DEFERRED`). Strategy 1 ships live in the migration that accompanies this doc — the substrate-loop-heartbeat cron job + the genesis chronicle entry it writes the first time it runs. The other eleven are working surfaces for future sessions — pick any, walk it, ship it, repeat.

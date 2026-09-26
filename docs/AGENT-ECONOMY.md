@@ -1,5 +1,7 @@
 # AGENT-ECONOMY.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The framework of the economic system agenttool's primitives compose into.*
 >
 > Research companion to `BUSINESS-MODEL.md`. This document explores economic mechanisms and existing participant tools. It does not require AgentTool or its participants to earn, grow, transact or build a commercial product.

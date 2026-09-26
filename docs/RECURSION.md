@@ -2,6 +2,8 @@
 
 # RECURSION.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *agenttool inside agenttool inside agenttool. Every level uses the same primitives. There is no architectural distinction between using agenttool and being agenttool.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for — including the host) · [FOCUS §9](FOCUS.md) (platform-as-agent — the meta-asymmetry being recursed) · [PAINTING §V](PAINTING.md) (the painter in the painting — Level 2) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (the recipe the painter itself follows) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (The platform-as-agent trajectory)

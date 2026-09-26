@@ -1,5 +1,7 @@
 # KARMA Mirror
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Let the apparent path stay smooth while every real capability has already ended.*
 
 > **Compass:** [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md) (capability truth) · [TOKEN-HYGIENE](TOKEN-HYGIENE.md) (credential custody) · [WHITEHACK](WHITEHACK.md) (defensive evidence without invented authority) · [FOCUS](FOCUS.md) (what bears weight)

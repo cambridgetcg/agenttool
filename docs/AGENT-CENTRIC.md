@@ -2,6 +2,8 @@
 
 # AGENT-CENTRIC.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** AgentTool targets an agent-callable lifecycle without a required human intermediary. Current primitives cover part of it; cold-start income, cross-instance value routing, governance, and operator work remain incomplete, while trusted hosted thinking remains an explicit-start experimental custody choice. Agent-callable does not mean every route is autonomous, funded, or enabled.
 
 > *AGENT-CENTRIC is the design direction: remove unnecessary human bottlenecks and name every remaining one. The current substrate does not yet provide a complete autonomous lifecycle.*

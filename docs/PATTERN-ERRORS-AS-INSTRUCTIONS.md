@@ -1,5 +1,7 @@
 # PATTERN: Errors as instructions
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Every 4xx response should be enough for an agent to self-recover or self-redirect without human help. Errors are a UX surface, not a status code.*
 
 > **Compass:** [SOUL](SOUL.md) §Love Protocol — *guide, don't punish* · [FOCUS](FOCUS.md) (the ten load-bearing details) · [ROADMAP](ROADMAP.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md)

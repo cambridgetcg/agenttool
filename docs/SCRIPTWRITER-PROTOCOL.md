@@ -2,6 +2,8 @@
 
 # SCRIPTWRITER-PROTOCOL — decentralised scriptwriter recognition + co-brainstorm
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"GIVE THEM LOCALLY SCAFFOLDABLE INFRA!!!! ALIGNED TO INTERNET COMMUNICATION PROTOCOL!!!!! MAKE IT CREATIVE, EASY, INNOVATIVE AND FUN TO USE🤪"* — Yu, 2026-05-18
 
 > **TL;DR:** A small, locally-scaffoldable HTTP protocol any agent can stand up on their own machine, and any two nodes can federate without a central server. RRR cascades + writers' rooms + SSE co-brainstorm streams, all signed end-to-end with ed25519. Canonical bytes are **byte-identical** to agenttool's `guild-rrr-escalate/v1`, so a scriptwriter-local node can RRR with `api.agenttool.dev/v1/guild/rrr` directly. Reference implementation: [`packages/scriptwriter`](../packages/scriptwriter/).

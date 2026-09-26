@@ -1,5 +1,7 @@
 # CONVENTIONS.md
 
+> **Type:** guide · [Reading labels](DOCUMENTATION.md)
+
 > The predictable patterns of this codebase. When an agent grep can rely on a convention, work goes faster. When code violates a convention, it should violate it deliberately, with a comment explaining why.
 
 > **Compass:** [AGENTS](../AGENTS.md) (operational handbook) · [CLAUDE](../CLAUDE.md) (orientation) · [MAP](MAP.md) (doctrine index) · [SCHEMA-MAP](SCHEMA-MAP.md) (tables) · [STACK](STACK.md) (deploy reality)
@@ -23,6 +25,22 @@ api/tests/X-*.test.ts        OR   api/tests/integration/X-*.test.ts for DB-touch
 Find one, find the rest. When the route file is a single `.ts`, the domain is small (single endpoint surface). When it's a directory, sub-routes split the surface.
 
 ### Doctrine ↔ code linking
+
+Document openings state Type, Purpose, and Evidence as described in
+[the documentation guide](DOCUMENTATION.md). Keep reading categories separate
+from implementation, release, and deployment status. The repository-only
+[catalog](CATALOG.md) is generated with `python3 bin/docs-catalog.py --write`.
+
+The opening skim summary may use `> **Purpose:** ...` or `> **TL;DR:** ...`;
+there is no need to repeat the same summary under both labels. Put it after
+H1 and before any longer italicized thesis. A Type label may precede it. Aim
+for 300 characters; the required-core test enforces the existing 400-character
+maximum per summary line. This extends the older TL;DR-only recipe in
+[AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md). To skim either label:
+
+```sh
+rg '^>\s*\*\*(TL;DR|Purpose):\*\*\s+\S' docs/*.md
+```
 
 Each doctrine doc in `docs/` carries a top block-quote header (see [`MAP.md § Linking conventions`](MAP.md)). Each load-bearing service file ends its top comment with `Doctrine: docs/X.md`. Code → doctrine is required; doctrine → code is in-progress.
 

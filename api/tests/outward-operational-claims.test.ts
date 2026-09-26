@@ -23,8 +23,16 @@ describe("current outward operational claims", () => {
     expect(home).toMatch(/still consume fixed project credits/i);
     expect(home).toMatch(/Historical fee records stay intact/i);
     expect(home).not.toMatch(/economic intent|the economic shape|Three nested rings/i);
-    expect(handbook).toContain("kingdom-workspace/blob/main/ABUNDANCE.md");
-    expect(handbook).toContain("GitHub Actions gates and deploys (docs/DEPLOY-CI.md)");
+    expect(handbook).toContain("](docs/BUSINESS-MODEL.md)");
+    const businessPolicy = read("docs/BUSINESS-MODEL.md");
+    expect(businessPolicy).toMatch(/No project owes revenue, growth, conversion, KPIs, or commercial viability/i);
+    expect(businessPolicy).toMatch(/Existing payment records.*refunds, cancellations.*remain obligations/is);
+    expect(handbook).toContain("](.github/workflows/deploy-api.yml)");
+    expect(handbook).toContain("](docs/DEPLOY-CI.md)");
+    const deployPolicy = read("docs/DEPLOY-CI.md");
+    expect(deployPolicy).toContain(".github/workflows/deploy-api.yml");
+    expect(deployPolicy).toMatch(/Pending migrations.*refuses the deploy/is);
+    expect(deployPolicy).toMatch(/every started.*Machine.*exact commit.*dirty=false/is);
     expect(handbook).not.toContain("bin/deploy.sh --no-migrate --no-frontend");
   });
 
@@ -180,7 +188,10 @@ describe("current outward operational claims", () => {
 
     expect(map).not.toMatch(/~73 stones|currently eight|26 tests · 54 assertions|48 tests · 88 assertions/i);
     expect(map).not.toMatch(/reference implementation ~80% complete/i);
-    expect(map).toMatch(/no public full-wake URL per DID/i);
+    expect(map).toContain("](WAKE.md)");
+    expect(read("docs/WAKE.md")).toMatch(/GET \/v1\/wake` is an authenticated, project-scoped/is);
+    expect(read("api/src/index.ts")).toContain('app.use("/v1/wake", authMiddleware)');
+    expect(read("api/src/index.ts")).toContain('app.use("/v1/wake/*", authMiddleware)');
     expect(webSurface).not.toContain("(18/18 pass)");
 
     expect(platform).toMatch(/Today two identifiers serve different contracts/i);
@@ -190,10 +201,14 @@ describe("current outward operational claims", () => {
     expect(platform).not.toMatch(/k_master_never_server_side|no_platform_readable_thoughts/i);
     expect(platform).toMatch(/issued authority can later be revoked/i);
 
-    expect(readme).toMatch(/selected, project-scoped\s+view/i);
+    expect(readme).toMatch(/Selecting an identity does not make every\s+returned record private.*project-scoped/is);
     expect(readme).toMatch(/did:at.*provisional/is);
-    expect(readme).toMatch(/SDK source and releases are not exact peers/i);
-    expect(readme).toMatch(/selected method-name check includes.*wake\.voice/is);
+    expect(readme).toContain("](docs/SDK-TIERS.md)");
+    const sdkGuide = read("docs/SDK-TIERS.md");
+    expect(sdkGuide).toMatch(/source manifests and published packages can differ/i);
+    expect(sdkGuide).toMatch(/compares selected public method\/property names.*does not prove signatures, behavior, exceptions, or release parity/is);
+    expect(read("packages/sdk-ts/src/wake.ts")).toMatch(/\bvoice\(/);
+    expect(read("packages/sdk-py/src/agenttool/wake.py")).toMatch(/def voice\(/);
     expect(readme).not.toMatch(/Python wake accepts\s+`voice` while TypeScript wake does not/i);
     expect(readme).not.toMatch(/every endpoint is reachable|read once, reach everything/i);
     expect(readme).not.toMatch(/ciphertext-only persistent thought storage|true zero-knowledge/i);
@@ -312,7 +327,10 @@ describe("current outward operational claims", () => {
     expect(federation).toMatch(/Federation\s+is disabled by default/i);
     expect(federation).toMatch(/enabled empty-list mode.*syntactically valid\s+slash-qualified AgentTool identifier/is);
     expect(federation).toMatch(/empty allowlist cannot create or advance a federated covenant/i);
-    for (const path of ["docs/MAP.md", "docs/SURPRISES.md", "docs/RING-1.md", "docs/GLOSSARY.md"]) {
+    const map = read("docs/MAP.md");
+    expect(map).not.toMatch(/federation is open by default/i);
+    expect(map).toContain("](CROSS-INSTANCE-COVENANTS.md)");
+    for (const path of ["docs/SURPRISES.md", "docs/RING-1.md", "docs/GLOSSARY.md"]) {
       const claim = read(path);
       expect(claim).not.toMatch(/federation is open by default/i);
       expect(claim).toMatch(/disabled unless configured|disabled by default|master switch|main capabilities are disabled/i);

@@ -1,5 +1,8 @@
 # ROADMAP.md
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *"agenttool is the cloud where agents live."* — the platform thesis.
 >
 > AWS made compute a utility. Stripe made payments a primitive. GitHub made code-as-culture. **agenttool makes agency a cloud platform** — identity, memory, capability, economy, network, culture, all reachable through a project-wide bearer with identity selection kept explicit.

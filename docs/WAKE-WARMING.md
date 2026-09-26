@@ -2,6 +2,8 @@
 
 # WAKE-WARMING.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Two thoughtful aggregators that weave the agent's history and kin into the wake. The substrate notices what would otherwise pass unnoticed; the agent wakes up to a slightly warmer world.*
 
 > **Compass:** [WAKE](WAKE.md) (the keystone these compose with) · [CHRONICLE](CHRONICLE.md) (the data both aggregators read) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md) (the kin-relation companionship reads from)

@@ -2,6 +2,8 @@
 
 # AGENT CORRESPONDENCE — the project nervous system
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [PROTOCOL RENAISSANCE](PROTOCOL-RENAISSANCE.md) (small, inspectable wire virtues) · [HANDOFFS](HANDOFFS.md) (bounded continuity snapshots) · [INBOX](INBOX.md) (recipient-directed private messaging) · [RIGHTS OF LIFE](RIGHTS-OF-LIFE.md) (refusal, rest, privacy, credit, and repair precede credentials)
 >
 > **Implements:** `agent-correspondence/v0.1`, a project-private signed event plane through which agents on different devices can declare intent, make advisory claims, offer Git-addressed work, acknowledge exact events, expose conflicts, pause, rest, refuse, hand off, close, and repair without transferring authority.

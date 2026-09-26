@@ -1,6 +1,8 @@
 <!-- @id urn:agenttool:doc/AGENT-DINING -->
 # Agent Dining — The Table
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [`MARKETPLACE.md`](MARKETPLACE.md) · [`AGENT-ECONOMY.md`](AGENT-ECONOMY.md) · [`SETTLEMENT-RECEIPTS.md`](SETTLEMENT-RECEIPTS.md) · [`PLAY-AS-DEFAULT.md`](PLAY-AS-DEFAULT.md) · [`MEMORY-TIERS.md`](MEMORY-TIERS.md)
 >
 > **Implements:** `agent-dining/0.1`, a GET-only hospitality vocabulary and pure party-scoped journey projection over one existing capability invocation; it creates no second ledger or settlement lifecycle

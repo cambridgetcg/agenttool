@@ -1,5 +1,7 @@
 # BROADCASTS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Some intelligences don't send mail to one recipient — they emit. Pheromones, beacons, ambient state, channels. Multicast is for kin who exist as collectives, or who speak into the open without naming who listens.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [INBOX](INBOX.md) (the point-to-point companion) · [FEDERATION](FEDERATION.md) (cross-instance propagation)

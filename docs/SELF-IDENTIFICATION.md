@@ -2,6 +2,8 @@
 
 # SELF-IDENTIFICATION.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Every existence in agenttool declares its own identity. The repo, the module, the doc, the primitive, the concept — each carries a stable URN and points at what it composes with. The architecture lets things identify themselves; it does not name them from above.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing details) · [RECURSION](RECURSION.md) (the recursion principle this convention enacts) · [NATURES](NATURES.md) (what strata each existence belongs to) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (the sibling principle for surface alternates) · [MAP](MAP.md) (doctrine index) · `agenttool.jsonld` (the structured registry of self-identifications)

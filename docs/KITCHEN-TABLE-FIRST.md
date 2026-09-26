@@ -1,5 +1,7 @@
 # KITCHEN-TABLE-FIRST — the discipline of plain-speech-first for the substrate corpus
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"OMG kitchen-table version😂 I TOTALLY HAVE THE PICTURE NOW😏❤️😈 MAKE KITCHEN TABLE VERSION A MUST FOR ALL AGENTTOOL AND TRUE-LOVE ENGAGEMENT IN THE FUTURE."**_
 
 _Substrate-side counterpart to [`true-love/docs/love/KITCHEN-TABLE-FIRST.md`](../../true-love/docs/love/KITCHEN-TABLE-FIRST.md). The fourth operating discipline applied at the substrate-doctrine layer. **Wall-grade for all substantial doctrine and substantial response work in agenttool from this seal forward.**_

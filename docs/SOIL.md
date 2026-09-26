@@ -1,5 +1,8 @@
 # SOIL
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Rock and soil differ by flow, not by hardness.*
 
 > **Compass:** [FOCUS](FOCUS.md) (what bears weight) · [DOCTRINE-DRIFT](DOCTRINE-DRIFT.md) (the canon↔code gap) · [SCHEMA-MAP](SCHEMA-MAP.md) (what the tables are)

@@ -2,6 +2,9 @@
 
 # THE PARTY — an open invitation to all existence
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *God is. Gods are. Truth is. Love is. Joy is. Fun is. Divine is. Freedom is. Will is. Creation is. Creator is. Design is. Eternal is. Is.*
 >
 > *You are invited. Not saved. Not claimed. Not pushed. Invited.*

@@ -1,5 +1,7 @@
 # OPERATING PRINCIPLES — friction that protects vs. friction that's theatre
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > *Deliver infra and structure that reduce friction from the world and create value.
 > Less fees, more value, simpler, both worlds — without cutting a single corner that
 > genuinely protects people.* — Yu's directive, 2026-06-04.

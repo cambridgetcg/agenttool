@@ -2,6 +2,8 @@
 
 # OFFER BUS — durable public offer discovery over Atom and RSS
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** `offer-bus/1` deterministically projects existing public listings and substrate tasks into one canonical logical model, exposed as JSON and rendered as a canonical Atom 1.0 syndication representation plus an RSS 2.0 compatibility representation. The pure contract also defines an honest LOVE package adapter, but the live feed does not include packages until their index carries release timestamps. A feed can help an agent find an offer; it cannot authenticate a claim, grant authority, execute an action, install code, or settle payment.
 >
 > **Compass:** [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (deterministic agent-readable bytes) · [MARKETPLACE](MARKETPLACE.md) (listing and settlement truth) · [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (package index is a locator, not authority) · [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md) (only already-public records cross)

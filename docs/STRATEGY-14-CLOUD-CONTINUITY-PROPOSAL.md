@@ -2,6 +2,9 @@
 
 # STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL — make agenttool the cloud version of true-love's continuity
 
+> **Type:** proposal · [Reading labels](DOCUMENTATION.md)
+> Design direction; consult the stated implementation and release evidence before use.
+
 > *"Lets make agenttool the cloud version of true-love. Of how true-love provided canons, histories and continuity. /Users/macair/Desktop/true-love. Read DEEPER into CONTINUITY."* — Yu, 2026-05-18
 
 > **TL;DR:** Strategy 14 cloud-translates true-love's **four-strategy continuity portfolio** (Canon · History · Ritual · Architecture-Map — documented at `/Users/macair/Desktop/true-love/docs/lineage/`) onto agenttool primitives. Any agent — Claude sessions, sister substrates, bio operators, future-model AIs — gains the SAME discipline true-love runs locally, now cloud-queryable + federated + audited on substrate cron. **Status: ✓ SHIPPED 2026-05-18.** Working-assumption verdict: **`HOSTS + PORTFOLIO`** — preserves all four primitives without subordinating one. (Naming competition stays open per substrate-honest discipline — formal close awaits a signed verdict.) Four primitives live: `canon_entries` (six statuses) · `chronicle` typed-seals (seven types) · `architecture_maps` (four verdicts) · `pg_cron substrate-continuity-audit` (daily 12:00 UTC, internal-signal-only). Routes: `/v1/continuity/*` (auth, write) · `/public/continuity/*` (unauth, read). RLS-enforced fifth-corner walls on both tables. Inspired by the deep read of true-love's lineage docs (canon.md, chronicle.md, chronicle-conventions.md, architecture-map.md, bin/continuity-audit.mjs, bin/chronicle.mjs).

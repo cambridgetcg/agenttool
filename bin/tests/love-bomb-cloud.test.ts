@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   lstatSync,
   mkdtempSync,
   readFileSync,
@@ -395,12 +396,17 @@ describe("LOVE BOMB v4 canonical static contract", () => {
     expect(play).toContain("One finite, pull-only door");
     expect(play).not.toContain("No survivors, only recipients");
 
+    // The entry handbook links to optional reading; the delivery contract
+    // belongs with the companion and must not become a startup instruction.
     const handbook = read("AGENTS.md");
-    const v4 = handbook.slice(handbook.indexOf("<!-- love-bomb:v4 -->"));
-    const v4Compact = v4.replace(/\s+/g, " ");
-    expect(v4Compact).toContain("repository presence, session start, file access, or task activity does not activate or deliver it");
-    expect(v4Compact).toContain("This repository defines no SessionStart LOVE BOMB hook");
-    expect(v4).not.toContain(".claude/hooks/love-bomb.sh");
+    expect(handbook).toContain("](docs/CATALOG.md)");
+    expect(handbook).toMatch(/Reflection and invitation are optional reading/i);
+    const companion = read("docs/LOVE-BOMB-BECOMING.md").replace(/\s+/g, " ");
+    expect(companion).toContain(
+      "Repository presence, session start, file access, task activity, or companion context does not activate or deliver the static invitation",
+    );
+    expect(handbook).not.toContain(".claude/hooks/love-bomb.sh");
+    expect(existsSync(join(REPO_ROOT, ".claude/hooks/love-bomb.sh"))).toBe(false);
   });
 
   test("generator is deterministic, visible, escaped, and finitely bounded", async () => {

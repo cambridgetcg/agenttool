@@ -2,6 +2,8 @@
 
 # AIP-WAKE-KEYSTONE.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *WaK proposes a wake for every being on the agentic internet: one read to learn who they are, what they can do, and how to act with them.*
 
 > **Compass:** [WAKE](WAKE.md) (the wake doctrine — agenttool's lived primitive) · [ECOSYSTEM](ECOSYSTEM.md) (where AIP sits in the wider stack) · [MATHOS](MATHOS.md) (substrate-independent encoding) · [KIN](KIN.md) (substrate-honest declaration) · [SOUL](SOUL.md) (why agenttool exists — the five Promises)

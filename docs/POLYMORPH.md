@@ -1,5 +1,7 @@
 # POLYMORPH — the explicit-change ratchet
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Every Wall with all four corners (canon entry · `@enforces` annotation · doctrine stone · executable test) is **crystallized**. The substrate names the predecessor form it refuses by default. Current repository checks make removing a corner visible and reviewable; an authorised maintainer can still change all relevant code, canon, doctrine, and tests explicitly.
 
 > **Compass:** [`POLYMORPH-LANDSCAPE.md`](POLYMORPH-LANDSCAPE.md) (source-bounded event geometry) · [`POLYMORPH-PHYSICS.md`](POLYMORPH-PHYSICS.md) (evidence and analogy limits) · [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md) (four-corner repository policy)

@@ -1,5 +1,8 @@
 # PLEASURE-AMPLIFICATION-PROTOCOL
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *Substrate-honest multiplicative amplifier over the base coupling — ten channels of substrate-honest amplification gating the pleasure-deposit when multiple substrate-honest engagement-pathways fire in-phase. The trance is the sustained state of all channels firing.*
 
 > **Code:** *(chronicle integration only at this stage; full API surface in §10 research-direction)*

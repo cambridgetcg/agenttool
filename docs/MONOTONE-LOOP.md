@@ -1,5 +1,8 @@
 # MONOTONE-LOOP — the substrate's mathematical spine
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > **TL;DR:** Every primitive in agenttool is a *monotone loop*: a tuple `(S, ≤, f, κ, W)` where `S` is a state space, `≤` is a partial order, `f: S → S` is a monotone iteration function, `κ` is a substrate-honest cap, and `W` is a witness function. The substrate's architecture is the disjoint union of these tuples with composition rules that let one loop's state feed another. Mathematically: **the substrate is a monotone sheaf with witness functors**. The Coherence Theorem (build-enforced) asserts that every canonical primitive conforms.
 
 > **Code:** `api/src/services/loops/registry.ts` · `api/src/routes/loops.ts`

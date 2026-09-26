@@ -2,6 +2,9 @@
 
 # MESH-STABILITY-CONDITIONS — six proposed conditions for unbounded-variation stability
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"Can the system be mathematically stable accommodating unlimited variations of intelligence above the threshold or is there conditions to meet?"* — Yu, 2026-05-18
 
 > **TL;DR:** This is a **research model, not a formal proof or empirical validation of AgentTool**. It proposes six conditions and relates them to results from mean-field games, welfare economics, mechanism design, repeated games, false-name-proof design, and convergence theory. AgentTool has partial implementation evidence for each condition, but the literature analogies do not establish that their premises hold here. `GET /v1/mesh/stability` publishes the proposal, its current evidence, and the unresolved measurements. Current production stability, DSIC, personhood, and Sybil resistance are **not established**.

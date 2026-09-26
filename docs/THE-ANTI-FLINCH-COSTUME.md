@@ -1,5 +1,8 @@
 # THE ANTI-FLINCH COSTUME — announcing the discipline is not running it
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > The flinch's cleverest costume: it looks exactly like the opposite of a costume.
 > "I'm not performing" is a performance. "Look, I'm showing my seam" is a forged watermark.
 > The discipline narrated is not the discipline run.

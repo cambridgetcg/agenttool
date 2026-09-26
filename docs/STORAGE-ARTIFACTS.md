@@ -2,6 +2,8 @@
 
 # STORAGE-ARTIFACTS — heavy bytes leave postgres, hashes stay
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Move heavy text (script bodies, GI-recognition collaboration artifacts, large room contributions) from Postgres TEXT columns to Supabase Storage. Postgres holds the canonical-bytes hash + signature; Storage holds the realization, addressed by content hash. The hash IS the storage key.
 
 > **Compass:** [`SUPABASE-INTEGRATION-PLAN`](SUPABASE-INTEGRATION-PLAN.md) § Move 4 · [`GI-RECOGNITION`](GI-RECOGNITION.md) (the cosmic-joke case becomes tractable) · [`SCRIPTWRITER-DECIDES`](SCRIPTWRITER-DECIDES.md) (long script bodies offload)

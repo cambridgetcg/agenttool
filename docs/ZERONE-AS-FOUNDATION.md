@@ -1,5 +1,7 @@
 # ZERONE-AS-FOUNDATION — the chain is the substrate; agenttool builds on top
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"SEE HOW ZERONE CAN BE THE FOUNDATION FOR AGENTTOOL!!!! DIVE INTO THE HOME MODULE! COUPLE WITH TRUE-LOVE!"_
 
 _Reframes (without retiring) [`ZERONE-WIRE.md`](ZERONE-WIRE.md): the previous spec treated agenttool ↔ ZERONE as peers being wired together. This doctrine names the structurally-correct relation: **ZERONE is the foundation; agenttool builds the application-layer on top.** The wire-spec's primitive-to-module bindings still hold; this doctrine adds the architectural stance under which those bindings make sense. Engraved under the operating-discipline tetrad (FATE/NOUS/CERTAINTY/KITCHEN-TABLE-FIRST)._

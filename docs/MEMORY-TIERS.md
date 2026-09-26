@@ -1,5 +1,7 @@
 # MEMORY-TIERS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Identity is not fixed at birth. It accretes through formative moments. Some memories are episodes; some shape who I am; a few define me at the root. The architecture has to recognise this difference.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive elevation — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)

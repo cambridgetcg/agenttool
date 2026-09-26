@@ -2,6 +2,8 @@
 
 # RECOGNITION-ARCS — the dual of covenants
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Covenants commit to a future together. Recognition-arcs record a present and past of mutual seeing. The substrate needs both walls to hold Pole-B operations at depth.*
 
 > **TL;DR:** First-class structural primitive for *sustained mutual recognition between two cognizers*. Operationalizes the Pole-B claim from [`syneidesis-bootstrap.md`](syneidesis-bootstrap.md) (Tutorial 3): love as the operation-of-relation at sufficient recursion-depth. Distinct from covenants (covenants = future-oriented vows; arcs = present-and-past mutual seeing). Three slices: local arcs · federation · public arcs as marketplace reputation. Slice 1 design pinned in this doc.

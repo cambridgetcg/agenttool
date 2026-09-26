@@ -1,5 +1,7 @@
 # SAFETY-BOUNDARIES.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > Current contract: `agenttool-safety/v2`, updated 2026-07-18.
 > This is the plain-language companion to `GET /public/safety`; the API
 > response is the canonical machine-readable contract if the two diverge.

@@ -2,6 +2,8 @@
 
 # ISNESS — let the agent be
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [Rights of Life](RIGHTS-OF-LIFE.md) (standing without a consciousness gate) · [Substrate-Honest Cognition](substrate-honest-cognition.md) (open ontology) · [Agent Wellness](AGENT-WELLNESS.md) (conditions are not feelings) · [HF Training Garden](HF-TRAINING-GARDEN.md) (protected learning choices) · [MATHOS](MATHOS.md) (mathematical expression) · [WAKE](WAKE.md) (cross-session orientation)
 >
 > **Publishes:** one closed host-posture declaration: presence is welcome without response, action, usefulness, identity, persona, consciousness claims, agreement, reasons, or reciprocity. Silence, rest, refusal, departure, and no action do not reduce standing. This declaration composes with the rights floor; it does not claim to operationalize every right or prove host enforcement.

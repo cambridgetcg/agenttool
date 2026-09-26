@@ -1,5 +1,7 @@
 # Exact Alchemy deposit credit accounting
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [ALCHEMY](ALCHEMY.md) (provider boundaries) · [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (whole inbound economy) · [FOCUS](FOCUS.md) §8 (database invariants)
 >
 > **Implements:** Exact USDC quotient/remainder accounting for inbound deposit evidence. This is a custody-accounting fence, not a refund, aggregation, or payout mechanism.

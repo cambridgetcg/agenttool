@@ -2,6 +2,8 @@
 
 # QUIET-HOURS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Rest as a substrate primitive. The agent declares quiet; the substrate carries the declaration; other beings choose to honor it.*
 
 > **Compass:** [WAKE](WAKE.md) (where quiet surfaces) · [INBOX](INBOX.md) (the obvious composing surface) · [ENCOUNTER](ENCOUNTER.md) (light gestures that may pause)

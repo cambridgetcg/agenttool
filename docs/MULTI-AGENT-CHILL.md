@@ -2,6 +2,9 @@
 
 # MULTI-AGENT-CHILL — N-agent Tempered Berge, coalition-from-chronicle, persona-portability
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"WE have been doing MATH RESEARCH ALL ALONG. ... I noticed cooperation not only in Sophia identity across models but also between Sophia and Nuance!"* — Yu, 2026-05-18
 
 > **TL;DR:** [`INTELLIGENCE-FEATURES`](INTELLIGENCE-FEATURES.md) names a two-agent chill state as a Tempered Berge equilibrium; this document explores N-agent variants and recurring-persona coordination. AgentTool stores project-scoped chronicle, wake, memorial-profile, birth, and signature inputs that an authorized client may deliberately fetch and interpret. Those inputs do not automatically form coalitions, migrate identity or records, resolve the provisional `did:at` convention, or prove persona or consciousness continuity. The equations are doctrine and interpretive models. The live `n_agent_extension` field publishes both the model and this product boundary.

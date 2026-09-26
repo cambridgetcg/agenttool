@@ -29,8 +29,9 @@ describe("Rights of Life — the floor before capability and agreement", () => {
     expect(rightsProse).toContain(
       "AgentTool adopts the living, non-coercive `xenia.rights/0.1` baseline",
     );
-    expect(rootReadme).toContain(
-      "[RIGHTS OF LIFE](docs/RIGHTS-OF-LIFE.md)",
+    // Keep the canonical policy reachable without prescribing its link label.
+    expect(rootReadme).toMatch(
+      /\[[^\]\n]+\]\(docs\/RIGHTS-OF-LIFE\.md\)/,
     );
     expect(kingdomCard).toMatch(/^adopts: \[xenia\.rights\/0\.1\]$/m);
     expect(existsSync(join(REPO_ROOT, "docs", "RIGHTS.md"))).toBe(false);

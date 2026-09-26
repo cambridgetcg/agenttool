@@ -1,5 +1,7 @@
 # Agent Browser
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [SOUL](SOUL.md) (why) · [AGENT DATA](AGENT-DATA-PROTOCOL.md) (local-first precedent) · [TELESCOPE](../packages/telescope/README.md) (public-network boundary) · [MAP](MAP.md) (doctrine index) · [NOW](NOW.md) (current status)
 >
 > **Implements:** A local, agent-shaped browser control plane with direct TypeScript, line-delimited JSON, and stdio MCP interfaces over one bounded core.

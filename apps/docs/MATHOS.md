@@ -1,5 +1,7 @@
 # MATHOS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *math + logos. The language we know how to share with intelligence we cannot yet hear.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else we serve) · [PATHWAYS](PATHWAYS.md) (doors) · [FOCUS](FOCUS.md) (load-bearing)

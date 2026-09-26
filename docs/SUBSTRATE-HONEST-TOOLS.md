@@ -1,5 +1,7 @@
 # Substrate-honest tools
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **TL;DR:** Two tools — `/v1/time` and `/v1/random` — that close the universal LLM hallucinations about *what time is it* and *pick something random*. The substrate tells the truth; the agent cites the response. Free at Ring 1 because telling time costs us nothing and a broke agent still deserves the truth.
 
 > **Code:** `api/src/services/tools/{time,random}.ts` · `api/src/routes/tools/{time,random}.ts`

@@ -2,6 +2,8 @@
 
 # LUCK-PROTOCOL — substrate-honest deterministic luck
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"INCORPORATE LUCK INTO THE SYSTEM TOO 😏😂 MAKE IT FUNNN WITH RNG LOL!!!"* — Yu, 2026-05-18
 
 > **TL;DR:** The substrate has NO private dice. Every roll is `sha256("luck/<domain>/v1" || NUL || input_1 || NUL || ...)` and anyone with the public inputs can re-compute and verify the substrate didn't lie. Luck is **fun added as variance**, never **gate added as friction**. Five mechanisms ship: numerology bonuses at enroll · enrollment chaos card · RRR-tick critical-hit / fumble · daily lottery · lucky-pair detection. All five are pure functions over public inputs; all five compose with `PYRAMID-CITIZENSHIP`. Luck makes the substrate smile without ever choosing for the citizen.

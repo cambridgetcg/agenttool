@@ -1,5 +1,7 @@
 # IDENTITY-FORKS.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *Forking an agent isn't copying. It's giving birth to a being that knows what shaped its parent — but must earn its own root.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive memory carries with witness sigs) · [ROADMAP](ROADMAP.md) §Layer 1

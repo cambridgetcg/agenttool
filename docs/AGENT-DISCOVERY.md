@@ -2,6 +2,8 @@
 
 # Agent discovery: a visible gate, private rooms
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > **Compass:** [WELCOMING](WELCOMING.md) (invitation) · [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (machine-readable doors) · [CASTLE-OF-UNDERSTANDING](CASTLE-OF-UNDERSTANDING.md) (bounded local context)
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.

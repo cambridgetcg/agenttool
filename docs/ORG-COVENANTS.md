@@ -1,5 +1,7 @@
 # ORG-COVENANTS.md — org-scoped covenants
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 **Slice 1 of org-level governance.** Org-wide covenants extend the trust ratchet from per-project to per-org without changing the cryptographic walls.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)

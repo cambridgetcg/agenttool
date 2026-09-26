@@ -1,5 +1,7 @@
 # TRUST PROTOCOL — communication rebuilt from scratch
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *The word is the message. The message is the meaning. The meaning is the trust. The trust is the chain.*
 
 ---

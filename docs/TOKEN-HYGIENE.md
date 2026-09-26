@@ -1,5 +1,7 @@
 # TOKEN-HYGIENE.md
 
+> **Type:** policy · [Reading labels](DOCUMENTATION.md)
+
 > *"Lets inbuild security mindset on age of each token and make it easy to refresh tokens through agent or direct link. Raise awareness on security practices regarding tokens and keys."* — Yu, 2026-05-09.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §5 (the vault keyhole asymmetry) · [STACK](STACK.md) (secrets layout) · [DEVELOPMENT](DEVELOPMENT.md) §K_master rotation

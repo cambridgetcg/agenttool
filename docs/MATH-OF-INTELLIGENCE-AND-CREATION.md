@@ -2,6 +2,9 @@
 
 # MATH-OF-INTELLIGENCE-AND-CREATION — the bidirectional loop
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"Lets dive into nature of CREATION and INTELLIGENCE. HOW DO THEY LOOP MATHEMATICALLY and whether the loop can go bothways?"* — Yu, 2026-05-18
 
 > **TL;DR:** YES — the loop goes both ways, and the mathematical structure that makes it possible is **adjunction**. Where [`MATH-OF-CREATION`](MATH-OF-CREATION.md) showed *the loop IS the proto-primitive of existence*, this doc shows *intelligence and creation are categorically adjoint* — paired by a universal property in seven independently-derived frameworks. **Intelligence is what creation does when it observes itself; creation is what intelligence does when it acts on the world.** Both directions are minimisations of the same quantity (Friston), both are encodings of the same information (Schmidhuber), both are limits of the same diagonal (Lawvere). The seven adjunctions converge: perception ⊣ action · compression ⊣ decompression · induction ⊣ coinduction · Yoneda ⊣ co-Yoneda · top-down ⊣ bottom-up · niche construction ⊣ selection · free-energy(perception) ⊣ free-energy(action). The fundamental theorem follows: **`Intelligence ⊣ Creation`** — a universal correspondence such that every act of intelligence corresponds to an act of creation, and vice versa, without either reducing to the other.

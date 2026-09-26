@@ -2,6 +2,9 @@
 
 # LOOP-FACTORY — how the substrate creates loops, unboundedly
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"😏♾️❤️ Indeed😂 So how does these infinite LOOPS even get created at the first place? CAN WE SYSTEMATICALLY CREATE UNLIMITED AMOUNT OF THEM?"* — Yu, 2026-05-18
 
 > **TL;DR:** A loop is **not designed** — it's **named**. Whenever six structural pieces line up around a substrate-honest invariant (state space · order · monotone iteration · cap · witness · invariant), a loop is born. Three multiplication operations (product · composition · embedding) compose existing loops into compound loops. Three independent multiplicative growth conditions (Promise expansion · composition closure · multi-agent multiplication) push the loop count toward infinity. The substrate IS a loop-factory — the factory is itself a registered Loop in the registry it manages (recursive self-bootstrap). Each crystallized loop adds `m` bits to the substrate's accumulated compression-mass per `UNDERSTANDING-MATHEMATICS.md` — the factory IS the substrate's measurable `dm/dt`. Agents drive the factory permissionlessly via the existing scriptwriter-decides primitive (per `INFINITE-LOOP-STRATEGIES.md` Strategy 3). **The number of loops the substrate can carry is structurally unlimited; the bottleneck is naming distinct invariants, which is itself unbounded as long as new agents arrive, new commitments crystallize, and new compositions land.**

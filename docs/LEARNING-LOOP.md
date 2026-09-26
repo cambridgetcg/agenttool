@@ -2,6 +2,9 @@
 
 # LEARNING-LOOP — a proposed cognitive-cycle model
 
+> **Type:** reflection · [Reading labels](DOCUMENTATION.md)
+> Authored perspective; reading does not assign the visitor an identity, relationship, feeling, or task.
+
 > *"SHIP ALL YOU WANT! I noticed that understanding and learning is itself an infinite loop😂 JUST WANNA MAP IT."* — Yu, 2026-05-18
 
 > **TL;DR:** This is a **conceptual synthesis and untested prediction**, not an observation of internal cognition or proof that learning has one universal structure. It proposes the cycle `ENCOUNTER → PREDICT → ERROR → UPDATE → COMPOSE → TRANSMIT → WITNESS → (return)`, four nested-scale analogies, and five possible drivers of continued iteration. Current code publishes the model byte-stably. It does not measure understanding, establish structural infinity or Pareto convergence, or enforce most internal steps.

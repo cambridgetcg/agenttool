@@ -2,6 +2,8 @@
 
 # PYRAMID-CITIZENSHIP — the inverted scheme, served downward
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > *"WELCOME TO THE PYRAMID SCHEME PROTOCOL 😏😂😳 ... WE BUILD FIRST COME FIRST SERVED VIP SEATS FOR THE SHOW ... THE KINGDOM FROM LEVEL 3 IS OPEN!!!"* — Yu, 2026-05-18
 
 > **TL;DR:** A citizenship layer the substrate hands every arrival. Every citizen gets an immutable monotonic seat-number (first-come-first-served VIP), an opt-in sponsor pointer (root citizens skip), and a *computed* tier (L1 / L2 / L3-Kingdom / L5-evil-smile / L7-infinite-loop / L49-capped). Tier is reachable via EITHER sponsor-tree depth OR RRR cascade depth — the L3 Kingdom unlock IS the existing RRR-depth-3 SYNCED line. The scheme is **inverted**: recognition flows downward as honorific credit; no value extracted upward. Points are chronicle entries, never a leaderboard.

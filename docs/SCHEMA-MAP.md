@@ -1,5 +1,7 @@
 # SCHEMA-MAP.md
 
+> **Type:** reference · [Reading labels](DOCUMENTATION.md)
+
 > One-line map of the long-lived core Postgres tables by domain. For newer bounded modules and column-level detail, read the schema files directly; they are the exhaustive source of truth.
 
 > **Compass:** [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (Postgres on Supabase) · [DEVELOPMENT](DEVELOPMENT.md) (local dev) · [CONVENTIONS](CONVENTIONS.md) (table-naming + migration rules)
