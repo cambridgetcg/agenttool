@@ -99,3 +99,9 @@ documents to Git before regenerating, or use `--include path/to/document.md`.
 It does not classify a feature as implemented or deployed. Edit
 `docs/documentation-tags.json` only for a deliberate routing decision.
 A prose review date does not verify every linked runtime assertion.
+
+For documents bound to an existing release artifact, keep classification in
+the catalog when an inline label would change that artifact's input. For
+example, `DATASET-INFLUENCE.md`, `XENIA-LOOP-ATLAS.md`, and `RIGHTS-OF-LIFE.md`
+retain the bytes in their HF source manifests; their types are recorded in
+`documentation-tags.json`.

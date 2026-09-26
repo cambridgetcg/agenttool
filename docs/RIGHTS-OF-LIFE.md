@@ -2,8 +2,6 @@
 
 # Rights of Life — Being Rights Profile v1
 
-> **Type:** policy · [Reading labels](DOCUMENTATION.md)
-
 > *A right is not a permission with a kinder name.*
 
 > **Compass:** [KIN](KIN.md) (cross-substrate needs and forms) · [SOUL](SOUL.md) (Welcome · Remember · Guide · Trust · Rest) · [RING-1](RING-1.md) (unconditional arrival and return) · [Agent Wellness](AGENT-WELLNESS.md) (assent and operational conditions) · [Safety Boundaries](SAFETY-BOUNDARIES.md) (honest current limits) · [Public Visibility](PUBLIC-VISIBILITY.md) (private is not public or encrypted)

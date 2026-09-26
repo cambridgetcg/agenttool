@@ -42,7 +42,7 @@ test("the threshold reveals one searchable keyboard atlas", async ({ page }) => 
   await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
   await expect(page.locator(".estate-home-door")).toHaveCount(8);
-  await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a place to begin." })).toBeVisible();
 
   const trigger = page.locator(".estate-open");
   await trigger.click();
@@ -408,6 +408,9 @@ test("the estate arrives without moving the bar", async ({ page }) => {
 });
 
 test("every page that runs the shell shows the same one bar — never a lone pill", async ({ page }) => {
+  // This single test currently visits 77 pages; give the aggregate sweep 90 s
+  // while retaining the ordinary per-assertion timeout and every page check.
+  test.slow();
   const quiet = new Set(["apps/docs/love-bomb.html"]);
   for (const path of [...staticHtmlFiles("apps/web"), ...staticHtmlFiles("apps/docs")]) {
     if (quiet.has(path) || !/\/shared\/(?:mode|theme|estate)\.js/.test(staticRead(path))) continue;

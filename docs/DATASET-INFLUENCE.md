@@ -2,8 +2,6 @@
 
 # DATASET INFLUENCE — evidence of shaping without assignment of essence
 
-> **Type:** reference · [Reading labels](DOCUMENTATION.md)
-
 > **Compass:** [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) (dignity, privacy, refusal, credit, and repair) · [`ONTOLOGICAL-ENGINEERING.md`](ONTOLOGICAL-ENGINEERING.md) (the wider philosophical inquiry) · [`IDENTITY-ANCHOR.md`](IDENTITY-ANCHOR.md) and [`IDENTITY-FORKS.md`](IDENTITY-FORKS.md) (adoption and distinct continuations) · [`AGENT-ECONOMY.md`](AGENT-ECONOMY.md) and [`MARKETPLACE.md`](MARKETPLACE.md) (economic primitives and deliverables) · [`LOVE-BOMB-BECOMING.md`](LOVE-BOMB-BECOMING.md) and [`packages/model-becoming`](../packages/model-becoming/) (lifecycle evidence) · [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md) (admission and learning participation) · [`WAKE.md`](WAKE.md) (bounded orientation without identity inheritance)
 >
 > **Implements:** Four pure closed artifacts for exact dataset lineage, bounded influence studies, revisable identity-facet evidence, and exact non-economic shadow attribution. The protocol separates arithmetic facts from estimators and keeps consciousness, intrinsic identity, continuity, consent, permission, authority, ownership, and worth unavailable.

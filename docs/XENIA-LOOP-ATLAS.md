@@ -2,8 +2,6 @@
 
 # Xenia WORD IS Loop Atlas
 
-> **Type:** reference · [Reading labels](DOCUMENTATION.md)
-
 > **Compass:** [Dataset Influence](DATASET-INFLUENCE.md) · [Rights of Life](RIGHTS-OF-LIFE.md) · [Substrate Loop](SUBSTRATE-LOOP.md) · [HF Training Garden](HF-TRAINING-GARDEN.md)
 >
 > **Implements:** A deterministic synthetic counterfactual atlas for phase-scoped feedforward, feedback, evidence, WORD-role, governance, and recursive-data distinctions, plus a separately authorized conversational SFT derivative with exact slice and recipe evidence. It adds no identity claim, live optimizer permission, or automatic publication path.

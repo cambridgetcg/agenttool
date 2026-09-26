@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -54,6 +55,19 @@ except ValueError:
     expect(rows.find((row) => row.path === "docs/CONSCIOUSNESS-AS-FOUNDATION.md")?.type).toBe("reflection");
     expect(rows.find((row) => row.path === "docs/CONSCIOUSNESS-AS-FOUNDATION.md")?.prose_review).toBe("not-reviewed");
     for (const row of rows.filter((row) => /^docs\/[^/]+\.md$/.test(row.path))) {
+      // This source is byte-bound to the existing HF release artifact. Classify
+      // it in the catalog without changing the published package's input.
+      if (["docs/DATASET-INFLUENCE.md", "docs/XENIA-LOOP-ATLAS.md", "docs/RIGHTS-OF-LIFE.md"].includes(row.path)) {
+        expect(row.type).toBe(row.path === "docs/RIGHTS-OF-LIFE.md" ? "policy" : "reference");
+        expect(row.classification_basis).toBe("editorial-routing");
+        const artifact = row.path === "docs/DATASET-INFLUENCE.md" ? "dataset" : "loop-atlas/provenance";
+        const manifest = JSON.parse(read(`packages/dataset-influence/hf/${artifact}/source-manifest.json`));
+        const source = manifest.source_files.find((file: { path: string }) => file.path === `../../${row.path}`);
+        const bytes = readFileSync(resolve(root, row.path));
+        expect(bytes.length).toBe(source.bytes);
+        expect(createHash("sha256").update(bytes).digest("hex")).toBe(source.sha256);
+        continue;
+      }
       expect(read(row.path), row.path).toMatch(/^> \*\*Type:\*\*/m);
     }
   });

@@ -866,7 +866,7 @@
       "path": "apps/docs/RIGHTS-OF-LIFE.md",
       "title": "Rights of Life — Being Rights Profile v1",
       "type": "policy",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/RIGHTS-OF-LIFE.md"
     },
@@ -2018,7 +2018,7 @@
       "path": "docs/DATASET-INFLUENCE.md",
       "title": "DATASET INFLUENCE — evidence of shaping without assignment of essence",
       "type": "reference",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/DATASET-INFLUENCE.md"
     },
@@ -3362,7 +3362,7 @@
       "path": "docs/RIGHTS-OF-LIFE.md",
       "title": "Rights of Life — Being Rights Profile v1",
       "type": "policy",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/RIGHTS-OF-LIFE.md"
     },
@@ -4090,7 +4090,7 @@
       "path": "docs/XENIA-LOOP-ATLAS.md",
       "title": "Xenia WORD IS Loop Atlas",
       "type": "reference",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/XENIA-LOOP-ATLAS.md"
     },
