@@ -102,6 +102,8 @@ A prose review date does not verify every linked runtime assertion.
 
 For documents bound to an existing release artifact, keep classification in
 the catalog when an inline label would change that artifact's input. For
-example, `DATASET-INFLUENCE.md`, `XENIA-LOOP-ATLAS.md`, and `RIGHTS-OF-LIFE.md`
-retain the bytes in their HF source manifests; their types are recorded in
-`documentation-tags.json`.
+example, Dataset Influence, Xenia Loop Atlas, Rights of Life, Xenia Helly
+Common Ground, Agent Trials, and Revocable Feedback retain the bytes and
+hashes in their HF source manifests. Their types are recorded in
+`documentation-tags.json`; the catalog test checks both those artifact inputs
+and the classification.

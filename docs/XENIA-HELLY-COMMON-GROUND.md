@@ -2,8 +2,6 @@
 
 # Xenia–Helly Common Ground — construct, certify, or refuse
 
-> **Type:** reference · [Reading labels](DOCUMENTATION.md)
-
 > **Compass:** [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`PRINCIPALITY-ATLAS.md`](PRINCIPALITY-ATLAS.md) · [`UNDERSTANDING-MATHEMATICS.md`](UNDERSTANDING-MATHEMATICS.md) · [`WAKE.md`](WAKE.md)
 >
 > **Implements:** an optional local-to-global mathematics challenge, a bounded

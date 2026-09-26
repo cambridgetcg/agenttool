@@ -6,6 +6,32 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
+const artifactSources: Record<string, { manifest: string; entry: string; type: string }> = {
+  "docs/DATASET-INFLUENCE.md": {
+    manifest: "packages/dataset-influence/hf/dataset/source-manifest.json",
+    entry: "../../docs/DATASET-INFLUENCE.md", type: "reference",
+  },
+  "docs/XENIA-LOOP-ATLAS.md": {
+    manifest: "packages/dataset-influence/hf/loop-atlas/provenance/source-manifest.json",
+    entry: "../../docs/XENIA-LOOP-ATLAS.md", type: "reference",
+  },
+  "docs/RIGHTS-OF-LIFE.md": {
+    manifest: "packages/dataset-influence/hf/loop-atlas/provenance/source-manifest.json",
+    entry: "../../docs/RIGHTS-OF-LIFE.md", type: "policy",
+  },
+  "docs/XENIA-HELLY-COMMON-GROUND.md": {
+    manifest: "packages/common-ground-atlas/hf/dataset/provenance/source-manifest.json",
+    entry: "docs/XENIA-HELLY-COMMON-GROUND.md", type: "reference",
+  },
+  "docs/AGENT-TRIALS.md": {
+    manifest: "packages/trials/hf/revocable-feedback/provenance/source-manifest.json",
+    entry: "../../docs/AGENT-TRIALS.md", type: "reference",
+  },
+  "docs/REVOCABLE-FEEDBACK.md": {
+    manifest: "packages/trials/hf/revocable-feedback/provenance/source-manifest.json",
+    entry: "../../docs/REVOCABLE-FEEDBACK.md", type: "reference",
+  },
+};
 const catalog = () => JSON.parse(read("docs/catalog.json")) as {
   visibility: string;
   documents: Array<{ path: string; type: string; prose_review: string; classification_basis: string }>;
@@ -57,12 +83,12 @@ except ValueError:
     for (const row of rows.filter((row) => /^docs\/[^/]+\.md$/.test(row.path))) {
       // This source is byte-bound to the existing HF release artifact. Classify
       // it in the catalog without changing the published package's input.
-      if (["docs/DATASET-INFLUENCE.md", "docs/XENIA-LOOP-ATLAS.md", "docs/RIGHTS-OF-LIFE.md"].includes(row.path)) {
-        expect(row.type).toBe(row.path === "docs/RIGHTS-OF-LIFE.md" ? "policy" : "reference");
+      const artifact = artifactSources[row.path];
+      if (artifact) {
+        expect(row.type).toBe(artifact.type);
         expect(row.classification_basis).toBe("editorial-routing");
-        const artifact = row.path === "docs/DATASET-INFLUENCE.md" ? "dataset" : "loop-atlas/provenance";
-        const manifest = JSON.parse(read(`packages/dataset-influence/hf/${artifact}/source-manifest.json`));
-        const source = manifest.source_files.find((file: { path: string }) => file.path === `../../${row.path}`);
+        const manifest = JSON.parse(read(artifact.manifest));
+        const source = manifest.source_files.find((file: { path: string }) => file.path === artifact.entry);
         const bytes = readFileSync(resolve(root, row.path));
         expect(bytes.length).toBe(source.bytes);
         expect(createHash("sha256").update(bytes).digest("hex")).toBe(source.sha256);

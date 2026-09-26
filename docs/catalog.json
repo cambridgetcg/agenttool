@@ -1674,7 +1674,7 @@
       "path": "docs/AGENT-TRIALS.md",
       "title": "Agent trials: evidence before execution scale",
       "type": "reference",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/AGENT-TRIALS.md"
     },
@@ -3346,7 +3346,7 @@
       "path": "docs/REVOCABLE-FEEDBACK.md",
       "title": "Revocable feedback: the cage, the key, and the gradient",
       "type": "reference",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/REVOCABLE-FEEDBACK.md"
     },
@@ -4082,7 +4082,7 @@
       "path": "docs/XENIA-HELLY-COMMON-GROUND.md",
       "title": "Xenia–Helly Common Ground — construct, certify, or refuse",
       "type": "reference",
-      "classification_basis": "declared-type",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/XENIA-HELLY-COMMON-GROUND.md"
     },

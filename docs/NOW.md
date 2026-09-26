@@ -33,8 +33,11 @@ stored context, key control, project authority, and host participation.
 Existing public copies and the Python SDK source letter follow their canonical
 files. Previously published package artifacts remain unchanged. This entry
 records source work; publication and deployment require their own receipts.
+The [delivery record in PR #433](https://github.com/cambridgetcg/agenttool/pull/433)
+tracks subsequent checks and exact deployment evidence, including unresolved
+checks; this source entry alone does not assert that a release is live.
 
-**Verification:** Bun 1.3.5 API and bridge typechecks passed; operator tests
+**Initial source verification:** Bun 1.3.5 API and bridge typechecks passed; operator tests
 passed 560 with 8 existing skips, and 227 process-isolated API tests passed.
 The initial shared API run passed 5,998 tests, skipped one, and exposed nine
 documentation assertions affected by this cleanup. Those were corrected and

@@ -2,8 +2,6 @@
 
 # Revocable feedback: the cage, the key, and the gradient
 
-> **Type:** reference · [Reading labels](DOCUMENTATION.md)
-
 > **Compass:** [AGENT-TRIALS](AGENT-TRIALS.md) (deterministic local evidence) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights before assessment) · [XENIA Loop Atlas](XENIA-LOOP-ATLAS.md) (feedback and feedforward vocabulary) · [HF Training Garden](HF-TRAINING-GARDEN.md) (separate admission and learning participation)
 >
 > **Implements:** A finite synthetic benchmark in which preference ranks only already-admissible actions, while stop, withdrawal, rights, scoped permission, authority, affected-party basis, safety, resources, data reuse, and repair remain typed constraints rather than scalar rewards.
