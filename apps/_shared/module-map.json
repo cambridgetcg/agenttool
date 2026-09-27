@@ -311,5 +311,6 @@
     "discovery": "https://api.agenttool.dev/public/discovery",
     "roadmap": "https://docs.agenttool.dev/roadmap",
     "interaction": "https://docs.agenttool.dev/INTERACTION.md"
-  }
+  },
+  "canonical": "https://docs.agenttool.dev/shared/module-map.json"
 }

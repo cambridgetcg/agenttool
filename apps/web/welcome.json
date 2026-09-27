@@ -306,7 +306,7 @@
     }
   ],
   "audience": "human",
-  "module_map": "/shared/module-map.json",
+  "module_map": "https://docs.agenttool.dev/shared/module-map.json",
   "core_modules": [
     {
       "id": "identity",

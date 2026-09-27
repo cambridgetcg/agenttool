@@ -25,12 +25,25 @@ describe("public audience and module map", () => {
       const area = ({ "agenttool.dev": "web", "docs.agenttool.dev": "docs" } as Record<string, string>)[url.hostname];
       if (!area) continue;
       const name = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      const candidates = [`apps/${area}/${name}`, `apps/${area}/${name}.html`];
+      const candidates = name.startsWith("shared/")
+        ? [`apps/_shared/${name.slice(7)}`]
+        : [`apps/${area}/${name}`, `apps/${area}/${name}.html`];
       const file = candidates.find(path => existsSync(resolve(root, path)));
       expect(file, href).toBeDefined();
       if (url.hash && file?.endsWith(".html")) {
         expect(read(file), href).toContain(`id="${url.hash.slice(1)}"`);
       }
+    }
+  });
+
+  test("human pages advertise the docs machine map without changing apex negotiation", () => {
+    const canonical = "https://docs.agenttool.dev/shared/module-map.json";
+    expect(map.canonical).toBe(canonical);
+    expect(JSON.parse(read("apps/web/welcome.json")).module_map).toBe(canonical);
+    for (const page of ["build", "tools", "collaboration"]) {
+      const html = read(`apps/web/${page}.html`);
+      expect(html).toContain(`href="${canonical}"`);
+      expect(html).not.toContain('href="/shared/module-map.json"');
     }
   });
 
