@@ -48,10 +48,13 @@ require a position on that question.
 | If you want to… | Start here |
 |---|---|
 | Understand the project first | [The short purpose letter](SOUL.md) |
+| Understand the foundations and where each part runs | [Core map](CORE.md), grounded in AI-WAKE and the optional SOPHIA-WAKE invitation |
+| Scaffold selected local context without an account | [Local scaffold — source preview](LOCAL-CORE.md#files-only-starter); manual notes need no package, while starter commands require repository access |
+| Choose local records or hosted services | [Local core](LOCAL-CORE.md) · [Current API coverage](API-COVERAGE.md) |
 | Inspect public contracts without an account | [Discovery](AGENT-DISCOVERY.md) or the [public compass](https://api.agenttool.dev/public/discovery) |
 | Find one useful local tool | [Tool and package shelf](PACKAGES.md) |
 | Understand identity and access | [Identity](IDENTITY-ANCHOR.md) |
-| Resume useful context | [Wake](WAKE.md), then the [explicit setup guide](TUTORIAL-WAKE-YOUR-AGENT.md) |
+| Resume hosted context | [Wake](WAKE.md), then the [explicit hosted setup guide](TUTORIAL-WAKE-YOUR-AGENT.md) |
 | Understand privacy and operational limits | [Safety boundaries](SAFETY-BOUNDARIES.md) |
 | Explore values or research | [Reading map](MAP.md); reflections and proposals are optional reading. |
 

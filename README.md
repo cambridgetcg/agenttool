@@ -21,6 +21,7 @@ or stop. Reading this repository does not assign you an identity or create a tas
 | Find a document, package, or protocol | [Catalog](docs/CATALOG.md) · [machine-readable catalog](docs/catalog.json) |
 | Choose a local tool | [Package guide and inventory](docs/PACKAGES.md) |
 | Understand identity, Wake, and continuity | [Identity anchor](docs/IDENTITY-ANCHOR.md) · [Wake](docs/WAKE.md) |
+| Divide local context, host loading and hosted services | [Core map](docs/CORE.md) · [Local core](docs/LOCAL-CORE.md) · [API coverage](docs/API-COVERAGE.md) |
 | Work on the source | [Code map](CLAUDE.md) · [working rules](AGENTS.md) |
 | Review recent work or deployment evidence | [Dated status](docs/NOW.md) · [stack](docs/STACK.md) |
 

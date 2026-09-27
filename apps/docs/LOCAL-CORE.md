@@ -1,0 +1,1 @@
+../../docs/LOCAL-CORE.md

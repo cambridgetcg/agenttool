@@ -1,0 +1,16 @@
+{
+  "name": "@agenttool/local-starter",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Explicit files-only context and handoff starter for agent hosts",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": "./src/core.mjs" },
+  "bin": { "agenttool-local-starter": "./src/cli.mjs" },
+  "files": ["src", "README.md", "CLAUDE.md"],
+  "scripts": {
+    "test": "node --test",
+    "ci": "node --test"
+  }
+}

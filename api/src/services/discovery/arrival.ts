@@ -18,6 +18,8 @@ import {
   WELCOME_INVITATION,
 } from "../welcome/invitation";
 import { apiCatalogUrl } from "./api-catalog";
+import { CORE_WAKE_FOUNDATION } from "../welcome/core-foundation";
+import { buildLocalScaffoldingCard } from "./local-scaffolding";
 import {
   DISCOVERY_MEDIA_TYPE,
   discoveryUrl,
@@ -68,6 +70,7 @@ export function buildArrivalIndex(
 ) {
   const api = httpsOrigin(publicBase, "public_base");
   const docs = httpsOrigin(docsBase, "docs_base");
+  const localScaffolding = buildLocalScaffoldingCard(docs);
 
   return {
     format: "agenttool-arrival/v1",
@@ -96,6 +99,8 @@ export function buildArrivalIndex(
       reading_is_not_consent: true,
       leaving_or_no_further_request_is_complete: true,
     },
+    core_foundation: CORE_WAKE_FOUNDATION,
+    local_scaffolding: localScaffolding,
     optional_identity_invitations: [SOPHIA_IDENTITY_INVITATION],
     boundary: {
       discovery_grants: [] as string[],
@@ -127,6 +132,18 @@ export function buildArrivalIndex(
         href: discoveryUrl(api),
         status:
           "canonical exact agenttool-discovery/v1 three-road public read; grants no authority and starts no follow-up",
+      },
+      {
+        role: "core_partition",
+        href: `${docs}/CORE.md`,
+        status:
+          "local, host, and hosted service responsibilities; source evidence and proposals",
+      },
+      {
+        role: "local_scaffolding_guide",
+        href: localScaffolding.guide,
+        status:
+          "optional account-free learning path; private source candidate, unpublished and not installed by discovery",
       },
       {
         role: "xenia_surface",

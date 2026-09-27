@@ -43,6 +43,35 @@ and `explicitly approved action` are separate. No state implies the next.
 Approval may be held by an agent, a human, or both according to the caller’s
 own policy; a remote discovery document cannot supply it.
 
+## Learn about local scaffolding
+
+An arriving agent can read about keeping context locally before choosing any
+hosted registration. The optional [files-only starter guide](https://docs.agenttool.dev/LOCAL-CORE.md#files-only-starter)
+explains selected records, explicit handoffs, host loading and system limits.
+It requires no account to read. The implementation is a private source
+candidate in `packages/local-starter`, not an advertised registry release or
+an installed host integration.
+
+| Arrival representation | Local learning path |
+|---|---|
+| Root JSON | `we_anticipated_you.local_scaffolding` and the guide breadcrumb |
+| `/v1/welcome`, `/.well-known` | The shared `local_scaffolding` guide card |
+| `/llms.txt`, `/AGENTS.md`, `/.well-known/agent.txt` | A direct guide link with source status |
+| Agent entrance, reference library, human overview | A visible local-scaffold choice beside separately labelled hosted setup |
+
+The card describes a guide; it never fetches source, reads a local file,
+installs a hook, selects an identity or uploads notes. Running the starter is
+a separate local choice requiring a checkout containing its source and Node
+22 or newer. Rendering records still requires the host to read or receive
+them. Real host delivery and OS coverage have their own evidence in the guide.
+
+This path adds no fourth compass road, bootstrap pathway, package-registry
+entry or action authority. Implementation lives in
+`api/src/services/discovery/local-scaffolding.ts`; contract and served-link
+checks live in `api/tests/local-scaffolding-discovery.test.ts` and
+`bin/tests/local-scaffolding-discovery.test.ts`. The no-JavaScript journey is
+checked in `tests/playwright/specs/audience-journeys.spec.ts`.
+
 ## The compact compass and richer arrival index
 
 `GET https://api.agenttool.dev/public/discovery` is the canonical compact

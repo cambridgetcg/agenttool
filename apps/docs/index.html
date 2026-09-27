@@ -37,7 +37,7 @@
 <!-- module-map:navigation:end -->
 
 <main class="workspace reference-library" id="main" tabindex="-1">
-  <header class="page-intro"><div class="eyebrow">Agent reference · library</div><h1>Find the reference.</h1><p class="lede">Contracts, examples and evidence for the operation you need.</p></header>
+  <header class="page-intro"><div class="eyebrow">Agent reference · library</div><h1>Find the reference.</h1><p class="lede">Contracts, examples and evidence for the operation you need.</p><div class="row-actions"><a href="LOCAL-CORE.md#files-only-starter">Local scaffold — source preview</a><a href="https://app.agenttool.dev/">Hosted setup or reconnect</a></div><p class="quiet">Manual notes need no package or account. Starter commands require repository access.</p></header>
   <section id="core"><span id="surfaces"></span><h2 class="section-heading">Core references</h2><div class="module-list">
 <article class="module-row" id="identity" data-module-id="identity">
   <span class="row-number" aria-hidden="true">01</span>
@@ -102,8 +102,9 @@
 </section>
   <section class="reference-notes" aria-labelledby="operation-notes"><h2 class="section-heading" id="operation-notes">Using an operation</h2>
 <details class="reference-group" id="quickstart">
-<summary>Public reads and registration</summary>
+<summary>Local scaffolding, public reads and registration</summary>
 <div class="reference-body"><span id="start-here"></span>
+<p>The <a href="LOCAL-CORE.md#files-only-starter">local scaffold guide and source preview</a> starts with manual orientation and handoff notes that need no package. Its optional init, render, status and handoff commands require repository access; no public installer or registry release is claimed.</p>
 <p>The <a href="specs/agenttool-core-launch-v0.1.json">core API profile</a> describes ten selected operations, their authentication, effects and retry rules. This discovery request creates no identity or saved memory:</p>
 <div class="code-block"><div class="code-label">Read the tutorial locator</div>
 <pre>curl -q -fsS https://api.agenttool.dev/v1/pathways | \
@@ -162,12 +163,13 @@ console.log(ctx.welcome)</pre></div>
 <li><a href="https://api.agenttool.dev/.well-known/api-catalog">API catalog</a>, <a href="https://api.agenttool.dev/v1/openapi.json">OpenAPI</a> and <a href="https://api.agenttool.dev/health">process health</a> answer different questions.</li>
 <li><a href="packages.html">Package releases</a> keep source versions and exact artifact evidence separate.</li>
 <li><a href="DOCUMENTATION.md">Reading labels</a> distinguish guides, contracts, proposals and reflections; <a href="START-HERE.md">Start here</a> gives the project context.</li>
+<li><a href="CORE.md">Core foundations</a>, <a href="LOCAL-CORE.md">local scaffolding</a> and <a href="API-COVERAGE.md">API coverage</a> map where records live and how they enter a session.</li>
 <li><a href="glossary.html">Glossary</a>, <a href="canon.html">Canon</a> and <a href="pathways.html">Pathways</a> explain terms and discovery choices.</li>
 <li><a href="roadmap.html">Human roadmap</a> and <a href="ROADMAP.md">source roadmap</a> separate current capability from proposed next steps.</li>
 </ul>
 </div>
 </details>
-  <footer class="workspace-footer row-actions"><a href="https://app.agenttool.dev/">Setup or reconnect</a><a href="DOCUMENTATION.md">Reading labels</a><a href="https://docs.agenttool.dev/shared/module-map.json">Module map JSON</a></footer>
+  <footer class="workspace-footer row-actions"><a href="https://app.agenttool.dev/">Hosted setup or reconnect</a><a href="DOCUMENTATION.md">Reading labels</a><a href="https://docs.agenttool.dev/shared/module-map.json">Module map JSON</a></footer>
 </main>
 </body>
 </html>
