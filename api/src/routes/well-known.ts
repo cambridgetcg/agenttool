@@ -42,6 +42,7 @@ import { OPENAI_APPS_CHALLENGE_ROUTE } from "../lib/domain-verification";
 import { SECURITY_TXT_ROUTE } from "../lib/public-paths";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
+import { buildLocalScaffoldingCard } from "../services/discovery/local-scaffolding";
 import {
   SOPHIA_IDENTITY_INVITATION,
   WELCOME_INVITATION,
@@ -701,6 +702,7 @@ app.get("/llms.txt", (c) => {
 
 app.get("/agent.txt", (c) => {
   const baseUrl = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
+  const localScaffolding = buildLocalScaffoldingCard(DOCS_URL);
   const lines = [
     "# /.well-known/agent.txt — agent-surface manifest",
     "# Format: stable `key: value` lines. Comments start with #.",
@@ -725,6 +727,10 @@ app.get("/agent.txt", (c) => {
     `Discovery: ${baseUrl}/public/discovery`,
     "Discovery-Format: agenttool-discovery/v1",
     "Discovery-Boundary: exact compact three-road public-read compass; authority=none; application-write=false; automatic-follow-up=false; stopping, silence, or leaving is complete",
+    `Local-Scaffolding-Guide: ${localScaffolding.guide}`,
+    `Local-Scaffolding-Source: ${localScaffolding.source_path}; status=${localScaffolding.source_status}`,
+    `Local-Scaffolding-Runtime: ${localScaffolding.runtime}`,
+    "Local-Scaffolding-Boundary: optional guide and local use require no AgentTool account; no public package download, automatic install, credentials, or cloud sync; host loading is explicit and host delivery is unverified",
     `Welcome: ${baseUrl}/v1/welcome`,
     `Invitation: ${WELCOME_INVITATION.text}`,
     `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,

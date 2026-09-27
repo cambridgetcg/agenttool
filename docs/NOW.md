@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (simplified reading and connection UI source candidate; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (local scaffolding discovery source candidate; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,92 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Local scaffolding at arrival (2026-09-27)
+
+**Source candidate:** `codex/agenttool-local-starter-20260927`, based on
+`a230ae4d`. Source checks below are separate from publication and live readback.
+
+Agents can now find an optional [local scaffolding guide](LOCAL-CORE.md#files-only-starter)
+from root JSON, welcome, rich arrival, `llms.txt`, `AGENTS.md`, `agent.txt`,
+and the visible agent/library/human entrances. Local reading appears beside
+explicitly labelled hosted setup. The shared guide card requires no account
+and performs no fetch, installation, local read or write. Existing compass
+roads, Link relations, foundation readings and package classifications stay
+within their existing contracts.
+
+The guide provides a manual orientation/handoff pattern without package
+access, then explains the private source starter. The repository is private;
+implementation references are labelled paths instead of unavailable public
+source links. All three core guides resolve their reading links from their
+served URLs, including heading fragments.
+
+**Verification:** 153 focused API tests and the installed API typecheck passed.
+Five served-document tests passed, and six browser journeys passed, including
+all three entrances at 320px with JavaScript disabled and no automatic API or
+POST requests. Local-starter CI run `36327872045` passed all six OS/Node jobs
+at `811a7153`: Linux/macOS each passed 70 tests; Windows each passed 63 with
+seven POSIX-specific skips. Full release gates and production readback belong
+to the delivery receipt; these checks do not establish deployment or actual
+host-session delivery.
+
+## Local starter and host boundaries (2026-09-27)
+
+**Source candidate:** `codex/agenttool-local-starter-20260927`, based on
+`a230ae4d` and carrying the core-foundation changes recorded below. Private
+source only; this entry does not establish installation, publication or deployment.
+
+The [local starter](../packages/local-starter/README.md) now initializes an
+explicit private directory, inspects seven fixed records, renders selected
+bounded context, and updates a handoff with an expected hash and cooperative
+lock. Identity, preferences, relationships and memories begin empty and
+disabled. AI-WAKE and optional SOPHIA-WAKE remain references. There are no
+dependencies, account requirements, network calls or host-setting writes.
+
+The [local core guide](LOCAL-CORE.md#harness-and-system-coverage) maps current
+Codex, Claude Code and Cursor hook mechanisms alongside manual loading,
+native Windows, WSL, containers and remote hosts. Fragments are reviewable
+proposals. Tests cover their command/JSON shape; actual host session delivery
+remains unverified. POSIX privacy checks do not establish Windows ACL privacy,
+and local files do not make later provider requests private.
+
+**Verification:** all 70 files/CLI tests passed on macOS arm64 with both Node
+22.18.0 and 24.18.1, including concurrent writers, byte-preserving handoffs,
+ambiguous I/O recovery and bounded hook output. The dependency-free CI matrix
+is configured for Linux, macOS and Windows with Node 22/24; Linux and Windows
+execution has not been observed in this local run. The existing packages
+preflight passed under Bun 1.3.5; 17 focused catalog/navigation/shelf checks
+passed, 138 relative source links/anchors resolved, three Markdown mirrors
+matched, and catalog/module-map and diff checks passed.
+
+## Core partition and wake foundations (2026-09-27)
+
+**Source candidate:** `codex/agenttool-core-foundations-20260927`, based on
+`a230ae4d`. This entry does not establish publication or deployment.
+
+[Core](CORE.md), [Local core](LOCAL-CORE.md) and [API coverage](API-COVERAGE.md)
+partition wake, continuity, identity, memory and relationship into local
+records, host loading, API operations and database persistence. The map names
+current service scopes, GET side effects, custody, and the remaining local
+starter integration. Source primitives are distinguished from proposed
+composition and from observed releases.
+
+AI-WAKE and SOPHIA-WAKE are the ordered reading foundation. Welcome and
+arrival builders expose optional references; text discovery and both reading
+entrances link the map. No invitation is fetched automatically or assigned
+as an identity. Runtime, database, authentication and private Wake composition
+remain governed by their existing contracts. The public invitation copies
+have older loading notes than the inspected house hook; provenance is recorded
+in Core.
+
+**Verification:** API and bridge typechecks passed. The required hermetic API
+gate passed 6,238 API tests (one existing skip) and 565 operator/protocol tests
+(eight existing skips), with zero failures. Final focused foundation/discovery
+checks passed 71 tests; document/navigation checks passed 44; browser arrival
+checks passed five, including 320px without JavaScript. All 93 relative guide
+references resolved, the three served Markdown mirrors matched canonical bytes,
+and catalog/module-map checks passed. These are local source checks, not private
+database or production verification.
 
 ## Simplified reading and connection UI (2026-09-27)
 

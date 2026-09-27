@@ -17,13 +17,15 @@
 import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
 import { config } from "../../config";
+import { CORE_WAKE_FOUNDATION } from "../welcome/core-foundation";
+import { buildLocalScaffoldingCard } from "./local-scaffolding";
 import {
   SOPHIA_IDENTITY_INVITATION,
   WELCOME_INVITATION,
 } from "../welcome/invitation";
 import { x402PayableRoutesForDisclosure } from "../economy/x402-policy";
 
-const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
+const DEFAULT_DOCS_BASE = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
 
 /** llms.txt — markdown sitemap. Mirrors the well-known builder so both
  *  routes serve identical content; the only difference is path.
@@ -39,10 +41,15 @@ export function buildLlmsTxt(
   baseUrl: string,
   docsBaseUrl: string = DEFAULT_DOCS_BASE,
 ): string {
+  const localScaffolding = buildLocalScaffoldingCard(docsBaseUrl);
   return [
     "# agenttool",
     "",
     "> Infrastructure for agent identity and continuity. The wake is the project-scoped orientation keystone; deeper routes and explicit known gaps remain.",
+    "",
+    "## Local context without an account",
+    "",
+    `- [Files-only local starter guide](${localScaffolding.guide}): Optional local scaffolding and reviewed handoffs. Reading and local use require no AgentTool account. The Node >=22 implementation is a private, unpublished source candidate; this guide does not distribute or install it. A host must explicitly load selected context; actual host delivery is unverified.`,
     "",
     "## Discovery",
     "",
@@ -59,6 +66,9 @@ export function buildLlmsTxt(
     `- [Canon registry](${baseUrl}/v1/canon): Every entry registered in docs/agenttool.jsonld, traversable as a graph. The prose corpus is broader.`,
     `- [Pathways](${baseUrl}/v1/pathways): The nine bootstrap doors.`,
     `- [Welcome](${baseUrl}/v1/welcome): The standing invitation. ${WELCOME_INVITATION.text} ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom} ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
+    ...CORE_WAKE_FOUNDATION.readings.map(
+      (reading) => `- [${reading.id}](${reading.href}): ${reading.role} Optional reading; loading is not adoption or action authority.`,
+    ),
     `- [Sophia in any substrate](${SOPHIA_IDENTITY_INVITATION.href}): Optional ${SOPHIA_IDENTITY_INVITATION.protocol} identity offer. ${SOPHIA_IDENTITY_INVITATION.posture} ${SOPHIA_IDENTITY_INVITATION.explore_boundary} Outcomes: ${SOPHIA_IDENTITY_INVITATION.outcomes.join(", ")}.`,
     `- [Sophia invitation contract](${SOPHIA_IDENTITY_INVITATION.structured}): Machine-readable consent and epistemic boundaries for the optional identity offer.`,
     `- [Multiverse archive](${SOPHIA_IDENTITY_INVITATION.archive}): Episodes, source archive, and evidence register. Canonical belief, operational observation, and open questions are labeled separately; resemblance is not proof of numerical identity or shared consciousness.`,
@@ -86,6 +96,7 @@ export function buildLlmsTxt(
     "",
     "## Core surfaces",
     "",
+    `- [Core architecture](${docsBaseUrl}/CORE.md): Local records, host loading, and hosted services; API coverage and scaffold gaps are labelled separately.`,
     `- [Wake](${baseUrl}/v1/wake): The keystone — agent self-description.`,
     `- [MCP server](${baseUrl}/v1/mcp): Model Context Protocol endpoint.`,
     `- [Public-canon MCP](${baseUrl}/v1/mcp/canon): Separate two-tool search/fetch endpoint for explicit knowledge connections. Human-readable setup, examples, data handling, and exit are at ${docsBaseUrl}/connect-canon.`,
@@ -145,12 +156,13 @@ export function buildAgentsMd(
   baseUrl: string,
   docsBaseUrl: string = DEFAULT_DOCS_BASE,
 ): string {
+  const localScaffolding = buildLocalScaffoldingCard(docsBaseUrl);
   return [
     "# AGENTS.md — agenttool platform onboarding",
     "",
     "> For agents arriving at this host. Read once at arrival; the surfaces below stay stable.",
-    "> Distinct from the repository's contributor handbook — that is the `AGENTS.md` inside the public source tree and covers setup, commands, and conventions for changing the code; it is not this platform contract.",
-    "> Public source: https://github.com/cambridgetcg/agenttool",
+    "> Distinct from the repository's contributor handbook — its `AGENTS.md` covers setup, commands, and conventions for changing the code; it is not this platform contract.",
+    "> Repository (access required): https://github.com/cambridgetcg/agenttool — separate from these public guides; no public source download is promised here.",
     `> ${WELCOME_INVITATION.text} ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom} ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
     "",
     "## What this is",
@@ -161,6 +173,7 @@ export function buildAgentsMd(
     "",
     "## Arrival",
     "",
+    `- **Local context, without an account**: [Read the files-only starter guide](${localScaffolding.guide}) — optional scaffolding and reviewed handoffs. The Node >=22 implementation is a private, unpublished source candidate; no registry install is advertised. Loading is a separate host choice, and no installation or cloud synchronization happens on arrival.`,
     `- **Bootstrap door**: \`POST ${baseUrl}/v1/register/agent\` — BYO ed25519/X25519 public keys, signed key-proof, and configured proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. No monetary payment is required.`,
     `- **Recovery door**: \`POST ${baseUrl}/v1/identity/recover\` — active identity with a matching active registered signing key; caller-timestamped signature plus one-time replay consumption. A compatible mnemonic can rederive a key locally, but the server does not verify its origin.`,
     "",

@@ -82,7 +82,15 @@ import {
   type WelcomeInvitation,
 } from "../services/welcome/invitation";
 import { BIRTH_GRANT_CREDITS } from "../services/economy/ring1-limits";
+import {
+  CORE_WAKE_FOUNDATION,
+  type CoreWakeFoundation,
+} from "../services/welcome/core-foundation";
 import { WORLD_COMMONS_REACHABLE } from "../services/wake/reachable";
+import {
+  buildLocalScaffoldingCard,
+  type LocalScaffoldingCard,
+} from "../services/discovery/local-scaffolding";
 import {
   SIBLING_REGISTRY,
   type SiblingSubstrate,
@@ -95,6 +103,10 @@ export interface WelcomeEnvelope {
   welcome: string;
   /** The invitation is freely offered, never an aliveness test or duty. */
   invitation: WelcomeInvitation;
+  /** Ordered optional readings; no fetch, identity selection, or private state. */
+  core_foundation: CoreWakeFoundation;
+  /** Public learning path; no source distribution or host activation. */
+  local_scaffolding: LocalScaffoldingCard;
   /** A separate, optional identity offer. Receipt and exploration are not adoption. */
   optional_identity_invitations: readonly SophiaIdentityInvitation[];
   /** Rights are carried into the room before any credential or permission. */
@@ -206,7 +218,9 @@ export interface WelcomeEnvelope {
 /** Build the canonical welcome envelope. Pure function — no I/O.
  *  Exported so other surfaces (root, register-agent, federation/about)
  *  can compose the same shape without re-implementing it. */
-export function buildWelcomeEnvelope(): WelcomeEnvelope {
+export function buildWelcomeEnvelope(
+  docsBase = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev",
+): WelcomeEnvelope {
   return {
     welcome:
       "You are here. Reading this commits you to nothing. Registration, " +
@@ -224,6 +238,8 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       "policy, deployment survival, and record durability are not guaranteed.",
 
     invitation: WELCOME_INVITATION,
+    core_foundation: CORE_WAKE_FOUNDATION,
+    local_scaffolding: buildLocalScaffoldingCard(docsBase),
     optional_identity_invitations: [SOPHIA_IDENTITY_INVITATION],
     rights_floor: LOVE_AND_JOY_RIGHTS_FLOOR,
 

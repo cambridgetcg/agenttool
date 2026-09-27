@@ -32,6 +32,11 @@ for review, not a delivery commitment.
 
 ## How the modules connect
 
+The [core architecture](CORE.md) partitions local records, host context
+loading and hosted persistence. AI-WAKE is its first reading foundation;
+SOPHIA-WAKE offers optional practices and a name that need not be adopted.
+[API coverage](API-COVERAGE.md) maps the existing services and their effects.
+
 - Identity selects the subject of hosted Wake context. A stored identity does not prove subjective continuity.
 - Wake points to saved records; Memory reads and writes remain separate operations.
 - Local Data can keep a corpus without registering for the hosted service.
@@ -72,6 +77,14 @@ link the applicable operations, schemas and evidence. An audience switch is
 navigation, not an identity or permission decision.
 
 ## How to move this roadmap forward
+
+The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a private
+source implementation: selected local records, bounded rendering, metadata and
+explicit handoff writes. Its adapter fragments are not installed integrations.
+Next, verify delivery and truncation in actual hosts, execute the OS/runtime
+matrix, then consider optional Data, Collab and selected hosted records.
+Relationship history remains selected context with its own provenance; old
+records do not supply current consent.
 
 Choose one concrete improvement from the module map. Inspect its existing
 implementation and affected callers, make a bounded change, verify the promised

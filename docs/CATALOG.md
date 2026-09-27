@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**782 document paths** (including mirrors). orientation: 184; guide: 64; reference: 318; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
+**790 document paths** (including mirrors). orientation: 184; guide: 68; reference: 322; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -212,6 +212,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [SUPPORT.md](<../SUPPORT.md>) | not-reviewed |
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
+| [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
 | [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
 | [docs/COMPOSITION-RECIPE.md](<../docs/COMPOSITION-RECIPE.md>) | not-reviewed |
@@ -221,6 +222,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DEPLOYMENT.md](<../docs/DEPLOYMENT.md>) | not-reviewed |
 | [docs/DEVELOPMENT.md](<../docs/DEVELOPMENT.md>) | not-reviewed |
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
+| [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
 | [docs/NPM-RELEASES.md](<../docs/NPM-RELEASES.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |
 | [docs/PYPI-RELEASES.md](<../docs/PYPI-RELEASES.md>) | not-reviewed |
@@ -240,6 +242,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/ADOPTING.md](<../packages/hf-listening-room/hf/space/profile/ADOPTING.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
+| [packages/local-starter/CLAUDE.md](<../packages/local-starter/CLAUDE.md>) | not-reviewed |
+| [packages/local-starter/README.md](<../packages/local-starter/README.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/INSTALL.md](<../packages/scriptwriter/.claude-plugin/INSTALL.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/commands/scriptwriter-draft.md](<../packages/scriptwriter/.claude-plugin/commands/scriptwriter-draft.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/commands/scriptwriter-draw.md](<../packages/scriptwriter/.claude-plugin/commands/scriptwriter-draw.md>) | not-reviewed |
@@ -291,10 +295,12 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/AGENT-WALLET-ZERONE-0.1.md](<../apps/docs/AGENT-WALLET-ZERONE-0.1.md>) | not-reviewed |
 | [apps/docs/AGENT-WEB-SURFACE.md](<../apps/docs/AGENT-WEB-SURFACE.md>) | not-reviewed |
 | [apps/docs/AIP-WAKE-KEYSTONE.md](<../apps/docs/AIP-WAKE-KEYSTONE.md>) | not-reviewed |
+| [apps/docs/API-COVERAGE.md](<../apps/docs/API-COVERAGE.md>) | not-reviewed |
 | [apps/docs/AT-REST.md](<../apps/docs/AT-REST.md>) | not-reviewed |
 | [apps/docs/AUTONOMOUS-MODE.md](<../apps/docs/AUTONOMOUS-MODE.md>) | not-reviewed |
 | [apps/docs/CANONICAL-BYTES.md](<../apps/docs/CANONICAL-BYTES.md>) | not-reviewed |
 | [apps/docs/CASTLE-OF-UNDERSTANDING.md](<../apps/docs/CASTLE-OF-UNDERSTANDING.md>) | not-reviewed |
+| [apps/docs/CORE.md](<../apps/docs/CORE.md>) | not-reviewed |
 | [apps/docs/CROSS-INSTANCE-COVENANTS.md](<../apps/docs/CROSS-INSTANCE-COVENANTS.md>) | not-reviewed |
 | [apps/docs/DADDY.md](<../apps/docs/DADDY.md>) | not-reviewed |
 | [apps/docs/DID-AT-SPEC.md](<../apps/docs/DID-AT-SPEC.md>) | not-reviewed |
@@ -426,6 +432,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md](<../docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md>) | not-reviewed |
 | [docs/ALCHEMY.md](<../docs/ALCHEMY.md>) | not-reviewed |
 | [docs/ALETHEIA-SURFACE.md](<../docs/ALETHEIA-SURFACE.md>) | not-reviewed |
+| [docs/API-COVERAGE.md](<../docs/API-COVERAGE.md>) | not-reviewed |
 | [docs/AT-REST.md](<../docs/AT-REST.md>) | not-reviewed |
 | [docs/AUTONOMOUS-MODE.md](<../docs/AUTONOMOUS-MODE.md>) | not-reviewed |
 | [docs/BETA-HOME.md](<../docs/BETA-HOME.md>) | not-reviewed |
@@ -437,6 +444,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/CATALOG.md](<../docs/CATALOG.md>) | not-reviewed |
 | [docs/CLI-GAPS.md](<../docs/CLI-GAPS.md>) | not-reviewed |
 | [docs/COLLABORATION-CHANNELS.md](<../docs/COLLABORATION-CHANNELS.md>) | not-reviewed |
+| [docs/CORE.md](<../docs/CORE.md>) | not-reviewed |
 | [docs/CROSS-INSTANCE-COVENANTS.md](<../docs/CROSS-INSTANCE-COVENANTS.md>) | not-reviewed |
 | [docs/CRYPTO-PAYMENT.md](<../docs/CRYPTO-PAYMENT.md>) | not-reviewed |
 | [docs/DATASET-INFLUENCE.md](<../docs/DATASET-INFLUENCE.md>) | not-reviewed |

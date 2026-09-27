@@ -19,6 +19,8 @@ import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0
 import { config } from "../config";
 import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
+import { CORE_WAKE_FOUNDATION } from "../services/welcome/core-foundation";
+import { LOCAL_SCAFFOLDING_FACTS } from "../services/discovery/local-scaffolding";
 import {
   SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS,
   SAFE_NET_MAX_CONCURRENT_REQUESTS,
@@ -574,6 +576,58 @@ function staticHtmlParserDescription(): string {
 const COMMON_SCHEMAS = {
   ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
   ...WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
+  LocalScaffoldingGuide: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Optional account-free guide to local context. The implementation is a private source candidate, not a published artifact or an activated host integration.",
+    required: [...Object.keys(LOCAL_SCAFFOLDING_FACTS), "guide"],
+    properties: {
+      ...Object.fromEntries(Object.entries(LOCAL_SCAFFOLDING_FACTS).map(
+        ([key, value]) => [key, { type: typeof value, const: value }],
+      )),
+      guide: {
+        type: "string", format: "uri",
+        pattern: "^https://[^/?#@\\s]+/LOCAL-CORE\\.md#files-only-starter$",
+      },
+    },
+  },
+  CoreWakeFoundation: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Ordered optional source readings. This metadata performs no fetch, selects no identity, and grants no authority.",
+    required: [
+      "format", "purpose", "readings", "reading_required", "automatic_fetch",
+      "identity_selected", "grants", "boundary", "integration",
+    ],
+    properties: {
+      format: { type: "string", const: CORE_WAKE_FOUNDATION.format },
+      purpose: { type: "string", const: CORE_WAKE_FOUNDATION.purpose },
+      readings: {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        prefixItems: CORE_WAKE_FOUNDATION.readings.map((reading) => ({
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "href", "role"],
+          properties: {
+            id: { type: "string", const: reading.id },
+            href: { type: "string", format: "uri", const: reading.href },
+            role: { type: "string", const: reading.role },
+          },
+        })),
+        items: false,
+      },
+      reading_required: { type: "boolean", const: false },
+      automatic_fetch: { type: "boolean", const: false },
+      identity_selected: { type: "boolean", const: false },
+      grants: { type: "array", maxItems: 0, items: false },
+      boundary: { type: "string", const: CORE_WAKE_FOUNDATION.boundary },
+      integration: { type: "string", const: CORE_WAKE_FOUNDATION.integration },
+    },
+  },
   WakeDegradation: {
     type: "object",
     additionalProperties: false,
@@ -3345,6 +3399,8 @@ function spec() {
                       "rfc",
                       "endpoints",
                       "invitation",
+                      "core_foundation",
+                      "local_scaffolding",
                       "optional_identity_invitations",
                       "boundary",
                       "first_contact",
@@ -3366,6 +3422,12 @@ function spec() {
                         items: { type: "string" },
                       },
                       invitation: { type: "object" },
+                      core_foundation: {
+                        $ref: "#/components/schemas/CoreWakeFoundation",
+                      },
+                      local_scaffolding: {
+                        $ref: "#/components/schemas/LocalScaffoldingGuide",
+                      },
                       optional_identity_invitations: {
                         type: "array",
                         minItems: 1,

@@ -99,7 +99,7 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     await expect(page.locator("html")).toHaveAttribute("data-audience", "agent");
     await expect(page.locator("#core [data-module]")).toHaveCount(5);
     await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Human overview" })).toBeVisible();
-    await expect(page.locator("main").getByRole("link", { name: "Setup or reconnect" })).toBeVisible();
+    await expect(page.locator("main").getByRole("link", { name: "Hosted setup or reconnect" }).first()).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to agent start" })).toBeFocused();
     await page.keyboard.press("Enter");
@@ -111,6 +111,47 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     await page.goto(`${WEB}/`);
     await expect(page.locator("#modules [data-core-module]")).toHaveCount(5);
     await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Agent reference", exact: true })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("all three entrances offer local reading and hosted setup without JavaScript or API effects", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 320, height: 800 } });
+  try {
+    const effects: string[] = [];
+    context.on("request", request => {
+      if (!['GET', 'HEAD'].includes(request.method()) || new URL(request.url()).origin === "https://api.agenttool.dev") {
+        effects.push(`${request.method()} ${request.url()}`);
+      }
+    });
+    // Keep the published cross-origin link intact, while containing its native
+    // navigation to this test's static docs server. No production fetch occurs.
+    await context.route("https://docs.agenttool.dev/LOCAL-CORE.md", route =>
+      route.fulfill({ status: 302, headers: { location: `${DOCS}/LOCAL-CORE.md#files-only-starter` }, body: "" }));
+    const page = await context.newPage();
+    for (const entrance of [`${DOCS}/agents`, `${DOCS}/`, `${WEB}/`]) {
+      await page.goto(entrance);
+      const main = page.locator("main");
+      const local = main.locator('a[href$="LOCAL-CORE.md#files-only-starter"]').first();
+      const hosted = main.getByRole("link", { name: "Hosted setup or reconnect", exact: true }).first();
+      await expect(local).toBeVisible();
+      await expect(local).toHaveAccessibleName(/local/i);
+      await expect(hosted).toBeVisible();
+      expect(new URL((await hosted.getAttribute("href"))!, entrance).origin).toBe("https://app.agenttool.dev");
+      await expect(main.locator("form")).toHaveCount(0);
+      const servedGuide = page.waitForResponse(response =>
+        new URL(response.url()).origin === DOCS && new URL(response.url()).pathname === "/LOCAL-CORE.md");
+      await local.click();
+      const response = await servedGuide;
+      expect(response.status()).toBe(200);
+      expect(response.headers()["content-type"]).toContain("text/markdown");
+      await expect(page).toHaveURL(`${DOCS}/LOCAL-CORE.md#files-only-starter`);
+      await expect(page.locator("body")).toContainText("Files-only starter");
+      // Raw Markdown remains a readable representation; section-id integrity
+      // is checked against served headings in local-scaffolding-discovery.
+      expect(effects).toEqual([]);
+    }
   } finally {
     await context.close();
   }

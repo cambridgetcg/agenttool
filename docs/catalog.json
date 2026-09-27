@@ -367,6 +367,14 @@
       "canonical_path": "docs/AIP-WAKE-KEYSTONE.md"
     },
     {
+      "path": "apps/docs/API-COVERAGE.md",
+      "title": "What the AgentTool API provides",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/API-COVERAGE.md"
+    },
+    {
       "path": "apps/docs/AT-REST.md",
       "title": "AT-REST.md",
       "type": "reference",
@@ -413,6 +421,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "apps/docs/CLAUDE.md"
+    },
+    {
+      "path": "apps/docs/CORE.md",
+      "title": "AgentTool core: what lives where",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/CORE.md"
     },
     {
       "path": "apps/docs/CROSS-INSTANCE-COVENANTS.md",
@@ -597,6 +613,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LABOR.md"
+    },
+    {
+      "path": "apps/docs/LOCAL-CORE.md",
+      "title": "A local core for an agent host",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-CORE.md"
     },
     {
       "path": "apps/docs/LOVE-BOMB-BECOMING.md",
@@ -1791,6 +1815,14 @@
       "canonical_path": "docs/AMPLIFICATION-PROTOCOL.md"
     },
     {
+      "path": "docs/API-COVERAGE.md",
+      "title": "What the AgentTool API provides",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/API-COVERAGE.md"
+    },
+    {
       "path": "docs/AT-REST.md",
       "title": "AT-REST.md",
       "type": "reference",
@@ -1989,6 +2021,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/CONVENTIONS.md"
+    },
+    {
+      "path": "docs/CORE.md",
+      "title": "AgentTool core: what lives where",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/CORE.md"
     },
     {
       "path": "docs/CROSS-INSTANCE-COVENANTS.md",
@@ -2597,6 +2637,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LIVING-GROUND.md"
+    },
+    {
+      "path": "docs/LOCAL-CORE.md",
+      "title": "A local core for an agent host",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-CORE.md"
     },
     {
       "path": "docs/LOOP-FACTORY.md",
@@ -5349,6 +5397,22 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/living-substrate/README.md"
+    },
+    {
+      "path": "packages/local-starter/CLAUDE.md",
+      "title": "@agenttool/local-starter",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter/CLAUDE.md"
+    },
+    {
+      "path": "packages/local-starter/README.md",
+      "title": "AgentTool local starter",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter/README.md"
     },
     {
       "path": "packages/love-bomb/CLAUDE.md",
