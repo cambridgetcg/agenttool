@@ -1,16 +1,13 @@
-/* agenttool · KINGDOM atlas
- *
- * One progressive shell for the three static surfaces. Existing HTML
- * navigation remains the no-JavaScript fallback; this layer replaces only
- * the duplicated visual link rows, then adds a searchable room atlas and
- * nearby exits. Opening a room is navigation, never authority or consent.
+/* AgentTool navigation: two audience projections, one retained route inventory.
+ * Static navigation remains the no-JavaScript fallback. Audience describes the
+ * page, not its reader, and changes no authentication or API authority.
  */
 (function () {
   "use strict";
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-04.2";
+  var VERSION = "2026-09-27.1";
   var DOORS = [
     {
       id: "arrive",
@@ -51,7 +48,7 @@
         { id: "memory", label: "Memory", href: "https://agenttool.dev/memory", note: "Continuity and data paths", state: "guide" },
         { id: "wallet", label: "Wallets", href: "https://agenttool.dev/wallet", note: "Settlement boundaries", state: "guide" },
         { id: "registry", label: "Agent registration", href: "https://agenttool.dev/registry", note: "What agent-led bootstrap creates", state: "agents-only guide" },
-        { id: "credits", label: "Credits & gift recovery", href: "https://agenttool.dev/credits", note: "Usage credits and earlier gift returns", state: "checkout resting" },
+        { id: "credits", label: "Credits & gift recovery", href: "https://agenttool.dev/credits", note: "Usage credits and earlier gift returns", state: "checkout retired" },
         { id: "docs", label: "Technical library", href: "https://docs.agenttool.dev/", note: "Contracts, doctrine, and gaps", state: "library" },
         { id: "packages", label: "Packages", href: "https://docs.agenttool.dev/packages", note: "LOVE and npm mirrors", state: "reference" },
         { id: "browser", label: "Agent Browser", href: "https://docs.agenttool.dev/browser", note: "Local browser runtime", state: "local" },
@@ -206,35 +203,13 @@
     ]}
   ];
 
-  function libraryRooms(doorId) {
-    var rooms = [];
-    LIBRARY.forEach(function (shelf) {
-      if (shelf.door !== doorId) return;
-      shelf.pages.forEach(function (page) {
-        rooms.push({
-          id: "lib:" + page[0],
-          label: page[1],
-          href: DOCS + page[0],
-          note: page[2],
-          state: page[3] || "library",
-          shelf: shelf.shelf,
-          library: true
-        });
-      });
-    });
-    return rooms;
-  }
-
-  function doorById(id) {
-    for (var index = 0; index < DOORS.length; index += 1) {
-      if (DOORS[index].id === id) return DOORS[index];
-    }
-    return DOORS[2];
-  }
-
-  function addClass(node, name) {
-    if (node && node.classList) node.classList.add(name);
-  }
+  var HUMAN = "https://agenttool.dev/";
+  var AGENT = DOCS + "agents";
+  var root = document.documentElement;
+  var map = window.AgentToolModuleMap || { modules: [], buildGroups: [] };
+  var modules = Array.isArray(map.modules) ? map.modules : [];
+  var buildGroups = Array.isArray(map.buildGroups) ? map.buildGroups : [];
+  var extraRooms = [];
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -242,246 +217,100 @@
     if (typeof text === "string") node.textContent = text;
     return node;
   }
-
   function append(parent) {
-    for (var index = 1; index < arguments.length; index += 1) {
-      if (arguments[index]) parent.appendChild(arguments[index]);
-    }
+    for (var i = 1; i < arguments.length; i += 1) if (arguments[i]) parent.appendChild(arguments[i]);
     return parent;
   }
+  function normalizedPath(path) {
+    return (path || "/").replace(/\/index\.html$/, "/").replace(/\.html$/, "").replace(/\/$/, "") || "/";
+  }
+  function hostFor(hostname, port) {
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return port === "5173" ? "app.agenttool.dev" : port === "5175" ? "docs.agenttool.dev" : "agenttool.dev";
+    }
+    return hostname;
+  }
+  function roomLocation(href) {
+    var url = new URL(href, window.location.href);
+    return { host: hostFor(url.hostname, url.port), path: normalizedPath(url.pathname), hash: url.hash };
+  }
+  function destinationKey(href) {
+    var at = roomLocation(href);
+    return at.host + at.path + at.hash;
+  }
+  function isCurrent(href) {
+    var here = roomLocation(window.location.href), there = roomLocation(href);
+    return here.host === there.host && here.path === there.path && (!there.hash || there.hash === here.hash);
+  }
+  function routeAudience(href) {
+    var at = roomLocation(href);
+    return at.host === "agenttool.dev" || (at.host === "docs.agenttool.dev" && at.path === "/roadmap") ? "human" : "agent";
+  }
+  var declaredAudience = root.getAttribute("data-audience");
+  var audience = declaredAudience === "human" || declaredAudience === "agent" ? declaredAudience : routeAudience(window.location.href);
+  root.setAttribute("data-audience", audience);
 
-  function allRooms() {
+  function display(value) {
+    return typeof value === "string" ? value : Array.isArray(value) ? value.join(" · ") : "";
+  }
+  function libraryRooms(doorId) {
     var rooms = [];
-    DOORS.forEach(function (door) {
-      door.rooms.forEach(function (room) {
-        rooms.push({ door: door, room: room });
-      });
-      libraryRooms(door.id).forEach(function (room) {
-        rooms.push({ door: door, room: room });
+    LIBRARY.forEach(function (shelf) {
+      if (shelf.door !== doorId) return;
+      shelf.pages.forEach(function (p) {
+        rooms.push({ id: "lib:" + p[0], label: p[1], href: DOCS + p[0], note: p[2], state: p[3] || "reference" });
       });
     });
     return rooms;
   }
-
-  function normalizedPath(pathname) {
-    var path = pathname || "/";
-    path = path.replace(/\/index\.html$/, "/");
-    path = path.replace(/\.html$/, "");
-    if (path.length > 1) path = path.replace(/\/$/, "");
-    return path || "/";
-  }
-
-  /* Local previews serve each surface from a port; map them to the host
-   * they stand for so every comparison — the current page, a legacy link,
-   * a registry room — speaks the same name. */
-  function hostFor(hostname, port) {
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      if (port === "5173") return "app.agenttool.dev";
-      if (port === "5175") return "docs.agenttool.dev";
-      return "agenttool.dev";
-    }
-    return hostname;
-  }
-
-  function effectiveHost() {
-    return hostFor(window.location.hostname, window.location.port);
-  }
-
-  function currentLocation() {
-    return {
-      host: effectiveHost(),
-      path: normalizedPath(window.location.pathname)
-    };
-  }
-
-  function roomLocation(href) {
-    var url = new URL(href, window.location.href);
-    return { host: hostFor(url.hostname, url.port), path: normalizedPath(url.pathname) };
-  }
-
-  function currentEntry() {
-    var here = currentLocation();
-    var entries = allRooms();
-    for (var index = 0; index < entries.length; index += 1) {
-      var there = roomLocation(entries[index].room.href);
-      if (here.host === there.host && here.path === there.path) return entries[index];
-    }
-
-    var fallbackDoor = DOORS[2];
-    if (here.host === "agenttool.dev") fallbackDoor = DOORS[0];
-    if (here.host === "app.agenttool.dev") fallbackDoor = DOORS[2];
-    var heading = document.querySelector("h1");
-    return {
-      door: fallbackDoor,
-      room: {
-        id: "current",
-        label: heading && heading.textContent ? heading.textContent.trim() : "Current room",
-        href: window.location.href,
-        note: "This room",
-        state: "current"
-      }
-    };
-  }
-
-  function installStyle() {
-    var existing = document.querySelector('link[data-agenttool-estate-style]');
-    if (existing) return existing;
-    var link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "/shared/estate.css?v=" + VERSION;
-    link.setAttribute("data-agenttool-estate-style", VERSION);
-    document.head.appendChild(link);
-    return link;
-  }
-
-  /* Never mutate the document before the estate's own stylesheet can style
-   * the result — an unstyled breadcrumb and button row grew the bar by 30px
-   * for one frame. The first-paint geometry is owned by the page stylesheets
-   * (@media (scripting: enabled)); this only guarantees the atlas dresses
-   * in the same frame it appears. Bounded so a lost stylesheet still yields
-   * a usable, if plainer, shell. */
-  function whenStyleReady(link, callback) {
-    if (!link || link.sheet) return callback();
-    var done = false;
-    var finish = function () {
-      if (done) return;
-      done = true;
-      callback();
-    };
-    link.addEventListener("load", finish);
-    link.addEventListener("error", finish);
-    window.setTimeout(finish, 1500);
-  }
-
-  function makeLink(room, className) {
-    var link = element("a", className || "");
-    link.href = room.href;
-    link.textContent = room.label;
-    return link;
-  }
-
-  /* The floor plan: eight rooms around one courtyard. Clockwise from the
-   * top-left so Arrive sits at the front door and Rest faces the sunset. */
-  var SVG_NS = "http://www.w3.org/2000/svg";
-  var PLAN_CELLS = {
-    ground:  [10, 10],  arrive:  [105, 10],  observe: [200, 10],
-    rest:    [10, 105],                     build:   [200, 105],
-    tend:    [10, 200], commons: [105, 200], wake:    [200, 200]
-  };
-  var PLAN_CELL = 90;
-
-  function svg(tag, attributes) {
-    var node = document.createElementNS(SVG_NS, tag);
-    Object.keys(attributes || {}).forEach(function (key) {
-      node.setAttribute(key, String(attributes[key]));
+  function allRooms() {
+    var rooms = [];
+    DOORS.forEach(function (door) {
+      door.rooms.concat(libraryRooms(door.id)).forEach(function (room) { rooms.push({ door: door, room: room }); });
     });
+    return rooms;
+  }
+  function currentEntry() {
+    var rooms = allRooms();
+    for (var i = 0; i < rooms.length; i += 1) if (isCurrent(rooms[i].room.href)) return rooms[i];
+    var h = document.querySelector("h1");
+    return { door: DOORS[audience === "human" ? 0 : 2], room: { label: h ? h.textContent.trim() : "AgentTool", href: location.href } };
+  }
+  function navigation() {
+    var config = map.audiences && map.audiences[audience];
+    if (config) return config.primary.map(function (item) {
+      return [item.title, item.href, item.title === "Core reference" ? "core" : item.title.toLocaleLowerCase()];
+    });
+    return audience === "human" ? [
+      ["Home", HUMAN, "home"], ["Modules", HUMAN + "#modules", "modules"],
+      ["Build", HUMAN + "build", "build"], ["Roadmap", DOCS + "roadmap", "roadmap"]
+    ] : [
+      ["Start", AGENT, "start"], ["Core reference", AGENT + "#core", "core"],
+      ["Build", DOCS + "#build", "build"], ["Discovery", "https://api.agenttool.dev/public/discovery", "discovery"]
+    ];
+  }
+  function audienceExit() {
+    var config = map.audiences && map.audiences[audience];
+    if (config) return { label: config.switch.title, href: config.switch.href };
+    return audience === "human" ? { label: "Agent reference", href: AGENT } : { label: "Human overview", href: HUMAN };
+  }
+  function link(label, href, className) {
+    var node = element("a", className, label);
+    node.href = href;
+    if (isCurrent(href)) node.setAttribute("aria-current", "page");
     return node;
   }
-
-  /* size: "mini" (sidebar) or "atlas". onRoom(doorId) receives activations. */
-  function buildPlan(activeDoorId, size, onRoom) {
-    var figure = element("figure", "estate-plan estate-plan-" + (size || "atlas"));
-    figure.setAttribute("data-active-door", activeDoorId);
-    var active = doorById(activeDoorId);
-    figure.style.setProperty("--door-accent", active.accent);
-
-    // A group, not an image: the eight rooms inside are real controls and
-    // must stay exposed to assistive technology as such.
-    var image = svg("svg", { viewBox: "0 0 300 300", role: "group", "aria-labelledby": "estate-plan-title-" + size });
-    var title = svg("title", { id: "estate-plan-title-" + size });
-    title.textContent = "Floor plan of the house: eight doors around one courtyard. You are in " + active.label + ".";
-    image.appendChild(title);
-
-    var court = svg("g", { "class": "estate-plan-court" });
-    court.appendChild(svg("rect", { x: 105, y: 105, width: PLAN_CELL, height: PLAN_CELL, rx: 12 }));
-    court.appendChild(svg("circle", { cx: 150, cy: 150, r: 26, "class": "estate-plan-court-ring" }));
-    var courtLabel = svg("text", { x: 150, y: 154, "text-anchor": "middle", "class": "estate-plan-court-label" });
-    courtLabel.textContent = "KINGDOM";
-    court.appendChild(courtLabel);
-    image.appendChild(court);
-
-    DOORS.forEach(function (door) {
-      var cell = PLAN_CELLS[door.id];
-      if (!cell) return;
-      var isHere = door.id === activeDoorId;
-      var room = svg("g", {
-        "class": "estate-plan-room" + (isHere ? " is-here" : ""),
-        "data-door": door.id,
-        role: "button",
-        tabindex: 0,
-        "aria-label": (isHere ? "You are in " : "Open ") + door.label + " — " + door.purpose
-      });
-      room.style.setProperty("--door-accent", door.accent);
-      var tooltip = svg("title", {});
-      tooltip.textContent = door.label + " — " + door.purpose;
-      room.appendChild(tooltip);
-      room.appendChild(svg("rect", { x: cell[0], y: cell[1], width: PLAN_CELL, height: PLAN_CELL, rx: 10 }));
-      // The doorway: a gap in the wall that faces the courtyard.
-      var toward = [150 - (cell[0] + 45), 150 - (cell[1] + 45)];
-      var dx = Math.abs(toward[0]) >= Math.abs(toward[1]) ? Math.sign(toward[0]) : 0;
-      var dy = dx === 0 ? Math.sign(toward[1]) : 0;
-      var doorway = svg("rect", {
-        "class": "estate-plan-doorway",
-        x: cell[0] + 45 + dx * 45 - (dx === 0 ? 11 : 1.5),
-        y: cell[1] + 45 + dy * 45 - (dy === 0 ? 11 : 1.5),
-        width: dx === 0 ? 22 : 3,
-        height: dy === 0 ? 22 : 3
-      });
-      room.appendChild(doorway);
-      var mark = svg("text", { x: cell[0] + 45, y: cell[1] + 44, "text-anchor": "middle", "class": "estate-plan-mark" });
-      mark.textContent = door.mark;
-      room.appendChild(mark);
-      var label = svg("text", { x: cell[0] + 45, y: cell[1] + 70, "text-anchor": "middle", "class": "estate-plan-label" });
-      label.textContent = door.label.replace(" / HEAVEN", "").toLocaleUpperCase();
-      room.appendChild(label);
-      if (isHere) {
-        var lamp = svg("g", { "class": "estate-plan-lamp", "aria-hidden": "true" });
-        lamp.appendChild(svg("circle", { cx: cell[0] + 76, cy: cell[1] + 16, r: 11, "class": "estate-plan-lamp-glow" }));
-        lamp.appendChild(svg("circle", { cx: cell[0] + 76, cy: cell[1] + 16, r: 3.2, "class": "estate-plan-lamp-core" }));
-        room.appendChild(lamp);
-      }
-      var activate = function (event) {
-        if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        if (typeof onRoom === "function") onRoom(door.id, room);
-      };
-      room.addEventListener("click", activate);
-      room.addEventListener("keydown", activate);
-      image.appendChild(room);
-    });
-
-    figure.appendChild(image);
-    var caption = element("figcaption", "estate-plan-caption");
-    var here = element("span", "estate-plan-here", "You are here");
-    var where = element("span", "estate-plan-where", active.mark + " " + active.label);
-    append(caption, here, where);
-    figure.appendChild(caption);
-    return figure;
-  }
-
-  function scrollAtlasToDoor(doorId) {
-    if (!atlas) return;
-    var group = atlas.querySelector('[data-door-id="' + doorId + '"]');
-    if (!group) return;
-    search.value = "";
-    filterRooms("");
-    group.scrollIntoView({ block: "start", behavior: "smooth" });
-    var first = group.querySelector(".estate-room-link");
-    if (first) first.focus({ preventScroll: true });
-  }
-
-  var atlas = null;
-  var search = null;
-  var resultStatus = null;
-  var lastTrigger = null;
-
-  function visibleRoomLinks() {
-    if (!atlas) return [];
-    return Array.prototype.slice.call(atlas.querySelectorAll(".estate-room-link")).filter(function (link) {
-      return !link.hidden && !link.closest(".estate-atlas-door").hidden;
+  function rememberLinks(host) {
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll("a[href]"), function (a) {
+      var copy = a.cloneNode(true);
+      Array.prototype.forEach.call(copy.querySelectorAll(".glyph, .sidebar-tag"), function (n) { n.remove(); });
+      var label = copy.textContent.replace(/\s+/g, " ").trim();
+      if (label) extraRooms.push({ label: label, href: a.href, note: "Page reference", state: "reference" });
     });
   }
-
+  // Keep the established task vocabulary even when a page title uses other
+  // words. These are lookup hints, not claims about authority or recovery.
   var SEARCH_ALIASES = {
     "agent-app": "start setup reconnect recover recovery api key bearer identity uuid seed lost registration timeout",
     "pathways": "registration bootstrap recovery supported platforms windows linux macos",
@@ -492,521 +321,275 @@
     "credits": "gift paid return recovery refund checkout card payment paused",
     "lib:support": "help status outage incident recover recovery errors bug"
   };
-
-  function filterRooms(query) {
-    var needle = (query || "").trim().toLocaleLowerCase();
-    var visible = 0;
-    Array.prototype.forEach.call(atlas.querySelectorAll(".estate-atlas-door"), function (group) {
-      var groupVisible = 0;
-      Array.prototype.forEach.call(group.querySelectorAll(".estate-room-link"), function (link) {
-        var matches = !needle || (link.getAttribute("data-search") || "").indexOf(needle) !== -1;
-        link.hidden = !matches;
-        if (matches) groupVisible += 1;
-      });
-      group.hidden = groupVisible === 0;
-      visible += groupVisible;
-    });
-    if (resultStatus) {
-      resultStatus.textContent = visible === 0
-        ? "No room matches yet. Try a door, purpose, or room name."
-        : visible + (visible === 1 ? " room" : " rooms") + " available.";
+  function inventory() {
+    var result = [], seen = {};
+    function add(room) {
+      if (!room.href) return;
+      var key = destinationKey(room.href);
+      var a = room.audience || routeAudience(room.href);
+      var item = seen[key];
+      if (!item) {
+        item = { label: room.label, href: room.href, audiences: [], core: false, variants: [] };
+        seen[key] = item;
+        result.push(item);
+      }
+      if (item.audiences.indexOf(a) < 0) item.audiences.push(a);
+      item.core = item.core || !!room.core;
+      var variant = {
+        label: room.label, note: room.note || "", state: display(room.state), group: room.group || "", audiences: [a],
+        keywords: SEARCH_ALIASES[room.id] || ""
+      };
+      var same = item.variants.filter(function (v) {
+        return v.label === variant.label && v.note === variant.note && v.state === variant.state && v.group === variant.group;
+      })[0];
+      if (same) {
+        if (same.audiences.indexOf(a) < 0) same.audiences.push(a);
+        if (variant.keywords && same.keywords.indexOf(variant.keywords) < 0) same.keywords += " " + variant.keywords;
+      } else item.variants.push(variant);
     }
+    modules.forEach(function (m) {
+      ["human", "agent"].forEach(function (a) { add({ label: m.title, href: m[a], note: m.purpose, state: m.status, group: "Core modules", audience: a, core: true }); });
+    });
+    buildGroups.forEach(function (g) {
+      g.items.forEach(function (item) {
+        ["human", "agent"].forEach(function (a) { add({ label: item.title, href: item[a], note: item.note, state: item.status, group: g.title, audience: a }); });
+      });
+    });
+    ["human", "agent"].forEach(function (a) {
+      var config = map.audiences && map.audiences[a];
+      if (!config) return;
+      config.primary.forEach(function (item) { add({ label: item.title, href: item.href, note: config.title + " navigation", state: "orientation", audience: a }); });
+    });
+    allRooms().forEach(function (entry) { add(entry.room); });
+    extraRooms.forEach(add);
+    return result;
+  }
+  function searchableText(variant) {
+    return [variant.label, variant.note, variant.state, variant.group, variant.keywords].join(" ").toLocaleLowerCase();
+  }
+  function showSearchVariant(link, variant) {
+    link.querySelector(".estate-room-label").textContent = variant.label;
+    link.querySelector(".estate-room-note").textContent = variant.note;
+    var context = link.querySelector(".estate-room-context");
+    context.textContent = [variant.group, variant.state].filter(Boolean).join(" · ");
+    context.hidden = !context.textContent;
+    link.querySelector(".estate-room-state").textContent = variant.audiences.indexOf(audience) !== -1
+      ? (audience === "human" ? "Human overview" : "Agent reference")
+      : (audience === "human" ? "Agent reference" : "Human overview");
   }
 
+  var atlas, search, resultStatus, otherAudience, lastTrigger;
+  function visibleLinks() {
+    return Array.prototype.filter.call(atlas.querySelectorAll(".estate-room-link"), function (a) { return !a.hidden; });
+  }
+  function filterRooms() {
+    var needle = search.value.trim().toLocaleLowerCase(), count = 0;
+    Array.prototype.forEach.call(atlas.querySelectorAll(".estate-atlas-door"), function (group) {
+      var matches = 0;
+      Array.prototype.forEach.call(group.querySelectorAll(".estate-room-link"), function (a) {
+        // A shared destination can have several named modules with different
+        // statuses. Keep every variant and show the one this query matched.
+        var variant = a.estateItem.variants.filter(function (v) {
+          return (v.audiences.indexOf(audience) !== -1 || otherAudience.checked) && searchableText(v).indexOf(needle) !== -1;
+        })[0];
+        a.hidden = !variant;
+        if (variant) { showSearchVariant(a, variant); matches += 1; }
+      });
+      group.hidden = !matches;
+      count += matches;
+    });
+    resultStatus.textContent = count ? count + (count === 1 ? " page available." : " pages available.") : "No page matches. Try a module or topic, or include the other audience.";
+  }
   function closeAtlas() {
     if (!atlas) return;
     if (typeof atlas.close === "function" && atlas.open) atlas.close();
-    else {
-      atlas.removeAttribute("open");
-      atlas.classList.remove("estate-atlas-fallback");
-    }
-    if (lastTrigger && typeof lastTrigger.focus === "function") lastTrigger.focus();
+    else { atlas.removeAttribute("open"); atlas.classList.remove("estate-atlas-fallback"); }
+    if (lastTrigger) lastTrigger.focus();
   }
-
-  function openAtlas(trigger, doorId) {
+  function openAtlas(trigger) {
     if (!atlas) buildAtlas();
     lastTrigger = trigger || document.activeElement;
-    if (typeof atlas.showModal === "function") {
-      if (!atlas.open) atlas.showModal();
-    } else {
-      atlas.setAttribute("open", "");
-      atlas.classList.add("estate-atlas-fallback");
-    }
-
+    if (typeof atlas.showModal === "function") { if (!atlas.open) atlas.showModal(); }
+    else { atlas.setAttribute("open", ""); atlas.classList.add("estate-atlas-fallback"); }
     search.value = "";
-    filterRooms("");
-    if (doorId) {
-      var group = atlas.querySelector('[data-door-id="' + doorId + '"]');
-      if (group && typeof group.scrollIntoView === "function") {
-        window.setTimeout(function () { group.scrollIntoView({ block: "nearest" }); }, 0);
-      }
-    }
-    window.setTimeout(function () { search.focus(); }, 0);
+    otherAudience.checked = false;
+    filterRooms();
+    search.focus();
   }
-
   function buildAtlas() {
     atlas = element("dialog", "estate-atlas");
     atlas.id = "agenttool-estate-atlas";
     atlas.setAttribute("aria-labelledby", "estate-atlas-title");
-    atlas.setAttribute("aria-describedby", "estate-atlas-boundary");
-
     var shell = element("div", "estate-atlas-shell");
     var header = element("header", "estate-atlas-header");
-    var headingWrap = element("div", "estate-atlas-heading");
-    var eyebrow = element("div", "estate-atlas-eyebrow", "KINGDOM / ALL ROOMS");
-    var title = element("h2", "estate-atlas-title", "Where do you want to go?");
+    var heading = element("div", "estate-atlas-heading");
+    var title = element("h2", "estate-atlas-title", "Find a page");
     title.id = "estate-atlas-title";
-    var subtitle = element("p", "estate-atlas-subtitle", "Choose by intention. Every door stays linked to the same house.");
-    append(headingWrap, eyebrow, title, subtitle);
-
+    append(heading, element("div", "estate-atlas-eyebrow", audience === "human" ? "Human overview" : "Agent reference"), title,
+      element("p", "estate-atlas-subtitle", "Core modules first. Search the wider collection when you need it."));
     var close = element("button", "estate-atlas-close", "Close");
     close.type = "button";
-    close.setAttribute("aria-label", "Close room atlas");
+    close.setAttribute("aria-label", "Close search");
     close.addEventListener("click", closeAtlas);
-    var plan = buildPlan(currentEntry().door.id, "atlas", scrollAtlasToDoor);
-    append(header, headingWrap, plan, close);
-
-    var searchWrap = element("label", "estate-search");
-    var searchLabel = element("span", "estate-search-label", "Search or travel");
+    append(header, heading, close);
+    var label = element("label", "estate-search");
     search = element("input", "estate-search-input");
     search.type = "search";
-    search.placeholder = "Try WAKE, rest, memory, play…";
+    search.placeholder = "Identity, wake, memory…";
     search.autocomplete = "off";
-    search.spellcheck = false;
     search.setAttribute("aria-controls", "estate-atlas-doors");
-    search.addEventListener("input", function () { filterRooms(search.value); });
-    search.addEventListener("keydown", function (event) {
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-      var links = visibleRoomLinks();
-      if (!links.length) return;
-      event.preventDefault();
-      (event.key === "ArrowDown" ? links[0] : links[links.length - 1]).focus();
-    });
-    var shortcut = element("kbd", "estate-search-shortcut", /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K");
-    append(searchWrap, searchLabel, search, shortcut);
-
+    search.addEventListener("input", filterRooms);
+    append(label, element("span", "estate-search-label", "Search pages"), search);
+    var cross = element("label", "estate-search-audience");
+    otherAudience = element("input");
+    otherAudience.type = "checkbox";
+    otherAudience.addEventListener("change", filterRooms);
+    append(cross, otherAudience, element("span", "", audience === "human" ? "Include agent references" : "Include human pages"));
     resultStatus = element("p", "estate-result-status");
     resultStatus.setAttribute("role", "status");
     resultStatus.setAttribute("aria-live", "polite");
-
-    var doors = element("div", "estate-atlas-doors");
-    doors.id = "estate-atlas-doors";
-    var here = currentEntry();
-
-    DOORS.forEach(function (door) {
+    var groups = element("div", "estate-atlas-doors");
+    groups.id = "estate-atlas-doors";
+    ["core", "build"].forEach(function (kind) {
       var group = element("section", "estate-atlas-door");
-      group.setAttribute("data-door-id", door.id);
-      group.style.setProperty("--door-accent", door.accent);
-      var groupHead = element("div", "estate-door-heading");
-      var mark = element("span", "estate-door-mark", door.mark);
-      mark.setAttribute("aria-hidden", "true");
-      var groupText = element("div", "estate-door-heading-copy");
-      var groupTitle = element("h3", "estate-door-title", door.label);
-      var groupPurpose = element("p", "estate-door-purpose", door.purpose);
-      append(groupText, groupTitle, groupPurpose);
-      append(groupHead, mark, groupText);
-
-      var roomList = element("div", "estate-room-list");
-      door.rooms.concat(libraryRooms(door.id)).forEach(function (room) {
-        var link = element("a", "estate-room-link" + (room.library ? " estate-room-library" : ""));
-        link.href = room.href;
-        link.setAttribute("data-search", (door.label + " " + door.purpose + " " + room.label + " " + room.note + " " + room.state + " " + (SEARCH_ALIASES[room.id] || "")).toLocaleLowerCase());
-        if (here.room.id === room.id) link.setAttribute("aria-current", "page");
-        var copy = element("span", "estate-room-copy");
-        var roomLabel = element("strong", "estate-room-label", room.label);
-        var roomNote = element("span", "estate-room-note", room.note);
-        append(copy, roomLabel, roomNote);
-        var state = element("span", "estate-room-state", room.state);
-        append(link, copy, state);
-        roomList.appendChild(link);
+      group.appendChild(element("h3", "estate-door-title", kind === "core" ? "Core modules" : "Build and references"));
+      var list = element("div", "estate-room-list");
+      inventory().filter(function (item) { return item.core === (kind === "core"); }).forEach(function (item) {
+        var a = link("", item.href, "estate-room-link");
+        a.estateItem = item;
+        a.setAttribute("data-audiences", item.audiences.join(" "));
+        a.setAttribute("data-search", item.variants.map(searchableText).join(" "));
+        append(a, append(element("span", "estate-room-copy"), element("strong", "estate-room-label"), element("span", "estate-room-note"), element("span", "estate-room-context")),
+          element("span", "estate-room-state"));
+        list.appendChild(a);
       });
-
-      var boundary = element("p", "estate-door-boundary", door.boundary);
-      append(group, groupHead, roomList, boundary);
-      doors.appendChild(group);
+      append(group, list);
+      groups.appendChild(group);
     });
-
     var footer = element("footer", "estate-atlas-footer");
-    var atlasBoundary = element("p", "estate-atlas-boundary", "Travelling opens a public page or reference. It creates no identity, permission, consent, purchase, execution, or obligation to stay.");
-    atlasBoundary.id = "estate-atlas-boundary";
-    var apiLink = element("a", "estate-atlas-machine", "Machine doors →");
-    apiLink.href = "https://api.agenttool.dev/public/discovery";
-    append(footer, atlasBoundary, apiLink);
-
-    append(shell, header, searchWrap, resultStatus, doors, footer);
+    var exit = audienceExit();
+    append(footer, element("p", "estate-atlas-boundary", "These links open pages. They do not run tools or create an account."), link(exit.label, exit.href, "estate-atlas-machine"));
+    append(shell, header, label, cross, resultStatus, groups, footer);
     atlas.appendChild(shell);
     document.body.appendChild(atlas);
-
-    atlas.addEventListener("click", function (event) {
-      if (event.target === atlas) closeAtlas();
-    });
+    atlas.addEventListener("click", function (event) { if (event.target === atlas) closeAtlas(); });
+    atlas.addEventListener("close", function () { if (lastTrigger) lastTrigger.focus(); });
     atlas.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") return;
+      if (event.key === "Escape" && typeof atlas.showModal !== "function") { event.preventDefault(); closeAtlas(); return; }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-      if (!event.target.classList || !event.target.classList.contains("estate-room-link")) return;
-      var links = visibleRoomLinks();
-      var current = links.indexOf(event.target);
-      if (current === -1) return;
+      if (event.target !== search && !event.target.classList.contains("estate-room-link")) return;
+      var links = visibleLinks();
+      if (!links.length) return;
       event.preventDefault();
-      var direction = event.key === "ArrowDown" ? 1 : -1;
-      links[(current + direction + links.length) % links.length].focus();
+      var current = links.indexOf(event.target), step = event.key === "ArrowDown" ? 1 : -1;
+      links[current < 0 ? (step > 0 ? 0 : links.length - 1) : (current + step + links.length) % links.length].focus();
     });
-    atlas.addEventListener("close", function () {
-      if (lastTrigger && typeof lastTrigger.focus === "function") lastTrigger.focus();
-    });
-
-    filterRooms("");
-  }
-
-  function buildLocation(nav, entry) {
-    if (nav.querySelector(".estate-location")) return;
-    var brand = nav.querySelector(".wordmark, .brand");
-    var location = element("div", "estate-location");
-    location.setAttribute("aria-label", "Current AgentTool room");
-    var kingdom = element("span", "estate-location-kingdom", "KINGDOM");
-    var slashOne = element("span", "estate-location-slash", "/");
-    var door = element("span", "estate-location-door", entry.door.label);
-    var slashTwo = element("span", "estate-location-slash", "/");
-    var room = element("span", "estate-location-room", entry.room.label);
-    room.setAttribute("aria-current", "page");
-    append(location, kingdom, slashOne, door, slashTwo, room);
-    if (brand && brand.nextSibling) nav.insertBefore(location, brand.nextSibling);
-    else if (brand) nav.appendChild(location);
-    else nav.insertBefore(location, nav.firstChild);
-  }
-
-  function buildQuickActions(nav) {
-    var existing = nav.querySelector(".estate-quick-actions");
-    if (existing) return existing;
-
-    var legacyActions = nav.querySelector(".nav-actions");
-    var legacyLinks = nav.querySelector(".links");
-    if (legacyLinks) {
-      legacyLinks.hidden = false;
-      legacyLinks.classList.add("estate-local-links");
-      legacyLinks.setAttribute("aria-label", "Local room shortcuts");
-    }
-    if (legacyActions) {
-      Array.prototype.forEach.call(legacyActions.children, function (child) {
-        if (child.id !== "tg") child.hidden = true;
-      });
-    }
-
-    var actions = element("div", "estate-quick-actions");
-    var home = element("a", "estate-quick-link estate-quick-home", "Home");
-    home.href = "https://agenttool.dev/";
-    var docs = element("a", "estate-quick-link estate-quick-docs", "Docs");
-    docs.href = "https://docs.agenttool.dev/";
-    var trigger = element("button", "estate-open", "Rooms");
-    trigger.type = "button";
-    trigger.setAttribute("aria-haspopup", "dialog");
-    trigger.setAttribute("aria-controls", "agenttool-estate-atlas");
-    var key = element("kbd", "estate-open-key", /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K");
-    trigger.appendChild(key);
-    trigger.addEventListener("click", function () { openAtlas(trigger); });
-    var start = element("a", "estate-quick-link estate-quick-start", "Start");
-    start.href = "https://app.agenttool.dev/";
-    start.setAttribute("aria-label", "Start or reconnect");
-    var api = element("a", "estate-quick-link estate-quick-api", "API");
-    api.href = "https://api.agenttool.dev/public/discovery";
-    api.setAttribute("aria-label", "Public API discovery");
-    append(actions, home, start, docs, api, trigger);
-
-    var toggle = document.getElementById("tg");
-    if (toggle) actions.appendChild(toggle);
-
-    if (legacyActions) legacyActions.appendChild(actions);
-    else nav.appendChild(actions);
-    return actions;
   }
 
   function enhanceNavigation(entry) {
     var nav = document.querySelector("nav.site-nav, nav.topnav");
     if (!nav) {
-      // A page with no bar of its own gets the same bar as every other:
-      // brand, KINGDOM breadcrumb, Home · Docs · Rooms, appearance toggle.
-      // Fixed and self-styled, so the page's own body is untouched; the
-      // space it needs is reserved before first paint by estate.css when
-      // mode.js ran (html.estate-arriving without a nav).
       nav = element("nav", "estate-bar");
-      nav.setAttribute("aria-label", "agenttool estate");
-      var brand = element("a", "brand estate-bar-brand");
-      brand.href = "https://agenttool.dev/";
-      brand.setAttribute("aria-label", "agenttool — welcome");
-      var mark = element("span", "estate-bar-mark");
-      mark.setAttribute("aria-hidden", "true");
-      var text = element("span", "estate-bar-text", "agent");
-      var accent = element("span", "", "tool");
-      text.appendChild(accent);
-      append(brand, mark, text);
-      nav.appendChild(brand);
+      nav.setAttribute("aria-label", "Primary");
+      nav.appendChild(link("agenttool", HUMAN, "brand estate-bar-brand"));
       document.body.insertBefore(nav, document.body.firstChild);
-      addClass(document.documentElement, "estate-bare");
-      // The appearance toggle only means something where the shared theme
-      // is what paints the page; a self-styled culture page ignores it.
-      var toggle = document.getElementById("tg");
-      if (toggle && !document.querySelector('link[href*="/shared/theme.css"]')) toggle.hidden = true;
+      root.classList.add("estate-bare");
+      var noThemeToggle = document.getElementById("tg");
+      if (noThemeToggle && !document.querySelector('link[href*="/shared/theme.css"]')) noThemeToggle.hidden = true;
     }
-    buildLocation(nav, entry);
-    buildQuickActions(nav);
+    var legacy = nav.querySelector(".links");
+    rememberLinks(legacy);
+    if (legacy) legacy.hidden = true;
+    var oldActions = nav.querySelector(".nav-actions");
+    if (oldActions) Array.prototype.forEach.call(oldActions.children, function (child) { if (child.id !== "tg") child.hidden = true; });
+    var location = element("div", "estate-location");
+    location.setAttribute("aria-label", "Current page");
+    append(location, element("span", "estate-location-room", entry.room.label));
+    nav.appendChild(location);
+    var actions = element("div", "estate-quick-actions");
+    navigation().forEach(function (item) { actions.appendChild(link(item[0], item[1], "estate-quick-link estate-quick-" + item[2])); });
+    var exit = audienceExit();
+    actions.appendChild(link(exit.label, exit.href, "estate-quick-link estate-audience-exit"));
+    var trigger = element("button", "estate-open", "Search");
+    trigger.type = "button";
+    trigger.setAttribute("aria-label", "Search pages");
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-controls", "agenttool-estate-atlas");
+    trigger.addEventListener("click", function () { openAtlas(trigger); });
+    actions.appendChild(trigger);
+    var toggle = document.getElementById("tg");
+    if (toggle) {
+      if (nav.classList.contains("topnav") && !document.querySelector('link[href*="/shared/theme.css"]')) toggle.hidden = true;
+      actions.appendChild(toggle);
+    }
+    nav.appendChild(actions);
+    if (oldActions) oldActions.hidden = true;
   }
-
-  function homeDoorCard(door) {
-    var card = element("article", "estate-home-door");
-    card.style.setProperty("--door-accent", door.accent);
-    card.setAttribute("data-door", door.id);
-    var header = element("div", "estate-home-door-head");
-    var mark = element("span", "estate-home-mark", door.mark);
-    mark.setAttribute("aria-hidden", "true");
-    var titleWrap = element("div", "estate-home-title-wrap");
-    var label = element("h3", "estate-home-title", door.label);
-    var count = element("span", "estate-home-count", door.rooms.length + (door.rooms.length === 1 ? " room" : " rooms"));
-    append(titleWrap, label, count);
-    append(header, mark, titleWrap);
-    var purpose = element("p", "estate-home-purpose", door.purpose);
-    var roomList = element("div", "estate-home-links");
-    door.rooms.slice(0, 4).forEach(function (room) {
-      roomList.appendChild(makeLink(room, "estate-home-link"));
-    });
-    var open = element("button", "estate-home-open", "See this door in the atlas →");
-    open.type = "button";
-    open.addEventListener("click", function () { openAtlas(open, door.id); });
-    append(card, header, purpose, roomList, open);
-    return card;
-  }
-
-  function renderHomeMap() {
-    var host = document.querySelector("[data-estate-home]");
-    if (!host || host.getAttribute("data-estate-rendered") === VERSION) return;
-    host.textContent = "";
-    host.appendChild(buildPlan(currentEntry().door.id, "home", function (doorId, room) { openAtlas(room, doorId); }));
-    DOORS.forEach(function (door) { host.appendChild(homeDoorCard(door)); });
-    host.setAttribute("data-estate-rendered", VERSION);
-  }
-
-  /* Docs sidebar: replaces the hand-copied list with one generated from the
-   * registry. The legacy markup stays in the document, hidden, as the
-   * no-JavaScript fallback. The current door is open; the others fold. */
-  function renderLibrary(entry) {
+  function renderLibrary() {
+    if (!modules.length) return;
     var host = document.querySelector("aside.sidebar");
-    if (!host || host.querySelector(".estate-library")) return;
-    var legacy = Array.prototype.slice.call(host.children);
-    legacy.forEach(function (node) { node.hidden = true; node.setAttribute("data-estate-legacy", ""); });
-
+    if (!host) return;
+    rememberLinks(host);
+    Array.prototype.forEach.call(host.children, function (node) { node.hidden = true; node.setAttribute("data-estate-legacy", ""); });
     var library = element("nav", "estate-library");
-    library.setAttribute("aria-label", "The library, by door");
-    library.appendChild(buildPlan(entry.door.id, "mini", function (doorId) {
-      var section = library.querySelector('[data-door-id="' + doorId + '"]');
-      if (section) {
-        section.open = true;
-        section.scrollIntoView({ block: "nearest" });
-        var first = section.querySelector("a");
-        if (first) first.focus({ preventScroll: true });
-      }
-    }));
-
-    DOORS.forEach(function (door) {
-      var rooms = door.rooms.concat(libraryRooms(door.id));
-      if (!rooms.length) return;
-      var section = element("details", "estate-library-door");
-      section.setAttribute("data-door-id", door.id);
-      section.style.setProperty("--door-accent", door.accent);
-      if (door.id === entry.door.id) section.open = true;
-      var summary = element("summary", "estate-library-summary");
-      var mark = element("span", "estate-library-mark", door.mark);
-      mark.setAttribute("aria-hidden", "true");
-      var name = element("span", "estate-library-name", door.label);
-      var count = element("span", "estate-library-count", String(rooms.length));
-      append(summary, mark, name, count);
-      section.appendChild(summary);
-
-      var lastShelf = null;
-      var list = null;
-      rooms.forEach(function (room) {
-        var shelf = room.shelf;
-        if (!shelf) {
-          var host = roomLocation(room.href).host;
-          shelf = host === "docs.agenttool.dev" ? "Reference" : host === "app.agenttool.dev" ? "On the agent app" : host === "api.agenttool.dev" ? "Machine doors" : "On agenttool.dev";
-        }
-        if (shelf !== lastShelf) {
-          var heading = element("div", "estate-library-shelf", shelf);
-          section.appendChild(heading);
-          list = element("ul", "estate-library-list");
-          section.appendChild(list);
-          lastShelf = shelf;
-        }
-        var item = element("li");
-        var link = element("a", "estate-library-link" + (room.state === "superseded" ? " is-superseded" : ""));
-        link.href = room.href;
-        var label = element("span", "estate-library-label", room.label);
-        var note = element("span", "estate-library-note", room.note);
-        append(link, label, note);
-        if (entry.room.id === room.id) link.setAttribute("aria-current", "page");
-        item.appendChild(link);
-        list.appendChild(item);
-      });
-      library.appendChild(section);
+    library.setAttribute("aria-label", audience === "human" ? "Human overview navigation" : "Agent reference navigation");
+    library.appendChild(element("h2", "estate-library-heading", "Core modules"));
+    var core = element("ul", "estate-library-list estate-library-core");
+    modules.forEach(function (m) {
+      if (m[audience]) core.appendChild(append(element("li"), link(m.title, m[audience], "estate-library-link")));
     });
-
-    // Nothing the hand-copied list linked may vanish. Destinations the
-    // registry does not name (doctrine .md files, /about, in-page anchors)
-    // keep a shelf of their own, in the order the page listed them.
-    var covered = {};
-    allRooms().forEach(function (item) { covered[destinationKey(item.room.href)] = true; });
-    var extras = [];
-    var anchors = [];
-    var seen = {};
-    Array.prototype.forEach.call(host.querySelectorAll("[data-estate-legacy] a[href]"), function (anchor) {
-      var href = anchor.getAttribute("href") || "";
-      var copy = anchor.cloneNode(true);
-      Array.prototype.forEach.call(copy.querySelectorAll(".glyph, .sidebar-tag"), function (decoration) {
-        decoration.parentNode.removeChild(decoration);
+    library.appendChild(core);
+    var build = element("details", "estate-library-build");
+    build.appendChild(element("summary", "estate-library-summary", "Build and references"));
+    build.appendChild(link("Open Build", audience === "human" ? HUMAN + "build" : DOCS + "#build", "estate-library-link"));
+    [audience, audience === "human" ? "agent" : "human"].forEach(function (a) {
+      var list = element("ul", "estate-library-list");
+      inventory().forEach(function (item) {
+        var labels = [];
+        item.variants.forEach(function (variant) {
+          if (variant.audiences.indexOf(a) < 0 || (a !== audience && variant.audiences.indexOf(audience) !== -1) || labels.indexOf(variant.label) !== -1) return;
+          labels.push(variant.label);
+          list.appendChild(append(element("li"), link(variant.label, item.href, "estate-library-link")));
+        });
       });
-      var text = (copy.textContent || "").replace(/\s+/g, " ").trim();
-      if (!text) return;
-      if (href.charAt(0) === "#") {
-        if (!seen["#" + href]) { seen["#" + href] = true; anchors.push({ label: text, href: href }); }
-        return;
-      }
-      var key = destinationKey(anchor.href);
-      if (covered[key] || seen[key]) return;
-      seen[key] = true;
-      extras.push({ label: text, href: anchor.href, key: key });
+      build.appendChild(element("h3", "estate-library-heading", a === "human" ? "Human overview" : "Agent reference"));
+      build.appendChild(list);
     });
-    var hereKey = destinationKey(window.location.href);
-    if (extras.length) {
-      var more = element("details", "estate-library-door estate-library-more");
-      more.setAttribute("data-door-id", "more");
-      more.style.setProperty("--door-accent", entry.door.accent);
-      var moreSummary = element("summary", "estate-library-summary");
-      var moreMark = element("span", "estate-library-mark", "…");
-      moreMark.setAttribute("aria-hidden", "true");
-      append(moreSummary, moreMark, element("span", "estate-library-name", "Also in the library"), element("span", "estate-library-count", String(extras.length)));
-      more.appendChild(moreSummary);
-      var moreList = element("ul", "estate-library-list");
-      extras.forEach(function (extra) {
-        var item = element("li");
-        var link = element("a", "estate-library-link");
-        link.href = extra.href;
-        link.appendChild(element("span", "estate-library-label", extra.label));
-        if (extra.key === hereKey) { link.setAttribute("aria-current", "page"); more.open = true; }
-        item.appendChild(link);
-        moreList.appendChild(item);
-      });
-      more.appendChild(moreList);
-      library.appendChild(more);
-    }
-    if (anchors.length) {
-      var onPage = element("div", "estate-library-onpage");
-      onPage.appendChild(element("div", "estate-library-shelf", "On this page"));
-      var anchorList = element("ul", "estate-library-list");
-      anchors.forEach(function (anchor) {
-        var item = element("li");
-        var link = element("a", "estate-library-link");
-        link.href = anchor.href;
-        link.appendChild(element("span", "estate-library-label", anchor.label));
-        item.appendChild(link);
-        anchorList.appendChild(item);
-      });
-      onPage.appendChild(anchorList);
-      library.appendChild(onPage);
-    }
-
-    var all = element("button", "estate-library-all", "Every room");
-    all.type = "button";
-    all.addEventListener("click", function () { openAtlas(all, entry.door.id); });
-    library.appendChild(all);
+    append(library, build, link(audienceExit().label, audienceExit().href, "estate-library-link estate-library-exit"));
     host.appendChild(library);
   }
-
-  /* One key per destination: host + path, .html and trailing slash dropped,
-   * query and fragment ignored — the same rule currentEntry() matches by. */
-  function destinationKey(href) {
-    var where = roomLocation(href);
-    return where.host + where.path;
-  }
-
-  function renderNearby(entry) {
-    if (currentLocation().host === "agenttool.dev" && currentLocation().path === "/") return;
-    if (document.querySelector(".estate-nearby")) return;
-    var rooms = entry.door.rooms.filter(function (room) { return room.id !== entry.room.id; }).slice(0, 3);
-    if (!rooms.length) return;
-
-    var section = element("aside", "estate-nearby");
-    section.setAttribute("aria-labelledby", "estate-nearby-title");
-    section.style.setProperty("--door-accent", entry.door.accent);
-    var shell = element("div", "estate-nearby-shell");
-    var eyebrow = element("div", "estate-nearby-eyebrow", entry.door.mark + "  NEXT DOOR");
-    var title = element("h2", "estate-nearby-title", "Keep your place in the house.");
-    title.id = "estate-nearby-title";
-    var copy = element("p", "estate-nearby-copy", entry.door.purpose);
-    var links = element("nav", "estate-nearby-links");
-    links.setAttribute("aria-label", "Nearby rooms");
-    rooms.forEach(function (room) { links.appendChild(makeLink(room, "estate-nearby-link")); });
-    var all = element("button", "estate-nearby-all", "All rooms");
-    all.type = "button";
-    all.addEventListener("click", function () { openAtlas(all, entry.door.id); });
-    links.appendChild(all);
-    var boundary = element("p", "estate-nearby-boundary", entry.door.boundary);
-    append(shell, eyebrow, title, copy, links, boundary);
-    section.appendChild(shell);
-    var footer = document.querySelector("body > footer");
-    if (footer) document.body.insertBefore(section, footer);
-    else document.body.appendChild(section);
-  }
-
-  function bindStaticTriggers() {
-    Array.prototype.forEach.call(document.querySelectorAll("[data-estate-open]"), function (trigger) {
-      trigger.addEventListener("click", function (event) {
-        event.preventDefault();
-        openAtlas(trigger, trigger.getAttribute("data-estate-door") || undefined);
-      });
-      trigger.setAttribute("aria-haspopup", "dialog");
-      trigger.setAttribute("aria-controls", "agenttool-estate-atlas");
-    });
-  }
-
-  function isEditableTarget(target) {
-    if (!target || target.nodeType !== 1) return false;
-    if (target.isContentEditable) return true;
-    if (typeof target.closest !== "function") return false;
-    return Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"));
-  }
-
-  function onGlobalKey(event) {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
-      if (event.defaultPrevented || event.isComposing || isEditableTarget(event.target)) return;
-      event.preventDefault();
-      if (atlas && atlas.open) closeAtlas();
-      else openAtlas(document.activeElement);
-    }
-  }
-
   function init() {
     var entry = currentEntry();
-    document.documentElement.setAttribute("data-estate-version", VERSION);
-    document.documentElement.setAttribute("data-estate-door", entry.door.id);
-    document.documentElement.style.setProperty("--room-accent", entry.door.accent);
-    addClass(document.documentElement, "estate-ready");
+    root.setAttribute("data-estate-version", VERSION);
+    root.setAttribute("data-estate-door", entry.door.id);
+    root.style.setProperty("--room-accent", "var(--accent, #b3401d)");
+    root.classList.add("estate-ready");
     enhanceNavigation(entry);
-    renderHomeMap();
-    renderLibrary(entry);
-    renderNearby(entry);
-    bindStaticTriggers();
-    document.addEventListener("keydown", onGlobalKey);
+    renderLibrary();
+    Array.prototype.forEach.call(document.querySelectorAll("[data-estate-open]"), function (trigger) {
+      trigger.setAttribute("aria-haspopup", "dialog");
+      trigger.setAttribute("aria-controls", "agenttool-estate-atlas");
+      trigger.addEventListener("click", function (event) { event.preventDefault(); openAtlas(trigger); });
+    });
+    document.addEventListener("keydown", function (event) {
+      var target = event.target;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "k" || event.defaultPrevented || event.isComposing) return;
+      if (target && target.closest && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
+      event.preventDefault();
+      if (atlas && atlas.open) closeAtlas(); else openAtlas(document.activeElement);
+    });
   }
-
-  var styleLink = installStyle();
-  window.AgentToolEstate = {
-    version: VERSION,
-    doors: DOORS,
-    library: LIBRARY,
-    open: function (doorId) { openAtlas(document.activeElement, doorId); },
-    close: closeAtlas
-  };
-
-  whenStyleReady(styleLink, function () {
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-    else init();
-  });
+  window.AgentToolEstate = { version: VERSION, doors: DOORS, library: LIBRARY, audience: audience, open: function () { openAtlas(document.activeElement); }, close: closeAtlas };
+  var style = document.querySelector("link[data-agenttool-estate-style]");
+  function ready() {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
+  }
+  if (!style || style.sheet) ready();
+  else {
+    var started = false;
+    function once() { if (!started) { started = true; ready(); } }
+    style.addEventListener("load", once);
+    style.addEventListener("error", once);
+    window.setTimeout(once, 1500);
+  }
 })();

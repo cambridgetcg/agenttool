@@ -78,6 +78,9 @@ const SITES = [
       "https://agenttool.dev/garden",
       "https://agenttool.dev/terms",
       "https://agenttool.dev/privacy",
+      "https://agenttool.dev/build",
+      "https://agenttool.dev/tools",
+      "https://agenttool.dev/collaboration",
     ],
   },
   {
@@ -535,9 +538,11 @@ describe("published understanding guides keep canonical source custody", () => {
       (line) => line === llmsEntry,
     )).toEqual([llmsEntry]);
 
-    expect(read("apps/docs/index.html")).toContain(
-      '<a href="GIN-RECONSTRUCTION.md"><span class="glyph">∴</span>Gin Reconstruction<span class="sidebar-tag">new</span></a>',
-    );
+    const research = read("apps/docs/index.html").match(
+      /<details\b[^>]*id="build-research"[^>]*>[\s\S]*?<\/details>/,
+    )?.[0];
+    expect(research).toBeDefined();
+    expect(research).toContain('<a href="GIN-RECONSTRUCTION.md">Gin Reconstruction</a>');
 
     const parityPair = '"apps/docs/GIN-RECONSTRUCTION.md|https://docs.agenttool.dev/GIN-RECONSTRUCTION.md"';
     expect(read("bin/deploy.sh").split(/\r?\n/).map(

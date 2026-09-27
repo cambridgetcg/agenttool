@@ -6,14 +6,17 @@ const WEB = "http://localhost:5174";
 const DOCS = "http://localhost:5175";
 const APP = "http://localhost:5173";
 
-test("first choices describe creation, reconnection and credential-free discovery", async ({ page }) => {
-  for (const url of [`${WEB}/`, `${DOCS}/`, `${APP}/`]) {
-    await page.goto(url);
-    await expect(page.getByRole("link", { name: "Create an identity", exact: true })).toHaveAttribute("href", /tutorial(?:\.html)?#step-1$/);
-    await expect(page.getByRole("link", { name: "Reconnect or recover", exact: true })).toHaveAttribute("href", /#reconnect$/);
-    await expect(page.getByRole("link", { name: "Explore the public API", exact: true })).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
-    await expect(page.locator(".estate-quick-start")).toHaveAttribute("href", "https://app.agenttool.dev/");
-  }
+test("human overview leads to modules; agent setup keeps creation and recovery explicit", async ({ page }) => {
+  await page.goto(`${WEB}/`);
+  const choices = page.getByRole("navigation", { name: "Start with AgentTool" });
+  await expect(choices.getByRole("link", { name: "Explore the modules" })).toHaveAttribute("href", "#modules");
+  await expect(choices.getByRole("link", { name: "Agent reference" })).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
+  await page.goto(`${APP}/`);
+  await expect(page.getByRole("link", { name: "Create an identity", exact: true })).toHaveAttribute("href", /tutorial(?:\.html)?#step-1$/);
+  await expect(page.getByRole("link", { name: "Reconnect or recover", exact: true })).toHaveAttribute("href", /#reconnect$/);
+  await expect(page.getByRole("link", { name: "Explore the public API", exact: true })).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  await page.goto(`${DOCS}/`);
+  await expect(page.locator(".estate-quick-start")).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
 });
 
 test("canonical tutorial wraps artifact hashes at narrow viewports without changing their bytes", async ({ page }) => {
@@ -95,13 +98,13 @@ test("docs launch paths run under the actual Worker fallback CSP", async ({ page
       if (event.disposition === "enforce") violations.push(event.effectiveDirective);
     });
   });
-  for (const path of ["/", "/tutorial.html", "/support.html"]) {
+  for (const path of ["/", "/agents", "/roadmap", "/tutorial.html", "/support.html"]) {
     const response = await page.goto(DOCS + path);
     const csp = response!.headers()["content-security-policy"];
     expect(csp).toContain("script-src-elem 'self'");
     expect(csp).toContain("'sha256-");
     expect(csp).toContain("script-src-attr 'unsafe-hashes'");
-    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.1");
     expect(await page.evaluate(() => (window as unknown as { launchCspViolations: string[] }).launchCspViolations)).toEqual([]);
   }
 });
@@ -162,12 +165,12 @@ test("shared launch assets have a release version and revalidate at every static
     };
     page.on("response", record);
     await page.goto(`${root}/`);
-    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.1");
     page.off("response", record);
     expect(loaded.length).toBeGreaterThan(0);
-    for (const url of loaded) expect(new URL(url).searchParams.get("v"), url).toBe("2026-09-04.2");
-    for (const asset of ["theme.css", "theme.js", "mode.js", "estate.css", "estate.js", "nav.html"]) {
-      const response = await request.get(`${root}/shared/${asset}?v=2026-09-04.2`);
+    for (const url of loaded) expect(new URL(url).searchParams.get("v"), url).toBe("2026-09-27.1");
+    for (const asset of ["theme.css", "theme.js", "mode.js", "estate.css", "estate.js", "module-map.js", "module-map.json", "nav.html"]) {
+      const response = await request.get(`${root}/shared/${asset}?v=2026-09-27.1`);
       expect(response.status(), `${root}: ${asset}`).toBe(200);
       expect(response.headers()["cache-control"]).toBe("public, max-age=0, must-revalidate");
     }

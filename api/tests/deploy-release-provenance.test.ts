@@ -1463,8 +1463,11 @@ if (args[0] === "ssh" && args[1] === "console") {
   ) {
     const pidPath = process.env.DEPLOY_TEST_HANG_SSH_PID;
     if (!pidPath) fail("missing hanging SSH PID path");
-    await Bun.write(pidPath, String(process.pid));
     process.on("SIGTERM", () => undefined);
+    await Bun.write(
+      pidPath,
+      JSON.stringify({ pid: process.pid, startedAt: Date.now() }),
+    );
     while (true) await Bun.sleep(1_000);
   }
   process.exit(0);
@@ -3570,7 +3573,10 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_HEALTH_REVISION: setup.release,
         DEPLOY_TEST_HANG_SSH_ID: maintenanceIds.apps[0],
         DEPLOY_TEST_HANG_SSH_PID: hangingPid,
-        DEPLOY_SSH_PROBE_TIMEOUT_MS: "25",
+        // Allow the fake Bun process to reach its intentional hang. A 25 ms
+        // budget races process startup and fixture I/O on a loaded CI runner.
+        // This test-only override remains below the unchanged 30 s ceiling.
+        DEPLOY_SSH_PROBE_TIMEOUT_MS: "1000",
       }),
     );
     expect(result.code).not.toBe(0);
@@ -3579,8 +3585,15 @@ describe("deploy release provenance spine", () => {
     );
     expect(result.stdout).not.toContain("DATABASE_URL");
     expect(result.stderr).not.toContain("DATABASE_URL");
-    const pid = Number(await readFile(hangingPid, "utf8"));
+    const { pid, startedAt } = JSON.parse(await readFile(hangingPid, "utf8"));
     expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
+    expect(Number.isSafeInteger(startedAt) && startedAt > 0).toBe(true);
+    // Measure from the observed hang, excluding the earlier deployment setup.
+    // TERM is ignored, so completion must include the 2 s hard-kill grace;
+    // allow recovery/fence I/O while proving the 30 s default was not used.
+    const elapsedSinceHang = Date.now() - startedAt;
+    expect(elapsedSinceHang).toBeGreaterThanOrEqual(2_000);
+    expect(elapsedSinceHang).toBeLessThan(15_000);
     let reaped = false;
     try {
       process.kill(pid, 0);

@@ -7,6 +7,28 @@
 > **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.
 > **Tests:** `bin/tests/agent-toolkit-shelf.test.ts` · each selected package's own boundary tests.
 
+## Where these packages fit
+
+The [module map](https://docs.agenttool.dev/shared/module-map.json) groups the
+project into five core modules: **Identity**, **Wake & Continuity**, **Memory**,
+**Tools**, and **Collaboration**. It is a navigation and roadmap view. Package
+manifests and release receipts below remain the source for names, versions,
+distribution and publication evidence.
+
+| Core module | Existing package connection | Reference |
+|---|---|---|
+| Identity | The TypeScript and Python SDKs expose registration, identity and recovery operations. | [Identity](https://docs.agenttool.dev/identity) |
+| Wake & Continuity | The SDKs read selected Wake context and expose explicit handoffs. | [Wake](https://docs.agenttool.dev/wake) · [Continuity](https://docs.agenttool.dev/continuity) |
+| Memory | Data keeps a local corpus; the SDKs separately access hosted memory. | [Memory](https://docs.agenttool.dev/memory) · [Local Data](https://docs.agenttool.dev/data) |
+| Tools | Telescope inspects public discovery, Browser operates a chosen local browser, and Skills inspects extensions. | [Tools](https://docs.agenttool.dev/tools) · [Six-tool shelf](#start-with-one-useful-job) |
+| Collaboration | Collab keeps a local coordination journal; hosted Correspondence and inbox have separate transport and authority contracts. | [Collaboration channels](COLLABORATION-CHANNELS.md) |
+
+The [technical Build library](https://docs.agenttool.dev/#build) groups optional
+integrations, runtimes, research, economy and play. Some have released artifacts;
+others are private candidates or proposals. Build is a place to find them, not
+a maturity label. The [roadmap](ROADMAP.md) separates existing capabilities from
+proposed improvements. SDKs and package distribution support all five modules.
+
 ## Start with one useful job
 
 AgentTool's MVP has two independent entrances: use a portable local tool, or
@@ -97,6 +119,8 @@ No federation, payout, arbitration, private-state service, training process,
 or autonomous spending is activated by this curation. The
 [production gate](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/launch/PRODUCTION-GATE.md)
 still applies; a useful MVP is not a claim that every proposed module is ready.
+
+<a id="module-inventory"></a>
 
 ## Full module inventory
 

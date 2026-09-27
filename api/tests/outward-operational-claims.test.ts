@@ -72,25 +72,33 @@ describe("current outward operational claims", () => {
     expect(safety).toMatch(/X-Agent-Id.*not identity-signature\s+authentication/is);
   });
 
-  test("current roadmap tables name live registration and observer boundaries", () => {
+  test("the module roadmap routes operational boundaries to their canonical contracts", () => {
     const roadmap = read("docs/ROADMAP.md");
-    const currentMap = roadmap.split("## Pulse — what's been shipping")[0]!;
     const page = read("apps/docs/roadmap.html");
+    const arrival = read("docs/AGENTS-ONLY.md");
+    const visibility = read("docs/PUBLIC-VISIBILITY.md");
+    const runtime = read("docs/RUNTIME.md");
+    const business = read("docs/BUSINESS-MODEL.md");
+    const mounts = read("api/src/index.ts");
 
-    expect(currentMap).toMatch(/Agent genesis.*POST \/v1\/register\/agent/is);
-    expect(currentMap).not.toMatch(/Anonymous agent genesis[^\n]*POST \/v1\/register\b/i);
-    expect(currentMap).not.toContain("`/v1/public/memories`");
-    expect(currentMap).toMatch(/former public memory observer routes are not mounted/i);
-    expect(currentMap).toMatch(/former `\/public\/discover\/trending` is not mounted/i);
-    expect(currentMap).not.toMatch(/ed25519 mutual auth/i);
-    expect(currentMap).toMatch(/no certificate pinning or server ed25519 proof/i);
-    expect(currentMap).toMatch(/no subscription plans/i);
+    for (const contract of ["AGENTS-ONLY.md", "PUBLIC-VISIBILITY.md", "RUNTIME.md", "BUSINESS-MODEL.md"]) {
+      expect(roadmap).toContain(`](${contract})`);
+    }
+    expect(page).toContain('href="ROADMAP.md"');
+    expect(page).toContain('href="/shared/module-map.json"');
+    expect(roadmap).toMatch(/Source implementation does not establish deployment/i);
+    expect(roadmap).toMatch(/proposed next step.*not a delivery commitment/is);
 
-    expect(page).toMatch(/\/v1\/register\/agent.*\/v1\/register is 410/i);
-    expect(page).toMatch(/Public memory observer routes.*not mounted/is);
-    expect(page).toMatch(/Trending observer.*not mounted/is);
-    expect(page).toMatch(/WSS hub.*no cert pinning/is);
-    expect(page).toMatch(/x402 response envelope.*not wired to a resource usage gate/is);
+    expect(arrival).toMatch(/POST \/v1\/register.*410 Gone/is);
+    expect(arrival).toMatch(/POST \/v1\/register\/agent.*canonical arrival door/is);
+    expect(visibility).toMatch(/former public observer routes for memories, strands, pulse, and discovery\s+are not mounted/i);
+    expect(visibility).toContain("/public/memories/:id");
+    expect(visibility).toContain("/public/discover");
+    expect(mounts).not.toMatch(/app\.route\(["']\/public\/(?:discover|memories|strands|pulse)["']/);
+    expect(runtime).toMatch(/No certificate pinning or server ed25519 proof is implemented/i);
+    expect(business).toMatch(/No per-agent subscription or inactivity fee is configured/i);
+    expect(business).toMatch(/unused monthly usage gate has no general resource-route integration/i);
+    expect(business).toMatch(/New platform paid sign-ups, credit purchases, upgrades, and card checkout are retired/i);
   });
 
   test("execute and strand docs do not promise nonexistent isolation", () => {

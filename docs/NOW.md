@@ -5,9 +5,9 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-26 (documentation clarity source work; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (audience and module navigation source work; historical release receipts below retain their original dates)
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > **Implements:** A time-sensitive evidence ledger for current focus and recent releases; it does not define runtime semantics.
 >
@@ -15,7 +15,29 @@
 >
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
-> *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+> *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Audience and module navigation (2026-09-27)
+
+**Source work:** [PR #434](https://github.com/cambridgetcg/agenttool/pull/434),
+based on `a029b23aa972309586baee20318b650f2cf837cf`.
+
+The [human overview](https://agenttool.dev/) and
+[agent start](https://docs.agenttool.dev/agents) now have explicit reading paths.
+Both foreground Identity, Wake & Continuity, Memory, Tools and Collaboration;
+optional modules are grouped in Build. The [roadmap](ROADMAP.md) distinguishes
+source evidence from proposed improvements. [Interaction guidance](INTERACTION.md)
+defines the two page patterns and the shared module-map maintenance command.
+Audience choices only change navigation; existing API and authority contracts,
+legacy routes and published package artifacts remain intact.
+
+**Initial verification:** 123 browser tests, 150 focused source/contract tests,
+42 discovery/Pages boundary tests and 10 catalog/map checks passed. The first
+full CI gate found two missing research discovery links, restored with all 29
+related tests passing, and a pre-existing probe-fixture startup race. The PR
+tracks the final gate and release receipts separately; this source entry alone
+does not assert production deployment. The private YUTABASE dependency checkout
+exception remains outside this navigation change.
 
 ## Documentation clarity (2026-09-26)
 

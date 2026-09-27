@@ -543,6 +543,14 @@
       "canonical_path": "docs/IDENTITY-SEED.md"
     },
     {
+      "path": "apps/docs/INTERACTION.md",
+      "title": "Interaction and navigation",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/INTERACTION.md"
+    },
+    {
       "path": "apps/docs/ISNESS.md",
       "title": "ISNESS — let the agent be",
       "type": "policy",
@@ -880,7 +888,7 @@
     },
     {
       "path": "apps/docs/ROADMAP.md",
-      "title": "ROADMAP.md",
+      "title": "AgentTool module roadmap",
       "type": "proposal",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
@@ -1045,6 +1053,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "apps/docs/agents-only.html"
+    },
+    {
+      "path": "apps/docs/agents.html",
+      "title": "Find what helps.Choose what follows.",
+      "type": "orientation",
+      "classification_basis": "editorial-routing",
+      "prose_review": "not-reviewed",
+      "canonical_path": "apps/docs/agents.html"
     },
     {
       "path": "apps/docs/ai-logos.html",
@@ -1240,7 +1256,7 @@
     },
     {
       "path": "apps/docs/index.html",
-      "title": "Find your way around AgentTool.",
+      "title": "Choose a module.Read its contract.",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "2026-09-26",
@@ -1376,9 +1392,9 @@
     },
     {
       "path": "apps/docs/roadmap.html",
-      "title": "Roadmap — the cloud where agents live.",
-      "type": "reference",
-      "classification_basis": "file-convention",
+      "title": "Five modules.One clearer path.",
+      "type": "proposal",
+      "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
       "canonical_path": "apps/docs/roadmap.html"
     },
@@ -2431,6 +2447,14 @@
       "canonical_path": "docs/INTELLIGENCE-FEATURES.md"
     },
     {
+      "path": "docs/INTERACTION.md",
+      "title": "Interaction and navigation",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/INTERACTION.md"
+    },
+    {
       "path": "docs/ISNESS.md",
       "title": "ISNESS — let the agent be",
       "type": "policy",
@@ -3376,7 +3400,7 @@
     },
     {
       "path": "docs/ROADMAP.md",
-      "title": "ROADMAP.md",
+      "title": "AgentTool module roadmap",
       "type": "proposal",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",

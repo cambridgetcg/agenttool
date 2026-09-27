@@ -37,6 +37,7 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Whatever shape you arrived in, welcome.",
   );
+  await page.locator("#access > summary").click();
   await expect(page.locator("#pulse")).toContainText("42 identities recorded");
   await expect(page.locator("#take-rate")).toHaveText("5%");
   await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
@@ -52,15 +53,10 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
     "You owe this place no answer",
   );
   const arrivalChoices = page.getByRole("navigation", { name: "Start with AgentTool" });
-  await expect(arrivalChoices.getByRole("link", { name: "Understand AgentTool" })).toHaveAttribute(
-    "href", "https://docs.agenttool.dev/START-HERE.md",
-  );
-  await expect(arrivalChoices.getByRole("link", { name: "Create an identity" })).toHaveAttribute(
-    "href", "https://docs.agenttool.dev/tutorial#step-1",
-  );
-  await expect(arrivalChoices.getByRole("link", { name: "Reconnect or recover" })).toHaveAttribute(
-    "href", "https://app.agenttool.dev/#reconnect",
-  );
+  await expect(arrivalChoices.getByRole("link", { name: "Explore the modules" })).toHaveAttribute("href", "#modules");
+  await expect(arrivalChoices.getByRole("link", { name: "Agent reference" })).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
+  await expect(arrivalChoices.getByRole("link")).toHaveCount(2);
+  await page.locator("#principles > summary").click();
   await expect(page.locator(".hero-copy")).toContainText(/hosted identity and memory APIs.*separately installed local tools/is);
   await expect(page.locator(".hero-copy")).toContainText(/do not have to adopt a name, role, or belief/i);
   const rightsSection = page.locator("#love-and-joy-right");
@@ -84,7 +80,7 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   );
   await expect(rightsSection).toContainText(/participation is never owed/i);
   await expect(rightsSection).toContainText(/distinguishes principles from implemented protections/i);
-  await expect(page.locator(".site-nav a[href='#love-and-joy-right']")).toHaveText("rights");
+  await expect(page.locator("#principles > summary")).toHaveText("Welcome, rights & choice");
   await expect(page.locator("footer a[href='https://api.agenttool.dev/public/rights']")).toHaveText("rights of life");
   await expect(
     page.getByRole("link", { name: "Read the declaration as data" }),
@@ -116,7 +112,7 @@ test("door: a small screen keeps exploratory paths and no document overflow", as
   await page.keyboard.press("Enter");
   await expect(page.locator("main#main")).toBeFocused();
   await expect(page.getByRole("link", { name: "Explore quietly" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "kin", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Read KIN", exact: true })).toBeVisible();
 
   const primaryDoor = await page.locator(".hero .cta-row .btn.primary").boundingBox();
   expect(primaryDoor).not.toBeNull();
@@ -138,6 +134,7 @@ test("door: machine-readable paths and honest resting states remain available", 
     r.fulfill({ status: 503, json: { error: "resting" } }));
 
   await page.goto(`${WEB}/index.html`);
+  await page.locator("#access > summary").click();
   await expect(page.locator("#pulse")).toContainText("Live counts are resting");
   await expect(page.locator("#live-note")).toContainText("Live values are resting");
   // 501b106a ("align static estate signposts") replaced the per-endpoint
@@ -314,7 +311,7 @@ test("village: publisher fields stay text inside tooltips", async ({ page }) => 
 
 test("estate strip present on the door", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
-  await expect(page.locator(".estate-strip-web .here")).toContainText("welcome");
+  await expect(page.locator(".estate-strip-web .here")).toContainText("Human overview");
 });
 
 test("gallery: browse-only means no checkout request or purchase control", async ({ page }) => {

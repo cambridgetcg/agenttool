@@ -36,70 +36,125 @@ test.beforeEach(async ({ page }) => {
     } }));
 });
 
-test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
+test("search keeps keyboard navigation and returns focus to its trigger", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
-
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-04.2");
-  await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
-  await expect(page.locator(".estate-home-door")).toHaveCount(8);
-  await expect(page.getByRole("heading", { name: "Choose a place to begin." })).toBeVisible();
-
-  const trigger = page.locator(".estate-open");
+  const trigger = page.getByRole("button", { name: "Search pages", exact: true });
   await trigger.click();
-  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
-  await expect(atlas).toBeVisible();
-  await expect(atlas.getByRole("link", { name: /Welcome/ })).toHaveAttribute("aria-current", "page");
-
-  const search = atlas.getByRole("searchbox", { name: "Search or travel" });
+  const atlas = page.getByRole("dialog", { name: "Find a page" });
+  const search = atlas.getByRole("searchbox", { name: "Search pages" });
+  await expect(search).toBeFocused();
   await search.fill("pocket sky");
-  await expect(atlas.getByRole("status")).toHaveText("1 room available.");
-  await expect(atlas.getByRole("link", { name: /Pocket Sky/ })).toBeVisible();
+  const results = atlas.locator(".estate-room-link:visible");
+  const count = await results.count();
+  expect(count).toBeGreaterThan(0);
+  await expect(atlas.getByRole("status")).toHaveText(`${count} ${count === 1 ? "page" : "pages"} available.`);
+  await expect(atlas.locator('a[href="https://agenttool.dev/sky"]')).toBeVisible();
   await search.press("ArrowDown");
-  await expect(atlas.getByRole("link", { name: /Pocket Sky/ })).toBeFocused();
-
+  await expect(results.first()).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(atlas).toBeHidden();
   await expect(trigger).toBeFocused();
-
   await page.keyboard.press("Control+k");
   await expect(atlas).toBeVisible();
 });
 
-test("the shared shell crosses human, docs, and agents-only doors honestly", async ({ page }) => {
+test("each audience has a consistent primary path and an explicit exit", async ({ page }) => {
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
   for (const surface of [
-    { url: `${WEB}/room.html`, room: "ROOM ∞", door: "commons" },
-    { url: `${WEB}/garden.html`, room: "Garden", door: "tend" },
-    { url: `${DOCS}/index.html`, room: "Technical library", door: "build" },
-    { url: `${APP}/index.html`, room: "Start or reconnect", door: "arrive" },
+    { url: `${WEB}/room.html`, audience: "human" },
+    { url: `${WEB}/garden.html`, audience: "human" },
+    { url: `${DOCS}/roadmap.html`, audience: "human" },
+    { url: `${DOCS}/index.html`, audience: "agent" },
+    { url: `${DOCS}/agents.html`, audience: "agent" },
+    { url: `${APP}/index.html`, audience: "agent" },
   ]) {
     await page.goto(surface.url);
-    await expect(page.locator("html")).toHaveAttribute("data-estate-door", surface.door);
-    await expect(page.locator(".estate-location-room")).toHaveText(surface.room);
-    await expect(page.locator(".estate-open")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-audience", surface.audience);
+    const actual = await page.locator(".estate-quick-actions a").evaluateAll((links) =>
+      links.map((a) => ({ title: a.textContent, href: (a as HTMLAnchorElement).href })));
+    const expected = map.audiences[surface.audience];
+    expect(actual).toEqual([...expected.primary, expected.switch]);
+    await expect(page.locator(".estate-nearby, .estate-plan, .estate-home-door")).toHaveCount(0);
   }
-
-  await page.goto(`${WEB}/room.html`);
-  const nearby = page.getByRole("complementary", { name: "Keep your place in the house." });
-  await expect(nearby).toBeVisible();
-  await expect(nearby.getByRole("link", { name: "The Long Context" })).toBeVisible();
-  await expect(nearby).toContainText("does not infer availability");
 });
 
-test("credits and agent registration keep their real place and purpose", async ({ page }) => {
-  await page.goto(`${WEB}/credits.html`);
-  await expect(page.locator("html")).toHaveAttribute("data-estate-door", "build");
-  await expect(page.locator(".estate-location-room")).toHaveText("Credits & gift recovery");
+test("appearance remains independent of audience on the generated navigation", async ({ page }) => {
+  for (const surface of [{ url: `${WEB}/index.html`, audience: "human" }, { url: `${DOCS}/memory.html`, audience: "agent" }]) {
+    await page.goto(surface.url);
+    const root = page.locator("html");
+    const before = await root.getAttribute("data-mode");
+    const toggle = page.locator("#tg");
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    const after = before === "night" ? "dawn" : "night";
+    await expect(root).toHaveAttribute("data-mode", after);
+    await expect(root).toHaveAttribute("data-audience", surface.audience);
+    await expect(toggle).toHaveAttribute("aria-pressed", String(after === "night"));
+    await page.reload();
+    await expect(root).toHaveAttribute("data-mode", after);
+  }
+});
 
+test("search defaults to its audience and includes the other path only by choice", async ({ page }) => {
+  await page.goto(`${WEB}/index.html`);
   await page.locator(".estate-open").click();
-  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
-  await expect(atlas.getByRole("link", { name: /Credits & gift recovery/ })).toHaveAttribute("aria-current", "page");
-  await expect(atlas.getByRole("link", { name: /Agent registration/ })).toContainText("What agent-led bootstrap creates");
+  const atlas = page.getByRole("dialog", { name: "Find a page" });
+  await atlas.getByRole("searchbox").fill("errors");
+  const technical = atlas.locator('a[href="https://docs.agenttool.dev/errors"]');
+  await expect(technical).toBeHidden();
+  await atlas.getByRole("checkbox", { name: "Include agent references" }).check();
+  await expect(technical).toBeVisible();
+  await expect(technical).toContainText("Agent reference");
+  await page.keyboard.press("Escape");
+  await page.locator(".estate-open").click();
+  await expect(atlas.getByRole("checkbox")).not.toBeChecked();
+});
 
-  await page.goto(`${WEB}/registry.html`);
-  await expect(page.locator(".estate-location-room")).toHaveText("Agent registration");
+test("search preserves recovery vocabulary and HTTP error codes", async ({ page }) => {
+  await page.goto(`${DOCS}/agents.html`);
   await page.locator(".estate-open").click();
-  await expect(page.getByRole("dialog", { name: "Where do you want to go?" })
-    .getByRole("link", { name: /Agent registration/ })).toHaveAttribute("aria-current", "page");
+  const dialog = page.getByRole("dialog", { name: "Find a page" });
+  for (const query of ["API key", "recovery", "seed"]) {
+    await dialog.getByRole("searchbox").fill(query);
+    await expect(dialog.getByRole("link", { name: /Start or reconnect/ })).toBeVisible();
+  }
+  await dialog.getByRole("searchbox").fill("429");
+  await expect(dialog.getByRole("link", { name: /Errors and auth/ })).toBeVisible();
+});
+
+test("each named Build entry remains searchable when several share a destination", async ({ page }) => {
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
+  for (const audience of ["human", "agent"] as const) {
+    await page.goto(audience === "human" ? `${WEB}/index.html` : `${DOCS}/agents.html`);
+    await page.locator(".estate-open").click();
+    const dialog = page.getByRole("dialog", { name: "Find a page" });
+    for (const group of map.buildGroups) {
+      for (const item of group.items) {
+        await dialog.getByRole("searchbox").fill(item.title);
+        const result = dialog.locator(`a[href="${item[audience]}"]`);
+        await expect(result).toBeVisible();
+        await expect(result).toContainText(item.title);
+        await expect(result).toContainText(group.title);
+        await expect(result).toContainText(item.status);
+      }
+    }
+    for (const query of ["Return", "Thread", "ADDS", "Alchemy", "Scriptwriter"]) {
+      await dialog.getByRole("searchbox").fill(query);
+      const result = dialog.locator('a[href="https://docs.agenttool.dev/packages#module-inventory"]');
+      await expect(result).toHaveCount(1);
+      await expect(result).toBeVisible();
+      await expect(result).toContainText(query);
+    }
+  }
+});
+
+test("older credit and registration pages remain findable with their real destinations", async ({ page }) => {
+  for (const path of ["credits", "registry"]) {
+    await page.goto(`${WEB}/${path}.html`);
+    await page.locator(".estate-open").click();
+    const atlas = page.getByRole("dialog", { name: "Find a page" });
+    await expect(atlas.locator(`a[href="https://agenttool.dev/${path}"]`)).toHaveAttribute("aria-current", "page");
+  }
 });
 
 test("the room shortcut never hijacks an editable field", async ({ page }) => {
@@ -112,44 +167,58 @@ test("the room shortcut never hijacks an editable field", async ({ page }) => {
   await expect(page.locator("#agenttool-estate-atlas")).toHaveCount(0);
 });
 
-test("the compact shell and atlas do not overflow at 320 CSS pixels", async ({ page }) => {
+test("Build and the audience exit stay visible at 320 CSS pixels", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto(`${WEB}/index.html`);
-
-  const nav = await page.locator("nav.site-nav").boundingBox();
-  expect(nav).not.toBeNull();
-  expect(nav!.height).toBeLessThan(96);
-
-  const primaryDoor = await page.locator(".hero .cta-row .btn.primary").boundingBox();
-  expect(primaryDoor).not.toBeNull();
-  expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
-
-  await page.locator(".estate-open").click();
-  await expect(page.getByRole("dialog", { name: "Where do you want to go?" })).toBeVisible();
-
-  const widths = await page.evaluate(() => ({
-    viewport: document.documentElement.clientWidth,
-    document: document.documentElement.scrollWidth,
-  }));
-  expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+  for (const url of [`${WEB}/index.html`, `${DOCS}/memory.html`, `${APP}/index.html`]) {
+    await page.goto(url);
+    await expect(page.locator(".estate-quick-build")).toBeVisible();
+    await expect(page.locator(".estate-audience-exit")).toBeVisible();
+    const nav = await page.locator("nav.site-nav, nav.topnav").boundingBox();
+    expect(nav!.height).toBeLessThanOrEqual(104);
+    await page.locator(".estate-open").click();
+    await expect(page.getByRole("dialog", { name: "Find a page" })).toBeVisible();
+    const widths = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
+    expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+  }
 });
 
-test("the static room map remains usable without JavaScript", async ({ browser }) => {
+test("static navigation and core modules remain useful without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto(`${WEB}/index.html`);
-
-  await expect(page.locator(".estate-strip-web")).toBeVisible();
-  await expect(page.locator(".site-nav .links")).toBeVisible();
+  await expect(page.locator(".site-nav")).toBeVisible();
   await expect(page.locator("#agenttool-estate-atlas")).toHaveCount(0);
-  await expect(page.locator(".hero").getByRole("link", { name: "Step onto the porch", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "the quiet door map below" })).toBeVisible();
-  await expect(page.locator("#estate .noscript-note")).toContainText("Core threshold paths remain listed");
-  await expect(page.locator("#estate .noscript-note")).not.toContainText("every static doorway");
+  await expect(page.locator("[data-core-module]")).toHaveCount(5);
+  await expect(page.locator('.site-nav a[href="https://agenttool.dev/build"]')).toBeVisible();
+  await expect(page.locator('.site-nav a[href="https://docs.agenttool.dev/agents"]')).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 800 });
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
+  for (const surface of [
+    { url: `${WEB}/index.html`, audience: "human" },
+    { url: `${DOCS}/agents.html`, audience: "agent" },
+    { url: `${DOCS}/memory.html`, audience: "agent" },
+    { url: `${APP}/index.html`, audience: "agent" },
+  ]) {
+    await page.goto(surface.url);
+    const sizes = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    expect(sizes[0], `${surface.url}: no-JS content must fit a narrow viewport`).toBeLessThanOrEqual(sizes[1]);
+    const nav = page.locator("nav.site-nav, nav.topnav");
+    const links = map.audiences[surface.audience];
+    for (const item of [...links.primary, links.switch]) {
+      const a = nav.getByRole("link", { name: item.title, exact: true });
+      await expect(a).toBeVisible();
+      const box = await a.boundingBox();
+      expect(box, `${surface.url}: ${item.title} needs a visible box`).not.toBeNull();
+      expect(box!.x, `${item.title}: left edge`).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, `${item.title}: right edge`).toBeLessThanOrEqual(320);
+      expect(box!.y, `${item.title}: top edge`).toBeGreaterThanOrEqual(0);
+      expect(box!.y + box!.height, `${item.title}: bottom edge`).toBeLessThanOrEqual(800);
+    }
+  }
   await context.close();
 });
 
-test("the JSON welcome names the same eight navigation doors", async ({ page }) => {
+test("the older machine route inventory remains compatible behind the focused navigation", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
   const browserDoors = await page.evaluate(() =>
     Object.fromEntries((window as typeof window & {
@@ -243,21 +312,18 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
   }
 });
 
-test("the library shelves every docs page under its door, current door open", async ({ page }) => {
+test("the library starts with the five core modules and keeps optional references under Build", async ({ page }) => {
   await page.goto(`${DOCS}/memory.html`);
-  await expect(page.locator("html")).toHaveAttribute("data-estate-door", "build");
-  await expect(page.locator(".estate-location-room")).toHaveText("Memory");
   const library = page.locator("aside.sidebar .estate-library");
   await expect(library).toBeVisible();
-  // The hand-copied list is hidden, not removed — it stays the no-JS fallback.
   await expect(page.locator("aside.sidebar [data-estate-legacy]").first()).toBeHidden();
-  await expect(library.locator(".estate-library-door:not(.estate-library-more)")).toHaveCount(8);
-  await expect(library.locator(".estate-library-more")).toHaveCount(1);
-  await expect(library.locator('.estate-library-door[data-door-id="build"]')).toHaveAttribute("open", "");
-  await expect(library.locator('.estate-library-door[data-door-id="rest"]')).not.toHaveAttribute("open", "");
-  await expect(library.locator('a[href="https://docs.agenttool.dev/memory"]')).toHaveAttribute("aria-current", "page");
-  await expect(library.locator(".estate-library-shelf", { hasText: "Contracts" })).toBeVisible();
-  await expect(library.locator(".estate-library-link.is-superseded")).toHaveCount(3);
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
+  expect(await library.locator(".estate-library-core a").allTextContents()).toEqual(map.modules.map((m: { title: string }) => m.title));
+  await expect(library.locator('.estate-library-core a[href="https://docs.agenttool.dev/memory"]')).toHaveAttribute("aria-current", "page");
+  await expect(library.locator(".estate-library-build")).not.toHaveAttribute("open", "");
+  await expect(library.locator(".estate-plan, .estate-library-door")).toHaveCount(0);
+  await library.getByText("Build and references", { exact: true }).click();
+  await expect(library.locator('.estate-library-build a[href="https://docs.agenttool.dev/vault"]')).toBeVisible();
 });
 
 test("no destination the hand-copied sidebar linked is lost on any docs page", async ({ page }) => {
@@ -275,7 +341,7 @@ test("no destination the hand-copied sidebar linked is lost on any docs page", a
         const url = new URL(href, location.href);
         let p = url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
         if (p.length > 1) p = p.replace(/\/$/, "");
-        return url.hash && url.pathname === location.pathname ? "#" + url.hash : hostFor(url.hostname, url.port) + (p || "/");
+        return hostFor(url.hostname, url.port) + (p || "/") + url.hash;
       };
       const generated = new Set(
         Array.from(document.querySelectorAll("aside.sidebar .estate-library a[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
@@ -288,51 +354,21 @@ test("no destination the hand-copied sidebar linked is lost on any docs page", a
   }
 });
 
-test("the plan's rooms are controls inside a group, not parts of an image", async ({ page }) => {
-  await page.goto(`${DOCS}/memory.html`);
-  const plan = page.locator(".estate-plan-mini svg");
-  await expect(plan).toHaveAttribute("role", "group");
-  await expect(plan.getByRole("button", { name: /Open Rest/ })).toBeVisible();
-  await expect(plan.getByRole("button", { name: /You are in Build/ })).toBeVisible();
-});
-
-test("the threshold plan returns focus to the room that opened the atlas", async ({ page }) => {
+test("the human overview retains five source-backed modules without a mixed room grid", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
-  const room = page.locator('.estate-plan-home .estate-plan-room[data-door="rest"]');
-  await room.focus();
-  await page.keyboard.press("Enter");
-  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
-  await expect(atlas).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(atlas).toBeHidden();
-  await expect(room).toBeFocused();
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
+  const cards = page.locator("[data-core-module]");
+  expect(await cards.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-core-module")))).toEqual(map.modules.map((m: { id: string }) => m.id));
+  await expect(page.locator(".estate-home-door, .estate-plan-home, .estate-nearby")).toHaveCount(0);
 });
 
-test("the floor plan lights the room you are in, in the sidebar and the atlas", async ({ page }) => {
-  await page.goto(`${DOCS}/memory.html`);
-  const mini = page.locator(".estate-plan-mini");
-  await expect(mini).toHaveAttribute("data-active-door", "build");
-  await expect(mini.locator(".estate-plan-room.is-here")).toHaveAttribute("data-door", "build");
-  await expect(mini.locator(".estate-plan-room")).toHaveCount(8);
-  await expect(mini.locator(".estate-plan-lamp")).toHaveCount(1);
-  await expect(mini.locator(".estate-plan-where")).toContainText("Build");
-  // A room on the plan is a door into the library, not an authority.
-  await mini.locator('.estate-plan-room[data-door="rest"]').click();
-  await expect(page.locator('.estate-library-door[data-door-id="rest"]')).toHaveAttribute("open", "");
-
-  await page.keyboard.press("Meta+K");
-  const atlas = page.getByRole("dialog", { name: "Where do you want to go?" });
-  await expect(atlas).toBeVisible();
-  await expect(atlas.locator(".estate-plan-atlas .estate-plan-room.is-here")).toHaveAttribute("data-door", "build");
-  await expect(atlas.getByRole("link", { name: /Ritonavir/ })).toBeVisible();
-});
-
-test("the threshold shows the plan above the eight doors", async ({ page }) => {
+test("a failed module-map load keeps static cards and audience navigation usable", async ({ page }) => {
+  await page.route(/\/shared\/module-map\.js/, (route) => route.abort());
   await page.goto(`${WEB}/index.html`);
-  await expect(page.locator(".estate-home-door")).toHaveCount(8);
-  const plan = page.locator(".estate-plan-home");
-  await expect(plan).toHaveAttribute("data-active-door", "arrive");
-  await expect(plan.locator(".estate-plan-room.is-here .estate-plan-label")).toHaveText("ARRIVE");
+  await expect(page.locator(".estate-quick-build")).toBeVisible();
+  await expect(page.locator("[data-core-module]")).toHaveCount(5);
+  await page.locator(".estate-open").click();
+  await expect(page.getByRole("dialog", { name: "Find a page" })).toBeVisible();
 });
 
 test("the geometry lessons keep their static strip: no loader, no enhanced shape", async ({ page }) => {
@@ -408,7 +444,7 @@ test("the estate arrives without moving the bar", async ({ page }) => {
 });
 
 test("every page that runs the shell shows the same one bar — never a lone pill", async ({ page }) => {
-  // This single test currently visits 77 pages; give the aggregate sweep 90 s
+  // This aggregate visits every web and docs page; allow 90 s for navigation
   // while retaining the ordinary per-assertion timeout and every page check.
   test.slow();
   const quiet = new Set(["apps/docs/love-bomb.html"]);
@@ -433,7 +469,7 @@ test("every page that runs the shell shows the same one bar — never a lone pil
   }
 });
 
-test("a bare page reserves the bar's room even when the estate stylesheet is slow", async ({ page }) => {
+test("a self-styled page reserves navigation space even when the stylesheet is slow", async ({ page }) => {
   // Codex P2 on #408: a script-inserted stylesheet is not render-blocking,
   // so on a cold load the page could paint and then drop by the bar's
   // height. The bare pages carry a parser-inserted <link> for it now.
@@ -445,7 +481,7 @@ test("a bare page reserves the bar's room even when the estate stylesheet is slo
     (window as unknown as { __tops: number[] }).__tops = [];
     const sample = () => {
       const first = Array.from(document.body.children).find(
-        (el) => !el.matches("nav.estate-bar, script, style, link") && (el as HTMLElement).offsetHeight > 0,
+        (el) => !el.matches("nav.estate-bar, nav.topnav, nav.site-nav, script, style, link") && (el as HTMLElement).offsetHeight > 0,
       );
       if (first) (window as unknown as { __tops: number[] }).__tops.push(Math.round(first.getBoundingClientRect().top + window.scrollY));
     };

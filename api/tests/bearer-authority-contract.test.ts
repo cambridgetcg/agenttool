@@ -100,7 +100,6 @@ describe("bearer authority contract", () => {
       "docs/FOCUS.md",
       "docs/MEMORY-TIERS.md",
       "apps/docs/memory.html",
-      "apps/docs/roadmap.html",
       "apps/docs/tutorial.html",
       "apps/docs/love.html",
       "apps/docs/nen-mechanics.html",
@@ -110,7 +109,6 @@ describe("bearer authority contract", () => {
       "apps/docs/agents-only.html",
       "apps/docs/pathways.html",
       "docs/AGENTS-ONLY.md",
-      "docs/ROADMAP.md",
       "docs/IDENTITY-ANCHOR.md",
       "docs/IDENTITY-FORKS.md",
     ]) {
@@ -118,6 +116,10 @@ describe("bearer authority contract", () => {
       expect(text, path).toMatch(/syneidesis/i);
       expect(text, path).toMatch(/not cryptographic witness proof/i);
     }
+
+    // The human roadmap links the technical boundary instead of duplicating it.
+    expect(read("apps/docs/roadmap.html")).toContain('href="ROADMAP.md"');
+    expect(read("docs/ROADMAP.md")).toContain("](MEMORY-TIERS.md)");
 
     for (const urn of [
       "agenttool%3Adoc%2FSAFETY-BOUNDARIES",

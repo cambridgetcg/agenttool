@@ -1,5 +1,10 @@
 # bin/
 
+`python3 bin/module-map.py --write` projects the public module map into its
+browser data asset and the static human core/Build cards; `--check` detects
+drift. Edit `apps/_shared/module-map.json` first. This editorial map points to
+operation contracts and package receipts; it does not replace them.
+
 `python3 bin/docs-catalog.py --write` refreshes the repository-only document
 index; `--check` detects coverage or classification drift. See
 [document labels](../docs/DOCUMENTATION.md).

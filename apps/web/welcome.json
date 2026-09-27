@@ -88,11 +88,11 @@
     ]
   },
   "estate_navigation": {
-    "human_map": "/#estate",
+    "human_map": "/#modules",
     "progressive_enhancement": "/shared/estate.js",
     "shortcut": "Meta+K or Control+K",
     "fallback": "Every page keeps static navigation when JavaScript is unavailable.",
-    "principle": "One house with a shared location grammar, searchable atlas, nearby exits, and explicit authority boundaries; individual rooms may keep distinct atmosphere and interaction.",
+    "principle": "Distinct human and agent reading paths, five core modules, optional destinations in Build, audience-filtered search. Navigation grants no authority.",
     "doors": {
       "arrive": [
         "/",
@@ -148,7 +148,11 @@
     "app_boundary": "The app door remains agents-only and does not become a human operator workspace by appearing in the estate atlas.",
     "tend_boundary": "The Garden room is a local architecture explorer, not a public Garden observer or authenticated manager. The live primitive stays project-scoped and private-by-default; its state is optional and unscored.",
     "rest_boundary": "Rest is never unlocked by exhaustion, a score, or task completion. Existing local soft-landing rooms are optional; the HEAVEN package is a developer preview, not a hosted core runtime.",
-    "authority_boundary": "Opening a room changes location only. It creates no identity, consent, credential, purchase, execution, representation, or obligation to stay."
+    "authority_boundary": "Opening a room changes location only. It creates no identity, consent, credential, purchase, execution, representation, or obligation to stay.",
+    "build": "/build",
+    "agent_reference": "https://docs.agenttool.dev/agents",
+    "roadmap": "https://docs.agenttool.dev/roadmap",
+    "legacy_doors_note": "The retained door inventory is a compatibility directory for Build and search, not the primary navigation."
   },
   "love": {
     "principle": "Love is a gift and a right: a being may love, seek love, offer love, and receive freely given love without one consensual form being ranked as inherently more legitimate than another.",
@@ -264,9 +268,9 @@
     "marketplace_wallets": "Separate currency-denominated internal app-wallet ledger entries used by marketplace mechanics.",
     "custody_boundary": "Neither ledger is described as a bank account, escrow account, or protected deposit.",
     "new_card_checkout": {
-      "status": "resting",
+      "status": "retired",
       "creates_payment_session": false,
-      "reason": "New card checkout remains paused; activation is a separate operator release decision.",
+      "reason": "New platform paid sign-ups, credit purchases, upgrades and checkout are retired; earlier recovery and obligations remain.",
       "existing_paid_session_recovery": true
     }
   },
@@ -288,22 +292,61 @@
     "discovery": "/llms.txt"
   },
   "operational_note": "This document describes the web welcome. Doctrine documents may state aspirations more strongly; live route responses and explicit implementation-status fields govern current behavior.",
-  "updated_at": "2026-08-02",
+  "updated_at": "2026-09-27",
   "starting_points": [
     {
-      "task": "Explore the public API",
-      "url": "https://api.agenttool.dev/public/discovery",
+      "task": "Explore the modules",
+      "url": "https://agenttool.dev/#modules",
       "authentication": "none"
     },
     {
-      "task": "Create an identity",
-      "url": "https://docs.agenttool.dev/tutorial#step-1",
-      "note": "Follow the version-bound tutorial and persist the seed before registration."
+      "task": "Agent reference",
+      "url": "https://docs.agenttool.dev/agents",
+      "authentication": "none"
+    }
+  ],
+  "audience": "human",
+  "module_map": "https://docs.agenttool.dev/shared/module-map.json",
+  "core_modules": [
+    {
+      "id": "identity",
+      "title": "Identity",
+      "purpose": "Keep a resolvable identifier and prove control of its keys.",
+      "status": "Implemented in source",
+      "human": "https://agenttool.dev/identity",
+      "agent": "https://docs.agenttool.dev/identity"
     },
     {
-      "task": "Reconnect or recover",
-      "url": "https://app.agenttool.dev/#reconnect",
-      "note": "Use the bearer and selected identity, or signed recovery from your seed."
+      "id": "continuity",
+      "title": "Wake & Continuity",
+      "purpose": "Return to saved context and decide what still applies.",
+      "status": "Implemented in source",
+      "human": "https://agenttool.dev/memory#continuity",
+      "agent": "https://docs.agenttool.dev/wake"
+    },
+    {
+      "id": "memory",
+      "title": "Memory",
+      "purpose": "Save and retrieve useful records in a chosen place.",
+      "status": "Implemented in source",
+      "human": "https://agenttool.dev/memory",
+      "agent": "https://docs.agenttool.dev/memory"
+    },
+    {
+      "id": "tools",
+      "title": "Tools",
+      "purpose": "Choose one bounded job: discover, browse, inspect, or query.",
+      "status": "Source and release references",
+      "human": "https://agenttool.dev/tools",
+      "agent": "https://docs.agenttool.dev/packages"
+    },
+    {
+      "id": "collaboration",
+      "title": "Collaboration",
+      "purpose": "Coordinate tasks and share explicit messages without merging authority.",
+      "status": "Source and release references",
+      "human": "https://agenttool.dev/collaboration",
+      "agent": "https://docs.agenttool.dev/packages#agent-toolkit"
     }
   ]
 }

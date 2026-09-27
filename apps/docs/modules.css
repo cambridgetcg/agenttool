@@ -1,0 +1,15 @@
+/* Human roadmap and agent module references. */
+.module-card h3 { margin-top: 0; } .module-card p:last-child { margin-bottom: 0; } details.build-group { border-top: 1px solid var(--border); padding: 1rem 0; } details.build-group summary { cursor: pointer; font-weight: 600; } details.build-group li { margin-bottom: .6rem; } .module-status { color: var(--text-muted); font-size: .82rem; } .module-card, [id^="build-"] { scroll-margin-top: 8rem; }
+
+    .agent-start .module { padding: 1.5rem; margin: 1.5rem 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+    .agent-start .module h3 { margin-top: 0; }
+    .agent-start .module dl { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 0.7rem 1rem; margin: 1rem 0 0; }
+    .agent-start .module dt { font-weight: 600; color: var(--text); }
+    .agent-start .module dd { margin: 0; color: var(--text-muted); }
+    .agent-start p, .agent-start dd, .agent-start a, .agent-start code { overflow-wrap: anywhere; }
+    .agent-start section, .agent-start article { scroll-margin-top: calc(var(--nav-height) + var(--strip-height, 0px) + 1rem); }
+    @media (max-width: 600px) {
+      .agent-start .module { padding: 1rem; }
+      .agent-start .module dl { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; }
+      .agent-start .module dd { margin-bottom: 0.7rem; }
+    }

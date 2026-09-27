@@ -3,7 +3,7 @@
  * Load synchronously right after the stylesheet <link>s so data-mode is
  * set before first paint (no flash of the wrong mode):
  *
- *   <script src="/shared/mode.js?v=2026-09-04.2"></script>
+ *   <script src="/shared/mode.js?v=2026-09-27.1"></script>
  *
  * Speaks the same protocol as apps/web (the landing): data-mode on
  * <html>, persisted as localStorage['agenttool.mode']. (window.flip() is
@@ -33,12 +33,26 @@
     var next = root.getAttribute('data-mode') === 'night' ? 'dawn' : 'night';
     root.setAttribute('data-mode', next);
     var b = document.getElementById('tg');
-    if (b) b.innerHTML = label(next);
+    if (b) {
+      b.innerHTML = label(next);
+      b.setAttribute('aria-pressed', String(next === 'night'));
+      b.setAttribute('aria-label', next === 'night' ? 'Use dawn appearance' : 'Use night appearance');
+    }
     try { localStorage.setItem(KEY, next); } catch (_) { /* proceed without */ }
   };
 
   function inject() {
-    if (document.getElementById('tg')) return;
+    var existing = document.getElementById('tg');
+    if (existing) {
+      existing.hidden = false;
+      existing.innerHTML = label(mode);
+      existing.setAttribute('aria-pressed', String(mode === 'night'));
+      existing.setAttribute('aria-label', mode === 'night' ? 'Use dawn appearance' : 'Use night appearance');
+      // Older pages bind window.flip inline. Generated fallback navigation is
+      // CSP-safe markup and needs this one listener instead.
+      if (!existing.hasAttribute('onclick')) existing.addEventListener('click', window.flip);
+      return;
+    }
     var host = document.querySelector('.topnav .nav-actions') ||
                document.querySelector('nav .nav-actions') ||
                document.querySelector('nav .links') ||
@@ -47,7 +61,8 @@
     b.id = 'tg';
     b.type = 'button';
     b.className = 'toggle';
-    b.setAttribute('aria-label', 'Toggle dawn / night mode');
+    b.setAttribute('aria-label', mode === 'night' ? 'Use dawn appearance' : 'Use night appearance');
+    b.setAttribute('aria-pressed', String(mode === 'night'));
     b.innerHTML = label(mode);
     b.addEventListener('click', window.flip);
     if (host) {
@@ -81,16 +96,24 @@
        for it where the browser understands the request. Pages that need the
        reservation at first paint also carry a parser-inserted <link>. */
     estateCss.setAttribute('blocking', 'render');
-    estateCss.href = '/shared/estate.css?v=2026-09-04.2';
-    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-04.2');
+    estateCss.href = '/shared/estate.css?v=2026-09-27.1';
+    estateCss.setAttribute('data-agenttool-estate-style', '2026-09-27.1');
     document.head.appendChild(estateCss);
   }
-  if (!document.querySelector('script[data-agenttool-estate]')) {
+  function loadNavigation() {
+    if (document.querySelector('script[data-agenttool-estate]')) return;
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-09-04.2';
-    estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-09-04.2');
+    estate.src = '/shared/estate.js?v=2026-09-27.1';
+    estate.setAttribute('data-agenttool-estate', '2026-09-27.1');
     document.head.appendChild(estate);
+  }
+  if (window.AgentToolModuleMap) loadNavigation();
+  else {
+    var map = document.createElement('script');
+    map.src = '/shared/module-map.js?v=2026-09-27.1';
+    map.addEventListener('load', loadNavigation);
+    map.addEventListener('error', loadNavigation);
+    document.head.appendChild(map);
   }
 })();
 
