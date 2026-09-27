@@ -8,7 +8,7 @@
   "engines": { "node": ">=22" },
   "exports": { ".": "./src/core.mjs" },
   "bin": { "agenttool-local-starter": "./src/cli.mjs" },
-  "files": ["src", "README.md", "CLAUDE.md"],
+  "files": ["src", "skills", "README.md", "CLAUDE.md"],
   "scripts": {
     "test": "node --test",
     "ci": "node --test"

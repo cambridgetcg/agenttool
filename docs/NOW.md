@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (narrow local-context credentials; historical release receipts below retain their original dates)
+> Updated: 2026-09-28 (local context delivery; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,36 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Local context delivery for Codex and Claude Code (2026-09-28)
+
+**Source candidate:** `feat/local-context-delivery`, based on `b68a01a4`.
+Private source, host installation and package publication remain separate.
+
+`packages/local-starter` now emits one reviewable delivery plan: portable
+skill/binding, optional local MCP configuration and direct SessionStart hook.
+CLI-only mode remains dependency-free. The sibling `local-starter-mcp` uses
+the repository's pinned SDK/Zod versions and one host-selected root, with
+read-only defaults and optional handoff/memory writes. Arrival calls the CLI
+directly because MCP startup readiness cannot be assumed. Memory uses the
+existing handoff write safeguards, with its own fixed file/lock; saves never
+enable selection. No automatic transcript capture or retention is introduced.
+
+**Focused evidence:** 100 starter tests, 16 stdio MCP tests and 13 document/
+discovery checks pass. The complete `preflight packages` gate also passes with
+Bun 1.3.5 / Node 24.18.1. The skill passes structural validation. Codex 0.157.1
+on macOS arm64 / Node 24.18.1 passed nine native app-server checks: skill
+discovery, MCP read/save/conflict, a fresh host read, disabled-memory omission
+and read-only refusal. Claude Code 2.1.282 executed the generated startup hook,
+validated JSON and observed synthetic additional context with no network.
+Neither probe sent a model request. Claude's native skill-validator result
+was inconclusive: it ignored a malformed negative control as well.
+
+Automatic resume/compact delivery, Codex native hooks and the expanded OS CI
+matrix remain unverified. Revision history, backup/restore, search and hosted
+synchronization remain separate roadmap work. See the
+[delivery map](LOCAL-CORE.md#codex-and-claude-code-delivery) and
+[package guide](../packages/local-starter/README.md) for exact setup and limits.
 
 ## Narrow local-context credentials (2026-09-27)
 

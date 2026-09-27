@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readSync } from 'node:fs';
-import { initStarter, renderStarter, inspectStarter, writeHandoff, formatMarkdown, StarterError } from './core.mjs';
+import { initStarter, renderStarter, inspectStarter, writeHandoff, writeMemory, formatMarkdown, StarterError } from './core.mjs';
 import { AdapterError, createAdapter, formatHook } from './adapters.mjs';
+import { createDelivery } from './delivery.mjs';
 
 const MAX_STDOUT_BYTES = 131072;
 
@@ -11,6 +12,8 @@ const HELP = `AgentTool local starter (Node >=22; files only)
   status  --dir <directory>
   render  --dir <directory> [--format markdown|json]
   handoff --dir <directory> --expect <sha256>  < handoff.txt
+  memory  --dir <directory> --expect <sha256>  < memories.txt
+  delivery --dir <directory> --harness codex|claude-code [--transport mcp|cli] [--write none|handoff|memory|both]
   adapter --dir <directory> --harness generic|codex|claude-code|cursor
   hook    --dir <directory> --harness codex|claude-code|cursor
 
@@ -18,7 +21,8 @@ Run with: node src/cli.mjs <command> [options]
 Adapters print proposed per-project fragments; they never install settings.
 Native Windows Codex/Cursor hooks are unsupported; use --harness generic.
 Hook load errors return no context and exit 0. Other errors are nonzero.
-Handoff reads at most 16384 UTF-8 bytes from stdin and requires the current hash.
+Handoff/memory replacements read at most 16384 UTF-8 bytes and require the current hash.
+Delivery prints a skill, MCP and hook plan; it never installs or enables them.
 All stdout, including JSON escaping and framing, is limited to 131072 bytes.
 No network, credential discovery, host registration, or model calls.
 `;
@@ -35,6 +39,8 @@ const OPTIONS = {
   status: ['dir'],
   render: ['dir', 'format'],
   handoff: ['dir', 'expect'],
+  memory: ['dir', 'expect'],
+  delivery: ['dir', 'harness', 'write', 'transport'],
   adapter: ['dir', 'harness'],
   hook: ['dir', 'harness'],
 };
@@ -57,7 +63,10 @@ function parse(argv) {
   }
   if (!options.dir) throw new CliError('MISSING_DIRECTORY');
   if (command === 'render' && options.format && !['markdown', 'json'].includes(options.format)) throw new CliError('INVALID_FORMAT');
-  if (command === 'handoff' && !/^[a-f0-9]{64}$/u.test(options.expect ?? '')) throw new CliError('INVALID_EXPECTED_HASH');
+  if (['handoff', 'memory'].includes(command) && !/^[a-f0-9]{64}$/u.test(options.expect ?? '')) throw new CliError('INVALID_EXPECTED_HASH');
+  if (command === 'delivery' && !['codex', 'claude-code'].includes(options.harness)) throw new CliError('INVALID_HARNESS');
+  if (command === 'delivery' && options.write && !['none', 'handoff', 'memory', 'both'].includes(options.write)) throw new CliError('INVALID_WRITE_MODE');
+  if (command === 'delivery' && options.transport && !['mcp', 'cli'].includes(options.transport)) throw new CliError('INVALID_TRANSPORT');
   if (command === 'adapter' || command === 'hook') {
     const harnesses = command === 'adapter' ? ['generic', 'codex', 'claude-code', 'cursor'] : ['codex', 'claude-code', 'cursor'];
     if (!harnesses.includes(options.harness)) throw new CliError('INVALID_HARNESS');
@@ -115,7 +124,12 @@ function run(argv) {
       const bundle = renderStarter(options.dir);
       if (options.format === 'json') printJson(bundle);
       else writeStdout(formatMarkdown(bundle).replace(/\n?$/u, '\n'));
-    } else if (command === 'handoff') printJson(writeHandoff(options.dir, readHandoff(), options.expect));
+    } else if (command === 'handoff' || command === 'memory') {
+      printJson((command === 'handoff' ? writeHandoff : writeMemory)(options.dir, readHandoff(), options.expect));
+    } else if (command === 'delivery') {
+      inspectStarter(options.dir);
+      printJson(createDelivery({ harness: options.harness, dir: options.dir, write: options.write, transport: options.transport }));
+    }
     else if (command === 'adapter') {
       inspectStarter(options.dir);
       printJson(createAdapter({ harness: options.harness, dir: options.dir }));

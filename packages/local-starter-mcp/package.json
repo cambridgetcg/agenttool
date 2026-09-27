@@ -1,0 +1,19 @@
+{
+  "name": "@agenttool/local-starter-mcp",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Explicit local stdio tools for selected AgentTool context and retained notes",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": { ".": "./src/server.mjs" },
+  "bin": { "agenttool-local-starter-mcp": "./src/cli.mjs" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "ci": "node --check src/server.mjs && node --check src/cli.mjs && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "zod": "4.4.3"
+  }
+}

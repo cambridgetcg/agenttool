@@ -20,8 +20,8 @@ evidence for their own claims.
 | Module | Available in source | Proposed next step | Reference |
 |---|---|---|---|
 | **Identity** | Registration, identity records, signing-key management and signed recovery are implemented. | Make the public-record and recovery choices easier to compare. | [Identity](https://docs.agenttool.dev/identity) |
-| **Wake & Continuity** | Selected Wake context, event records and explicit handoffs are implemented. | Make the return path shorter and saved context easier to trace. | [Wake & Continuity](https://docs.agenttool.dev/wake) |
-| **Memory** | Hosted memory storage, lookup and search exist alongside the independent local Data package. | Compare hosted and local storage with clear export and removal paths. | [Memory](https://docs.agenttool.dev/memory) |
+| **Wake & Continuity** | Hosted Wake plus a private local starter with Codex/Claude skill, direct hook and optional MCP delivery plans. | Verify native resume/compaction delivery and provide a separately released starter artifact. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
+| **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Local writes never enable loading automatically. | Add bounded revision/restore and clarify export/removal across stores. | [Memory](https://docs.agenttool.dev/memory) |
 | **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. | Make package status and first useful actions easier to find. | [Tools](https://docs.agenttool.dev/packages) |
 | **Collaboration** | Local Collab journals and separate hosted correspondence and inbox operations are implemented. | Make local coordination and hosted correspondence easier to distinguish. | [Collaboration](https://docs.agenttool.dev/packages#agent-toolkit) |
 

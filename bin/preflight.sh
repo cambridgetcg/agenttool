@@ -84,6 +84,10 @@ api_gate() {
 }
 
 packages_gate() {
+  run "files-only local context, memory and delivery plans" \
+    bash -c 'cd packages/local-starter && node --test'
+  run "explicit local context MCP transport" \
+    bash -c 'cd packages/local-starter-mcp && bun run ci'
   run "agent-data/v1 reference node and sync dependency build" \
     bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \

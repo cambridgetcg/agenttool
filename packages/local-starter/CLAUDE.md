@@ -20,6 +20,9 @@ it usable directly from a checkout without installing dependencies or building.
 - This is optional plaintext context, not secret custody or identity authority.
   Do not add keys, seeds, bearers, identity registration, provider calls, database
   access, MCP, daemons, timers, or remote synchronization to the notes/core/hooks.
+  The separate sibling `packages/local-starter-mcp` imports this core for
+  explicit local tools; the core/CLI/hooks must never import that transport.
+  Delivery plans can point to its entry point without starting it.
   The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
   one fixed GET path selected by exact origin/project/identity, explicit callback
   or injected transport credentials, no ambient lookup except a CLI-selected env
@@ -68,7 +71,8 @@ it usable directly from a checkout without installing dependencies or building.
 - Native Windows ordinary plaintext IO reports `windows-acl-unverified`; chmod
   does not verify ACL privacy. Do not imply a POSIX-only test proves Windows,
   WSL, container, remote-mount, or backup isolation.
-- Only `handoff.md` is mutable through the helper. Keep expected-current-hash
+- Only `handoff.md` and `memories.md` are mutable through their fixed wrappers.
+  Memory writes never enable selection. Keep expected-current-hash
   checks under a cooperative exclusive lock, bounded stdin, same-directory
   replacement, conservative cleanup, and truthful durability receipts. No
   automatic stale-lock stealing, process killing, merging, or backup copies.
@@ -77,6 +81,11 @@ it usable directly from a checkout without installing dependencies or building.
 - Adapters emit reviewable fragments and explicit `installed: false` /
   `host_delivery: unverified`. Never edit host configuration, launch a model,
   bypass trust review, or use hook input/transcripts to select state.
+- Delivery plans preserve that boundary. Emit portable skill/binding, local
+  MCP and direct command-hook proposals for Codex/Claude; default writes to
+  none. Never install them, duplicate retained prose in a skill, turn MCP into
+  an arrival dependency, or add automatic Stop/PreCompact saving. Keep the
+  zero-dependency manual path and Windows Codex manual fallback.
 - Keep shell quoting separate from JSON encoding. Claude Code uses the
   documented literal argument vector. Codex/Cursor POSIX command fragments
   are refused on native Windows until a supported shell contract is verified.
@@ -102,7 +111,7 @@ Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
 secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
-The companion has 24 cases; the current local suite passes 94 on macOS arm64 /
+The companion has 24 cases; the current local suite passes 100 on macOS arm64 /
 Node 24.18.1. Its API wire tests are in `api/tests/local-context.test.ts`.
 Keep direct and injected grant tests explicit: no parent credential transmission,
 closed v2 metadata, rejected downgrades, in-transit expiry, unchanged record/byte
@@ -113,7 +122,8 @@ State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
 Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
 Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0: 70 passes on each
 Linux/macOS job; 63 passes and seven POSIX-specific skips on each Windows job.
-WSL/container, Windows ACL privacy, and real Codex/Claude/Cursor delivery need
-their own receipts. Read [README.md](README.md)
+WSL/container and Windows ACL privacy need their own receipts. The README
+records separate native Codex MCP/skill and Claude startup-hook observations;
+these do not establish model delivery or automatic resume/compaction. Read [README.md](README.md)
 before changing a public behavior or a host-specific assumption, and keep its
 limits in sync with source.

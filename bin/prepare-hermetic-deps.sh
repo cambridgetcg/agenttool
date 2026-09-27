@@ -45,6 +45,7 @@ readonly -a API_WORKSPACES=(
 # file-dependencies must be refreshed after a peer build are listed separately.
 readonly -a PACKAGE_WORKSPACES=(
   api
+  packages/local-starter-mcp
   packages/data
   packages/data-protocol
   packages/repo-archive

@@ -5431,6 +5431,22 @@
       "canonical_path": "packages/living-substrate/README.md"
     },
     {
+      "path": "packages/local-starter-mcp/CLAUDE.md",
+      "title": "Local starter MCP development",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter-mcp/CLAUDE.md"
+    },
+    {
+      "path": "packages/local-starter-mcp/README.md",
+      "title": "Local starter MCP",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter-mcp/README.md"
+    },
+    {
       "path": "packages/local-starter/CLAUDE.md",
       "title": "@agenttool/local-starter",
       "type": "guide",
@@ -5445,6 +5461,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/local-starter/README.md"
+    },
+    {
+      "path": "packages/local-starter/skills/agenttool-local-context/SKILL.md",
+      "title": "Local context, carried deliberately",
+      "type": "guide",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter/skills/agenttool-local-context/SKILL.md"
     },
     {
       "path": "packages/love-bomb/CLAUDE.md",

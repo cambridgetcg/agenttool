@@ -58,7 +58,8 @@ not claim that every source version is published or installed on your host.
 
 | Primitive | Implemented use | Boundary |
 |---|---|---|
-| [Local starter](#files-only-starter) | Creates a small local file set, renders bounded selected context, fingerprints records and explicitly replaces a handoff. | Private Node source candidate; no dependencies, account, network, key store or automatic host installation. Adapter output is a proposal, not verified delivery. |
+| [Local starter](#files-only-starter) | Creates selected local files, fingerprints records, and explicitly replaces a handoff or memory. | Private dependency-free Node source; delivery plans do not install host settings. |
+| Local starter MCP (`packages/local-starter-mcp/README.md`) | Explicit local status/read and optional fixed-slot handoff/memory saves. | Separate private stdio transport with pinned SDK dependencies; no hosted API, credentials or automatic memory capture. |
 | Wake Continuity / AFTERGLOW (`packages/wake-continuity/README.md`) | Constructs and validates digest-linked capsules and a carry/park view. | Pure library: no persistence, source retrieval, session loading, or execution. A digest does not hide guessable private content. |
 | Wake Thread (`packages/wake-thread/README.md`) | Binds selected facts, omissions, retention declarations, and carry/fork/rest/refuse receipts. | Private source package. Caller supplies facts and time; retention validation does not delete stored copies or authenticate a choice. |
 | Wake Return (`packages/wake-return/README.md`) | Local MCP status and explicit observation of one host-selected project/identity. | Private source candidate. Observation uses two fixed hosted GETs; it does not restore a private session or read private memories. |
@@ -123,7 +124,9 @@ returns no note bodies. Edit the manifest's `enabled` entries to choose context.
 
 `handoff --dir ... --expect HASH` takes explicitly supplied UTF-8 on stdin and
 uses a cooperative lock plus expected-content checks to replace only
-`handoff.md`. Keep keys, seed phrases and bearers in a separate reviewed secret
+`handoff.md`. The separate `memory` command applies the same checks to
+`memories.md`; saving never enables a disabled source. Both replace complete
+contents, so preserve wanted existing notes. Keep keys, seed phrases and bearers in a separate reviewed secret
 mechanism. The starter neither stores nor resolves keys.
 
 Take `HASH` from the current handoff entry in `status`, then supply a reviewed file:
@@ -163,13 +166,55 @@ emits a per-project configuration proposal; it never changes host settings.
 Background scheduling, cloud synchronization, automated memory capture, Data/
 Collab backends and a universal installer remain outside this version.
 
+### Codex and Claude Code delivery
+
+**Source:** one command emits a reviewable skill, binding, MCP and hook plan:
+
+```sh
+node packages/local-starter/src/cli.mjs delivery --dir /absolute/private/new-starter --harness codex
+node packages/local-starter/src/cli.mjs delivery --dir /absolute/private/new-starter --harness claude-code --write both
+```
+
+The default MCP mode is read-only. Choose `--write handoff`, `memory` or
+`both` to expose those fixed-slot saves. Choose `--transport cli` to use
+the dependency-free CLI instead of MCP. Neither mode installs or activates
+settings. Both source packages must exist on the execution host for MCP;
+only local-starter is needed for CLI mode. Source remains private/unpublished.
+
+| Delivery | Why it exists | Codex | Claude Code |
+|---|---|---|---|
+| Portable skill | Teach how to arrive, refresh, retain selected facts and recover from a conflict. No note snapshot is embedded. | `.agents/skills/agenttool-local-context/`; invoke with `$agenttool-local-context`. | `.claude/skills/agenttool-local-context/`; invoke with `/agenttool-local-context`. |
+| Local stdio MCP | Offer fresh read/status and explicit hash-checked saves without model-selected paths. | `.codex/config.toml`, `mcp_servers.agenttool_local`. | `.mcp.json`, `mcpServers.agenttool_local`. |
+| Direct command hook | Load selected local context on startup, resume and after compaction. | `.codex/hooks.json`; project and exact-hook trust required. | `.claude/settings.local.json`; literal Node command/args and native trust behavior. |
+
+Skills guide behavior; they do not guarantee an arrival callback. MCP exposes
+operations; it need not be ready at startup. In Codex, an MCP hook needs an
+already connected server; Claude skips MCP SessionStart hooks at launch/resume.
+For that reason the generated arrival hook invokes the local CLI directly.
+No Stop/PreCompact write or transcript capture is generated. After compaction,
+use newly supplied hook context or explicitly read again; a cached skill does
+not refresh memory. See current official
+[Codex hooks](https://learn.chatgpt.com/docs/hooks),
+[Claude hooks](https://code.claude.com/docs/en/hooks),
+[Codex skills](https://learn.chatgpt.com/docs/build-skills),
+[Claude skills](https://code.claude.com/docs/en/skills),
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp) and
+[Claude MCP](https://code.claude.com/docs/en/mcp), checked 2026-09-28.
+
+Handoff holds current work; memory holds chosen durable facts with useful
+source/date context. Both are complete replacements, bounded by the manifest
+and guarded by the current hash. Writing and enabling delivery remain separate.
+No revision history, backup/restore, semantic search or cloud synchronization
+is added by this transport. Disconnect the skill, MCP and hook individually;
+removing one does not stop the other paths or retract prior output.
+
 ### Harness and system coverage
 
 | Host/system | Current starter path | Limitation |
 |---|---|---|
 | Any host with explicit text/tool input | Manually run `render` and supply its output. | A stored file or printed result is not automatically session context. |
 | Codex | Proposed project `.codex/hooks.json` SessionStart hook on macOS/Linux. | Current hooks require host trust/review. Context may be previewed/spilled; actual startup/resume/compact delivery remains untested. |
-| Claude Code | Proposed project SessionStart hook with literal Node `command` + `args`. | Depends on the current documented host version; actual session delivery remains untested. |
+| Claude Code | Project SessionStart proposal with literal Node `command` + `args`; startup execution observed on macOS / 2.1.282. | Model receipt and resume/compact delivery remain untested. |
 | Cursor | Proposed project `sessionStart` hook on macOS/Linux. | Documented as fire-and-forget; first-turn ordering and compaction restoration are not guaranteed here. |
 | Native Windows | Files-only Node path with inherited ACLs; Claude proposal available. | ACL privacy is unverified. Codex/Cursor hook fragments refuse until native-shell handling is verified; use manual rendering. |
 | WSL, containers, SSH/remote hosts | Run Node where the selected files and host actually live. | Paths, UID/ACLs, volumes and persistence belong to that environment. No automatic translation, sharing or synchronization. |
@@ -179,7 +224,13 @@ These host shapes were checked against current official
 [Claude hooks](https://code.claude.com/docs/en/hooks) and
 [Cursor hooks](https://cursor.com/docs/hooks) documentation. They replace the
 older assumption that Codex has no SessionStart hook. Local tests exercise
-file operations and fake-host JSON/command fixtures, not model sessions.
+file operations and protocol fixtures. Separate observations on 2026-09-28
+(local date), macOS arm64 / Node 24.18.1: Codex 0.157.1 discovered the skill
+and passed nine native MCP checks across two host processes; Claude 2.1.282
+ran the startup hook with validated additional context. Both used synthetic
+notes and no model requests. These do not prove model adoption, automatic
+resume/compact hooks or other OS versions. The package guide records the
+scope and native skill-validator limitation.
 
 POSIX owner-only modes are checked; Windows reports `windows-acl-unverified`.
 Initialization requires hard-link support for no-clobber manifest publication;
