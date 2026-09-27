@@ -150,7 +150,7 @@ const CASES: EncodingCase[] = [
   {
     method: "vault.set_policy",
     prefix: "/v1/vault/",
-    invoke: (at, id) => at.vault.set_policy(id, { read_only: true }),
+    invoke: (at, id) => at.vault.set_policy(id, { agent_ids: [] }),
   },
   { method: "vault.audit", prefix: "/v1/vault/", invoke: (at, id) => at.vault.audit(id) },
   {

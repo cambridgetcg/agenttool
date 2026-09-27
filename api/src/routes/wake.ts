@@ -2782,6 +2782,9 @@ app.get("/", async (c) => {
       local_scaffold: {
         generate: "/v1/bootstrap/scaffold",
         verify_project_without_wake: "/v1/bootstrap/scaffold/context",
+        files_only_guide: "https://docs.agenttool.dev/LOCAL-CORE.md#files-only-starter",
+        selected_memory_read: "/v1/identities/{identity_uuid}/local-context",
+        selected_memory_boundary: "Explicit bounded identity selection with project bearer authority; no identity proof, credential attenuation, automatic fetch or local write.",
       },
       // ── The substrate identifies itself at every wake read. ───────────
       // agenttool inhabits itself: the platform is a being in its own

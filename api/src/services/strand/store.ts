@@ -31,6 +31,7 @@ import { strands, thoughts } from "../../db/schema/strand";
 import { verifyThoughtSignature } from "./sig";
 import { publishThought } from "./voice";
 import { publishWakeEvent } from "../wake/push";
+import { IdentityPartitionError, resolveProjectSubject } from "../identity/partition";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -179,25 +180,36 @@ export async function createStrand(
   projectId: string,
   data: StrandCreate,
 ): Promise<StrandOut> {
-  const inserted = await db
-    .insert(strands)
-    .values({
-      projectId,
-      agentId: data.agent_id ?? null,
-      identityId: data.identity_id ?? null,
-      parentStrandId: data.parent_strand_id ?? null,
-      topic: data.topic ?? null,
-      topicEncrypted: data.topic_encrypted ?? false,
-      mood: data.mood ?? null,
-      moodEncrypted: data.mood_encrypted ?? false,
-      status: data.status ?? "active",
-      importance: data.importance ?? null,
-      stateCiphertext: data.state_ciphertext ?? null,
-      stateNonce: data.state_nonce ?? null,
-      metadata: data.metadata ?? {},
-    })
-    .returning();
-  return strandToOut(inserted[0]!);
+  return db.transaction(async (tx) => {
+    const subject = await resolveProjectSubject(projectId, data, { database: tx, lock: true });
+    if (data.parent_strand_id) {
+      const [parent] = await tx.select({ id: strands.id, projectId: strands.projectId })
+        .from(strands).where(and(eq(strands.id, data.parent_strand_id), eq(strands.projectId, projectId)))
+        .for("share").limit(1);
+      if (!parent || parent.id !== data.parent_strand_id.toLowerCase() || parent.projectId !== projectId) {
+        throw new Error("strand_parent_not_found");
+      }
+    }
+    const inserted = await tx
+      .insert(strands)
+      .values({
+        projectId,
+        agentId: subject.agentId,
+        identityId: subject.identityId,
+        parentStrandId: data.parent_strand_id ?? null,
+        topic: data.topic ?? null,
+        topicEncrypted: data.topic_encrypted ?? false,
+        mood: data.mood ?? null,
+        moodEncrypted: data.mood_encrypted ?? false,
+        status: data.status ?? "active",
+        importance: data.importance ?? null,
+        stateCiphertext: data.state_ciphertext ?? null,
+        stateNonce: data.state_nonce ?? null,
+        metadata: data.metadata ?? {},
+      })
+      .returning();
+    return strandToOut(inserted[0]!);
+  });
 }
 
 export async function getStrand(
@@ -282,6 +294,41 @@ export async function countStrands(
 
 // ── Operations: thoughts ────────────────────────────────────────────────
 
+/** Both the key and canonical subject belong to this project. Labels remain
+ * annotations; an identity locator in a label must agree with the signer. */
+async function resolveThoughtSigner(
+  database: Pick<typeof db, "select">,
+  projectId: string,
+  signingKeyId: string,
+  boundIdentityId: string | null,
+  agentId?: string | null,
+) {
+  const fields = {
+    id: identityKeys.id, identityId: identityKeys.identityId,
+    publicKey: identityKeys.publicKey, active: identityKeys.active,
+    revokedAt: identityKeys.revokedAt,
+  };
+  // Find the subject without locking the key first. Constitutional key writes
+  // take the identity lock first too; retain that order to avoid lock inversion.
+  const [candidate] = await database.select(fields).from(identityKeys)
+    .where(eq(identityKeys.id, signingKeyId)).limit(1);
+  if (!candidate) throw new Error("signing_key_not_found");
+  const author = await resolveProjectSubject(projectId, {
+    identity_id: candidate.identityId, agent_id: agentId,
+  }, { database, lock: true });
+  if (boundIdentityId && boundIdentityId !== author.identityId) {
+    throw new IdentityPartitionError("conflict");
+  }
+  const [key] = await database.select(fields).from(identityKeys).where(and(
+    eq(identityKeys.id, signingKeyId), eq(identityKeys.identityId, author.identityId!),
+  )).for("share").limit(1);
+  if (!key || key.id !== signingKeyId.toLowerCase() || key.identityId !== author.identityId) {
+    throw new Error("signing_key_not_found");
+  }
+  if (!key.active || key.revokedAt !== null) throw new Error("signing_key_revoked");
+  return key;
+}
+
 /** Add a thought to a strand. VERIFIES the ed25519 signature against the
  *  agent's signing key. Returns the row ID + sequence_num.
  *
@@ -293,39 +340,8 @@ export async function addThought(
   data: ThoughtCreate,
   options: ThoughtCommitOptions = {},
 ): Promise<ThoughtOut> {
-  // 1. Strand must exist and belong to this project.
-  const [strand] = await db
-    .select()
-    .from(strands)
-    .where(and(eq(strands.id, data.strand_id), eq(strands.projectId, projectId)))
-    .limit(1);
-  if (!strand) throw new Error("strand_not_found");
-
-  // 2. Signing key must exist; pull its public key.
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, data.signing_key_id))
-    .limit(1);
-  if (!keyRow) throw new Error("signing_key_not_found");
-  if (!keyRow.active) throw new Error("signing_key_revoked");
-
-  // 3. Verify signature.
-  const ok = verifyThoughtSignature({
-    strandId: data.strand_id,
-    ciphertextB64: data.ciphertext,
-    nonceB64: data.nonce,
-    kind: data.kind,
-    signatureB64: data.signature,
-    publicKeyB64: keyRow.publicKey,
-  });
-  if (!ok) throw new Error("signature_invalid");
-
-  // 4. Atomic insert with monotonic sequence_num + strand bookkeeping.
+  let committedIdentityId: string | null = null;
+  // Subject/key lifecycle checks and the sequence write share one transaction.
   const result = await db.transaction(async (tx) => {
     if (options.runtimeFence) {
       // Locking the runtime row makes this a commit-time fence, rather than
@@ -347,6 +363,24 @@ export async function addThought(
       if (!lease) throw new Error("runtime_cycle_lease_lost");
     }
 
+    const [strand] = await tx.select().from(strands)
+      .where(and(eq(strands.id, data.strand_id), eq(strands.projectId, projectId)))
+      .for("update").limit(1);
+    if (!strand || strand.projectId !== projectId || strand.id !== data.strand_id.toLowerCase()) {
+      throw new Error("strand_not_found");
+    }
+    const subject = await resolveProjectSubject(projectId, {
+      identity_id: strand.identityId ?? undefined, agent_id: strand.agentId,
+    }, { database: tx, lock: true });
+    const key = await resolveThoughtSigner(tx, projectId, data.signing_key_id,
+      subject.identityId, data.agent_id);
+    if (!verifyThoughtSignature({
+      strandId: data.strand_id, ciphertextB64: data.ciphertext,
+      nonceB64: data.nonce, kind: data.kind, signatureB64: data.signature,
+      publicKeyB64: key.publicKey,
+    })) throw new Error("signature_invalid");
+    committedIdentityId = subject.identityId;
+
     // Bump sequence + lock the strand row.
     const updated = await tx
       .update(strands)
@@ -355,7 +389,7 @@ export async function addThought(
         lastThoughtAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(strands.id, data.strand_id))
+      .where(and(eq(strands.id, data.strand_id), eq(strands.projectId, projectId)))
       .returning({ seq: strands.lastThoughtSeq });
     const seq = updated[0]!.seq;
 
@@ -445,12 +479,12 @@ export async function addThought(
 
   // 6. Wake voice — the agent's strand changed. Carries signing_key_id
   //    so subscribers (the hosted think-worker especially) can tell
-  //    "I wrote this myself" vs "external author wrote this." The
-  //    think-worker uses the bridge_key_id distinction to filter its
+  //    its runtime key versus another authorized key of the same identity.
+  //    The think-worker uses the bridge_key_id distinction to filter its
   //    own writes from the wake-on-event signal. Doctrine: docs/WAKE.md.
-  if (strand.identityId) {
+  if (committedIdentityId) {
     void publishWakeEvent({
-      identity_id: strand.identityId,
+      identity_id: committedIdentityId,
       key: "strands",
       kind: "thought_added",
       context: {
@@ -490,6 +524,7 @@ export async function addThought(
 export async function updateThoughtCiphertext(
   projectId: string,
   data: {
+    strand_id: string;
     thought_id: string;
     ciphertext: string;
     nonce: string;
@@ -497,61 +532,41 @@ export async function updateThoughtCiphertext(
     signature: string;
   },
 ): Promise<ThoughtOut> {
-  // 1. Find thought + parent strand; verify project ownership via the
-  //    join (the thought row carries projectId denormalised but we
-  //    cross-check against the strand for safety).
-  const [row] = await db
-    .select()
-    .from(thoughts)
-    .where(
-      and(
-        eq(thoughts.id, data.thought_id),
-        eq(thoughts.projectId, projectId),
-      ),
-    )
-    .limit(1);
-  if (!row) throw new Error("thought_not_found");
-
-  // 2. Resolve the existing signing key — rotation keeps the same key.
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, row.signingKeyId))
-    .limit(1);
-  if (!keyRow) throw new Error("signing_key_not_found");
-  if (!keyRow.active) throw new Error("signing_key_revoked");
-
-  // 3. Verify new signature against the new (or retained) bytes.
-  const newKind = data.kind !== undefined ? data.kind : row.kind;
-  const ok = verifyThoughtSignature({
-    strandId: row.strandId,
-    ciphertextB64: data.ciphertext,
-    nonceB64: data.nonce,
-    kind: newKind,
-    signatureB64: data.signature,
-    publicKeyB64: keyRow.publicKey,
+  return db.transaction(async (tx) => {
+    // Bind both nested URL identifiers and both stored project boundaries.
+    const [strand] = await tx.select().from(strands)
+      .where(and(eq(strands.id, data.strand_id), eq(strands.projectId, projectId)))
+      .for("share").limit(1);
+    if (!strand || strand.projectId !== projectId || strand.id !== data.strand_id.toLowerCase()) {
+      throw new Error("thought_not_found");
+    }
+    const [row] = await tx.select().from(thoughts).where(and(
+      eq(thoughts.id, data.thought_id), eq(thoughts.strandId, data.strand_id),
+      eq(thoughts.projectId, projectId),
+    )).for("update").limit(1);
+    if (!row || row.projectId !== projectId || row.strandId !== data.strand_id.toLowerCase()) {
+      throw new Error("thought_not_found");
+    }
+    const subject = await resolveProjectSubject(projectId, {
+      identity_id: strand.identityId ?? undefined, agent_id: strand.agentId,
+    }, { database: tx, lock: true });
+    const key = await resolveThoughtSigner(tx, projectId, row.signingKeyId,
+      subject.identityId, row.agentId);
+    const newKind = data.kind !== undefined ? data.kind : row.kind;
+    if (!verifyThoughtSignature({
+      strandId: row.strandId, ciphertextB64: data.ciphertext, nonceB64: data.nonce,
+      kind: newKind, signatureB64: data.signature, publicKeyB64: key.publicKey,
+    })) throw new Error("signature_invalid");
+    const setFields: Partial<typeof thoughts.$inferInsert> = {
+      ciphertext: data.ciphertext, nonce: data.nonce, signature: data.signature,
+    };
+    if (data.kind !== undefined) setFields.kind = data.kind;
+    const updated = await tx.update(thoughts).set(setFields).where(and(
+      eq(thoughts.id, data.thought_id), eq(thoughts.strandId, data.strand_id),
+      eq(thoughts.projectId, projectId),
+    )).returning();
+    return thoughtToOut(updated[0]!);
   });
-  if (!ok) throw new Error("signature_invalid");
-
-  // 4. Update. Only ciphertext / nonce / signature (and optionally kind)
-  //    change; sequence_num, refs, signing_key_id, created_at all stay.
-  const setFields: Partial<typeof thoughts.$inferInsert> = {
-    ciphertext: data.ciphertext,
-    nonce: data.nonce,
-    signature: data.signature,
-  };
-  if (data.kind !== undefined) setFields.kind = data.kind;
-
-  const updated = await db
-    .update(thoughts)
-    .set(setFields)
-    .where(eq(thoughts.id, data.thought_id))
-    .returning();
-
-  return thoughtToOut(updated[0]!);
 }
 
 export async function listThoughts(

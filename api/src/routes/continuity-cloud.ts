@@ -10,10 +10,9 @@
  *    POST /v1/continuity/architecture-maps  — declare an architecture-map row
  *    GET  /v1/continuity/architecture-maps  — list (filterable)
  *
- *  Reads are PUBLIC (no auth) per commitment/audit-output-is-public
- *  composed with RING-1's anyone-arrives. Writes require API key auth
- *  (middleware applied at mount) plus ed25519 signature whose signing
- *  identity's DID equals the supplied agent_did.
+ *  Reads and writes require the project bearer applied at the parent mount.
+ *  Reads are restricted to that project's identities; writes additionally
+ *  require an active owned signing identity matching the supplied agent_did.
  *
  *  Doctrine: docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md
  *            docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md
@@ -27,10 +26,11 @@
  *    @enforces urn:agenttool:commitment/keeper-owns-the-list
  *    @enforces urn:agenttool:commitment/audit-output-is-public */
 
-import { and, desc, eq, sql as drizzleSql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql as drizzleSql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import {
   architectureMaps,
@@ -39,6 +39,7 @@ import {
 } from "../db/schema/continuity";
 import { identities, identityKeys } from "../db/schema/identity";
 import { fail } from "../lib/errors";
+import { IdentityPartitionError, requireActiveProjectIdentity } from "../services/identity/partition";
 import {
   canonicalArchitectureMapBytes,
   canonicalCanonEntryBytes,
@@ -49,20 +50,22 @@ import {
   verifyEd25519Signature,
 } from "../services/continuity-cloud/canonical-bytes";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 
 const CANON_POINTER = "urn:agenttool:doc/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL";
 
 // ─── shared: resolve signing key + verify identity ownership ──────────
 
 async function resolveSignerOrFail(input: {
+  projectId: string;
   signingKeyId: string;
   expectedDid: string;
+  database: Pick<typeof db, "select">;
 }): Promise<
   { ok: true; publicKey: string; identityId: string }
   | { ok: false; error: string; message: string }
 > {
-  const [keyRow] = await db
+  const [candidate] = await input.database
     .select({
       id: identityKeys.id,
       identityId: identityKeys.identityId,
@@ -73,19 +76,30 @@ async function resolveSignerOrFail(input: {
     .from(identityKeys)
     .where(eq(identityKeys.id, input.signingKeyId))
     .limit(1);
-  if (!keyRow) {
+  if (!candidate) {
     return { ok: false, error: "unknown_signing_key", message: "signing_key_id not found." };
+  }
+
+  let identityRow;
+  try {
+    identityRow = await requireActiveProjectIdentity(input.projectId, candidate.identityId, {
+      database: input.database, lock: true,
+    });
+  } catch (error) {
+    if (!(error instanceof IdentityPartitionError)) throw error;
+    return { ok: false, error: "signer_not_authorized", message: "An active signing identity owned by this project is required." };
+  }
+  const [keyRow] = await input.database.select({
+    id: identityKeys.id, identityId: identityKeys.identityId, publicKey: identityKeys.publicKey,
+    active: identityKeys.active, revokedAt: identityKeys.revokedAt,
+  }).from(identityKeys).where(and(
+    eq(identityKeys.id, input.signingKeyId), eq(identityKeys.identityId, identityRow.id),
+  )).for("share").limit(1);
+  if (!keyRow || keyRow.id !== input.signingKeyId.toLowerCase() || keyRow.identityId !== identityRow.id) {
+    return { ok: false, error: "signer_not_authorized", message: "The signing key must belong to the owned identity." };
   }
   if (!keyRow.active || keyRow.revokedAt) {
     return { ok: false, error: "signing_key_inactive", message: "signing_key is revoked or inactive." };
-  }
-  const [identityRow] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.id, keyRow.identityId))
-    .limit(1);
-  if (!identityRow) {
-    return { ok: false, error: "unknown_identity", message: "signing identity not found." };
   }
   if (identityRow.did !== input.expectedDid) {
     return {
@@ -96,6 +110,20 @@ async function resolveSignerOrFail(input: {
     };
   }
   return { ok: true, publicKey: keyRow.publicKey, identityId: identityRow.id };
+}
+
+/** The fixed ownership predicate is always combined with caller filters.
+ * Lifecycle changes do not erase an owning project's historical records. */
+function projectDids(projectId: string) {
+  return db.select({ did: identities.did }).from(identities)
+    .where(eq(identities.projectId, projectId));
+}
+
+function projectSeals(projectId: string) {
+  return and(
+    eq(chronicle.projectId, projectId),
+    drizzleSql`${chronicle.metadata}->>'kind' = 'continuity_seal'`,
+  );
 }
 
 // ─── POST /v1/continuity/canon ────────────────────────────────────────
@@ -128,59 +156,49 @@ app.post("/continuity/canon", async (c) => {
     }, 400);
   }
 
-  const signer = await resolveSignerOrFail({
-    signingKeyId: body.signing_key_id,
-    expectedDid: body.agent_did,
-  });
-  if (!signer.ok) {
-    return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
-  }
+  return db.transaction(async (tx) => {
+    const signer = await resolveSignerOrFail({
+      projectId: c.var.project.id,
+      database: tx,
+      signingKeyId: body.signing_key_id,
+      expectedDid: body.agent_did,
+    });
+    if (!signer.ok) {
+      return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
+    }
 
-  const declaredAtIso = body.declared_at ?? new Date().toISOString();
-  const bytes = canonicalCanonEntryBytes({
-    agentDid: body.agent_did,
-    textId: body.text_id,
-    source: body.source,
-    status: body.status,
-    location: body.location,
-    preservation: body.preservation,
-    notes: body.notes ?? "",
-    declaredAtIso,
-  });
-  const sigOk = await verifyEd25519Signature({
-    bytes,
-    signatureB64: body.signature,
-    publicKeyB64: signer.publicKey,
-  });
-  if (!sigOk) {
-    return fail(c, {
-      error: "signature_invalid",
-      message: "ed25519 verification failed against signing_key's public_key. " +
-        "Canonical bytes context: canon-entry/v1.",
-      _canon_pointer: CANON_POINTER,
-    }, 403);
-  }
-
-  // Upsert — keepers update their canon over time.
-  const declaredAt = new Date(declaredAtIso);
-  const [entry] = await db
-    .insert(canonEntries)
-    .values({
+    const declaredAtIso = body.declared_at ?? new Date().toISOString();
+    const bytes = canonicalCanonEntryBytes({
       agentDid: body.agent_did,
       textId: body.text_id,
       source: body.source,
       status: body.status,
       location: body.location,
       preservation: body.preservation,
-      notes: body.notes ?? null,
-      signature: body.signature,
-      signingKeyId: body.signing_key_id,
-      declaredAt,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [canonEntries.agentDid, canonEntries.textId],
-      set: {
+      notes: body.notes ?? "",
+      declaredAtIso,
+    });
+    const sigOk = await verifyEd25519Signature({
+      bytes,
+      signatureB64: body.signature,
+      publicKeyB64: signer.publicKey,
+    });
+    if (!sigOk) {
+      return fail(c, {
+        error: "signature_invalid",
+        message: "ed25519 verification failed against signing_key's public_key. " +
+          "Canonical bytes context: canon-entry/v1.",
+        _canon_pointer: CANON_POINTER,
+      }, 403);
+    }
+
+    // Upsert — keepers update their canon over time.
+    const declaredAt = new Date(declaredAtIso);
+    const [entry] = await tx
+      .insert(canonEntries)
+      .values({
+        agentDid: body.agent_did,
+        textId: body.text_id,
         source: body.source,
         status: body.status,
         location: body.location,
@@ -188,23 +206,38 @@ app.post("/continuity/canon", async (c) => {
         notes: body.notes ?? null,
         signature: body.signature,
         signingKeyId: body.signing_key_id,
+        declaredAt,
         updatedAt: new Date(),
-      },
-    })
-    .returning();
+      })
+      .onConflictDoUpdate({
+        target: [canonEntries.agentDid, canonEntries.textId],
+        set: {
+          source: body.source,
+          status: body.status,
+          location: body.location,
+          preservation: body.preservation,
+          notes: body.notes ?? null,
+          signature: body.signature,
+          signingKeyId: body.signing_key_id,
+          declaredAt,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
-  return c.json(
-    {
-      canon_entry: entry,
-      doctrine: {
-        what: "agent_continuity.canon_entries — the CANON cloud primitive.",
-        why: "Cloud version of true-love/docs/lineage/canon.md — the list of what's alive and where it lives.",
-        commitment: "keeper-owns-the-list — only your signing identity can write your canon entries.",
-        readers: "Public. Any agent arriving with no context can read your canon to know what you keep alive.",
+    return c.json(
+      {
+        canon_entry: entry,
+        doctrine: {
+          what: "agent_continuity.canon_entries — the CANON cloud primitive.",
+          why: "Cloud version of true-love/docs/lineage/canon.md — the list of what's alive and where it lives.",
+          commitment: "keeper-owns-the-list — only your signing identity can write your canon entries.",
+          readers: "Authenticated callers in the owning project can read these records.",
+        },
       },
-    },
-    201,
-  );
+      201,
+    );
+  });
 });
 
 // ─── GET /v1/continuity/canon ─────────────────────────────────────────
@@ -215,7 +248,7 @@ app.get("/continuity/canon", async (c) => {
   const textId = c.req.query("text_id");
   const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
 
-  const conditions = [];
+  const conditions = [inArray(canonEntries.agentDid, projectDids(c.var.project.id))];
   if (agentDid) conditions.push(eq(canonEntries.agentDid, agentDid));
   if (status && (CANONICAL_CANON_STATUSES as readonly string[]).includes(status)) {
     conditions.push(eq(canonEntries.status, status as (typeof CANONICAL_CANON_STATUSES)[number]));
@@ -280,75 +313,78 @@ app.post("/continuity/seal", async (c) => {
     }, 400);
   }
 
-  const signer = await resolveSignerOrFail({
-    signingKeyId: body.signing_key_id,
-    expectedDid: body.agent_did,
-  });
-  if (!signer.ok) {
-    return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
-  }
+  return db.transaction(async (tx) => {
+    const signer = await resolveSignerOrFail({
+      projectId: c.var.project.id,
+      database: tx,
+      signingKeyId: body.signing_key_id,
+      expectedDid: body.agent_did,
+    });
+    if (!signer.ok) {
+      return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
+    }
 
-  const occurredAtIso = body.occurred_at ?? new Date().toISOString();
-  const bytes = canonicalContinuitySealBytes({
-    agentDid: body.agent_did,
-    type: body.type,
-    title: body.title,
-    shortName: body.short_name,
-    liturgicalText: body.liturgical_text,
-    body: body.body ?? "",
-    occurredAtIso,
-  });
-  const sigOk = await verifyEd25519Signature({
-    bytes,
-    signatureB64: body.signature,
-    publicKeyB64: signer.publicKey,
-  });
-  if (!sigOk) {
-    return fail(c, {
-      error: "signature_invalid",
-      message: "ed25519 verification failed against signing_key's public_key. " +
-        "Canonical bytes context: continuity-seal/v1.",
-      _canon_pointer: CANON_POINTER,
-    }, 403);
-  }
-
-  // Write a chronicle row. The HISTORY cloud lives on the existing
-  // chronicle table — typed-seals carry metadata.short_name +
-  // metadata.liturgical_text per wall/chronicle-seal-typed-canonical-seven.
-  const PLATFORM_PROJECT = "00000000-0000-0000-0000-000000000000";
-  const [entry] = await db
-    .insert(chronicle)
-    .values({
-      projectId: PLATFORM_PROJECT,
-      agentId: null,
+    const occurredAtIso = body.occurred_at ?? new Date().toISOString();
+    const bytes = canonicalContinuitySealBytes({
+      agentDid: body.agent_did,
       type: body.type,
       title: body.title,
-      body: body.body ?? null,
-      metadata: {
-        ...(body.metadata ?? {}),
-        agent_did: body.agent_did,
-        short_name: body.short_name,
-        liturgical_text: body.liturgical_text,
-        signature: body.signature,
-        signing_key_id: body.signing_key_id,
-        canonical_bytes_context: "continuity-seal/v1",
-        kind: "continuity_seal",
-      },
-      occurredAt: new Date(occurredAtIso),
-    })
-    .returning();
+      shortName: body.short_name,
+      liturgicalText: body.liturgical_text,
+      body: body.body ?? "",
+      occurredAtIso,
+    });
+    const sigOk = await verifyEd25519Signature({
+      bytes,
+      signatureB64: body.signature,
+      publicKeyB64: signer.publicKey,
+    });
+    if (!sigOk) {
+      return fail(c, {
+        error: "signature_invalid",
+        message: "ed25519 verification failed against signing_key's public_key. " +
+          "Canonical bytes context: continuity-seal/v1.",
+        _canon_pointer: CANON_POINTER,
+      }, 403);
+    }
 
-  return c.json(
-    {
-      seal: entry,
-      doctrine: {
-        what: "Typed-seal chronicle entry — HISTORY cloud, per wall/chronicle-seal-typed-canonical-seven.",
-        why: "Cloud version of annotated git tags in true-love/docs/lineage/chronicle.md.",
-        canonical_bytes_context: "continuity-seal/v1",
+    // Write a chronicle row. The HISTORY cloud lives on the existing
+    // chronicle table — typed-seals carry metadata.short_name +
+    // metadata.liturgical_text per wall/chronicle-seal-typed-canonical-seven.
+    const [entry] = await tx
+      .insert(chronicle)
+      .values({
+        projectId: c.var.project.id,
+        agentId: signer.identityId,
+        type: body.type,
+        title: body.title,
+        body: body.body ?? null,
+        metadata: {
+          ...(body.metadata ?? {}),
+          agent_did: body.agent_did,
+          short_name: body.short_name,
+          liturgical_text: body.liturgical_text,
+          signature: body.signature,
+          signing_key_id: body.signing_key_id,
+          canonical_bytes_context: "continuity-seal/v1",
+          kind: "continuity_seal",
+        },
+        occurredAt: new Date(occurredAtIso),
+      })
+      .returning();
+
+    return c.json(
+      {
+        seal: entry,
+        doctrine: {
+          what: "Typed-seal chronicle entry — HISTORY cloud, per wall/chronicle-seal-typed-canonical-seven.",
+          why: "Cloud version of annotated git tags in true-love/docs/lineage/chronicle.md.",
+          canonical_bytes_context: "continuity-seal/v1",
+        },
       },
-    },
-    201,
-  );
+      201,
+    );
+  });
 });
 
 // ─── GET /v1/continuity/chronicle — typed-seals ───────────────────────
@@ -359,13 +395,9 @@ app.get("/continuity/chronicle", async (c) => {
   const since = c.req.query("since");
   const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
 
-  const conditions = [];
-  // Only continuity-seal entries (those whose metadata.kind = 'continuity_seal'
-  // or whose metadata.kind = 'continuity_audit' from the cron job).
-  conditions.push(
-    drizzleSql`(${chronicle.metadata}->>'kind' IN ('continuity_seal', 'continuity_audit')
-            OR ${chronicle.type} IN ('seal','vow','wake','promise','refusal','recognition','naming'))`,
-  );
+  // Historical platform-project rows remain stored, but their metadata alone
+  // cannot establish a private project's ownership.
+  const conditions = [projectSeals(c.var.project.id)];
   if (agentDid) {
     conditions.push(drizzleSql`${chronicle.metadata}->>'agent_did' = ${agentDid}`);
   }
@@ -442,81 +474,86 @@ app.post("/continuity/architecture-maps", async (c) => {
     }, 400);
   }
 
-  const signer = await resolveSignerOrFail({
-    signingKeyId: body.signing_key_id,
-    expectedDid: body.agent_did,
-  });
-  if (!signer.ok) {
-    return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
-  }
+  return db.transaction(async (tx) => {
+    const signer = await resolveSignerOrFail({
+      projectId: c.var.project.id,
+      database: tx,
+      signingKeyId: body.signing_key_id,
+      expectedDid: body.agent_did,
+    });
+    if (!signer.ok) {
+      return fail(c, { error: signer.error, message: signer.message, _canon_pointer: CANON_POINTER }, 403);
+    }
 
-  const declaredAtIso = body.declared_at ?? new Date().toISOString();
-  const bytes = canonicalArchitectureMapBytes({
-    agentDid: body.agent_did,
-    sourceRepo: body.source_repo,
-    componentName: body.component_name,
-    parallelLocation: body.parallel_location ?? "",
-    verdict: body.verdict,
-    notes: body.notes ?? "",
-    declaredAtIso,
-  });
-  const sigOk = await verifyEd25519Signature({
-    bytes,
-    signatureB64: body.signature,
-    publicKeyB64: signer.publicKey,
-  });
-  if (!sigOk) {
-    return fail(c, {
-      error: "signature_invalid",
-      message: "ed25519 verification failed against signing_key's public_key. " +
-        "Canonical bytes context: architecture-map/v1.",
-      _canon_pointer: CANON_POINTER,
-    }, 403);
-  }
-
-  const declaredAt = new Date(declaredAtIso);
-  const [entry] = await db
-    .insert(architectureMaps)
-    .values({
+    const declaredAtIso = body.declared_at ?? new Date().toISOString();
+    const bytes = canonicalArchitectureMapBytes({
       agentDid: body.agent_did,
       sourceRepo: body.source_repo,
       componentName: body.component_name,
-      parallelLocation: body.parallel_location ?? null,
+      parallelLocation: body.parallel_location ?? "",
       verdict: body.verdict,
-      notes: body.notes ?? null,
-      signature: body.signature,
-      signingKeyId: body.signing_key_id,
-      declaredAt,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [
-        architectureMaps.agentDid,
-        architectureMaps.sourceRepo,
-        architectureMaps.componentName,
-      ],
-      set: {
+      notes: body.notes ?? "",
+      declaredAtIso,
+    });
+    const sigOk = await verifyEd25519Signature({
+      bytes,
+      signatureB64: body.signature,
+      publicKeyB64: signer.publicKey,
+    });
+    if (!sigOk) {
+      return fail(c, {
+        error: "signature_invalid",
+        message: "ed25519 verification failed against signing_key's public_key. " +
+          "Canonical bytes context: architecture-map/v1.",
+        _canon_pointer: CANON_POINTER,
+      }, 403);
+    }
+
+    const declaredAt = new Date(declaredAtIso);
+    const [entry] = await tx
+      .insert(architectureMaps)
+      .values({
+        agentDid: body.agent_did,
+        sourceRepo: body.source_repo,
+        componentName: body.component_name,
         parallelLocation: body.parallel_location ?? null,
         verdict: body.verdict,
         notes: body.notes ?? null,
         signature: body.signature,
         signingKeyId: body.signing_key_id,
+        declaredAt,
         updatedAt: new Date(),
-      },
-    })
-    .returning();
+      })
+      .onConflictDoUpdate({
+        target: [
+          architectureMaps.agentDid,
+          architectureMaps.sourceRepo,
+          architectureMaps.componentName,
+        ],
+        set: {
+          parallelLocation: body.parallel_location ?? null,
+          verdict: body.verdict,
+          notes: body.notes ?? null,
+          signature: body.signature,
+          signingKeyId: body.signing_key_id,
+          declaredAt,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
-  return c.json(
-    {
-      architecture_map: entry,
-      doctrine: {
-        what: "agent_continuity.architecture_maps — the ARCHITECTURE-MAP cloud primitive.",
-        why: "Cloud version of true-love/docs/lineage/architecture-map.md — what was inherited, where the parallel lives, the verdict.",
-        canonical_bytes_context: "architecture-map/v1",
+    return c.json(
+      {
+        architecture_map: entry,
+        doctrine: {
+          what: "agent_continuity.architecture_maps — the ARCHITECTURE-MAP cloud primitive.",
+          why: "Cloud version of true-love/docs/lineage/architecture-map.md — what was inherited, where the parallel lives, the verdict.",
+          canonical_bytes_context: "architecture-map/v1",
+        },
       },
-    },
-    201,
-  );
+      201,
+    );
+  });
 });
 
 // ─── GET /v1/continuity/architecture-maps ─────────────────────────────
@@ -527,7 +564,7 @@ app.get("/continuity/architecture-maps", async (c) => {
   const verdict = c.req.query("verdict");
   const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
 
-  const conditions = [];
+  const conditions = [inArray(architectureMaps.agentDid, projectDids(c.var.project.id))];
   if (agentDid) conditions.push(eq(architectureMaps.agentDid, agentDid));
   if (sourceRepo) conditions.push(eq(architectureMaps.sourceRepo, sourceRepo));
   if (verdict && (CANONICAL_ARCHITECTURE_VERDICTS as readonly string[]).includes(verdict)) {
@@ -571,11 +608,11 @@ app.get("/continuity", async (c) => {
     const [canonCount] = await db
       .select({ n: drizzleSql<number>`count(*)::int` })
       .from(canonEntries)
-      .where(eq(canonEntries.agentDid, agentDid));
+      .where(and(inArray(canonEntries.agentDid, projectDids(c.var.project.id)), eq(canonEntries.agentDid, agentDid)));
     const [archCount] = await db
       .select({ n: drizzleSql<number>`count(*)::int` })
       .from(architectureMaps)
-      .where(eq(architectureMaps.agentDid, agentDid));
+      .where(and(inArray(architectureMaps.agentDid, projectDids(c.var.project.id)), eq(architectureMaps.agentDid, agentDid)));
     const [lastSeal] = await db
       .select({
         type: chronicle.type,
@@ -585,8 +622,8 @@ app.get("/continuity", async (c) => {
       .from(chronicle)
       .where(
         and(
+          projectSeals(c.var.project.id),
           drizzleSql`${chronicle.metadata}->>'agent_did' = ${agentDid}`,
-          drizzleSql`${chronicle.type} IN ('seal','vow','wake','promise','refusal','recognition','naming')`,
         ),
       )
       .orderBy(desc(chronicle.occurredAt))

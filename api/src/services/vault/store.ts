@@ -1,10 +1,6 @@
-/** vault/store.ts — in-process secret retrieval (no HTTP, no Bearer).
- *
- *  The HTTP surface lives in routes/vault/secrets.ts and enforces audit +
- *  agent_id policy. This module is the slimmer counterpart used by other
- *  services (think-worker, etc.) that need a secret value while already
- *  inside the API's project context. It does NOT enforce X-Agent-Id
- *  policy — callers that need that should hit the HTTP route.
+/** In-process retrieval checks the durable runtime subject and current audience.
+ *  It is server-authorized processing, not a claim that a root signed this read.
+ *  Doctrine: docs/IDENTITY-PARTITIONS.md.
  *
  *  Two encryption paths exist (per migration 0022_vault_agent_encrypted.sql):
  *
@@ -22,10 +18,13 @@
  *      the value — that's the trade-off of the privacy lever. */
 
 import { and, eq, isNull } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
-import { vaultSecrets, vaultVersions } from "../../db/schema/vault";
+import { vaultAudit, vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { decrypt } from "./crypto";
+import { refuseVaultRead, validateVaultAudience } from "./audience";
+import { requireActiveProjectIdentity } from "../identity/partition";
 
 /** Fetch + decrypt a secret value by (projectId, name). Returns null if
  *  the secret doesn't exist, is expired, or has no current version.
@@ -33,12 +32,11 @@ import { decrypt } from "./crypto";
  *  the version was stored via the agent-encrypted opt-in path — the
  *  in-process consumer can't decrypt without the agent's K_vault.
  *
- *  No agent_id policy enforcement — caller is presumed in-process and
- *  trusted. Audit rows are NOT written for in-process reads (the runtime
- *  event log carries the audit trail at a different granularity). */
+ *  An unbound runtime may consume only project-shared values. */
 export async function getSecretValue(
   projectId: string,
   name: string,
+  identityId: string | null,
 ): Promise<string | null> {
   const [secret] = await db
     .select()
@@ -52,6 +50,20 @@ export async function getSecretValue(
     )
     .limit(1);
   if (!secret) return null;
+
+  let actorId: string | null = null;
+  try {
+    const audience = await validateVaultAudience(projectId, secret.agentIds, { stored: true });
+    if (identityId !== null) actorId = (await requireActiveProjectIdentity(projectId, identityId)).id;
+    if (audience !== null && (!actorId || !audience.includes(actorId))) refuseVaultRead();
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      await db.insert(vaultAudit).values({
+        projectId, secretName: name, action: "runtime_access_denied", agentId: actorId,
+      });
+    }
+    throw error;
+  }
 
   const [v] = await db
     .select()
@@ -73,6 +85,10 @@ export async function getSecretValue(
   if (v.agentEncrypted) {
     throw new Error("agent_encrypted_secret_not_in_process_readable");
   }
+
+  await db.insert(vaultAudit).values({
+    projectId, secretName: name, action: "runtime_read", agentId: actorId, version: v.version,
+  });
 
   // After the check above, auth_tag is guaranteed non-null by the schema
   // CHECK constraint (agent_encrypted=FALSE ⇒ auth_tag IS NOT NULL).

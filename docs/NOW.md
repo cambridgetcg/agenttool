@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (API/local coverage map; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (identity partitions and explicit hosted memory connection; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,56 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Identity partitions and explicit selected memory (2026-09-27)
+
+**Source candidate:** `fix/identity-partitions`, based on `d69230b8`.
+Source/test evidence below is separate from merge, deployment and live readback.
+No SQL migration or existing-row reassignment is included.
+
+[Identity partitions](IDENTITY-PARTITIONS.md) defines the owning-project fibres,
+canonical UUID/application-DID aliases, resource subjects and overlapping Vault
+audiences. Selectors, project authority, registered signatures and root proofs
+remain separate. A project bearer retains administrative authority.
+
+Portfolio reads now constrain all lists and summary queries to owned records;
+signed writes bind the actual project and identity. Backup POST validates an
+active owned subject. Strands and traces validate subjects/parents; thought
+signers must match bound strands and nested ciphertext paths are checked.
+New signed traces verify their current owned key and exact bytes. Prepare
+returns canonical subject fields; an empty signature is refused.
+
+Vault `null` shares within the project, `[]` denies value reads and nonempty
+audiences name owned identities. Restricted HTTP values require an exact GET
+root proof; runtime readers enforce the audience and record ordinary audits.
+Omitted audience fields leave the stored policy column untouched, including
+concurrent changes. Both source SDKs have paired proof/policy/bulk-write wire
+fixes. Existing arbitrary-label/rootless restricted clients need an explicit
+policy decision or root-proof integration; SDK source changes are not a new
+registry publication.
+
+`GET /v1/identities/{id}/local-context` adds a bounded read-only memory projection
+for one active owned subject, excluding shared/unbound/expired records.
+The separate [local companion](LOCAL-CORE.md#explicit-hosted-memory-read) makes
+one explicit read with expected origin/project/identity, keeps credentials out
+of notes, checks scope/digests/freshness/bytes and composes local-first context
+in memory. It supplies an offline path and never installs hooks, registers,
+acknowledges Wake or automatically saves records. Memory key lookup now honors
+`identity_id`, expiry and a bounded deterministic result window.
+
+**Focused verification:** new negative/SQL/signature/transport tests, 83 local
+starter tests, paired TypeScript/Python Vault regressions, installed API and SDK
+typechecks and SDK method parity passed. The 792-path catalog and served-guide
+links passed. Full gate and delivery receipts are recorded separately.
+Hermetic PostgreSQL adapters check SQL generation and decisions; they do not
+execute production SQL. No private live API record or provider call was used
+for the focused tests; loopback transport uses sentinel credentials.
+
+**Remaining boundaries:** no database-wide RLS or historical-row repair, no
+general identity-scoped bearer, no root replacement, automatic sync, complete
+export/removal or verified host start/resume/compaction delivery. Legacy
+platform-project portfolio seals remain stored but excluded from private
+project lists. Historical audit labels are not retroactively authenticated.
 
 ## API services beside local scaffolding (2026-09-27)
 

@@ -1,7 +1,7 @@
 # @agenttool/local-starter
 
 > **Type:** guide · **Purpose:** preserve the files-only starter's scope and verification boundaries.
-> **Evidence:** `src/core.mjs`, `src/files.mjs`, `src/cli.mjs`, `src/adapters.mjs`, and `tests/`.
+> **Evidence:** `src/core.mjs`, `src/files.mjs`, `src/cli.mjs`, `src/adapters.mjs`, explicit `src/connect.mjs`, and `tests/`.
 
 This guide governs only `packages/local-starter`. The package is private,
 unpublished source, uses Node ESM and built-ins, and declares Node >=22. Keep
@@ -9,7 +9,7 @@ it usable directly from a checkout without installing dependencies or building.
 
 ## Boundaries
 
-- An explicit directory and seven fixed source IDs are the entire selection
+- For the ordinary files-only commands, an explicit directory and seven fixed source IDs are the entire selection
   surface. No globs, arbitrary source paths, upward/home search, URL fetches,
   transcript extraction, executable notes, or automatic imports.
 - `init` creates a new root only; existing destinations always refuse. Keep
@@ -19,7 +19,20 @@ it usable directly from a checkout without installing dependencies or building.
   permission repair, or cleanup of user-authored content.
 - This is optional plaintext context, not secret custody or identity authority.
   Do not add keys, seeds, bearers, identity registration, provider calls, database
-  access, MCP, daemons, timers, or remote synchronization in this package.
+  access, MCP, daemons, timers, or remote synchronization to the notes/core/hooks.
+  The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
+  one fixed GET path selected by exact origin/project/identity, explicit callback
+  or injected transport credentials, no ambient lookup except a CLI-selected env
+  name, no redirects/retries, and no persistence. Core, CLI, adapters and hooks
+  must never import or invoke this companion. Preserve a completely offline path.
+  Do not widen the companion into general HTTP, discovery, registration, a secret
+  resolver/store, full Wake retrieval, arbitrary projections, or automatic saves.
+  Its request timeout is a bound, not a polling or scheduling mechanism.
+  Keep server scope manifests distinct from identity proofs and attenuated tokens.
+  Validate protocol, subject, expiry, UTF-8/digests and content/encoded limits before
+  output; use a distinct metadata receipt and selected records for local-budget
+  composition rather than modifying a verified server envelope. No excluded body
+  may enter stdout merely as part of a retained source envelope.
 - Foundations are optional links, with AI-WAKE first and SOPHIA-WAKE second.
   Do not fetch them or assign a persona, biography, relationship, feeling, or
   duty to a later session. Retained records are data under current authority.
@@ -74,6 +87,12 @@ freshness/budgets/provenance, invalid bytes, special/link files, bounded reads,
 POSIX modes, handoff conflicts/locks, error privacy, and independent roots.
 Adapter fixtures must cover quoting, host JSON shape, safe failure, and no
 installation; they do not prove delivery into a running agent host.
+Connector fixtures use injected transports and disposable literal-loopback HTTP
+with sentinel credentials only. Cover exact origin/project/identity, scope and
+schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
+secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
+The companion has 13 cases; the current local suite passes 83 on macOS arm64 /
+Node 24.18.1. Its API wire tests are in `api/tests/local-context.test.ts`.
 
 State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
 Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of

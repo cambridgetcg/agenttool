@@ -139,66 +139,63 @@ class TestVaultVersions:
 
 class TestVaultPolicy:
     def test_set_policy(self, at):
-        with patch.object(at._http, "put", return_value=_mock_response(200, {"policy": {"read_only": True}})) as mock_put:
-            result = at.vault.set_policy("openai-key", allowed_agents=["agent-1"], read_only=True)
-            assert result["policy"]["read_only"] is True
+        identity = "22222222-2222-4222-8222-222222222222"
+        with patch.object(at._http, "put", return_value=_mock_response(200, {"agent_ids": [identity]})) as mock_put:
+            result = at.vault.set_policy("openai-key", allowed_agents=[identity])
+            assert result["agent_ids"] == [identity]
             payload = mock_put.call_args[1]["json"]
-            assert payload["allowed_agents"] == ["agent-1"]
-            assert payload["read_only"] is True
+            assert payload == {"agent_ids": [identity]}
 
     def test_set_policy_partial(self, at):
         with patch.object(at._http, "put", return_value=_mock_response(200, {})) as mock_put:
-            at.vault.set_policy("key", require_agent_id=True)
-            payload = mock_put.call_args[1]["json"]
-            assert payload.get("require_agent_id") is True
-            assert "allowed_agents" not in payload
+            with pytest.raises(AgentToolError) as raised:
+                at.vault.set_policy("key", require_agent_id=True)
+            assert raised.value.code == "vault_policy_option_unsupported"
+            mock_put.assert_not_called()
 
 
 class TestVaultAudit:
     def test_audit_specific_secret(self, at):
         events = [{"action": "read", "agent_id": "agent-1", "ts": "2026-03-17T06:01:00Z"}]
-        with patch.object(at._http, "get", return_value=_mock_response(200, {"events": events})) as mock_get:
+        with patch.object(at._http, "get", return_value=_mock_response(200, {"entries": events})) as mock_get:
             result = at.vault.audit("openai-key")
             assert isinstance(result, list)
             assert result[0]["action"] == "read"
             assert "/openai-key/audit" in mock_get.call_args[0][0]
 
     def test_audit_project_wide(self, at):
-        with patch.object(at._http, "get", return_value=_mock_response(200, {"events": []})) as mock_get:
+        with patch.object(at._http, "get", return_value=_mock_response(200, {"entries": []})) as mock_get:
             at.vault.audit()
             assert "/v1/vault/audit" in mock_get.call_args[0][0]
             assert "/vault/audit" in mock_get.call_args[0][0]
 
     def test_audit_limit_param(self, at):
-        with patch.object(at._http, "get", return_value=_mock_response(200, {"events": []})) as mock_get:
+        with patch.object(at._http, "get", return_value=_mock_response(200, {"entries": []})) as mock_get:
             at.vault.audit(limit=10)
             params = mock_get.call_args[1].get("params", {})
             assert params.get("limit") == 10
 
 
 class TestVaultBulk:
-    def test_bulk_returns_map(self, at):
-        payload = {
-            "openai-key": {"value": "sk-abc", "version": 1, "found": True},
-            "missing-key": {"found": False},
-        }
-        with patch.object(at._http, "post", return_value=_mock_response(200, payload)) as mock_post:
-            result = at.vault.bulk(["openai-key", "missing-key"])
-            assert result["openai-key"]["found"] is True
-            assert result["missing-key"]["found"] is False
+    def test_bulk_put_sends_explicit_writes(self, at):
+        secrets = [{"name": "openai-key", "value": "fixture"}]
+        with patch.object(at._http, "post", return_value=_mock_response(200, {"stored": [{"name": "openai-key", "version": 1}]})) as mock_post:
+            result = at.vault.bulk_put(secrets)
+            assert result["stored"][0]["version"] == 1
             body = mock_post.call_args[1]["json"]
-            assert body["names"] == ["openai-key", "missing-key"]
+            assert body == {"secrets": secrets}
 
     def test_bulk_with_agent_id(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(200, {})) as mock_post:
-            at.vault.bulk(["key"], agent_id="agent-x")
-            headers = mock_post.call_args[1].get("headers", {})
-            assert headers.get("X-Agent-Id") == "agent-x"
+            with pytest.raises(AgentToolError) as raised:
+                at.vault.bulk(["key"], agent_id="agent-x")
+            assert raised.value.code == "vault_bulk_read_unavailable"
+            mock_post.assert_not_called()
 
 
 class TestVaultCheck:
     def test_check_existence(self, at):
-        with patch.object(at._http, "post", return_value=_mock_response(200, {"exists": {"openai-key": True, "missing": False}})):
+        with patch.object(at._http, "post", return_value=_mock_response(200, {"results": [{"name": "openai-key", "exists": True}, {"name": "missing", "exists": False}]})):
             result = at.vault.check(["openai-key", "missing"])
             assert result["openai-key"] is True
             assert result["missing"] is False

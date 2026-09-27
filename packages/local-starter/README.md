@@ -1,12 +1,14 @@
 # AgentTool local starter
 
 > **Type:** guide · **Purpose:** keep a small, explicitly selected set of local context files and carry a reviewed handoff between sessions.
-> **Evidence:** [core](src/core.mjs), [filesystem boundary](src/files.mjs), [CLI](src/cli.mjs), and [adapter fragments](src/adapters.mjs). Source availability does not establish package publication or host delivery.
+> **Evidence:** [core](src/core.mjs), [filesystem boundary](src/files.mjs), [CLI](src/cli.mjs), [adapter fragments](src/adapters.mjs), and [explicit hosted-read companion](src/connect.mjs). Source availability does not establish package publication or host delivery.
 
 This private source package creates seven ordinary Markdown files and a JSON
-manifest. You choose what a host reads. It has no runtime dependencies, service,
-database, network calls, credential discovery, identity registration, or model
-calls. It does not install itself into an agent host.
+manifest. You choose what a host reads. Its ordinary commands and hooks have no
+runtime dependencies, service, database, network calls, credential discovery,
+identity registration, or model calls. It does not install itself into an agent
+host. A separate, explicitly invoked [hosted-read companion](#explicit-hosted-read-companion)
+can add one bounded memory selection; existing commands never invoke it.
 
 The files hold optional plaintext context. They are not a key store, an
 authenticated identity, model training, or evidence of personal continuity.
@@ -171,6 +173,78 @@ and compaction delivery remain **untested** for all three hosts. Do not install
 both a full static snapshot and a full startup hook unless you want duplicate
 context.
 
+## Explicit hosted-read companion
+
+This optional connection reads recent memories for **one active identity owned
+by the authenticated project**, through
+`GET /v1/identities/:id/local-context`. It does not fetch full Wake, project-shared
+or unbound legacy memory, identity backups, Vault values, or provider credentials.
+The endpoint returns a project-bearer scope manifest. Selecting an identity
+filters records; it does not prove the caller holds that identity's signing key
+or turn the project bearer into an identity-private credential.
+
+Run `connect.mjs` separately and supply the expected HTTPS origin, project UUID,
+and identity UUID. The credential flag names an environment variable; it never
+accepts the bearer value in argv. Use your existing host credential mechanism
+to make that value available only to the intended process. Do not write it in
+notes, command history, or host configuration examples.
+
+```sh
+node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
+node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
+```
+
+The first command makes one explicit GET; the second reads only local files and
+does not resolve any credential. These are source instructions, not proof that
+the endpoint is deployed or that a package is published. There is no connection
+file, account lookup, registration fallback, installation, scheduled refresh,
+save, synchronization, or automatic write to `memories.md` or `handoff.md`.
+
+The hosted protocol (`agenttool-local-api-context/v1`) examines at most 32 recent
+candidates in deterministic creation-time/ID order, returns at most eight complete
+records, and identifies whether another candidate exists. Each included record
+has at most 4,096 content bytes, a SHA-256, creation time and optional expiry.
+The total hosted content limit is 8,192 bytes; encoded JSON is separately capped
+at 32,768 bytes. Oversized, invalid, over-budget, and item-limited records are
+named omissions. The API filters expired rows and performs no memory access-time
+update. This is a bounded recent window, not a complete export or search result.
+
+The companion checks the exact expected project and identity, closed protocol
+shape, scope, byte counts, hashes, timestamps and expiry before producing any
+context. A snapshot more than five minutes away from the client clock is refused;
+a record that expired in transit is also refused. The request has a ten-second
+bound and a response-byte cap, follows no redirects, and never retries. A refusal,
+timeout, incompatible older server or unavailable credential produces a short
+error with no partial stdout. Run the explicit offline command or the unchanged
+`cli.mjs render` command when local-only context is wanted.
+
+Composition keeps local records first within the local manifest's aggregate
+content budget; only complete hosted records that fit the remainder are included.
+JSON output uses `agenttool-connected-context/v1`: `hosted.receipt` contains
+source metadata without record bodies, while `hosted.selection` carries the
+selected records and local budget omissions. `response_sha256` identifies the
+original received HTTP entity bytes, not the derived receipt. Origin comes from
+the chosen request target. Hashes identify bytes; they do not certify authorship
+or truth. Output framing retains the separate 131,072-byte stdout cap.
+
+For a host integration, the module exports `readHostedContext(options)` and
+`renderConnectedContext({ dir, ...options })`. Pass either a `resolveBearer`
+callback or a structural `transport: { request(url, init) }`, never both. A
+configured credential broker's `asTransport(grant)` fits that interface and keeps
+the bearer outside this process. The first endpoint needs a GET grant for one
+exact identity path with no query names; generic broker grants still use
+segment-aware path prefixes. Keep the grant handle in trusted host state.
+The existing broker is a separate preview with its own OS, custody, and same-user
+limits, not a dependency bundled here. The callback/env option holds the bearer
+in this process's memory and environment handling has its normal host exposure.
+Exact credential reflections are refused; that is not protection against every
+transformed or encoded disclosure.
+
+The CLI accepts HTTPS origins only. Literal-loopback HTTP is available solely
+through the module's explicit `allowLoopbackHttp` test seam, never as a CLI flag.
+No new hook is generated; deliberate host loading and provider disclosure remain
+the caller's decisions. Disabling this connection cannot retract earlier output.
+
 ## Platform and custody limits
 
 | Environment | Local files | Hook-fragment boundary |
@@ -228,6 +302,12 @@ or remote-retention claim is made.
 node --test
 ```
 
-Tests require no service, credentials, package installation, or model calls.
+Tests require no external service, real credentials, package installation, or
+model calls. Connector tests use injected transports and temporary literal-loopback
+HTTP servers with obvious sentinel bearers. On macOS arm64 / Node 24.18.1 the
+complete local suite passes 83 tests, including 13 connector cases. The API's
+`tests/local-context.test.ts` passes nine hermetic cases with Bun 1.3.5, including
+the actual route-envelope/companion wire contract. This is separate from the
+earlier files-only OS matrix and is not a live hosted or real-harness receipt.
 See [CLAUDE.md](CLAUDE.md) for the package's change boundaries, and
 [Local core](../../docs/LOCAL-CORE.md) for the larger local/host/server map.

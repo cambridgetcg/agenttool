@@ -178,7 +178,7 @@ CASES: List[Case] = [
     Case(
         "vault.set_policy",
         "/v1/vault/",
-        lambda at, i: at.vault.set_policy(i, read_only=True),
+        lambda at, i: at.vault.set_policy(i, agent_ids=[]),
     ),
     Case("vault.audit", "/v1/vault/", lambda at, i: at.vault.audit(i)),
     Case(

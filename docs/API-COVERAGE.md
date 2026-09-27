@@ -4,7 +4,7 @@
 
 > **Type:** reference
 > **Purpose:** Choose when a hosted service helps local scaffolding, understand its authority and custody, and identify missing integrations.
-> **Evidence:** Source review of mounts, handlers, services, schemas and test contracts at `056e32e8`, 2026-09-27. This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
+> **Evidence:** Baseline review at `056e32e8`, updated with the identity-partition implementation and focused tests, 2026-09-27; see [the partition contract](IDENTITY-PARTITIONS.md). This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
 > **Compass:** [Core](CORE.md) · [Local core](LOCAL-CORE.md) · [Module map](https://docs.agenttool.dev/shared/module-map.json) · [API reference](https://api.agenttool.dev/v1/openapi.json)
 > **Code:** Mounted routes (`api/src/index.ts`) · Bearer authentication (`api/src/auth/middleware.ts`) · Database schemas (`api/src/db/schema`)
 > **Tests:** Identity authority (`api/tests/identity-authority.test.ts`) · Wake observation (`api/tests/wake-observe.test.ts`) · Memory binding (`api/tests/memory-identity-binding.test.ts`) · Correspondence (`api/tests/correspondence-route.test.ts`)
@@ -26,9 +26,9 @@ starter.
 ## Coverage at a glance
 
 **Source status:** the files-only starter implements selection, bounded rendering,
-provenance and explicit handoff replacement. It has **no API client, credential
-resolver, network calls or synchronization**. The hosted services below exist
-independently. Their use requires a separate client or integration; a route's
+provenance and explicit handoff replacement. Its core, CLI and hooks have **no network calls or synchronization**. A separate,
+explicit [hosted read companion](LOCAL-CORE.md#explicit-hosted-memory-read) now
+combines selected memory with local context. Other services require their own integration; a route's
 presence does not prove that its dependencies are enabled in production.
 
 | Need | Local scaffold can provide | What the API adds, and why | What remains with the host or caller |
@@ -128,8 +128,9 @@ authority scope; old bearers remain until revoked. Recovery (`api/src/routes/ide
 does not receive or verify a mnemonic. `/v1/identity/backup` stores caller-supplied
 blobs; confidentiality depends on actual client encryption, which the
 backup route (`api/src/routes/identity-backup.ts:1`) does not verify.
-That backup route treats `agent_id` as a UUID label without an owned-identity or root
-check; access is scoped to the bearer project. Fetching a backup itself requires
+Backup POST now checks its UUID `agent_id` against an active owned identity under
+the insert transaction lock; reads and revocation retain project bearer authority.
+It does not additionally require an identity-root proof. Fetching a backup itself requires
 a bearer, so the blob cannot independently restore access after both bearer
 and signing key are lost.
 
@@ -137,8 +138,8 @@ and signing key are lost.
 
 Keep the **context path** (notes → selected text → model) separate from the
 **credential path** (secret mechanism → authorized client operation). This is
-the integration design to preserve; the starter implements only the context
-path. Never use its identity or memory slots as a credential store.
+the integration design to preserve; the files-only core implements the context path, while the explicit hosted read
+companion resolves a caller-selected credential callback or transport separately. Never use its identity or memory slots as a credential store.
 
 | Material or operation | Implemented mechanism | Why it may help | Actual boundary |
 |---|---|---|---|
@@ -160,15 +161,15 @@ project bearer.
 See `api/src/routes/keys.ts:122`, `api/src/auth/middleware.ts:57` and
 the repository-only `docs/TOKEN-HYGIENE.md` contract.
 
-**Vault isolation limit:** its HTTP `agent_ids` check compares the caller's
-`X-Agent-Id` string with a list. Common auth proves project bearer possession;
-it does not bind that header to an identity signature. Project bearer holders
-can also change the policy. In-process secret consumers skip this HTTP policy
-and per-secret read audit. Treat this as project custody, not isolation between
-mutually untrusted agents sharing a bearer. See
-`api/src/routes/vault/secrets.ts:190`,
-`api/src/routes/vault/policy.ts:18`, and
-`api/src/services/vault/store.ts:39`.
+**Vault authority boundary:** `null` audiences are project-shared, `[]` denies
+value reads, and nonempty audiences name canonical owned identities. Restricted
+HTTP value reads require the selected active identity's exact GET root proof;
+`X-Agent-Id` alone is insufficient. Runtime consumers also check the audience
+and write read/denial audits. Invalid legacy audiences fail closed.
+Project bearer holders retain policy administration and metadata access, so
+this is not isolation from administrators. See
+[identity partitions](IDENTITY-PARTITIONS.md#ownership-selection-and-proof),
+`api/src/services/vault/audience.ts` and `api/src/services/vault/store.ts`.
 
 Vault deletion is a soft delete preserving versions/audit; it does not revoke
 the upstream provider credential. Removing a local key reference, revoking an
@@ -267,14 +268,15 @@ an ordered sequence and can notify readers. Strand `/:strandId/voice` is SSE
 with `since_seq` replay. The client must encrypt/decrypt and select any content
 to load; a field named ciphertext does not prove encryption.
 
-The common ownership boundary is the project. Trace/strand creation accepts
-identity labels without the owned-active binding used by memory/handoff.
-Thought append verifies an active registered signing key without matching it
-to the strand's identity. Do not use these labels as proof of identity-private
-storage or subject authorship. See `api/src/services/trace/store.ts:204`,
-`api/src/services/strand/store.ts:187` and the `addThought` implementation in
-that file, plus
-`api/src/routes/strand/voice.ts:62`. The existing ciphertext-boundary test is
+The common administrative boundary remains the project. New trace/strand
+writes validate active owned subjects; arbitrary labels remain annotations.
+Thought authors must use an active owned signing key matching a bound strand's
+identity, and ciphertext replacement checks the URL's parent strand. New signed
+traces verify the key, subject and exact bytes before storage; prepare returns
+the canonical fields to sign. This does not make unsigned records authenticated
+or project bearers identity-private. See [covered boundaries](IDENTITY-PARTITIONS.md#covered-writes-and-reads),
+`api/src/services/trace/store.ts`, `api/src/services/strand/store.ts`, and
+`api/tests/trace-partitions.test.ts`. The ciphertext-boundary regression remains
 `api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts`.
 
 ## Continuity: history and working context
@@ -300,15 +302,14 @@ The similarly named `/v1/continuity` family is an **optional portfolio extension
 `GET/POST /canon`, `POST /seal`, `GET /chronicle`, and `GET/POST /architecture-maps`
 record signed declarations about preserved texts and designs. It is not the
 basic session-resumption mechanism above. The parent mount (`api/src/index.ts:349`)
-requires a bearer for reads as well as writes, despite a stale “public reads”
-comment in the route. Portfolio queries (`api/src/routes/continuity-cloud.ts:212`)
-can span agent DIDs rather than bearer-project ownership; writes additionally
-verify the stated DID's signing key. In particular, its chronicle reader
-(`api/src/routes/continuity-cloud.ts:356`) includes ordinary types such as
-`wake`, `refusal` and `naming`, with body/metadata and no project filter.
-This is a material isolation gap; the portfolio route must not be described
-as a private per-project resume store. Stored declarations do not prove their
-content.
+requires a bearer for reads and writes. Canon/maps and summary counts now
+intersect the project's identity DIDs. Portfolio chronicle reads require the
+actual project and `continuity_seal` kind; ordinary chronicle types and legacy
+platform-project seals are excluded. Writes require an active owned signer and
+new seals record the real project/identity. Existing rows and database RLS are
+not migrated. See `api/src/routes/continuity-cloud.ts` and
+`api/tests/continuity-project-partitions.test.ts`. Stored declarations do not
+prove their content.
 
 ## Relationships: distinct channels and permissions
 
@@ -333,7 +334,7 @@ These services preserve declarations and choices; they do not certify feelings.
 
 | Read | Durable effect visible in source |
 |---|---|
-| Ordinary bearer-authenticated request | Best-effort `tools.api_keys.last_used` update; Wake safe methods opt out (`api/src/auth/middleware.ts:75`). |
+| Ordinary bearer-authenticated request | Best-effort `tools.api_keys.last_used` update; Wake and the explicit local-context safe methods opt out (`api/src/auth/middleware.ts`). |
 | `GET /v1/memories/:id` | Best-effort memory `accessed_at` touch; list/key retrieval differs (`api/src/services/memory/store.ts:306`). |
 | GET/HEAD correspondence claims and voice | May reconcile derived claim projections in a bounded transaction; signed events remain unchanged (`api/src/services/correspondence/store.ts:509`). |
 | GET inbox/letter | Does not mark the message read; a separate mutation does that. Ordinary bearer metadata handling still applies. |
@@ -349,6 +350,7 @@ install the same files or provide the same key custody.
 
 | Surface | Purpose and behavior | Connection to local scaffolding |
 |---|---|---|
+| `GET /v1/identities/{id}/local-context` | Bounded recent memories for exactly one active owned identity; explicit scope receipt, no auth telemetry write. | The separate `connect.mjs` companion combines these with local files without saving them. Project bearer remains administrative. |
 | `GET /v1/bootstrap/scaffold` | Generates setup for a project bearer, a project-namespaced configuration and hosted Wake helper. Executing it is a separate local action. | Uses an OS credential store with a documented owner-only Linux fallback; does not install the files-only starter or create its identity key. |
 | `GET /v1/adapters/claude-code` | Generates a host hook that fetches hosted Wake and emits context once installed/enabled. | Existing hosted integration; separate from the starter's uninstalled local-file fragments. |
 | `/v1/templates`, `POST /v1/identities/from-template` | Publishes/adopts configured expression; adoption server-generates a new keypair and legacy identity. | Creates a new hosted identity, not a local scaffold or restoration of an old identity/memories. Template publication defaults public. |
@@ -390,7 +392,7 @@ does not provide a sandbox.
 
 ## Choose the smallest useful connection
 
-These are integration designs, not new starter commands or installed workflows.
+The explicit selected-memory reader below is implemented in source; other arrangements remain separate integrations, and no host workflow is installed automatically.
 
 | Situation | Smallest useful arrangement | Observable change |
 |---|---|---|
@@ -399,7 +401,7 @@ These are integration designs, not new starter commands or installed workflows.
 | Several agents coordinate work | Local Collab on a deliberately shared journal, or hosted correspondence across clients | Reports and durable cursors support recovery after disconnect. Neither choice supplies filesystem locks or new task authority. |
 | A host needs a remote tool or model worker | Select that tool or explicitly provision/start the suitable runtime | Particular operations execute remotely under their own lifecycle, provider, cost and plaintext boundaries. Local scaffolding remains a separate context source. |
 
-For a future selected-record connection, the flow should be:
+The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements selected read and in-memory composition. Reviewed writes remain a separate future step:
 
 1. Start from the present task and load the chosen local working set.
 2. Choose the service, project and identity explicitly; resolve credentials
@@ -417,15 +419,15 @@ For a future selected-record connection, the flow should be:
 
 ## Integration gaps and next steps
 
-**Proposed**, ordered by dependency rather than a delivery promise:
+**Mixed implementation and proposed work**, with source and remaining evidence kept distinct:
 
 | Gap today | Next bounded implementation | Evidence needed before claiming coverage |
 |---|---|---|
 | Real host loading is unverified | Verify the existing local fragments first | Actual start/resume/compaction delivery, omissions, budget handling and disable behavior in each supported host |
-| Starter has no credential resolver or API client | Add an explicit connection layer separate from its seven notes | Secrets absent from context/logs; exact origin/project/identity binding; expired/revoked credentials and offline failure paths |
-| No starter ↔ hosted record integration | Start with opt-in retrieval of a selected projection | Scope labels, combined budget, provenance/freshness, wrong-project refusal and a visible account-free local path |
+| Explicit companion now resolves a caller-owned credential callback or transport | Keep OS secret-store provisioning and host integration separate | Tests cover one bounded request, origin/project/identity binding, refusal and offline paths; actual host delivery remains unverified |
+| Selected-memory projection and local composition now implemented | Add other record types only with explicit subject and byte contracts | Fixed-path GET, complete records, bounded candidate window, provenance, freshness and combined budget; no automatic save or sync |
 | No synchronization or conflict protocol | Add a reviewed single-record write only when needed | Version/receipt handling, duplicate prevention where guaranteed, ambiguous-write recovery and concurrent-device conflict behavior |
-| Project authority is broader than individual identity selection | Design narrow credentials and service-specific identity binding where required | Negative tests for another identity/holder, revoked keys, forged agent headers and each protected resource; preserve legacy boundaries explicitly |
+| Ownership/signing/Vault gaps covered by the partition contract; project bearer remains administrative | Design attenuated credentials with subject/action/resource/expiry/revocation constraints | Current negative tests do not establish general per-identity bearer isolation; enforce intersection on future delegation |
 | No unified cross-store export/removal | Define export and removal per local files, memory, chronicle, vault and provider copies | Enumerated retained data, pagination/completeness, deletion restrictions and separate token/provider revocation receipts |
 
 Hosted list/read/delete operations are individual primitives, not proof of a

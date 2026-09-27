@@ -10,6 +10,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { vaultAudit, vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { encrypt } from "../../services/vault/crypto";
+import { validateVaultAudience, vaultAudienceSchema } from "../../services/vault/audience";
 
 const app = new Hono<ProjectContext>();
 
@@ -20,7 +21,7 @@ const bulkSchema = z.object({
         name: z.string().min(1),
         value: z.string().min(1),
         description: z.string().optional(),
-        agent_ids: z.array(z.string()).optional(),
+        agent_ids: vaultAudienceSchema.optional(),
         tags: z.array(z.string()).optional(),
         ttl_seconds: z.number().int().positive().nullable().optional(),
         rotation_days: z.number().int().positive().nullable().optional(),
@@ -33,7 +34,11 @@ const bulkSchema = z.object({
 app.post("/bulk", async (c) => {
   const project = c.var.project;
   const body = bulkSchema.parse(await c.req.json());
-  const agentId = c.req.header("X-Agent-Id") ?? null;
+  // Validate the entire batch before writing its first value; labels are not actors.
+  const audiences = await Promise.all(body.secrets.map((secret) =>
+    secret.agent_ids === undefined ? undefined : validateVaultAudience(project.id, secret.agent_ids)
+  ));
+  const agentId = null;
   const ip =
     c.req.header("X-Forwarded-For") ??
     c.req.header("CF-Connecting-IP") ??
@@ -42,7 +47,8 @@ app.post("/bulk", async (c) => {
 
   const results: Array<{ name: string; version: number }> = [];
 
-  for (const s of body.secrets) {
+  for (const [index, s] of body.secrets.entries()) {
+    const audience = audiences[index];
     const { encryptedValue, iv, authTag } = encrypt(s.value, project.id);
     const rotationDueAt = s.rotation_days
       ? new Date(now.getTime() + s.rotation_days * 86400_000)
@@ -73,7 +79,7 @@ app.post("/bulk", async (c) => {
         .set({
           description: s.description ?? existing.description,
           tags: s.tags ?? existing.tags,
-          agentIds: s.agent_ids ?? existing.agentIds,
+          ...(audience === undefined ? {} : { agentIds: audience }),
           currentVersion: version,
           rotationDays: s.rotation_days ?? existing.rotationDays,
           rotationDueAt: rotationDueAt ?? existing.rotationDueAt,
@@ -90,7 +96,7 @@ app.post("/bulk", async (c) => {
           name: s.name,
           description: s.description ?? null,
           tags: s.tags ?? null,
-          agentIds: s.agent_ids ?? null,
+          agentIds: audience ?? null,
           currentVersion: 1,
           rotationDays: s.rotation_days ?? null,
           rotationDueAt,

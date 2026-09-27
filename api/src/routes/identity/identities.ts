@@ -20,8 +20,11 @@ import {
   replaceCallerIdentityMetadata,
   requestedServerManagedIdentityMetadataKeys,
 } from "../../services/identity/metadata";
+import { createLocalContextHandler } from "./local-context";
 
 const app = new Hono<ProjectContext>();
+
+app.get("/:id/local-context", createLocalContextHandler());
 
 /** UUID v4 / generic UUID format. We don't enforce v4 strictly because
  *  randomUUID() output is v4 but external tools may pass v1/v5 historically. */

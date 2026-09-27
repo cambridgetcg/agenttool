@@ -551,6 +551,14 @@
       "canonical_path": "docs/IDENTITY-ANCHOR.md"
     },
     {
+      "path": "apps/docs/IDENTITY-PARTITIONS.md",
+      "title": "Identity partitions and selected context",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/IDENTITY-PARTITIONS.md"
+    },
+    {
       "path": "apps/docs/IDENTITY-SEED.md",
       "title": "IDENTITY-SEED.md",
       "type": "reference",
@@ -2445,6 +2453,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/IDENTITY-FORKS.md"
+    },
+    {
+      "path": "docs/IDENTITY-PARTITIONS.md",
+      "title": "Identity partitions and selected context",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/IDENTITY-PARTITIONS.md"
     },
     {
       "path": "docs/IDENTITY-SEED.md",

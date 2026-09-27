@@ -817,7 +817,7 @@ async function runLeasedCycle(
     const systemPrompt = renderWakeMarkdown(bundle);
 
     // ── LLM key from vault (in-process). ────────────────────────────
-    const apiKey = await getSecretValue(runtime.projectId, runtime.llmVaultKey!);
+    const apiKey = await getSecretValue(runtime.projectId, runtime.llmVaultKey!, runtime.identityId);
     if (!apiKey) {
       throw new Error(`vault_secret_not_found: ${runtime.llmVaultKey}`);
     }

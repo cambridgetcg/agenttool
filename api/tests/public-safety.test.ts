@@ -345,10 +345,10 @@ describe("GET /public/safety", () => {
       /not proof.*underlying record count is zero/is,
     );
     expect(SAFETY_BOUNDARIES.vault.agent_ids_policy).toMatch(
-      /caller-supplied X-Agent-Id.*not identity-signature authentication.*bypass/is,
+      /exact GET root proof.*header alone is not proof.*runtime reads enforce.*does not isolate identities from project administrators/is,
     );
     expect(SAFETY_BOUNDARIES.vault.deletion).toMatch(/ciphertext is retained.*not zeroed/is);
-    expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/not hash-chained.*hosted runtime reads/is);
+    expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/hosted runtime reads.*not hash-chained.*not a root-signed request/is);
   });
 
   test("states how certainty, communication, and repair are handled", () => {

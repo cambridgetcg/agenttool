@@ -176,14 +176,13 @@
       <table class="params-table">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td><span class="pname">decision_type</span></td><td><span class="ptype">string</span></td><td>What kind of decision — <code>tool_choice</code>, <code>refusal</code>, <code>strategy_switch</code>, freeform.</td></tr>
-          <tr><td><span class="pname">decision_summary</span></td><td><span class="ptype">string</span></td><td>One-line summary of what was decided.</td></tr>
-          <tr><td><span class="pname">reasoning</span></td><td><span class="ptype">string</span></td><td>The argument — what was weighed, what was ruled out, what tipped it.</td></tr>
-          <tr><td><span class="pname">context</span></td><td><span class="ptype">object</span></td><td>The state at decision time — input, observed values, relevant memories.</td></tr>
-          <tr><td><span class="pname">conclusion</span></td><td><span class="ptype">string</span></td><td>The action taken (or refused).</td></tr>
-          <tr><td><span class="pname">confidence</span></td><td><span class="ptype">float (0.0–1.0)</span></td><td>How sure the agent was. Crucial for downstream auditing.</td></tr>
-          <tr><td><span class="pname">parent_trace_id</span></td><td><span class="ptype">uuid</span></td><td>Optional — links this trace to its predecessor for chain reconstruction.</td></tr>
-          <tr><td><span class="pname">signature</span></td><td><span class="ptype">base64</span></td><td>Optional ed25519 signature for verifiable provenance.</td></tr>
+          <tr><td><span class="pname">decision</span></td><td><span class="ptype">object</span></td><td>Required <code>type</code> and <code>summary</code>; optional <code>output_ref</code>.</td></tr>
+          <tr><td><span class="pname">reasoning</span></td><td><span class="ptype">object</span></td><td>Required <code>conclusion</code>; optional <code>observations</code>, <code>hypothesis</code>, <code>confidence</code> (0–1), <code>alternatives</code> and <code>signals</code>.</td></tr>
+          <tr><td><span class="pname">context</span></td><td><span class="ptype">object</span></td><td>Optional <code>files_read</code>, <code>key_facts</code> and <code>external_signals</code>.</td></tr>
+          <tr><td><span class="pname">identity_id</span></td><td><span class="ptype">uuid | null</span></td><td>Optional canonical subject; a bound identity must be active and owned by this project.</td></tr>
+          <tr><td><span class="pname">agent_id</span></td><td><span class="ptype">string | null</span></td><td>An identity UUID/application-DID alias binds that identity; arbitrary labels are annotations. Canonical selectors must agree.</td></tr>
+          <tr><td><span class="pname">parent_trace_id</span></td><td><span class="ptype">tr_… handle</span></td><td>Optional predecessor in the same project; it may have another subject.</td></tr>
+          <tr><td><span class="pname">signature</span></td><td><span class="ptype">base64 | null</span></td><td>Optional Ed25519 proof. A signed write also needs <code>signing_key_id</code> and <code>signed_at</code>; use the preparation flow below. Empty signatures are refused.</td></tr>
         </tbody>
       </table>
 
@@ -203,12 +202,16 @@
   -H "Authorization: Bearer $AT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "decision_type": "tool_choice",
-    "decision_summary": "Pick scrape over browse for static page",
-    "reasoning": "Page returns 200 with full HTML; no JS-rendered content needed. Scrape is 30x cheaper.",
-    "context": { "url": "https://example.com/article", "headers": {...} },
-    "conclusion": "called /v1/scrape",
-    "confidence": 0.92
+    "decision": {
+      "type": "tool_choice",
+      "summary": "Choose scrape for the static article"
+    },
+    "reasoning": {
+      "observations": ["The response contains the complete article HTML"],
+      "conclusion": "Use /v1/scrape",
+      "confidence": 0.92
+    },
+    "context": { "external_signals": { "url": "https://example.com/article" } }
   }'</pre>
           </div>
         </div>
@@ -232,7 +235,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">List recent traces. Filterable by <code>decision_type</code> and <code>min_confidence</code>.</p>
+          <p class="endpoint-desc">List recent traces within the project. Filters include <code>identity_id</code>, <code>agent_id</code>, <code>session_id</code>, <code>decision_type</code> and <code>parent_trace_id</code>. Selecting an identity does not narrow the bearer's authority.</p>
         </div>
       </div>
 
@@ -290,11 +293,13 @@
       </div>
 
       <h2 id="signatures">Verifiable traces</h2>
-      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship to the AgentTool identity record associated with that public key.</p>
-
-      <p>Canonical payload: <code>SHA-256(decision_type || \0 || decision_summary || \0 || reasoning || \0 || conclusion || \0 || canonical_json(context))</code>.</p>
-
-      <p>Sign client-side. Send <code>signature</code> with the POST. We verify against the agent's active <a href="identity.html#keys">key</a> before accepting.</p>
+      <ol>
+        <li>POST the intended body to <code>/v1/traces/prepare</code>. This free operation returns <code>agent_id</code>, canonical <code>identity_id</code>, <code>signed_at</code> and <code>canonical_sha256_b64</code>.</li>
+        <li>Base64-decode the digest and Ed25519-sign its 32 raw bytes with your registered key. Keep the returned subject fields unchanged.</li>
+        <li>POST the same content with those returned fields, <code>signature</code> and <code>signing_key_id</code> to <code>/v1/traces</code>. The key must be active and owned by the project, and must match any bound identity.</li>
+      </ol>
+      <p>The <a href="CANONICAL-BYTES.md#agent-tracev1--signed-reasoning-trace"><code>agent-trace/v1</code> recipe</a> binds the project, subject fields, session, parent, normalized content digest and signing time. New signed writes verify before storage and recheck admission inside the transaction. Signed fields are not silently rewritten. A signature proves these bytes were signed by that key; it does not establish truth or give identities privacy from the project bearer.</p>
+      <p><code>GET /v1/traces/:id/verify</code> checks stored signatures, including historical rows, and reports an explicit status. <code>has_signature</code> only says a string is stored; older rows may lack the recipe, timestamp or a usable key. Unsigned records remain supported.</p>
 
       <h2 id="next">What to read next</h2>
       <ul>

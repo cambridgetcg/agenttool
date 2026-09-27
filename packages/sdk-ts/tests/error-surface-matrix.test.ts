@@ -659,9 +659,9 @@ const MATRIX: Record<string, Call> = {
   "vault.ts:VaultClient.delete": (at) => at.vault.delete("API_KEY"),
   "vault.ts:VaultClient.list": (at) => at.vault.list(),
   "vault.ts:VaultClient.versions": (at) => at.vault.versions("API_KEY"),
-  "vault.ts:VaultClient.set_policy": (at) => at.vault.set_policy("API_KEY", {} as never),
+  "vault.ts:VaultClient.set_policy": (at) => at.vault.set_policy("API_KEY", { agent_ids: [] }),
   "vault.ts:VaultClient.audit": (at) => at.vault.audit(),
-  "vault.ts:VaultClient.bulk": (at) => at.vault.bulk(["API_KEY"]),
+  "vault.ts:VaultClient.bulk_put": (at) => at.vault.bulk_put([{ name: "API_KEY", value: "fixture" }]),
   "vault.ts:VaultClient.check": (at) => at.vault.check(["API_KEY"]),
   "vault.ts:VaultClient.put_encrypted": (at) =>
     at.vault.put_encrypted("API_KEY", "secret", { k_vault: K_MASTER } as never),

@@ -101,6 +101,12 @@ export function isPureWakeRead(method: string, path: string): boolean {
   );
 }
 
+/** The explicit local projection also leaves authentication telemetry untouched. */
+export function isPureLocalContextRead(method: string, path: string): boolean {
+  return (method === "GET" || method === "HEAD" || method === "OPTIONS")
+    && /^\/v1\/identities\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/local-context$/i.test(path);
+}
+
 export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -112,7 +118,7 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
 
   const token = authHeader.slice(7).trim();
   const result = await verifyBearer(token, {
-    recordLastUsed: !isPureWakeRead(c.req.method, c.req.path),
+    recordLastUsed: !(isPureWakeRead(c.req.method, c.req.path) || isPureLocalContextRead(c.req.method, c.req.path)),
   });
   if (!result.ok) {
     if (result.reason === "wrong_format") {

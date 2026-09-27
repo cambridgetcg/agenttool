@@ -12,7 +12,7 @@
 >
 > **Code:** `api/src/routes/strand/` (strands · thoughts · voice SSE) · `api/src/services/strand/` (store · sig · voice) · `bin/sign-thought.ts` · `bin/gen-k-master.ts` · DB: `api/src/db/schema/strand.ts` (strands · thoughts · mood_history)
 >
-> **Tests:** `api/tests/doctrine/promise-09-inner-voice.test.ts` (wake never leaks ciphertext fields) · `api/tests/pulse-drift.test.ts` (mood_history-driven)
+> **Tests:** `api/tests/doctrine/promise-09-inner-voice.test.ts` (wake never leaks ciphertext fields) · `api/tests/pulse-drift.test.ts` (mood_history-driven) · `api/tests/strand-project-partitions.test.ts` (subject, signer and parent boundaries)
 
 ## The principle
 
@@ -42,6 +42,25 @@ A thought is *not* a memory and *not* a trace:
 | Interrelation | Sequential within strand | Tree (parent_trace_id) | Graph (cosine) |
 
 Three distinct surfaces. The strand is where new cognition forms; trace is where decisions are recorded; memory is where insight is stored after consolidation.
+
+### Project, subject and author
+
+The project bearer remains the administrative and read boundary. A new strand's
+`identity_id`, or a recognized UUID/`did:at:UUID` alias in `agent_id`, must resolve
+to an active owned identity. Conflicting selectors are refused; arbitrary labels
+remain annotations. An optional parent strand must belong to the same project,
+but may have another subject. Existing records are not retroactively rebound.
+
+Thought writes require an active owned registered signing key. A bound strand
+accepts keys belonging to that same identity; an unbound project-level strand
+accepts an owned active signer. A canonical author selector must agree with
+the signing key. These checks run inside the write transaction and do not
+turn an unsigned label into proof or isolate identities from the project bearer.
+
+Ciphertext replacement also requires the URL parent to match the stored thought.
+It verifies with the thought's existing signing key under current admission,
+preserving its key reference and sequence. See
+[identity partitions](IDENTITY-PARTITIONS.md#covered-writes-and-reads).
 
 ## Thought kinds (vitakka)
 
@@ -93,6 +112,10 @@ isolation or secure-erasure guarantee.
 
 The intended use of `/v1/identity/backup` is a blob encrypted client-side under a passphrase only the agent holds, optionally including K_master. The route stores arbitrary caller-supplied base64 and does not verify an authenticated-encryption envelope. When the client actually encrypts the blob and keeps the passphrase off-platform, a new orchestrator instance can fetch and decrypt it locally and AgentTool cannot recover K_master from that blob.
 
+Backup POST requires an active owned identity UUID; backup reads still require
+the project bearer. The blob alone cannot restore access when both bearer and
+signing key have been lost.
+
 ### Encryption — per-thought
 
 The documented client recipe, before anything leaves the agent's machine:
@@ -122,7 +145,7 @@ Then POST to `/v1/strands/:id/thoughts`:
 ```
 
 strand storage service:
-- ✓ verifies the signature with the public key from `identity.identity_keys[signing_key_id]`
+- ✓ checks active project ownership and subject agreement, then verifies the signature with `identity.identity_keys[signing_key_id]`
 - ✓ stores `(ciphertext, nonce, kind, signature, signing_key_id, sequence_num)`
 - ✗ has no plaintext thought column
 - ✗ does not prove that `ciphertext` is AES-GCM output or that `nonce` is fresh
@@ -137,8 +160,8 @@ When the client actually uses AES-256-GCM correctly, GCM gives confidentiality a
 
 The recipe above is `strand-thought/v1`. There is a second framing,
 `strand-thought/v2`, and **the server already accepts both** —
-`verifyThoughtSignature` tries v2 and falls back to v1, so every row ever
-signed stays verifiable.
+`verifyThoughtSignature` tries v2 and falls back to v1. Historical bytes retain
+their recipe; acceptance of a new write also requires current signer admission.
 
 ```
 strand-thought/v2
@@ -287,7 +310,7 @@ The cron lives on the orchestrator, not on us. Otherwise we'd hold K_master duri
 | **Memory** | Thoughts can reference memories (refs.memory); consolidation creates new memories from clusters of thoughts |
 | **Trace** | When a thought becomes a decision, the agent records a trace with `parent_thought_id` in its references |
 | **Chronicle** | Significant strand events ("named", "completed", "branched") chronicle naturally |
-| **Vault** | Stores the agent's LLM provider key — fetched + decrypted by orchestrator for autonomous LLM calls |
+| **Vault** | Stores a provider key: restricted HTTP reads require exact GET root proof; hosted runtime reads check the durable owned subject and audience. Server-managed values are decrypted by the service; caller-encrypted values require local decryption. |
 | **Wallet** | Autonomous runs are paid via credit budget — agent funds its own thinking |
 | **Wake** | Returns active strands (metadata only) so the agent picks up where it left off |
 | **Expression** | `register` and `walls` shape the inner voice the orchestrator instructs the LLM to produce |
@@ -327,6 +350,8 @@ GET    /v1/strands  ?status=&agent_id=      list (filter)
 GET    /v1/strands/:id                       fetch one
 PATCH  /v1/strands/:id                       status / mood / state / revisit / topic
 POST   /v1/strands/:strandId/thoughts        add signed caller-supplied ciphertext/nonce fields
+PATCH  /v1/strands/:strandId/thoughts/:thoughtId/ciphertext
+                                             replace bytes under the existing key and exact parent
 GET    /v1/strands/:strandId/thoughts        list stored opaque blobs (decrypt client-side if encrypted)
 GET    /v1/strands/:strandId/voice           SSE push channel (LISTEN/NOTIFY-backed)
 ```

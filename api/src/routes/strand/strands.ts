@@ -14,6 +14,8 @@ import {
   patchStrand,
 } from "../../services/strand/store";
 
+import { resolveProjectSubject } from "../../services/identity/partition";
+
 const app = new Hono<ProjectContext>();
 
 const STATUS = z.enum(["active", "dormant", "completed", "abandoned"]);
@@ -57,9 +59,17 @@ app.post("/", async (c) => {
       400,
     );
   }
+  await resolveProjectSubject(c.var.project.id, parsed.data);
   await charge(c, ROUTE_CREDITS["strand.create"], "strand.create");
-  const strand = await createStrand(c.var.project.id, parsed.data);
-  return c.json(strand, 201);
+  try {
+    const strand = await createStrand(c.var.project.id, parsed.data);
+    return c.json(strand, 201);
+  } catch (error) {
+    if (error instanceof Error && error.message === "strand_parent_not_found") {
+      throw new HTTPException(404, { message: error.message });
+    }
+    throw error;
+  }
 });
 
 // ── GET /v1/strands ?status=active&agent_id=...&limit=50 ───────────────

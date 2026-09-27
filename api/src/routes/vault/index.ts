@@ -12,7 +12,10 @@
  *    GET            /v1/vault/audit        — project-wide audit
  *    GET            /v1/vault/:name/audit  — per-secret audit
  *
- *  Auth: mounted on /v1/vault/* by parent app (api/src/index.ts).
+ *  Auth: project bearer mounted by parent app (api/src/index.ts).
+ *  Administration and metadata retain project scope. Restricted value GETs
+ *  additionally require the selected identity's root proof; headers alone
+ *  are not authenticated actors. Doctrine: docs/IDENTITY-PARTITIONS.md.
  *
  *  Order matters — Hono matches routes in registration order. Specific paths
  *  must register BEFORE the parameterised /:name catch-all so that

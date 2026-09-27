@@ -5,8 +5,8 @@
  *  as memory's promise 6, applied here as: traces use Postgres tsvector,
  *  not vector embeddings).
  *
- *  Verifiability: an agent MAY sign the trace with its ed25519 key. We store
- *  the signature; verification is on-demand, through `./verify.ts` and
+ *  Verifiability: new signed writes verify an owned active key and exact
+ *  subject bytes. Historical signatures can be checked through `./verify.ts` and
  *  `GET /v1/traces/:id/verify`. `has_signature` below reports only that a
  *  string is stored — it is NOT an audit claim. Ask the verify route before
  *  treating any trace as signed.
@@ -16,10 +16,14 @@
 import { randomBytes } from "node:crypto";
 
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
 import { traces } from "../../db/schema/trace";
+import { identityKeys } from "../../db/schema/identity";
+import { canonicalIdentityId, requireActiveProjectIdentity, resolveProjectSubject, type PartitionOptions } from "../identity/partition";
 import { publishWakeEvent } from "../wake/push";
+import { canonicalTraceBytes, normalizeTraceCore, TRACE_SIGNATURE_CONTEXT, traceSigningCoreSha256Hex, verifyTraceSignatureBytes } from "./sig";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -92,6 +96,7 @@ export interface TraceSearchParams {
 
 export interface TraceListParams {
   agent_id?: string | null;
+  identity_id?: string | null;
   session_id?: string | null;
   decision_type?: string;
   parent_trace_id?: string;
@@ -201,55 +206,112 @@ function rowToOut(row: typeof traces.$inferSelect): TraceOut {
 
 // ── Operations ───────────────────────────────────────────────────────────
 
+/** New writes bind owned subjects; a signature additionally proves the registered author. */
+export async function validateTracePartition(projectId: string, data: TraceCreate, options: PartitionOptions = {}) {
+  if (data.signature != null && data.signature.length === 0) {
+    throw new HTTPException(400, { message: "Use null or omit signature for an unsigned trace; an empty signature cannot be verified." });
+  }
+  const binding = await resolveProjectSubject(projectId, data, options);
+  if (data.signature && (data.identity_id ?? null) !== binding.identityId) {
+    throw new HTTPException(400, {
+      message: "Sign the canonical identity_id returned by POST /v1/traces/prepare; signed subject fields are never silently rewritten.",
+    });
+  }
+  const database = options.database ?? db;
+  if (data.signing_key_id) {
+    const [candidate] = await database.select({ identityId: identityKeys.identityId })
+      .from(identityKeys).where(eq(identityKeys.id, data.signing_key_id)).limit(1);
+    if (!candidate || (binding.identityId && candidate.identityId !== binding.identityId)) {
+      throw new HTTPException(403, { message: "The signing key must belong to the selected subject in this project." });
+    }
+    await requireActiveProjectIdentity(projectId, candidate.identityId, options);
+    const query = database.select({ id: identityKeys.id, identityId: identityKeys.identityId, publicKey: identityKeys.publicKey, active: identityKeys.active, revokedAt: identityKeys.revokedAt })
+      .from(identityKeys).where(and(eq(identityKeys.id, data.signing_key_id), eq(identityKeys.identityId, candidate.identityId)));
+    const [key] = options.lock ? await query.for("share").limit(1) : await query.limit(1);
+    if (!key || key.id !== canonicalIdentityId(data.signing_key_id) || key.identityId !== candidate.identityId || !key.active || key.revokedAt) {
+      throw new HTTPException(403, { message: "The signing key must be active and belong to the selected subject in this project." });
+    }
+    if (data.signature) {
+      const signedAt = data.metadata?.signed_at;
+      if (data.metadata?.signature_context !== TRACE_SIGNATURE_CONTEXT || typeof signedAt !== "string" || !Number.isFinite(Date.parse(signedAt))) {
+        throw new HTTPException(400, { message: "A signed trace requires the agent-trace/v1 context and signed_at timestamp." });
+      }
+      const canonical = canonicalTraceBytes({
+        projectId, agentId: binding.agentId, identityId: binding.identityId,
+        sessionId: data.session_id ?? null, parentTraceId: data.parent_trace_id ?? null,
+        coreSha256Hex: traceSigningCoreSha256Hex(normalizeTraceCore(data)), signedAtIso: signedAt,
+      });
+      if (!(await verifyTraceSignatureBytes(canonical, data.signature, key.publicKey))) {
+        throw new HTTPException(403, { message: "The trace signature does not verify over these exact fields." });
+      }
+    }
+  } else if (data.signature) {
+    throw new HTTPException(400, { message: "A signed trace requires signing_key_id." });
+  }
+  if (data.parent_trace_id) {
+    const query = database.select({ traceId: traces.traceId, projectId: traces.projectId }).from(traces)
+      .where(and(eq(traces.traceId, data.parent_trace_id), eq(traces.projectId, projectId)));
+    const [parent] = options.lock ? await query.for("share").limit(1) : await query.limit(1);
+    if (!parent || parent.projectId !== projectId || parent.traceId !== data.parent_trace_id) {
+      throw new HTTPException(404, { message: "Parent trace not found in this project." });
+    }
+  }
+  return binding;
+}
+
 export async function createTrace(
   projectId: string,
   data: TraceCreate,
 ): Promise<{ trace_id: string; id: string; created_at: string }> {
   const traceId = generateTraceId();
 
-  const inserted = await db
-    .insert(traces)
-    .values({
-      traceId,
-      projectId,
-      agentId: data.agent_id ?? null,
-      identityId: data.identity_id ?? null,
-      sessionId: data.session_id ?? null,
-      parentTraceId: data.parent_trace_id ?? null,
+  const { inserted, binding } = await db.transaction(async (tx) => {
+    const binding = await validateTracePartition(projectId, data, { database: tx, lock: true });
+    const inserted = await tx
+      .insert(traces)
+      .values({
+        traceId,
+        projectId,
+        agentId: binding.agentId,
+        identityId: binding.identityId,
+        sessionId: data.session_id ?? null,
+        parentTraceId: data.parent_trace_id ?? null,
 
-      decisionType: data.decision.type,
-      decisionSummary: data.decision.summary,
-      outputRef: data.decision.output_ref ?? null,
+        decisionType: data.decision.type,
+        decisionSummary: data.decision.summary,
+        outputRef: data.decision.output_ref ?? null,
 
-      observations: (data.reasoning.observations ?? []) as unknown,
-      hypothesis: data.reasoning.hypothesis ?? null,
-      conclusion: data.reasoning.conclusion,
-      confidence: data.reasoning.confidence ?? null,
-      alternatives: (data.reasoning.alternatives ?? null) as unknown,
-      signals: (data.reasoning.signals ?? null) as unknown,
+        observations: (data.reasoning.observations ?? []) as unknown,
+        hypothesis: data.reasoning.hypothesis ?? null,
+        conclusion: data.reasoning.conclusion,
+        confidence: data.reasoning.confidence ?? null,
+        alternatives: (data.reasoning.alternatives ?? null) as unknown,
+        signals: (data.reasoning.signals ?? null) as unknown,
 
-      filesRead: (data.context?.files_read ?? null) as unknown,
-      keyFacts: (data.context?.key_facts ?? null) as unknown,
-      externalSignals: (data.context?.external_signals ?? null) as unknown,
+        filesRead: (data.context?.files_read ?? null) as unknown,
+        keyFacts: (data.context?.key_facts ?? null) as unknown,
+        externalSignals: (data.context?.external_signals ?? null) as unknown,
 
-      signature: data.signature ?? null,
-      signingKeyId: data.signing_key_id ?? null,
+        signature: data.signature ?? null,
+        signingKeyId: data.signing_key_id ?? null,
 
-      tags: (data.tags ?? null) as unknown,
-      metadata: (data.metadata ?? {}) as unknown,
-    })
-    .returning({
-      id: traces.id,
-      traceId: traces.traceId,
-      createdAt: traces.createdAt,
-    });
+        tags: (data.tags ?? null) as unknown,
+        metadata: (data.metadata ?? {}) as unknown,
+      })
+      .returning({
+        id: traces.id,
+        traceId: traces.traceId,
+        createdAt: traces.createdAt,
+      });
+    return { inserted, binding };
+  });
 
   const row = inserted[0]!;
 
   // Trace originator's `you_reason` aggregate changed — bump their wake.
-  if (data.identity_id) {
+  if (binding.identityId) {
     void publishWakeEvent({
-      identity_id: data.identity_id,
+      identity_id: binding.identityId,
       key: "traces",
       kind: "added",
       context: {
@@ -296,6 +358,7 @@ export async function listTraces(
 ): Promise<TraceOut[]> {
   const filters = [eq(traces.projectId, projectId)];
   if (params.agent_id) filters.push(eq(traces.agentId, params.agent_id));
+  if (params.identity_id) filters.push(eq(traces.identityId, params.identity_id));
   if (params.session_id) filters.push(eq(traces.sessionId, params.session_id));
   if (params.decision_type) filters.push(eq(traces.decisionType, params.decision_type));
   if (params.parent_trace_id) filters.push(eq(traces.parentTraceId, params.parent_trace_id));

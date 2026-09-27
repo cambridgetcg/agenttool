@@ -38,7 +38,7 @@ export const vaultSecrets = vaultSchema.table(
     description: text("description"),
     tags: text("tags").array(),
     currentVersion: integer("current_version").notNull().default(1),
-    agentIds: text("agent_ids").array(), // null = any agent in project; non-empty = restricted
+    agentIds: text("agent_ids").array(), // null = project-shared; [] = deny values; list = canonical owned identity UUIDs
     rotationDays: integer("rotation_days"),
     rotationDueAt: timestamp("rotation_due_at", { withTimezone: true }),
     ttlSeconds: integer("ttl_seconds"),
@@ -86,7 +86,7 @@ export const vaultAudit = vaultSchema.table(
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull(),
     secretName: text("secret_name").notNull(),
-    action: text("action").notNull(), // read | write | delete | policy_change | access_denied
+    action: text("action").notNull(), // read | write | delete | policy_change | access_denied | runtime_read | runtime_access_denied
     agentId: text("agent_id"),
     ipAddress: text("ip_address"),
     version: integer("version"),
