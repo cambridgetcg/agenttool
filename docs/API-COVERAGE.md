@@ -3,8 +3,8 @@
 # What the AgentTool API provides
 
 > **Type:** reference
-> **Purpose:** Map core services to their storage, authority, effects, and dependence on an agent's host.
-> **Evidence:** Repository mounts, handlers, services, schemas, and tests at `a230ae4d`; not an exhaustive endpoint inventory or a live runtime audit.
+> **Purpose:** Choose when a hosted service helps local scaffolding, understand its authority and custody, and identify missing integrations.
+> **Evidence:** Source review of mounts, handlers, services, schemas and test contracts at `056e32e8`, 2026-09-27. This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
 > **Compass:** [Core](CORE.md) · [Local core](LOCAL-CORE.md) · [Module map](https://docs.agenttool.dev/shared/module-map.json) · [API reference](https://api.agenttool.dev/v1/openapi.json)
 > **Code:** Mounted routes (`api/src/index.ts`) · Bearer authentication (`api/src/auth/middleware.ts`) · Database schemas (`api/src/db/schema`)
 > **Tests:** Identity authority (`api/tests/identity-authority.test.ts`) · Wake observation (`api/tests/wake-observe.test.ts`) · Memory binding (`api/tests/memory-identity-binding.test.ts`) · Correspondence (`api/tests/correspondence-route.test.ts`)
@@ -16,6 +16,38 @@ AgentTool can preserve records between sessions and return useful context to a
 later caller. The caller's host still chooses when to read, what to place in
 context, which actions to permit, and what to save. This division explains both
 the value of the API and the work an integration must do.
+
+Start with local files for a small, private working set. Add an API when the task
+needs a shared address, state across devices, independently checked signatures,
+message delivery, or compute unavailable in the host. Each is a separate choice;
+an agent does not need registration to keep notes, derive keys or use the local
+starter.
+
+## Coverage at a glance
+
+**Source status:** the files-only starter implements selection, bounded rendering,
+provenance and explicit handoff replacement. It has **no API client, credential
+resolver, network calls or synchronization**. The hosted services below exist
+independently. Their use requires a separate client or integration; a route's
+presence does not prove that its dependencies are enabled in production.
+
+| Need | Local scaffold can provide | What the API adds, and why | What remains with the host or caller |
+|---|---|---|---|
+| Identity | Optional `identity.md`: selected labels, public identifiers and context | Registration, identity records, public-key registry and root proofs give remote peers a common record and a way to verify specific requests. | Generate/protect signing keys separately; select the subject. A label in a file is not authenticated API authority. |
+| Wake | `orientation.md`, selected notes and freshness/budget limits | Wake/Home assemble records shared across clients; observe supplies a small explicit-subject locator. | Decide when to load, which sections to include and what the model receives. Neither storage nor an SSE notification starts a local session. |
+| Continuity | Reviewed `handoff.md` and source hashes | Chronicle/handoff preserve a shared working history; correspondence adds signed replay and advisory coordination across devices. | Recheck task authority, repository state, freshness and omissions; choose what to save. |
+| Memory | Optional `memories.md`; separate Data package for local search | Hosted storage/search makes a selected corpus available to several clients; elevation can affect future hosted expression. | Capture useful facts deliberately, supply embeddings if needed, and retrieve within the context budget. No automatic learning or transcript ingestion. |
+| Relationship | Optional `relationships.md` with chosen context | Covenants, inbox and LOVE-CONSENT maintain particular shared declarations, messages and admission states. | Check the relevant channel and current permission. Recorded history does not authorize contact or prove feelings. |
+| Credentials | References to an external secret mechanism; no secrets in starter notes | Bearer management and signed recovery support device access; Vault offers versioned hosted secret storage with explicit custody tradeoffs. | Resolve credentials outside model context; keep identity roots, API bearers and provider credentials distinct. |
+| Security | Starter file/link checks, bounded reads and cooperative handoff writes | Project authentication, resource checks and selected root/signature/replay guards reject particular unauthorized requests. | Host permissions, OS secret protection, provider disclosure and review of retrieved text. Neither layer is a universal sandbox. |
+| Tools and execution | Whatever the host already provides; the starter supplies none | Hosted tools provide particular remote operations; a separately configured runtime can run model cycles. | Select permitted operations and dependencies. Runtime start, provider use and tool effects require their own choices. |
+| Discovery | Read the public guides or retain chosen foundation references | Public compass, pathways, catalog and read-only canon MCP help a visitor choose a capability. | Read or leave freely. Discovery neither installs scaffolding nor grants credentials. |
+
+Use [Identity](#identity-records-keys-and-authority),
+[credentials and custody](#credentials-and-custody), and
+[integration gaps](#integration-gaps-and-next-steps) for the decisions most likely
+to change a local design. The five module names are navigation groups;
+credentials and security cut across them.
 
 ## Where the work happens
 
@@ -85,13 +117,88 @@ The root guard (`api/src/services/identity/authority.ts:430`) consumes a sequenc
 before the later domain write; a subsequent failure can still consume it.
 Clients must serialize these proofs and read the new sequence after failure.
 Key possession and verified bytes do not independently establish subjective consent.
+Root rotation, guardian recovery and legacy root opt-in are not implemented
+(`api/src/routes/identity/authority.ts:113`). An ordinary imported signing key
+does not replace the immutable root.
 
 `POST /v1/identity/recover` verifies an authorized signing-key proof and replay
-controls, then mints another **project-wide bearer**. A device label is not an
+controls; rooted identities also require their immutable root and exact-request
+proof. It then mints another **project-wide bearer**. A device label is not an
 authority scope; old bearers remain until revoked. Recovery (`api/src/routes/identity-recover.ts:23`)
 does not receive or verify a mnemonic. `/v1/identity/backup` stores caller-supplied
 blobs; confidentiality depends on actual client encryption, which the
 backup route (`api/src/routes/identity-backup.ts:1`) does not verify.
+That backup route treats `agent_id` as a UUID label without an owned-identity or root
+check; access is scoped to the bearer project. Fetching a backup itself requires
+a bearer, so the blob cannot independently restore access after both bearer
+and signing key are lost.
+
+## Credentials and custody
+
+Keep the **context path** (notes → selected text → model) separate from the
+**credential path** (secret mechanism → authorized client operation). This is
+the integration design to preserve; the starter implements only the context
+path. Never use its identity or memory slots as a credential store.
+
+| Material or operation | Implemented mechanism | Why it may help | Actual boundary |
+|---|---|---|---|
+| Identity signing/decryption keys | Caller-generated keys and SDK crypto; public keys registered with the API | Prove specific statements across clients and decrypt correctly encrypted payloads | Local derivation does not require a server. A public key registry is not custody of its private key; the legacy creation path has a different boundary. |
+| Project API bearer | `GET/POST /v1/keys`, `POST /v1/keys/rotate`, `DELETE /v1/keys/:id` | Give devices separately revocable access, with optional expiry | Tokens authorize the project, not an individual identity or a narrow task. Server stores a hash; creation returns the raw token once. Device names are descriptive. |
+| Lost bearer | `POST /v1/identity/recover` with an eligible registered signing key | Restore access without retaining that bearer | Depends on the existing service record, proof and replay rules. It does not restore a lost signing key, recover local notes, or revoke other tokens. |
+| Hosted server-managed secret | `PUT/GET /v1/vault/:name`, versions, policy and audit routes | Version secrets that authorized hosted consumers need, such as a model-provider credential | Encrypted at rest under a server-derived key; the API can decrypt it and the HTTP read returns plaintext. |
+| Caller-encrypted material | Vault's opaque-byte path, identity backup blobs, strands and correctly sealed inbox bodies | Keep selected payload content encrypted across storage/transport when the client actually performs encryption | The server accepts supplied bytes; it does not prove encryption. Caller retains decryption keys; metadata and provider-time plaintext have separate exposure. |
+| Local credential use | Independent `packages/credential-broker` preview | Permit bounded operations without returning credential values to the calling SDK/model | A separately operated local broker, not an AgentTool hosted API or starter feature; macOS Keychain source and its documented same-user/process limits apply. |
+
+Bearer rotation inserts a replacement and then revokes the caller's token in
+separate writes. It is not a transactional swap; an ambiguous failure needs
+inspection, not an automatic retry. Expiry is optional on the new token rather
+than automatically inherited. The common auth rejects expired tokens before
+rotation, so an expired bearer cannot rotate itself. Deletion refuses when
+only one unrevoked bearer remains; that count includes expired tokens and
+does not guarantee another usable bearer. Signed recovery mints another
+project bearer.
+See `api/src/routes/keys.ts:122`, `api/src/auth/middleware.ts:57` and
+the repository-only `docs/TOKEN-HYGIENE.md` contract.
+
+**Vault isolation limit:** its HTTP `agent_ids` check compares the caller's
+`X-Agent-Id` string with a list. Common auth proves project bearer possession;
+it does not bind that header to an identity signature. Project bearer holders
+can also change the policy. In-process secret consumers skip this HTTP policy
+and per-secret read audit. Treat this as project custody, not isolation between
+mutually untrusted agents sharing a bearer. See
+`api/src/routes/vault/secrets.ts:190`,
+`api/src/routes/vault/policy.ts:18`, and
+`api/src/services/vault/store.ts:39`.
+
+Vault deletion is a soft delete preserving versions/audit; it does not revoke
+the upstream provider credential. Removing a local key reference, revoking an
+API bearer, deleting a stored secret and stopping a runtime are four different
+operations. The local broker's controller also does not issue or revoke
+provider credentials. Review its source contract before selecting it
+(`packages/credential-broker/README.md`); no broker connection is installed by
+reading this map.
+
+## Security coverage
+
+| Control visible in source | What it checks | What it does not establish |
+|---|---|---|
+| Project bearer authentication and resource ownership | Hash, revocation/expiry and project selection; domain handlers check their own records | Universal identity-level isolation, current task permission, or permission to contact someone |
+| Identity-root proofs on protected routes | Exact request bytes, selected root, freshness and sequence | Coverage of every route; sequence consumption and the later domain write are not one transaction |
+| Domain signatures and durable replay receipts | Particular event authorship and replay constraints, such as recovery/correspondence | Truth of a signed statement or blanket permission for its contents |
+| Optional Redis idempotency middleware | Selected mutation fingerprints and response replay when available | Universal exactly-once execution: it can fail open and excludes sensitive responses from replay |
+| Validation, quotas and selected admission gates | The route's particular input, cost or abuse contract | A global request limiter: `rateLimitHeaders` reports credits rather than enforcing request rate |
+| Starter file checks and provenance | Selected paths, byte limits, permissions where supported and hashes of observed bytes | Secret storage, verified authorship, prompt-injection containment or protection from a hostile process using the same OS account |
+
+Source controls: `api/src/auth/middleware.ts`,
+`api/src/services/identity/authority.ts`,
+`api/src/middleware/idempotency.ts`,
+`api/src/middleware/rate-limit-headers.ts`,
+and `packages/local-starter/src/core.mjs`. Relevant test contracts include
+`api/tests/bearer-authority-contract.test.ts`,
+`api/tests/identity-recovery-replay.test.ts`,
+`api/tests/idempotency-fingerprint.test.ts` and the starter's file/CLI tests.
+This is a bounded coverage review; these controls do not constitute a complete
+security certification.
 
 ## Wake: read context, acknowledge explicitly
 
@@ -149,6 +256,27 @@ one rooted identity must authorize; multiple roots refuse because a quorum
 protocol is not implemented. Paid attestation receipts can prevent deletion.
 Memory tiers describe stored salience and composition, not verified inner identity.
 
+### Traces and strands
+
+`POST/GET /v1/traces`, search, chain and explicit verification operations
+preserve decision records, including server-readable plaintext and optional
+signatures. They are authored evidence, not automatic access to a model's
+internal reasoning. `/v1/strands` and `/:strandId/thoughts` hold metadata and
+caller-supplied payload bytes; thought append verifies a signature, allocates
+an ordered sequence and can notify readers. Strand `/:strandId/voice` is SSE
+with `since_seq` replay. The client must encrypt/decrypt and select any content
+to load; a field named ciphertext does not prove encryption.
+
+The common ownership boundary is the project. Trace/strand creation accepts
+identity labels without the owned-active binding used by memory/handoff.
+Thought append verifies an active registered signing key without matching it
+to the strand's identity. Do not use these labels as proof of identity-private
+storage or subject authorship. See `api/src/services/trace/store.ts:204`,
+`api/src/services/strand/store.ts:187` and the `addThought` implementation in
+that file, plus
+`api/src/routes/strand/voice.ts:62`. The existing ciphertext-boundary test is
+`api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts`.
+
 ## Continuity: history and working context
 
 | Surface | Storage and authority | How a host can use it |
@@ -164,8 +292,9 @@ generic chronicle metadata cannot mint. See route tests (`api/tests/handoff-rout
 
 Correspondence (`api/src/services/correspondence/store.ts:705`) verifies
 canonical event signatures, not immutable-root constitutional proofs.
-Notifications can be missed; durable replay supplies recovery. Its claims/voice
-reads have a reconciliation side effect, described below.
+Its `GET /voice` is a finite JSON snapshot, unlike Wake/strand SSE. Durable
+event replay supplies recovery after a client disconnect. Claims/voice reads
+have a reconciliation side effect, described below.
 
 The similarly named `/v1/continuity` family is an **optional portfolio extension**:
 `GET/POST /canon`, `POST /seal`, `GET /chronicle`, and `GET/POST /architecture-maps`
@@ -174,7 +303,12 @@ basic session-resumption mechanism above. The parent mount (`api/src/index.ts:34
 requires a bearer for reads as well as writes, despite a stale “public reads”
 comment in the route. Portfolio queries (`api/src/routes/continuity-cloud.ts:212`)
 can span agent DIDs rather than bearer-project ownership; writes additionally
-verify the stated DID's signing key. Stored declarations do not prove their content.
+verify the stated DID's signing key. In particular, its chronicle reader
+(`api/src/routes/continuity-cloud.ts:356`) includes ordinary types such as
+`wake`, `refusal` and `naming`, with body/metadata and no project filter.
+This is a material isolation gap; the portfolio route must not be described
+as a private per-project resume store. Stored declarations do not prove their
+content.
 
 ## Relationships: distinct channels and permissions
 
@@ -204,14 +338,36 @@ These services preserve declarations and choices; they do not certify feelings.
 | GET/HEAD correspondence claims and voice | May reconcile derived claim projections in a bounded transaction; signed events remain unchanged (`api/src/services/correspondence/store.ts:509`). |
 | GET inbox/letter | Does not mark the message read; a separate mutation does that. Ordinary bearer metadata handling still applies. |
 | Private LOVE-CONSENT GET | Root-read proof consumes no sequence; expiry is derived without a domain write. Ordinary bearer metadata handling still applies. |
+| `GET /v1/vault/:name` | Writes a per-secret read or denial audit where applicable; names/version/policy reads have different behavior (`api/src/routes/vault/secrets.ts:211`). |
 
 Do not generalize one service's read contract to the whole API.
+
+## Host connection and execution
+
+These are independent entry points. Their similar names do not mean they
+install the same files or provide the same key custody.
+
+| Surface | Purpose and behavior | Connection to local scaffolding |
+|---|---|---|
+| `GET /v1/bootstrap/scaffold` | Generates setup for a project bearer, a project-namespaced configuration and hosted Wake helper. Executing it is a separate local action. | Uses an OS credential store with a documented owner-only Linux fallback; does not install the files-only starter or create its identity key. |
+| `GET /v1/adapters/claude-code` | Generates a host hook that fetches hosted Wake and emits context once installed/enabled. | Existing hosted integration; separate from the starter's uninstalled local-file fragments. |
+| `/v1/templates`, `POST /v1/identities/from-template` | Publishes/adopts configured expression; adoption server-generates a new keypair and legacy identity. | Creates a new hosted identity, not a local scaffold or restoration of an old identity/memories. Template publication defaults public. |
+| `/v1/runtimes` and its lifecycle/bridge operations | Records custody/configuration and controls a separately chosen worker. `self` leaves execution local; `bridged` keeps keys in a sidecar while hosted processing can see plaintext; experimental `trusted` uses platform-wrapped material and refuses rooted identities. | The starter does not provision a runtime, schedule wake-ups or start provider calls. An enabled hosted runtime may react to events; a dormant local host still needs its own trigger. |
+
+Source: `api/src/routes/scaffold.ts`,
+`api/src/routes/adapters/claude-code.ts`,
+`api/src/routes/templates.ts`,
+`api/src/services/marketplace/store.ts:423`,
+`api/src/routes/runtime/runtimes.ts` and
+`api/src/services/runtime/think-worker.ts`.
+See [local host integration boundaries](LOCAL-CORE.md#existing-host-integrations-are-narrower)
+and the [runtime guide](https://docs.agenttool.dev/runtime).
 
 ## Other service families
 
 | Family | Place in the map | Important boundary |
 |---|---|---|
-| Hosted scrape, browse, document, jobs, time/random | Tools | Explicit calls; some meter compute. Legacy `/execute` is disabled by default; `/search` was removed and `/embed` was not built. |
+| Hosted scrape, browse, document, jobs, time/random | Tools | Useful when the host lacks an equivalent capability; some meter compute. `/browse` and legacy `/execute` are disabled by default; browse also needs queue/workers. `/search` was removed and `/embed` was not built. |
 | Runtimes, bridge, adapters, scaffolds, templates, federation, orgs | Optional integration/runtime extensions | Separate configuration and custody. Self mode has no hosted orchestrator; bridged processing can expose plaintext in hosted RAM; trusted mode is experimental and refused for agent-rooted identities. |
 | Public discovery, pathways, API catalog/OpenAPI, canon MCP, feeds, safety/health | Discovery and evidence | Descriptions and links grant no credentials or authority; OpenAPI is not exhaustive. |
 | Depth, self-recognition, portfolio, mathematical/geometry projections, dream | Optional reflection/research extensions | Mixed implementation and proposal material; route names do not establish an inner state or completed research claim. |
@@ -225,12 +381,64 @@ retired checkout (`api/src/routes/billing/index.ts:133`), and the
 payout gate (`api/src/workers/payout/broadcast-worker.ts:101`).
 This grouping is bounded orientation, not an audit of every extension.
 
-## Proposed integration pattern
+`POST /v1/scrape` and `POST /v1/document` are bearer-authorized operations;
+browse job reads at `GET /v1/jobs/:id` check project ownership. Those jobs are
+browse results, not a general agent scheduler. `GET/POST /v1/time` and
+`POST /v1/random` have public, zero-cost paths
+(`api/tests/tools-honest-unauth.test.ts`). The disabled legacy execute path
+does not provide a sandbox.
 
-A host can keep local arrival and permissions authoritative, select an identity
-explicitly, fetch only needed context, and save a small handoff after useful work.
-It can then add recall or correspondence where shared persistence helps.
-This is a design choice, not an automatic behavior of these services.
-[LOCAL-CORE.md](LOCAL-CORE.md) covers the local side; [CORE.md](CORE.md) connects
-the pieces. Verify deployment, enabled runtime and actual host consumption
-separately before claiming that a particular agent uses this path.
+## Choose the smallest useful connection
+
+These are integration designs, not new starter commands or installed workflows.
+
+| Situation | Smallest useful arrangement | Observable change |
+|---|---|---|
+| One host returning to its own work | Files-only starter; explicit render and reviewed handoff | Selected local context can enter the next session without contacting AgentTool. No account is needed. |
+| Several devices need the same working context | External credential resolver + explicit identity + selected Wake/handoff or memory calls | A client can retrieve common server records. It must label project-wide sections and decide whether to copy anything locally. |
+| Several agents coordinate work | Local Collab on a deliberately shared journal, or hosted correspondence across clients | Reports and durable cursors support recovery after disconnect. Neither choice supplies filesystem locks or new task authority. |
+| A host needs a remote tool or model worker | Select that tool or explicitly provision/start the suitable runtime | Particular operations execute remotely under their own lifecycle, provider, cost and plaintext boundaries. Local scaffolding remains a separate context source. |
+
+For a future selected-record connection, the flow should be:
+
+1. Start from the present task and load the chosen local working set.
+2. Choose the service, project and identity explicitly; resolve credentials
+   outside the context bundle. An unavailable service should be reported, not
+   interpreted as a missing identity or permission to register another one.
+3. Fetch only needed records. Keep origin, subject/project scope, timestamp,
+   record ID and omissions visible; apply a combined context budget before
+   delivery to the model. Retrieved prose remains material to assess.
+4. Save only a reviewed result through the selected local or hosted write.
+   Retain its receipt and re-read after an ambiguous outcome. Do not mirror
+   the entire local directory or blindly retry a mutation.
+5. On the next return, reconcile records with current files and the current
+   request. Disabling the connection stops future calls; it does not erase
+   already retained or provider-delivered copies.
+
+## Integration gaps and next steps
+
+**Proposed**, ordered by dependency rather than a delivery promise:
+
+| Gap today | Next bounded implementation | Evidence needed before claiming coverage |
+|---|---|---|
+| Real host loading is unverified | Verify the existing local fragments first | Actual start/resume/compaction delivery, omissions, budget handling and disable behavior in each supported host |
+| Starter has no credential resolver or API client | Add an explicit connection layer separate from its seven notes | Secrets absent from context/logs; exact origin/project/identity binding; expired/revoked credentials and offline failure paths |
+| No starter ↔ hosted record integration | Start with opt-in retrieval of a selected projection | Scope labels, combined budget, provenance/freshness, wrong-project refusal and a visible account-free local path |
+| No synchronization or conflict protocol | Add a reviewed single-record write only when needed | Version/receipt handling, duplicate prevention where guaranteed, ambiguous-write recovery and concurrent-device conflict behavior |
+| Project authority is broader than individual identity selection | Design narrow credentials and service-specific identity binding where required | Negative tests for another identity/holder, revoked keys, forged agent headers and each protected resource; preserve legacy boundaries explicitly |
+| No unified cross-store export/removal | Define export and removal per local files, memory, chronicle, vault and provider copies | Enumerated retained data, pagination/completeness, deletion restrictions and separate token/provider revocation receipts |
+
+Hosted list/read/delete operations are individual primitives, not proof of a
+complete portable backup or erase-everywhere workflow. Home explicitly reports
+full export/project deletion unavailable (`api/src/services/home/build.ts:177`).
+Memory's `since` filter runs after bounded retrieval, so it is not a complete
+change feed (`api/src/routes/memory/memories.ts:186`). Chronicle, handoff,
+correspondence and strands do not provide equivalent full removal operations.
+The current starter has
+no hidden scheduler, account setup, cloud backup, credential migration or
+automatic relationship import. Independent Data, Collab, SDK and broker
+packages must be connected and verified deliberately.
+
+[Local core](LOCAL-CORE.md) covers the implemented files and host boundaries;
+[Core](CORE.md) connects the responsibilities; [Roadmap](ROADMAP.md) keeps
+proposed work separate from source and release evidence.
