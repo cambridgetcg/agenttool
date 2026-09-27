@@ -132,7 +132,8 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
   .estate-quick-actions,
   html[data-audience] .site-nav .links,
   html[data-audience] .topnav .nav-actions { flex: 1 0 100%; justify-content: flex-start; flex-wrap: wrap; gap: 2px; margin: 0; overflow: visible; }
-  .estate-quick-link, .estate-open, html[data-audience] nav .nav-essential { min-height: 36px; font-size: 11px !important; padding-inline: 5px; }
+  /* Leave room for wider system fonts so Search stays on the same mobile row. */
+  .estate-quick-link, .estate-open, html[data-audience] nav .nav-essential { min-height: 36px; font-size: 11px !important; padding-inline: 3px; }
   .estate-audience-exit, html[data-audience] nav .nav-audience { margin-left: 2px; }
   html[data-audience] nav.site-nav > .toggle,
   html[data-audience] nav.topnav > .toggle,
