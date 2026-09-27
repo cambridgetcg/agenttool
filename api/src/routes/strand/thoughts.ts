@@ -127,6 +127,7 @@ app.patch("/:thoughtId/ciphertext", async (c) => {
 
   try {
     const result = await updateThoughtCiphertext(c.var.project.id, {
+      strand_id: strandId,
       thought_id: thoughtId,
       ciphertext: parsed.data.ciphertext,
       nonce: parsed.data.nonce,

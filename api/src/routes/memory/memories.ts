@@ -249,7 +249,10 @@ app.get("/", async (c) => {
   ];
 
   if (key) {
-    const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null));
+    const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null, {
+      identity_id: identityId ?? null,
+      limit: Number.isFinite(limit) ? limit : 20,
+    }));
     const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
     return c.json(
       attachSurface(

@@ -21,6 +21,7 @@ Use put for secrets the hosted runtime needs to consume server-side
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import re
 
 import httpx
 
@@ -29,6 +30,9 @@ import httpx
 from ._url import _path_segment
 from .crypto import decrypt_thought, encrypt_thought
 from .exceptions import AgentToolError, raise_from_response
+from .authority import authority_request_target, authority_timestamp_now, identity_read_authority_headers
+
+_UNSET = object()
 
 
 class VaultClient:
@@ -58,10 +62,10 @@ class VaultClient:
         events = at.vault.audit("openai-key")
 
         # Set access policy
-        at.vault.set_policy("openai-key", allowed_agents=["agent-1"], read_only=True)
+        at.vault.set_policy("openai-key", agent_ids=["11111111-1111-4111-8111-111111111111"])
 
-        # Bulk retrieve
-        secrets = at.vault.bulk(["openai-key", "db-url"])
+        # Explicit bulk write (there is no bulk value-read endpoint)
+        at.vault.bulk_put([{"name": "openai-key", "value": "provider-key"}])
 
         # Check existence
         exists = at.vault.check(["openai-key", "missing-key"])
@@ -82,7 +86,7 @@ class VaultClient:
         value: str,
         *,
         description: Optional[str] = None,
-        agent_ids: Optional[List[str]] = None,
+        agent_ids: Any = _UNSET,
         tags: Optional[List[str]] = None,
         ttl_seconds: Optional[int] = None,
         rotation_days: Optional[int] = None,
@@ -94,16 +98,16 @@ class VaultClient:
             name: Secret name (slug-style, e.g. ``openai-key``).
             value: Plaintext secret value.
             description: Optional human-readable description.
-            agent_ids: List of agent IDs allowed to access this secret.
+            agent_ids: Omit to preserve; None shares; [] denies; a list selects owned identities.
             tags: Optional tags for organisation.
             ttl_seconds: Auto-expire after this many seconds.
             rotation_days: Flag for rotation after N days.
-            agent_id: Pass ``X-Agent-Id`` header for audit trail.
+            agent_id: Legacy caller label; this does not establish an authenticated audit actor.
         """
         payload: Dict[str, Any] = {"value": value}
         if description is not None:
             payload["description"] = description
-        if agent_ids is not None:
+        if agent_ids is not _UNSET:
             payload["agent_ids"] = agent_ids
         if tags is not None:
             payload["tags"] = tags
@@ -131,13 +135,15 @@ class VaultClient:
         *,
         version: Optional[int] = None,
         agent_id: Optional[str] = None,
+        read_authority: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Retrieve a secret's plaintext value.
 
         Args:
             name: Secret name.
             version: Retrieve a specific version (default: latest).
-            agent_id: Pass ``X-Agent-Id`` header for audit trail.
+            agent_id: Identity selector; restricted values also require read_authority.
+            read_authority: did, signing_key, current_sequence, and optional timestamp.
 
         Returns dict with ``name``, ``value``, ``version``, ``description``, etc.
         """
@@ -149,8 +155,25 @@ class VaultClient:
         if agent_id is not None:
             headers["X-Agent-Id"] = agent_id
 
+        url = self._url(f"/v1/vault/{_path_segment(name)}")
+        if read_authority is not None:
+            proof = read_authority
+            match = re.fullmatch(r"did:at:([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", proof["did"], re.I)
+            selected = agent_id.removeprefix("did:at:").lower() if agent_id is not None else None
+            if match is None or (selected is not None and selected != match[1].lower()):
+                raise AgentToolError("Vault read selector must match the signing identity DID.", code="vault_identity_conflict")
+            headers["X-Agent-Id"] = match[1].lower()
+            # httpx builds the actual encoded query once; sign that exact target.
+            target = str(httpx.URL(url, params=params or None))
+            headers.update(identity_read_authority_headers(
+                identity_did=proof["did"], request_target=authority_request_target(target),
+                current_sequence=proof["current_sequence"],
+                timestamp=proof.get("timestamp") or authority_timestamp_now(),
+                signing_key=proof["signing_key"],
+            ))
+
         resp = self._http.get(
-            self._url(f"/v1/vault/{_path_segment(name)}"),
+            url,
             params=params or None,
             headers=headers if headers else None,
         )
@@ -223,25 +246,17 @@ class VaultClient:
         self,
         name: str,
         *,
-        allowed_agents: Optional[List[str]] = None,
+        agent_ids: Any = _UNSET,
+        allowed_agents: Any = _UNSET,
         read_only: Optional[bool] = None,
         require_agent_id: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        """Set an access policy for a secret.
-
-        Args:
-            name: Secret name.
-            allowed_agents: Whitelist of agent IDs. Empty list = all agents allowed.
-            read_only: If True, only GET operations are permitted.
-            require_agent_id: If True, requests without X-Agent-Id are rejected.
-        """
-        payload: Dict[str, Any] = {}
-        if allowed_agents is not None:
-            payload["allowed_agents"] = allowed_agents
-        if read_only is not None:
-            payload["read_only"] = read_only
-        if require_agent_id is not None:
-            payload["require_agent_id"] = require_agent_id
+        """Set agent_ids (or its deprecated allowed_agents alias): None shares; [] denies."""
+        if read_only is not None or require_agent_id is not None:
+            raise AgentToolError("Vault policies support agent_ids only; read_only and require_agent_id are not implemented.", code="vault_policy_option_unsupported")
+        if (agent_ids is _UNSET) == (allowed_agents is _UNSET):
+            raise AgentToolError("Provide exactly one of agent_ids or its allowed_agents alias (None shares; [] denies).", code="vault_policy_invalid")
+        payload = {"agent_ids": agent_ids if agent_ids is not _UNSET else allowed_agents}
 
         resp = self._http.put(self._url(f"/v1/vault/{_path_segment(name)}/policy"), json=payload)
         if resp.status_code != 200:
@@ -277,7 +292,7 @@ class VaultClient:
             # Server guidance travels intact. See exceptions.py § _error_from_response.
             raise_from_response(resp, "vault.audit")
         data = resp.json()
-        return data.get("events", data)
+        return data.get("entries", [])
 
     # ── Bulk ──────────────────────────────────────────────────────────────────
 
@@ -287,24 +302,14 @@ class VaultClient:
         *,
         agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Retrieve multiple secrets in a single request.
+        """Deprecated: bulk value retrieval has no API endpoint; use authorized get calls."""
+        raise AgentToolError("Bulk value retrieval is unavailable; use get for each intended secret. bulk_put is a separate write operation.", code="vault_bulk_read_unavailable")
 
-        Returns a dict mapping name → ``{value, version, found}``
-        for each requested name. Missing secrets are included with
-        ``found: False`` rather than raising.
-        """
-        payload: Dict[str, Any] = {"names": names}
-        headers = {}
-        if agent_id is not None:
-            headers["X-Agent-Id"] = agent_id
-
-        resp = self._http.post(
-            self._url("/v1/vault/bulk"), json=payload,
-            headers=headers if headers else None,
-        )
+    def bulk_put(self, secrets: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Explicit project-admin bulk write; never performs value retrieval."""
+        resp = self._http.post(self._url("/v1/vault/bulk"), json={"secrets": secrets})
         if resp.status_code != 200:
-            # Server guidance travels intact. See exceptions.py § _error_from_response.
-            raise_from_response(resp, "vault.bulk")
+            raise_from_response(resp, "vault.bulk_put")
         return resp.json()
 
     def check(self, names: List[str]) -> Dict[str, bool]:
@@ -317,7 +322,7 @@ class VaultClient:
             # Server guidance travels intact. See exceptions.py § _error_from_response.
             raise_from_response(resp, "vault.check")
         data = resp.json()
-        return data.get("exists", data)
+        return {row["name"]: row["exists"] for row in data.get("results", [])}
 
     # ── Agent-encrypted (zero-knowledge) path ─────────────────────────────
 
@@ -328,7 +333,7 @@ class VaultClient:
         *,
         k_vault: bytes,
         description: Optional[str] = None,
-        agent_ids: Optional[List[str]] = None,
+        agent_ids: Any = _UNSET,
         tags: Optional[List[str]] = None,
         ttl_seconds: Optional[int] = None,
         rotation_days: Optional[int] = None,
@@ -360,7 +365,7 @@ class VaultClient:
         }
         if description is not None:
             payload["description"] = description
-        if agent_ids is not None:
+        if agent_ids is not _UNSET:
             payload["agent_ids"] = agent_ids
         if tags is not None:
             payload["tags"] = tags
@@ -390,6 +395,7 @@ class VaultClient:
         k_vault: bytes,
         version: Optional[int] = None,
         agent_id: Optional[str] = None,
+        read_authority: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Fetch a secret; decrypt locally if it was stored agent-encrypted.
 
@@ -410,7 +416,7 @@ class VaultClient:
                 stored via the server-encrypted path.
             version, agent_id: Same as :meth:`get`.
         """
-        resp = self.get(name, version=version, agent_id=agent_id)
+        resp = self.get(name, version=version, agent_id=agent_id, read_authority=read_authority)
         if resp.get("agent_encrypted") is True:
             ct = resp.get("ciphertext_b64")
             nonce = resp.get("nonce_b64")

@@ -330,15 +330,23 @@ export async function readByKey(
   projectId: string,
   key: string,
   agentId?: string | null,
+  options: { identity_id?: string | null; limit?: number; database?: Pick<typeof db, "select"> } = {},
 ): Promise<MemoryOut[]> {
-  const filters = [eq(memories.projectId, projectId), eq(memories.key, key)];
+  const filters = [
+    eq(memories.projectId, projectId), eq(memories.key, key),
+    or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!,
+  ];
   if (agentId) filters.push(eq(memories.agentId, agentId));
+  if (options.identity_id) filters.push(eq(memories.identityId, options.identity_id));
+  const limit = Number.isFinite(options.limit)
+    ? Math.max(1, Math.min(100, Math.trunc(options.limit!))) : 100;
 
-  const rows = await db
+  const rows = await (options.database ?? db)
     .select()
     .from(memories)
     .where(and(...filters))
-    .orderBy(desc(memories.createdAt));
+    .orderBy(desc(memories.createdAt), desc(memories.id))
+    .limit(limit);
 
   return rows.map(rowToOut);
 }

@@ -8,6 +8,7 @@ import { Hono } from "hono";
 
 import {
   isPureWakeRead,
+  isPureLocalContextRead,
   type ProjectContext,
 } from "../src/auth/middleware";
 import {
@@ -241,6 +242,14 @@ describe("WAKE private cache boundary", () => {
 });
 
 describe("pure reads and durable acknowledgement", () => {
+  test("local-context safe reads alone also suppress authentication telemetry", () => {
+    const path = "/v1/identities/11111111-2222-4333-8444-555555555555/local-context";
+    for (const method of ["GET", "HEAD", "OPTIONS"]) expect(isPureLocalContextRead(method, path)).toBe(true);
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) expect(isPureLocalContextRead(method, path)).toBe(false);
+    for (const candidate of ["/v1/identities", path + "/anything", path.replace("local-context", "expression")]) {
+      expect(isPureLocalContextRead("GET", candidate)).toBe(false);
+    }
+  });
   test("WAKE safe methods suppress bearer last-used telemetry only on WAKE", () => {
     for (const method of ["GET", "HEAD", "OPTIONS"]) {
       expect(isPureWakeRead(method, "/v1/wake")).toBe(true);

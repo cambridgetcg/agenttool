@@ -299,8 +299,16 @@ made. It is recorded on the trace's `metadata.signed_at`, alongside
 `metadata.signature_context`, and both are required for a later check.
 
 `POST /v1/traces/prepare` returns `signing_core_json`, `signing_core_sha256_hex`,
-and `canonical_sha256_b64` for a given body, so no client has to re-implement
-the fold; it charges nothing. `GET /v1/traces/:id/verify` rebuilds these bytes
+and `canonical_sha256_b64`, plus `agent_id`, canonical `identity_id` and
+`signed_at`. Copy those returned subject/time fields into the signed POST;
+base64-decode the digest and sign its 32 raw bytes. Preparation charges nothing.
+The raw `agent_id` label is preserved; an owned UUID/application-DID alias can
+establish the canonical identity binding before signing. New signed writes
+refuse inferred or rewritten subject fields, missing/empty proof, foreign or
+inactive keys, and mismatched bound signers. Parent references must stay within
+the project. Admission and proof checks repeat in the insert transaction.
+
+`GET /v1/traces/:id/verify` rebuilds these bytes
 from the stored row and reports one of `unsigned`, `no_key_reference`,
 `recipe_unrecorded`, `recipe_unsupported`, `signed_at_unrecorded`,
 `key_not_found`, `valid`, `valid_key_revoked`, or `invalid` — never a bare
@@ -310,7 +318,9 @@ boolean. A trace signed before this recipe existed carries no
 Used in: `api/src/services/trace/sig.ts` (recipe) · `api/src/services/trace/verify.ts`
 (check) · `api/src/routes/trace/traces.ts` (surface). Vectors:
 `api/tests/trace-canonical-bytes.test.ts`. Status machine:
-`api/tests/trace-verify-status.test.ts`.
+`api/tests/trace-verify-status.test.ts`. New-write admission and signed-field
+preservation: `api/tests/trace-partitions.test.ts`. These checks do not change
+the frozen recipe or retroactively validate historical rows.
 
 ### `agent-wallet-*/v1` — capability-bounded wallet records
 
@@ -1019,6 +1029,12 @@ u32be(len(kind))         || kind          // empty string when omitted
 > **Why v2 exists.** v1 NUL-delimits two fields it does not length-bound, and neither is text: ciphertext and nonce are raw binary that may contain 0x00. A 12-byte AES-GCM nonce leads with 0x00 about 4.6% of the time, and when it does, the same signature also verifies a *different* `(ciphertext, nonce)` split — the trailing byte of the ciphertext can be read as the separator instead. Length-prefixing every variable-length field removes the ambiguity; the domain tag removes cross-context replay.
 
 Both are accepted. `verifyThoughtSignature` tries v2 first and falls back to v1, and **v1 verification is never removed** — dropping it would make already-signed history unverifiable. Every writer still *signs* v1 by default: an independently published SDK cannot lead the server it talks to. The ordered cutover (server dual-accept → SDK → CLI → worker) is in [`STRANDS.md`](STRANDS.md) § *Canonical bytes — v1, v2, and the cutover*, and the current default is pinned by assertions in `packages/sdk-ts`, `packages/sdk-py`, and `api/tests/runtime-thought-signing.test.ts`.
+
+Recipe compatibility is separate from write admission: a new thought requires
+an active owned key matching any bound strand identity. Replacement preserves
+the existing key and sequence and checks the URL's parent strand. These
+project/subject checks do not rewrite v1 or v2 bytes or remove historical
+verification; see [identity partitions](IDENTITY-PARTITIONS.md).
 
 Used in: `services/strand/sig.ts` (`canonicalThoughtBytesV2`). Client signers: `packages/sdk-ts/src/crypto.ts` (`signThought`, `version: "v2"`) · `packages/sdk-py/src/agenttool/crypto.py` (`sign_thought`, `version="v2"`) · `cli/think/src/crypto.ts`. Pinned by the shared fixture (`strand-thought/v2`, 8 cases across all three implementations).
 

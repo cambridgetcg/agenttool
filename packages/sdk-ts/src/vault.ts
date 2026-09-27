@@ -20,10 +20,12 @@ import { decryptThought, encryptThought } from "./crypto.js";
 // Secret names are caller-supplied path segments like every other id here, so
 // they cross the same shared boundary.
 import { encodePathSegment } from "./_url.js";
+import { authorityRequestTarget, authorityTimestampNow, identityReadAuthorityHeaders } from "./authority.js";
 
 export interface PutSecretOptions {
   description?: string;
-  agent_ids?: string[];
+  /** Omitted preserves an existing audience; null shares; [] denies value reads. */
+  agent_ids?: string[] | null;
   tags?: string[];
   ttl_seconds?: number;
   rotation_days?: number;
@@ -44,7 +46,14 @@ export interface GetDecryptedOptions extends GetSecretOptions {
 
 export interface GetSecretOptions {
   version?: number;
+  /** Selector only. Restricted values also require read_authority. */
   agent_id?: string;
+  read_authority?: {
+    did: string;
+    signing_key: Uint8Array;
+    current_sequence: number;
+    timestamp?: string;
+  };
 }
 
 export interface ListSecretsOptions {
@@ -54,8 +63,12 @@ export interface ListSecretsOptions {
 }
 
 export interface SetPolicyOptions {
-  allowed_agents?: string[];
+  agent_ids?: string[] | null;
+  /** @deprecated Alias for agent_ids. [] denies; null shares. */
+  allowed_agents?: string[] | null;
+  /** Unsupported by the API; passing this option raises before I/O. */
   read_only?: boolean;
+  /** Unsupported by the API; passing this option raises before I/O. */
   require_agent_id?: boolean;
 }
 
@@ -94,8 +107,25 @@ export class VaultClient {
   /** Retrieve a secret's plaintext value. */
   async get(name: string, options?: GetSecretOptions): Promise<Record<string, unknown>> {
     const qs = options?.version !== undefined ? `?version=${options.version}` : "";
+    const path = `/v1/vault/${encodePathSegment(name)}${qs}`;
     const extra: Record<string, string> = options?.agent_id ? { "X-Agent-Id": options.agent_id } : {};
-    return this.req("GET", `/v1/vault/${encodePathSegment(name)}${qs}`, undefined, extra);
+    const proof = options?.read_authority;
+    if (proof) {
+      const id = proof.did.match(/^did:at:([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i)?.[1]?.toLowerCase();
+      const selected = options?.agent_id?.replace(/^did:at:/, "").toLowerCase();
+      if (!id || (selected !== undefined && selected !== id)) {
+        throw new AgentToolError("Vault read selector must match the signing identity DID.", { code: "vault_identity_conflict" });
+      }
+      extra["X-Agent-Id"] = id;
+      Object.assign(extra, identityReadAuthorityHeaders({
+        identityDid: proof.did,
+        requestTarget: authorityRequestTarget(this.http.baseUrl.replace(/\/$/, "") + path),
+        currentSequence: proof.current_sequence,
+        timestamp: proof.timestamp ?? authorityTimestampNow(),
+        signingKey: proof.signing_key,
+      }));
+    }
+    return this.req("GET", path, undefined, extra);
   }
 
   /** Soft-delete a secret (all versions). */
@@ -124,10 +154,14 @@ export class VaultClient {
 
   /** Set an access policy for a secret. */
   async set_policy(name: string, options: SetPolicyOptions): Promise<Record<string, unknown>> {
-    const body: Record<string, unknown> = {};
-    if (options.allowed_agents !== undefined) body.allowed_agents = options.allowed_agents;
-    if (options.read_only !== undefined) body.read_only = options.read_only;
-    if (options.require_agent_id !== undefined) body.require_agent_id = options.require_agent_id;
+    if (options.read_only !== undefined || options.require_agent_id !== undefined) {
+      throw new AgentToolError("Vault policies support agent_ids only; read_only and require_agent_id are not implemented.", { code: "vault_policy_option_unsupported" });
+    }
+    if ((options.agent_ids !== undefined && options.allowed_agents !== undefined)
+      || (options.agent_ids === undefined && options.allowed_agents === undefined)) {
+      throw new AgentToolError("Provide exactly one of agent_ids or its allowed_agents alias (null shares; [] denies).", { code: "vault_policy_invalid" });
+    }
+    const body = { agent_ids: options.agent_ids !== undefined ? options.agent_ids : options.allowed_agents };
     return this.req("PUT", `/v1/vault/${encodePathSegment(name)}/policy`, body);
   }
 
@@ -136,21 +170,25 @@ export class VaultClient {
     const qs = `?limit=${options?.limit ?? 50}`;
     const path = name ? `/v1/vault/${encodePathSegment(name)}/audit${qs}` : `/v1/vault/audit${qs}`;
     const data = await this.req("GET", path);
-    const d = data as { events?: Record<string, unknown>[] };
-    return d.events ?? (data as unknown as Record<string, unknown>[]);
+    const d = data as { entries?: Record<string, unknown>[] };
+    return d.entries ?? [];
   }
 
-  /** Retrieve multiple secrets in a single request. */
+  /** @deprecated Bulk value retrieval has no API endpoint. Use explicitly authorized get calls. */
   async bulk(names: string[], options?: { agent_id?: string }): Promise<Record<string, unknown>> {
-    const extra: Record<string, string> = options?.agent_id ? { "X-Agent-Id": options.agent_id } : {};
-    return this.req("POST", "/v1/vault/bulk", { names }, extra);
+    throw new AgentToolError("Bulk value retrieval is unavailable; use get for each intended secret. bulk_put is a separate write operation.", { code: "vault_bulk_read_unavailable" });
+  }
+
+  /** Explicit project-admin bulk write; never performs value retrieval. */
+  async bulk_put(secrets: Array<{ name: string; value: string } & Omit<PutSecretOptions, "agent_id">>): Promise<Record<string, unknown>> {
+    return this.req("POST", "/v1/vault/bulk", { secrets });
   }
 
   /** Check existence of multiple secrets without retrieving values. */
   async check(names: string[]): Promise<Record<string, boolean>> {
     const data = await this.req("POST", "/v1/vault/check", { names });
-    const d = data as { exists?: Record<string, boolean> };
-    return d.exists ?? (data as unknown as Record<string, boolean>);
+    const d = data as { results?: Array<{ name: string; exists: boolean }> };
+    return Object.fromEntries((d.results ?? []).map((row) => [row.name, row.exists]));
   }
 
   // ── Agent-encrypted (zero-knowledge) path ─────────────────────────────
@@ -204,6 +242,7 @@ export class VaultClient {
     const resp = await this.get(name, {
       version: options.version,
       agent_id: options.agent_id,
+      read_authority: options.read_authority,
     });
     if (resp.agent_encrypted === true) {
       const ct = resp.ciphertext_b64 as string | undefined;

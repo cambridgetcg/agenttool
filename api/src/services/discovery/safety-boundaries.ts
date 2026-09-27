@@ -332,11 +332,11 @@ export const SAFETY_BOUNDARIES = {
     agent_encrypted:
       "agent_encrypted=true stores caller-supplied opaque bytes that the normal read route returns without decrypting. The API does not prove those bytes were encrypted or that only one agent can read them.",
     agent_ids_policy:
-      "The HTTP read route compares agent_ids with the caller-supplied X-Agent-Id header under a project-root bearer. This is an intra-project label check, not identity-signature authentication. Hosted runtime reads currently bypass this policy check.",
+      "Null agent_ids shares values within the project; [] denies value reads. A nonempty audience requires canonical owned identities. Restricted HTTP reads require X-Agent-Id plus that active identity's exact GET root proof; a caller-supplied header alone is not proof. Hosted runtime reads enforce the audience against their stored identity binding. Project bearers retain policy administration and metadata access, so this does not isolate identities from project administrators.",
     deletion:
       "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed.",
     audit:
-      "HTTP vault operations write ordinary audit rows. They are not hash-chained, signed, or database-immutable, and hosted runtime reads do not currently create the same per-secret read record.",
+      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request.",
   },
 
   marketplace_input: {

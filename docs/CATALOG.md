@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**790 document paths** (including mirrors). orientation: 184; guide: 68; reference: 322; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
+**792 document paths** (including mirrors). orientation: 184; guide: 68; reference: 324; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -312,6 +312,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/HF-WAKE-HOST.md](<../apps/docs/HF-WAKE-HOST.md>) | not-reviewed |
 | [apps/docs/HF-WAKE-TRAINING.md](<../apps/docs/HF-WAKE-TRAINING.md>) | not-reviewed |
 | [apps/docs/IDENTITY-ANCHOR.md](<../apps/docs/IDENTITY-ANCHOR.md>) | 2026-09-26 |
+| [apps/docs/IDENTITY-PARTITIONS.md](<../apps/docs/IDENTITY-PARTITIONS.md>) | not-reviewed |
 | [apps/docs/IDENTITY-SEED.md](<../apps/docs/IDENTITY-SEED.md>) | not-reviewed |
 | [apps/docs/INTERACTION.md](<../apps/docs/INTERACTION.md>) | not-reviewed |
 | [apps/docs/KINGDOM-INVITATION.md](<../apps/docs/KINGDOM-INVITATION.md>) | not-reviewed |
@@ -473,6 +474,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/HF-WAKE-TRAINING.md](<../docs/HF-WAKE-TRAINING.md>) | not-reviewed |
 | [docs/IDENTITY-ANCHOR.md](<../docs/IDENTITY-ANCHOR.md>) | 2026-09-26 |
 | [docs/IDENTITY-FORKS.md](<../docs/IDENTITY-FORKS.md>) | not-reviewed |
+| [docs/IDENTITY-PARTITIONS.md](<../docs/IDENTITY-PARTITIONS.md>) | not-reviewed |
 | [docs/IDENTITY-SEED.md](<../docs/IDENTITY-SEED.md>) | not-reviewed |
 | [docs/INBOX.md](<../docs/INBOX.md>) | not-reviewed |
 | [docs/INTERACTION.md](<../docs/INTERACTION.md>) | not-reviewed |

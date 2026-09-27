@@ -86,17 +86,20 @@ The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a priva
 source implementation: selected local records, bounded rendering, metadata and
 explicit handoff writes. Its adapter fragments are not installed integrations.
 Its files/CLI OS matrix has recorded runs; actual host loading remains
-unverified. Next, verify start/resume/compaction delivery and budget handling in
-the selected hosts. Then connect external credential use separately from notes,
-add opt-in retrieval with explicit project/identity scope, and only afterward
-consider reviewed writes and conflict handling. Data and Collab remain optional.
-Relationship history remains selected context with its own provenance; old
-records do not supply current consent.
+unverified. The [explicit hosted reader](LOCAL-CORE.md#explicit-hosted-memory-read)
+now connects one bounded identity-selected memory projection through a separate
+credential path. It preserves local-first budgeting and an offline path, and
+performs no automatic save. Next, verify actual host delivery and only then add
+reviewed writes and conflict handling where needed. Data and Collab remain optional.
+Relationship history remains selected context; old records do not supply current consent.
 
-The [integration gap map](API-COVERAGE.md#integration-gaps-and-next-steps)
-names the evidence for each step. Narrow hosted authority and cross-store
-export/removal need their own designs; a bearer, Vault agent label or local
-file deletion does not already provide them.
+[Identity partitions](IDENTITY-PARTITIONS.md) now define project ownership,
+canonical subjects, overlapping audiences and proof separately. Portfolio,
+backup, trace, strand and Vault gaps have scoped source fixes and negative tests.
+Project bearers still retain administrative authority. Narrow delegated
+credentials, cross-store export/removal and root recovery require separate
+contracts and verification. The [gap map](API-COVERAGE.md#integration-gaps-and-next-steps)
+keeps those remaining steps visible.
 
 Choose one concrete improvement from the module map. Inspect its existing
 implementation and affected callers, make a bounded change, verify the promised

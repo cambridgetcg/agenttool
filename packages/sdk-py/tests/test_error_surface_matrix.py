@@ -640,9 +640,9 @@ MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
     "vault.VaultClient.delete": lambda at: at.vault.delete("API_KEY"),
     "vault.VaultClient.list": lambda at: at.vault.list(),
     "vault.VaultClient.versions": lambda at: at.vault.versions("API_KEY"),
-    "vault.VaultClient.set_policy": lambda at: at.vault.set_policy("API_KEY"),
+    "vault.VaultClient.set_policy": lambda at: at.vault.set_policy("API_KEY", agent_ids=[]),
     "vault.VaultClient.audit": lambda at: at.vault.audit(),
-    "vault.VaultClient.bulk": lambda at: at.vault.bulk(["API_KEY"]),
+    "vault.VaultClient.bulk_put": lambda at: at.vault.bulk_put([{"name": "API_KEY", "value": "fixture"}]),
     "vault.VaultClient.check": lambda at: at.vault.check(["API_KEY"]),
     "vault.VaultClient.put_encrypted": lambda at: at.vault.put_encrypted(
         "API_KEY", "secret", k_vault=bytes(32)

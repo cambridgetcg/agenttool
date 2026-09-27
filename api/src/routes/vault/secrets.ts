@@ -20,18 +20,22 @@
 import type { Context } from "hono";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { vaultAudit, vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { decrypt, encrypt } from "../../services/vault/crypto";
+import { authorizeVaultHttpRead, validateVaultAudience, vaultAudienceSchema } from "../../services/vault/audience";
+import { abort } from "../../lib/errors";
 
 const app = new Hono<ProjectContext>();
 
 function reqMeta(c: Context<ProjectContext>) {
   return {
-    agentId: c.req.header("X-Agent-Id") ?? null,
+    // A project-admin write does not prove the identity named in a caller header.
+    agentId: null,
     ip:
       c.req.header("X-Forwarded-For") ??
       c.req.header("CF-Connecting-IP") ??
@@ -56,7 +60,7 @@ const putSchema = z
      *  agent_encrypted=true. */
     nonce_b64: z.string().min(1).optional(),
     description: z.string().optional(),
-    agent_ids: z.array(z.string()).optional(),
+    agent_ids: vaultAudienceSchema.optional(),
     tags: z.array(z.string()).optional(),
     ttl_seconds: z.number().int().positive().nullable().optional(),
     rotation_days: z.number().int().positive().nullable().optional(),
@@ -77,6 +81,9 @@ app.put("/:name", async (c) => {
   const name = c.req.param("name");
   const body = putSchema.parse(await c.req.json());
   const { agentId, ip } = reqMeta(c);
+  const audience = body.agent_ids === undefined
+    ? undefined
+    : await validateVaultAudience(project.id, body.agent_ids);
   const now = new Date();
 
   // Two encryption paths — see file header doctrine note.
@@ -127,7 +134,7 @@ app.put("/:name", async (c) => {
       .set({
         description: body.description ?? existing.description,
         tags: body.tags ?? existing.tags,
-        agentIds: body.agent_ids ?? existing.agentIds,
+        ...(audience === undefined ? {} : { agentIds: audience }),
         currentVersion: version,
         rotationDays: body.rotation_days ?? existing.rotationDays,
         rotationDueAt: rotationDueAt ?? existing.rotationDueAt,
@@ -144,7 +151,7 @@ app.put("/:name", async (c) => {
         name,
         description: body.description ?? null,
         tags: body.tags ?? null,
-        agentIds: body.agent_ids ?? null,
+        agentIds: audience ?? null,
         currentVersion: 1,
         rotationDays: body.rotation_days ?? null,
         rotationDueAt,
@@ -181,17 +188,19 @@ app.put("/:name", async (c) => {
     created_at: now.toISOString(),
     expires_at: expiresAt?.toISOString() ?? null,
     rotation_due: rotationDueAt?.toISOString() ?? null,
-    agent_ids: body.agent_ids ?? null,
+    agent_ids: audience === undefined ? (existing?.agentIds ?? null) : audience,
   });
 });
 
-// ─── GET /:name — retrieve plaintext value (X-Agent-Id policy enforced) ─────
+// Restricted values require root proof; metadata routes retain project-admin scope.
 
 app.get("/:name", async (c) => {
   const project = c.var.project;
   const name = c.req.param("name");
   const versionParam = c.req.query("version");
-  const { agentId, ip } = reqMeta(c);
+  const { ip } = reqMeta(c);
+  let agentId: string | null = null;
+  c.header("Cache-Control", "private, no-store");
 
   const [secret] = await db
     .select()
@@ -208,9 +217,15 @@ app.get("/:name", async (c) => {
     return c.json({ error: "Secret not found" }, 404);
   }
 
-  // Policy: if agent_ids restricted, X-Agent-Id must be on the list.
-  if (secret.agentIds && secret.agentIds.length > 0) {
-    if (!agentId || !secret.agentIds.includes(agentId)) {
+  try {
+    agentId = await authorizeVaultHttpRead({
+      projectId: project.id,
+      audience: secret.agentIds,
+      selectedIdentity: c.req.header("X-Agent-Id") ?? null,
+      request: c.req.raw,
+    });
+  } catch (error) {
+    if (error instanceof HTTPException) {
       await db.insert(vaultAudit).values({
         projectId: project.id,
         secretName: name,
@@ -218,13 +233,16 @@ app.get("/:name", async (c) => {
         agentId,
         ipAddress: ip,
       });
-      return c.json({ error: "Access denied for this agent_id" }, 403);
     }
+    throw error;
   }
 
   const requestedVersion = versionParam
     ? Number(versionParam)
     : secret.currentVersion;
+  if (!Number.isSafeInteger(requestedVersion) || requestedVersion < 1) {
+    abort({ error: "invalid_vault_version", message: "version must be a positive integer.", docs: "https://docs.agenttool.dev/IDENTITY-PARTITIONS.md" }, 400);
+  }
 
   const [v] = await db
     .select()

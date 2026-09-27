@@ -19,6 +19,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identityBackups } from "../db/schema/continuity";
+import { requireActiveProjectIdentity } from "../services/identity/partition";
 
 const app = new Hono<ProjectContext>();
 
@@ -47,23 +48,29 @@ app.post("/", async (c) => {
   const project = c.var.project;
   const body = backupSchema.parse(await c.req.json());
 
-  const [backup] = await db
-    .insert(identityBackups)
-    .values({
-      projectId: project.id,
-      agentId: body.agent_id,
-      label: body.label,
-      blobBase64: body.blob_base64,
-      keyDerivation: body.key_derivation,
-      nonce: body.nonce ?? null,
-      metadata: body.metadata ?? {},
-    })
-    .returning({
-      id: identityBackups.id,
-      label: identityBackups.label,
-      keyDerivation: identityBackups.keyDerivation,
-      createdAt: identityBackups.createdAt,
+  const backup = await db.transaction(async (tx) => {
+    const identity = await requireActiveProjectIdentity(project.id, body.agent_id, {
+      database: tx, lock: true,
     });
+    const [stored] = await tx
+      .insert(identityBackups)
+      .values({
+        projectId: project.id,
+        agentId: identity.id,
+        label: body.label,
+        blobBase64: body.blob_base64,
+        keyDerivation: body.key_derivation,
+        nonce: body.nonce ?? null,
+        metadata: body.metadata ?? {},
+      })
+      .returning({
+        id: identityBackups.id,
+        label: identityBackups.label,
+        keyDerivation: identityBackups.keyDerivation,
+        createdAt: identityBackups.createdAt,
+      });
+    return stored;
+  });
 
   return c.json(
     {

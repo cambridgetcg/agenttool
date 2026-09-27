@@ -12,6 +12,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { errors, fail } from "../../lib/errors";
+import { resolveProjectSubject } from "../../services/identity/partition";
 import {
   canonicalTraceBytes,
   normalizeTraceCore,
@@ -24,6 +25,7 @@ import {
   deleteTrace,
   getTrace,
   listTraces,
+  validateTracePartition,
 } from "../../services/trace/store";
 import { verifyStoredTrace } from "../../services/trace/verify";
 
@@ -65,7 +67,7 @@ const createSchema = z.object({
   context: contextSchema,
   tags: z.array(z.string().max(64)).max(32).optional(),
   metadata: z.record(z.unknown()).optional(),
-  signature: z.string().max(512).nullish(),
+  signature: z.string().min(1).max(512).nullish(),
   signing_key_id: z.string().uuid().nullish(),
   // The signer's own timestamp, bound into agent-trace/v1. Required to make
   // a signature checkable later — created_at is assigned after the signing,
@@ -117,15 +119,13 @@ app.post("/", async (c) => {
     );
   }
 
-  await charge(c, ROUTE_CREDITS["trace.write"], "trace.write");
-
   // Stamp origin AFTER caller metadata so the middleware value wins —
   // unspoofable via the body. Doctrine: docs/ACTIVITY.md §Origin signal.
   // The signing stamp rides in metadata rather than in a column: verify
   // needs the recipe name and the signer's timestamp, and neither is worth
   // a migration while both are write-once alongside the signature.
   const { signed_at: signedAt, signature_context: _context, ...traceFields } = signing;
-  const created = await createTrace(c.var.project.id, {
+  const input = {
     ...traceFields,
     metadata: {
       ...(signing.metadata ?? {}),
@@ -137,7 +137,10 @@ app.post("/", async (c) => {
           }
         : {}),
     },
-  });
+  };
+  await validateTracePartition(c.var.project.id, input);
+  await charge(c, ROUTE_CREDITS["trace.write"], "trace.write");
+  const created = await createTrace(c.var.project.id, input);
   return c.json(
     {
       ...created,
@@ -167,14 +170,15 @@ app.post("/prepare", async (c) => {
   }
 
   const projectId = c.var.project.id;
+  const binding = await resolveProjectSubject(projectId, parsed.data);
   const signedAt = parsed.data.signed_at ?? new Date().toISOString();
   const core = normalizeTraceCore(parsed.data);
   const coreJson = traceSigningCoreJson(core);
   const coreSha256Hex = traceSigningCoreSha256Hex(core);
   const canonical = canonicalTraceBytes({
     projectId,
-    agentId: parsed.data.agent_id ?? null,
-    identityId: parsed.data.identity_id ?? null,
+    agentId: binding.agentId,
+    identityId: binding.identityId,
     sessionId: parsed.data.session_id ?? null,
     parentTraceId: parsed.data.parent_trace_id ?? null,
     coreSha256Hex,
@@ -184,12 +188,14 @@ app.post("/prepare", async (c) => {
   return c.json({
     recipe: TRACE_SIGNATURE_CONTEXT,
     project_id: projectId,
+    agent_id: binding.agentId,
+    identity_id: binding.identityId,
     signed_at: signedAt,
     signing_core_json: coreJson,
     signing_core_sha256_hex: coreSha256Hex,
     canonical_sha256_b64: Buffer.from(canonical).toString("base64"),
     instruction:
-      "ed25519-sign the 32 raw bytes of canonical_sha256_b64 (base64-decode first; do not sign the base64 text), then POST /v1/traces with the identical fields plus signature, signing_key_id, and this exact signed_at.",
+      "ed25519-sign the 32 raw bytes of canonical_sha256_b64 (base64-decode first; do not sign the base64 text), then POST /v1/traces with the same content and returned agent_id, identity_id and signed_at, plus signature and signing_key_id.",
     charged: 0,
     next_actions: [
       { action: "record the signed trace", method: "POST", path: "/v1/traces" },
@@ -210,6 +216,7 @@ app.get("/", async (c) => {
 
   const rows = await listTraces(project.id, {
     agent_id: agentId,
+    identity_id: z.string().uuid().nullish().parse(c.req.query("identity_id")) ?? null,
     session_id: sessionId,
     decision_type: decisionType,
     parent_trace_id: parent,

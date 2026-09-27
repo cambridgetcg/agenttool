@@ -1,0 +1,1 @@
+../../docs/IDENTITY-PARTITIONS.md

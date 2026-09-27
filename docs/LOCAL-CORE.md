@@ -235,10 +235,51 @@ Use the [API comparison](API-COVERAGE.md#coverage-at-a-glance) to decide when
 shared storage, verification or delivery helps. The
 [credential map](API-COVERAGE.md#credentials-and-custody) separates local key
 custody, project bearers, hosted Vault and the independent local credential
-broker. None is connected to the starter today. The
-[integration sequence](API-COVERAGE.md#integration-gaps-and-next-steps) starts
-with verified host loading, then a separate credential path and selected
-retrieval; automatic synchronization is not implemented.
+broker. The separate explicit companion below connects selected hosted memories;
+it does not install a broker or OS secret store. The
+[integration sequence](API-COVERAGE.md#integration-gaps-and-next-steps) keeps
+actual host loading, reviewed writes and conflict handling as further work.
+Automatic synchronization is not implemented.
+
+## Explicit hosted memory read
+
+The separate source companion `packages/local-starter/src/connect.mjs` can make
+one bounded authenticated GET and combine selected hosted memories with the
+local working set. The original core, CLI and hook commands remain offline.
+This requires private source access, Node 22+, an existing local starter and
+an already authorized project bearer supplied outside notes.
+
+```sh
+node packages/local-starter/src/connect.mjs \
+  --dir /absolute/private/existing-starter \
+  --origin https://api.agenttool.dev \
+  --project-id <project-uuid> --identity-id <identity-uuid> \
+  --credential-env AGENTTOOL_CONTEXT_BEARER
+```
+
+Replace the placeholders and arrange the named environment variable through
+your existing credential mechanism; never put its value in arguments or notes.
+Use `--offline` instead of `--credential-env` for local context without credential
+resolution or network activity. A library caller can supply a credential callback
+or an explicitly configured transport such as a broker grant; no integration is
+installed automatically.
+
+The API path is `/v1/identities/{identity_uuid}/local-context`, with no query
+parameters. It selects only that active owned identity's unexpired memories,
+excluding project-shared and unbound records. The response states that selection
+is not identity proof or bearer attenuation. It returns at most eight whole
+records, 4 KiB per record and 8 KiB content, with digests, timestamps and omissions.
+It examines a bounded recent window, so this is not a complete export or sync feed.
+
+The companion checks origin/project/identity, schema, freshness, record digests,
+expiry and byte limits, refuses redirects and makes no automatic retry. Local
+records get priority within the combined content budget. Output is a reviewable
+snapshot with a separate hosted receipt and selection; it does not replace notes,
+register identities, acknowledge Wake, install hooks or start a runtime.
+Credential values can exist in client process memory. This is not an OS credential
+store or a general secret detector. Actual host delivery still needs verification.
+See [the partition contract](IDENTITY-PARTITIONS.md) for the mathematical scope,
+source/test boundaries and deliberate compatibility changes.
 
 ## Custody, sharing, and deletion
 
