@@ -623,6 +623,14 @@
       "canonical_path": "docs/LABOR.md"
     },
     {
+      "path": "apps/docs/LOCAL-CONTEXT-GRANTS.md",
+      "title": "A grant for one selected context read",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-CONTEXT-GRANTS.md"
+    },
+    {
       "path": "apps/docs/LOCAL-CORE.md",
       "title": "A local core for an agent host",
       "type": "guide",
@@ -2653,6 +2661,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LIVING-GROUND.md"
+    },
+    {
+      "path": "docs/LOCAL-CONTEXT-GRANTS.md",
+      "title": "A grant for one selected context read",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-CONTEXT-GRANTS.md"
     },
     {
       "path": "docs/LOCAL-CORE.md",

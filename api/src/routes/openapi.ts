@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
+import { LOCAL_CONTEXT_OPENAPI_PATHS } from "./openapi-local-context";
 import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import { CORE_WAKE_FOUNDATION } from "../services/welcome/core-foundation";
@@ -2956,6 +2957,10 @@ function spec() {
     security: [{ bearerAuth: [] }],
     components: {
       securitySchemes: {
+        localContextGrant: {
+          type: "http", scheme: "bearer", bearerFormat: "atlc_*",
+          description: "Separately stored, opaque, revocable and expiring credential for one exact local-context GET. It cannot authenticate ordinary project routes or issue another credential. Parent-key revocation/expiry also invalidates it. Never send it as model context.",
+        },
         bearerAuth: {
           type: "http",
           scheme: "bearer",
@@ -4618,65 +4623,7 @@ function spec() {
           },
         },
       },
-      "/v1/identities/{id}/local-context": {
-        get: {
-          tags: ["identity"],
-          summary: "Read a bounded memory window for one owned active identity",
-          description: "Explicit project-bearer projection, not identity authentication or credential attenuation. No query parameters. Excludes project-shared, unbound and expired memories. Uses a read-only repeatable-read transaction and suppresses authentication last_used writes; it does not acknowledge Wake, write local files, start a session or supply a complete export.",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
-          responses: {
-            "200": {
-              description: "Complete selected records, scope and explicit omissions; Cache-Control: private, no-store",
-              content: { "application/json": { schema: {
-                type: "object", additionalProperties: false,
-                required: ["format", "project_id", "identity_id", "generated_at", "scope", "bounds", "used_content_bytes", "records", "omissions", "has_more"],
-                properties: {
-                  format: { const: "agenttool-local-api-context/v1" },
-                  project_id: { type: "string", format: "uuid" },
-                  identity_id: { type: "string", format: "uuid" },
-                  generated_at: { type: "string", format: "date-time" },
-                  scope: {
-                    type: "object", additionalProperties: false,
-                    required: ["authentication", "selection", "identity_proven", "bearer_attenuated", "project_shared_included"],
-                    properties: {
-                      authentication: { const: "project_bearer" }, selection: { const: "identity_partition" },
-                      identity_proven: { const: false }, bearer_attenuated: { const: false }, project_shared_included: { const: false },
-                    },
-                  },
-                  bounds: {
-                    type: "object", additionalProperties: false,
-                    required: ["max_items", "max_candidates", "max_record_bytes", "max_content_bytes", "max_response_bytes"],
-                    properties: {
-                      max_items: { const: 8 }, max_candidates: { const: 32 }, max_record_bytes: { const: 4096 },
-                      max_content_bytes: { const: 8192 }, max_response_bytes: { const: 32768 },
-                    },
-                  },
-                  used_content_bytes: { type: "integer", minimum: 0, maximum: 8192 },
-                  records: { type: "array", maxItems: 8, items: {
-                    type: "object", additionalProperties: false,
-                    required: ["id", "created_at", "expires_at", "content_bytes", "sha256", "content"],
-                    properties: {
-                      id: { type: "string", format: "uuid" }, created_at: { type: "string", format: "date-time" },
-                      expires_at: { type: ["string", "null"], format: "date-time" },
-                      content_bytes: { type: "integer", minimum: 0, maximum: 4096 },
-                      sha256: { type: "string", pattern: "^[0-9a-f]{64}$" }, content: { type: "string" },
-                    },
-                  } },
-                  omissions: { type: "array", maxItems: 32, items: {
-                    type: "object", additionalProperties: false, required: ["id", "reason"],
-                    properties: { id: { type: "string", format: "uuid" }, reason: { enum: ["record_too_large", "invalid_content", "content_budget", "item_limit"] } },
-                  } },
-                  has_more: { type: "boolean", description: "More rows exist beyond the bounded candidate window; omissions can exist even when false." },
-                },
-              } } },
-            },
-            "400": { $ref: "#/components/responses/Validation" },
-            "401": { description: "Project bearer required" },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "503": { description: "Projection unavailable; no fallback to project-wide Wake" },
-          },
-        },
-      },
+      ...LOCAL_CONTEXT_OPENAPI_PATHS,
       "/v1/identities/{id}": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or exact legacy did-field value (`did:at:<uuid>`)" },

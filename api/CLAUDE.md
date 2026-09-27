@@ -84,6 +84,7 @@ the `endpoints:` array of `buildArrivalIndex` in
 | `GET /v1/wake` · `GET /v1/wake/observe` | identity-bearing keystone projections · separate explicit-subject data-only locator | `docs/WAKE.md` |
 | `GET /v1/memetic-landscape` | unauthenticated zero-I/O discovery for canonical artifact-variant geometry; its `platform_self.memetic_landscape` WAKE coordinate is context only, never identity, memory, consent, authority, or continuity | `docs/MEMETIC-LANDSCAPE.md` |
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
+| `/v1/identities/:id/local-context` · `/local-context-grants` | bounded selected-memory GET · explicit administrator grant issue/inspect/revoke | `docs/LOCAL-CONTEXT-GRANTS.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |
 | `/v1/strands` | encrypted thoughts under K_master · SSE-streamable | `docs/STRANDS.md` |
 | `/v1/vault` | secrets (server-encrypted or agent-encrypted) | — |

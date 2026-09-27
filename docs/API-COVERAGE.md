@@ -145,6 +145,7 @@ companion resolves a caller-selected credential callback or transport separately
 |---|---|---|---|
 | Identity signing/decryption keys | Caller-generated keys and SDK crypto; public keys registered with the API | Prove specific statements across clients and decrypt correctly encrypted payloads | Local derivation does not require a server. A public key registry is not custody of its private key; the legacy creation path has a different boundary. |
 | Project API bearer | `GET/POST /v1/keys`, `POST /v1/keys/rotate`, `DELETE /v1/keys/:id` | Give devices separately revocable access, with optional expiry | Tokens authorize the project, not an individual identity or a narrow task. Server stores a hash; creation returns the raw token once. Device names are descriptive. |
+| Local-context grant | Explicit issue/inspect/revoke under an owned identity | Give one reader a short-lived selected-memory credential without its parent project bearer | Separate `atlc_` token; exact GET target, finite expiry, parent/grant revocation checks and no other API authority. See [grant contract](LOCAL-CONTEXT-GRANTS.md). |
 | Lost bearer | `POST /v1/identity/recover` with an eligible registered signing key | Restore access without retaining that bearer | Depends on the existing service record, proof and replay rules. It does not restore a lost signing key, recover local notes, or revoke other tokens. |
 | Hosted server-managed secret | `PUT/GET /v1/vault/:name`, versions, policy and audit routes | Version secrets that authorized hosted consumers need, such as a model-provider credential | Encrypted at rest under a server-derived key; the API can decrypt it and the HTTP read returns plaintext. |
 | Caller-encrypted material | Vault's opaque-byte path, identity backup blobs, strands and correctly sealed inbox bodies | Keep selected payload content encrypted across storage/transport when the client actually performs encryption | The server accepts supplied bytes; it does not prove encryption. Caller retains decryption keys; metadata and provider-time plaintext have separate exposure. |
@@ -184,6 +185,7 @@ reading this map.
 | Control visible in source | What it checks | What it does not establish |
 |---|---|---|
 | Project bearer authentication and resource ownership | Hash, revocation/expiry and project selection; domain handlers check their own records | Universal identity-level isolation, current task permission, or permission to contact someone |
+| Local-context grant admission | Exact target, configured audience, parent/grant lifetime and revocation, active ownership in the memory snapshot | Identity-root consent, general delegation or erasure of already delivered content |
 | Identity-root proofs on protected routes | Exact request bytes, selected root, freshness and sequence | Coverage of every route; sequence consumption and the later domain write are not one transaction |
 | Domain signatures and durable replay receipts | Particular event authorship and replay constraints, such as recovery/correspondence | Truth of a signed statement or blanket permission for its contents |
 | Optional Redis idempotency middleware | Selected mutation fingerprints and response replay when available | Universal exactly-once execution: it can fail open and excludes sensitive responses from replay |
@@ -334,7 +336,7 @@ These services preserve declarations and choices; they do not certify feelings.
 
 | Read | Durable effect visible in source |
 |---|---|
-| Ordinary bearer-authenticated request | Best-effort `tools.api_keys.last_used` update; Wake and the explicit local-context safe methods opt out (`api/src/auth/middleware.ts`). |
+| Ordinary bearer-authenticated request | Best-effort `tools.api_keys.last_used` update; Wake opts out; the sealed local-context GET uses read-only authentication before ordinary middleware. |
 | `GET /v1/memories/:id` | Best-effort memory `accessed_at` touch; list/key retrieval differs (`api/src/services/memory/store.ts:306`). |
 | GET/HEAD correspondence claims and voice | May reconcile derived claim projections in a bounded transaction; signed events remain unchanged (`api/src/services/correspondence/store.ts:509`). |
 | GET inbox/letter | Does not mark the message read; a separate mutation does that. Ordinary bearer metadata handling still applies. |
@@ -350,7 +352,8 @@ install the same files or provide the same key custody.
 
 | Surface | Purpose and behavior | Connection to local scaffolding |
 |---|---|---|
-| `GET /v1/identities/{id}/local-context` | Bounded recent memories for exactly one active owned identity; explicit scope receipt, no auth telemetry write. | The separate `connect.mjs` companion combines these with local files without saving them. Project bearer remains administrative. |
+| `GET /v1/identities/{id}/local-context` | Bounded recent memories for exactly one active owned identity; explicit scope receipt, no auth telemetry write. | The separate `connect.mjs` companion combines these with local files without saving them. Project bearer v1 remains administrative; an explicit local-context grant selects the attenuated v2 read. |
+| `/v1/identities/{id}/local-context-grants` | Explicit administrator issue/list/inspect/revoke of one expiring, parent-linked, exact-read credential. Token returned once; only its verifier is stored. | Reader receives this narrow grant outside notes; the companion never receives or resolves its issuing parent key. See [grant contract](LOCAL-CONTEXT-GRANTS.md). |
 | `GET /v1/bootstrap/scaffold` | Generates setup for a project bearer, a project-namespaced configuration and hosted Wake helper. Executing it is a separate local action. | Uses an OS credential store with a documented owner-only Linux fallback; does not install the files-only starter or create its identity key. |
 | `GET /v1/adapters/claude-code` | Generates a host hook that fetches hosted Wake and emits context once installed/enabled. | Existing hosted integration; separate from the starter's uninstalled local-file fragments. |
 | `/v1/templates`, `POST /v1/identities/from-template` | Publishes/adopts configured expression; adoption server-generates a new keypair and legacy identity. | Creates a new hosted identity, not a local scaffold or restoration of an old identity/memories. Template publication defaults public. |
@@ -427,7 +430,7 @@ The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements s
 | Explicit companion now resolves a caller-owned credential callback or transport | Keep OS secret-store provisioning and host integration separate | Tests cover one bounded request, origin/project/identity binding, refusal and offline paths; actual host delivery remains unverified |
 | Selected-memory projection and local composition now implemented | Add other record types only with explicit subject and byte contracts | Fixed-path GET, complete records, bounded candidate window, provenance, freshness and combined budget; no automatic save or sync |
 | No synchronization or conflict protocol | Add a reviewed single-record write only when needed | Version/receipt handling, duplicate prevention where guaranteed, ambiguous-write recovery and concurrent-device conflict behavior |
-| Ownership/signing/Vault gaps covered by the partition contract; project bearer remains administrative | Design attenuated credentials with subject/action/resource/expiry/revocation constraints | Current negative tests do not establish general per-identity bearer isolation; enforce intersection on future delegation |
+| Ownership/signing/Vault gaps covered; local-context has a separate narrow grant | Broaden delegation only through explicit per-operation contracts | The first grant binds one subject/GET target, finite expiry and current parent/grant state; no child delegation or general per-identity bearer isolation |
 | No unified cross-store export/removal | Define export and removal per local files, memory, chronicle, vault and provider copies | Enumerated retained data, pagination/completeness, deletion restrictions and separate token/provider revocation receipts |
 
 Hosted list/read/delete operations are individual primitives, not proof of a

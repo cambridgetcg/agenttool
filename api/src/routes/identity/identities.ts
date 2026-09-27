@@ -20,11 +20,13 @@ import {
   replaceCallerIdentityMetadata,
   requestedServerManagedIdentityMetadataKeys,
 } from "../../services/identity/metadata";
-import { createLocalContextHandler } from "./local-context";
+import localContextGrants from "./local-context-grants";
 
 const app = new Hono<ProjectContext>();
 
-app.get("/:id/local-context", createLocalContextHandler());
+// The exact local-context read is sealed early in the parent application.
+// Management retains ordinary project-administrator authentication.
+app.route("/:id/local-context-grants", localContextGrants);
 
 /** UUID v4 / generic UUID format. We don't enforce v4 strictly because
  *  randomUUID() output is v4 but external tools may pass v1/v5 historically. */

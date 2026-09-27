@@ -136,12 +136,13 @@ project's private portfolio; metadata alone is insufficient to reassign them.
 
 ## Explicit local connection
 
-`GET /v1/identities/{identity_uuid}/local-context` requires a project bearer
-and one active owned identity in the path. It accepts no query parameters.
+`GET /v1/identities/{identity_uuid}/local-context` accepts a project bearer
+or a separately issued [local-context grant](LOCAL-CONTEXT-GRANTS.md), with one
+active owned identity in the path. It accepts no query parameters.
 It reads a repeatable, read-only database snapshot and leaves authentication
 `last_used` untouched. It neither observes/acknowledges Wake nor writes memory.
 
-The closed `agenttool-local-api-context/v1` envelope contains the authenticated
+For project bearers, the closed `agenttool-local-api-context/v1` envelope contains the authenticated
 project, selected identity, generation time, scope, bounds, whole memory
 records and omission reasons. Scope explicitly says `identity_proven: false`,
 `bearer_attenuated: false`, and `project_shared_included: false`.
@@ -174,8 +175,9 @@ for the manual invocation and host boundary.
 
 True least-authority delegation would bind a capability to **(origin, project,
 subject, actions, resource set, expiry, revocation state)**. Child delegation
-must intersect these sets and never broaden them. That capability does not
-yet exist for general hosted API bearers. A fixed-path local broker grant can
+must intersect these sets and never broaden them. The first narrow [local-context grant](LOCAL-CONTEXT-GRANTS.md) implements
+a singleton action/target with parent-linked expiry and revocation. It grants no
+child delegation. General scoped access across hosted API routes is still absent. A fixed-path local broker grant can
 constrain its mediated request; it does not change the upstream bearer itself.
 
 Selected retrieval is implemented here; automatic synchronization, reviewed

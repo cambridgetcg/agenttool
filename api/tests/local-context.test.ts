@@ -203,3 +203,46 @@ test("published OpenAPI describes the closed projection without upgrading its au
   expect(validate({ ...envelope, extra: "unreviewed" })).toBe(false);
   expect(operation.parameters.every((parameter: { in: string }) => parameter.in === "path")).toBe(true);
 });
+
+
+test("OpenAPI separates narrow-grant admission and administrator credential management", async () => {
+  const { default: openapi } = await import("../src/routes/openapi");
+  const spec = await (await openapi.request("/")).json();
+  const operation = spec.paths["/v1/identities/{id}/local-context"].get;
+  const ajv = new Ajv2020({ strict: false, validateFormats: false });
+  const validate = ajv.compile(operation.responses["200"].content["application/json"].schema);
+  const authorization = {
+    grant_id: OTHER, origin: "https://api.agenttool.dev", action: "local_context.read", method: "GET",
+    path: `/v1/identities/${IDENTITY}/local-context`, issued_at: NOW.toISOString(),
+    expires_at: new Date(NOW.getTime() + 60_000).toISOString(), checked_at: NOW.toISOString(),
+  };
+  const project = packLocalContext(PROJECT, IDENTITY, [candidate(1)], NOW);
+  const grant = { ...project, format: "agenttool-local-api-context/v2",
+    scope: { ...project.scope, authentication: "local_context_grant", bearer_attenuated: true }, authorization };
+  expect(validate(grant)).toBe(true);
+  for (const malformed of [
+    { ...grant, format: project.format },
+    { ...grant, scope: project.scope },
+    { ...grant, authorization: { ...authorization, token: "must-not-appear" } },
+    { ...grant, authorization: { ...authorization, method: "POST" } },
+    { ...grant, authorization: { ...authorization, path: "/v1/wake" } },
+    { ...grant, authorization: { ...authorization, action: "*" } },
+  ]) expect(validate(malformed)).toBe(false);
+  expect(operation.security).toEqual([{ bearerAuth: [] }, { localContextGrant: [] }]);
+  const collection = spec.paths["/v1/identities/{id}/local-context-grants"];
+  const item = spec.paths["/v1/identities/{id}/local-context-grants/{grant_id}"];
+  for (const op of [collection.post, collection.get, item.get, item.delete]) {
+    expect(op.security).toEqual([{ bearerAuth: [] }]);
+  }
+  const issue = ajv.compile(collection.post.requestBody.content["application/json"].schema);
+  const request = { grant_id: OTHER, expires_at: authorization.expires_at };
+  expect(issue(request)).toBe(true);
+  expect(issue({ ...request, scope: "*" })).toBe(false);
+  const { checked_at: _checked, ...issued } = authorization;
+  const metadata = { ...issued, project_id: PROJECT, identity_id: IDENTITY, issuing_api_key_id: id(2), revoked_at: null };
+  const inspect = ajv.compile(item.get.responses["200"].content["application/json"].schema);
+  expect(inspect({ grant: metadata })).toBe(true);
+  expect(inspect({ grant: { ...metadata, token_hash: "a".repeat(64) } })).toBe(false);
+  const list = ajv.compile(collection.get.responses["200"].content["application/json"].schema);
+  expect(list({ grants: Array(51).fill(metadata) })).toBe(false);
+});

@@ -247,7 +247,8 @@ The separate source companion `packages/local-starter/src/connect.mjs` can make
 one bounded authenticated GET and combine selected hosted memories with the
 local working set. The original core, CLI and hook commands remain offline.
 This requires private source access, Node 22+, an existing local starter and
-an already authorized project bearer supplied outside notes.
+an already authorized credential supplied outside notes: an ordinary project bearer
+or a separately issued [local-context grant](LOCAL-CONTEXT-GRANTS.md).
 
 ```sh
 node packages/local-starter/src/connect.mjs \
@@ -267,7 +268,11 @@ installed automatically.
 The API path is `/v1/identities/{identity_uuid}/local-context`, with no query
 parameters. It selects only that active owned identity's unexpired memories,
 excluding project-shared and unbound records. The response states that selection
-is not identity proof or bearer attenuation. It returns at most eight whole
+is not identity proof. Project bearers retain the v1 projection and administrative
+authority; `--authentication local_context_grant` selects the separate v2 receipt
+and an expiring/revocable exact-read credential. The companion never issues it.
+See [grant setup and limits](LOCAL-CONTEXT-GRANTS.md#give-the-local-companion-the-narrow-credential).
+Both modes return at most eight whole
 records, 4 KiB per record and 8 KiB content, with digests, timestamps and omissions.
 It examines a bounded recent window, so this is not a complete export or sync feed.
 

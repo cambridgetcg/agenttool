@@ -179,9 +179,18 @@ This optional connection reads recent memories for **one active identity owned
 by the authenticated project**, through
 `GET /v1/identities/:id/local-context`. It does not fetch full Wake, project-shared
 or unbound legacy memory, identity backups, Vault values, or provider credentials.
-The endpoint returns a project-bearer scope manifest. Selecting an identity
-filters records; it does not prove the caller holds that identity's signing key
-or turn the project bearer into an identity-private credential.
+Choose the authentication boundary explicitly:
+
+- `project_bearer` is the default and retains the original v1 response. Selecting
+  an identity filters records; it does not narrow the project bearer's authority.
+- `local_context_grant` requires a separately issued, expiring read credential and
+  the v2 response. The server limits that credential to this project, identity,
+  configured service origin, and exact GET path. It cannot authorize other reads,
+  writes, identity creation, or further grants.
+
+Neither mode proves the caller holds the identity's signing key. Grant issuance
+is project-administrator delegation, not identity-root consent. The companion
+does not need the parent project bearer in grant mode.
 
 Run `connect.mjs` separately and supply the expected HTTPS origin, project UUID,
 and identity UUID. The credential flag names an environment variable; it never
@@ -191,17 +200,28 @@ notes, command history, or host configuration examples.
 
 ```sh
 node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
+node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --authentication local_context_grant --credential-env LOCAL_CONTEXT_GRANT
 node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
 ```
 
-The first command makes one explicit GET; the second reads only local files and
-does not resolve any credential. These are source instructions, not proof that
+Each connected command makes one explicit GET; the offline command reads only
+local files and does not resolve any credential, including when grant mode is
+selected. These are source instructions, not proof that
 the endpoint is deployed or that a package is published. There is no connection
 file, account lookup, registration fallback, installation, scheduled refresh,
 save, synchronization, or automatic write to `memories.md` or `handoff.md`.
 
-The hosted protocol (`agenttool-local-api-context/v1`) examines at most 32 recent
-candidates in deterministic creation-time/ID order, returns at most eight complete
+Grant management is separate from the reader. A project administrator explicitly
+issues a grant through `POST /v1/identities/{id}/local-context-grants`, choosing a
+new canonical `grant_id` and `expires_at`; the token is returned once. Expiry must
+be within 24 hours and no later than the issuing key's finite expiry. Listing
+returns bounded metadata; `DELETE /v1/identities/{id}/local-context-grants/{grant_id}`
+revokes a grant. Parent-key revocation or rotation also invalidates its grants.
+The reader never mints, refreshes, retries issuance, or substitutes the parent
+bearer. Keep the issued token in the caller's credential mechanism, outside notes.
+
+Both hosted protocol versions examine at most 32 recent
+candidates in deterministic creation-time/ID order, return at most eight complete
 records, and identifies whether another candidate exists. Each included record
 has at most 4,096 content bytes, a SHA-256, creation time and optional expiry.
 The total hosted content limit is 8,192 bytes; encoded JSON is separately capped
@@ -212,7 +232,13 @@ update. This is a bounded recent window, not a complete export or search result.
 The companion checks the exact expected project and identity, closed protocol
 shape, scope, byte counts, hashes, timestamps and expiry before producing any
 context. A snapshot more than five minutes away from the client clock is refused;
-a record that expired in transit is also refused. The request has a ten-second
+a record that expired in transit is also refused. Grant mode additionally checks
+the closed authorization metadata: canonical grant ID, exact origin/action/method/
+path, ordered issue/check/response times, a check within five minutes of the client
+clock, a lifetime of at most 24 hours, and expiry after both the client time and
+response generation. A v1 response cannot downgrade a grant-mode request. Direct
+grant mode requires a canonical `atlc_` token encoding 32 random bytes and refuses
+an ordinary project token before HTTP. The request has a ten-second
 bound and a response-byte cap, follows no redirects, and never retries. A refusal,
 timeout, incompatible older server or unavailable credential produces a short
 error with no partial stdout. Run the explicit offline command or the unchanged
@@ -222,18 +248,27 @@ Composition keeps local records first within the local manifest's aggregate
 content budget; only complete hosted records that fit the remainder are included.
 JSON output uses `agenttool-connected-context/v1`: `hosted.receipt` contains
 source metadata without record bodies, while `hosted.selection` carries the
-selected records and local budget omissions. `response_sha256` identifies the
+selected records and local budget omissions. The receipt format is
+`agenttool-local-api-context-receipt/v1` for a project read and `/v2` for a grant
+read. The latter preserves authorization metadata, including grant ID and expiry,
+without a grant token or token hash. `response_sha256` identifies the
 original received HTTP entity bytes, not the derived receipt. Origin comes from
 the chosen request target. Hashes identify bytes; they do not certify authorship
 or truth. Output framing retains the separate 131,072-byte stdout cap.
 
 For a host integration, the module exports `readHostedContext(options)` and
 `renderConnectedContext({ dir, ...options })`. Pass either a `resolveBearer`
-callback or a structural `transport: { request(url, init) }`, never both. A
+callback or a structural `transport: { request(url, init) }`, never both. Set
+`authentication: 'local_context_grant'` for the delegated protocol; omitted
+authentication means `project_bearer`. A
 configured credential broker's `asTransport(grant)` fits that interface and keeps
-the bearer outside this process. The first endpoint needs a GET grant for one
+the bearer outside this process. The endpoint needs a broker GET grant for one
 exact identity path with no query names; generic broker grants still use
-segment-aware path prefixes. Keep the grant handle in trusted host state.
+segment-aware path prefixes. Keep the broker handle in trusted host state.
+Broker grants and hosted local-context grants are separate boundaries: a broker
+that injects a project bearer still produces a project-bearer v1 server receipt.
+Injected transports remain responsible for their own credential custody and
+origin/redirect limits; the companion validates the response's declared authority.
 The existing broker is a separate preview with its own OS, custody, and same-user
 limits, not a dependency bundled here. The callback/env option holds the bearer
 in this process's memory and environment handling has its normal host exposure.
@@ -243,7 +278,10 @@ transformed or encoded disclosure.
 The CLI accepts HTTPS origins only. Literal-loopback HTTP is available solely
 through the module's explicit `allowLoopbackHttp` test seam, never as a CLI flag.
 No new hook is generated; deliberate host loading and provider disclosure remain
-the caller's decisions. Disabling this connection cannot retract earlier output.
+the caller's decisions. Grant validity is checked again on each server read in
+the same read-only snapshot as memory selection; its receipt is evidence of that
+admission, not a promise of future validity. Revocation, expiry, or disabling this
+connection cannot retract bytes already received or disclosed.
 
 ## Platform and custody limits
 
@@ -305,9 +343,11 @@ node --test
 Tests require no external service, real credentials, package installation, or
 model calls. Connector tests use injected transports and temporary literal-loopback
 HTTP servers with obvious sentinel bearers. On macOS arm64 / Node 24.18.1 the
-complete local suite passes 83 tests, including 13 connector cases. The API's
-`tests/local-context.test.ts` passes nine hermetic cases with Bun 1.3.5, including
-the actual route-envelope/companion wire contract. This is separate from the
+complete local suite passes 94 tests, including 24 connector cases. Connector
+coverage includes both protocol versions, grant-bound origin/subject/time checks,
+parent-token refusal before HTTP, delegated CLI output and local-only operation.
+The API's `tests/local-context.test.ts` owns the actual route-envelope/companion
+wire contract; its API gate is verified separately. This is separate from the
 earlier files-only OS matrix and is not a live hosted or real-harness receipt.
 See [CLAUDE.md](CLAUDE.md) for the package's change boundaries, and
 [Local core](../../docs/LOCAL-CORE.md) for the larger local/host/server map.

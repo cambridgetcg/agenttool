@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (identity partitions and explicit hosted memory connection; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (narrow local-context credentials; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,36 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Narrow local-context credentials (2026-09-27)
+
+**Source candidate:** `feat/local-context-grants`, based on `05d53017` (PR #438).
+Merge, migration and live deployment are separate release receipts.
+
+[Local-context grants](LOCAL-CONTEXT-GRANTS.md) give an explicit reader one
+revocable, expiring GET capability without its parent's project bearer.
+Administrator issue/list/inspect/revoke routes use immutable caller-chosen
+UUIDs; the separate table stores only a token hash. Expiry is at most 24 hours
+and cannot exceed the issuing key's lifetime. Every read rechecks grant, parent,
+active ownership and exact target in the same read-only snapshot as selection.
+This is administrator delegation, not identity-root consent.
+
+The exact read now precedes ordinary body decorators and project middleware.
+This fixes a transport gap: the main app previously added fields that the
+closed companion contract rejected. Project credentials retain v1; explicit
+`local_context_grant` mode requires v2 and its closed authorization receipt.
+Grant tokens cannot authenticate ordinary project APIs. No registry package,
+automatic issuance, host installation, sync or general delegation is added.
+
+**Focused evidence:** 43 API/service/transport/schema tests and 94 local starter
+tests passed. PostgreSQL 16 executed the actual migration against disposable
+synthetic parent tables: 7 tests cover constraints, concurrent issuance,
+rollback, parent locks and revocation snapshots. All temporary clusters stopped.
+The 794-path catalog and public guide links passed. Complete gate, merge,
+migration and delivery receipts remain separate from these focused results.
+One additive migration is required; existing migration bytes and production
+records are unchanged. Retained metadata prevents issuance-ID reuse and
+constrains hard deletion of related database rows.
 
 ## Identity partitions and explicit selected memory (2026-09-27)
 

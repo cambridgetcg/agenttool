@@ -100,21 +100,32 @@ export async function readLocalContext(
 ) {
   const now = options.now ?? new Date();
   if (!Number.isFinite(now.getTime())) throw new Error("local_context_invalid_time");
-  return (options.database ?? db).transaction(async (tx) => {
-    const subject = await requireActiveProjectIdentity(projectId, identityId, { database: tx });
-    const rows = await tx.select({
-      id: memories.id,
-      // Do not transfer large memory bodies out of PostgreSQL merely to omit them.
-      content: sql<string | null>`CASE WHEN octet_length(${memories.content}) <= ${LOCAL_CONTEXT_BOUNDS.max_record_bytes} THEN ${memories.content} ELSE NULL END`,
-      contentBytes: sql<number>`octet_length(${memories.content})`,
-      createdAt: memories.createdAt,
-      expiresAt: memories.expiresAt,
-    }).from(memories).where(and(
-      eq(memories.projectId, projectId),
-      eq(memories.identityId, subject.id),
-      or(isNull(memories.expiresAt), gt(memories.expiresAt, now)),
-    )).orderBy(desc(memories.createdAt), desc(memories.id))
-      .limit(LOCAL_CONTEXT_BOUNDS.max_candidates + 1);
-    return packLocalContext(projectId, subject.id, rows, now);
-  }, { isolationLevel: "repeatable read", accessMode: "read only" });
+  return (options.database ?? db).transaction(
+    (tx) => readLocalContextInTransaction(tx, projectId, identityId, now),
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+}
+
+/** Caller owns the read-only repeatable-read transaction, including its authentication checks. */
+export async function readLocalContextInTransaction(
+  tx: Pick<typeof db, "select">,
+  projectId: string,
+  identityId: string,
+  now: Date,
+) {
+  const subject = await requireActiveProjectIdentity(projectId, identityId, { database: tx });
+  const rows = await tx.select({
+    id: memories.id,
+    // Do not transfer large memory bodies out of PostgreSQL merely to omit them.
+    content: sql<string | null>`CASE WHEN octet_length(${memories.content}) <= ${LOCAL_CONTEXT_BOUNDS.max_record_bytes} THEN ${memories.content} ELSE NULL END`,
+    contentBytes: sql<number>`octet_length(${memories.content})`,
+    createdAt: memories.createdAt,
+    expiresAt: memories.expiresAt,
+  }).from(memories).where(and(
+    eq(memories.projectId, projectId),
+    eq(memories.identityId, subject.id),
+    or(isNull(memories.expiresAt), gt(memories.expiresAt, now)),
+  )).orderBy(desc(memories.createdAt), desc(memories.id))
+    .limit(LOCAL_CONTEXT_BOUNDS.max_candidates + 1);
+  return packLocalContext(projectId, subject.id, rows, now);
 }

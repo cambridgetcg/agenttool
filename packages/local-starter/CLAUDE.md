@@ -28,7 +28,18 @@ it usable directly from a checkout without installing dependencies or building.
   Do not widen the companion into general HTTP, discovery, registration, a secret
   resolver/store, full Wake retrieval, arbitrary projections, or automatic saves.
   Its request timeout is a bound, not a polling or scheduling mechanism.
-  Keep server scope manifests distinct from identity proofs and attenuated tokens.
+  Keep project-bearer selection, hosted read grants, broker grants, and identity
+  proofs distinct. Authentication defaults to `project_bearer` and requires the
+  unchanged v1 envelope. Explicit `local_context_grant` requires v2 with closed
+  authorization metadata and rejects a v1 downgrade. Validate exact origin,
+  project, identity, action/method/path, canonical grant ID, issue/check/response
+  ordering, the 24-hour lifetime cap, fresh checks, and expiry against client
+  time. Direct grant mode must refuse parent tokens before HTTP; accept only a
+  canonical `atlc_` token encoding 32 bytes. Never add grant issuance, renewal,
+  revocation or parent-key discovery to this reader. Issuance and management are
+  explicit administrator operations elsewhere; a receipt is not ongoing authority
+  and revocation cannot retract earlier output. A broker injecting a project
+  bearer still produces a project-bearer server receipt.
   Validate protocol, subject, expiry, UTF-8/digests and content/encoded limits before
   output; use a distinct metadata receipt and selected records for local-budget
   composition rather than modifying a verified server envelope. No excluded body
@@ -91,8 +102,12 @@ Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
 secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
-The companion has 13 cases; the current local suite passes 83 on macOS arm64 /
+The companion has 24 cases; the current local suite passes 94 on macOS arm64 /
 Node 24.18.1. Its API wire tests are in `api/tests/local-context.test.ts`.
+Keep direct and injected grant tests explicit: no parent credential transmission,
+closed v2 metadata, rejected downgrades, in-transit expiry, unchanged record/byte
+bounds, secret-free receipts, and offline/CLI behavior. Test credentials are
+sentinels; current counts do not establish production grant issuance or revocation.
 
 State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
 Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
