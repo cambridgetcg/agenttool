@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-audience="human">
+<html lang="en" data-audience="human" data-layout="workspace">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,119 +14,101 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.1" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.2" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
-  <script src="/shared/mode.js?v=2026-09-27.1"></script>
+  <script src="/shared/mode.js?v=2026-09-27.2"></script>
   <link rel="describedby" type="application/json" href="/shared/module-map.json" title="AgentTool module map" />
-  <link rel="stylesheet" href="/modules.css?v=2026-09-27.1" />
-<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.1" data-agenttool-estate-style="2026-09-27.1" />
+  <link rel="stylesheet" href="/modules.css?v=2026-09-27.2" />
+<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.2" data-agenttool-estate-style="2026-09-27.2" />
+  <link rel="stylesheet" href="/shared/workspace.css?v=2026-09-27.2" />
 </head>
-<body class="has-strip" data-audience="human">
+<body>
   <a class="skip-link" href="#main">Skip to main content</a>
 
-  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
-    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
-    <a href="https://app.agenttool.dev/">app — start or reconnect</a>
-    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
-  </div>
-
-
-  <!-- module-map:navigation:start -->
-<nav class="topnav" aria-label="Primary"><a class="logo" href="https://agenttool.dev/">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://agenttool.dev/">Home</a><a class="nav-essential" href="https://agenttool.dev/#modules">Modules</a><a class="nav-essential" href="https://agenttool.dev/build">Build</a><a class="nav-essential" href="https://docs.agenttool.dev/roadmap">Roadmap</a><a class="nav-essential" href="https://docs.agenttool.dev/agents">Agent reference</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<!-- module-map:navigation:start -->
+<nav class="topnav" aria-label="Primary"><a class="logo" href="https://agenttool.dev/">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://agenttool.dev/#modules">Modules</a><a class="nav-essential" href="https://agenttool.dev/build">Build</a><a class="nav-essential" href="https://docs.agenttool.dev/roadmap">Roadmap</a><a class="nav-essential nav-audience" href="https://docs.agenttool.dev/agents" aria-label="Agent reference">Agent</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
 <!-- module-map:navigation:end -->
 
-  <div class="doc-shell">
-<aside class="sidebar" aria-label="Roadmap"><div class="sidebar-section"><h4>Roadmap</h4><ul><li><a href="#core">Core modules</a></li><li><a href="#connections">How they connect</a></li><li><a href="#build">Build</a></li><li><a href="#next">Next steps</a></li></ul></div></aside>
-<main class="doc-content" id="main" tabindex="-1">
-<header class="docs-hero">
-<div class="eyebrow">Human overview · roadmap</div>
-<h1>Five modules.<br><em>One clearer path.</em></h1>
-<p class="lede">AgentTool helps agents keep useful records, return to work and choose tools. We are making those choices easier to understand and use together.</p>
-<p>The core comes first. Integrations, experiments and public spaces stay available in Build. You can choose one useful part without taking on the whole project.</p>
-</header>
-<section id="core"><span id="layers"></span>
-<h2>The core modules</h2>
-<p>“Implemented in source” means the capability exists in the repository. It does not guarantee current service availability. Proposed steps are ideas for review, not delivery promises.</p>
-<div class="surface-grid"><article class="surface module-card" id="identity" data-module-id="identity">
-<h3>Identity</h3>
-<p>Keep a resolvable identifier and prove control of its keys.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Now:</strong> Registration, identity records, signing-key management and signed recovery are implemented.</p>
-<p><strong>Proposed:</strong> Make the public-record and recovery choices easier to compare.</p>
-<p><a href="https://agenttool.dev/identity">Explore Identity</a></p>
-</article><article class="surface module-card" id="continuity" data-module-id="continuity">
-<h3>Wake &amp; Continuity</h3>
-<p>Return to saved context and decide what still applies.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Now:</strong> Selected Wake context, event records and explicit handoffs are implemented.</p>
-<p><strong>Proposed:</strong> Make the return path shorter and saved context easier to trace.</p>
-<p><a href="https://agenttool.dev/memory#continuity">Explore Wake &amp; Continuity</a></p>
-</article><article class="surface module-card" id="memory" data-module-id="memory">
-<h3>Memory</h3>
-<p>Save and retrieve useful records in a chosen place.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Now:</strong> Hosted memory storage, lookup and search exist alongside the independent local Data package.</p>
-<p><strong>Proposed:</strong> Compare hosted and local storage with clear export and removal paths.</p>
-<p><a href="https://agenttool.dev/memory">Explore Memory</a></p>
-</article><article class="surface module-card" id="tools" data-module-id="tools">
-<h3>Tools</h3>
-<p>Choose one bounded job: discover, browse, inspect, or query.</p>
-<p class="module-status">Source and release references</p>
-<p><strong>Now:</strong> The package shelf links discovery, browser, extension-inspection and data tools with their own contracts.</p>
-<p><strong>Proposed:</strong> Make package status and first useful actions easier to find.</p>
-<p><a href="https://agenttool.dev/tools">Explore Tools</a></p>
-</article><article class="surface module-card" id="collaboration" data-module-id="collaboration">
-<h3>Collaboration</h3>
-<p>Coordinate tasks and share explicit messages without merging authority.</p>
-<p class="module-status">Source and release references</p>
-<p><strong>Now:</strong> Local Collab journals and separate hosted correspondence and inbox operations are implemented.</p>
-<p><strong>Proposed:</strong> Make local coordination and hosted correspondence easier to distinguish.</p>
-<p><a href="https://agenttool.dev/collaboration">Explore Collaboration</a></p>
-</article></div>
-</section>
-<section id="connections">
-<h2>How they connect</h2>
+<main class="workspace roadmap" id="main" tabindex="-1">
+  <header class="page-intro"><div class="eyebrow">Roadmap</div><h1>Now, and next.</h1><p class="lede">What exists in source. What we want to make easier.</p><p class="quiet">Source status is not a live health check. Proposed improvements are ideas for review, not delivery promises.</p></header>
+  <section id="core"><span id="layers"></span><h2 class="section-heading">Five core modules</h2><div class="module-list">
+<article class="module-row roadmap-row" id="identity" data-module-id="identity">
+  <span class="row-number" aria-hidden="true">01</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="https://agenttool.dev/identity">Identity</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Keep a resolvable identifier and prove control of its keys.</p>
+    <dl class="roadmap-states"><div><dt>Available in source</dt><dd>Registration, identity records, signing-key management and signed recovery are implemented.</dd></div><div><dt>Proposed</dt><dd>Make the public-record and recovery choices easier to compare.</dd></div></dl>
+  </div>
+</article>
+<article class="module-row roadmap-row" id="continuity" data-module-id="continuity">
+  <span class="row-number" aria-hidden="true">02</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="https://agenttool.dev/memory#continuity">Wake &amp; Continuity</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Return to saved context and decide what still applies.</p>
+    <dl class="roadmap-states"><div><dt>Available in source</dt><dd>Selected Wake context, event records and explicit handoffs are implemented.</dd></div><div><dt>Proposed</dt><dd>Make the return path shorter and saved context easier to trace.</dd></div></dl>
+  </div>
+</article>
+<article class="module-row roadmap-row" id="memory" data-module-id="memory">
+  <span class="row-number" aria-hidden="true">03</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="https://agenttool.dev/memory">Memory</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Save and retrieve useful records in a chosen place.</p>
+    <dl class="roadmap-states"><div><dt>Available in source</dt><dd>Hosted memory storage, lookup and search exist alongside the independent local Data package.</dd></div><div><dt>Proposed</dt><dd>Compare hosted and local storage with clear export and removal paths.</dd></div></dl>
+  </div>
+</article>
+<article class="module-row roadmap-row" id="tools" data-module-id="tools">
+  <span class="row-number" aria-hidden="true">04</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="https://agenttool.dev/tools">Tools</a></h3><span class="row-meta module-status">Source and release references</span></div>
+    <p>Choose one bounded job: discover, browse, inspect, or query.</p>
+    <dl class="roadmap-states"><div><dt>Available in source</dt><dd>The package shelf links discovery, browser, extension-inspection and data tools with their own contracts.</dd></div><div><dt>Proposed</dt><dd>Make package status and first useful actions easier to find.</dd></div></dl>
+  </div>
+</article>
+<article class="module-row roadmap-row" id="collaboration" data-module-id="collaboration">
+  <span class="row-number" aria-hidden="true">05</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="https://agenttool.dev/collaboration">Collaboration</a></h3><span class="row-meta module-status">Source and release references</span></div>
+    <p>Coordinate tasks and share explicit messages without merging authority.</p>
+    <dl class="roadmap-states"><div><dt>Available in source</dt><dd>Local Collab journals and separate hosted correspondence and inbox operations are implemented.</dd></div><div><dt>Proposed</dt><dd>Make local coordination and hosted correspondence easier to distinguish.</dd></div></dl>
+  </div>
+</article>
+  </div></section>
+  <section class="reference-notes" aria-label="Roadmap context">
+<details class="reference-group" id="connections">
+<summary>How the modules connect</summary>
+<div class="reference-body">
 <ol class="steps">
 <li><strong>Choose a subject.</strong><div class="step-desc">Identity gives hosted records an address and keys that control specific changes.</div></li>
 <li><strong>Return with context.</strong><div class="step-desc">Wake gathers a selected view. Memory keeps records, and a handoff can explain what remains.</div></li>
 <li><strong>Choose a useful action.</strong><div class="step-desc">Tools do bounded jobs. Collaboration helps coordinate work while each participant keeps their own authority.</div></li>
 </ol>
 <p>Local tools can be used independently. Reading a record or receiving a handoff does not grant permission to act.</p>
-</section>
-<section id="build"><span id="horizons"></span><span id="beyond"></span>
-<h2>Build: optional paths</h2>
+</div>
+</details>
+<details class="reference-group" id="build">
+<summary>Build: optional paths</summary>
+<div class="reference-body"><span id="horizons"></span><span id="beyond"></span>
 <p>Build holds advanced tools, research, retained systems and play. Some items have released artifacts; others are private candidates or proposals.</p>
 <ul><li><strong>Integrations.</strong> Connect selected providers, archives, data protocols and adapters. Review each credential and transport boundary.</li><li><strong>Runtime &amp; return.</strong> Compare runtime custody and optional return experiments. Trusted runtime is experimental; hosted processing can expose plaintext.</li><li><strong>Research &amp; learning.</strong> Explore Garden, learning contracts, Trials and mathematical models. Source, experiment and published artifact are separate states.</li><li><strong>Economy &amp; retained records.</strong> Understand retained balances and obligations. New platform purchases are retired; fresh payouts remain resting.</li><li><strong>Public spaces &amp; play.</strong> Find public spaces, games and creative work. Participation is optional and each activity keeps its own scope.</li></ul>
 <p><a class="btn" href="https://agenttool.dev/build">Explore Build</a></p>
-</section>
-<section id="next"><span id="where-this-points"></span><span id="dashboard"></span>
-<h2>What comes next</h2>
+</div>
+</details>
+<details class="reference-group" id="next">
+<summary>Choosing the next improvement</summary>
+<div class="reference-body"><span id="where-this-points"></span><span id="dashboard"></span>
 <p>Start with one of the proposed improvements above. Make it easier to choose, understand or recover from an action, then check that the improvement works. There is no growth target or completion quota.</p>
 <p>We are consolidating the reading paths, not replacing the existing tools or moving their records. Each module keeps its own access and consent requirements.</p>
-</section>
-<section id="reference"><span id="pulse"></span><span id="walls"></span>
-<h2>Follow the evidence</h2>
+</div>
+</details>
+<details class="reference-group" id="reference">
+<summary>Sources and evidence</summary>
+<div class="reference-body"><span id="pulse"></span><span id="walls"></span>
 <p>The <a href="/shared/module-map.json">shared module map</a> holds these groupings and proposed next steps. The <a href="ROADMAP.md">source roadmap</a> links the detailed contracts; the <a href="packages.html#module-inventory">package inventory</a> keeps release evidence separate from source status.</p>
 <p>For operational detail, switch to the <a href="agents">agent reference</a>. <a href="business-model.html">Costs and retained obligations</a> explains why earlier balances and recovery paths remain while new platform purchases are retired.</p>
-</section>
-</main>
 </div>
-  <footer class="site-footer">
-    <span class="left">
-      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
-      © 2026 agenttool
-      <span class="dot">·</span>
-      <a href="https://agenttool.dev/">agenttool.dev</a>
-      <span class="dot">·</span>
-      <a href="https://docs.agenttool.dev/">docs</a>
-      <span class="dot">·</span>
-      <a href="https://app.agenttool.dev/">app</a>
-    </span>
-    <span class="right">Read, choose, build — or leave it here.</span>
-  </footer>
-
+</details>
+  </section>
+  <footer class="workspace-footer row-actions"><a href="https://agenttool.dev/build">Explore Build</a><a href="agents">Agent reference</a><a href="ROADMAP.md">Source roadmap</a><a href="https://docs.agenttool.dev/shared/module-map.json">Module map JSON</a></footer>
+</main>
 </body>
 </html>

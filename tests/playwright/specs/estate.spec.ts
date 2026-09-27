@@ -1,5 +1,5 @@
-/** Unified estate shell — every visual room keeps its local character while
- * location, travel, exits, and authority language remain one experience. */
+/** Shared reading paths, local outlines and explicit search remain usable
+ * across the human and agent layouts, without granting operational authority. */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,12 @@ test("search keeps keyboard navigation and returns focus to its trigger", async 
   await expect(trigger).toBeFocused();
   await page.keyboard.press("Control+k");
   await expect(atlas).toBeVisible();
+  await search.fill("identity");
+  // A native search field can consume Escape to clear text. It must still
+  // close this dialog and return focus without requiring a second key press.
+  await search.press("Escape");
+  await expect(atlas).toBeHidden();
+  await expect(trigger).toBeFocused();
 });
 
 test("each audience has a consistent primary path and an explicit exit", async ({ page }) => {
@@ -71,10 +77,11 @@ test("each audience has a consistent primary path and an explicit exit", async (
     await page.goto(surface.url);
     await expect(page.locator("html")).toHaveAttribute("data-audience", surface.audience);
     const actual = await page.locator(".estate-quick-actions a").evaluateAll((links) =>
-      links.map((a) => ({ title: a.textContent, href: (a as HTMLAnchorElement).href })));
+      links.map((a) => ({ title: a.getAttribute("aria-label") || a.textContent, href: (a as HTMLAnchorElement).href })));
     const expected = map.audiences[surface.audience];
     expect(actual).toEqual([...expected.primary, expected.switch]);
-    await expect(page.locator(".estate-nearby, .estate-plan, .estate-home-door")).toHaveCount(0);
+    await expect(page.locator("nav.site-nav > .wordmark, nav.topnav > .logo")).toHaveAttribute("href", expected.home);
+    await expect(page.locator(".estate-location, .estate-nearby, .estate-plan, .estate-home-door")).toHaveCount(0);
   }
 });
 
@@ -167,14 +174,36 @@ test("the room shortcut never hijacks an editable field", async ({ page }) => {
   await expect(page.locator("#agenttool-estate-atlas")).toHaveCount(0);
 });
 
-test("Build and the audience exit stay visible at 320 CSS pixels", async ({ page }) => {
+test("every primary path and control stays visible without overlap at 320 CSS pixels", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
+  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
   for (const url of [`${WEB}/index.html`, `${DOCS}/memory.html`, `${APP}/index.html`]) {
     await page.goto(url);
-    await expect(page.locator(".estate-quick-build")).toBeVisible();
-    await expect(page.locator(".estate-audience-exit")).toBeVisible();
-    const nav = await page.locator("nav.site-nav, nav.topnav").boundingBox();
-    expect(nav!.height).toBeLessThanOrEqual(104);
+    const nav = page.locator("nav.site-nav, nav.topnav");
+    const audience = await page.locator("html").getAttribute("data-audience");
+    const paths = map.audiences[audience!];
+    for (const item of [...paths.primary, paths.switch]) {
+      await expect(nav.getByRole("link", { name: item.title, exact: true })).toBeVisible();
+    }
+    await expect(nav.getByRole("button", { name: "Search pages", exact: true })).toBeVisible();
+    await expect(nav.locator("#tg")).toBeVisible();
+    const box = await nav.boundingBox();
+    expect(box!.height).toBeLessThanOrEqual(104);
+    const controls = await nav.locator("a:visible, button:visible").evaluateAll(nodes => nodes.map(node => {
+      const r = node.getBoundingClientRect();
+      return { name: node.getAttribute("aria-label") || node.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    }));
+    for (const [index, control] of controls.entries()) {
+      expect(control.left, `${url}: ${control.name} left`).toBeGreaterThanOrEqual(0);
+      expect(control.right, `${url}: ${control.name} right`).toBeLessThanOrEqual(320);
+      expect(control.top, `${url}: ${control.name} top`).toBeGreaterThanOrEqual(0);
+      expect(control.bottom, `${url}: ${control.name} bottom`).toBeLessThanOrEqual(800);
+      for (const other of controls.slice(index + 1)) {
+        const overlaps = Math.min(control.right, other.right) > Math.max(control.left, other.left)
+          && Math.min(control.bottom, other.bottom) > Math.max(control.top, other.top);
+        expect(overlaps, `${url}: ${control.name} overlaps ${other.name}`).toBe(false);
+      }
+    }
     await page.locator(".estate-open").click();
     await expect(page.getByRole("dialog", { name: "Find a page" })).toBeVisible();
     const widths = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
@@ -203,6 +232,7 @@ test("static navigation and core modules remain useful without JavaScript", asyn
     const sizes = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
     expect(sizes[0], `${surface.url}: no-JS content must fit a narrow viewport`).toBeLessThanOrEqual(sizes[1]);
     const nav = page.locator("nav.site-nav, nav.topnav");
+    await expect(page.locator(".estate-strip:visible, .estate-strip-web:visible")).toHaveCount(0);
     const links = map.audiences[surface.audience];
     for (const item of [...links.primary, links.switch]) {
       const a = nav.getByRole("link", { name: item.title, exact: true });
@@ -251,7 +281,6 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
     const html = staticRead(path);
     expect(html, `${path}: no shared theme loader`).toContain("/shared/theme.js");
     expect(html, `${path}: no no-JS site navigation`).toContain("site-nav");
-    expect(html, `${path}: no no-JS estate links`).toContain("estate-strip-web");
   }
 
   // Pages whose own policy forbids scripts (`script-src 'none'` in their
@@ -312,25 +341,34 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
   }
 });
 
-test("the library starts with the five core modules and keeps optional references under Build", async ({ page }) => {
+test("a reference sidebar offers a local outline and compact onward paths", async ({ page }) => {
   await page.goto(`${DOCS}/memory.html`);
   const library = page.locator("aside.sidebar .estate-library");
   await expect(library).toBeVisible();
+  await expect(library).toHaveAttribute("aria-label", "On this page");
   await expect(page.locator("aside.sidebar [data-estate-legacy]").first()).toBeHidden();
-  const map = JSON.parse(staticRead("apps/_shared/module-map.json"));
-  expect(await library.locator(".estate-library-core a").allTextContents()).toEqual(map.modules.map((m: { title: string }) => m.title));
-  await expect(library.locator('.estate-library-core a[href="https://docs.agenttool.dev/memory"]')).toHaveAttribute("aria-current", "page");
-  await expect(library.locator(".estate-library-build")).not.toHaveAttribute("open", "");
-  await expect(library.locator(".estate-plan, .estate-library-door")).toHaveCount(0);
-  await library.getByText("Build and references", { exact: true }).click();
-  await expect(library.locator('.estate-library-build a[href="https://docs.agenttool.dev/vault"]')).toBeVisible();
+  const outline = library.locator(".estate-page-toc a");
+  expect(await outline.count()).toBeGreaterThan(0);
+  expect(await outline.count()).toBeLessThanOrEqual(24);
+  await expect(library.getByRole("link", { name: "Bring your own embeddings", exact: true })).toHaveAttribute("href", "#byo-embeddings");
+  const searchSection = library.getByRole("link", { name: "Search — semantic or text", exact: true });
+  await expect(searchSection).toHaveAttribute("href", "#search");
+  await searchSection.click();
+  await expect(page).toHaveURL(`${DOCS}/memory.html#search`);
+  await expect(searchSection).toHaveAttribute("aria-current", "location");
+  await expect(page.locator("main h2#search")).toBeInViewport();
+  await expect(library.getByRole("link", { name: "Agent start", exact: true })).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
+  await expect(library.getByRole("link", { name: "Build", exact: true })).toHaveAttribute("href", "https://docs.agenttool.dev/#build");
+  await expect(library.locator(".estate-library-core, .estate-library-build, .estate-plan")).toHaveCount(0);
 });
 
-test("no destination the hand-copied sidebar linked is lost on any docs page", async ({ page }) => {
+test("Search retains every legacy sidebar destination without repeating its inventory beside the page", async ({ page }) => {
   for (const path of staticHtmlFiles("apps/docs")) {
     if (!/<aside class="sidebar"/.test(staticRead(path))) continue;
     await page.goto(`${DOCS}/${path.replace(/^apps\/docs\//, "")}`);
     await expect(page.locator("aside.sidebar .estate-library")).toBeVisible();
+    await page.getByRole("button", { name: "Search pages", exact: true }).click();
+    await page.getByRole("dialog", { name: "Find a page" }).getByRole("checkbox").check();
     const missing = await page.evaluate(() => {
       // The same port-to-host mapping the shell uses for local previews.
       const hostFor = (hostname: string, port: string) =>
@@ -344,13 +382,13 @@ test("no destination the hand-copied sidebar linked is lost on any docs page", a
         return hostFor(url.hostname, url.port) + (p || "/") + url.hash;
       };
       const generated = new Set(
-        Array.from(document.querySelectorAll("aside.sidebar .estate-library a[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
+        Array.from(document.querySelectorAll("#agenttool-estate-atlas .estate-room-link[href]")).map((a) => norm((a as HTMLAnchorElement).href)),
       );
       return Array.from(document.querySelectorAll("aside.sidebar [data-estate-legacy] a[href]"))
         .map((a) => norm((a as HTMLAnchorElement).href))
         .filter((k) => !generated.has(k));
     });
-    expect(missing, `${path}: legacy links missing from the generated library`).toEqual([]);
+    expect(missing, `${path}: legacy links missing from Search`).toEqual([]);
   }
 });
 
@@ -369,6 +407,26 @@ test("a failed module-map load keeps static cards and audience navigation usable
   await expect(page.locator("[data-core-module]")).toHaveCount(5);
   await page.locator(".estate-open").click();
   await expect(page.getByRole("dialog", { name: "Find a page" })).toBeVisible();
+});
+
+test("deep links open their disclosures on arrival and when the hash changes", async ({ page }) => {
+  await page.goto(`${WEB}/build.html#research`);
+  await expect(page.locator("details#research")).toHaveAttribute("open", "");
+  await expect(page.locator("#research").getByRole("link", { name: /^Garden/ })).toBeVisible();
+  await page.evaluate(() => { window.location.hash = "runtime"; });
+  await expect(page.locator("details#runtime")).toHaveAttribute("open", "");
+  await expect(page.locator("#runtime").getByRole("link", { name: /^Runtime modes/ })).toBeInViewport();
+
+  // The target can be inside a closed disclosure, or be the disclosure itself.
+  await page.goto(`${WEB}/index.html#gift-title`);
+  await expect(page.locator("details#access")).toHaveAttribute("open", "");
+  await expect(page.locator("#gift-title")).toBeInViewport();
+  await page.goto(`${DOCS}/index.html#sdks`);
+  await expect(page.locator("details#sdks")).toHaveAttribute("open", "");
+  await expect(page.locator("#sdks pre").first()).toBeVisible();
+  await page.evaluate(() => { window.location.hash = "quickstart"; });
+  await expect(page.locator("details#quickstart")).toHaveAttribute("open", "");
+  await expect(page.locator("#quickstart pre")).toBeInViewport();
 });
 
 test("the geometry lessons keep their static strip: no loader, no enhanced shape", async ({ page }) => {
@@ -453,7 +511,8 @@ test("every page that runs the shell shows the same one bar — never a lone pil
     const base = path.startsWith("apps/web") ? WEB : DOCS;
     await page.goto(`${base}/${path.replace(/^apps\/(web|docs)\//, "")}`);
     await expect(page.locator("html"), path).toHaveClass(/estate-ready/);
-    await expect(page.locator(".estate-location"), path).toHaveCount(1);
+    await expect(page.locator(".estate-location"), path).toHaveCount(0);
+    await expect(page.locator("nav.site-nav:visible, nav.topnav:visible, nav.estate-bar:visible"), path).toHaveCount(1);
     await expect(page.locator(".estate-open"), path).toHaveCount(1);
     await expect(page.locator(".estate-floating-open"), path).toHaveCount(0);
     const bare = await page.locator("html").evaluate((html) => html.classList.contains("estate-bare"));

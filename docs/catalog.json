@@ -1056,7 +1056,7 @@
     },
     {
       "path": "apps/docs/agents.html",
-      "title": "Find what helps.Choose what follows.",
+      "title": "A useful next step.",
       "type": "orientation",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1256,7 +1256,7 @@
     },
     {
       "path": "apps/docs/index.html",
-      "title": "Choose a module.Read its contract.",
+      "title": "Find the reference.",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "2026-09-26",
@@ -1392,7 +1392,7 @@
     },
     {
       "path": "apps/docs/roadmap.html",
-      "title": "Five modules.One clearer path.",
+      "title": "Now, and next.",
       "type": "proposal",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1576,7 +1576,7 @@
     },
     {
       "path": "apps/web/index.html",
-      "title": "Whatever shape you arrived in, welcome.",
+      "title": "Useful context.A clear next step.",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "2026-09-26",

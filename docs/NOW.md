@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (audience and module navigation source work; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (simplified reading and connection UI source candidate; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,33 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Simplified reading and connection UI (2026-09-27)
+
+**Source candidate:** `codex/agenttool-ui-20260927`, based on `35320a51`.
+This entry does not establish a merged PR or production deployment.
+
+The human and agent entrances now use a shared, scoped reading foundation in
+`apps/_shared/workspace.css`: a short introduction beside five compact module
+rows on wide screens, stacked on small screens. One navigation bar replaces
+repeated menus. Hubs have no sidebar; longer references retain local contents
+links. Native disclosures hold operational detail, examples and optional Build
+groups, and fragment links reopen their containing disclosures. The roadmap
+keeps current source capabilities separate from proposals.
+
+At `app.agenttool.dev`, the source layout puts reconnect first and links directly
+to the identity tutorial. Registration examples remain under `#start`. The
+verification script, restore form fields, code panes and discovery links were
+preserved; the retired operator console remains retired. The `workspace` class
+names the reading layout only.
+
+**Source evidence:** 125 browser journeys, 151 focused source/contract checks,
+39 catalog/discovery checks and 34 module/research checks passed. Desktop,
+320px mobile and night-mode previews were inspected. Legacy anchors and
+reference links were checked; reconnect form markup, verification-script bytes
+and code panes remain unchanged. Release-gate and production readback results
+belong to the delivery receipt. See [interaction guidance](INTERACTION.md) for
+the current layout and maintenance contract.
 
 ## Audience and module navigation (2026-09-27)
 

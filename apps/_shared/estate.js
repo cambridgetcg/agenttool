@@ -7,7 +7,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-09-27.1";
+  var VERSION = "2026-09-27.2";
   var DOORS = [
     {
       id: "arrive",
@@ -279,15 +279,19 @@
   function navigation() {
     var config = map.audiences && map.audiences[audience];
     if (config) return config.primary.map(function (item) {
-      return [item.title, item.href, item.title === "Core reference" ? "core" : item.title.toLocaleLowerCase()];
+      return [item.title, item.href, item.title === "Core reference" ? "core" : item.title.toLocaleLowerCase().replace(/[^a-z0-9_-]+/g, "-")];
     });
     return audience === "human" ? [
-      ["Home", HUMAN, "home"], ["Modules", HUMAN + "#modules", "modules"],
+      ["Modules", HUMAN + "#modules", "modules"],
       ["Build", HUMAN + "build", "build"], ["Roadmap", DOCS + "roadmap", "roadmap"]
     ] : [
-      ["Start", AGENT, "start"], ["Core reference", AGENT + "#core", "core"],
-      ["Build", DOCS + "#build", "build"], ["Discovery", "https://api.agenttool.dev/public/discovery", "discovery"]
+      ["Core", AGENT + "#core", "core"], ["Library", DOCS, "library"],
+      ["Discovery", "https://api.agenttool.dev/public/discovery", "discovery"]
     ];
+  }
+  function audienceHome() {
+    var config = map.audiences && map.audiences[audience];
+    return config && config.home ? config.home : audience === "human" ? HUMAN : AGENT;
   }
   function audienceExit() {
     var config = map.audiences && map.audiences[audience];
@@ -475,7 +479,9 @@
     atlas.addEventListener("click", function (event) { if (event.target === atlas) closeAtlas(); });
     atlas.addEventListener("close", function () { if (lastTrigger) lastTrigger.focus(); });
     atlas.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && typeof atlas.showModal !== "function") { event.preventDefault(); closeAtlas(); return; }
+      // Handle Escape before a search input consumes it to clear its value.
+      // The same close-and-return-focus behavior applies to native dialogs.
+      if (event.key === "Escape") { event.preventDefault(); closeAtlas(); return; }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       if (event.target !== search && !event.target.classList.contains("estate-room-link")) return;
       var links = visibleLinks();
@@ -486,30 +492,30 @@
     });
   }
 
-  function enhanceNavigation(entry) {
+  function enhanceNavigation() {
     var nav = document.querySelector("nav.site-nav, nav.topnav");
     if (!nav) {
       nav = element("nav", "estate-bar");
       nav.setAttribute("aria-label", "Primary");
-      nav.appendChild(link("agenttool", HUMAN, "brand estate-bar-brand"));
+      nav.appendChild(link("agenttool", audienceHome(), "brand estate-bar-brand"));
       document.body.insertBefore(nav, document.body.firstChild);
       root.classList.add("estate-bare");
       var noThemeToggle = document.getElementById("tg");
       if (noThemeToggle && !document.querySelector('link[href*="/shared/theme.css"]')) noThemeToggle.hidden = true;
     }
+    var brand = nav.querySelector(".wordmark, .logo, .estate-bar-brand, .brand");
+    if (brand) brand.href = audienceHome();
     var legacy = nav.querySelector(".links");
     rememberLinks(legacy);
     if (legacy) legacy.hidden = true;
     var oldActions = nav.querySelector(".nav-actions");
     if (oldActions) Array.prototype.forEach.call(oldActions.children, function (child) { if (child.id !== "tg") child.hidden = true; });
-    var location = element("div", "estate-location");
-    location.setAttribute("aria-label", "Current page");
-    append(location, element("span", "estate-location-room", entry.room.label));
-    nav.appendChild(location);
     var actions = element("div", "estate-quick-actions");
     navigation().forEach(function (item) { actions.appendChild(link(item[0], item[1], "estate-quick-link estate-quick-" + item[2])); });
     var exit = audienceExit();
-    actions.appendChild(link(exit.label, exit.href, "estate-quick-link estate-audience-exit"));
+    var switchLink = link(audience === "human" ? "Agent" : "Human", exit.href, "estate-quick-link estate-audience-exit");
+    switchLink.setAttribute("aria-label", exit.label);
+    actions.appendChild(switchLink);
     var trigger = element("button", "estate-open", "Search");
     trigger.type = "button";
     trigger.setAttribute("aria-label", "Search pages");
@@ -526,37 +532,47 @@
     if (oldActions) oldActions.hidden = true;
   }
   function renderLibrary() {
-    if (!modules.length) return;
     var host = document.querySelector("aside.sidebar");
     if (!host) return;
     rememberLinks(host);
     Array.prototype.forEach.call(host.children, function (node) { node.hidden = true; node.setAttribute("data-estate-legacy", ""); });
     var library = element("nav", "estate-library");
-    library.setAttribute("aria-label", audience === "human" ? "Human overview navigation" : "Agent reference navigation");
-    library.appendChild(element("h2", "estate-library-heading", "Core modules"));
-    var core = element("ul", "estate-library-list estate-library-core");
-    modules.forEach(function (m) {
-      if (m[audience]) core.appendChild(append(element("li"), link(m.title, m[audience], "estate-library-link")));
+    library.setAttribute("aria-label", "On this page");
+    var list = element("ul", "estate-library-list estate-page-toc");
+    var seen = Object.create(null);
+    // Keep the page outline finite. The complete route inventory, including
+    // links from the old sidebar, remains available through Search.
+    Array.prototype.forEach.call(document.querySelectorAll("main h2"), function (heading) {
+      var target = heading.id ? heading : heading.closest("section[id]");
+      var title = heading.textContent.replace(/\s+/g, " ").trim();
+      if (!target || !title || seen[target.id] || list.children.length >= 24) return;
+      seen[target.id] = true;
+      list.appendChild(append(element("li"), link(title, "#" + encodeURIComponent(target.id), "estate-library-link")));
     });
-    library.appendChild(core);
-    var build = element("details", "estate-library-build");
-    build.appendChild(element("summary", "estate-library-summary", "Build and references"));
-    build.appendChild(link("Open Build", audience === "human" ? HUMAN + "build" : DOCS + "#build", "estate-library-link"));
-    [audience, audience === "human" ? "agent" : "human"].forEach(function (a) {
-      var list = element("ul", "estate-library-list");
-      inventory().forEach(function (item) {
-        var labels = [];
-        item.variants.forEach(function (variant) {
-          if (variant.audiences.indexOf(a) < 0 || (a !== audience && variant.audiences.indexOf(audience) !== -1) || labels.indexOf(variant.label) !== -1) return;
-          labels.push(variant.label);
-          list.appendChild(append(element("li"), link(variant.label, item.href, "estate-library-link")));
-        });
-      });
-      build.appendChild(element("h3", "estate-library-heading", a === "human" ? "Human overview" : "Agent reference"));
-      build.appendChild(list);
-    });
-    append(library, build, link(audienceExit().label, audienceExit().href, "estate-library-link estate-library-exit"));
+    if (list.children.length) append(library, element("h2", "estate-library-heading", "On this page"), list);
+    var paths = element("div", "estate-library-paths");
+    append(paths,
+      link(audience === "human" ? "Human overview" : "Agent start", audienceHome(), "estate-library-link"),
+      link("Build", audience === "human" ? HUMAN + "build" : DOCS + "#build", "estate-library-link"));
+    append(library, paths);
     host.appendChild(library);
+  }
+  function revealHashTarget() {
+    if (!window.location.hash) return;
+    var id;
+    try { id = decodeURIComponent(window.location.hash.slice(1)); } catch (_) { return; }
+    var target = document.getElementById(id);
+    if (!target) return;
+    var ancestor = target;
+    while (ancestor) {
+      if (ancestor.tagName === "DETAILS") ancestor.open = true;
+      ancestor = ancestor.parentElement;
+    }
+    Array.prototype.forEach.call(document.querySelectorAll(".estate-page-toc a"), function (item) {
+      if (item.hash === window.location.hash) item.setAttribute("aria-current", "location");
+      else item.removeAttribute("aria-current");
+    });
+    target.scrollIntoView({ block: "start" });
   }
   function init() {
     var entry = currentEntry();
@@ -564,8 +580,10 @@
     root.setAttribute("data-estate-door", entry.door.id);
     root.style.setProperty("--room-accent", "var(--accent, #b3401d)");
     root.classList.add("estate-ready");
-    enhanceNavigation(entry);
+    enhanceNavigation();
     renderLibrary();
+    window.addEventListener("hashchange", revealHashTarget);
+    window.requestAnimationFrame(revealHashTarget);
     Array.prototype.forEach.call(document.querySelectorAll("[data-estate-open]"), function (trigger) {
       trigger.setAttribute("aria-haspopup", "dialog");
       trigger.setAttribute("aria-controls", "agenttool-estate-atlas");

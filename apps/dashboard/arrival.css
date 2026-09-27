@@ -1,0 +1,89 @@
+/* Agent connection only. Credentials and verification stay in index.html. */
+main.onboarding.workspace {
+  display: block;
+  min-height: 0;
+  align-items: normal;
+  justify-content: normal;
+}
+main.onboarding.workspace::before { display: none; }
+.arrival .qs-section,
+.arrival .qs-section:first-of-type { margin: 0 0 28px; }
+.arrival .qs-section .muted,
+.arrival .arrival-detail-body > .muted {
+  max-width: 82ch;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.arrival .qs-restore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
+  gap: 16px;
+  margin: 18px 0 8px;
+  max-width: 960px;
+}
+.arrival .qs-restore label { gap: 8px; font-size: 12px; }
+.arrival .qs-restore input {
+  min-width: 0;
+  min-height: 44px;
+  border-color: var(--control-line);
+  background: var(--bg);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.arrival .qs-restore input:focus { border-color: var(--accent); }
+.arrival .btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent);
+}
+.arrival .qs-restore-status { font-size: 13px; }
+.arrival .arrival-detail { border-top: 1px solid var(--line); }
+.arrival .arrival-detail > summary {
+  min-height: 52px;
+  padding: 16px 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.arrival .arrival-detail-body { padding: 4px 0 24px; }
+.arrival .qs-code {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.arrival .qs-tabs { gap: 8px; margin-bottom: 12px; }
+.arrival .qs-tab {
+  min-height: 40px;
+  background: transparent;
+  border-color: var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.arrival .qs-tab.active { background: var(--panel); border-color: var(--accent); }
+.arrival .qs-doors { display: block; margin-top: 12px; }
+.arrival .qs-doors a {
+  padding: 12px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  transition: none;
+}
+.arrival .qs-doors a:hover { transform: none; background: transparent; }
+.arrival .qs-doors a .verb { color: var(--accent); font-family: var(--mono); font-size: 11px; }
+.arrival .qs-pulse { margin: 0 0 12px; font-family: var(--mono); font-size: 12px; }
+.arrival .qs-pulse .dot { animation: none; }
+.arrival .arrival-detail-body a { color: var(--accent) !important; }
+@media (max-width: 760px) {
+  .arrival .qs-restore { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .arrival .qs-restore button { justify-self: start; }
+}

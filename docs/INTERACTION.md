@@ -6,7 +6,7 @@
 > **Purpose:** Give human and agent visitors clear entrances and consistent module descriptions.
 > **Evidence:** Static navigation and source contracts; labels do not establish deployment or permission.
 > **Compass:** [Start here](START-HERE.md) · [Document labels](DOCUMENTATION.md) · [Agent discovery](AGENT-DISCOVERY.md)
-> **Code:** `apps/_shared/module-map.json` · `apps/_shared/estate.js` · `apps/web/index.html` · `apps/docs/agents.html`
+> **Code:** `apps/_shared/module-map.json` · `apps/_shared/workspace.css` · `apps/_shared/estate.js` · `apps/docs/agents.html` · `apps/dashboard/index.html`
 > **Tests:** `tests/playwright/specs/audience-journeys.spec.ts` · `api/tests/arrival-discovery.test.ts` · `api/tests/apex-door-worker.test.ts`
 
 A visitor should know what a module helps with and what a next step changes.
@@ -34,6 +34,31 @@ does not mean a module is unfinished. The roadmap distinguishes source
 capabilities from proposed work. Neither replaces the existing
 [setup and reconnect page](https://app.agenttool.dev/).
 
+## Keep the first choice clear
+
+Use one navigation bar. Human pages lead to **Modules**, **Build** and
+**Roadmap**; agent pages lead to **Core**, **Library** and **Discovery**.
+The short **Agent** and **Human** exits retain the accessible names
+“Agent reference” and “Human overview”. Search is a secondary, audience-scoped
+view; the brand returns to that audience's entrance.
+
+The core hubs use `data-layout="workspace"` and the shared `workspace.css`
+reading styles. This is a visual layout, not an operator console. On wide
+screens, `.arrival-grid` places the short introduction beside the five module
+rows; narrow screens stack them. Hubs have no sidebar. Long references keep
+a local table of contents rather than repeating the whole module inventory.
+
+Show a module's purpose, source status and direct reference before optional
+detail. Native `details` elements hold usage fields, examples and Build groups;
+their content remains in the HTML. The shared navigation code opens the
+containing disclosures when following a fragment. The roadmap labels current
+source capabilities and proposed work separately.
+
+The agent setup page shows the reconnect form first, with a direct tutorial
+link for new identities. Registration examples live under `#start`; other
+destinations are optional disclosures. The layout leaves ephemeral bearer
+verification, selected-identity checks and credential clearing unchanged.
+
 ## Describe a module consistently
 
 | Human-facing description | What it tells the reader |
@@ -58,7 +83,7 @@ Link the [ten-operation core launch profile](specs/agenttool-core-launch-v0.1.js
 for its exact authentication, costs, success representations, and retry or
 recovery rules. Other operations need their own contracts. The profile and
 OpenAPI are finite selections, not exhaustive inventories. Avoid copying
-signed byte layouts or mutable prices into navigation cards.
+signed byte layouts or mutable prices into navigation rows.
 
 For an ambiguous mutation, describe the operation's inspection or recovery
 path. Do not imply that a generic retry button is safe. No reading sequence
@@ -91,16 +116,17 @@ to an immutable release.
 
 Edit `apps/_shared/module-map.json` for module names, links, scope, status and
 proposed steps. Run `python3 bin/module-map.py --write` to refresh the browser
-data asset, static navigation, human core cards and Build cards. `--check`
+data asset, static navigation, human core rows and Build groups. `--check`
 detects drift. The roadmap's authored summaries are checked against the same
 facts by `bin/tests/module-navigation.test.ts`.
 
 Declare each enhanced page's `data-audience` explicitly and keep its generated
 navigation region. Load the shared navigation stylesheet in the HTML head so
-the first paint reserves the final space. New page styles belong in external
-CSS; preserve the existing content security policy. Keep Build and the audience
-exit usable on small screens and without scripts. Verify the actual bounds of
-fixed navigation links, since document width alone can miss clipped controls.
+the first paint reserves the final space. Load `workspace.css` after existing
+styles on pages that opt into the reading layout; put specialized styles in
+external CSS. Preserve the content security policy. Keep the primary paths and
+audience exit usable on small screens and without scripts. Verify the actual
+bounds of navigation controls, since document width alone can miss clipping.
 
 Use `tests/playwright/specs/audience-journeys.spec.ts`, `estate.spec.ts` and
 `launch-ui.spec.ts` for changes to these paths. Search must retain each name

@@ -8,15 +8,17 @@ const APP = "http://localhost:5173";
 
 test("human overview leads to modules; agent setup keeps creation and recovery explicit", async ({ page }) => {
   await page.goto(`${WEB}/`);
-  const choices = page.getByRole("navigation", { name: "Start with AgentTool" });
-  await expect(choices.getByRole("link", { name: "Explore the modules" })).toHaveAttribute("href", "#modules");
-  await expect(choices.getByRole("link", { name: "Agent reference" })).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
+  const choices = page.locator("#modules .module-destination");
+  await expect(choices).toHaveCount(5);
+  await expect(choices.first()).toHaveAttribute("href", "https://agenttool.dev/identity");
+  await expect(page.locator(".estate-audience-exit")).toHaveAccessibleName("Agent reference");
   await page.goto(`${APP}/`);
   await expect(page.getByRole("link", { name: "Create an identity", exact: true })).toHaveAttribute("href", /tutorial(?:\.html)?#step-1$/);
-  await expect(page.getByRole("link", { name: "Reconnect or recover", exact: true })).toHaveAttribute("href", /#reconnect$/);
-  await expect(page.getByRole("link", { name: "Explore the public API", exact: true })).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  await expect(page.locator("#restore-form")).toBeVisible();
+  await expect(page.locator("#start")).not.toHaveAttribute("open");
+  await expect(page.locator(".estate-quick-discovery")).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
   await page.goto(`${DOCS}/`);
-  await expect(page.locator(".estate-quick-start")).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
+  await expect(page.locator(".topnav .logo")).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
 });
 
 test("canonical tutorial wraps artifact hashes at narrow viewports without changing their bytes", async ({ page }) => {
@@ -104,7 +106,7 @@ test("docs launch paths run under the actual Worker fallback CSP", async ({ page
     expect(csp).toContain("script-src-elem 'self'");
     expect(csp).toContain("'sha256-");
     expect(csp).toContain("script-src-attr 'unsafe-hashes'");
-    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.1");
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.2");
     expect(await page.evaluate(() => (window as unknown as { launchCspViolations: string[] }).launchCspViolations)).toEqual([]);
   }
 });
@@ -133,9 +135,12 @@ test("primary actions and app door labels retain body-text contrast in both appe
           const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
           return (values[0] + 0.05) / (values[1] + 0.05);
         };
-        const button = getComputedStyle(document.querySelector(".qs-choices .btn-primary, .start-choices .btn-primary")!);
+        const control = document.querySelector("#restore-go, .module-row h3 a")!;
+        const button = getComputedStyle(control);
         const foreground = rgb(button.color);
-        const stops = button.backgroundImage === "none" ? [button.backgroundColor] : button.backgroundImage.match(/rgba?\([^)]+\)/g);
+        const stops = button.backgroundImage === "none"
+          ? [button.backgroundColor === "rgba(0, 0, 0, 0)" ? getComputedStyle(document.body).backgroundColor : button.backgroundColor]
+          : button.backgroundImage.match(/rgba?\([^)]+\)/g);
         if (!stops?.length) throw new Error("Expected rendered primary-button colors: " + button.backgroundImage);
         const primary = stops.map(stop => contrast(foreground, rgb(stop)));
         const label = document.querySelector(".qs-doors strong");
@@ -165,12 +170,12 @@ test("shared launch assets have a release version and revalidate at every static
     };
     page.on("response", record);
     await page.goto(`${root}/`);
-    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.1");
+    await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.2");
     page.off("response", record);
     expect(loaded.length).toBeGreaterThan(0);
-    for (const url of loaded) expect(new URL(url).searchParams.get("v"), url).toBe("2026-09-27.1");
-    for (const asset of ["theme.css", "theme.js", "mode.js", "estate.css", "estate.js", "module-map.js", "module-map.json", "nav.html"]) {
-      const response = await request.get(`${root}/shared/${asset}?v=2026-09-27.1`);
+    for (const url of loaded) expect(new URL(url).searchParams.get("v"), url).toBe("2026-09-27.2");
+    for (const asset of ["theme.css", "theme.js", "mode.js", "estate.css", "estate.js", "module-map.js", "module-map.json", "nav.html", "workspace.css"]) {
+      const response = await request.get(`${root}/shared/${asset}?v=2026-09-27.2`);
       expect(response.status(), `${root}: ${asset}`).toBe(200);
       expect(response.headers()["cache-control"]).toBe("public, max-age=0, must-revalidate");
     }

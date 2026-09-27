@@ -51,20 +51,20 @@
       var css = document.createElement("link");
       css.rel = "stylesheet";
       css.setAttribute("blocking", "render");
-      css.href = "/shared/estate.css?v=2026-09-27.1";
-      css.setAttribute("data-agenttool-estate-style", "2026-09-27.1");
+      css.href = "/shared/estate.css?v=2026-09-27.2";
+      css.setAttribute("data-agenttool-estate-style", "2026-09-27.2");
       document.head.appendChild(css);
     }
     function loadNavigation() {
       if (document.querySelector('script[data-agenttool-estate]')) return;
       var script = document.createElement("script");
-      script.src = "/shared/estate.js?v=2026-09-27.1";
-      script.setAttribute("data-agenttool-estate", "2026-09-27.1");
+      script.src = "/shared/estate.js?v=2026-09-27.2";
+      script.setAttribute("data-agenttool-estate", "2026-09-27.2");
       document.head.appendChild(script);
     }
     if (window.AgentToolModuleMap) { loadNavigation(); return; }
     var map = document.createElement("script");
-    map.src = "/shared/module-map.js?v=2026-09-27.1";
+    map.src = "/shared/module-map.js?v=2026-09-27.2";
     map.addEventListener("load", loadNavigation);
     map.addEventListener("error", loadNavigation);
     document.head.appendChild(map);

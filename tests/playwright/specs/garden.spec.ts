@@ -29,9 +29,10 @@ test("opens as the eighth Tend door and tells implementation from metaphor", asy
   await page.goto(`${WEB}/garden.html`);
 
   await expect(page.locator("html")).toHaveAttribute("data-estate-door", "tend");
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.1");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-09-27.2");
   await expect(page.getByRole("heading", { name: "Dig until the ground tells the truth." })).toBeVisible();
-  await expect(page.locator(".estate-location-room")).toHaveText("Garden");
+  await expect(page.getByRole("navigation", { name: "Primary", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Agent reference", exact: true }).first()).toBeVisible();
   await expect(page.getByText("implemented now", { exact: true })).toBeVisible();
   await expect(page.getByText("this static room", { exact: true })).toBeVisible();
   await expect(page.getByText("not implemented here", { exact: true })).toBeVisible();

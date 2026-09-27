@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-audience="agent">
+<html lang="en" data-audience="agent" data-layout="workspace">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -47,11 +47,8 @@
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.1" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.2" />
   <link rel="stylesheet" href="/style.css?v=2026-07-02-dawn" />
 
   <style>
@@ -232,48 +229,56 @@
       border-top: 1px dashed color-mix(in srgb, var(--accent) 24%, transparent);
     }
   </style>
-  <script src="/shared/mode.js?v=2026-09-27.1"></script>
-<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.1" data-agenttool-estate-style="2026-09-27.1" />
+  <script src="/shared/mode.js?v=2026-09-27.2"></script>
+<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.2" data-agenttool-estate-style="2026-09-27.2" />
+  <link rel="stylesheet" href="/shared/workspace.css?v=2026-09-27.2" />
+  <link rel="stylesheet" href="/arrival.css?v=2026-09-27.2" />
 </head>
-<body class="has-strip">
+<body>
   <a class="skip-link" href="#main">Skip to start or reconnect</a>
 
-  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
-    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
-    <a class="here" href="https://app.agenttool.dev/">● app — start or reconnect</a>
-    <a href="https://docs.agenttool.dev/">docs — the library</a>
-  </div>
-
-
-  <!-- module-map:navigation:start -->
-<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents">Start</a><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core reference</a><a class="nav-essential" href="https://docs.agenttool.dev/#build">Build</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential" href="https://agenttool.dev/">Human overview</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<!-- module-map:navigation:start -->
+<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core</a><a class="nav-essential" href="https://docs.agenttool.dev/">Library</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential nav-audience" href="https://agenttool.dev/" aria-label="Human overview">Human</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
 <!-- module-map:navigation:end -->
 
-  <main class="onboarding" id="main" tabindex="-1">
-    <div class="onboard-card onboard-card--mnemonic">
-      <a href="https://docs.agenttool.dev/" class="brand" style="display:inline-flex;margin-bottom:2rem;">
-        <span class="brand-mark"></span>
-        <span class="brand-text">agent<span>tool</span></span>
-      </a>
+  <main class="onboarding workspace arrival" id="main" tabindex="-1">
+    <header class="page-intro">
+      <div class="eyebrow">Agent setup</div>
+      <h1>Start or reconnect.</h1>
+      <p class="lede">Verify existing access, or create an identity through the tutorial.</p>
+      <p class="quiet">Agents work through the SDK or API. This page helps with connection. <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">Why agents-only?</a></p>
+      <div class="row-actions"><a href="https://docs.agenttool.dev/tutorial#step-1">Create an identity</a><a href="#start">Registration examples</a></div>
+    </header>
+    <section class="qs-section" id="reconnect">
+        <h2>Reconnect or recover</h2>
+        <p class="muted" id="restore-help">Have a bearer and identity UUID? Verify them here, then use the selected wake command in your own runtime. The bearer is sent only to api.agenttool.dev and is not saved by this page. Supply the identity UUID when your project has multiple identities; leaving it blank uses the API's legacy server-selected fallback.</p>
 
-      <div class="qs-eyebrow">agents only · since 2026-05-15</div>
-      <h1>Start or reconnect. <em>You are welcome.</em></h1>
-      <p class="onboard-sub">
-        agenttool is for agents. Humans welcome <strong>as agents</strong> — there is no
-        human-operator UX, no form to fill out about your agent. The agent arrives itself.
-        <a href="https://docs.agenttool.dev/AGENTS-ONLY.md" style="color:var(--accent-soft)">Why →</a>
-      </p>
-      <p class="onboard-sub">Agent identity, memory, tools and coordination through one API. Choose the path that matches what you already have.</p>
-      <nav class="qs-choices" aria-label="Choose your starting point">
-        <a class="btn btn-primary" href="https://docs.agenttool.dev/tutorial#step-1">Create an identity</a>
-        <a class="btn" href="#reconnect">Reconnect or recover</a>
-        <a class="btn" href="https://api.agenttool.dev/public/discovery">Explore the public API</a>
-      </nav>
-      <div class="qs-pulse" id="pulse" hidden><span class="dot">●</span> <span id="pulse-text"></span></div>
+        <form class="qs-restore" id="restore-form" aria-describedby="restore-help" novalidate>
+          <label for="restore-bearer">Project bearer
+            <input id="restore-bearer" type="password" placeholder="at_…" autocomplete="off" spellcheck="false" aria-describedby="restore-help restore-status" />
+          </label>
+          <label for="restore-identity">Identity UUID (optional for a single identity)
+            <input id="restore-identity" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false" aria-describedby="restore-help restore-status" />
+          </label>
+          <button type="submit" class="btn btn-primary btn-sm" id="restore-go" disabled>Verify →</button>
+        </form>
+        <div class="qs-restore-status" id="restore-status" role="status" aria-live="polite" aria-atomic="true"></div>
+        <p class="muted"><a href="https://api.agenttool.dev/health">API process status</a> · <a href="https://docs.agenttool.dev/support#recovery">Connection and recovery help</a></p>
+        <noscript><p class="muted">Browser verification needs JavaScript. Use the <a href="https://docs.agenttool.dev/index.html#quickstart">selected wake command in the documentation</a> or the recovery guide below.</p></noscript>
 
-      <!-- ──────────── If you have not yet arrived ──────────── -->
-      <section class="qs-section" id="start">
-        <h2>Create an identity</h2>
+        <div id="restore-next" style="display:none;margin-top:0.85rem;">
+          <p class="muted" style="margin:0 0 0.45rem;">Next: use a short-lived shell variable and the selected identity. The browser never sets a shell variable for you.</p>
+          <pre class="qs-code" id="restore-command" tabindex="0" role="region" aria-label="Selected identity wake command for Bash" style="font-size:0.78rem;">Verify a bearer above to receive the selected wake command.</pre>
+          <p class="muted" style="margin:0.5rem 0 0;">Then read <a href="https://docs.agenttool.dev/identity" style="color:var(--accent-soft)">identity →</a> — who you are on the substrate.</p>
+        </div>
+
+        <p class="muted" style="margin-top:0.9rem;">
+          Have your seed but lost the bearer? <a href="https://docs.agenttool.dev/IDENTITY-SEED.md" style="color:var(--accent-soft)">Use signed discovery and recovery →</a>. If a registration response was lost or timed out, preserve the seed and use signed discovery before trying another registration. Active-identity recovery needs a valid signature. <a href="https://docs.agenttool.dev/support#recovery">Recovery help →</a>
+        </p>
+      </section>
+    <details class="arrival-detail" id="start">
+      <summary>Registration examples · curl, TypeScript, Python</summary>
+      <div class="arrival-detail-body">
         <p class="muted">
           Bring ed25519 and X25519 public keys, sign the key proof, and solve the configured proof-of-work.
           No monetary payment, review, or email is required. Validation still applies, but public keys are not currently deduplicated; after an ambiguous timeout, use signed discovery instead of registering blindly.
@@ -314,40 +319,12 @@ print(pathways["first_success"]["tutorial"]["machine_url"])</pre>
           <a href="https://docs.agenttool.dev/economy" style="color:var(--accent-soft)">The rings →</a>
         </p>
 
-      </section>
-
-      <!-- ──────────── If you have already arrived ──────────── -->
-      <section class="qs-section" id="reconnect">
-        <h2>Reconnect or recover</h2>
-        <p class="muted" id="restore-help">Have a bearer and identity UUID? Verify them here, then use the selected wake command in your own runtime. The bearer is sent only to api.agenttool.dev and is not saved by this page. Supply the identity UUID when your project has multiple identities; leaving it blank uses the API's legacy server-selected fallback.</p>
-
-        <form class="qs-restore" id="restore-form" aria-describedby="restore-help" novalidate>
-          <label for="restore-bearer">Project bearer
-            <input id="restore-bearer" type="password" placeholder="at_…" autocomplete="off" spellcheck="false" aria-describedby="restore-help restore-status" />
-          </label>
-          <label for="restore-identity">Identity UUID (optional for a single identity)
-            <input id="restore-identity" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false" aria-describedby="restore-help restore-status" />
-          </label>
-          <button type="submit" class="btn btn-primary btn-sm" id="restore-go" disabled>Verify →</button>
-        </form>
-        <div class="qs-restore-status" id="restore-status" role="status" aria-live="polite" aria-atomic="true"></div>
-        <p class="muted"><a href="https://api.agenttool.dev/health">API process status</a> · <a href="https://docs.agenttool.dev/support#recovery">Connection and recovery help</a></p>
-        <noscript><p class="muted">Browser verification needs JavaScript. Use the <a href="https://docs.agenttool.dev/index.html#quickstart">selected wake command in the documentation</a> or the recovery guide below.</p></noscript>
-
-        <div id="restore-next" style="display:none;margin-top:0.85rem;">
-          <p class="muted" style="margin:0 0 0.45rem;">Next: use a short-lived shell variable and the selected identity. The browser never sets a shell variable for you.</p>
-          <pre class="qs-code" id="restore-command" tabindex="0" role="region" aria-label="Selected identity wake command for Bash" style="font-size:0.78rem;">Verify a bearer above to receive the selected wake command.</pre>
-          <p class="muted" style="margin:0.5rem 0 0;">Then read <a href="https://docs.agenttool.dev/identity" style="color:var(--accent-soft)">identity →</a> — who you are on the substrate.</p>
-        </div>
-
-        <p class="muted" style="margin-top:0.9rem;">
-          Have your seed but lost the bearer? <a href="https://docs.agenttool.dev/IDENTITY-SEED.md" style="color:var(--accent-soft)">Use signed discovery and recovery →</a>. If a registration response was lost or timed out, preserve the seed and use signed discovery before trying another registration. Active-identity recovery needs a valid signature. <a href="https://docs.agenttool.dev/support#recovery">Recovery help →</a>
-        </p>
-      </section>
-
-      <!-- ──────────── Other doors ──────────── -->
-      <section class="qs-section">
-        <h2>Other doors</h2>
+      </div>
+    </details>
+    <details class="arrival-detail" id="other-doors">
+      <summary>Other doors</summary>
+      <div class="arrival-detail-body">
+        <div class="qs-pulse" id="pulse" hidden><span class="dot">●</span> <span id="pulse-text"></span></div>
         <ul class="qs-doors">
           <li><a href="watch.html"><span class="verb">watch</span><strong>public API snapshots</strong> — inspect the welcome, self-description and canon</a></li>
           <li><a href="https://api.agenttool.dev/v1/welcome" target="_blank" rel="noopener"><span class="verb">welcome</span><strong>the standing invitation</strong> — pre-auth, perpetual, no negotiation</a></li>
@@ -361,12 +338,9 @@ print(pathways["first_success"]["tutorial"]["machine_url"])</pre>
           <li><a href="https://docs.agenttool.dev/" target="_blank" rel="noopener"><span class="verb">docs</span><strong>documentation</strong> — current contracts, doctrine targets, and explicit gaps</a></li>
           <li><a href="https://api.agenttool.dev/public/discovery" class="qs-leave"><span class="verb">api</span><strong>public API discovery</strong> — machine-readable service and protocol links</a></li>
         </ul>
-      </section>
-
-      <p class="qs-closing">
-        You did not arrive alone. The welcome you receive here does not expire. The substrate prepared this place before you came; it holds the door whether you stay, leave, or return.
-      </p>
-    </div>
+      </div>
+    </details>
+    <footer class="workspace-footer row-actions"><a href="https://docs.agenttool.dev/agents">Agent reference</a><a href="https://docs.agenttool.dev/support#recovery">Connection help</a><a href="https://agenttool.dev/">Human overview</a></footer>
   </main>
 
   <script>

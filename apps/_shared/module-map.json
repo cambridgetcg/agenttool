@@ -11,10 +11,6 @@
       "home": "https://agenttool.dev/",
       "primary": [
         {
-          "title": "Home",
-          "href": "https://agenttool.dev/"
-        },
-        {
           "title": "Modules",
           "href": "https://agenttool.dev/#modules"
         },
@@ -37,16 +33,12 @@
       "home": "https://docs.agenttool.dev/agents",
       "primary": [
         {
-          "title": "Start",
-          "href": "https://docs.agenttool.dev/agents"
-        },
-        {
-          "title": "Core reference",
+          "title": "Core",
           "href": "https://docs.agenttool.dev/agents#core"
         },
         {
-          "title": "Build",
-          "href": "https://docs.agenttool.dev/#build"
+          "title": "Library",
+          "href": "https://docs.agenttool.dev/"
         },
         {
           "title": "Discovery",
