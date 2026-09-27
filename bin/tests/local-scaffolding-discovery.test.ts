@@ -11,7 +11,7 @@ import { handlePagesRequest } from "../../infra/pages/sensitive-path-worker.js";
 const ROOT = resolve(import.meta.dir, "../..");
 const DOCS_ROOT = join(ROOT, "apps/docs");
 const DOCS = "https://docs.agenttool.dev";
-const GUIDES = ["LOCAL-CORE.md", "CORE.md", "API-COVERAGE.md", "IDENTITY-PARTITIONS.md"];
+const GUIDES = ["LOCAL-CORE.md", "CORE.md", "API-COVERAGE.md", "IDENTITY-PARTITIONS.md", "LOCAL-CONTEXT-GRANTS.md"];
 const SOURCE_PREFIX = "/cambridgetcg/agenttool/";
 let server: ReturnType<typeof Bun.serve>;
 const served = new Map<string, Promise<{ status: number; contentType: string; body: string }>>();

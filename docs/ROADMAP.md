@@ -96,9 +96,11 @@ Relationship history remains selected context; old records do not supply current
 [Identity partitions](IDENTITY-PARTITIONS.md) now define project ownership,
 canonical subjects, overlapping audiences and proof separately. Portfolio,
 backup, trace, strand and Vault gaps have scoped source fixes and negative tests.
-Project bearers still retain administrative authority. Narrow delegated
-credentials, cross-store export/removal and root recovery require separate
-contracts and verification. The [gap map](API-COVERAGE.md#integration-gaps-and-next-steps)
+Project bearers still retain administrative authority. A separate
+[local-context grant](LOCAL-CONTEXT-GRANTS.md) now narrows one read by subject,
+action, target, expiry and current parent/grant state. General delegated API
+access, delegation chains, cross-store export/removal and root recovery remain
+separate contracts and verification. The [gap map](API-COVERAGE.md#integration-gaps-and-next-steps)
 keeps those remaining steps visible.
 
 Choose one concrete improvement from the module map. Inspect its existing

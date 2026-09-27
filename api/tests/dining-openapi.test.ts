@@ -31,6 +31,7 @@ describe("Agent Dining OpenAPI contract", () => {
       "utf8",
     );
     const gardens = readFileSync(join(routesDir, "openapi-gardens.ts"), "utf8");
+    const localContext = readFileSync(join(routesDir, "openapi-local-context.ts"), "utf8");
 
     // @agenttool/whitehack-scan 0.10.0 fails closed above 10,000 lines.
     expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
@@ -40,12 +41,16 @@ describe("Agent Dining OpenAPI contract", () => {
     expect(x402TopUp.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(x402Payable.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(gardens.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(localContext.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(main).toContain("paths: withX402PayableOperations({");
     expect(main).toContain("}, { x402Response, staticToolResponseHeaders }),");
     expect(main).toContain("...x402TopUpOpenApiPaths({ x402Response, staticToolResponseHeaders })");
     expect(x402TopUp).toContain('"/v1/x402/top-up/{credits}"');
     expect(main).toContain("...MARKETPLACE_DINING_OPENAPI_PATHS");
     expect(main).toContain("...GARDENS_OPENAPI_PATHS");
+    expect(main).toContain("...LOCAL_CONTEXT_OPENAPI_PATHS");
+    expect(localContext).toContain('"/v1/identities/{id}/local-context"');
+    expect(localContext).toContain('"/v1/identities/{id}/local-context-grants"');
     expect(gardens).toContain('"/v1/gardens');
     expect(main).toContain("...WAKE_OBSERVATION_OPENAPI_SCHEMAS");
     expect(main).toContain("...WAKE_OBSERVATION_OPENAPI_PATHS");

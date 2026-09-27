@@ -71,6 +71,15 @@ jobs:
       - name: Prove the durable generation hold
         working-directory: api
         run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
 
   launch-stateful:
     name: Launch transactions and admission

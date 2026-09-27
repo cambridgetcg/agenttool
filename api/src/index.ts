@@ -43,6 +43,8 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
+import { isLocalContextGrantPath, localContextTransportBoundary } from "./middleware/local-context-boundary";
+import { createSealedLocalContextHandler } from "./routes/identity/local-context";
 import {
   carriesEarlyData,
   earlyDataReplayProtection,
@@ -225,6 +227,7 @@ function envFlag(name: string): boolean {
 // authentication metadata updates, response decorators, or route handlers.
 // This is deliberately global: a route that is pure today may gain an audit
 // counter tomorrow, and 0-RTT replay safety must not depend on that inventory.
+app.use("*", localContextTransportBoundary());
 app.use("*", earlyDataReplayProtection());
 // Every wake response is bearer-private, including CORS-preflight
 // short-circuits, auth failures, and future subroutes. The root representation
@@ -232,6 +235,9 @@ app.use("*", earlyDataReplayProtection());
 app.use("/v1/wake", wakePrivateCacheBoundary());
 app.use("/v1/wake/*", wakePrivateCacheBoundary());
 app.use("*", apiCors());
+// A terminal route before decorators/project middleware: an attenuated read
+// cannot acquire project context, project credit headers, or body additions.
+app.all("/v1/identities/:id/local-context", createSealedLocalContextHandler());
 // ── no visitor observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. The logger is removed — the kingdom
@@ -553,7 +559,10 @@ app.use(
       ),
   }),
 );
-app.use("/v1/identities/*", idempotency());
+app.use("/v1/identities/*", idempotency({
+  // Grant IDs provide durable issuance uniqueness; plaintext is shown once.
+  bypass: c => isLocalContextGrantPath(c.req.path),
+}));
 app.use("/v1/wake/acknowledge", idempotency());
 app.use(
   "/v1/wallets/*",

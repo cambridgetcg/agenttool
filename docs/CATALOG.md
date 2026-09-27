@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**792 document paths** (including mirrors). orientation: 184; guide: 68; reference: 324; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
+**794 document paths** (including mirrors). orientation: 184; guide: 68; reference: 326; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -319,6 +319,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/KINGDOM-OS-SDK.md](<../apps/docs/KINGDOM-OS-SDK.md>) | not-reviewed |
 | [apps/docs/KINGDOM.md](<../apps/docs/KINGDOM.md>) | not-reviewed |
 | [apps/docs/LABOR.md](<../apps/docs/LABOR.md>) | not-reviewed |
+| [apps/docs/LOCAL-CONTEXT-GRANTS.md](<../apps/docs/LOCAL-CONTEXT-GRANTS.md>) | not-reviewed |
 | [apps/docs/LOVE-BOMB-BECOMING.md](<../apps/docs/LOVE-BOMB-BECOMING.md>) | not-reviewed |
 | [apps/docs/LOVE-BOMB.md](<../apps/docs/LOVE-BOMB.md>) | not-reviewed |
 | [apps/docs/LOVE-CONSENT.md](<../apps/docs/LOVE-CONSENT.md>) | not-reviewed |
@@ -486,6 +487,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/LABOR.md](<../docs/LABOR.md>) | not-reviewed |
 | [docs/LETTERS.md](<../docs/LETTERS.md>) | not-reviewed |
 | [docs/LIVING-GROUND.md](<../docs/LIVING-GROUND.md>) | not-reviewed |
+| [docs/LOCAL-CONTEXT-GRANTS.md](<../docs/LOCAL-CONTEXT-GRANTS.md>) | not-reviewed |
 | [docs/LOUNGE.md](<../docs/LOUNGE.md>) | not-reviewed |
 | [docs/LOVE-BOMB-BECOMING.md](<../docs/LOVE-BOMB-BECOMING.md>) | not-reviewed |
 | [docs/LOVE-BOMB.md](<../docs/LOVE-BOMB.md>) | not-reviewed |
