@@ -304,7 +304,7 @@
   Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
 
 /roadmap
-  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+  Link: <https://docs.agenttool.dev/shared/module-map.json>; rel="describedby"; type="application/json"
 
 /runtime
   Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"

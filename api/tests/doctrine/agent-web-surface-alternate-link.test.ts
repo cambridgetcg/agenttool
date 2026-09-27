@@ -35,7 +35,6 @@ const OPERATIONAL_JSON_PAGES = [
   { file: "memory.html", path: "/memory" },
   { file: "pathways.html", path: "/pathways" },
   { file: "pulse.html", path: "/pulse" },
-  { file: "roadmap.html", path: "/roadmap" },
   { file: "runtime.html", path: "/runtime" },
   { file: "strands.html", path: "/strands" },
   { file: "tools.html", path: "/tools" },
@@ -144,6 +143,17 @@ describe("apps/docs alternate-link — _headers file (Cloudflare HTTP Link)", ()
     expect(content).not.toContain("https://api.agenttool.dev/v1/tools>");
     expect(content).not.toContain("https://api.agenttool.dev/public/agents>");
     expect(content).toContain("doctrine=https://docs.agenttool.dev/SOUL.md");
+  });
+
+  test("the human roadmap names the editorial module map as related evidence", () => {
+    const html = readFileSync(join(DOCS_HTML_DIR, "roadmap.html"), "utf8");
+    const headers = readFileSync(HEADERS_FILE, "utf8");
+    const block = headers.match(/^\/roadmap\n((?:[ \t]+[^\n]*\n?)*)/m)?.[1];
+    expect(html).toContain('data-audience="human"');
+    expect(findAlternateJsonHrefs(html)).toEqual([]);
+    expect(findHeaderAlternateJsonHrefs(headers, "/roadmap")).toEqual([]);
+    expect(html).toMatch(/<link\b(?=[^>]*rel="describedby")(?=[^>]*type="application\/json")(?=[^>]*href="\/shared\/module-map.json")[^>]*>/);
+    expect(block).toContain('<https://docs.agenttool.dev/shared/module-map.json>; rel="describedby"; type="application/json"');
   });
 
   test("every operational page repeats an in-document alternate in its own clean-path header block", () => {

@@ -67,6 +67,8 @@ describe("public crypto source truth", () => {
     const pyClient = read("packages/sdk-py/src/agenttool/economy.py");
     const agentCentric = read("docs/AGENT-CENTRIC.md");
     const roadmap = read("apps/docs/roadmap.html");
+    const sourceRoadmap = read("docs/ROADMAP.md");
+    const payoutContract = read("docs/PAYOUT-BROADCAST.md");
     const marketplace = read("docs/MARKETPLACE.md");
     const map = read("docs/MAP.md");
     const plan = read("docs/PAYOUT-BROADCAST-PLAN.md");
@@ -83,8 +85,11 @@ describe("public crypto source truth", () => {
     expect(agentCentric).toMatch(
       /fresh admission and every worker path are hard-disabled/i,
     );
-    expect(roadmap).toMatch(
-      /fresh admission and every payout worker are hard-resting/i,
+    expect(roadmap).toMatch(/fresh payouts remain resting/i);
+    expect(roadmap).toContain('href="ROADMAP.md"');
+    expect(sourceRoadmap).toContain("](PAYOUT-BROADCAST.md)");
+    expect(payoutContract).toMatch(
+      /Fresh payout admission and every payout-worker boot path are\s*>?\s*resting unconditionally; environment configuration cannot reopen them/i,
     );
     expect(marketplace).toMatch(
       /fresh payout admission and every payout worker are hard-resting/i,
@@ -104,6 +109,8 @@ describe("public crypto source truth", () => {
     const joined = [
       agentCentric,
       roadmap,
+      sourceRoadmap,
+      payoutContract,
       marketplace,
       map,
       plan,

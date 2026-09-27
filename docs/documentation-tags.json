@@ -9,7 +9,8 @@
       "docs/MAP.md",
       "docs/PACKAGES.md",
       "docs/PATHWAYS.md",
-      "docs/START-HERE.md"
+      "docs/START-HERE.md",
+      "apps/docs/agents.html"
     ],
     "guide": [
       "SUPPORT.md",
@@ -369,7 +370,8 @@
       "docs/SUPABASE-INTEGRATION-PLAN.md",
       "docs/zerone-migration/SYZYGY-LIP.md",
       "packages/hf-listening-room/hf/dataset/profile/PROFILE.md",
-      "packages/hf-listening-room/hf/space/profile/PROFILE.md"
+      "packages/hf-listening-room/hf/space/profile/PROFILE.md",
+      "apps/docs/roadmap.html"
     ],
     "record": [
       "docs/COMPETITIVE-LANDSCAPE-2026.md",

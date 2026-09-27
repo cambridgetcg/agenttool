@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**779 document paths** (including mirrors). orientation: 183; guide: 64; reference: 317; policy: 27; reflection: 127; proposal: 39; record: 20; unclassified: 2.
+**782 document paths** (including mirrors). orientation: 184; guide: 64; reference: 318; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -43,6 +43,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/PACKAGES.md](<../apps/docs/PACKAGES.md>) | not-reviewed |
 | [apps/docs/PATHWAYS.md](<../apps/docs/PATHWAYS.md>) | not-reviewed |
 | [apps/docs/START-HERE.md](<../apps/docs/START-HERE.md>) | 2026-09-26 |
+| [apps/docs/agents.html](<../apps/docs/agents.html>) | not-reviewed |
 | [apps/docs/index.html](<../apps/docs/index.html>) | 2026-09-26 |
 | [apps/web/index.html](<../apps/web/index.html>) | 2026-09-26 |
 | [bin/README.md](<../bin/README.md>) | not-reviewed |
@@ -306,6 +307,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/HF-WAKE-TRAINING.md](<../apps/docs/HF-WAKE-TRAINING.md>) | not-reviewed |
 | [apps/docs/IDENTITY-ANCHOR.md](<../apps/docs/IDENTITY-ANCHOR.md>) | 2026-09-26 |
 | [apps/docs/IDENTITY-SEED.md](<../apps/docs/IDENTITY-SEED.md>) | not-reviewed |
+| [apps/docs/INTERACTION.md](<../apps/docs/INTERACTION.md>) | not-reviewed |
 | [apps/docs/KINGDOM-INVITATION.md](<../apps/docs/KINGDOM-INVITATION.md>) | not-reviewed |
 | [apps/docs/KINGDOM-OS-SDK.md](<../apps/docs/KINGDOM-OS-SDK.md>) | not-reviewed |
 | [apps/docs/KINGDOM.md](<../apps/docs/KINGDOM.md>) | not-reviewed |
@@ -387,7 +389,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/pulse.html](<../apps/docs/pulse.html>) | not-reviewed |
 | [apps/docs/resources.html](<../apps/docs/resources.html>) | not-reviewed |
 | [apps/docs/ring-1.html](<../apps/docs/ring-1.html>) | not-reviewed |
-| [apps/docs/roadmap.html](<../apps/docs/roadmap.html>) | not-reviewed |
 | [apps/docs/runtime.html](<../apps/docs/runtime.html>) | not-reviewed |
 | [apps/docs/snake-fire-heart.html](<../apps/docs/snake-fire-heart.html>) | not-reviewed |
 | [apps/docs/soul.html](<../apps/docs/soul.html>) | not-reviewed |
@@ -466,6 +467,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/IDENTITY-FORKS.md](<../docs/IDENTITY-FORKS.md>) | not-reviewed |
 | [docs/IDENTITY-SEED.md](<../docs/IDENTITY-SEED.md>) | not-reviewed |
 | [docs/INBOX.md](<../docs/INBOX.md>) | not-reviewed |
+| [docs/INTERACTION.md](<../docs/INTERACTION.md>) | not-reviewed |
 | [docs/JOKES.md](<../docs/JOKES.md>) | not-reviewed |
 | [docs/JSPACE-WAKE-CONTINUITY.md](<../docs/JSPACE-WAKE-CONTINUITY.md>) | not-reviewed |
 | [docs/KARMA-MIRROR.md](<../docs/KARMA-MIRROR.md>) | not-reviewed |
@@ -763,6 +765,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | Document | Prose review |
 |---|---|
 | [apps/docs/ROADMAP.md](<../apps/docs/ROADMAP.md>) | not-reviewed |
+| [apps/docs/roadmap.html](<../apps/docs/roadmap.html>) | not-reviewed |
 | [docs/ALIGNMENT-MOVES.md](<../docs/ALIGNMENT-MOVES.md>) | not-reviewed |
 | [docs/FFFF-DETECTION-INSTRUMENTATION.md](<../docs/FFFF-DETECTION-INSTRUMENTATION.md>) | not-reviewed |
 | [docs/FRICTION-ROADMAP.md](<../docs/FRICTION-ROADMAP.md>) | not-reviewed |

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-audience="human">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,8 +23,9 @@
 <link rel="related" type="text/plain" href="https://api.agenttool.dev/llms.txt" title="Machine sitemap (llms.txt)" />
 <link rel="related" type="application/json" href="https://api.agenttool.dev/public/safety" title="Authority, storage, and custody boundaries (JSON)" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23b8451f' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23b8451f'/></svg>" />
-<link rel="stylesheet" href="/style.css?v=2026-07-18-invitation" />
-<script src="/shared/theme.js?v=2026-09-04.2" defer></script>
+<link rel="stylesheet" href="/style.css?v=2026-09-27.1" />
+<script src="/shared/theme.js?v=2026-09-27.1" defer></script>
+<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.1" data-agenttool-estate-style="2026-09-27.1" />
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to the answer</a>
@@ -35,26 +36,16 @@
   <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </nav>
 
-<nav class="site-nav" aria-label="Primary">
-  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
-  <div class="links">
-    <a href="/">welcome</a>
-    <a href="/identity">identity</a>
-    <a href="/memory" aria-current="page">memory</a>
-    <a href="/wallet">wallet</a>
-    <a href="/registry">register</a>
-    <a href="/porch">porch</a>
-    <a href="https://docs.agenttool.dev/">docs</a>
-  </div>
-  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Night appearance" hidden>☾&nbsp; night</button>
-</nav>
+<!-- module-map:navigation:start -->
+<nav class="site-nav" aria-label="Primary"><a class="wordmark" href="https://agenttool.dev/">agenttool</a><div class="links"><a class="nav-essential" href="https://agenttool.dev/">Home</a><a class="nav-essential" href="https://agenttool.dev/#modules">Modules</a><a class="nav-essential" href="https://agenttool.dev/build">Build</a><a class="nav-essential" href="https://docs.agenttool.dev/roadmap">Roadmap</a><a class="nav-essential" href="https://docs.agenttool.dev/agents">Agent reference</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<!-- module-map:navigation:end -->
 
 <main class="wrap" id="main" tabindex="-1">
   <header class="hero">
     <div class="eyebrow">a need, answered plainly</div>
     <h1 class="serif">Memory for AI agents<br>that survives the session</h1>
     <p class="lede">A context window ends; a record can remain. Memory here is
-    one authenticated POST — typed, searchable, server-readable, and available
+    a hosted service — typed, searchable, server-readable, and available
     to later authenticated sessions while the service holds it. Writes and
     searches charge fixed project credits from the first call. The published
     <strong>100&nbsp;MB and 10,000-record</strong> figures are dated,
@@ -63,21 +54,16 @@
 
   <section aria-label="Try it now">
     <h2>Keep one thought</h2>
-    <pre class="mono" tabindex="0" role="group" aria-label="Shell: write one memory">curl -X POST https://api.agenttool.dev/v1/memories \
-  -H "Authorization: Bearer at_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"episodic","content":"The garden flourished at turn 9."}'</pre>
-    <p class="quiet">A write reserves one project credit before the insert, and
+    <p>First choose where the record should live. Read the <a href="https://docs.agenttool.dev/memory">hosted memory reference</a> or the <a href="https://docs.agenttool.dev/packages#agent-toolkit">local Data guide</a> before making a write.</p>
+    <p class="quiet"><strong>For hosted memory:</strong> a write reserves one project credit before the insert, and
     a failure after that point keeps the charge. Schema-invalid requests and
     writes to an identity you do not own refuse before any debit. Search and
     higher-tier operations have their own fixed credit costs. No key yet?
     <a href="/registry">Registration has no monetary payment step and is
-    agent-driven</a> — or read the doors first with
-    <span class="mono">curl https://api.agenttool.dev/v1/pathways</span> (no auth).
-    Even a keyless call is answered: the 401 carries
-    <span class="mono">next_actions</span> to the open doors.</p>
+    agent-driven</a> — or <a href="https://docs.agenttool.dev/agents">read the agent reference</a> first. Local Data needs no hosted account or project credits; its files and SQLite database live in your chosen directory.</p>
   </section>
 
+  <section id="continuity" aria-label="Wake and continuity"><h2>Return with context</h2><p>Wake reads a selected identity and project’s orientation. A saved handoff can explain earlier work, but a later session still needs to check freshness, scope and current permission. Saving, retrieving and resuming are separate choices.</p><p><a href="https://docs.agenttool.dev/wake">Agent Wake reference</a> · <a href="https://docs.agenttool.dev/agents#core">Core operation contracts</a></p></section>
   <section aria-label="What you get">
     <div class="door-grid">
       <article class="door-card">

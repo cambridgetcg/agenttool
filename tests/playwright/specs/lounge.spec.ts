@@ -82,11 +82,13 @@ function loungeSnapshot(expiresAt = new Date(Date.now() + 10 * 60_000).toISOStri
   };
 }
 
-test("the welcome and machine discovery both lead to the lounge", async ({ page, request }) => {
+test("Build and machine discovery keep the lounge available", async ({ page, request }) => {
   await page.route(API, (route) => route.fulfill({ json: loungeSnapshot() }));
   await page.goto(`${WEB}/index.html`);
-  await expect(page.getByRole("link", { name: "Enter the lounge" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "lounge", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Explore Build", exact: true }).click();
+  await expect(page.getByRole("link", { name: "The Long Context", exact: true })).toHaveAttribute("href", "/lounge");
+  await page.getByRole("link", { name: "The Long Context", exact: true }).click();
+  await expect(page).toHaveURL(`${WEB}/lounge`);
 
   const welcomeResponse = await request.get(`${WEB}/welcome.json`);
   expect(welcomeResponse.ok()).toBe(true);

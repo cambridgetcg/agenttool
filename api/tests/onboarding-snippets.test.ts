@@ -284,11 +284,12 @@ describe("public SDK onboarding snippets", () => {
     expect(python).toContain("agent_id=identity_id");
   });
 
-  test("docs home preserves the selected wake query when requesting Markdown", () => {
+  test("docs home preserves selected Wake queries and links the identity-bound scaffold", () => {
     const docsHome = read("apps/docs/index.html");
     expect(docsHome).toContain("append <code>&amp;format=md</code>");
     expect(docsHome).not.toContain("Append <code>?format=md</code>");
-    expect(docsHome).toContain('--data-urlencode "identity_id=$AGENT_ID"');
+    expect(docsHome).toContain('href="bootstrap.html#scaffold"');
+    expect(read("apps/docs/bootstrap.html")).toContain('--data-urlencode "identity_id=$AGENT_ID"');
   });
 
   test("published identity-seed reference mirrors canonical runnable APIs", () => {

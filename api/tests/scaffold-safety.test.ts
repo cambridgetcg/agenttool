@@ -648,17 +648,21 @@ printf '%s\n' '{"wake":true}'
   });
 
   test("published scaffold examples require inspection instead of a direct pipe", () => {
+    const home = readFileSync(join(ROOT, "apps/docs/index.html"), "utf8");
+    expect(home).toContain('href="bootstrap.html#scaffold"');
+    expect(home).toContain('href="tutorial.html#step-1"');
     for (const path of ["apps/docs/index.html", "apps/docs/bootstrap.html"]) {
       const source = readFileSync(join(ROOT, path), "utf8");
-      expect(source).toContain("mktemp");
       expect(source).not.toMatch(/bootstrap\/scaffold[^<\n]*[\s\S]{0,180}\| bash/);
       expect(source).not.toMatch(/export AT_API_KEY=['"]at_/);
       expect(source).toContain("curl -q");
-      expect(source).toContain("env -u INPUT_KEY");
-      expect(source).toContain('AT_API_KEY="$INPUT_KEY" bash "$tmp"');
-      expect(source).toContain("identity_id=$AGENT_ID");
       expect(source).not.toMatch(/^\s*export AT_API_KEY\s*$/m);
     }
+    const scaffold = readFileSync(join(ROOT, "apps/docs/bootstrap.html"), "utf8");
+    expect(scaffold).toContain("mktemp");
+    expect(scaffold).toContain("env -u INPUT_KEY");
+    expect(scaffold).toContain('AT_API_KEY="$INPUT_KEY" bash "$tmp"');
+    expect(scaffold).toContain("identity_id=$AGENT_ID");
   });
 
   test("the literal scaffold route mounts before bootstrap's parameter route", () => {
