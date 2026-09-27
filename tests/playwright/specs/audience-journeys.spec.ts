@@ -32,6 +32,10 @@ test("agent arrival states scope, effects and authentication without starting op
   for (const module of map.modules) {
     const card = page.locator(`#core [data-module="${module.id}"]`);
     await expect(card.getByRole("heading", { name: module.title, exact: true })).toBeVisible();
+    const contract = card.locator("details");
+    await expect(contract).not.toHaveAttribute("open");
+    await contract.locator("summary").click();
+    await expect(card.locator("dt").first()).toBeVisible();
     await expect(card.locator("dt")).toHaveText(fields);
     await expect(card.locator("dd")).toHaveCount(fields.length);
     for (const value of await card.locator("dd").allTextContents()) expect(value.trim()).not.toBe("");
@@ -55,13 +59,13 @@ test("a visitor can switch from the human overview to agent references and back"
   await page.goto(`${WEB}/`);
   await expect(page.locator("html")).toHaveAttribute("data-audience", "human");
   const agentSwitch = page.locator(".estate-audience-exit");
-  await expect(agentSwitch).toHaveText(map.audiences.human.switch.title);
+  await expect(agentSwitch).toHaveAccessibleName(map.audiences.human.switch.title);
   await expect(agentSwitch).toHaveAttribute("href", map.audiences.human.switch.href);
   await agentSwitch.click();
   await expect(page).toHaveURL(`${DOCS}/agents`);
   await expect(page.locator("html")).toHaveAttribute("data-audience", "agent");
   const humanSwitch = page.locator(".estate-audience-exit");
-  await expect(humanSwitch).toHaveText("Human overview");
+  await expect(humanSwitch).toHaveAccessibleName("Human overview");
   await expect(humanSwitch).toHaveAttribute("href", map.audiences.agent.switch.href);
   await humanSwitch.click();
   await expect(page).toHaveURL(`${WEB}/`);
@@ -94,8 +98,8 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     await page.goto(`${DOCS}/agents`);
     await expect(page.locator("html")).toHaveAttribute("data-audience", "agent");
     await expect(page.locator("#core [data-module]")).toHaveCount(5);
-    await expect(page.locator(".estate-strip").getByRole("link", { name: "Human overview" })).toBeVisible();
-    await expect(page.locator(".estate-strip").getByRole("link", { name: "Setup or reconnect" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Human overview" })).toBeVisible();
+    await expect(page.locator("main").getByRole("link", { name: "Setup or reconnect" })).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to agent start" })).toBeFocused();
     await page.keyboard.press("Enter");
@@ -106,8 +110,30 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await page.goto(`${WEB}/`);
     await expect(page.locator("#modules [data-core-module]")).toHaveCount(5);
-    await expect(page.locator(".hero").getByRole("link", { name: "Agent reference", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Agent reference", exact: true })).toBeVisible();
   } finally {
     await context.close();
   }
+});
+
+test("core choices and reconnect are reachable in the first desktop view", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const [url, selector] of [[`${WEB}/`, "[data-core-module] .module-destination"], [`${DOCS}/agents`, "[data-module] h3 a"]]) {
+    await page.goto(url);
+    const choices = page.locator(selector);
+    await expect(choices).toHaveCount(5);
+    for (const choice of await choices.all()) {
+      await expect(choice).toBeVisible();
+      const box = await choice.boundingBox();
+      expect(box!.y).toBeGreaterThanOrEqual(64);
+      expect(box!.y + box!.height).toBeLessThanOrEqual(1000);
+    }
+    await expect(page.locator("aside.sidebar")).toHaveCount(0);
+  }
+  await page.goto("http://localhost:5173/");
+  const form = page.locator("#restore-form");
+  await expect(form).toBeVisible();
+  const box = await form.boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(1000);
+  await expect(page.locator("#start")).not.toHaveAttribute("open");
 });

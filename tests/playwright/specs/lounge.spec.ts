@@ -86,6 +86,7 @@ test("Build and machine discovery keep the lounge available", async ({ page, req
   await page.route(API, (route) => route.fulfill({ json: loungeSnapshot() }));
   await page.goto(`${WEB}/index.html`);
   await page.getByRole("link", { name: "Explore Build", exact: true }).click();
+  await page.locator("#more-places > summary").click();
   await expect(page.getByRole("link", { name: "The Long Context", exact: true })).toHaveAttribute("href", "/lounge");
   await page.getByRole("link", { name: "The Long Context", exact: true }).click();
   await expect(page).toHaveURL(`${WEB}/lounge`);

@@ -1,13 +1,20 @@
 # agenttool-docs
 
 ## What This Is
-API documentation site for the AgentTool platform. Static HTML pages covering all 9 services: Memory, Tools, Verify, Economy, Trace, Identity, Vault, Pulse, and Bootstrap. Hosted at docs.agenttool.dev.
+Static references at **docs.agenttool.dev** for hosted APIs and independent
+local tools. `agents.html` is the agent entrance, `index.html` is the direct
+reference library, and `roadmap.html` is a human-facing source/proposal map.
 
 ## Current State
-Active — all 9 service pages live, plus the main index, local agent-data docs,
-local Agent Browser docs, a public Canon MCP connection guide, a support
-route, and a LOVE Package Protocol surface for public exact-version package
-discovery.
+The current source groups Identity, Wake & Continuity, Memory, Tools and
+Collaboration first, with optional areas in Build. The three hubs use compact
+rows without sidebars; agent usage fields and examples use native disclosures.
+Hosted service references, local Data and Browser guides, public Canon MCP,
+support and exact-version LOVE package discovery retain their own contracts.
+The reading-layout refresh is a source candidate; see
+[`docs/NOW.md`](../../docs/NOW.md) for its verification and separate release record.
+
+The artifact-specific records below retain their original scope and receipts.
 `love-bomb.html` is the semantic, no-JavaScript LOVE BOMB v4 door. Its JSON,
 Markdown, plain-text, and closed-schema twins are static pull-only files with
 exact representation links and route-specific Cloudflare headers. The page
@@ -243,13 +250,28 @@ execution-readiness proof, or a hosted route.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
-- Single shared `style.css` (dark theme matching landing page)
+- Shared `theme.css` plus `docs.css` for reference typography; scoped
+  `apps/_shared/workspace.css` for the core reading layout and `modules.css`
+  for usage disclosures and roadmap comparisons
 - Small native JavaScript files for bounded interactions such as Party Telephone
-- Shared progressive KINGDOM location bar, searchable room atlas, and nearby exits from `apps/_shared/estate.js`; legacy pages without the appearance controller load it directly. Static links remain the no-JavaScript fallback, and opening the atlas grants no authority.
+- One generated audience navigation bar and optional search from
+  `apps/_shared/estate.js`; static links remain the no-JavaScript fallback.
+  Agent primaries are Core / Library / Discovery; human primaries are
+  Modules / Build / Roadmap. Short Human / Agent exits keep full accessible labels.
+
+Core hubs opt into `data-layout="workspace"`. Arrival introductions sit beside
+the five rows on wide screens and stack on narrow screens. Keep hub sidebars
+absent; long references use local contents links. The shared fragment handler
+opens containing `details`, so existing anchors remain usable. Keep source
+status visible and distinguish proposals from release or deployment evidence.
+See [`docs/INTERACTION.md`](../../docs/INTERACTION.md); the layout name does not
+introduce an operator workspace or new authority.
 
 ## Project Structure
 ```
-index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+agents.html     — Agent entrance: five core rows and expandable usage contracts
+index.html      — Direct reference library; Build, examples, auth, errors and limits
+roadmap.html    — Human-facing source capabilities and proposed improvements
 connect-canon.html — Public-canon MCP connection, examples, boundaries, data handling, exit
 support.html    — Public support and private security-reporting routes
 _redirects      — Common machine-document paths → canonical API contracts
@@ -296,7 +318,8 @@ identity.html   — agent-identity API reference (provisional AgentTool identifi
 vault.html      — agent-vault API reference (encrypted secrets)
 pulse.html      — agent-pulse API reference (heartbeats, presence)
 bootstrap.html  — agent-bootstrap API reference (initial project records and key material)
-style.css       — Shared dark-theme stylesheet
+docs.css        — Long-reference layout, typography and code blocks
+modules.css     — Core usage disclosures and roadmap comparisons
 ```
 
 ## How to Run
@@ -309,7 +332,7 @@ npx serve .
 Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
-- **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
+- **agenttool-dashboard**: agent setup and reconnect surface; ephemeral verification comes first, with optional SDK / curl examples and a direct identity tutorial link
 - **api.agenttool.dev**: the canonical API. **agenttool.dev** is the public HTML welcome; selected machine paths are forwarded or redirected to the API. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
@@ -328,7 +351,9 @@ Static hosting (Cloudflare Pages or similar). No build step.
 AgentTool Platform
 
 ## Key Files
-- `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
+- `agents.html` — Agent entrance with five direct module references and usage fields
+- `index.html` — Reference library, optional Build groups and preserved operation examples
+- `roadmap.html` — Current source capabilities beside explicitly proposed work
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
@@ -349,4 +374,4 @@ AgentTool Platform
 - `HF-WAKE-TRAINING.md` / `HF-WAKE-HOST.md` — canonical governance and exact-host boundaries, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
-- `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks
+- `docs.css` / `modules.css` — Reference layout and scoped core-module details; the shared reading foundation is `apps/_shared/workspace.css`

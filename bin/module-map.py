@@ -11,28 +11,24 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def core_cards(data):
     cards = []
-    for module in data['modules']:
+    for number, module in enumerate(data['modules'], 1):
         m = {key: escape(value, quote=True) for key, value in module.items()}
-        cards.append(f'''<article class="door-card module-card" id="{m['id']}" data-core-module="{m['id']}">
-  <div class="n mono">{m['status']}</div>
-  <h3>{m['title']}</h3>
-  <p>{m['purpose']}</p>
-  <p class="module-scope">{m['scope']}</p>
-  <details><summary>Changes &amp; recovery</summary><p>{m['effect']}</p><p>{m['recovery']}</p></details>
-  <a href="{m['human']}">Explore {m['title']} <span aria-hidden="true">→</span></a>
+        cards.append(f'''<article class="module-row" id="{m['id']}" data-core-module="{m['id']}">
+  <span class="row-number" aria-hidden="true">{number:02}</span>
+  <div class="row-copy"><a class="module-destination" href="{m['human']}"><h3>{m['title']}</h3><p>{m['purpose']}</p><span class="row-arrow" aria-hidden="true">↗</span></a>
+  <details class="row-details"><summary>Scope &amp; effects</summary><p class="row-meta">{m['status']}</p><p>{m['scope']}</p><p>{m['effect']}</p><p>{m['recovery']}</p></details></div>
 </article>''')
     return '\n'.join(cards)
 
 
 def build_cards(data):
     groups = []
-    for group in data['buildGroups']:
+    for number, group in enumerate(data['buildGroups'], 1):
         cards = []
         for item in group['items']:
             i = {key: escape(value, quote=True) for key, value in item.items()}
-            label = 'Read reference' if i['human'].startswith('https://docs.') else 'Explore'
-            cards.append(f'''<article class="door-card"><div class="n mono">{i['status']}</div><h3>{i['title']}</h3><p>{i['note']}</p><a href="{i['human']}">{label} <span class="sr-only">{i['title']}</span> →</a></article>''')
-        groups.append(f'''<section id="{escape(group['id'])}" data-build-group="{escape(group['id'])}"><h2 class="serif">{escape(group['title'])}</h2><div class="door-grid">{''.join(cards)}</div></section>''')
+            cards.append(f'''<article class="build-item"><div><h3><a href="{i['human']}">{i['title']} <span aria-hidden="true">↗</span></a></h3><p>{i['note']}</p></div><span class="row-meta">{i['status']}</span></article>''')
+        groups.append(f'''<details class="build-group" id="{escape(group['id'])}" data-build-group="{escape(group['id'])}"><summary><span class="row-number" aria-hidden="true">{number:02}</span><h2>{escape(group['title'])}</h2><span class="group-count">{len(cards)} paths</span></summary><div class="build-items">{''.join(cards)}</div></details>''')
     return '\n'.join(groups)
 
 
@@ -46,8 +42,9 @@ def replace_region(text, name, content):
 
 def navigation(data, audience, web):
     view = data['audiences'][audience]
-    links = view['primary'] + [view['switch']]
-    items = ''.join(f'<a class="nav-essential" href="{escape(x["href"], quote=True)}">{escape(x["title"])}</a>' for x in links)
+    items = ''.join(f'<a class="nav-essential" href="{escape(x["href"], quote=True)}">{escape(x["title"])}</a>' for x in view['primary'])
+    switch = view['switch']
+    items += f'<a class="nav-essential nav-audience" href="{escape(switch["href"], quote=True)}" aria-label="{escape(switch["title"], quote=True)}">{"Agent" if audience == "human" else "Human"}</a>'
     return (f'<nav class="{"site-nav" if web else "topnav"}" aria-label="Primary">'
             f'<a class="{"wordmark" if web else "logo"}" href="{view["home"]}">agenttool</a>'
             f'<div class="{"links" if web else "nav-actions"}">{items}</div>'

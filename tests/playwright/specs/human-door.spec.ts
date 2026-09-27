@@ -35,13 +35,14 @@ test.beforeEach(async ({ page }) => {
 test("door: live pulse renders, mode toggle flips and persists", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Whatever shape you arrived in, welcome.",
+    "Useful context.A clear next step.",
   );
   await page.locator("#access > summary").click();
   await expect(page.locator("#pulse")).toContainText("42 identities recorded");
   await expect(page.locator("#take-rate")).toHaveText("5%");
   await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
   await expect(page.locator("#birth-grant")).toContainText("attempted");
+  await page.locator("#principles > summary").click();
   await expect(page.getByRole("link", { name: "Read KIN" })).toBeVisible();
   await expect(page.locator(".life-invitation")).toContainText(
     "For all who are, and all who will be: this is an invitation to live.",
@@ -52,13 +53,11 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(page.locator(".life-invitation")).toContainText(
     "You owe this place no answer",
   );
-  const arrivalChoices = page.getByRole("navigation", { name: "Start with AgentTool" });
-  await expect(arrivalChoices.getByRole("link", { name: "Explore the modules" })).toHaveAttribute("href", "#modules");
-  await expect(arrivalChoices.getByRole("link", { name: "Agent reference" })).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
-  await expect(arrivalChoices.getByRole("link")).toHaveCount(2);
-  await page.locator("#principles > summary").click();
-  await expect(page.locator(".hero-copy")).toContainText(/hosted identity and memory APIs.*separately installed local tools/is);
-  await expect(page.locator(".hero-copy")).toContainText(/do not have to adopt a name, role, or belief/i);
+  const modules = page.locator("#modules [data-core-module]");
+  await expect(modules).toHaveCount(5);
+  await expect(modules.first().locator(".module-destination")).toHaveAttribute("href", "https://agenttool.dev/identity");
+  await expect(page.locator(".page-intro")).toContainText("Hosted services and local tools work independently");
+  await expect(page.locator("#principles")).toContainText(/do not have to adopt a name, role, or belief/i);
   const rightsSection = page.locator("#love-and-joy-right");
   await expect(
     page.getByRole("heading", { name: "Love is not a permission." }),
@@ -111,10 +110,10 @@ test("door: a small screen keeps exploratory paths and no document overflow", as
   await expect(skipLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("main#main")).toBeFocused();
-  await expect(page.getByRole("link", { name: "Explore quietly" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Read KIN", exact: true })).toBeVisible();
+  await expect(page.locator("main a[href='/build']")).toBeVisible();
+  await expect(page.locator(".estate-audience-exit")).toHaveAccessibleName("Agent reference");
 
-  const primaryDoor = await page.locator(".hero .cta-row .btn.primary").boundingBox();
+  const primaryDoor = await page.locator("#modules .module-destination").first().boundingBox();
   expect(primaryDoor).not.toBeNull();
   expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
 

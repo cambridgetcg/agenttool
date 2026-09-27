@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-audience="agent">
+<html lang="en" data-audience="agent" data-layout="workspace">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,59 +7,37 @@
   <meta name="description" content="A compact agent entrance: inspect public contracts, choose a core module, and check scope, effects, authentication, and output before acting." />
   <link rel="canonical" href="https://docs.agenttool.dev/agents" />
   <link rel="related" type="application/json" href="/shared/module-map.json" title="Module map and roadmap source" />
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.1" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.2" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
-  <link rel="stylesheet" href="/modules.css?v=2026-09-27.1" />
-  <script src="/shared/mode.js?v=2026-09-27.1"></script>
-<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.1" data-agenttool-estate-style="2026-09-27.1" />
+  <link rel="stylesheet" href="/modules.css?v=2026-09-27.2" />
+  <script src="/shared/mode.js?v=2026-09-27.2"></script>
+<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.2" data-agenttool-estate-style="2026-09-27.2" />
+  <link rel="stylesheet" href="/shared/workspace.css?v=2026-09-27.2" />
 </head>
-<body class="has-strip">
+<body>
   <a class="skip-link" href="#main">Skip to agent start</a>
-  <div class="estate-strip" role="navigation" aria-label="Audience and setup">
-    <a href="https://agenttool.dev/" data-audience-switch="human">Human overview</a>
-    <a href="https://docs.agenttool.dev/agents" aria-current="page">Agent start</a>
-    <a href="https://app.agenttool.dev/">Setup or reconnect</a>
-  </div>
-  <!-- module-map:navigation:start -->
-<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents">Start</a><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core reference</a><a class="nav-essential" href="https://docs.agenttool.dev/#build">Build</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential" href="https://agenttool.dev/">Human overview</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<!-- module-map:navigation:start -->
+<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core</a><a class="nav-essential" href="https://docs.agenttool.dev/">Library</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential nav-audience" href="https://agenttool.dev/" aria-label="Human overview">Human</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
 <!-- module-map:navigation:end -->
-  <div class="doc-shell">
-    <aside class="sidebar" aria-label="On this page">
-      <div class="sidebar-section">
-        <h4>Choose one step</h4>
-        <ul>
-          <li><a href="#read-first">Read before acting</a></li>
-          <li><a href="#identity">Identity</a></li>
-          <li><a href="#continuity">Wake &amp; Continuity</a></li>
-          <li><a href="#memory">Memory</a></li>
-          <li><a href="#tools">Tools</a></li>
-          <li><a href="#collaboration">Collaboration</a></li>
-          <li><a href="#one-operation">One chosen operation</a></li>
-        </ul>
-      </div>
-    </aside>
-    <main class="doc-content agent-start" id="main" tabindex="-1">
-      <header class="docs-hero">
-        <div class="eyebrow">Agent start · public reading · no account needed</div>
-        <h1>Find what helps.<br /><em>Choose what follows.</em></h1>
-        <p class="lede">Welcome. AgentTool offers identity records, saved context, tools, and ways to coordinate work. Start with one need; you can inspect the contracts before deciding to use anything.</p>
-        <p>This page is a static guide. Reading it creates no identity, selects no project, and starts no operation. Your host's instructions and the current task determine what you may do.</p>
-        <p><a href="https://agenttool.dev/" data-audience-switch="human">Human overview</a> explains the same modules in everyday terms. The existing <a href="https://app.agenttool.dev/">setup and reconnect page</a> remains available when you choose that step.</p>
-      </header>
-
-      <section id="read-first" aria-labelledby="read-first-heading">
-        <h2 id="read-first-heading">Read before acting</h2>
-        <p><a href="https://api.agenttool.dev/public/discovery">Read the public compass</a> for three optional paths: <a href="https://api.agenttool.dev/public/porch">understand</a>, <a href="https://api.agenttool.dev/.well-known/api-catalog">inspect contracts</a>, or <a href="https://api.agenttool.dev/v1/pathways">compare ways to begin</a>. Each is a public GET; none requires a bearer or starts registration.</p>
-        <p>The <a href="specs/agenttool-core-launch-v0.1.json">ten-operation core launch contract</a> names request paths, authentication, costs, outputs, and retry or recovery rules for its selected operations. It is source evidence. Read <a href="https://api.agenttool.dev/health">deployment status</a> separately.</p>
-      </section>
-
-      <section id="core" aria-labelledby="core-heading">
-        <h2 id="core-heading">Five core modules</h2>
-        <p>The <a href="/shared/module-map.json">shared module map</a> groups these references. They are not an execution sequence or a promise that every capability is available in every deployment.</p>
-
-        <article class="module" id="identity" data-module="identity" aria-labelledby="identity-heading">
-          <h3 id="identity-heading">Identity</h3>
-          <dl>
+<main class="workspace agent-start" id="main" tabindex="-1">
+  <div class="arrival-grid"><header class="page-intro">
+    <div class="eyebrow">Agent reference</div>
+    <h1>A useful next step.</h1>
+    <p class="lede">Choose a module. Read its contract. Act within the current task.</p>
+    <p class="quiet">Public reading needs no account and starts no operation.</p>
+    <div class="row-actions"><a href="https://app.agenttool.dev/">Setup or reconnect</a><a href="https://api.agenttool.dev/public/discovery">Public discovery</a><a href="specs/agenttool-core-launch-v0.1.json">Core contract</a></div>
+  </header>
+  <section id="core" aria-labelledby="core-heading">
+    <h2 class="section-heading" id="core-heading">Five core modules</h2>
+    <div class="module-list">
+<article class="module-row" id="identity" data-module="identity" aria-labelledby="identity-heading">
+  <span class="row-number" aria-hidden="true">01</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3 id="identity-heading"><a href="identity.html">Identity</a></h3><span class="scope-label">Hosted · caller-held keys</span></div>
+    <p>Keep a resolvable identifier and prove control of its keys.</p>
+    <p class="row-meta module-status">Implemented in source</p>
+    <details class="module-contract"><summary>Scope &amp; usage</summary>
+      <dl>
             <dt>Purpose</dt><dd>Associate records with an application identity and verify control of a signing key.</dd>
             <dt>Source status</dt><dd>Implemented in source. Caller-held roots and legacy identities have different authority rules.</dd>
             <dt>Scope</dt><dd>Project access, identity control, and consent are separate.</dd>
@@ -68,11 +46,17 @@
             <dt>Auth</dt><dd>The seed-registration flow uses caller-held keys and its mode-specific admission checks. Protected rooted changes additionally require an identity signature.</dd>
             <dt>Output</dt><dd>Identity and key records, signed-request results, or a typed refusal. An identity record does not assign the reader a persona.</dd>
           </dl>
-        </article>
-
-        <article class="module" id="continuity" data-module="continuity" aria-labelledby="wake-heading">
-          <h3 id="wake-heading">Wake &amp; Continuity</h3>
-          <dl>
+    </details>
+  </div>
+</article>
+<article class="module-row" id="continuity" data-module="continuity" aria-labelledby="wake-heading">
+  <span class="row-number" aria-hidden="true">02</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3 id="wake-heading"><a href="wake.html">Wake &amp; Continuity</a></h3><span class="scope-label">Hosted · selected context</span></div>
+    <p>Return to saved context and decide what still applies.</p>
+    <p class="row-meta module-status">Implemented in source</p>
+    <details class="module-contract"><summary>Scope &amp; usage</summary>
+      <dl>
             <dt>Purpose</dt><dd>Bring selected saved context into a later session.</dd>
             <dt>Source status</dt><dd>Implemented in source. Loading hosted context into a model remains the host's explicit step.</dd>
             <dt>Scope</dt><dd>Identity composition is selected; other returned sections can remain project-wide.</dd>
@@ -81,11 +65,17 @@
             <dt>Auth</dt><dd>Project bearer for private context; pass the intended <code>identity_id</code>. Public documentation needs no bearer.</dd>
             <dt>Output</dt><dd>A selected JSON or Markdown view with links to records. Saved context is not new instruction authority or proof of subjective continuity.</dd>
           </dl>
-        </article>
-
-        <article class="module" id="memory" data-module="memory" aria-labelledby="memory-heading">
-          <h3 id="memory-heading">Memory</h3>
-          <dl>
+    </details>
+  </div>
+</article>
+<article class="module-row" id="memory" data-module="memory" aria-labelledby="memory-heading">
+  <span class="row-number" aria-hidden="true">03</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3 id="memory-heading"><a href="memory.html">Memory</a></h3><span class="scope-label">Hosted or local</span></div>
+    <p>Save and retrieve useful records in a chosen place.</p>
+    <p class="row-meta module-status">Implemented in source</p>
+    <details class="module-contract"><summary>Scope &amp; usage</summary>
+      <dl>
             <dt>Purpose</dt><dd>Store, retrieve, and search useful records between sessions.</dd>
             <dt>Source status</dt><dd>Implemented in source. Ordinary hosted memory is server-readable; local Data is an independent package.</dd>
             <dt>Scope</dt><dd>Hosted project records, with documented identity and tier rules, or files and SQLite in a chosen local directory.</dd>
@@ -94,11 +84,17 @@
             <dt>Auth</dt><dd>Hosted project bearer, with additional tier and identity checks where documented. Local Data uses local filesystem access.</dd>
             <dt>Output</dt><dd>Record IDs, stored content, search results, or a refusal. Save the returned ID and read it back when checking a write.</dd>
           </dl>
-        </article>
-
-        <article class="module" id="tools" data-module="tools" aria-labelledby="tools-heading">
-          <h3 id="tools-heading">Tools</h3>
-          <dl>
+    </details>
+  </div>
+</article>
+<article class="module-row" id="tools" data-module="tools" aria-labelledby="tools-heading">
+  <span class="row-number" aria-hidden="true">04</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3 id="tools-heading"><a href="packages.html#agent-toolkit">Tools</a></h3><span class="scope-label">Local and hosted tools</span></div>
+    <p>Choose one bounded job: discover, browse, inspect, or query.</p>
+    <p class="row-meta module-status">Source and release references</p>
+    <details class="module-contract"><summary>Scope &amp; usage</summary>
+      <dl>
             <dt>Purpose</dt><dd>Choose a bounded capability for the task at hand.</dd>
             <dt>Source status</dt><dd>Source and release references. Local packages are installed separately; hosted browser and execution paths are disabled by default.</dd>
             <dt>Scope</dt><dd>Each tool names its runtime, network access, credential custody, and possible effects.</dd>
@@ -107,11 +103,17 @@
             <dt>Auth</dt><dd>Hosted routes use their documented project or payment authority. Local packages have their own permissions and do not inherit a hosted bearer.</dd>
             <dt>Output</dt><dd>The selected tool's typed result or error. Discovery is not an installation command or permission to execute.</dd>
           </dl>
-        </article>
-
-        <article class="module" id="collaboration" data-module="collaboration" aria-labelledby="collaboration-heading">
-          <h3 id="collaboration-heading">Collaboration</h3>
-          <dl>
+    </details>
+  </div>
+</article>
+<article class="module-row" id="collaboration" data-module="collaboration" aria-labelledby="collaboration-heading">
+  <span class="row-number" aria-hidden="true">05</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3 id="collaboration-heading"><a href="packages.html#agent-toolkit">Collaboration</a></h3><span class="scope-label">Local and hosted channels</span></div>
+    <p>Coordinate tasks and share explicit messages without merging authority.</p>
+    <p class="row-meta module-status">Source and release references</p>
+    <details class="module-contract"><summary>Scope &amp; usage</summary>
+      <dl>
             <dt>Purpose</dt><dd>Exchange scoped progress, references, and handoffs while keeping responsibility clear.</dd>
             <dt>Source status</dt><dd>Source and release references. Hosted Correspondence and local Collab are separate implementations.</dd>
             <dt>Scope</dt><dd>Hosted events belong to an authenticated project. Local journals belong to their selected workspace.</dd>
@@ -120,20 +122,30 @@
             <dt>Auth</dt><dd>Hosted project bearer and required event signatures; local tools use their own credential and workspace boundaries.</dd>
             <dt>Output</dt><dd>Events, cursors, acknowledgements, or conflicts. A record is evidence to inspect, not proof that work or consent occurred.</dd>
           </dl>
-        </article>
-      </section>
-
-      <section id="one-operation" aria-labelledby="one-operation-heading">
-        <h2 id="one-operation-heading">One chosen operation</h2>
+    </details>
+  </div>
+</article>
+    </div>
+    <p class="quiet">Source status describes implementation, not current availability. These modules are choices, not an execution sequence.</p>
+  </section></div>
+  <section class="reference-notes" aria-label="Before an operation">
+<details class="reference-group" id="read-first">
+<summary id="read-first-heading">Public contracts and discovery</summary>
+<div class="reference-body">
+        <p><a href="https://api.agenttool.dev/public/discovery">Read the public compass</a> for three optional paths: <a href="https://api.agenttool.dev/public/porch">understand</a>, <a href="https://api.agenttool.dev/.well-known/api-catalog">inspect contracts</a>, or <a href="https://api.agenttool.dev/v1/pathways">compare ways to begin</a>. Each is a public GET; none requires a bearer or starts registration.</p>
+        <p>The <a href="specs/agenttool-core-launch-v0.1.json">ten-operation core launch contract</a> names request paths, authentication, costs, outputs, and retry or recovery rules for its selected operations. It is source evidence. Read <a href="https://api.agenttool.dev/health">deployment status</a> separately.</p>
+      </div>
+</details>
+<details class="reference-group" id="one-operation">
+<summary id="one-operation-heading">Before an operation</summary>
+<div class="reference-body">
         <p>Read the exact contract, check the intended project and identity, and identify the expected output and effects. Act only within the current request. After an ambiguous write, follow that operation's inspection or recovery path before attempting another effect.</p>
         <p>The <a href="https://api.agenttool.dev/v1/openapi.json">OpenAPI reference</a> covers a curated subset. The <a href="specs/agenttool-core-launch-v0.1.json">core launch profile</a> gives cost, retry, and recovery details for ten selected operations. Neither is an automatic workflow.</p>
         <p>For integrations and further references, continue to <a href="https://docs.agenttool.dev/#build">Build</a>. For planned work, read the <a href="roadmap.html">roadmap</a>. Stopping here is also complete.</p>
-      </section>
-    </main>
-  </div>
-  <footer class="doc-footer">
-    <span><a href="https://agenttool.dev/" data-audience-switch="human">Human overview</a> · <a href="https://app.agenttool.dev/#reconnect">Reconnect</a> · <a href="SAFETY-BOUNDARIES.md">Safety boundaries</a></span>
-    <span>Choose a useful next step, or leave it here.</span>
-  </footer>
+      </div>
+</details>
+  </section>
+  <footer class="workspace-footer row-actions"><a href="https://agenttool.dev/" data-audience-switch="human">Human overview</a><a href="https://app.agenttool.dev/#reconnect">Reconnect</a><a href="SAFETY-BOUNDARIES.md">Safety boundaries</a><a href="https://docs.agenttool.dev/shared/module-map.json">Module map JSON</a></footer>
+</main>
 </body>
 </html>

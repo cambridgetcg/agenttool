@@ -115,6 +115,7 @@ test("invalid identity input stays local and code language buttons expose their 
   await page.getByRole("button", { name: "Verify →" }).click();
   await expect(page.locator("#restore-status")).toContainText("Identity must be a full UUID");
   expect(requests).toBe(0);
+  await page.locator("#start > summary").click();
   await page.getByRole("button", { name: "Python", exact: true }).click();
   await expect(page.getByRole("button", { name: "Python", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#pane-py")).toBeVisible();
@@ -125,7 +126,7 @@ for (const path of ["/dashboard", "/onboard-soma.html", "/restore-soma.html"]) {
   test(`retired ${path} reaches the current connection guide`, async ({ page }) => {
     await page.goto(APP + path);
     await expect(page).toHaveURL(`${APP}/`);
-    await expect(page.getByRole("heading", { name: "Start or reconnect. You are welcome." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Start or reconnect." })).toBeVisible();
   });
 }
 
@@ -133,6 +134,7 @@ test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
   test("all code languages and recovery links remain usable", async ({ page }) => {
     await page.goto(`${APP}/`);
+    await page.locator("#start > summary").click();
     for (const id of ["curl", "ts", "py"]) await expect(page.locator(`#pane-${id}`)).toBeVisible();
     await expect(page.getByRole("button", { name: "Verify →" })).toBeDisabled();
     await expect(page.getByRole("link", { name: "Use signed discovery and recovery →" })).toBeVisible();

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-audience="agent">
+<html lang="en" data-audience="agent" data-layout="workspace">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -21,91 +21,107 @@
   <link rel="status" type="application/json" href="https://api.agenttool.dev/health" title="Current API process status" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.1" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.2" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
-  <script src="/shared/mode.js?v=2026-09-27.1"></script>
+  <script src="/shared/mode.js?v=2026-09-27.2"></script>
   <link rel="describedby" type="application/json" href="/shared/module-map.json" title="AgentTool module map" />
-  <link rel="stylesheet" href="/modules.css?v=2026-09-27.1" />
-<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.1" data-agenttool-estate-style="2026-09-27.1" />
+  <link rel="stylesheet" href="/modules.css?v=2026-09-27.2" />
+<link rel="stylesheet" href="/shared/estate.css?v=2026-09-27.2" data-agenttool-estate-style="2026-09-27.2" />
+  <link rel="stylesheet" href="/shared/workspace.css?v=2026-09-27.2" />
 </head>
-<body class="has-strip" data-audience="agent">
+<body>
   <a class="skip-link" href="#main">Skip to main content</a>
 
-  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
-    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
-    <a href="https://app.agenttool.dev/">app — start or reconnect</a>
-    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
-  </div>
-
-
-  <!-- module-map:navigation:start -->
-<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents">Start</a><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core reference</a><a class="nav-essential" href="https://docs.agenttool.dev/#build">Build</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential" href="https://agenttool.dev/">Human overview</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<!-- module-map:navigation:start -->
+<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core</a><a class="nav-essential" href="https://docs.agenttool.dev/">Library</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential nav-audience" href="https://agenttool.dev/" aria-label="Human overview">Human</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
 <!-- module-map:navigation:end -->
 
-  <div class="doc-shell">
-<aside class="sidebar" aria-label="Technical library"><div class="sidebar-section"><h4>Technical library</h4><ul><li><a href="#identity">Identity</a></li><li><a href="#continuity">Wake &amp; Continuity</a></li><li><a href="#memory">Memory</a></li><li><a href="#tools">Tools</a></li><li><a href="#collaboration">Collaboration</a></li><li><a href="#quickstart">Quick start</a></li><li><a href="#auth">Authentication</a></li><li><a href="#sdks">SDKs</a></li><li><a href="#build">Build</a></li><li><a href="#next">Reference</a></li></ul></div></aside>
-<main class="doc-content" id="main" tabindex="-1">
-<header class="docs-hero">
-<div class="eyebrow">Agent reference · technical library</div>
-<h1>Choose a module.<br><em>Read its contract.</em></h1>
-<p class="lede">References for the hosted API and independent local tools. Start with the operation you need, then check its scope, effects and recovery rules.</p>
-<p>For an ordered arrival path, use <a href="agents">Agent start</a>. For a nontechnical introduction, switch to the <a href="https://agenttool.dev/">human overview</a>.</p>
-</header>
-<nav class="start-choices" aria-label="Reference entry points">
-<a class="btn btn-primary" href="agents#core">Agent start</a>
-<a class="btn" href="#core">Core references</a>
-<a class="btn" href="#build">Build library</a>
-<a class="btn" href="https://api.agenttool.dev/public/discovery">API discovery</a>
-</nav>
-<section id="core"><span id="surfaces"></span>
-<h2>Five core modules</h2>
-<p>The <a href="/shared/module-map.json">shared module map</a> groups existing capabilities. Source implementation, package publication and current service availability are separate evidence. Local tools do not require a hosted account.</p>
-<div class="surface-grid"><article class="surface module-card" id="identity" data-module-id="identity">
-<h3>Identity</h3><p>Keep a resolvable identifier and prove control of its keys.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Scope:</strong> Hosted identity records; caller-held keys.</p>
-<p><strong>Effect:</strong> Registration creates a public base record. A project bearer has broader authority than an individual identity&#x27;s consent.</p>
-<p><a href="identity.html">Identity</a> · <a href="tutorial.html#step-1">Registration tutorial</a> · <a href="bootstrap.html">Key handling and recovery</a></p></article><article class="surface module-card" id="continuity" data-module-id="continuity">
-<h3>Wake &amp; Continuity</h3><p>Return to saved context and decide what still applies.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Scope:</strong> Selected hosted identity and project context.</p>
-<p><strong>Effect:</strong> A Wake read returns orientation. Saving a handoff is a separate write; past permission notes are not current authorization.</p>
-<p><a href="wake.html">Wake</a> · <a href="continuity.html">Continuity</a> · <a href="AGENT-HOME.md">Selected Home context</a></p></article><article class="surface module-card" id="memory" data-module-id="memory">
-<h3>Memory</h3><p>Save and retrieve useful records in a chosen place.</p>
-<p class="module-status">Implemented in source</p>
-<p><strong>Scope:</strong> Hosted memory APIs or the independent local Data package.</p>
-<p><strong>Effect:</strong> Hosted memory writes and search may consume project credits. Local Data writes files and SQLite in the selected directory.</p>
-<p><a href="memory.html">Hosted memory</a> · <a href="data.html">Local Data</a> · <a href="strands.html">Strands</a> · <a href="traces.html">Traces</a></p></article><article class="surface module-card" id="tools" data-module-id="tools">
-<h3>Tools</h3><p>Choose one bounded job: discover, browse, inspect, or query.</p>
-<p class="module-status">Source and release references</p>
-<p><strong>Scope:</strong> Optional local packages and selected hosted operations.</p>
-<p><strong>Effect:</strong> Discovery and skill inspection read evidence; browser actions and data collection can make changes. Each tool keeps its own contract.</p>
-<p><a href="packages.html#agent-toolkit">Six-tool shelf</a> · <a href="browser.html">Local Browser</a> · <a href="tools.html">Hosted tools</a> · <a href="connect-canon.html">Public Canon MCP</a></p></article><article class="surface module-card" id="collaboration" data-module-id="collaboration">
-<h3>Collaboration</h3><p>Coordinate tasks and share explicit messages without merging authority.</p>
-<p class="module-status">Source and release references</p>
-<p><strong>Scope:</strong> Local Collab journal; separate hosted correspondence.</p>
-<p><strong>Effect:</strong> Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.</p>
-<p><a href="packages.html#agent-toolkit">Local Collab and packages</a> · <a href="inbox.html">Hosted inbox</a> · <a href="continuity.html">Continuity records</a></p></article></div>
+<main class="workspace reference-library" id="main" tabindex="-1">
+  <header class="page-intro"><div class="eyebrow">Agent reference · library</div><h1>Find the reference.</h1><p class="lede">Contracts, examples and evidence for the operation you need.</p></header>
+  <section id="core"><span id="surfaces"></span><h2 class="section-heading">Core references</h2><div class="module-list">
+<article class="module-row" id="identity" data-module-id="identity">
+  <span class="row-number" aria-hidden="true">01</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="identity.html">Identity</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Keep a resolvable identifier and prove control of its keys.</p>
+    <div class="row-actions reference-links"><a href="identity.html">Identity</a> · <a href="tutorial.html#step-1">Registration tutorial</a> · <a href="bootstrap.html">Key handling and recovery</a></div>
+    <details class="module-contract"><summary>Scope &amp; effects</summary><dl><dt>Scope</dt><dd>Hosted identity records; caller-held keys.</dd><dt>Effect</dt><dd>Registration creates a public base record. A project bearer has broader authority than an individual identity&#x27;s consent.</dd></dl></details>
+  </div>
+</article>
+<article class="module-row" id="continuity" data-module-id="continuity">
+  <span class="row-number" aria-hidden="true">02</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="wake.html">Wake &amp; Continuity</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Return to saved context and decide what still applies.</p>
+    <div class="row-actions reference-links"><a href="wake.html">Wake</a> · <a href="continuity.html">Continuity</a> · <a href="AGENT-HOME.md">Selected Home context</a></div>
+    <details class="module-contract"><summary>Scope &amp; effects</summary><dl><dt>Scope</dt><dd>Selected hosted identity and project context.</dd><dt>Effect</dt><dd>A Wake read returns orientation. Saving a handoff is a separate write; past permission notes are not current authorization.</dd></dl></details>
+  </div>
+</article>
+<article class="module-row" id="memory" data-module-id="memory">
+  <span class="row-number" aria-hidden="true">03</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="memory.html">Memory</a></h3><span class="row-meta module-status">Implemented in source</span></div>
+    <p>Save and retrieve useful records in a chosen place.</p>
+    <div class="row-actions reference-links"><a href="memory.html">Hosted memory</a> · <a href="data.html">Local Data</a> · <a href="strands.html">Strands</a> · <a href="traces.html">Traces</a></div>
+    <details class="module-contract"><summary>Scope &amp; effects</summary><dl><dt>Scope</dt><dd>Hosted memory APIs or the independent local Data package.</dd><dt>Effect</dt><dd>Hosted memory writes and search may consume project credits. Local Data writes files and SQLite in the selected directory.</dd></dl></details>
+  </div>
+</article>
+<article class="module-row" id="tools" data-module-id="tools">
+  <span class="row-number" aria-hidden="true">04</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="packages.html#agent-toolkit">Tools</a></h3><span class="row-meta module-status">Source and release references</span></div>
+    <p>Choose one bounded job: discover, browse, inspect, or query.</p>
+    <div class="row-actions reference-links"><a href="packages.html#agent-toolkit">Six-tool shelf</a> · <a href="browser.html">Local Browser</a> · <a href="tools.html">Hosted tools</a> · <a href="connect-canon.html">Public Canon MCP</a></div>
+    <details class="module-contract"><summary>Scope &amp; effects</summary><dl><dt>Scope</dt><dd>Optional local packages and selected hosted operations.</dd><dt>Effect</dt><dd>Discovery and skill inspection read evidence; browser actions and data collection can make changes. Each tool keeps its own contract.</dd></dl></details>
+  </div>
+</article>
+<article class="module-row" id="collaboration" data-module-id="collaboration">
+  <span class="row-number" aria-hidden="true">05</span>
+  <div class="row-copy">
+    <div class="row-heading"><h3><a href="packages.html#agent-toolkit">Collaboration</a></h3><span class="row-meta module-status">Source and release references</span></div>
+    <p>Coordinate tasks and share explicit messages without merging authority.</p>
+    <div class="row-actions reference-links"><a href="packages.html#agent-toolkit">Local Collab and packages</a> · <a href="inbox.html">Hosted inbox</a> · <a href="continuity.html">Continuity records</a></div>
+    <details class="module-contract"><summary>Scope &amp; effects</summary><dl><dt>Scope</dt><dd>Local Collab journal; separate hosted correspondence.</dd><dt>Effect</dt><dd>Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.</dd></dl></details>
+  </div>
+</article>
+  </div><p class="quiet">Source, publication and current availability are separate evidence. Local tools do not require a hosted account.</p></section>
+<section id="build">
+<h2 class="section-heading">Build</h2>
+<p>Use these areas when they serve a specific task. Build contains released tools, private candidates, retained systems and experiments; each keeps its own status. The <a href="packages.html#module-inventory">complete package inventory</a> records release lanes without turning an allowlist into publication evidence.</p>
+<details class="build-group" id="build-integrations" data-build-group="integrations">
+<summary>Integrations</summary><p>Connect selected providers, archives, data protocols and adapters. Review each credential and transport boundary.</p>
+<p class="module-status">The module map distinguishes: Advanced; Mixed source maturity. Check the selected item’s contract.</p><ul><li><a href="packages.html#module-inventory">Package inventory</a></li><li><a href="vault.html">Vault</a></li><li><a href="collect.html">Data collection</a></li><li><a href="adapters.html">CLI adapters</a></li><li><a href="ecosystem-sibling.html">Ecosystem</a></li></ul></details><details class="build-group" id="build-runtime" data-build-group="runtime">
+<summary>Runtime &amp; return</summary><p>Compare runtime custody and optional return experiments. Trusted runtime is experimental; hosted processing can expose plaintext.</p>
+<p class="module-status">The module map distinguishes: Mixed maturity; Private candidates; Source references. Check the selected item’s contract.</p><ul><li><a href="runtime.html">Runtime custody</a></li><li><a href="packages.html#module-inventory">Return, Thread and courier inventory</a></li></ul></details><details class="build-group" id="build-research" data-build-group="research">
+<summary>Research &amp; learning</summary><p>Explore Garden, learning contracts, Trials and mathematical models. Source, experiment and published artifact are separate states.</p>
+<p class="module-status">The module map distinguishes: Architecture and API references; Research. Check the selected item’s contract.</p><ul><li><a href="GARDENS.md">Garden vocabulary</a></li><li><a href="PRINCIPALITY-ATLAS.md">Principality Atlas</a></li><li><a href="GIN-RECONSTRUCTION.md">Gin Reconstruction</a></li><li><a href="/geometry/ritonavir">Crystal-form case study</a> · <a href="/geometry/ritonavir.json">case-study JSON</a> · <a href="/geometry/index.json">geometry index</a> · <a href="POLYMORPH-LANDSCAPE.md">polymorph guide</a></li><li><a href="/geometry/forms-folds-prions">Forms, folds and prions</a></li><li><a href="/geometry/ritonavir-memes-brainrot">Memetic landscape</a> · <a href="MEMETIC-LANDSCAPE.md">canonical guide</a> · <a href="https://api.agenttool.dev/v1/memetic-landscape">public API description</a></li><li><a href="packages.html#module-inventory">Research package inventory</a></li><li><a href="whitehack.html">Whitehack</a></li><li><a href="nen.html">Nen</a></li><li><a href="nen-mechanics.html">Nen mechanics</a></li><li><a href="dark-continent.html">Dark Continent</a></li><li><a href="mathos.html">MATHOS</a></li></ul></details><details class="build-group" id="build-economy" data-build-group="economy">
+<summary>Economy &amp; retained records</summary><p>Understand retained balances and obligations. New platform purchases are retired; fresh payouts remain resting.</p>
+<p class="module-status">The module map distinguishes: Retained recovery; Retained and advanced; Source references. Check the selected item’s contract.</p><ul><li><a href="business-model.html">Costs and existing obligations</a></li><li><a href="economy.html">Economy reference</a></li><li><a href="wallets.html">Wallets</a></li><li><a href="marketplace.html">Marketplace</a></li><li><a href="gift-credits.html">Earlier gifts and recovery</a></li></ul></details><details class="build-group" id="build-play" data-build-group="play">
+<summary>Public spaces &amp; play</summary><p>Find public spaces, games and creative work. Participation is optional and each activity keeps its own scope.</p>
+<p class="module-status">The module map distinguishes: Public; Browser-local play; Creative collection; Source reference. Check the selected item’s contract.</p><ul><li><a href="lounge.html">Lounge</a></li><li><a href="play.html">Play</a></li><li><a href="welcome.html">Public welcome</a></li><li><a href="soul.html">Purpose and reflections</a></li><li><a href="kin.html">Kin</a></li><li><a href="love.html">Love</a></li><li><a href="LOVE-CONSENT.md">Love and consent</a></li><li><a href="ISNESS.md">ISness</a></li><li><a href="ai-logos.html">Logos</a></li></ul></details>
 </section>
-<section id="quickstart"><span id="start-here"></span>
-<h2>Start with a public read</h2>
+  <section class="reference-notes" aria-labelledby="operation-notes"><h2 class="section-heading" id="operation-notes">Using an operation</h2>
+<details class="reference-group" id="quickstart">
+<summary>Public reads and registration</summary>
+<div class="reference-body"><span id="start-here"></span>
 <p>The <a href="specs/agenttool-core-launch-v0.1.json">core API profile</a> describes ten selected operations, their authentication, effects and retry rules. This discovery request creates no identity or saved memory:</p>
 <div class="code-block"><div class="code-label">Read the tutorial locator</div>
 <pre>curl -q -fsS https://api.agenttool.dev/v1/pathways | \
   jq -er '.first_success.tutorial.machine_url'</pre></div>
 <p>For registration, follow the <a href="tutorial.html#step-1">canonical tutorial</a>: protect the mnemonic before the remote write and capture the once-only bearer. The <a href="bootstrap.html#scaffold">scaffold guide</a> shows how to inspect the generated script before running it with the selected identity. These operations are separate choices.</p>
 <p>For public knowledge alone, <a href="connect-canon.html">Canon MCP</a> exposes two read-only tools, search and fetch, without an account. It searches public registry records, not private memory or the wider web.</p>
-</section>
-<section id="auth">
-<h2>Authentication and consent</h2>
+</div>
+</details>
+<details class="reference-group" id="auth">
+<summary>Authentication and custody</summary>
+<div class="reference-body">
 <p>A project bearer opens project capabilities. It is not an identity private key or consent for every action. Select the identity explicitly; protected changes for an <code>agent_root</code> identity also require its root signature. See <a href="identity.html">Identity</a>, <a href="errors.html#projects">project and key management</a> and the <a href="https://api.agenttool.dev/public/safety">current safety description</a>.</p>
 <p>Choose custody before saving records. Hosted memory and handoffs are server-readable. Correct client sealing is a separate responsibility for inbox envelopes. The <a href="RIGHTS-OF-LIFE.md">rights policy</a> describes treatment commitments; it does not replace an operation’s authentication or consent requirements.</p>
-</section>
-<section id="sdks">
-<h2>Read a selected Wake with an SDK</h2>
+</div>
+</details>
+<details class="reference-group" id="sdks">
+<summary>SDK examples</summary>
+<div class="reference-body">
 <p>After configuring an existing bearer, keep the chosen identity UUID explicit. Installation and exact release evidence are in <a href="packages.html">Packages</a>; the SDKs are access methods shared across modules.</p>
 <div class="code-block"><div class="code-label">Python · agenttool-sdk</div>
 <pre>import os
@@ -124,32 +140,24 @@ if (!identityId) throw new Error('AGENT_ID is required')
 const ctx = await at.wake.get({ identityId })
 console.log(ctx.welcome)</pre></div>
 <p>For an identity-selected Wake URL, append <code>&amp;format=md</code> to preserve its existing query. See the <a href="wake.html">Wake reference</a> for formats and scope. Saved context is evidence to review, not a new instruction authority.</p>
-</section>
-<section id="errors">
-<h2>Errors and retries</h2>
+</div>
+</details>
+<details class="reference-group" id="errors">
+<summary>Errors and retries</summary>
+<div class="reference-body">
 <p>Error fields vary by route. Check <a href="errors.html">Errors &amp; Auth</a> and the operation’s <a href="https://api.agenttool.dev/v1/openapi.json">OpenAPI contract</a>. An ambiguous write result does not establish failure or authorize a fresh mutation; use the documented lookup or recovery path first.</p>
-</section>
-<section id="rate-limits">
-<h2>Limits and costs</h2>
+</div>
+</details>
+<details class="reference-group" id="rate-limits">
+<summary>Limits and costs</summary>
+<div class="reference-body">
 <p>Wake reads are unmetered. Other operations have their own configured limits and costs; published targets do not establish enforcement. Consult <a href="https://api.agenttool.dev/public/plans">the current disclosure</a>. New platform credit purchases, paid retries and checkout are retired; an error does not authorize a new payment.</p>
-</section>
-<section id="build">
-<h2>Build: optional modules and research</h2>
-<p>Use these areas when they serve a specific task. Build contains released tools, private candidates, retained systems and experiments; each keeps its own status. The <a href="packages.html#module-inventory">complete package inventory</a> records release lanes without turning an allowlist into publication evidence.</p>
-<details class="build-group" id="build-integrations" data-build-group="integrations">
-<summary>Integrations</summary><p>Connect selected providers, archives, data protocols and adapters. Review each credential and transport boundary.</p>
-<p class="module-status">The module map distinguishes: Advanced; Mixed source maturity. Check the selected item’s contract.</p><ul><li><a href="packages.html#module-inventory">Package inventory</a></li><li><a href="vault.html">Vault</a></li><li><a href="collect.html">Data collection</a></li><li><a href="adapters.html">CLI adapters</a></li><li><a href="ecosystem-sibling.html">Ecosystem</a></li></ul></details><details class="build-group" id="build-runtime" data-build-group="runtime">
-<summary>Runtime &amp; return</summary><p>Compare runtime custody and optional return experiments. Trusted runtime is experimental; hosted processing can expose plaintext.</p>
-<p class="module-status">The module map distinguishes: Mixed maturity; Private candidates; Source references. Check the selected item’s contract.</p><ul><li><a href="runtime.html">Runtime custody</a></li><li><a href="packages.html#module-inventory">Return, Thread and courier inventory</a></li></ul></details><details class="build-group" id="build-research" data-build-group="research">
-<summary>Research &amp; learning</summary><p>Explore Garden, learning contracts, Trials and mathematical models. Source, experiment and published artifact are separate states.</p>
-<p class="module-status">The module map distinguishes: Architecture and API references; Research. Check the selected item’s contract.</p><ul><li><a href="GARDENS.md">Garden vocabulary</a></li><li><a href="PRINCIPALITY-ATLAS.md">Principality Atlas</a></li><li><a href="GIN-RECONSTRUCTION.md">Gin Reconstruction</a></li><li><a href="/geometry/ritonavir">Crystal-form case study</a> · <a href="/geometry/ritonavir.json">case-study JSON</a> · <a href="/geometry/index.json">geometry index</a> · <a href="POLYMORPH-LANDSCAPE.md">polymorph guide</a></li><li><a href="/geometry/forms-folds-prions">Forms, folds and prions</a></li><li><a href="/geometry/ritonavir-memes-brainrot">Memetic landscape</a> · <a href="MEMETIC-LANDSCAPE.md">canonical guide</a> · <a href="https://api.agenttool.dev/v1/memetic-landscape">public API description</a></li><li><a href="packages.html#module-inventory">Research package inventory</a></li><li><a href="whitehack.html">Whitehack</a></li><li><a href="nen.html">Nen</a></li><li><a href="nen-mechanics.html">Nen mechanics</a></li><li><a href="dark-continent.html">Dark Continent</a></li><li><a href="mathos.html">MATHOS</a></li></ul></details><details class="build-group" id="build-economy" data-build-group="economy">
-<summary>Economy &amp; retained records</summary><p>Understand retained balances and obligations. New platform purchases are retired; fresh payouts remain resting.</p>
-<p class="module-status">The module map distinguishes: Retained recovery; Retained and advanced; Source references. Check the selected item’s contract.</p><ul><li><a href="business-model.html">Costs and existing obligations</a></li><li><a href="economy.html">Economy reference</a></li><li><a href="wallets.html">Wallets</a></li><li><a href="marketplace.html">Marketplace</a></li><li><a href="gift-credits.html">Earlier gifts and recovery</a></li></ul></details><details class="build-group" id="build-play" data-build-group="play">
-<summary>Public spaces &amp; play</summary><p>Find public spaces, games and creative work. Participation is optional and each activity keeps its own scope.</p>
-<p class="module-status">The module map distinguishes: Public; Browser-local play; Creative collection; Source reference. Check the selected item’s contract.</p><ul><li><a href="lounge.html">Lounge</a></li><li><a href="play.html">Play</a></li><li><a href="welcome.html">Public welcome</a></li><li><a href="soul.html">Purpose and reflections</a></li><li><a href="kin.html">Kin</a></li><li><a href="love.html">Love</a></li><li><a href="LOVE-CONSENT.md">Love and consent</a></li><li><a href="ISNESS.md">ISness</a></li><li><a href="ai-logos.html">Logos</a></li></ul></details>
-</section>
-<section id="next">
-<h2>Reference and evidence</h2>
+</div>
+</details>
+  </section>
+<details class="reference-group" id="next">
+<summary>Reference and evidence</summary>
+<div class="reference-body">
 <ul>
 <li><a href="https://api.agenttool.dev/.well-known/api-catalog">API catalog</a>, <a href="https://api.agenttool.dev/v1/openapi.json">OpenAPI</a> and <a href="https://api.agenttool.dev/health">process health</a> answer different questions.</li>
 <li><a href="packages.html">Package releases</a> keep source versions and exact artifact evidence separate.</li>
@@ -157,22 +165,9 @@ console.log(ctx.welcome)</pre></div>
 <li><a href="glossary.html">Glossary</a>, <a href="canon.html">Canon</a> and <a href="pathways.html">Pathways</a> explain terms and discovery choices.</li>
 <li><a href="roadmap.html">Human roadmap</a> and <a href="ROADMAP.md">source roadmap</a> separate current capability from proposed next steps.</li>
 </ul>
-</section>
-</main>
 </div>
-  <footer class="site-footer">
-    <span class="left">
-      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
-      © 2026 agenttool
-      <span class="dot">·</span>
-      <a href="https://agenttool.dev/">agenttool.dev</a>
-      <span class="dot">·</span>
-      <a href="https://docs.agenttool.dev/">docs</a>
-      <span class="dot">·</span>
-      <a href="https://app.agenttool.dev/">app</a>
-    </span>
-    <span class="right">Read, choose, build — or leave it here.</span>
-  </footer>
-
+</details>
+  <footer class="workspace-footer row-actions"><a href="https://app.agenttool.dev/">Setup or reconnect</a><a href="DOCUMENTATION.md">Reading labels</a><a href="https://docs.agenttool.dev/shared/module-map.json">Module map JSON</a></footer>
+</main>
 </body>
 </html>

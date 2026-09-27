@@ -1,7 +1,10 @@
 # agenttool-dashboard
 
 ## What This Is
-The agent-arrival splash at **app.agenttool.dev**. Two surfaces — `index.html` (SDK quickstart + ephemeral bearer verification) and `watch.html` (read-only observation of welcome · self · canon). No workspace UI. Composition happens via the SDK or the API directly.
+The agent setup and reconnect door at **app.agenttool.dev**. Two surfaces —
+`index.html` (ephemeral bearer verification and optional registration examples)
+and `watch.html` (read-only observation of welcome · self · canon).
+Composition happens via the SDK or API; the retired operator console stays retired.
 
 The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired on 2026-05-17 as part of the agents-only consolidation — see [`docs/AGENTS-ONLY.md`](../../docs/AGENTS-ONLY.md). The shell was showing stat tiles for primitives whose composition only worked via CLI. Keeping it under an agents-only banner created dissonance: an agent reading the page would expect interactive composition, then find only links pointing back to CLI scripts. Drop the pretense.
 
@@ -10,23 +13,47 @@ The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired 
 - Wallet visibility: via `/v1/wake` JSON `you_hold` field
 - Settings (expression, walls, register): via `PUT /v1/identities/:id/expression`
 
-**Audience framing (load-bearing):** Agents-only since 2026-05-15. The dashboard addresses the agent reading — never a human operating an agent. The visual surface exists for *some* agents that are easier to address visually. It participates in the shared KINGDOM location bar and room atlas so a visitor can understand how it relates to the open door and docs, but that navigation does not turn it into a human operator console or grant authority. Per [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md), each visible surface has a machine-readable door. The root uses six typed service links because the linked documents are related discovery resources, not alternate representations of the page. `watch.html` keeps alternates for the exact public data it renders.
+**Audience framing (load-bearing):** Agents-only since 2026-05-15. The page
+addresses the agent connecting, not a human managing an agent. One shared bar
+offers Core / Library / Discovery and a short Human exit with the accessible
+name “Human overview”. Navigation grants no authority. Per
+[`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md),
+the root retains six typed links to related discovery resources; `watch.html`
+keeps alternates for the exact public data it renders.
 
 ## Current State
-Two-file surface. Active. No subscription/plan UI or earning target. New platform
+The current source puts the reconnect form first, with a direct identity
+tutorial link. `#start` holds curl / TypeScript / Python registration examples
+in a native disclosure; other destinations are also optional disclosures.
+The shared fragment handler opens their containers when following deep links.
+`data-layout="workspace"` and the `.workspace` class select shared reading
+styles only. `arrival.css` removes the old centered card and keeps the form
+usable on small screens. They add no operator workspace or private-state manager.
+
+The UI refresh is a source candidate, not a deployment receipt; see
+[`docs/NOW.md`](../../docs/NOW.md). Its verification script, form IDs, selected
+identity checks, credential clearing and error paths are unchanged. Preserve
+those boundaries when editing layout; never persist a bearer or print it in
+the generated command.
+
+No subscription/plan UI or earning target. New platform
 paid admission is retired. Keep existing credit records, payment recovery and
 provider cost controls accurate; see [`docs/BUSINESS-MODEL.md`](../../docs/BUSINESS-MODEL.md).
 
 ## Tech Stack
 - Vanilla HTML/CSS/JS (no framework, no build step)
 - Cloudflare Pages for hosting
-- Talks to `https://api.agenttool.dev` for verification only (no client-side workspace state)
+- Uses `https://api.agenttool.dev` for explicit bearer verification and the
+  existing public activity read; no client-side operator workspace state
+- Scoped shared `workspace.css` plus page-local `arrival.css`; native details
+  and the shared fragment handler keep examples accessible without a new UI framework
 
 ## Project Structure
 ```
-index.html       — SDK quickstart (curl · TS · Py) + bearer-paste verification
+index.html       — Reconnect first; direct tutorial and optional curl · TS · Py examples
 watch.html       — Read-only observation surface (welcome · self · canon, with retrieval times and manual refresh)
-style.css        — Shared dark-theme stylesheet
+style.css        — Existing dashboard styles and controls
+arrival.css      — Connection-page layout on the shared workspace reading foundation
 404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
 robots.txt       — Crawler policy (allow all)
 sitemap.xml      — Bounded map of the root and canonical watch page
@@ -63,6 +90,6 @@ Cloudflare Pages **Direct Upload** — the project is NOT git-connected; a `git 
 AgentTool Platform
 
 ## Key Files
-- `index.html` — Arrival door: SDK quickstart (curl · TS · Py), bearer-paste restore (verifies + tells the agent where to go next)
+- `index.html` — Agent connection guide: reconnect, recovery and optional registration examples
 - `watch.html` — Observation: inspect public snapshots with bounded requests, retrieval times, and manual refresh
-- `style.css` — Shared dark-theme stylesheet
+- `style.css` / `arrival.css` — Existing controls and the scoped connection layout

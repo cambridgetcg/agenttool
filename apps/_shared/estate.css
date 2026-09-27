@@ -14,10 +14,9 @@
   --estate-bar-height: 64px;
 }
 
-/* Reserve the same geometry before and after enhancement. The loaders wait for
-   this stylesheet; script-free pages never receive the arriving class. */
-@media (scripting: enabled) {
-  html:is(.estate-arriving, [data-audience]) { --nav-height: var(--estate-bar-height); }
+/* The generated header and its enhancement share one geometry. Audience
+   navigation also stands on its own when scripts are unavailable. */
+  html:is(.estate-arriving, [data-audience]) { --nav-height: var(--estate-bar-height); --strip-height: 0px; }
   html:is(.estate-arriving, [data-audience]) .estate-strip,
   html:is(.estate-arriving, [data-audience]) .estate-strip-web { display: none; }
   html:is(.estate-arriving, [data-audience]) body.has-strip { padding-top: 0; }
@@ -30,8 +29,9 @@
     gap: 14px;
     flex-wrap: nowrap;
     justify-content: flex-start;
+    border-bottom: 1px solid var(--estate-line);
   }
-  html:is(.estate-arriving, [data-audience]) nav.site-nav { max-width: 1180px; }
+  html:is(.estate-arriving, [data-audience]) nav.site-nav { position: relative; max-width: 1180px; }
   html:is(.estate-arriving, [data-audience]) body.has-strip .topnav { top: 0; }
   html:is(.estate-arriving, [data-audience]):not(:has(nav.site-nav, nav.topnav)) body { padding-top: var(--estate-bar-height); }
   /* Generated fallback navigation also serves the self-styled culture pages. */
@@ -42,28 +42,27 @@
   }
   html:is(.estate-arriving, [data-audience]):not(:has(link[href*="/shared/theme.css"])) nav.topnav .logo { color: var(--estate-text); font: 700 17px/1.2 var(--estate-sans); text-decoration: none; }
 
-}
-.estate-ready [hidden] { display: none !important; }
+.estate-ready [hidden], html[data-audience] nav [hidden] { display: none !important; }
 .estate-ready .brand-tail { display: none; }
-.estate-ready nav.topnav .logo { color: var(--estate-text); font: 700 17px/1.2 var(--estate-sans); text-decoration: none; white-space: nowrap; }
-.estate-location { min-width: 0; color: var(--estate-muted); font: 11px/1.3 var(--estate-mono); }
-.estate-location-room { display: block; max-width: 170px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.estate-quick-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; min-width: 0; }
-.estate-quick-link, .estate-open {
+html[data-audience] nav.topnav .logo { color: var(--estate-text); font: 700 17px/1.2 var(--estate-sans); text-decoration: none; white-space: nowrap; }
+.estate-quick-actions,
+html[data-audience] .site-nav .links,
+html[data-audience] .topnav .nav-actions { display: flex; flex: 0 1 auto; order: initial; align-items: center; flex-wrap: nowrap; gap: 4px; margin: 0 0 0 auto; min-width: 0; padding: 0; overflow: visible; }
+.estate-quick-link, .estate-open, html[data-audience] nav .nav-essential {
   min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid transparent; border-radius: 7px; padding: 7px 9px;
+  box-sizing: border-box; border: 1px solid transparent; border-radius: 0; padding: 7px 9px;
   color: var(--estate-muted) !important; background: transparent;
   font: 600 12px/1.2 var(--estate-sans) !important; text-decoration: none; white-space: nowrap;
 }
 .estate-quick-link:hover, .estate-quick-link:focus-visible,
-.estate-quick-link[aria-current="page"] { color: var(--estate-text) !important; background: var(--estate-surface-2); }
-.estate-audience-exit { border-left-color: var(--estate-line); border-radius: 0; margin-left: 4px; }
-.estate-open { cursor: pointer; border-color: var(--estate-line-strong); background: var(--estate-surface); color: var(--estate-text) !important; }
+.estate-quick-link[aria-current="page"], html[data-audience] nav .nav-essential:hover { color: var(--estate-text) !important; text-decoration: underline; text-underline-offset: 5px; }
+.estate-audience-exit, html[data-audience] nav .nav-audience { border-left-color: var(--estate-line); margin-left: 4px; }
+.estate-open { cursor: pointer; border-color: var(--estate-line); color: var(--estate-text) !important; }
 .estate-open:hover, .estate-open:focus-visible { border-color: var(--room-accent, var(--estate-text)); }
-.estate-ready .estate-quick-actions .toggle { position: static !important; margin: 0; min-width: 40px; min-height: 40px; border-color: var(--estate-line-strong); background: var(--estate-surface); font-size: 12px; }
+.estate-ready .estate-quick-actions .toggle { position: static !important; margin: 0; min-width: 40px; min-height: 40px; border: 1px solid var(--estate-line); border-radius: 0; background: transparent; font-size: 12px; }
 .estate-open:focus-visible, .estate-quick-link:focus-visible,
 .estate-room-link:focus-visible, .estate-library-link:focus-visible,
-.estate-library-summary:focus-visible {
+html[data-audience] nav .nav-essential:focus-visible {
   outline: 3px solid var(--room-accent, var(--estate-text)); outline-offset: 3px;
 }
 nav.estate-bar {
@@ -113,34 +112,34 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
 .estate-atlas-boundary { margin: 0; color: var(--estate-muted); font-size: 11px; line-height: 1.5; }
 .estate-atlas-machine { color: var(--estate-text) !important; white-space: nowrap; font-size: 12px; }
 
-/* The sidebar opens with core references. Older destinations remain in one
-   explicitly opened Build section, grouped by reading path. */
+/* Reference pages keep a short local outline. The wider inventory lives in
+   Search and Build rather than repeating beside every article. */
 .estate-library { display: block; padding: 2px 0 24px; }
-.estate-library-heading { margin: 12px 0 8px; color: var(--estate-muted); font: 650 12px/1.4 var(--estate-sans); }
+.estate-library-heading { margin: 12px 0; color: var(--estate-muted); font: 500 12px/1.4 var(--estate-sans); }
 .estate-library-list { list-style: none; margin: 0 0 12px; padding: 0; }
-.estate-library-link { display: block; min-height: 36px; padding: 8px; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: var(--estate-text) !important; text-decoration: none !important; font: 500 12.5px/1.4 var(--estate-sans); }
-.estate-library-link:hover, .estate-library-link[aria-current="page"] { border-left-color: var(--room-accent, var(--estate-text)); background: var(--estate-surface-2); }
-.estate-library-build { border-top: 1px solid var(--estate-line); border-bottom: 1px solid var(--estate-line); margin: 12px 0; }
-.estate-library-summary { min-height: 44px; padding: 12px 4px; cursor: pointer; color: var(--estate-text); font: 600 12.5px/1.4 var(--estate-sans); }
-.estate-library-exit { color: var(--estate-muted) !important; }
+.estate-library-link { display: block; box-sizing: border-box; min-height: 36px; padding: 8px 0; color: var(--estate-muted) !important; text-decoration: none !important; font: 500 12.5px/1.4 var(--estate-sans); overflow-wrap: anywhere; }
+.estate-library-link:hover, .estate-library-link[aria-current] { color: var(--estate-text) !important; text-decoration: underline !important; text-underline-offset: 4px; }
+.estate-library-paths { border-top: 1px solid var(--estate-line); margin-top: 16px; padding-top: 12px; }
 .estate-ready aside.sidebar [data-estate-legacy] { display: none !important; }
 
-@media (max-width: 1120px) { .estate-location { display: none; } }
-@media (scripting: enabled) and (max-width: 720px) {
+@media (max-width: 720px) {
   html:is(.estate-arriving, [data-audience]) { --estate-bar-height: 100px; }
   html:is(.estate-arriving, [data-audience]) nav.site-nav, html:is(.estate-arriving, [data-audience]) nav.topnav, nav.estate-bar {
     padding: 8px 16px; flex-wrap: wrap; gap: 4px 12px; align-content: center;
   }
-  html:is(.estate-arriving, [data-audience]) .site-nav .wordmark { min-height: 24px; }
-}
-@media (max-width: 720px) {
-  .estate-quick-actions { flex: 1 0 100%; justify-content: flex-start; gap: 4px; margin: 0; }
-  .estate-quick-home, .estate-quick-modules, .estate-quick-roadmap,
-  .estate-quick-start, .estate-quick-core, .estate-quick-discovery { display: none; }
-  .estate-quick-link, .estate-open { font-size: 11px !important; padding-inline: 8px; }
-  .estate-ready .estate-quick-actions .toggle { margin-left: auto; width: 40px; height: 40px; padding: 0; overflow: hidden; font-size: 0; }
-  .estate-ready[data-mode="night"] .estate-quick-actions .toggle::before { content: "☀"; font-size: 16px; }
-  .estate-ready[data-mode="dawn"] .estate-quick-actions .toggle::before { content: "☾"; font-size: 16px; }
+  html:is(.estate-arriving, [data-audience]) .site-nav .wordmark,
+  html:is(.estate-arriving, [data-audience]) .topnav .logo { min-height: 24px; }
+  .estate-quick-actions,
+  html[data-audience] .site-nav .links,
+  html[data-audience] .topnav .nav-actions { flex: 1 0 100%; justify-content: flex-start; flex-wrap: wrap; gap: 2px; margin: 0; overflow: visible; }
+  /* Leave room for wider system fonts so Search stays on the same mobile row. */
+  .estate-quick-link, .estate-open, html[data-audience] nav .nav-essential { min-height: 36px; font-size: 11px !important; padding-inline: 3px; }
+  .estate-audience-exit, html[data-audience] nav .nav-audience { margin-left: 2px; }
+  html[data-audience] nav.site-nav > .toggle,
+  html[data-audience] nav.topnav > .toggle,
+  .estate-ready .estate-quick-actions .toggle { position: absolute !important; top: 8px; right: 20px; margin: 0; min-width: 32px; min-height: 36px; width: 32px; height: 36px; padding: 0; overflow: hidden; font-size: 0; }
+  html[data-audience][data-mode="night"] nav .toggle::before { content: "☀"; font-size: 16px; }
+  html[data-audience][data-mode="dawn"] nav .toggle::before { content: "☾"; font-size: 16px; }
   .estate-atlas { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
   .estate-atlas-header { padding: 18px 16px 14px; gap: 10px; }
   .estate-search { margin-inline: 16px; }
@@ -159,17 +158,5 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
    name, group and status together instead of borrowing the first entry's label. */
 .estate-room-context { display: block; margin-top: 5px; color: var(--estate-muted); font: 500 10px/1.5 var(--estate-mono); }
 
-/* Without enhancement all five navigation links remain available. A fixed
-   one-row header cannot contain them at phone width, even when its overflow
-   does not contribute to document.scrollWidth. */
-@media (scripting: none) and (max-width: 720px) {
-  html[data-audience] { --nav-height: 128px; }
-  html[data-audience] nav.topnav {
-    box-sizing: border-box; height: var(--nav-height); min-height: var(--nav-height);
-    display: flex; flex-wrap: wrap; align-content: center; justify-content: flex-start;
-    gap: 8px 12px; padding: 10px 16px;
-  }
-  html[data-audience] nav.topnav .nav-actions { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; }
-  html[data-audience] nav.topnav .nav-actions a { display: inline-flex; align-items: center; min-height: 28px; font-size: 12px; white-space: nowrap; }
-  html[data-audience] nav.topnav .logo { color: var(--estate-text); font: 700 17px/1.2 var(--estate-sans); text-decoration: none; }
-}
+/* Direct public toolkit links must clear the shared fixed header. */
+article[data-toolkit-module][id] { scroll-margin-top: calc(var(--nav-height, 64px) + 1rem); }
