@@ -116,7 +116,14 @@ describe("explicit hosted context route", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(calls).toEqual([[PROJECT, IDENTITY]]);
     for (const suffix of ["me/local-context", `did:at:${IDENTITY}/local-context`, `${IDENTITY}/local-context?identity_id=${OTHER}`, `${IDENTITY}/local-context?limit=100`]) {
-      expect((await app.request(`/v1/identities/${suffix}`)).status).toBe(400);
+      const invalid = await app.request(`/v1/identities/${suffix}`);
+      expect(invalid.status).toBe(400);
+      expect(invalid.headers.get("cache-control")).toBe("private, no-store");
+      expect(await invalid.json()).toMatchObject({
+        error: "invalid_local_context_request",
+        docs: "https://docs.agenttool.dev/IDENTITY-PARTITIONS.md",
+        next_actions: [{ method: "GET", path: "/v1/identities/{id}/local-context" }],
+      });
     }
     expect(calls).toHaveLength(1);
   });
@@ -124,9 +131,23 @@ describe("explicit hosted context route", () => {
   test("subject and storage failures disclose no rows or raw errors and never compose Wake", async () => {
     const refused = await route(async () => { throw new IdentityPartitionError(); }).request(`/v1/identities/${IDENTITY}/local-context`);
     expect(refused.status).toBe(404);
+    expect(await refused.json()).toMatchObject({
+      error: "identity_not_found_or_not_owned",
+      docs: "https://docs.agenttool.dev/IDENTITY-PARTITIONS.md",
+      next_actions: [{ method: "GET", path: "/v1/identities" }],
+    });
     const failed = await route(async () => { throw new Error("sentinel private database detail"); }).request(`/v1/identities/${IDENTITY}/local-context`);
     expect(failed.status).toBe(503);
-    expect(await failed.json()).toEqual({ error: "local_context_unavailable" });
+    expect(failed.headers.get("cache-control")).toBe("private, no-store");
+    const body = await failed.json();
+    expect(body).toMatchObject({
+      error: "local_context_unavailable",
+      docs: "https://docs.agenttool.dev/LOCAL-CORE.md",
+      next_actions: [{ method: null }],
+    });
+    expect(body.next_actions[0].action).toContain("local files");
+    expect(JSON.stringify(body)).not.toContain("sentinel private database detail");
+    expect(body).not.toHaveProperty("memories");
   });
 });
 
