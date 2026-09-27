@@ -265,6 +265,11 @@ or covenant record does not grant permission for a new action.
 
 ## Source checks to consult
 
+- Local starter CI on 2026-09-27 exercised Node 22.18.0 and 24.18.0 on Linux,
+  macOS and Windows. Linux/macOS jobs each passed 70 checks; Windows jobs each
+  passed 63 and skipped seven POSIX-specific checks. Repository-access-required
+  run `36327872045`, source `811a7153`, covers files and adapter fixtures;
+  actual host delivery, Windows ACL privacy and remote filesystems remain unverified.
 - AFTERGLOW tests (`packages/wake-continuity/tests/core.test.ts`) cover explicit
   projection and causal references; package tests (`packages/wake-continuity/tests/package.test.ts`)
   keep its implementation pure.

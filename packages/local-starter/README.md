@@ -193,14 +193,17 @@ durability behavior; a successful read is not proof of private storage. Once
 you submit selected text to a model host, that host/provider's handling applies.
 
 Local tests passed **70/70** on macOS arm64 with both Node **22.18.0** and
-**24.18.1**. The [CI workflow](../../.github/workflows/local-starter.yml) is
-configured for Ubuntu 24.04, macOS 15, and Windows 2025 with Node 22.18.0 and
-24.18.0. That matrix is configured, not yet executed evidence.
+**24.18.1**. The [CI workflow](../../.github/workflows/local-starter.yml) also
+passed all six jobs on Ubuntu 24.04, macOS 15, and Windows 2025 with Node
+22.18.0 and 24.18.0: Linux/macOS each passed 70 tests; Windows each passed 63
+and skipped seven POSIX-specific checks. Evidence: repository-access-required
+[run 36327872045](https://github.com/cambridgetcg/agenttool/actions/runs/36327872045),
+source `811a7153`, checked 2026-09-27. These are files and adapter fixtures.
 
 Codex 0.157.1 and Claude Code 2.1.282 were checked for version/help only; Cursor
-was not verified as installed. Linux, native Windows, WSL, container, and real
-host delivery are not established by the local macOS tests. A declared runtime
-or generated fragment is not an executed platform or host-session test.
+was not verified as installed. WSL, container filesystems, Windows ACL privacy,
+and real host delivery remain unverified. Passing the OS matrix does not prove
+delivery into a Codex, Claude Code or Cursor session.
 
 ## Disable or remove
 

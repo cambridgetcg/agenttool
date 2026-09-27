@@ -39,8 +39,11 @@ served URLs, including heading fragments.
 **Verification:** 153 focused API tests and the installed API typecheck passed.
 Five served-document tests passed, and six browser journeys passed, including
 all three entrances at 320px with JavaScript disabled and no automatic API or
-POST requests. Full release gates and production readback belong to the
-delivery receipt; these local checks do not establish deployment.
+POST requests. Local-starter CI run `36327872045` passed all six OS/Node jobs
+at `811a7153`: Linux/macOS each passed 70 tests; Windows each passed 63 with
+seven POSIX-specific skips. Full release gates and production readback belong
+to the delivery receipt; these checks do not establish deployment or actual
+host-session delivery.
 
 ## Local starter and host boundaries (2026-09-27)
 

@@ -76,9 +76,10 @@ Adapter fixtures must cover quoting, host JSON shape, safe failure, and no
 installation; they do not prove delivery into a running agent host.
 
 State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
-Node 22.18.0 and 24.18.1. The configured CI matrix covers
-Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0; configuration alone
-is not execution evidence. Linux/Windows/WSL/container and real
-Codex/Claude/Cursor delivery need their own receipts. Read [README.md](README.md)
+Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
+Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0: 70 passes on each
+Linux/macOS job; 63 passes and seven POSIX-specific skips on each Windows job.
+WSL/container, Windows ACL privacy, and real Codex/Claude/Cursor delivery need
+their own receipts. Read [README.md](README.md)
 before changing a public behavior or a host-specific assumption, and keep its
 limits in sync with source.
