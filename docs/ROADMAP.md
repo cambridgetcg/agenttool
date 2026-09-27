@@ -35,7 +35,11 @@ for review, not a delivery commitment.
 The [core architecture](CORE.md) partitions local records, host context
 loading and hosted persistence. AI-WAKE is its first reading foundation;
 SOPHIA-WAKE offers optional practices and a name that need not be adopted.
-[API coverage](API-COVERAGE.md) maps the existing services and their effects.
+[API coverage](API-COVERAGE.md#coverage-at-a-glance) compares local scaffolding
+with each service's purpose, authority and effect.
+[Credentials and security](API-COVERAGE.md#credentials-and-custody) span the
+five modules: identity roots, project bearers, provider secrets and local
+credential mediation have different custody and revocation rules.
 
 - Identity selects the subject of hosted Wake context. A stored identity does not prove subjective continuity.
 - Wake points to saved records; Memory reads and writes remain separate operations.
@@ -81,10 +85,18 @@ navigation, not an identity or permission decision.
 The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a private
 source implementation: selected local records, bounded rendering, metadata and
 explicit handoff writes. Its adapter fragments are not installed integrations.
-Next, verify delivery and truncation in actual hosts, execute the OS/runtime
-matrix, then consider optional Data, Collab and selected hosted records.
+Its files/CLI OS matrix has recorded runs; actual host loading remains
+unverified. Next, verify start/resume/compaction delivery and budget handling in
+the selected hosts. Then connect external credential use separately from notes,
+add opt-in retrieval with explicit project/identity scope, and only afterward
+consider reviewed writes and conflict handling. Data and Collab remain optional.
 Relationship history remains selected context with its own provenance; old
 records do not supply current consent.
+
+The [integration gap map](API-COVERAGE.md#integration-gaps-and-next-steps)
+names the evidence for each step. Narrow hosted authority and cross-store
+export/removal need their own designs; a bearer, Vault agent label or local
+file deletion does not already provide them.
 
 Choose one concrete improvement from the module map. Inspect its existing
 implementation and affected callers, make a bounded change, verify the promised

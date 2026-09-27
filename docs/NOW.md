@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (local scaffolding discovery source candidate; historical release receipts below retain their original dates)
+> Updated: 2026-09-27 (API/local coverage map; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,36 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## API services beside local scaffolding (2026-09-27)
+
+**Source review:** `codex/agenttool-api-map-20260927`, based on `056e32e8`.
+Documentation only; no runtime, credential, database or host configuration changed.
+
+[API coverage](API-COVERAGE.md) now starts with why a service helps and what a
+local scaffold already supplies. It maps identity, Wake, continuity, memory,
+relationships, credentials, security, tools and discovery across local records,
+host loading and hosted services. Credential custody distinguishes identity
+roots, project bearers, provider secrets, hosted Vault and the independent local
+broker. The starter remains unconnected to these services.
+
+The source review records important limits: project authority exceeds identity
+selection; Vault's caller-supplied agent label is not cryptographic isolation;
+bearer rotation is not a transaction; backup storage requires existing project
+access; root replacement and unified export/removal are not implemented.
+The roadmap links the dependency order: verify host loading, separate credential
+use from context, add selected retrieval, then consider reviewed writes and
+conflict handling.
+
+**Evidence boundary:** mounted handlers, services, schemas and existing test
+contracts were inspected. This review does not exercise private endpoints,
+credential recovery, model providers or a live security assessment.
+
+**Verification:** 14 focused documentation checks passed: the 790-path catalog,
+public core-guide links and fragments through the Pages guard, and published
+Markdown parity. Source review was split across identity/credentials,
+continuity/memory and collaboration/runtime, then reconciled against handlers.
+Publication and live readback are separate delivery evidence.
 
 ## Local scaffolding at arrival (2026-09-27)
 

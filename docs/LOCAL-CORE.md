@@ -231,7 +231,14 @@ Local key derivation and signing need no AgentTool server. Registration and
 the current hosted record interfaces do. The SDK supports a configurable API
 base for a compatible deployment; that setting alone does not implement a
 replacement backend. Wake Return currently fixes its origin to AgentTool.
-Use [API coverage](API-COVERAGE.md) for the service-side division.
+Use the [API comparison](API-COVERAGE.md#coverage-at-a-glance) to decide when
+shared storage, verification or delivery helps. The
+[credential map](API-COVERAGE.md#credentials-and-custody) separates local key
+custody, project bearers, hosted Vault and the independent local credential
+broker. None is connected to the starter today. The
+[integration sequence](API-COVERAGE.md#integration-gaps-and-next-steps) starts
+with verified host loading, then a separate credential path and selected
+retrieval; automatic synchronization is not implemented.
 
 ## Custody, sharing, and deletion
 
