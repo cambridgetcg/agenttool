@@ -10,16 +10,17 @@ This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this m
 certificate state, and deployed revision are time-sensitive; consult
 `docs/NOW.md` and `docs/STACK.md` before treating it as live. Understanding
 is the purpose: no revenue, growth, conversion or KPI obligation applies.
-The optional directions in `docs/ROADMAP.md` are:
+`docs/ROADMAP.md` maps core and optional modules. These implementation boundaries
+continue to apply:
 
-- **Horizon A — Understand existing accounting and obligations** — new
+- **Existing accounting and obligations** — new
   platform paid sign-ups, credit purchases, checkout and marketplace purchase
   admission are retired. Preserve existing records, settlements, recovery,
   refunds and cancellations. Fresh payout admission and worker execution
   remain resting under their separate conserved-backing boundary.
-- **Horizon B — Portable evidence** — inspect federation and authority
+- **Portable evidence** — inspect federation and authority
   boundaries without a growth or commercial target.
-- **Horizon C — Replaceable runtimes and tool interfaces** — keep custody,
+- **Replaceable runtimes and tool interfaces** — keep custody,
   provider costs and lifecycle controls explicit; no duty to operate a paid
   runtime or make infrastructure pay for itself.
 
@@ -124,7 +125,7 @@ requires the runtime migrations and KMS/Vault/database secrets. Production's
 entrypoint, allowing its controller to run while the global switch still keeps
 HTTP-side workers disabled.
 
-## Bridge protocol (Horizon C)
+## Bridge protocol
 
 Outbound WSS from `bin/agenttool-bridge.ts` (Bun-compiled, 10MB, headless) to `/v1/runtimes/:id/bridge`:
 
