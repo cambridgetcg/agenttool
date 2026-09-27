@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { Database } from 'bun:sqlite';
 import { Courier, selectReport } from '../src/courier.js';
-import { test, expect } from 'bun:test';
+import { test, expect, spyOn } from 'bun:test';
 import { chmodSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fixture, FakeNetwork, FakeTelegram, key, sender } from './helpers.js';
@@ -101,7 +101,35 @@ test('pending import rechecks revocation and never reconstructs under a new sess
 
 test('blocked Wake read is cancelled with finite lifetime; silent hints still trigger periodic replay',async()=>{
   const f=fixture(1),network=new FakeNetwork();try{await f.open();const start=Date.now();await expect(wakeHint(f.b,network,AbortSignal.timeout(30))).rejects.toThrow('cancelled');expect(Date.now()-start).toBeLessThan(500);expect(network.cancelled).toBe(1);
-    await f.courier(network).watch(350,AbortSignal.timeout(1000));expect(network.queries.length).toBeGreaterThanOrEqual(3);expect(network.cancelled).toBeGreaterThanOrEqual(3);
+    // Drive the same 350 ms watch and 100 ms replay deadlines explicitly: real
+    // SQLite work must not consume the time allotted to test replay scheduling.
+    // Keep the real one-second guard and the real stream/ledger/replay paths.
+    const guard=AbortSignal.timeout(1000),stop=new AbortController();
+    const origin=Date.now();let now=origin;
+    const timers:Array<{deadline:number;controller:AbortController}>=[];
+    const clock=spyOn(Date,'now').mockImplementation(()=>now);
+    const timeout=spyOn(AbortSignal,'timeout').mockImplementation(ms=>{
+      const controller=new AbortController();timers.push({deadline:now+ms,controller});return controller.signal;
+    });
+    let watching:Promise<void>|undefined;
+    const turn=()=>until(new Promise<void>(resolve=>setImmediate(resolve)),guard);
+    const advance=(elapsed:number)=>{
+      now=origin+elapsed;
+      for(const timer of timers)if(timer.deadline<=now)timer.controller.abort();
+    };
+    try {
+      watching=f.courier(network).watch(350,AbortSignal.any([guard,stop.signal]));
+      await turn();expect(network.queries).toHaveLength(1);expect(network.cancelled).toBe(1);
+      for(const elapsed of [100,200,300]){
+        advance(elapsed);await turn();
+        expect(network.queries).toHaveLength(1+elapsed/100);
+        expect(network.cancelled).toBe(1+elapsed/100);
+      }
+      advance(350);await until(watching,guard);
+      expect(network.queries).toHaveLength(4);expect(network.cancelled).toBe(5);
+    } finally {
+      stop.abort();await watching?.catch(()=>{});timeout.mockRestore();clock.mockRestore();
+    }
   }finally{await f.close();}
 });
 
