@@ -97,6 +97,50 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Local Starter preview distribution — 2026-09-28
+
+`@agenttool/local-starter@0.1.0-dev.0` has a standalone preview artifact and
+an entry in the protected publisher's allowlist. **It is not published to
+npm.** The registry limitation concerns publication provenance, not a runtime
+defect in the CLI, local MCP or plugin delivery.
+
+The registry-independent channels are the
+[public distribution repository and plugin catalogs](https://github.com/cambridgetcg/agenttool-local-starter),
+the [versioned GitHub Release](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.0),
+and the [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
+with its [standalone archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz).
+Installation guidance and separately dated delivery receipts are in
+[Local Core](LOCAL-CORE.md#files-only-starter) and [Now](NOW.md).
+
+| Exact candidate | Recorded identity |
+|---|---|
+| Version | `0.1.0-dev.0` |
+| Archive | `agenttool-local-starter-0.1.0-dev.0.tgz` · 229,793 bytes |
+| SHA-256 | `b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c` |
+| Source revision | `150c5c4725f34fb92493e490c49d0a96904505cf` |
+| Protected release policy | `local-starter` · LOVE artifact · prerelease channel `next` |
+
+The frozen archive's `package.json.repository` names the private
+`cambridgetcg/agenttool` source repository. npm's
+[provenance prerequisites](https://docs.npmjs.com/generating-provenance-statements/#prerequisites)
+require public repository metadata matching the publishing source. The
+protected publisher requires `--provenance`; the public distribution mirror
+does not change that embedded repository identity. No provenance-disabled
+publication or source-repository visibility change is authorized by this
+record.
+
+There is a separate private-fetch authentication gap in the current workflow:
+checkout uses `persist-credentials: false`, while `validateTag` subsequently
+fetches the private source repository's `main` branch without configured Git
+authentication. That gap must be resolved without removing the main-ancestry
+check or exposing publish credentials to package build scripts.
+
+A future npm release needs a **new version** with public repository metadata,
+a reviewed protected publisher bound to that public source, and appropriate
+first-publication bootstrap credentials. The existing `0.1.0-dev.0` archive,
+hash and source record remain immutable; correcting publication metadata must
+not replace its already distributed bytes.
+
 ## Verified Economic Kernel 0.2 developer preview — 2026-09-03
 
 The authorized Economic Kernel pair is publicly verified from protected

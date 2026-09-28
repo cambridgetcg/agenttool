@@ -1,0 +1,6 @@
+AgentTool Local Starter
+Copyright 2026 AgentTool contributors
+
+This product includes software developed by AgentTool contributors.
+The optional bundled MCP transport includes third-party software listed in
+dist/THIRD_PARTY_LICENSES. CLI modules use Node.js built-ins only.

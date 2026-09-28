@@ -306,11 +306,13 @@ test('final stdout boundary rejects an oversized serialized payload atomically a
     export function inspectStarter() { return { content: text }; }
     export function initStarter() { return { content: text }; }
     export function writeHandoff() { return { content: text }; }
+    export function writeMemory() { return { content: text }; }
   `);
   for (const args of [
     ['init', '--dir', dir], ['status', '--dir', dir],
     ['render', '--dir', dir, '--format', 'json'],
     ['handoff', '--dir', dir, '--expect', 'a'.repeat(64)],
+    ['memory', '--dir', dir, '--expect', 'a'.repeat(64)],
   ]) {
     const result = run(args, { cli, input: '' });
     expectSafeError(result, 2);

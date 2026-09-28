@@ -1,0 +1,18 @@
+{
+  "name": "agenttool-local-starter",
+  "version": "0.1.0-dev.0",
+  "description": "Optional local context, handoffs and memory with explicit setup.",
+  "author": { "name": "AgentTool contributors", "url": "https://agenttool.dev" },
+  "homepage": "https://github.com/cambridgetcg/agenttool-local-starter",
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AgentTool Local Starter",
+    "shortDescription": "Carry chosen local context between sessions.",
+    "longDescription": "A skill for explicitly selected local context, handoffs and memory. Installation exposes guidance only. Choose an external notes directory, then review optional project MCP and SessionStart hook connections. No automatic notes discovery, capture or saving.",
+    "developerName": "AgentTool contributors",
+    "category": "Productivity",
+    "capabilities": ["Local context", "Explicit handoff", "Optional memory"],
+    "defaultPrompt": ["Set up selected local context for this project.", "Read the latest bound context and continue the current task."]
+  }
+}

@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - adds
+          - local-starter
           - data
           - data-sync
           - economic-kernel

@@ -3,9 +3,11 @@
 > **Type:** guide · **Purpose:** preserve the files-only starter's scope and verification boundaries.
 > **Evidence:** `src/core.mjs`, `src/files.mjs`, `src/cli.mjs`, `src/adapters.mjs`, explicit `src/connect.mjs`, and `tests/`.
 
-This guide governs only `packages/local-starter`. The package is private,
-unpublished source, uses Node ESM and built-ins, and declares Node >=22. Keep
-it usable directly from a checkout without installing dependencies or building.
+This guide governs only `packages/local-starter`. Core and CLI use Node ESM
+and built-ins and declare Node >=22. Keep them usable directly from a checkout
+without installing dependencies or building. The public preview archive copies
+those modules into `dist` and bundles the sibling MCP transport with Bun 1.3.5.
+The manifest has no runtime dependencies or installation lifecycle scripts.
 
 ## Boundaries
 
@@ -20,6 +22,16 @@ it usable directly from a checkout without installing dependencies or building.
 - This is optional plaintext context, not secret custody or identity authority.
   Do not add keys, seeds, bearers, identity registration, provider calls, database
   access, MCP, daemons, timers, or remote synchronization to the notes/core/hooks.
+  The separate sibling `packages/local-starter-mcp` imports this core for
+  explicit local tools; the core/CLI/hooks must never import that transport.
+  Delivery plans can point to its entry point without starting it.
+  Release delivery paths point to the bundled `dist` entry within this package;
+  never rely on a repository sibling or installed dependency at runtime. Keep
+  the pinned builder and exact third-party licenses in sync. Plugin manifests
+  expose the skill only; no default MCP/hook, root binding or startup effect.
+  Retained notes and machine-specific bindings belong outside the distributable
+  package and plugin cache. Build output is generated and disposable, never a
+  notes root. Do not publish source paths, source maps or private absolute paths.
   The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
   one fixed GET path selected by exact origin/project/identity, explicit callback
   or injected transport credentials, no ambient lookup except a CLI-selected env
@@ -68,7 +80,8 @@ it usable directly from a checkout without installing dependencies or building.
 - Native Windows ordinary plaintext IO reports `windows-acl-unverified`; chmod
   does not verify ACL privacy. Do not imply a POSIX-only test proves Windows,
   WSL, container, remote-mount, or backup isolation.
-- Only `handoff.md` is mutable through the helper. Keep expected-current-hash
+- Only `handoff.md` and `memories.md` are mutable through their fixed wrappers.
+  Memory writes never enable selection. Keep expected-current-hash
   checks under a cooperative exclusive lock, bounded stdin, same-directory
   replacement, conservative cleanup, and truthful durability receipts. No
   automatic stale-lock stealing, process killing, merging, or backup copies.
@@ -77,6 +90,11 @@ it usable directly from a checkout without installing dependencies or building.
 - Adapters emit reviewable fragments and explicit `installed: false` /
   `host_delivery: unverified`. Never edit host configuration, launch a model,
   bypass trust review, or use hook input/transcripts to select state.
+- Delivery plans preserve that boundary. Emit portable skill/binding, local
+  MCP and direct command-hook proposals for Codex/Claude; default writes to
+  none. Never install them, duplicate retained prose in a skill, turn MCP into
+  an arrival dependency, or add automatic Stop/PreCompact saving. Keep the
+  zero-dependency manual path and Windows Codex manual fallback.
 - Keep shell quoting separate from JSON encoding. Claude Code uses the
   documented literal argument vector. Codex/Cursor POSIX command fragments
   are refused on native Windows until a supported shell contract is verified.
@@ -98,11 +116,15 @@ freshness/budgets/provenance, invalid bytes, special/link files, bounded reads,
 POSIX modes, handoff conflicts/locks, error privacy, and independent roots.
 Adapter fixtures must cover quoting, host JSON shape, safe failure, and no
 installation; they do not prove delivery into a running agent host.
+After a release build, run `npm run check:bundle`. Its optional extracted-root
+argument tests the actual archive surface outside the repository with no
+`node_modules` or sibling packages. Keep archive checks distinct from native
+host delivery and registry/download publication receipts.
 Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
 secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
-The companion has 24 cases; the current local suite passes 94 on macOS arm64 /
+The companion has 24 cases; the current local suite passes 100 on macOS arm64 /
 Node 24.18.1. Its API wire tests are in `api/tests/local-context.test.ts`.
 Keep direct and injected grant tests explicit: no parent credential transmission,
 closed v2 metadata, rejected downgrades, in-transit expiry, unchanged record/byte
@@ -113,7 +135,8 @@ State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
 Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
 Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0: 70 passes on each
 Linux/macOS job; 63 passes and seven POSIX-specific skips on each Windows job.
-WSL/container, Windows ACL privacy, and real Codex/Claude/Cursor delivery need
-their own receipts. Read [README.md](README.md)
+WSL/container and Windows ACL privacy need their own receipts. The README
+records separate native Codex MCP/skill and Claude startup-hook observations;
+these do not establish model delivery or automatic resume/compaction. Read [README.md](README.md)
 before changing a public behavior or a host-specific assumption, and keep its
 limits in sync with source.

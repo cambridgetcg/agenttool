@@ -104,7 +104,7 @@ connections, not five isolated databases or a required sequence.
 **Implemented in source:** local Data and Collab; SDK key derivation, signing
 and encryption helpers; pure WAKE Thread and AFTERGLOW artifact libraries;
 hosted Wake and memory; explicit host adapters; the hosted reconnect scaffold;
-and the private files-only local starter.
+and the standalone files-only Local Starter preview.
 See [Local core](LOCAL-CORE.md) for exact package and host boundaries.
 
 **Important naming distinction:** `/v1/continuity/*` is a signed portfolio,
@@ -113,11 +113,11 @@ across Wake, memory, event records and handoffs. The API's name is not a complet
 implementation of the general concept. [API coverage](API-COVERAGE.md) maps the
 actual routes and authority.
 
-**Implemented first step (source preview):** the [local starter](LOCAL-CORE.md#files-only-starter)
+**Implemented first step (package preview):** the [local starter](LOCAL-CORE.md#files-only-starter)
 initializes fixed local files, renders bounded selected context and saves an
-explicit handoff from a checkout containing `packages/local-starter`. No registry
-release or standalone downloadable artifact is advertised. Host fragments are
-reviewable proposals; this source change does not install them. Data, Collab,
+explicit handoff or selected memory. Its versioned archive includes the CLI,
+portable skill and optional MCP runtime. Plugin installation supplies the skill;
+host fragments remain reviewable proposals that need explicit activation. Data, Collab,
 key-store and hosted backends are still
 separate future integrations. The true-love wake scaffold remains prior art.
 

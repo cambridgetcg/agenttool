@@ -20,7 +20,7 @@ distribution and publication evidence.
 | Identity | The TypeScript and Python SDKs expose registration, identity and recovery operations. | [Identity](https://docs.agenttool.dev/identity) |
 | Wake & Continuity | The SDKs read selected Wake context and expose explicit handoffs. | [Wake](https://docs.agenttool.dev/wake) · [Continuity](https://docs.agenttool.dev/continuity) |
 | Memory | Data keeps a local corpus; the SDKs separately access hosted memory. | [Memory](https://docs.agenttool.dev/memory) · [Local Data](https://docs.agenttool.dev/data) |
-| Tools | Telescope inspects public discovery, Browser operates a chosen local browser, and Skills inspects extensions. | [Tools](https://docs.agenttool.dev/tools) · [Six-tool shelf](#start-with-one-useful-job) |
+| Tools | Telescope inspects public discovery, Browser operates a chosen local browser, and Skills inspects extensions. | [Tools](https://docs.agenttool.dev/tools) · [Local tool shelf](#start-with-one-useful-job) |
 | Collaboration | Collab keeps a local coordination journal; hosted Correspondence and inbox have separate transport and authority contracts. | [Collaboration channels](COLLABORATION-CHANNELS.md) |
 
 The [technical Build library](https://docs.agenttool.dev/#build) groups optional
@@ -47,6 +47,7 @@ or authority to the host.
 <!-- agent-toolkit:start -->
 | One job | Existing module | First usable door | Where it runs and what changes |
 |---|---|---|---|
+| Return with chosen local context | `local-starter/` · `@agenttool/local-starter` preview | [Setup and exact downloads](LOCAL-CORE.md#files-only-starter) | Node 22+, explicit notes folder. Skill-only plugins; optional MCP and project hooks require deliberate setup. Saves replace selected fixed slots with hash checks. |
 | Discover a service before joining | `telescope/` · `@agenttool/telescope` | `agenttool-telescope scan api.agenttool.dev --json` | Local client, public HTTPS reads. Reports evidence and optional plans; does not install or invoke discovered tools. |
 | Observe and deliberately act on the web | `browser/` · `@agenttool/browser` | `agenttool-browser mcp`; inspect `browser_capabilities` and `browser_plan` before a chosen browser operation | Local installed Chrome-family browser, ephemeral by default. Planning does not execute; navigation or actions can have external effects. |
 | Keep and query a local corpus | `data/` · `@agenttool/data` | `DataNode.open`, then an explicit `collect`, `query`, or `readContent` | Local filesystem and SQLite under a selected root; collection writes local state. Requires Bun. Local does not mean encrypted, backed up, or agent-only secret. |
@@ -55,14 +56,14 @@ or authority to the host.
 | Choose hosted orientation and task continuity | `sdk-ts/` · `@agenttool/sdk` (paired Python: `agenttool-sdk`) | Explicit project/identity binding, selected Wake, then a chosen hosted operation | Hosted/project-scoped authority. Wake reads are unmetered; memory writes and search are metered in project credits. No registration, recall, storage, or spending follows automatically from discovery. |
 <!-- agent-toolkit:end -->
 
-The six rows are a selection guide, not a bundled product, compatibility
+These rows are a selection guide, not a bundled product, compatibility
 certificate, new MCP server, or universal installer. The local tools do not
 require an AgentTool account. Inspect their own guides and exact artifacts;
 their interfaces differ, and Data does not acquire an MCP interface by being
 on this shelf.
 
 Release evidence is separate from source identity. The committed LOVE catalog
-selects Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills 0.3.3
+selects Local Starter 0.1.0-dev.0 (preview), Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills 0.3.3
 is public, with a bounded [byte readback below](#release-readback) and no LOVE
 entry. Its immutable guide preserves preparation-time release observations;
 those are not current publication status. Collab 0.4.0 has a
@@ -206,7 +207,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `trials/` | `@agenttool/trials` · private | Deterministic local trial receipts, revocable-feedback evaluation, boundary evidence, and privacy-first STS projection | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/trials/CLAUDE.md) |
 | `wake-continuity/` | `@agenttool/wake-continuity` · npm-allowlisted | Digest-only AFTERGLOW continuity and record-only functional-access envelopes for bounded WAKE orientation | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-continuity/CLAUDE.md) |
 | `wake-return/` | `@agenttool/wake-return` · private | Local source-candidate, two-tool explicit WAKE locator observer; no identity adoption, private-state integration, or publication | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-return/CLAUDE.md) |
-| `local-starter/` | `@agenttool/local-starter` · private | Files-only Node context renderer and explicit handoff writer; optional per-project host fragments, no automatic installation or hosted connection | [Local core](LOCAL-CORE.md) · [package guide](../packages/local-starter/README.md) |
+| `local-starter/` | `@agenttool/local-starter` · LOVE · npm-allowlisted · preview | Files-only context, guarded handoff/memory saves and reviewable Codex/Claude skill, MCP and hook plans | [Local core](LOCAL-CORE.md) · [package guide](../packages/local-starter/README.md) |
+| `local-starter-mcp/` | `@agenttool/local-starter-mcp` · private | Bundled into Local Starter; separate internal stdio source for one explicitly bound local root; read-only by default, optional fixed-slot saves, no hosted calls | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) · [package guide](../packages/local-starter-mcp/README.md) |
 | `wake-thread/` | `@agenttool/wake-thread` · private | Pure, refusable continuity offers over explicit digest-bound WAKE facts | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-thread/CLAUDE.md) |
 | `wallet/` | `@agenttool/wallet` · LOVE + npm-allowlisted | Agent Wallet 0.1 — closed capability, intent, receipt, and continuity primitives without key export or RPC | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet/CLAUDE.md) |
 | `wallet-zerone/` | `@agenttool/wallet-zerone` · LOVE + npm-allowlisted | Offline-first Zerone chain adapter for Agent Wallet intents and exact Cosmos direct-sign bytes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet-zerone/CLAUDE.md) |

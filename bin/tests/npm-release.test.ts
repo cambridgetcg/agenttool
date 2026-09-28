@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { LOVE_PACKAGES } from "../build-love-packages";
 
 import {
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
+  assertReleaseSourcesUnchanged,
   expectedTag,
   isPrereleaseVersion,
   packedFilename,
@@ -254,7 +256,7 @@ describe("standard npm release policy", () => {
     }
   });
 
-  test("allowlists thirty-eight reviewed release identities", () => {
+  test("allowlists thirty-nine reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -277,6 +279,7 @@ describe("standard npm release policy", () => {
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
+      "local-starter",
       "love-bomb",
       "love-geometry",
       "math-cards",
@@ -1288,6 +1291,80 @@ describe("standard npm release policy", () => {
     );
     expect(() => validateNpmTagForVersion("0.1.0-dev.0", "next")).not.toThrow();
     expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
+  });
+
+  test("requires the standalone starter CLI, MCP, skill, plugins and licenses", async () => {
+    const spec = releaseSpec("local-starter");
+    expect(spec).toEqual({
+      key: "local-starter",
+      name: "@agenttool/local-starter",
+      packagePath: "packages/local-starter",
+      tagPrefix: "local-starter",
+      artifactKind: "love",
+      gateScripts: ["ci", "build", "check:bundle"],
+      prerequisites: [{ packagePath: "packages/local-starter-mcp", scripts: ["ci"] }],
+    });
+    expect(expectedTag(spec, "0.1.0-dev.0")).toBe("local-starter-v0.1.0-dev.0");
+    expect(LOVE_PACKAGES.find(({ name }) => name === spec.name)?.additionalSourcePaths).toEqual(
+      spec.prerequisites?.map(({ packagePath }) => packagePath),
+    );
+    expect(requiredArchiveEntries(spec)).toEqual([
+      "package/package.json", "package/LICENSE", "package/NOTICE", "package/README.md",
+      "package/dist/cli.mjs", "package/dist/core.mjs", "package/dist/files.mjs",
+      "package/dist/adapters.mjs", "package/dist/delivery.mjs", "package/dist/connect.mjs",
+      "package/dist/agenttool-local-starter-mcp.js", "package/dist/THIRD_PARTY_LICENSES",
+      "package/skills/agenttool-local-context/SKILL.md",
+      "package/.codex-plugin/plugin.json", "package/.claude-plugin/plugin.json",
+      "package/plugin.json",
+    ]);
+    const workflow = await readFile(join(import.meta.dir, "../../.github/workflows/publish-npm.yml"), "utf8");
+    expect(workflow.match(/^\s+- local-starter$/gm)).toEqual(["          - local-starter"]);
+    const calls: string[] = [];
+    await prepareReleaseWorkspaces(spec, {
+      install: async (path, options) => { calls.push(`install:${path}:${options.force}`); },
+      run: async (path, script) => { calls.push(`run:${path}:${script}`); },
+    });
+    expect(calls).toEqual([
+      "install:packages/local-starter-mcp:false",
+      "run:packages/local-starter-mcp:ci",
+      "install:packages/local-starter:true",
+    ]);
+  });
+
+  test("refuses LOVE tag drift in bundled prerequisite source", async () => {
+    const root = await mkdtemp(join(tmpdir(), "npm-release-source-test-"));
+    const git = async (...args: string[]): Promise<string> => {
+      const child = Bun.spawn(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+      ]);
+      if (code !== 0) throw new Error(stderr || `git exited ${code}`);
+      return stdout.trim();
+    };
+    const commit = async () => {
+      await git("add", ".");
+      await git("-c", "commit.gpgsign=false", "-c", "user.name=Release Test", "-c", "user.email=release@example.invalid", "commit", "-qm", "fixture");
+      return git("rev-parse", "HEAD");
+    };
+    try {
+      await git("init", "-q", "-b", "main");
+      for (const path of ["packages/local-starter", "packages/local-starter-mcp"]) {
+        await mkdir(join(root, path), { recursive: true });
+        await writeFile(join(root, path, "runtime.js"), "export const first = true;\n");
+      }
+      const source = await commit();
+      await writeFile(join(root, "release-note.md"), "Artifact receipt\n");
+      const receiptCommit = await commit();
+      const spec = releaseSpec("local-starter");
+      await expect(assertReleaseSourcesUnchanged(spec, source, receiptCommit, root)).resolves.toBeUndefined();
+      await writeFile(join(root, "packages/local-starter-mcp/runtime.js"), "export const changed = true;\n");
+      const driftedCommit = await commit();
+      await expect(assertReleaseSourcesUnchanged(spec, source, driftedCommit, root)).rejects.toThrow(
+        "package or prerequisite bytes drifted",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("forces a dependent target install only after its prerequisites", async () => {

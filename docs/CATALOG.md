@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**794 document paths** (including mirrors). orientation: 184; guide: 68; reference: 326; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
+**797 document paths** (including mirrors). orientation: 184; guide: 71; reference: 326; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -242,8 +242,11 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/ADOPTING.md](<../packages/hf-listening-room/hf/space/profile/ADOPTING.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
+| [packages/local-starter-mcp/CLAUDE.md](<../packages/local-starter-mcp/CLAUDE.md>) | not-reviewed |
+| [packages/local-starter-mcp/README.md](<../packages/local-starter-mcp/README.md>) | not-reviewed |
 | [packages/local-starter/CLAUDE.md](<../packages/local-starter/CLAUDE.md>) | not-reviewed |
 | [packages/local-starter/README.md](<../packages/local-starter/README.md>) | not-reviewed |
+| [packages/local-starter/skills/agenttool-local-context/SKILL.md](<../packages/local-starter/skills/agenttool-local-context/SKILL.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/INSTALL.md](<../packages/scriptwriter/.claude-plugin/INSTALL.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/commands/scriptwriter-draft.md](<../packages/scriptwriter/.claude-plugin/commands/scriptwriter-draft.md>) | not-reviewed |
 | [packages/scriptwriter/.claude-plugin/commands/scriptwriter-draw.md](<../packages/scriptwriter/.claude-plugin/commands/scriptwriter-draw.md>) | not-reviewed |

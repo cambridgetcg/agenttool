@@ -16,12 +16,14 @@ const DOCS = "https://docs.example";
 const GUIDE = `${DOCS}/LOCAL-CORE.md#files-only-starter`;
 
 describe("optional local scaffolding at public arrival", () => {
-  test("the small guide card separates account-free use from private unpublished source and host loading", () => {
+  test("the small guide card separates account-free package preview from explicit setup and host loading", () => {
     const card = buildLocalScaffoldingCard(`${DOCS}/ignored/path?query=ignored`);
     expect(card.guide).toBe(GUIDE);
     expect(card.format).toBe("agenttool-local-scaffolding/v1");
     expect(card.source_path).toBe("packages/local-starter");
-    expect(card.source_status).toBe("private_source_candidate_unpublished");
+    expect(card.source_status).toBe("package_preview");
+    expect(card.purpose).toContain("standalone Local Starter 0.1.0-dev.0 preview");
+    expect(card.purpose).toContain("exact-version downloads and explicit setup");
     expect(card.guide_account_required).toBe(false);
     expect(card.local_account_required).toBe(false);
     expect(card.automatic_install).toBe(false);
@@ -30,7 +32,7 @@ describe("optional local scaffolding at public arrival", () => {
     expect(card.runtime).toBe("Node >=22");
     expect(card.effects).toMatch(/no fetch, install, account creation, or local write/);
     expect(card.limits).toMatch(/not credential custody or cloud synchronization/);
-    expect(card.limits).toMatch(/Private source is not a public download/);
+    expect(card.limits).toMatch(/requires explicit local setup and host loading/);
     expect(Buffer.byteLength(JSON.stringify(card))).toBeLessThan(2048);
     expect(Object.keys(card)).not.toContain("install_command");
     expect(Object.keys(card)).not.toContain("download_url");
@@ -90,6 +92,7 @@ describe("optional local scaffolding at public arrival", () => {
       { guide_account_required: true }, { local_account_required: true },
       { automatic_install: true }, { host_loading_required: false },
       { host_delivery: "verified" }, { source_status: "published" },
+      { source_status: "private_source_candidate_unpublished" },
       { runtime: "any host" }, { private_state: "must not appear" },
       { grants: ["load-private-memory"] }, { download_url: "https://download.example/package.tgz" },
       { guide: "https://user:password@docs.example/LOCAL-CORE.md#files-only-starter" },
@@ -105,7 +108,10 @@ describe("optional local scaffolding at public arrival", () => {
     const agents = buildAgentsMd(API, DOCS);
     for (const text of [llms, agents]) {
       expect(text).toContain(GUIDE);
-      expect(text).toContain("private, unpublished source candidate");
+      expect(text).toContain("exact-version downloads of the standalone 0.1.0-dev.0 preview");
+      expect(text).toContain("explicit setup");
+      expect(text).toContain("host delivery is unverified");
+      expect(text).not.toContain("private, unpublished source candidate");
       expect(text).not.toContain("npm install @agenttool/local-starter");
     }
     expect(llms.indexOf(GUIDE)).toBeLessThan(llms.indexOf("[Register an AI agent]"));
@@ -118,9 +124,10 @@ describe("optional local scaffolding at public arrival", () => {
     expect(response.status).toBe(200);
     const text = await response.text();
     expect(text).toContain(`Local-Scaffolding-Guide: ${buildLocalScaffoldingCard().guide}`);
-    expect(text).toContain("Local-Scaffolding-Source: packages/local-starter; status=private_source_candidate_unpublished");
+    expect(text).toContain("Local-Scaffolding-Source: packages/local-starter; status=package_preview");
     expect(text).toContain("Local-Scaffolding-Runtime: Node >=22");
-    expect(text).toMatch(/Local-Scaffolding-Boundary: .*no AgentTool account.*no public package download.*host loading is explicit/);
+    expect(text).toMatch(/Local-Scaffolding-Boundary: .*no AgentTool account.*0.1.0-dev.0 preview downloads and explicit setup.*host loading is explicit/);
+    expect(text).not.toContain("no public package download");
     expect(text).not.toContain("Local-Scaffolding-Install:");
   });
 

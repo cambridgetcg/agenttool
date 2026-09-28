@@ -900,6 +900,7 @@ describe("boring test spine", () => {
     const packageWorkspaces = readBashArray("PACKAGE_WORKSPACES");
     expect(packageWorkspaces).toEqual([
       "api",
+      "packages/local-starter-mcp",
       "packages/data",
       "packages/data-protocol",
       "packages/repo-archive",
@@ -1475,9 +1476,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(65);
+      expect(calls).toHaveLength(66);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        55,
+        56,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,

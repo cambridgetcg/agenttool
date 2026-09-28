@@ -285,16 +285,27 @@ export function formatMarkdown(bundle) {
 }
 
 export function writeHandoff(input, text, expectedSha256) {
+  return writeRecord(input, "handoff", text, expectedSha256);
+}
+
+/** Explicit replacement of the fixed memories slot; never enables delivery. */
+export function writeMemory(input, text, expectedSha256) {
+  return writeRecord(input, "memory", text, expectedSha256);
+}
+
+// Only the two fixed wrappers above select a target. No caller-selected paths.
+function writeRecord(input, id, text, expectedSha256) {
   if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/.test(expectedSha256))
     throw new StarterError("invalid_expected_hash");
   if (typeof text !== "string" || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text) ||
-      !text.isWellFormed()) throw new StarterError("invalid_handoff");
+      !text.isWellFormed()) throw new StarterError(`invalid_${id}`);
   const root = rootDirectory(input);
   const { manifest, digest } = readManifest(root);
-  const source = manifest.sources.find((entry) => entry.id === "handoff");
+  const source = manifest.sources.find((entry) => entry.id === id);
+  const filename = SOURCE_FILES[id];
   const bytes = Buffer.from(text, "utf8");
-  if (bytes.length > source.max_bytes) throw new StarterError("invalid_handoff");
-  const lock = path.join(root.path, ".handoff.lock");
+  if (bytes.length > source.max_bytes) throw new StarterError(`invalid_${id}`);
+  const lock = path.join(root.path, `.${id}.lock`);
   let lockStat;
   try { lockStat = exclusiveFile(lock, ""); }
   catch (error) {
@@ -302,20 +313,20 @@ export function writeHandoff(input, text, expectedSha256) {
   }
   let temporary, temporaryStat;
   try {
-    const current = readFileBounded(root, "handoff.md", source.max_bytes);
-    if (!["ready", "empty"].includes(current.status)) throw new StarterError("unsafe_handoff");
+    const current = readFileBounded(root, filename, source.max_bytes);
+    if (!["ready", "empty"].includes(current.status)) throw new StarterError(`unsafe_${id}`);
     if (current.sha256 !== expectedSha256) throw new StarterError("write_conflict");
-    temporary = path.join(root.path, `.handoff-${randomUUID()}.tmp`);
+    temporary = path.join(root.path, `.${id}-${randomUUID()}.tmp`);
     temporaryStat = exclusiveFile(temporary, bytes);
     checkRoot(root);
-    const latest = readFileBounded(root, "handoff.md", source.max_bytes);
-    if (!["ready", "empty"].includes(latest.status)) throw new StarterError("unsafe_handoff");
+    const latest = readFileBounded(root, filename, source.max_bytes);
+    if (!["ready", "empty"].includes(latest.status)) throw new StarterError(`unsafe_${id}`);
     if (latest.sha256 !== expectedSha256 || readManifest(root).digest !== digest)
       throw new StarterError("write_conflict");
-    try { fs.renameSync(temporary, path.join(root.path, "handoff.md")); }
+    try { fs.renameSync(temporary, path.join(root.path, filename)); }
     catch { throw new StarterError("write_uncertain"); }
     return {
-      format: "agenttool-local-write/v1", source: "handoff",
+      format: "agenttool-local-write/v1", source: id,
       previous_sha256: expectedSha256, sha256: sha256(bytes), bytes: bytes.length,
       durability: "file-fsync-and-rename",
     };

@@ -1,0 +1,42 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/local-starter",
+  "version": "0.1.0-dev.0",
+  "description": "Explicit files-only context and handoff starter for agent hosts",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-local-starter-0.1.0-dev.0.tgz",
+    "sha256": "b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c",
+    "size": 229793,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool-local-starter/releases/download/local-starter-v0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "node": ">=22"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "150c5c4725f34fb92493e490c49d0a96904505cf",
+    "path": "packages/local-starter"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}

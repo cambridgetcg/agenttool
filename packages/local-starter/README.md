@@ -1,9 +1,9 @@
 # AgentTool local starter
 
-> **Type:** guide · **Purpose:** keep a small, explicitly selected set of local context files and carry a reviewed handoff between sessions.
-> **Evidence:** [core](src/core.mjs), [filesystem boundary](src/files.mjs), [CLI](src/cli.mjs), [adapter fragments](src/adapters.mjs), and [explicit hosted-read companion](src/connect.mjs). Source availability does not establish package publication or host delivery.
+> **Type:** guide · **Purpose:** carry selected local context, handoffs and durable notes between sessions, with explicit Codex and Claude Code delivery choices.
+> **Evidence:** the release's `dist/core.mjs`, `dist/files.mjs`, `dist/cli.mjs`, `dist/delivery.mjs`, `dist/adapters.mjs`, and explicit `dist/connect.mjs`. Release availability does not establish host installation or delivery.
 
-This private source package creates seven ordinary Markdown files and a JSON
+This preview package creates seven ordinary Markdown files and a JSON
 manifest. You choose what a host reads. Its ordinary commands and hooks have no
 runtime dependencies, service, database, network calls, credential discovery,
 identity registration, or model calls. It does not install itself into an agent
@@ -14,19 +14,46 @@ The files hold optional plaintext context. They are not a key store, an
 authenticated identity, model training, or evidence of personal continuity.
 Reading retained prose does not grant permission for a new task.
 
+## Obtain the preview
+
+`@agenttool/local-starter@0.1.0-dev.0` is one portable package: zero-dependency
+CLI modules, a skill, optional bundled stdio MCP, and Codex/Claude Code plugin
+manifests. Direct downloads and the [public distribution repository](https://github.com/cambridgetcg/agenttool-local-starter)
+carry the same release contents. Pin the version and check the download's
+published SHA-256 before extraction. The package's repository metadata identifies
+the protected source repository; the public distribution is separately inspectable.
+
+For an npm-managed project installation:
+
+```sh
+npm install --save-exact --ignore-scripts @agenttool/local-starter@0.1.0-dev.0
+```
+
+The package has no install lifecycle scripts or runtime dependency installation.
+Node **22 or newer** runs both CLI and MCP; Bun is needed only by maintainers
+building releases. The CLI is available as `agenttool-local-starter` through
+your package manager's local executable path. For a downloaded archive, extract
+it and use `node /absolute/package/dist/cli.mjs` directly.
+
+Plugin installation exposes the skill only: no default notes root, MCP process,
+hook, initialization, read or save. Keep notes outside the extracted package,
+`node_modules`, and plugin cache. Generate the explicit project delivery plan
+below after selecting a root. Skills, MCP and hooks can be chosen independently.
+No account, hosted API or identity registration is needed for local use.
+
 ## Start manually
 
-Node **22 or newer** is declared. No build or dependency installation is needed.
-Run these examples from `packages/local-starter`; replace the absolute paths.
+No build or dependency installation is needed for a release archive.
+Run these examples from its extracted package directory; replace the absolute paths.
 The destination's parent directory must exist, and the destination must be new.
 Its filesystem must support hardlinks: init uses a temporary hardlink to publish
 the manifest without overwriting an existing name.
 
 ```sh
-node src/cli.mjs init --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs status --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs render --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs render --dir /absolute/path/project/.agenttool-local --format json
+node dist/cli.mjs init --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs status --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs render --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs render --dir /absolute/path/project/.agenttool-local --format json
 ```
 
 Edit the selected notes, render again, and deliberately paste or attach the
@@ -104,21 +131,30 @@ Neither command reads unrelated files or discovers host conversation archives.
 The Markdown wrapper labels records as data to assess. It is not a prompt
 injection sandbox, and it cannot change a host's instruction hierarchy.
 
-## Save a reviewed handoff
+## Save a chosen handoff or memory
 
 Read `status` and take the `sha256` of its `handoff` entry. Prepare the next
 handoff in a file you selected, then replace `HASH` below with that digest:
 
 ```sh
-node src/cli.mjs handoff --dir /absolute/path/project/.agenttool-local --expect HASH < /absolute/path/reviewed-handoff.md
+node dist/cli.mjs handoff --dir /absolute/path/project/.agenttool-local --expect HASH < /absolute/path/reviewed-handoff.md
+node dist/cli.mjs memory --dir /absolute/path/project/.agenttool-local --expect MEMORY_HASH < /absolute/path/reviewed-memories.md
 ```
 
-The command reads bounded UTF-8 from redirected stdin and writes only
-`handoff.md`. The configured handoff limit still applies; the CLI's absolute
+Each command reads bounded UTF-8 from redirected stdin and replaces its fixed
+slot: `handoff.md` or `memories.md`. Take `MEMORY_HASH` from the current
+`memory` status entry. The configured slot limit still applies; the CLI's absolute
 stdin bound is 16,384 bytes. It accepts empty content as a deliberate replacement.
 There is no automatic transcript extraction or end-of-session save.
 
-A root-local lock coordinates other starter writers. The expected digest and
+Use handoff for current work and the next useful step; use memory for a small
+durable fact or decision, with its source/date and uncertainty where useful.
+Both operations replace the complete file: read existing selected content and
+preserve wanted notes before composing a replacement. Saving a disabled slot
+does not enable it. Selection remains a deliberate manifest edit. Empty text
+clears the current slot, without removing earlier host/provider copies.
+
+A per-slot root-local lock coordinates other starter writers. The expected digest and
 manifest digest are checked before replacement. A conflicting writer or an
 existing lock causes refusal; inspect the current state before trying again.
 The helper does not steal old locks, kill processes, merge content, or keep
@@ -138,13 +174,84 @@ directory or handoff before deciding what to do next; do not automatically
 retry. Status may itself refuse an incomplete or unsafe manifest. An existing
 root still refuses reinitialization, and leftover locks are not stolen.
 
-## Optional host fragments
+## Codex and Claude Code: one delivery plan
+
+Generate a reviewable project plan for the directory you already initialized:
 
 ```sh
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness generic
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness codex
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness claude-code
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness cursor
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness codex
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness claude-code --write both
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness codex --transport cli --write handoff
+```
+
+The JSON contains exact file contents and intended destinations. Skill and
+binding files are create-only proposals; host settings are merge proposals.
+No files, host settings, dependency installs or model sessions are changed.
+Keep the plan private because it contains absolute local paths.
+
+| Layer | Purpose | Codex destination | Claude Code destination |
+|---|---|---|---|
+| Skill + `binding.json` | Arrival, fresh reads, selective retention and recovery. | `.agents/skills/agenttool-local-context/` | `.claude/skills/agenttool-local-context/` |
+| Local MCP | Explicit status/read and optional fixed-slot writes. | `.codex/config.toml` | `.mcp.json` |
+| Command hook | Load selected local files on SessionStart, including compact. | `.codex/hooks.json` | `.claude/settings.local.json` |
+
+Choose the layers you need and merge only their entries, preserving existing
+configuration. The skill has no snapshot baked into it; its sibling binding
+contains exact CLI argument vectors for a CLI-only installation. A listed
+skill is guidance, not automatic wake delivery. Invoke it with
+`$agenttool-local-context` in Codex or `/agenttool-local-context` in Claude Code.
+
+`--transport mcp` is the default. Choose `--transport cli` for a shell-capable
+host without MCP; that plan omits the MCP configuration and dependency step.
+Its binding records the choice, so an unavailable MCP server is not mistaken
+for permission to save through a shell.
+
+The release includes `dist/agenttool-local-starter-mcp.js`, with the MCP SDK and
+Zod bundled and their licenses in `dist/THIRD_PARTY_LICENSES`. No repository
+sibling or `node_modules` is required at runtime. The MCP source remains a
+separate internal build component. CLI/manual/command-hook use requires only
+Node built-ins. MCP has no hosted connection, credentials,
+prompts or resources:
+
+| Tool | Effect |
+|---|---|
+| `local_context_status({})` | Fixed-slot metadata, including disabled slots; no bodies. |
+| `local_context_read({})` | Fresh selected context with named omissions; disabled bodies are not read. |
+| `local_handoff_save({text, expected_sha256})` | Replace the bound handoff, if enabled by the startup write mode. |
+| `local_memory_save({text, expected_sha256})` | Replace the bound memory, if enabled by the startup write mode. |
+
+`--write none` is the default; alternatives are `handoff`, `memory`, and
+`both`. Unselected write tools are absent and cannot be called through this
+server. The generated CLI skill binding carries the same choice. This limits
+the adapter, not unrelated shell/file tools held by the host. The model cannot
+choose another root or an arbitrary filename through these tools.
+
+Arrival uses a direct command because MCP readiness is not guaranteed at
+startup. Codex MCP hooks need an already connected server; Claude skips MCP
+SessionStart hooks at launch/resume. Skills and explicit MCP reads can obtain
+fresh notes later. No Stop, PreCompact, transcript capture, or automatic-save
+hook is generated. Native trust and tool controls continue to apply.
+See [Codex hooks](https://learn.chatgpt.com/docs/hooks),
+[Claude hooks](https://code.claude.com/docs/en/hooks),
+[Codex skills](https://learn.chatgpt.com/docs/build-skills),
+[Claude skills](https://code.claude.com/docs/en/skills),
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp) and
+[Claude MCP](https://code.claude.com/docs/en/mcp); checked 2026-09-28.
+
+On native Windows, a Codex delivery plan still supplies the skill and MCP
+proposal, plus manual loading; the command hook remains unsupported by this
+starter. This is the starter's verification boundary, not a claim that Codex
+lacks Windows hooks. WSL, containers, SSH and remote sessions need Node,
+packages and selected files in their own execution environment; no paths or
+notes move there automatically.
+
+## Optional hook-only fragments
+
+```sh
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness generic
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness codex
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness claude-code
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness cursor
 ```
 
 An adapter prints an argument vector, proposed configuration, destination, and
@@ -168,8 +275,9 @@ host session files. No hook saves or mutates the notes.
 The shapes follow the current official [Codex hooks](https://learn.chatgpt.com/docs/hooks),
 [Claude Code hooks](https://code.claude.com/docs/en/hooks), and
 [Cursor hooks](https://cursor.com/docs/hooks) references. A local process/JSON
-fixture is separate from delivery into a real product session. Startup, resume,
-and compaction delivery remain **untested** for all three hosts. Do not install
+fixture is separate from delivery into a real product session. Claude's native
+startup execution is observed below; resume and compaction hook delivery remain
+**untested**. Codex/Cursor native hooks remain untested. Do not install
 both a full static snapshot and a full startup hook unless you want duplicate
 context.
 
@@ -199,15 +307,15 @@ to make that value available only to the intended process. Do not write it in
 notes, command history, or host configuration examples.
 
 ```sh
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --authentication local_context_grant --credential-env LOCAL_CONTEXT_GRANT
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --authentication local_context_grant --credential-env LOCAL_CONTEXT_GRANT
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
 ```
 
 Each connected command makes one explicit GET; the offline command reads only
 local files and does not resolve any credential, including when grant mode is
-selected. These are source instructions, not proof that
-the endpoint is deployed or that a package is published. There is no connection
+selected. These commands do not establish the hosted endpoint's availability.
+There is no connection
 file, account lookup, registration fallback, installation, scheduled refresh,
 save, synchronization, or automatic write to `memories.md` or `handoff.md`.
 
@@ -287,7 +395,7 @@ connection cannot retract bytes already received or disclosed.
 
 | Environment | Local files | Hook-fragment boundary |
 |---|---|---|
-| macOS/Linux | POSIX owner-only root/files; regular-file, link, bounded-read and replacement checks | Codex, Claude Code, and Cursor fragments can be emitted; actual host delivery is unverified. |
+| macOS/Linux | POSIX owner-only root/files; regular-file, link, bounded-read and replacement checks | Proposals available; the bounded macOS native observations below do not establish Linux host delivery. |
 | Native Windows | Ordinary plaintext IO with inherited ACLs; reports `windows-acl-unverified` | Claude Code's argument-vector proposal is available. Codex/Cursor hook generation refuses; use the generic manual path. |
 | WSL/container/remote host | Requires Node and the selected paths in that environment | No automatic path translation, state synchronization, or cross-host installation. |
 
@@ -305,17 +413,33 @@ durability behavior; a successful read is not proof of private storage. Once
 you submit selected text to a model host, that host/provider's handling applies.
 
 Local tests passed **70/70** on macOS arm64 with both Node **22.18.0** and
-**24.18.1**. The [CI workflow](../../.github/workflows/local-starter.yml) also
+**24.18.1**. The repository's `local-starter.yml` CI workflow also
 passed all six jobs on Ubuntu 24.04, macOS 15, and Windows 2025 with Node
 22.18.0 and 24.18.0: Linux/macOS each passed 70 tests; Windows each passed 63
 and skipped seven POSIX-specific checks. Evidence: repository-access-required
 [run 36327872045](https://github.com/cambridgetcg/agenttool/actions/runs/36327872045),
 source `811a7153`, checked 2026-09-27. These are files and adapter fixtures.
 
-Codex 0.157.1 and Claude Code 2.1.282 were checked for version/help only; Cursor
-was not verified as installed. WSL, container filesystems, Windows ACL privacy,
-and real host delivery remain unverified. Passing the OS matrix does not prove
-delivery into a Codex, Claude Code or Cursor session.
+**Observed 2026-09-28 (local date), macOS arm64 / Node 24.18.1:**
+
+- Codex 0.157.1 app-server discovered the project skill, connected the local MCP,
+  read selected context, saved memory, refused a stale hash, loaded changed
+  notes in a new host process, omitted disabled memory and refused read-only
+  writes. Nine checks passed, with no model request or installed global config.
+- Claude Code 2.1.282 `--init-only` ran the generated direct SessionStart
+  startup command, validated its hook JSON and observed 2,014 characters of
+  `additionalContext`, including a synthetic marker. The child had no network
+  access or write access to shared Claude configuration. No model request ran.
+- Skill structural validation passed the skill-creator validator. Claude's
+  native plugin validator returned empty contents even for a deliberately
+  malformed scratch skill; it supplies no skill-validation evidence here.
+
+These observations cover host discovery/operations and Claude hook execution,
+not model adoption, native resume/compact hooks, Codex/Cursor hook execution,
+Windows/WSL/container delivery or Linux host delivery. The earlier real Codex
+return experiment used explicit context loading after resume/compaction; it
+did not prove automatic hooks. Cursor installation remains unverified. New
+delivery/MCP checks have not yet run in the six-job CI matrix.
 
 ## Disable or remove
 
@@ -325,7 +449,10 @@ delivery into a Codex, Claude Code or Cursor session.
    project configuration. Preserve other entries and follow that host's
    restart/reload or hook-review procedure. Remove a manually added instruction
    pointer or static import separately; the starter never installs these.
-3. Stop using a generated snapshot and remove any copies you deliberately
+3. Remove the `agenttool_local` MCP entry and dedicated skill/binding separately
+   if installed. Removing a hook does not disconnect MCP or a skill; removing
+   MCP does not stop the command hook. Reload/restart the host as required.
+4. Stop using a generated snapshot and remove any copies you deliberately
    created if they are no longer wanted. Inspect the local directory before
    deleting it through your ordinary filesystem tools; there is no deletion
    command or automatic cleanup of personal notes.
@@ -336,14 +463,31 @@ or remote-retention claim is made.
 
 ## Develop
 
+Maintainers can run ordinary source commands as `node src/cli.mjs` without a
+build or dependency install. Source tests use Node directly. Building a release
+requires the adjacent internal `local-starter-mcp` component and its committed
+dependencies, prepared with Bun **1.3.5** and `--frozen-lockfile --ignore-scripts`.
+The build rejects other Bun versions. It copies the six built-in-only modules
+and bundles the MCP runtime; it does not copy private notes, bindings or source maps.
+
 ```sh
 node --test
+bun run build
+npm run check:bundle
 ```
+
+`check:bundle` copies only the declared release surface into a disposable
+directory outside the repository and runs Node with a minimal environment.
+It checks CLI initialization/read/save, MCP negotiation/read-only and selected
+CAS writes, packaged skill/config paths, and preservation of an external notes
+directory across cache relocation/removal. To test a real extracted archive,
+run `node scripts/check-release.mjs /absolute/extracted/package`. This is artifact
+evidence; it does not verify host trust, native model delivery or publication.
 
 Tests require no external service, real credentials, package installation, or
 model calls. Connector tests use injected transports and temporary literal-loopback
 HTTP servers with obvious sentinel bearers. On macOS arm64 / Node 24.18.1 the
-complete local suite passes 94 tests, including 24 connector cases. Connector
+complete local suite passes 100 tests, including 24 connector cases. Connector
 coverage includes both protocol versions, grant-bound origin/subject/time checks,
 parent-token refusal before HTTP, delegated CLI output and local-only operation.
 The API's `tests/local-context.test.ts` owns the actual route-envelope/companion

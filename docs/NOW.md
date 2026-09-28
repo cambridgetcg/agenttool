@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-27 (narrow local-context credentials; historical release receipts below retain their original dates)
+> Updated: 2026-09-28 (local context delivery; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,68 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Standalone Local Starter preview (2026-09-28)
+
+**Release candidate:** `release/local-starter-preview`, based on `bd540dc2`.
+Version: `@agenttool/local-starter@0.1.0-dev.0`. The [public distribution and
+GitHub prerelease](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.0)
+are available; anonymous download matches the tested 229,793-byte artifact.
+SHA-256: `b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c`.
+The source revision is `150c5c4725f34fb92493e490c49d0a96904505cf`.
+AgentTool-site publication follows clean-main deployment; its readback is a
+separate release receipt. npm registry publication is blocked
+by the current private-source/provenance mismatch; direct archive installation
+and the public plugin catalogs remain available. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28). The prior source-only record
+below is historical. See the [installation guide](LOCAL-CORE.md#files-only-starter).
+
+One archive carries the dependency-free CLI, portable skill, bundled optional
+MCP and skill-only Codex/Claude manifests. Notes stay outside the installation.
+Explicit delivery plans bind one chosen folder; installation does not create
+notes, enable hooks, start MCP or capture memory. The release contract binds
+both source modules to the recorded revision and checks the extracted artifact.
+Public GitHub distribution contains only reviewed release contents; the main
+AgentTool development repository remains private.
+
+**Evidence:** 100 starter and 16 MCP tests, 60 release/catalog/link checks,
+extracted artifact CLI/MCP checks, native plugin validators and the full package
+gate passed. Archive has exactly 16 regular files with no machine binding,
+install script or runtime dependency installation. The six Linux/macOS/Windows
+× Node 22.18.0/24.18.0 Local Starter CI combinations passed in [run
+36394702520](https://github.com/cambridgetcg/agenttool/actions/runs/36394702520).
+The ordinary npm client also installed the anonymously downloaded archive
+without scripts or registry access and passed isolated CLI/MCP checks. Native automatic resume/
+compaction delivery remains unverified.
+
+## Local context delivery for Codex and Claude Code (2026-09-28)
+
+**Source candidate:** `feat/local-context-delivery`, based on `b68a01a4`.
+Private source, host installation and package publication remain separate.
+
+`packages/local-starter` now emits one reviewable delivery plan: portable
+skill/binding, optional local MCP configuration and direct SessionStart hook.
+CLI-only mode remains dependency-free. The sibling `local-starter-mcp` uses
+the repository's pinned SDK/Zod versions and one host-selected root, with
+read-only defaults and optional handoff/memory writes. Arrival calls the CLI
+directly because MCP startup readiness cannot be assumed. Memory uses the
+existing handoff write safeguards, with its own fixed file/lock; saves never
+enable selection. No automatic transcript capture or retention is introduced.
+
+**Focused evidence:** 100 starter tests, 16 stdio MCP tests and 13 document/
+discovery checks pass. The complete `preflight packages` gate also passes with
+Bun 1.3.5 / Node 24.18.1. The skill passes structural validation. Codex 0.157.1
+on macOS arm64 / Node 24.18.1 passed nine native app-server checks: skill
+discovery, MCP read/save/conflict, a fresh host read, disabled-memory omission
+and read-only refusal. Claude Code 2.1.282 executed the generated startup hook,
+validated JSON and observed synthetic additional context with no network.
+Neither probe sent a model request. Claude's native skill-validator result
+was inconclusive: it ignored a malformed negative control as well.
+
+Automatic resume/compact delivery, Codex native hooks and the expanded OS CI
+matrix remain unverified. Revision history, backup/restore, search and hosted
+synchronization remain separate roadmap work. See the
+[delivery map](LOCAL-CORE.md#codex-and-claude-code-delivery) and
+[package guide](../packages/local-starter/README.md) for exact setup and limits.
 
 ## Narrow local-context credentials (2026-09-27)
 
