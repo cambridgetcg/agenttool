@@ -730,7 +730,7 @@ app.get("/agent.txt", (c) => {
     `Local-Scaffolding-Guide: ${localScaffolding.guide}`,
     `Local-Scaffolding-Source: ${localScaffolding.source_path}; status=${localScaffolding.source_status}`,
     `Local-Scaffolding-Runtime: ${localScaffolding.runtime}`,
-    "Local-Scaffolding-Boundary: optional guide and local use require no AgentTool account; no public package download, automatic install, credentials, or cloud sync; host loading is explicit and host delivery is unverified",
+    "Local-Scaffolding-Boundary: optional guide and local use require no AgentTool account; guide links to exact-version standalone 0.1.0-dev.0 preview downloads and explicit setup; no automatic install, credential custody, or cloud sync; host loading is explicit and host delivery is unverified",
     `Welcome: ${baseUrl}/v1/welcome`,
     `Invitation: ${WELCOME_INVITATION.text}`,
     `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,

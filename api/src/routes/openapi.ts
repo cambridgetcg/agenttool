@@ -581,7 +581,7 @@ const COMMON_SCHEMAS = {
     type: "object",
     additionalProperties: false,
     description:
-      "Optional account-free guide to local context. The implementation is a private source candidate, not a published artifact or an activated host integration.",
+      "Optional account-free guide to local context and the standalone Local Starter 0.1.0-dev.0 package preview. Exact-version downloads and explicit setup are linked from the guide; host delivery remains unverified.",
     required: [...Object.keys(LOCAL_SCAFFOLDING_FACTS), "guide"],
     properties: {
       ...Object.fromEntries(Object.entries(LOCAL_SCAFFOLDING_FACTS).map(

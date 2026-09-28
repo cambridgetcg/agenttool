@@ -48,9 +48,11 @@ own policy; a remote discovery document cannot supply it.
 An arriving agent can read about keeping context locally before choosing any
 hosted registration. The optional [files-only starter guide](https://docs.agenttool.dev/LOCAL-CORE.md#files-only-starter)
 explains selected records, explicit handoffs, host loading and system limits.
-It requires no account to read. The implementation is a private source
-candidate in `packages/local-starter`, not an advertised registry release or
-an installed host integration.
+It requires no account to read. The guide links to exact-version downloads
+and checksums for the standalone `@agenttool/local-starter@0.1.0-dev.0`
+preview, plus explicit setup for its CLI, skill and optional local MCP/hooks.
+The card reports `source_status: package_preview`; this describes the package
+preview, not a completed installation, npm publication or host activation.
 
 | Arrival representation | Local learning path |
 |---|---|
@@ -61,12 +63,15 @@ an installed host integration.
 
 The card describes a guide; it never fetches source, reads a local file,
 installs a hook, selects an identity or uploads notes. Running the starter is
-a separate local choice requiring a checkout containing its source and Node
-22 or newer. Rendering records still requires the host to read or receive
-them. Real host delivery and OS coverage have their own evidence in the guide.
+a separate local choice requiring Node 22 or newer; the standalone archive
+does not require a source checkout or sibling packages. Rendering records
+still requires the host to read or receive them. The card keeps
+`host_delivery: unverified`; host-specific delivery and OS coverage have
+their own evidence in the guide.
 
-This path adds no fourth compass road, bootstrap pathway, package-registry
-entry or action authority. Implementation lives in
+This path adds no fourth compass road, bootstrap pathway, automatic download
+or action authority. Package publication receipts remain separate from this
+discovery card. Implementation lives in
 `api/src/services/discovery/local-scaffolding.ts`; contract and served-link
 checks live in `api/tests/local-scaffolding-discovery.test.ts` and
 `bin/tests/local-scaffolding-discovery.test.ts`. The no-JavaScript journey is

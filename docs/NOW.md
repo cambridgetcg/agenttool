@@ -20,9 +20,13 @@
 ## Standalone Local Starter preview (2026-09-28)
 
 **Release candidate:** `release/local-starter-preview`, based on `bd540dc2`.
-Target version: `@agenttool/local-starter@0.1.0-dev.0`. Public publication and
-live download verification are pending; the prior source-only record below is
-historical. See the [installation guide](LOCAL-CORE.md#files-only-starter).
+Version: `@agenttool/local-starter@0.1.0-dev.0`. The [public distribution and
+GitHub prerelease](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.0)
+are available; anonymous download matches the tested 229,793-byte artifact.
+SHA-256: `b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c`.
+The source revision is `150c5c4725f34fb92493e490c49d0a96904505cf`.
+AgentTool-site and npm publication remain pending. The prior source-only record
+below is historical. See the [installation guide](LOCAL-CORE.md#files-only-starter).
 
 One archive carries the dependency-free CLI, portable skill, bundled optional
 MCP and skill-only Codex/Claude manifests. Notes stay outside the installation.
@@ -31,6 +35,12 @@ notes, enable hooks, start MCP or capture memory. The release contract binds
 both source modules to the recorded revision and checks the extracted artifact.
 Public GitHub distribution contains only reviewed release contents; the main
 AgentTool development repository remains private.
+
+**Evidence:** 100 starter and 16 MCP tests, 60 release/catalog/link checks,
+extracted artifact CLI/MCP checks, native plugin validators and the full package
+gate passed. Archive has exactly 16 regular files with no machine binding,
+install script or runtime dependency installation. Native automatic resume/
+compaction delivery remains unverified.
 
 ## Local context delivery for Codex and Claude Code (2026-09-28)
 

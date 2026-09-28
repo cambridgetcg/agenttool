@@ -75,7 +75,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     what_we_are: "/v1/self",
   };
   const breadcrumbsBlock: Record<string, unknown> = {
-    local_scaffolding: `${localScaffolding.guide} — optional account-free local context guide; private source candidate, no automatic installation`,
+    local_scaffolding: `${localScaffolding.guide} — optional account-free local context guide; standalone 0.1.0-dev.0 preview downloads and explicit setup, no automatic installation`,
     discovery:
       "/public/discovery — canonical compact three-road public compass; reading selects nothing and starts no follow-up",
     arrival:
