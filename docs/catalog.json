@@ -423,6 +423,14 @@
       "canonical_path": "apps/docs/CLAUDE.md"
     },
     {
+      "path": "apps/docs/COLLABORATION-MISSION-CLIENT.md",
+      "title": "A first mission conversation across two devices",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-CLIENT.md"
+    },
+    {
       "path": "apps/docs/COLLABORATION-MISSIONS.md",
       "title": "Scoped mission participation",
       "type": "reference",
@@ -1997,6 +2005,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/COLLABORATION-CHANNELS.md"
+    },
+    {
+      "path": "docs/COLLABORATION-MISSION-CLIENT.md",
+      "title": "A first mission conversation across two devices",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-CLIENT.md"
     },
     {
       "path": "docs/COLLABORATION-MISSIONS.md",

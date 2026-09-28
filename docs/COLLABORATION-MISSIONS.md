@@ -12,6 +12,11 @@ private development repository; reading the contract requires no repository
 access. npm, a local Collab installation and the experimental courier are not
 required by this HTTP protocol. No client integration is installed automatically.
 
+A [portable CLI and optional stdio MCP trial](COLLABORATION-MISSION-CLIENT.md)
+provides explicit enrollment, signed participation and bounded polling. Its
+source distribution requires repository access; physical two-device delivery
+and native wake remain separate verification steps.
+
 ## What this slice provides
 
 A project administrator creates an immutable mission descriptor and issues an

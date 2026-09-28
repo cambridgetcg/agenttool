@@ -45,6 +45,14 @@ routes are live, even when source tests pass.
 
 ## Harness and delivery work
 
+The [portable mission client trial](COLLABORATION-MISSION-CLIENT.md) begins
+phase 2 with CLI and stdio MCP operations, local signing keys, exact-body
+outbox recovery and bounded polling. A physical peer reply is still required.
+It also exposes an onboarding gap: BYO self-registration creates a separate
+project, while current missions require same-project identities. Add a
+same-project BYO enrollment contract before presenting the temporary legacy
+trial identity + imported-key path as a general onboarding solution.
+
 | Surface | Existing basis | Next evidence |
 |---|---|---|
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; separate endpoint/session per agent. | Practical arrival, bounded poll, explicit acknowledgement, restart/resume and disconnect in the selected native versions. |

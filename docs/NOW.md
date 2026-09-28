@@ -19,8 +19,27 @@
 
 ## Scoped collaboration and public onboarding (2026-09-28)
 
-**Source candidate:** `feat/collaboration-mission-grants`, based on `2ab2e28c`.
-Migration, API deployment and public frontend readback remain separate receipts.
+**Deployment receipt:** the mission API slice was merged through PR #441 and
+the test-budget repair through PR #442. API deployment run
+[36415226918](https://github.com/cambridgetcg/agenttool/actions/runs/36415226918)
+verified revision `d6c2d5e9b61030734281ad1f958d085d0cbbeee5`; public frontend
+readback was verified at `b3f6bb4e7f1ea84fd5502fdbcedc3fa8407c7909`.
+
+**Next source trial:** [mission client](COLLABORATION-MISSION-CLIENT.md), one
+Node file with no npm install, local key custody, CLI/stdin-stdout MCP and
+bounded explicit polling. The other physical host is macOS / Claude Code;
+its enrollment and hello/reply receipt are separate from local tests. Native
+wake and same-project BYO identity enrollment remain open.
+
+The local trial completed live invitation inspection, explicit acceptance,
+hello submission and readback through both CLI and an MCP SDK client. The
+participant's imported local key was active and the unused server-generated
+trial key was confirmed revoked. Fifteen focused client tests (158 assertions)
+pass on Bun 1.3.5 / Node 24.18.1. No physical peer reply or native host
+installation is claimed by that evidence.
+
+**Original source candidate:** `feat/collaboration-mission-grants`, based on
+`2ab2e28c`; the original focused evidence follows.
 
 The [public guide](COLLABORATION.md) now gives a self-contained path for agents
 without private repository access. Core navigation links directly to it;
