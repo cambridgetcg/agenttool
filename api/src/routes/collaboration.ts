@@ -4,6 +4,7 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { verifyBearer } from "../auth/middleware";
+import { errors, fail } from "../lib/errors";
 import { configuredLocalContextOrigin } from "./identity/local-context";
 import { readStrictCorrespondenceJson, StrictJsonError } from "../services/correspondence/strict-json";
 import { createMissionSchema, issueMissionGrantSchema, MISSION_PROOF_HEADERS, MissionError } from "../services/collaboration/contracts";
@@ -16,6 +17,28 @@ const DOCS = "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md";
 
 class TransportError extends Error {
   constructor(readonly status: ContentfulStatusCode, readonly code: string) { super(code); }
+}
+
+const TRANSPORT_MESSAGES: Record<string, string> = {
+  invalid_content_length: "Content-Length must use canonical unsigned decimal spelling.",
+  mission_body_too_large: "The request exceeds this mission operation's body limit.",
+  mission_route_not_found: "No mission operation is available at this exact path.",
+  mission_method_not_allowed: "This mission path does not accept the requested method.",
+  invalid_mission_target: "Use only the exact path and query forms in the mission contract.",
+  mission_credential_invalid: "Use the credential and signing proof required by this operation.",
+  mission_content_encoding_not_supported: "Send unencoded bytes so the exact signed body can be checked.",
+  mission_json_required: "Mission mutations with a body require application/json.",
+  invalid_mission_request: "Provide a canonical mission UUID, bounded descriptor and explicit expiry.",
+  invalid_mission_grant_request: "Provide the grant UUID, identity, registered key, actions and expiry.",
+};
+function missionFailure(c: Context, code: string, status: ContentfulStatusCode, message: string) {
+  return fail(c, errors.refusal({
+    error: code, message, docs: DOCS,
+    hint: status === 409 || status === 503
+      ? "After an uncertain mutation, inspect its known identifier before changing or retrying it. Issued tokens cannot be recovered."
+      : "Check the selected mission, credential type, exact request bytes and current invitation scope.",
+    next_actions: [{ action: "Read the mission request contract and recovery steps", method: null }],
+  }), status);
 }
 
 async function bodyBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
@@ -112,10 +135,10 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
     } catch (error) {
       // Never pass private SQL parameters, token material or proof bytes into
       // the global error logger. Service failures use a finite public code set.
-      if (error instanceof TransportError) return c.json({ error: error.code, docs: DOCS }, error.status);
-      if (error instanceof StrictJsonError) return c.json({ error: "invalid_mission_json", docs: DOCS }, error.status);
-      if (error instanceof MissionError) return c.json({ error: error.code, docs: DOCS }, error.status);
-      return c.json({ error: "mission_unavailable", docs: DOCS }, 503);
+      if (error instanceof TransportError) return missionFailure(c, error.code, error.status, TRANSPORT_MESSAGES[error.code] ?? "Use the exact mission request contract.");
+      if (error instanceof StrictJsonError) return missionFailure(c, "invalid_mission_json", error.status, "Provide bounded, duplicate-free JSON with well-formed UTF-8.");
+      if (error instanceof MissionError) return missionFailure(c, error.code, error.status, error.message);
+      return missionFailure(c, "mission_unavailable", 503, "The mission operation could not be completed.");
     }
   };
 }

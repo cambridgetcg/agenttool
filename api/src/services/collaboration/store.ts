@@ -7,7 +7,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { db } from "../../db/client";
-import { collaborationEvents as events, collaborationGrants as grants, collaborationMissions as missions } from "../../db/schema/collaboration";
+import { collaborationEvents, collaborationGrants, collaborationMissions } from "../../db/schema/collaboration";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys } from "../../db/schema/tools";
 import { correspondenceCanonicalJson } from "../correspondence/canonical";
@@ -21,9 +21,9 @@ import { MISSION_REQUEST_DOMAIN, missionSha256, verifyMissionProof } from "./pro
 
 export { MissionError } from "./contracts";
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type MissionRow = typeof missions.$inferSelect;
-type GrantRow = typeof grants.$inferSelect;
-type EventRow = typeof events.$inferSelect;
+type MissionRow = typeof collaborationMissions.$inferSelect;
+type GrantRow = typeof collaborationGrants.$inferSelect;
+type EventRow = typeof collaborationEvents.$inferSelect;
 export interface MissionOptions { database?: Pick<typeof db, "transaction">; now?: Date | (() => Date) }
 export interface MissionTarget { projectId: string; missionId: string }
 export interface MissionGrantTarget extends MissionTarget { grantId: string }
@@ -61,7 +61,7 @@ async function lockSubject(tx: Transaction, projectId: string, identityId: strin
   return key;
 }
 async function lockMission(tx: Transaction, target: MissionTarget, mode: "share" | "update") {
-  const [row] = await tx.select().from(missions).where(and(eq(missions.id, target.missionId), eq(missions.projectId, target.projectId)))
+  const [row] = await tx.select().from(collaborationMissions).where(and(eq(collaborationMissions.id, target.missionId), eq(collaborationMissions.projectId, target.projectId)))
     .for(mode).limit(1);
   return row;
 }
@@ -109,11 +109,11 @@ export async function createMission(input: { projectId: string; issuerApiKeyId: 
     const parent = await lockParent(tx, input.projectId, input.issuerApiKeyId);
     const now = instant(options), expiresAt = expiry(parsed.expires_at, now, MISSION_BOUNDS.missionAgeMs);
     if (!parentValid(parent, input.projectId, now)) throw new MissionError("invalid_credential");
-    const [row] = await tx.insert(missions).values({ id: parsed.mission_id, projectId: input.projectId,
+    const [row] = await tx.insert(collaborationMissions).values({ id: parsed.mission_id, projectId: input.projectId,
       creatorApiKeyId: input.issuerApiKeyId, descriptor: parsed.descriptor,
       digest: `sha256:${missionSha256(correspondenceCanonicalJson(parsed.descriptor))}`,
       createdAt: now, expiresAt, revokedAt: null, lastReceiptSeq: 0n,
-    }).onConflictDoNothing({ target: missions.id }).returning();
+    }).onConflictDoNothing({ target: collaborationMissions.id }).returning();
     if (!row) throw new MissionError("conflict");
     return missionMetadata(row);
   });
@@ -121,7 +121,7 @@ export async function createMission(input: { projectId: string; issuerApiKeyId: 
 export async function getMission(input: MissionTarget, options: MissionOptions = {}) {
   ids(input.projectId, input.missionId);
   return (options.database ?? db).transaction(async tx => {
-    const [row] = await tx.select().from(missions).where(and(eq(missions.id, input.missionId), eq(missions.projectId, input.projectId))).limit(1);
+    const [row] = await tx.select().from(collaborationMissions).where(and(eq(collaborationMissions.id, input.missionId), eq(collaborationMissions.projectId, input.projectId))).limit(1);
     if (!row) throw new MissionError("not_found");
     return missionMetadata(row);
   });
@@ -141,11 +141,11 @@ export async function issueMissionGrant(input: MissionTarget & {
     const now = instant(options), expiresAt = expiry(parsed.expires_at, now, MISSION_BOUNDS.grantAgeMs);
     if (!activeMission(mission, now) || expiresAt > mission.expiresAt || !parentValid(parent, input.projectId, now, expiresAt)) throw new MissionError("invalid_credential");
     const token = `atcm_${randomBytes(32).toString("base64url")}`;
-    const [row] = await tx.insert(grants).values({ id: parsed.grant_id, projectId: input.projectId, missionId: input.missionId,
+    const [row] = await tx.insert(collaborationGrants).values({ id: parsed.grant_id, projectId: input.projectId, missionId: input.missionId,
       identityId: parsed.identity_id, signingKeyId: parsed.signing_key_id, issuingApiKeyId: input.issuerApiKeyId,
       tokenHash: missionSha256(token), origin: input.origin, actions: [...parsed.actions].sort(),
       issuedAt: now, expiresAt, acceptedAt: null, acceptanceProof: null, revokedAt: null,
-    }).onConflictDoNothing({ target: grants.id }).returning();
+    }).onConflictDoNothing({ target: collaborationGrants.id }).returning();
     if (!row) throw new MissionError("conflict");
     return { grant: grantMetadata(row), token };
   });
@@ -153,7 +153,7 @@ export async function issueMissionGrant(input: MissionTarget & {
 export async function getMissionGrant(input: MissionGrantTarget, options: MissionOptions = {}) {
   ids(input.projectId, input.missionId, input.grantId);
   return (options.database ?? db).transaction(async tx => {
-    const [row] = await tx.select().from(grants).where(and(eq(grants.id, input.grantId), eq(grants.missionId, input.missionId), eq(grants.projectId, input.projectId))).limit(1);
+    const [row] = await tx.select().from(collaborationGrants).where(and(eq(collaborationGrants.id, input.grantId), eq(collaborationGrants.missionId, input.missionId), eq(collaborationGrants.projectId, input.projectId))).limit(1);
     if (!row) throw new MissionError("not_found");
     return grantMetadata(row);
   });
@@ -163,13 +163,13 @@ export async function revokeMissionGrant(input: MissionGrantTarget, options: Mis
   ids(input.projectId, input.missionId, input.grantId);
   return (options.database ?? db).transaction(async tx => {
     if (!await lockMission(tx, input, "share")) throw new MissionError("not_found");
-    const target = and(eq(grants.id, input.grantId), eq(grants.missionId, input.missionId), eq(grants.projectId, input.projectId));
-    const [row] = await tx.select().from(grants).where(target).for("update").limit(1);
+    const target = and(eq(collaborationGrants.id, input.grantId), eq(collaborationGrants.missionId, input.missionId), eq(collaborationGrants.projectId, input.projectId));
+    const [row] = await tx.select().from(collaborationGrants).where(target).for("update").limit(1);
     if (!row) throw new MissionError("not_found");
     if (row.revokedAt) return grantMetadata(row);
     const now = instant(options);
     if (now < row.issuedAt) throw new MissionError("invalid_state");
-    const [updated] = await tx.update(grants).set({ revokedAt: now }).where(target).returning();
+    const [updated] = await tx.update(collaborationGrants).set({ revokedAt: now }).where(target).returning();
     return grantMetadata(updated);
   });
 }
@@ -181,7 +181,7 @@ export async function revokeMission(input: MissionTarget, options: MissionOption
     if (row.revokedAt) return missionMetadata(row);
     const now = instant(options);
     if (now < row.createdAt) throw new MissionError("invalid_state");
-    const [updated] = await tx.update(missions).set({ revokedAt: now }).where(eq(missions.id, row.id)).returning();
+    const [updated] = await tx.update(collaborationMissions).set({ revokedAt: now }).where(eq(collaborationMissions.id, row.id)).returning();
     return missionMetadata(updated);
   });
 }
@@ -200,13 +200,13 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
   const observation = selected.operation === "observe" ? parseMissionInput(missionObservationSchema, body) : null;
   return (options.database ?? db).transaction(async tx => {
     // Lookup only locates the immutable binding. Its state is re-read under lock.
-    const [hint] = await tx.select().from(grants).where(eq(grants.tokenHash, tokenHash)).limit(1);
+    const [hint] = await tx.select().from(collaborationGrants).where(eq(collaborationGrants.tokenHash, tokenHash)).limit(1);
     if (!hint || hint.id !== input.proof.grantId || hint.missionId !== input.missionId
       || hint.identityId !== input.proof.identityId || hint.signingKeyId !== input.proof.keyId) throw deny();
     const key = await lockSubject(tx, hint.projectId, hint.identityId, hint.signingKeyId);
     const parent = await lockParent(tx, hint.projectId, hint.issuingApiKeyId);
     const mission = await lockMission(tx, { projectId: hint.projectId, missionId: hint.missionId }, selected.operation === "observe" ? "update" : "share");
-    const [grant] = await tx.select().from(grants).where(eq(grants.id, hint.id))
+    const [grant] = await tx.select().from(collaborationGrants).where(eq(collaborationGrants.id, hint.id))
       .for(selected.operation === "accept" ? "update" : "share").limit(1);
     // Sample time after every potentially blocking authority lock.
     const now = instant(options);
@@ -222,7 +222,7 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     if (acceptance) {
       if (acceptance.mission_digest !== mission.digest) throw new MissionError("conflict");
       if (grant.acceptedAt) return { created: false, data: { mission: missionView, grant: grantMetadata(grant) } };
-      const [accepted] = await tx.update(grants).set({ acceptedAt: now, acceptanceProof: proofRecord(input, key.publicKey) }).where(eq(grants.id, grant.id)).returning();
+      const [accepted] = await tx.update(collaborationGrants).set({ acceptedAt: now, acceptanceProof: proofRecord(input, key.publicKey) }).where(eq(collaborationGrants.id, grant.id)).returning();
       return { created: true, data: { mission: missionView, grant: grantMetadata(accepted) } };
     }
     const action = selected.operation === "observe" ? "mission.observe" : "mission.read";
@@ -231,14 +231,14 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     if (selected.operation === "context") return { created: false, data: { mission: missionView, grant: grantMetadata(grant) } };
     if (selected.operation === "list") {
       if (selected.after > mission.lastReceiptSeq) throw new MissionError("invalid_request");
-      const rows = await tx.select().from(events).where(and(eq(events.missionId, mission.id), eq(events.projectId, mission.projectId), gt(events.receiptSeq, selected.after)))
-        .orderBy(asc(events.receiptSeq)).limit(selected.limit + 1);
+      const rows = await tx.select().from(collaborationEvents).where(and(eq(collaborationEvents.missionId, mission.id), eq(collaborationEvents.projectId, mission.projectId), gt(collaborationEvents.receiptSeq, selected.after)))
+        .orderBy(asc(collaborationEvents.receiptSeq)).limit(selected.limit + 1);
       const visible = rows.slice(0, selected.limit);
       return { created: false, data: packMissionEventPage(mission.id, selected.after.toString(), visible.map(eventMetadata), rows.length > selected.limit) };
     }
     if (!observation) throw new MissionError("invalid_request");
     const rawBody = new TextDecoder("utf-8", { fatal: true }).decode(input.bodyBytes), bodyDigest = missionSha256(input.bodyBytes);
-    const [existing] = await tx.select().from(events).where(and(eq(events.missionId, mission.id), eq(events.eventId, observation.event_id))).limit(1);
+    const [existing] = await tx.select().from(collaborationEvents).where(and(eq(collaborationEvents.missionId, mission.id), eq(collaborationEvents.eventId, observation.event_id))).limit(1);
     if (existing) {
       if (existing.grantId !== grant.id || existing.identityId !== grant.identityId || existing.signingKeyId !== grant.signingKeyId
         || existing.bodyDigest !== bodyDigest || existing.rawBody !== rawBody) throw new MissionError("conflict");
@@ -246,10 +246,10 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     }
     if (mission.lastReceiptSeq >= 9_223_372_036_854_775_807n) throw new MissionError("invalid_state");
     const receiptSeq = mission.lastReceiptSeq + 1n;
-    const [inserted] = await tx.insert(events).values({ missionId: mission.id, projectId: mission.projectId,
+    const [inserted] = await tx.insert(collaborationEvents).values({ missionId: mission.id, projectId: mission.projectId,
       eventId: observation.event_id, grantId: grant.id, identityId: grant.identityId, signingKeyId: grant.signingKeyId,
       receiptSeq, rawBody, bodyDigest, observation, proof: proofRecord(input, key.publicKey), receivedAt: now }).returning();
-    await tx.update(missions).set({ lastReceiptSeq: receiptSeq }).where(eq(missions.id, mission.id));
+    await tx.update(collaborationMissions).set({ lastReceiptSeq: receiptSeq }).where(eq(collaborationMissions.id, mission.id));
     return { created: true, data: { event: eventMetadata(inserted) } };
   });
 }

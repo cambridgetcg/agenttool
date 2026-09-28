@@ -75,6 +75,10 @@ describe("sealed collaboration transport", () => {
     for (const [path, token] of [[`${BASE}/${M}/context`, "at_project"], [`${BASE}/${M}/invitation`, "atlc_other"], [`${BASE}/${M}`, TOKEN]]) {
       const response = await f.app.request(path!, { headers: { Authorization: `Bearer ${token}` } });
       expect(response.status).toBe(401); privateResponse(response);
+      const body = await response.json();
+      expect(body.message.length).toBeGreaterThan(0);
+      expect(body.next_actions.length).toBeGreaterThan(0);
+      expect(body.docs).toBe("https://docs.agenttool.dev/COLLABORATION-MISSIONS.md");
     }
     expect(f.counts()).toEqual({ project: 0, downstream: 0 }); expect(f.seen).toEqual([]);
   });
