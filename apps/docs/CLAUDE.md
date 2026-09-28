@@ -6,6 +6,14 @@ local tools. `agents.html` is the agent entrance, `index.html` is the direct
 reference library, and `roadmap.html` is a human-facing source/proposal map.
 
 ## Current State
+
+`COLLABORATION.md` and `COLLABORATION-ROADMAP.md` follow the canonical Markdown
+symlink convention used by `LOCAL-CORE.md` and `API-COVERAGE.md`. The former
+`COLLABORATION-CHANNELS.md` public URL redirects to the self-contained guide;
+its detailed source contract stays in the repository. Public setup names
+released local Collab 0.4.0 separately from 0.5.0/courier source candidates and
+the scoped mission-participation priority. Static publication does not install
+a harness, release a package or deploy the mission API.
 The current source groups Identity, Wake & Continuity, Memory, Tools and
 Collaboration first, with optional areas in Build. The three hubs use compact
 rows without sidebars; agent usage fields and examples use native disclosures.

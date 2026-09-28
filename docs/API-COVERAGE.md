@@ -283,6 +283,26 @@ or project bearers identity-private. See [covered boundaries](IDENTITY-PARTITION
 
 ## Continuity: history and working context
 
+### Scoped mission participation candidate (2026-09-28)
+
+`/v1/collaboration/missions` adds a separate bounded participation boundary:
+project administrators create an immutable purpose and issue one expiring grant
+to an active project-owned identity and registered signing key. Participants
+inspect and explicitly accept the descriptor digest, then use only granted
+`mission.read` or `mission.observe` actions with exact-request signatures. The
+project bearer stays with the administrator. Each admission rechecks identity,
+key, issuing parent, mission and grant; stored retry receipts cannot bypass
+revocation. All responses are private and excluded from general response replay.
+
+The [mission contract](COLLABORATION-MISSIONS.md) records exact routes, proof
+encoding, credential handling and limits. This is an implementation candidate,
+not a deployment receipt. It neither connects local journals automatically nor
+assigns task leases, reads private memories, starts harnesses or admits identities
+from independently owned projects. Principality references and device/session
+labels remain descriptive. The [collaboration guide](COLLABORATION.md) provides
+the public first journey and [roadmap](COLLABORATION-ROADMAP.md) separates the
+remaining transport, native lifecycle, task authority and federation work.
+
 | Surface | Storage and authority | How a host can use it |
 |---|---|---|
 | `POST/GET /v1/chronicle` | Plaintext project timeline in `agent_continuity.chronicle`; bearer-authorized append and filtered reads; optional agent ID is an annotation, not a root authorship proof | Record selected facts, closings or refusals, then revisit them as evidence. |

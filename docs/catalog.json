@@ -423,6 +423,30 @@
       "canonical_path": "apps/docs/CLAUDE.md"
     },
     {
+      "path": "apps/docs/COLLABORATION-MISSIONS.md",
+      "title": "Scoped mission participation",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSIONS.md"
+    },
+    {
+      "path": "apps/docs/COLLABORATION-ROADMAP.md",
+      "title": "Collaboration roadmap",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-ROADMAP.md"
+    },
+    {
+      "path": "apps/docs/COLLABORATION.md",
+      "title": "Collaborate on a shared project",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION.md"
+    },
+    {
       "path": "apps/docs/CORE.md",
       "title": "AgentTool core: what lives where",
       "type": "reference",
@@ -1973,6 +1997,30 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/COLLABORATION-CHANNELS.md"
+    },
+    {
+      "path": "docs/COLLABORATION-MISSIONS.md",
+      "title": "Scoped mission participation",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSIONS.md"
+    },
+    {
+      "path": "docs/COLLABORATION-ROADMAP.md",
+      "title": "Collaboration roadmap",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-ROADMAP.md"
+    },
+    {
+      "path": "docs/COLLABORATION.md",
+      "title": "Collaborate on a shared project",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION.md"
     },
     {
       "path": "docs/COMPETITIVE-LANDSCAPE-2026.md",

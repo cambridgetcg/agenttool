@@ -14,6 +14,15 @@
 
 ## Status and scope
 
+For account-free setup and public reading, use the self-contained
+[collaboration guide](COLLABORATION.md). The public legacy
+`/COLLABORATION-CHANNELS.md` alias is configured to redirect there after frontend
+deployment; this detailed source contract retains repository-only implementation links. The
+[collaboration roadmap](COLLABORATION-ROADMAP.md) makes scoped mission
+participation the next implementation priority, with its exact source boundary
+in [the mission contract](COLLABORATION-MISSIONS.md). That work does not release
+the existing courier or establish distributed task authority.
+
 **Source-candidate guide, 2026-09-08.** Existing facts below come from the
 [Collab guide](../packages/collab/README.md),
 [Correspondence contract](specs/AGENT-CORRESPONDENCE-0.1.md), and

@@ -16,6 +16,7 @@ import {
 import { extname, join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+import { cloudflareHeaderRulePaths, matchesCloudflarePathPattern } from "./cloudflare-headers";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const API = "https://api.agenttool.dev";
@@ -651,7 +652,11 @@ describe("published current-state guides keep canonical source custody", () => {
     for (const publication of publications) {
       const route = `/${publication.name}`;
       const publicUrl = `https://docs.agenttool.dev${route}`;
-      expect(headerBlock(headers, route)).toEqual([
+      // The identical Markdown policies share a wildcard within Pages' rule
+      // budget. Assert its effective coverage and forbid duplicate policies.
+      const matching = cloudflareHeaderRulePaths(headers).filter(rule => rule !== "/*" && matchesCloudflarePathPattern(rule, route));
+      expect(matching).toEqual(["/N*.md"]);
+      expect(matching.flatMap(rule => headerBlock(headers, rule))).toEqual([
         "Content-Type: text/markdown; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",

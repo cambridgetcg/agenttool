@@ -11,7 +11,7 @@ import { handlePagesRequest } from "../../infra/pages/sensitive-path-worker.js";
 const ROOT = resolve(import.meta.dir, "../..");
 const DOCS_ROOT = join(ROOT, "apps/docs");
 const DOCS = "https://docs.agenttool.dev";
-const GUIDES = ["LOCAL-CORE.md", "CORE.md", "API-COVERAGE.md", "IDENTITY-PARTITIONS.md", "LOCAL-CONTEXT-GRANTS.md"];
+const GUIDES = ["LOCAL-CORE.md", "CORE.md", "API-COVERAGE.md", "IDENTITY-PARTITIONS.md", "LOCAL-CONTEXT-GRANTS.md", "COLLABORATION.md", "COLLABORATION-ROADMAP.md", "COLLABORATION-MISSIONS.md"];
 const SOURCE_PREFIX = "/cambridgetcg/agenttool/";
 let server: ReturnType<typeof Bun.serve>;
 const served = new Map<string, Promise<{ status: number; contentType: string; body: string }>>();
@@ -25,6 +25,12 @@ function inside(parent: string, child: string): boolean {
 async function asset(request: Request): Promise<Response> {
   const pathname = decodeURIComponent(new URL(request.url).pathname);
   if (pathname.includes("\0")) return new Response("Not Found", { status: 404 });
+  // Pages applies its committed redirect file at the asset layer. Emulate only
+  // local aliases here; canonical external discovery redirects remain separate.
+  const redirects = await readFile(join(DOCS_ROOT, "_redirects"), "utf8");
+  const alias = redirects.split(/\r?\n/).map(line => line.trim().split(/\s+/))
+    .find(([from, to, status]) => from === pathname && to?.startsWith("/") && status === "301");
+  if (alias) return new Response(null, { status: 301, headers: { Location: alias[1]! } });
   const candidate = resolve(DOCS_ROOT, `.${pathname}`);
   if (!inside(DOCS_ROOT, candidate)) return new Response("Not Found", { status: 404 });
   const possibilities = pathname.endsWith("/")
@@ -135,6 +141,25 @@ describe("local scaffolding discovery reaches public representations", () => {
     const destination = await get(new URL(`${DOCS}/LOCAL-CORE.md#files-only-starter`));
     expect(destination.status).toBe(200);
     expect(anchors(destination.body, true).has("files-only-starter")).toBe(true);
+  });
+
+  test("the former collaboration channel URL reaches public onboarding through its committed alias", async () => {
+    const response = await fetch(new URL("/COLLABORATION-CHANNELS.md", server.url), { redirect: "manual" });
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe("/COLLABORATION.md");
+    const destination = await get(new URL(response.headers.get("location")!, DOCS));
+    expect(destination.status).toBe(200);
+    expect(destination.body).toContain("## Connect two local harnesses");
+    expect(destination.body).toContain("**Published 0.4.0**");
+    expect(destination.body).toContain("**Source candidate 0.5.0**");
+  });
+
+  test("human, agent, package and fallback entries offer the self-contained collaboration guide", async () => {
+    for (const name of ["index.html", "agents.html", "packages.html", "llms.txt"]) {
+      const page = await get(new URL(name, `${DOCS}/`));
+      expect(page.status).toBe(200);
+      expect(links(page.body).some(href => new URL(href, DOCS).pathname === "/COLLABORATION.md"), name).toBe(true);
+    }
   });
 
   test("the static llms fallback discloses an account-free package preview and a usable guide", async () => {

@@ -23,7 +23,7 @@ evidence for their own claims.
 | **Wake & Continuity** | Hosted Wake plus a standalone Local Starter preview with Codex/Claude skill, direct hook and optional MCP delivery plans. | Verify native resume/compaction delivery; add a reviewed public-source npm publishing lane with matching package metadata. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
 | **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Local writes never enable loading automatically. | Add bounded revision/restore and clarify export/removal across stores. | [Memory](https://docs.agenttool.dev/memory) |
 | **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. | Make package status and first useful actions easier to find. | [Tools](https://docs.agenttool.dev/packages) |
-| **Collaboration** | Local Collab journals and separate hosted correspondence and inbox operations are implemented. | Make local coordination and hosted correspondence easier to distinguish. | [Collaboration](https://docs.agenttool.dev/packages#agent-toolkit) |
+| **Collaboration** | Published local Collab 0.4.0 journals; separate hosted correspondence and inbox operations; local waiting and courier source candidates. | Scoped mission participants within one project, followed by real-device delivery, distributed task authority and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
 
 Source implementation does not establish deployment, current availability or
 a package release. Tools and Collaboration link their recorded release evidence
@@ -81,6 +81,16 @@ link the applicable operations, schemas and evidence. An audience switch is
 navigation, not an identity or permission decision.
 
 ## How to move this roadmap forward
+
+The [collaboration roadmap](COLLABORATION-ROADMAP.md) now puts public onboarding
+first and **scoped mission participation** next. A shared principality or purpose
+is descriptive; explicit participant admission and grants supply bounded
+permission. The initial mission slice uses registered identities owned by one
+project, without distributing its administrative bearer. Cross-device message
+delivery, native lifecycle, distributed leases/review and cross-project
+membership each have separate acceptance criteria. Start with the
+[public collaboration guide](COLLABORATION.md); source implementation is not
+evidence that the mission service is deployed.
 
 The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a standalone
 preview: selected local records, bounded rendering, metadata and explicit
