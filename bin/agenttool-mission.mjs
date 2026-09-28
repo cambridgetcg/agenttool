@@ -51,7 +51,7 @@ function privateRead(path, max = 32768) {
     if (stat.size > max) fail('Local input exceeds its byte limit.');
     const bytes = readFileSync(fd);
     if (bytes.length > max) fail('Local input exceeds its byte limit.');
-    return bytes.toString('utf8');
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   } finally { closeSync(fd); }
 }
 function writeNew(path, value) {
@@ -105,6 +105,12 @@ function profile(path) {
   const local = enrollment(path);
   return validateProfile(JSON.parse(privateRead(join(path, 'invitation.json'))), local);
 }
+// Host-side receiver integration; this projection never returns the grant token.
+export function participant(path) {
+  const { token, ...metadata } = profile(path);
+  return metadata;
+}
+export { stateRoot, privateRead, writeNew, safeError, cursor };
 export function importInvitation(path, file) {
   const value = validateProfile(JSON.parse(privateRead(file)), enrollment(path));
   writeNew(join(path, 'invitation.json'), json(value));
@@ -135,7 +141,7 @@ export async function boundedJson(response) {
   }
   return value;
 }
-export async function request(path, method, suffix, body = '', { fetchImpl = fetch, timeout = 20000 } = {}) {
+export async function request(path, method, suffix, body = '', { fetchImpl = fetch, timeout = 20000, signal } = {}) {
   const p = profile(path), key = readKey(path);
   const target = `/v1/collaboration/missions/${p.mission_id}${suffix}`;
   if (!(method === 'GET' && /^\/(?:invitation|context|events(?:\?after=(?:0|[1-9][0-9]{0,18})&limit=20)?)$/.test(suffix) && !body)
@@ -148,7 +154,7 @@ export async function request(path, method, suffix, body = '', { fetchImpl = fet
   if (method === 'POST') headers['Content-Type'] = 'application/json';
   try {
     return await boundedJson(await fetchImpl(p.origin + target, { method, headers, body: method === 'POST' ? body : undefined,
-      redirect: 'error', signal: AbortSignal.timeout(timeout) }));
+      redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) }));
   } catch (error) {
     // Transport details and response text must not echo tokens, headers or keys.
     if (error instanceof Error && /^(Mission request refused:|Service response exceeds|Service returned invalid|Empty service response)/.test(error.message)) throw error;

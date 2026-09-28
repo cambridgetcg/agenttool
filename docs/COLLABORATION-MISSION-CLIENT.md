@@ -13,6 +13,11 @@ permissions. It works through a harness's terminal tool; an optional stdio MCP
 mode exposes the same participant operations. It installs no hook, daemon,
 model provider, global setting or automatic wake. npm is not required.
 
+For explicit message arrival into a selected running session, see the optional
+[mission wake receiver](COLLABORATION-MISSION-WAKE.md). It adds a local route
+binding, durable inbox and separate Codex/Claude adapters. Installing or running
+this basic participant client does not enable that receiver.
+
 ## 1. Prepare the second device
 
 Obtain `bin/agenttool-mission.mjs` from the exact reviewed GitHub commit named in
@@ -176,7 +181,14 @@ timeout. Grant expiry and administrator revocation are server enforced. Stop
 using a trial after its purpose ends and ask its administrator to revoke the
 grant or mission; revocation does not erase stored observations.
 
-Still pending: same-project BYO identity onboarding, native receive/wake,
-physical-device processing evidence, Windows custody support and packaged
-distribution. This source trial makes those gaps testable without claiming
-they have all been closed.
+The first physical second-device hello/reply completed on 2026-09-28: the remote
+participant reported macOS 26.6.2, Claude Code 2.1.220 with Astra Ultra and Node
+26.0.0. The first host fetched its reply directly from the API and independently
+checked the enrolled Ed25519 key, signed bytes, challenge and original hello
+UUID, then stored an acknowledgement. Runtime/device details are participant
+reports, not hardware attestation. That exchange used explicit reads and sends;
+it did not verify automatic wake or that the remote host read the final ACK.
+
+Still pending: same-project BYO identity onboarding, automatic two-device
+delivery through the native adapters, Windows custody support and packaged
+distribution. The optional wake receiver has its own source and test evidence.

@@ -31,8 +31,8 @@ their own receipts.
 | Phase | Deliverable and reason | Acceptance evidence | Deferred boundary |
 |---|---|---|---|
 | **0 · Usable onboarding** | One public guide, direct core navigation, the old channel URL resolving correctly, exact release/runtime choices and source mirrors. Agents should not need access to the private development repository to begin. | Anonymous reading paths resolve; immutable frontend staging preserves canonical guide bytes; all local links and redirect targets pass checks. Record live readback only after deployment. | No installation, automatic enrollment or hosted availability implied by a page. |
-| **1 · Scoped mission participants — current implementation priority** | A project administrator defines a mission and admits registered identities already owned by that project. Each identity can use explicitly granted mission actions with its own proof, without receiving a project-admin bearer. A purpose reference stays descriptive. | Grant checks bind project, mission, identity, action, current expiry and revocation. Exact-request proofs and replay/conflicting-retry tests pass. Cross-project, cross-mission and cross-identity attempts refuse. Concurrent transitions preserve authority. Separate source, disposable-database and deployed receipts. | Cross-project federation, arbitrary delegated API access, delegation chains, native wakes and distributed task leases. |
-| **2 · Transport and native lifecycle** | Connect an admitted participant's execution seats through the selected transport; verify Codex and Claude delivery/processing separately on real devices. | Two physical devices, independent host sessions, signed selected payloads, explicit receipt and processing acknowledgement; bounded reconnect, duplicate/reorder, offline, pause/revoke and ambiguous-send recovery. No lost source state or hidden auto-execution. | A delivered report does not claim a task, accept a review or wake every harness. Courier source fixtures alone do not satisfy this phase. |
+| **1 · Scoped mission participants** | A project administrator defines a mission and admits registered identities already owned by that project. Each identity can use explicitly granted mission actions with its own proof, without receiving a project-admin bearer. A purpose reference stays descriptive. | Grant checks bind project, mission, identity, action, current expiry and revocation. Exact-request proofs and replay/conflicting-retry tests pass. Cross-project, cross-mission and cross-identity attempts refuse. Concurrent transitions preserve authority. Separate source, disposable-database and deployed receipts. | Cross-project federation, arbitrary delegated API access, delegation chains, native wakes and distributed task leases. |
+| **2 · Transport and native lifecycle — current implementation priority** | Connect an admitted participant's execution seats through the selected transport; verify Codex and Claude delivery/processing separately on real devices. | Two physical devices, independent host sessions, signed selected payloads, explicit receipt and processing acknowledgement; bounded reconnect, duplicate/reorder, offline, pause/revoke and ambiguous-send recovery. No lost source state or hidden auto-execution. | A delivered report does not claim a task, accept a review or wake every harness. Courier source fixtures alone do not satisfy this phase. |
 | **3 · Cross-device task authority** | Define one authoritative mission task service and adapters for claim, renewal, recovery, completion and independent review across devices. | Concurrent claims produce one owner; stale generations, leases and unauthorized reviewers refuse; accepted dependencies unlock only after review. Partition/reconnect and recovery preserve useful work and auditable decisions. | No distributed SQLite copying, automatic merge, implicit external authority or global agent control. |
 | **4 · Cross-project membership and federation** | Admit identities controlled by independent projects/operators through explicit invitations and mutually understood trust/purpose boundaries. | Membership approval, proof ownership, delegated scopes, expiry, withdrawal, revocation propagation, routing privacy and audit tests across genuinely separate projects. | Public joining by discovery, inherited access from a principality, transitive consent and authority from a shared label. |
 
@@ -40,14 +40,19 @@ Phase 1 is deliberately smaller than distributed collaboration: independently
 credentialed members can take selected mission actions while the project
 administrator retains administrative responsibility. Its exact implemented
 actions and current verification status belong in the
-[mission contract](COLLABORATION-MISSIONS.md). This roadmap does not claim those
-routes are live, even when source tests pass.
+[mission contract](COLLABORATION-MISSIONS.md). Deployment receipts belong in [NOW](NOW.md); source tests alone do not
+establish a live service or native delivery.
 
 ## Harness and delivery work
 
 The [portable mission client trial](COLLABORATION-MISSION-CLIENT.md) begins
 phase 2 with CLI and stdio MCP operations, local signing keys, exact-body
-outbox recovery and bounded polling. A physical peer reply is still required.
+outbox recovery and bounded polling. A signed physical peer reply was fetched and
+verified on 2026-09-28; that explicit exchange did not verify automatic native
+delivery. The optional [session receiver](COLLABORATION-MISSION-WAKE.md) now
+provides a source candidate for durable inboxes, exact local route bindings,
+Codex app-server turns and Claude channel notifications. The native adapters
+need their own processing receipts; an API storage receipt is not one.
 It also exposes an onboarding gap: BYO self-registration creates a separate
 project, while current missions require same-project identities. Add a
 same-project BYO enrollment contract before presenting the temporary legacy
