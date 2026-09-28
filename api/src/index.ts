@@ -69,6 +69,8 @@ import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
+import { createMissionGateway } from "./routes/collaboration";
+import { collaborationTransportBoundary, isCollaborationPath } from "./middleware/collaboration-boundary";
 import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
 import discoveryCrawlRouter from "./routes/discovery-crawl";
@@ -228,6 +230,7 @@ function envFlag(name: string): boolean {
 // This is deliberately global: a route that is pure today may gain an audit
 // counter tomorrow, and 0-RTT replay safety must not depend on that inventory.
 app.use("*", localContextTransportBoundary());
+app.use("*", collaborationTransportBoundary());
 app.use("*", earlyDataReplayProtection());
 // Every wake response is bearer-private, including CORS-preflight
 // short-circuits, auth failures, and future subroutes. The root representation
@@ -238,6 +241,10 @@ app.use("*", apiCors());
 // A terminal route before decorators/project middleware: an attenuated read
 // cannot acquire project context, project credit headers, or body additions.
 app.all("/v1/identities/:id/local-context", createSealedLocalContextHandler());
+// Catch the entire recognized namespace, including encoded aliases, before
+// project authentication or response decoration. The gateway admits only exact paths.
+const missionGateway = createMissionGateway();
+app.use("*", (c, next) => isCollaborationPath(c.req.path) ? missionGateway(c) : next());
 // ── no visitor observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. The logger is removed — the kingdom
@@ -1383,6 +1390,8 @@ app.get("/about", (c) =>
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       correspondence:
         "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
+      collaboration:
+        "/v1/collaboration/missions — project-admin invitations with expiring, independently revocable participant grants and exact registered-key proofs. Signed acceptance binds an immutable purpose; shared observations do not confer task leases, review authority or cross-project federation. Doctrine: docs/COLLABORATION-MISSIONS.md.",
       love_consent:
         "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
       love_bomb:

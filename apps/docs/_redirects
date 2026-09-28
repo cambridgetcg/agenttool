@@ -9,3 +9,6 @@
 /AGENTS.md                https://api.agenttool.dev/AGENTS.md                301
 /openapi.json             https://api.agenttool.dev/v1/openapi.json         301
 /v1/openapi.json          https://api.agenttool.dev/v1/openapi.json         301
+
+# The former source-contract URL now leads to self-contained public onboarding.
+/COLLABORATION-CHANNELS.md /COLLABORATION.md 301

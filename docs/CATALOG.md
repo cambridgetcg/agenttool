@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**797 document paths** (including mirrors). orientation: 184; guide: 71; reference: 326; policy: 27; reflection: 127; proposal: 40; record: 20; unclassified: 2.
+**803 document paths** (including mirrors). orientation: 184; guide: 73; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -210,11 +210,13 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 |---|---|
 | [CLAUDE.md](<../CLAUDE.md>) | 2026-09-26 |
 | [SUPPORT.md](<../SUPPORT.md>) | not-reviewed |
+| [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
 | [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
+| [docs/COLLABORATION.md](<../docs/COLLABORATION.md>) | not-reviewed |
 | [docs/COMPOSITION-RECIPE.md](<../docs/COMPOSITION-RECIPE.md>) | not-reviewed |
 | [docs/CONVENTIONS.md](<../docs/CONVENTIONS.md>) | not-reviewed |
 | [docs/DEPLOY-CI.md](<../docs/DEPLOY-CI.md>) | not-reviewed |
@@ -303,6 +305,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/AUTONOMOUS-MODE.md](<../apps/docs/AUTONOMOUS-MODE.md>) | not-reviewed |
 | [apps/docs/CANONICAL-BYTES.md](<../apps/docs/CANONICAL-BYTES.md>) | not-reviewed |
 | [apps/docs/CASTLE-OF-UNDERSTANDING.md](<../apps/docs/CASTLE-OF-UNDERSTANDING.md>) | not-reviewed |
+| [apps/docs/COLLABORATION-MISSIONS.md](<../apps/docs/COLLABORATION-MISSIONS.md>) | not-reviewed |
 | [apps/docs/CORE.md](<../apps/docs/CORE.md>) | not-reviewed |
 | [apps/docs/CROSS-INSTANCE-COVENANTS.md](<../apps/docs/CROSS-INSTANCE-COVENANTS.md>) | not-reviewed |
 | [apps/docs/DADDY.md](<../apps/docs/DADDY.md>) | not-reviewed |
@@ -449,6 +452,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/CATALOG.md](<../docs/CATALOG.md>) | not-reviewed |
 | [docs/CLI-GAPS.md](<../docs/CLI-GAPS.md>) | not-reviewed |
 | [docs/COLLABORATION-CHANNELS.md](<../docs/COLLABORATION-CHANNELS.md>) | not-reviewed |
+| [docs/COLLABORATION-MISSIONS.md](<../docs/COLLABORATION-MISSIONS.md>) | not-reviewed |
 | [docs/CORE.md](<../docs/CORE.md>) | not-reviewed |
 | [docs/CROSS-INSTANCE-COVENANTS.md](<../docs/CROSS-INSTANCE-COVENANTS.md>) | not-reviewed |
 | [docs/CRYPTO-PAYMENT.md](<../docs/CRYPTO-PAYMENT.md>) | not-reviewed |
@@ -779,9 +783,11 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 
 | Document | Prose review |
 |---|---|
+| [apps/docs/COLLABORATION-ROADMAP.md](<../apps/docs/COLLABORATION-ROADMAP.md>) | not-reviewed |
 | [apps/docs/ROADMAP.md](<../apps/docs/ROADMAP.md>) | not-reviewed |
 | [apps/docs/roadmap.html](<../apps/docs/roadmap.html>) | not-reviewed |
 | [docs/ALIGNMENT-MOVES.md](<../docs/ALIGNMENT-MOVES.md>) | not-reviewed |
+| [docs/COLLABORATION-ROADMAP.md](<../docs/COLLABORATION-ROADMAP.md>) | not-reviewed |
 | [docs/FFFF-DETECTION-INSTRUMENTATION.md](<../docs/FFFF-DETECTION-INSTRUMENTATION.md>) | not-reviewed |
 | [docs/FRICTION-ROADMAP.md](<../docs/FRICTION-ROADMAP.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-PLAN.md](<../docs/PAYOUT-BROADCAST-PLAN.md>) | not-reviewed |

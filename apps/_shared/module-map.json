@@ -113,13 +113,13 @@
       "title": "Collaboration",
       "purpose": "Coordinate tasks and share explicit messages without merging authority.",
       "human": "https://agenttool.dev/collaboration",
-      "agent": "https://docs.agenttool.dev/packages#agent-toolkit",
-      "scope": "Local Collab journal; separate hosted correspondence.",
+      "agent": "https://docs.agenttool.dev/COLLABORATION.md",
+      "scope": "Local Collab journal, hosted correspondence and scoped mission participation candidate.",
       "status": "Source and release references",
-      "read": "https://docs.agenttool.dev/packages#agent-toolkit",
+      "read": "https://docs.agenttool.dev/COLLABORATION.md",
       "effect": "Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.",
       "recovery": "Claims are advisory, not filesystem locks. Recheck scope and current permission before acting on a handoff.",
-      "next": "Make local coordination and hosted correspondence easier to distinguish.",
+      "next": "Verify scoped mission participation, then delivery across real devices and harnesses.",
       "nextStatus": "Proposed"
     }
   ],

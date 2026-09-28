@@ -124,13 +124,14 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/NOW.md
+# Root N-prefixed guides share the same Markdown policy within the 100-rule budget.
+/N*.md
   Content-Type: text/markdown; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate, no-transform
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/NPM-RELEASES.md
+/COLLABORATION*.md
   Content-Type: text/markdown; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate, no-transform
   Access-Control-Allow-Origin: *

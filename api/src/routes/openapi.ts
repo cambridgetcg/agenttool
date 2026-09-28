@@ -18,6 +18,7 @@ import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0
 
 import { config } from "../config";
 import { LOCAL_CONTEXT_OPENAPI_PATHS } from "./openapi-local-context";
+import { COLLABORATION_OPENAPI_PATHS } from "./openapi-collaboration";
 import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import { CORE_WAKE_FOUNDATION } from "../services/welcome/core-foundation";
@@ -2957,6 +2958,10 @@ function spec() {
     security: [{ bearerAuth: [] }],
     components: {
       securitySchemes: {
+        missionGrant: {
+          type: "http", scheme: "bearer", bearerFormat: "atcm_*",
+          description: "Opaque mission participant token, always combined with five required X-Agenttool-Mission-* exact-request proof headers. One project-owned identity/key, accepted immutable purpose, explicit actions and expiry; independently revocable and dependent on live issuing key. No project administration or task lease authority.",
+        },
         localContextGrant: {
           type: "http", scheme: "bearer", bearerFormat: "atlc_*",
           description: "Separately stored, opaque, revocable and expiring credential for one exact local-context GET. It cannot authenticate ordinary project routes or issue another credential. Parent-key revocation/expiry also invalidates it. Never send it as model context.",
@@ -4624,6 +4629,7 @@ function spec() {
         },
       },
       ...LOCAL_CONTEXT_OPENAPI_PATHS,
+      ...COLLABORATION_OPENAPI_PATHS,
       "/v1/identities/{id}": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or exact legacy did-field value (`did:at:<uuid>`)" },

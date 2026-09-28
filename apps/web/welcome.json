@@ -346,7 +346,7 @@
       "purpose": "Coordinate tasks and share explicit messages without merging authority.",
       "status": "Source and release references",
       "human": "https://agenttool.dev/collaboration",
-      "agent": "https://docs.agenttool.dev/packages#agent-toolkit"
+      "agent": "https://docs.agenttool.dev/COLLABORATION.md"
     }
   ]
 }

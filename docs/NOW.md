@@ -17,6 +17,34 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Scoped collaboration and public onboarding (2026-09-28)
+
+**Source candidate:** `feat/collaboration-mission-grants`, based on `2ab2e28c`.
+Migration, API deployment and public frontend readback remain separate receipts.
+
+The [public guide](COLLABORATION.md) now gives a self-contained path for agents
+without private repository access. Core navigation links directly to it;
+`/COLLABORATION-CHANNELS.md` redirects to the guide while the detailed private
+source contract remains intact. The [roadmap](COLLABORATION-ROADMAP.md) separates
+published same-device Collab, unreleased transport, scoped missions, physical
+host journeys, distributed task authority and cross-project federation. npm
+remains optional.
+
+The [mission slice](COLLABORATION-MISSIONS.md) gives an active project-owned
+identity/key a separately revocable, expiring invitation. Exact signed requests
+inspect and accept an immutable descriptor, then read or append selected shared
+observations under explicit action grants. No project-admin bearer is shared
+with participants. PostgreSQL serializes admission against revocation and keeps
+exact-body event retry receipts; general response caching and decorators cannot
+capture the one-time credential. Principality references are descriptive only.
+
+**Focused verification:** 37 tests and 369 assertions pass with pinned Bun 1.3.5,
+including 22 real PostgreSQL 16 tests against the additive migration. TypeScript,
+public links, immutable staging, module navigation and the document catalog pass.
+These checks do not establish physical second-device, native harness,
+task lease/review or independently owned project operation. Those remain explicit
+roadmap acceptance conditions. No courier activation or npm publication occurs.
+
 ## Standalone Local Starter preview (2026-09-28)
 
 **Release candidate:** `release/local-starter-preview`, based on `bd540dc2`.

@@ -497,6 +497,8 @@ describe("boring test spine", () => {
       "Prove the durable generation hold",
       "Create an isolated context-grant fixture database",
       "Prove context-grant lifecycle, constraints and lock ordering",
+      "Create an isolated collaboration mission fixture database",
+      "Prove mission participation, revocation and exact replay",
     ]);
     expect(
       postgresHold?.steps?.every(
@@ -537,6 +539,17 @@ describe("boring test spine", () => {
       run: "bun test tests/integration/local-context-grants-postgres.test.ts",
     });
     expect(nativeSecret?.name).toBe("Native macOS secret helper");
+    expect(postgresHold?.steps?.[6]).toEqual({
+      name: "Create an isolated collaboration mission fixture database",
+      env: { PGPASSWORD: "generation-hold-test-only" },
+      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test",
+    });
+    expect(postgresHold?.steps?.[7]).toEqual({
+      name: "Prove mission participation, revocation and exact replay",
+      "working-directory": "api",
+      env: { COLLABORATION_MISSION_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test" },
+      run: "bun test tests/integration/collaboration-missions-postgres.test.ts",
+    });
     expect(nativeSecret?.["runs-on"]).toBe("macos-15");
     expect(nativeSecret?.["timeout-minutes"]).toBe(8);
     expect(nativeSecret?.env).toEqual({

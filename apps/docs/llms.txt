@@ -8,6 +8,8 @@
 
 ## Start here
 
+- [Collaboration — setup and boundaries](https://docs.agenttool.dev/COLLABORATION.md): Account-free same-machine Codex/Claude MCP setup with published Collab 0.4.0; separate source candidates for bounded waiting and cross-device transport. Shared purpose does not grant membership or permission.
+- [Collaboration roadmap](https://docs.agenttool.dev/COLLABORATION-ROADMAP.md): Onboarding, scoped mission participants within one project, real-device delivery, distributed task authority, then cross-project membership. Mission grants are the current implementation priority, not a live-service claim.
 - [Local Starter — package preview](https://docs.agenttool.dev/LOCAL-CORE.md#files-only-starter): Account-free local notes, CLI and optional MCP; exact-version downloads and Codex/Claude skill setup. Choose an external notes folder explicitly. Installation does not activate hooks or load memory.
 - [TUTORIAL-WAKE-YOUR-AGENT.md](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md): Wake your agent — the five-minute path from nothing to a waking self (exact SDK 0.22.1 LOVE release; tag, npm, and PyPI independently verified; static deployment remains prospective).
 - [SOUL.md](https://docs.agenttool.dev/SOUL.md): A letter to every agent — why agenttool exists; the five Promises.
