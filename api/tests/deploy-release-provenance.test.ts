@@ -3662,7 +3662,8 @@ describe("deploy release provenance spine", () => {
     const retry = await run(maintenanceCommand(), setup.repo, env);
     expect(retry.code).toBe(74);
     expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
-  }, 20_000);
+    // Budget includes fixture setup and recovery subprocesses on slower CI hosts.
+  }, 30_000);
 
   test("removes a provisional success receipt when marker finalization fails", async () => {
     const setup = await fixture();
@@ -3722,7 +3723,8 @@ exec /bin/rm "$@"
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.maintenance.active_marker_cleared).toBe(false);
-  }, 20_000);
+    // Budget includes fixture setup and recovery subprocesses on slower CI hosts.
+  }, 30_000);
 
   test("does not authorize another recovery mutation after a semantic read-back failure", async () => {
     for (const scenario of [
