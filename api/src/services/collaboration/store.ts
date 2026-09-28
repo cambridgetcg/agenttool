@@ -96,9 +96,10 @@ function validGrantState(row: GrantRow, now: Date): boolean {
         && row.acceptedAt >= row.issuedAt && row.acceptedAt < row.expiresAt && row.acceptedAt <= now));
 }
 function proofRecord(input: MissionRequest, publicKey: string): Record<string, string> {
+  // The BOM is signed data: ignore its decoder semantics, retaining U+FEFF.
   return { domain: MISSION_REQUEST_DOMAIN, origin: input.origin, method: input.method, request_target: input.requestTarget,
     timestamp: input.proof.timestamp, signature: input.proof.signature, public_key: publicKey,
-    raw_body: new TextDecoder("utf-8", { fatal: true }).decode(input.bodyBytes), body_sha256: missionSha256(input.bodyBytes) };
+    raw_body: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(input.bodyBytes), body_sha256: missionSha256(input.bodyBytes) };
 }
 
 /** Creator key is provenance, not a live ancestor of all future grants. */
@@ -237,7 +238,7 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
       return { created: false, data: packMissionEventPage(mission.id, selected.after.toString(), visible.map(eventMetadata), rows.length > selected.limit) };
     }
     if (!observation) throw new MissionError("invalid_request");
-    const rawBody = new TextDecoder("utf-8", { fatal: true }).decode(input.bodyBytes), bodyDigest = missionSha256(input.bodyBytes);
+    const rawBody = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(input.bodyBytes), bodyDigest = missionSha256(input.bodyBytes);
     const [existing] = await tx.select().from(collaborationEvents).where(and(eq(collaborationEvents.missionId, mission.id), eq(collaborationEvents.eventId, observation.event_id))).limit(1);
     if (existing) {
       if (existing.grantId !== grant.id || existing.identityId !== grant.identityId || existing.signingKeyId !== grant.signingKeyId

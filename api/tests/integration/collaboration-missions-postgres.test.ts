@@ -8,7 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import type { Sql } from "postgres";
 import postgres from "../fixtures/verified-postgres";
 import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../../src/services/collaboration/store";
-import { canonicalMissionRequestBytes } from "../../src/services/collaboration/proof";
+import { canonicalMissionRequestBytes, verifyMissionProof } from "../../src/services/collaboration/proof";
 import type { MissionAction, MissionRequest } from "../../src/services/collaboration/contracts";
 
 const DATABASE = process.env.COLLABORATION_MISSION_TEST_DATABASE_URL?.trim() ?? "";
@@ -121,6 +121,38 @@ databaseTest("separate accepted identities share bounded observations and exact 
   expect((read.data.events as unknown[])).toHaveLength(1);
   await expect(executeMissionRequest(req(observer.token, "/events", { event_id: uid(13), summary: "unauthorized" }, { proof: readerProof }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
   await expect(executeMissionRequest(req(token, "/events?after=2"), options())).rejects.toMatchObject({ status: 400 });
+});
+
+databaseTest("BOM-prefixed signed observations roundtrip exact bytes and fresh retries preserve receipts", async () => {
+  const { token } = await accepted();
+  const body = { event_id: E, summary: "Selected 雨夜 evidence" };
+  const bodyBytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify(body))]);
+  const request = req(token, "/events", body, { bodyBytes });
+  const written = await executeMissionRequest(request, options());
+  const event = written.data.event as { raw_body: string; proof: { raw_body: string } };
+  expect(Buffer.from(event.raw_body, "utf8")).toEqual(bodyBytes);
+  expect(Buffer.from(event.proof.raw_body, "utf8")).toEqual(bodyBytes);
+  expect(verifyMissionProof({ ...request, bodyBytes: Buffer.from(event.raw_body, "utf8") }, PUBLIC, NOW)).toBe(true);
+  const [stored] = await admin`SELECT raw_body, proof FROM tools.collaboration_events WHERE mission_id = ${M} AND event_id = ${E}`;
+  expect(Buffer.from(stored.raw_body, "utf8")).toEqual(bodyBytes);
+  expect(Buffer.from(stored.proof.raw_body, "utf8")).toEqual(bodyBytes);
+  const later = new Date(NOW.getTime() + 1000);
+  const fresh = req(token, "/events", body, { bodyBytes, proof: { ...request.proof, timestamp: later.toISOString() } });
+  const retried = await executeMissionRequest(fresh, { database, now: later });
+  expect(retried.created).toBe(false);
+  expect(retried.data).toEqual(written.data);
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_events`)[0].n).toBe(1);
+});
+
+databaseTest("BOM-prefixed acceptance retains independently verifiable signed body bytes", async () => {
+  const { token, mission } = await enrolled();
+  const body = { mission_digest: mission.mission_digest };
+  const bodyBytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify(body))]);
+  const request = req(token, "/accept", body, { bodyBytes });
+  expect((await executeMissionRequest(request, options())).created).toBe(true);
+  const [stored] = await admin`SELECT acceptance_proof FROM tools.collaboration_grants WHERE id = ${G}`;
+  expect(Buffer.from(stored.acceptance_proof.raw_body, "utf8")).toEqual(bodyBytes);
+  expect(verifyMissionProof({ ...request, bodyBytes: Buffer.from(stored.acceptance_proof.raw_body, "utf8") }, PUBLIC, NOW)).toBe(true);
 });
 
 databaseTest("project, mission, key, parent, action and expiry boundaries cannot widen grants", async () => {

@@ -38,8 +38,8 @@ with participants. PostgreSQL serializes admission against revocation and keeps
 exact-body event retry receipts; general response caching and decorators cannot
 capture the one-time credential. Principality references are descriptive only.
 
-**Focused verification:** 48 tests and 398 assertions pass with pinned Bun 1.3.5,
-including 22 real PostgreSQL 16 tests against the additive migration. TypeScript,
+**Focused verification:** 50 tests and 409 assertions pass with pinned Bun 1.3.5,
+including 24 real PostgreSQL 16 tests against the additive migration. TypeScript,
 public links, immutable staging, module navigation and the document catalog pass.
 These checks do not establish physical second-device, native harness,
 task lease/review or independently owned project operation. Those remain explicit
