@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { initStarter, inspectStarter } from '../../local-starter/src/core.mjs';
 import { buildLocalContextMcpServer, LocalContextStdioTransport, MAX_WIRE_BYTES } from '../src/server.mjs';
 
@@ -270,7 +270,7 @@ test('native failed response after rename reports uncertainty without replay or 
   `, { mode: 0o600 });
   const before = snapshot(dir);
   const expected = hash(dir, 'handoff');
-  const processHandle = start(['--dir', dir, '--write', 'handoff'], ['--import', preloader]);
+  const processHandle = start(['--dir', dir, '--write', 'handoff'], ['--import', pathToFileURL(preloader).href]);
   try {
     await processHandle.peer.initialize();
     const saved = await processHandle.peer.call('local_handoff_save', { text: 'Chosen text applied once.', expected_sha256: expected });
