@@ -39,6 +39,11 @@ jobs:
         working-directory: packages/local-starter
     steps:
       - name: Check out repository
+        # Keep the authored file bytes stable for protocol and artifact fixtures.
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
