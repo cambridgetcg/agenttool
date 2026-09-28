@@ -1,15 +1,29 @@
 {
   "name": "@agenttool/local-starter",
   "version": "0.1.0-dev.0",
-  "private": true,
   "description": "Explicit files-only context and handoff starter for agent hosts",
+  "author": "AgentTool contributors",
+  "homepage": "https://github.com/cambridgetcg/agenttool-local-starter#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/local-starter"
+  },
+  "bugs": { "url": "https://github.com/cambridgetcg/agenttool-local-starter/issues" },
   "license": "Apache-2.0",
   "type": "module",
   "engines": { "node": ">=22" },
-  "exports": { ".": "./src/core.mjs" },
-  "bin": { "agenttool-local-starter": "./src/cli.mjs" },
-  "files": ["src", "skills", "README.md", "CLAUDE.md"],
+  "exports": { ".": "./dist/core.mjs" },
+  "bin": {
+    "agenttool-local-starter": "./dist/cli.mjs",
+    "agenttool-local-starter-mcp": "./dist/agenttool-local-starter-mcp.js"
+  },
+  "files": ["dist", "skills", ".codex-plugin", ".claude-plugin", "plugin.json", "README.md", "LICENSE", "NOTICE"],
+  "publishConfig": { "access": "public" },
+  "bundlerBunVersion": "1.3.5",
   "scripts": {
+    "build": "bun scripts/build-release.ts",
+    "check:bundle": "node scripts/check-release.mjs",
     "test": "node --test",
     "ci": "node --test"
   }

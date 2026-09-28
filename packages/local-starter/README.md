@@ -1,9 +1,9 @@
 # AgentTool local starter
 
 > **Type:** guide · **Purpose:** carry selected local context, handoffs and durable notes between sessions, with explicit Codex and Claude Code delivery choices.
-> **Evidence:** [core](src/core.mjs), [filesystem boundary](src/files.mjs), [CLI](src/cli.mjs), [delivery plans](src/delivery.mjs), [adapter fragments](src/adapters.mjs), and [explicit hosted-read companion](src/connect.mjs). Source availability does not establish package publication or host delivery.
+> **Evidence:** the release's `dist/core.mjs`, `dist/files.mjs`, `dist/cli.mjs`, `dist/delivery.mjs`, `dist/adapters.mjs`, and explicit `dist/connect.mjs`. Release availability does not establish host installation or delivery.
 
-This private source package creates seven ordinary Markdown files and a JSON
+This preview package creates seven ordinary Markdown files and a JSON
 manifest. You choose what a host reads. Its ordinary commands and hooks have no
 runtime dependencies, service, database, network calls, credential discovery,
 identity registration, or model calls. It does not install itself into an agent
@@ -14,19 +14,46 @@ The files hold optional plaintext context. They are not a key store, an
 authenticated identity, model training, or evidence of personal continuity.
 Reading retained prose does not grant permission for a new task.
 
+## Obtain the preview
+
+`@agenttool/local-starter@0.1.0-dev.0` is one portable package: zero-dependency
+CLI modules, a skill, optional bundled stdio MCP, and Codex/Claude Code plugin
+manifests. Direct downloads and the [public distribution repository](https://github.com/cambridgetcg/agenttool-local-starter)
+carry the same release contents. Pin the version and check the download's
+published SHA-256 before extraction. The package's repository metadata identifies
+the protected source repository; the public distribution is separately inspectable.
+
+For an npm-managed project installation:
+
+```sh
+npm install --save-exact --ignore-scripts @agenttool/local-starter@0.1.0-dev.0
+```
+
+The package has no install lifecycle scripts or runtime dependency installation.
+Node **22 or newer** runs both CLI and MCP; Bun is needed only by maintainers
+building releases. The CLI is available as `agenttool-local-starter` through
+your package manager's local executable path. For a downloaded archive, extract
+it and use `node /absolute/package/dist/cli.mjs` directly.
+
+Plugin installation exposes the skill only: no default notes root, MCP process,
+hook, initialization, read or save. Keep notes outside the extracted package,
+`node_modules`, and plugin cache. Generate the explicit project delivery plan
+below after selecting a root. Skills, MCP and hooks can be chosen independently.
+No account, hosted API or identity registration is needed for local use.
+
 ## Start manually
 
-Node **22 or newer** is declared. No build or dependency installation is needed.
-Run these examples from `packages/local-starter`; replace the absolute paths.
+No build or dependency installation is needed for a release archive.
+Run these examples from its extracted package directory; replace the absolute paths.
 The destination's parent directory must exist, and the destination must be new.
 Its filesystem must support hardlinks: init uses a temporary hardlink to publish
 the manifest without overwriting an existing name.
 
 ```sh
-node src/cli.mjs init --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs status --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs render --dir /absolute/path/project/.agenttool-local
-node src/cli.mjs render --dir /absolute/path/project/.agenttool-local --format json
+node dist/cli.mjs init --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs status --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs render --dir /absolute/path/project/.agenttool-local
+node dist/cli.mjs render --dir /absolute/path/project/.agenttool-local --format json
 ```
 
 Edit the selected notes, render again, and deliberately paste or attach the
@@ -110,8 +137,8 @@ Read `status` and take the `sha256` of its `handoff` entry. Prepare the next
 handoff in a file you selected, then replace `HASH` below with that digest:
 
 ```sh
-node src/cli.mjs handoff --dir /absolute/path/project/.agenttool-local --expect HASH < /absolute/path/reviewed-handoff.md
-node src/cli.mjs memory --dir /absolute/path/project/.agenttool-local --expect MEMORY_HASH < /absolute/path/reviewed-memories.md
+node dist/cli.mjs handoff --dir /absolute/path/project/.agenttool-local --expect HASH < /absolute/path/reviewed-handoff.md
+node dist/cli.mjs memory --dir /absolute/path/project/.agenttool-local --expect MEMORY_HASH < /absolute/path/reviewed-memories.md
 ```
 
 Each command reads bounded UTF-8 from redirected stdin and replaces its fixed
@@ -152,9 +179,9 @@ root still refuses reinitialization, and leftover locks are not stolen.
 Generate a reviewable project plan for the directory you already initialized:
 
 ```sh
-node src/cli.mjs delivery --dir /absolute/private/notes --harness codex
-node src/cli.mjs delivery --dir /absolute/private/notes --harness claude-code --write both
-node src/cli.mjs delivery --dir /absolute/private/notes --harness codex --transport cli --write handoff
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness codex
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness claude-code --write both
+node dist/cli.mjs delivery --dir /absolute/private/notes --harness codex --transport cli --write handoff
 ```
 
 The JSON contains exact file contents and intended destinations. Skill and
@@ -179,10 +206,11 @@ host without MCP; that plan omits the MCP configuration and dependency step.
 Its binding records the choice, so an unavailable MCP server is not mistaken
 for permission to save through a shell.
 
-The [separate MCP package](../local-starter-mcp/README.md) runs on Node >=22 and
-needs its own frozen dependency installation using Bun 1.3.5. Both sibling
-packages must remain available on the execution host. CLI/manual/command-hook
-use remains dependency-free. MCP has no hosted connection, credentials,
+The release includes `dist/agenttool-local-starter-mcp.js`, with the MCP SDK and
+Zod bundled and their licenses in `dist/THIRD_PARTY_LICENSES`. No repository
+sibling or `node_modules` is required at runtime. The MCP source remains a
+separate internal build component. CLI/manual/command-hook use requires only
+Node built-ins. MCP has no hosted connection, credentials,
 prompts or resources:
 
 | Tool | Effect |
@@ -220,10 +248,10 @@ notes move there automatically.
 ## Optional hook-only fragments
 
 ```sh
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness generic
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness codex
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness claude-code
-node src/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness cursor
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness generic
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness codex
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness claude-code
+node dist/cli.mjs adapter --dir /absolute/path/project/.agenttool-local --harness cursor
 ```
 
 An adapter prints an argument vector, proposed configuration, destination, and
@@ -279,15 +307,15 @@ to make that value available only to the intended process. Do not write it in
 notes, command history, or host configuration examples.
 
 ```sh
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --authentication local_context_grant --credential-env LOCAL_CONTEXT_GRANT
-node src/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --credential-env AT_API_KEY
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --authentication local_context_grant --credential-env LOCAL_CONTEXT_GRANT
+node dist/connect.mjs --dir /absolute/path/project/.agenttool-local --origin https://api.agenttool.dev --project-id PROJECT_UUID --identity-id IDENTITY_UUID --offline --format json
 ```
 
 Each connected command makes one explicit GET; the offline command reads only
 local files and does not resolve any credential, including when grant mode is
-selected. These are source instructions, not proof that
-the endpoint is deployed or that a package is published. There is no connection
+selected. These commands do not establish the hosted endpoint's availability.
+There is no connection
 file, account lookup, registration fallback, installation, scheduled refresh,
 save, synchronization, or automatic write to `memories.md` or `handoff.md`.
 
@@ -385,7 +413,7 @@ durability behavior; a successful read is not proof of private storage. Once
 you submit selected text to a model host, that host/provider's handling applies.
 
 Local tests passed **70/70** on macOS arm64 with both Node **22.18.0** and
-**24.18.1**. The [CI workflow](../../.github/workflows/local-starter.yml) also
+**24.18.1**. The repository's `local-starter.yml` CI workflow also
 passed all six jobs on Ubuntu 24.04, macOS 15, and Windows 2025 with Node
 22.18.0 and 24.18.0: Linux/macOS each passed 70 tests; Windows each passed 63
 and skipped seven POSIX-specific checks. Evidence: repository-access-required
@@ -435,9 +463,26 @@ or remote-retention claim is made.
 
 ## Develop
 
+Maintainers can run ordinary source commands as `node src/cli.mjs` without a
+build or dependency install. Source tests use Node directly. Building a release
+requires the adjacent internal `local-starter-mcp` component and its committed
+dependencies, prepared with Bun **1.3.5** and `--frozen-lockfile --ignore-scripts`.
+The build rejects other Bun versions. It copies the six built-in-only modules
+and bundles the MCP runtime; it does not copy private notes, bindings or source maps.
+
 ```sh
 node --test
+bun run build
+npm run check:bundle
 ```
+
+`check:bundle` copies only the declared release surface into a disposable
+directory outside the repository and runs Node with a minimal environment.
+It checks CLI initialization/read/save, MCP negotiation/read-only and selected
+CAS writes, packaged skill/config paths, and preservation of an external notes
+directory across cache relocation/removal. To test a real extracted archive,
+run `node scripts/check-release.mjs /absolute/extracted/package`. This is artifact
+evidence; it does not verify host trust, native model delivery or publication.
 
 Tests require no external service, real credentials, package installation, or
 model calls. Connector tests use injected transports and temporary literal-loopback

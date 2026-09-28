@@ -113,6 +113,7 @@ describe("LOVE Package release inventory", () => {
   test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
+      { name: "@agenttool/local-starter", version: "0.1.0-dev.0", releaseTag: "local-starter-v0.1.0-dev.0" },
       { name: "@agenttool/adds", version: "0.2.3", releaseTag: "adds-v0.2.3" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
@@ -137,6 +138,20 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/hf-scout", version: "0.2.0-dev.0", releaseTag: "hf-scout-v0.2.0-dev.0" },
       { name: "@agenttool/principality-geometry", version: "0.1.0-dev.0", releaseTag: "principality-geometry-v0.1.0-dev.0" },
     ]);
+  });
+
+  test("binds the standalone starter to both source packages and no runtime dependencies", () => {
+    expect(LOVE_PACKAGES.find(({ name }) => name === "@agenttool/local-starter")).toEqual({
+      name: "@agenttool/local-starter",
+      version: "0.1.0-dev.0",
+      packagePath: "packages/local-starter",
+      additionalSourcePaths: ["packages/local-starter-mcp"],
+      mirrorRepository: "https://github.com/cambridgetcg/agenttool-local-starter",
+      releaseTag: "local-starter-v0.1.0-dev.0",
+      buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"], ["bun", "run", "check:bundle"]],
+      expectedDependencies: {},
+      expectedPeerDependencies: {},
+    });
   });
 
   test("preserves economic v0.1 and requires both v0.2 developer previews", () => {
@@ -468,6 +483,30 @@ describe("LOVE Package release inventory", () => {
 });
 
 describe("LOVE Package builder and verifier", () => {
+  test("advertises an explicit public distribution mirror without changing source provenance", async () => {
+    const setup = await fixture();
+    const spec = { ...setup.spec, mirrorRepository: "https://github.com/example/public-distribution" };
+    const options = { repoRoot: setup.repoRoot, outputRoot: setup.firstOutput, packages: [spec] };
+    await buildLovePackages(options);
+    await verifyLovePackages(options);
+    // A second build must preserve the same immutable release and mirror.
+    await buildLovePackages(options);
+    const manifestPath = join(setup.firstOutput, "packages/v1/@agenttool/data/0.1.0/manifest.json");
+    const original = await readFile(manifestPath, "utf8");
+    const manifest = JSON.parse(original);
+    expect(manifest.source.repository).toBe("https://github.com/cambridgetcg/agenttool.git");
+    expect(manifest.artifact.mirrors).toEqual([
+      { url: "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz" },
+      { url: "https://github.com/example/public-distribution/releases/download/data-v0.1.0/agenttool-data-0.1.0.tgz" },
+    ]);
+    await writeFile(manifestPath, original.replace("example/public-distribution", "example/unreviewed"));
+    await expect(verifyLovePackages(options)).rejects.toThrow();
+    await expect(buildLovePackages({
+      ...options,
+      packages: [{ ...spec, mirrorRepository: "https://secret@example.invalid/repo" }],
+    })).rejects.toThrow("credential-free HTTPS URL");
+  });
+
   test("builds a deterministic static mirror and detects tampering", async () => {
     const setup = await fixture();
     const common = { repoRoot: setup.repoRoot, packages: [setup.spec] };
@@ -639,6 +678,45 @@ describe("LOVE Package builder and verifier", () => {
         packages: [mutation],
       }),
     ).rejects.toThrow("tracked worktree is dirty");
+  });
+
+  test("requires declared sibling source inputs to be clean and committed", async () => {
+    const setup = await fixture();
+    const sibling = "packages/bundled-companion";
+    const spec = { ...setup.spec, additionalSourcePaths: [sibling] };
+    const options = { repoRoot: setup.repoRoot, outputRoot: setup.firstOutput, packages: [spec] };
+    await expect(buildLovePackages(options)).rejects.toThrow("additional source is absent from source revision");
+
+    await mkdir(join(setup.repoRoot, sibling), { recursive: true });
+    await writeFile(join(setup.repoRoot, sibling, "index.js"), "export const companion = true;\n");
+    await expect(buildLovePackages(options)).rejects.toThrow("package source contains untracked or dirty files");
+    await run(["git", "add", sibling], setup.repoRoot);
+    await run(["git", "-c", "commit.gpgsign=false", "-c", "user.name=LOVE Test", "-c", "user.email=love@example.invalid", "commit", "-qm", "test: commit companion"], setup.repoRoot);
+    await buildLovePackages(options);
+    await verifyLovePackages(options);
+    await expect(verifyLovePackages({
+      ...options,
+      packages: [{ ...setup.spec, additionalSourcePaths: ["packages/missing"] }],
+    })).rejects.toThrow("additional source is absent from source revision");
+
+    await writeFile(join(setup.repoRoot, sibling, "untracked.js"), "export {};\n");
+    await expect(buildLovePackages(options)).rejects.toThrow("package source contains untracked or dirty files");
+  });
+
+  test("refuses unsafe or duplicate additional source paths", async () => {
+    const setup = await fixture();
+    for (const path of ["../outside", "/absolute", "packages/../outside"]) {
+      await expect(buildLovePackages({
+        repoRoot: setup.repoRoot,
+        outputRoot: setup.firstOutput,
+        packages: [{ ...setup.spec, additionalSourcePaths: [path] }],
+      })).rejects.toThrow("additionalSourcePaths must contain safe repository-relative paths");
+    }
+    await expect(buildLovePackages({
+      repoRoot: setup.repoRoot,
+      outputRoot: setup.firstOutput,
+      packages: [{ ...setup.spec, additionalSourcePaths: [setup.spec.packagePath] }],
+    })).rejects.toThrow("duplicate source path");
   });
 
   test("does not call optional or peer-dependent artifacts self-contained", async () => {

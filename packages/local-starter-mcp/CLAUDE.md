@@ -4,9 +4,11 @@
 > **Evidence:** `src/server.mjs`, `src/cli.mjs`, `tests/stdio.test.mjs`, and the sibling starter's core.
 
 This package is a private Node >=22 ESM checkout component, with no build step.
-It deliberately imports `../local-starter/src/core.mjs`; package publication and
-standalone distribution are not implemented. Use Bun 1.3.5 and the committed
-lockfile to prepare the pinned SDK/Zod dependencies.
+It deliberately imports `../local-starter/src/core.mjs` during development.
+The public Local Starter release bundles this component and that core into one
+standalone `dist/agenttool-local-starter-mcp.js`; this package remains private
+and is not independently published. Use Bun 1.3.5 and the committed lockfile
+to prepare the pinned SDK/Zod dependencies and the sibling release builder.
 
 - Keep core filesystem checks in the sibling starter. Do not duplicate storage,
   manifest policy, save algorithms, or hosted `connect` behavior here.

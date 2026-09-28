@@ -45,6 +45,17 @@ export interface ReleaseWorkspaceOperations {
 }
 
 export const RELEASE_SPECS = {
+  "local-starter": {
+    key: "local-starter",
+    name: "@agenttool/local-starter",
+    packagePath: "packages/local-starter",
+    tagPrefix: "local-starter",
+    artifactKind: "love",
+    gateScripts: ["ci", "build", "check:bundle"],
+    prerequisites: [
+      { packagePath: "packages/local-starter-mcp", scripts: ["ci"] },
+    ],
+  },
   adds: {
     key: "adds",
     name: "@agenttool/adds",
@@ -707,6 +718,22 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
     "package/NOTICE",
     "package/README.md",
   ];
+  if (spec.name === "@agenttool/local-starter") {
+    entries.push(
+      "package/dist/cli.mjs",
+      "package/dist/core.mjs",
+      "package/dist/files.mjs",
+      "package/dist/adapters.mjs",
+      "package/dist/delivery.mjs",
+      "package/dist/connect.mjs",
+      "package/dist/agenttool-local-starter-mcp.js",
+      "package/dist/THIRD_PARTY_LICENSES",
+      "package/skills/agenttool-local-context/SKILL.md",
+      "package/.codex-plugin/plugin.json",
+      "package/.claude-plugin/plugin.json",
+      "package/plugin.json",
+    );
+  }
   if (spec.name === "@agenttool/collab") {
     entries.push(
       "package/THIRD_PARTY_LICENSES",
@@ -1188,6 +1215,25 @@ async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersio
   }
 }
 
+export async function assertReleaseSourcesUnchanged(
+  spec: ReleaseSpec,
+  sourceRevision: string,
+  tagCommit: string,
+  repoRoot = REPO_ROOT,
+): Promise<void> {
+  // The LOVE source revision binds the whole repository. Every prerequisite
+  // that contributes bundled bytes must also remain unchanged at the tag.
+  const sourcePaths = [...new Set([
+    spec.packagePath,
+    ...(spec.prerequisites ?? []).map((prerequisite) => prerequisite.packagePath),
+  ])];
+  const drift = await command("git", ["diff", "--quiet", sourceRevision, tagCommit, "--", ...sourcePaths], {
+    cwd: repoRoot,
+    allowFailure: true,
+  });
+  if (drift.exitCode !== 0) fail("package or prerequisite bytes drifted after the checked-in LOVE source revision");
+}
+
 async function loveArtifact(
   spec: ReleaseSpec,
   version: string,
@@ -1216,8 +1262,7 @@ async function loveArtifact(
   if (sourceExists.exitCode !== 0) fail("LOVE manifest source revision is absent from Git history");
   const sourceAncestor = await command("git", ["merge-base", "--is-ancestor", sourceRevision, tagCommit], { allowFailure: true });
   if (sourceAncestor.exitCode !== 0) fail("LOVE manifest source revision is not an ancestor of the release tag");
-  const packageDrift = await command("git", ["diff", "--quiet", sourceRevision, tagCommit, "--", spec.packagePath], { allowFailure: true });
-  if (packageDrift.exitCode !== 0) fail("package bytes drifted after the checked-in LOVE source revision");
+  await assertReleaseSourcesUnchanged(spec, sourceRevision, tagCommit);
 
   const sourceArtifact = join(root, filename);
   const sourceStat = await stat(sourceArtifact);

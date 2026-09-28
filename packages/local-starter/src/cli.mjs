@@ -17,7 +17,8 @@ const HELP = `AgentTool local starter (Node >=22; files only)
   adapter --dir <directory> --harness generic|codex|claude-code|cursor
   hook    --dir <directory> --harness codex|claude-code|cursor
 
-Run with: node src/cli.mjs <command> [options]
+Run with: agenttool-local-starter <command> [options]
+Or: node /absolute/package/dist/cli.mjs <command> [options]
 Adapters print proposed per-project fragments; they never install settings.
 Native Windows Codex/Cursor hooks are unsupported; use --harness generic.
 Hook load errors return no context and exit 0. Other errors are nonzero.

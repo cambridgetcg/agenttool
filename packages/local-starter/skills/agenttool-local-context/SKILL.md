@@ -7,8 +7,34 @@ description: Load selected AgentTool local context when arriving or returning to
 
 Use the configured AgentTool local tools. If they are unavailable, read
 `binding.json` beside this skill: its argument vectors bind one local directory
-and the existing CLI. If neither binding is present, ask for the intended
-starter directory; do not discover one from home folders or old transcripts.
+and the existing CLI. If neither binding is present, this is an unconfigured
+installation. Follow setup below; do not discover a notes root from home folders
+or old transcripts.
+
+## Set up an unconfigured plugin
+
+Installing this plugin exposes the skill only. It starts no MCP server or hook
+and creates, reads, or saves no notes. First select the intended absolute notes
+directory under the current task. Keep it outside the package/plugin cache so
+upgrades and removal do not replace retained notes.
+
+Resolve `../../dist/cli.mjs` from this installed skill's actual directory; verify
+the adjacent package root's `package.json` names `@agenttool/local-starter`.
+Use that resolved CLI and Node >=22. If the skill was copied without its package
+or binding, obtain the package location rather than searching the filesystem.
+For an existing starter, run `delivery --dir <chosen-root> --harness codex` or
+`--harness claude-code`. Creating a new starter is a separate deliberate
+`init --dir <new-root>` operation; never initialize on installation or arrival.
+
+The delivery command prints a reviewable plan and changes nothing. Select
+`--transport cli` when MCP is unwanted. Default `--write none` exposes no save
+operations; use `handoff`, `memory`, or `both` only when selected for this task.
+Apply chosen project entries, preserving existing configuration and native
+trust review. The generated project skill includes a private `binding.json`;
+avoid enabling a second copy of this plugin skill for the same project.
+Hooks and MCP are independent opt-in connections. Regenerate absolute runtime
+paths after a plugin upgrade changes its cache location. Never write a machine
+binding or retained notes back into the distributable plugin.
 
 ## Arrive or return
 

@@ -46,6 +46,10 @@ export interface LovePackageSpec {
   name: `@agenttool/${string}`;
   version: string;
   packagePath: string;
+  /** Additional repository inputs bundled into this package at source.revision. */
+  additionalSourcePaths?: readonly string[];
+  /** Optional public distribution repository; source.repository is unchanged. */
+  mirrorRepository?: string;
   releaseTag: string;
   buildCommands: readonly (readonly string[])[];
   expectedDependencies?: Readonly<Record<string, string>>;
@@ -61,6 +65,17 @@ const STRICT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\
 const TOOL_ROOT = resolve(import.meta.dir, "..");
 
 export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
+  {
+    name: "@agenttool/local-starter",
+    version: "0.1.0-dev.0",
+    packagePath: "packages/local-starter",
+    additionalSourcePaths: ["packages/local-starter-mcp"],
+    mirrorRepository: "https://github.com/cambridgetcg/agenttool-local-starter",
+    releaseTag: "local-starter-v0.1.0-dev.0",
+    buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"], ["bun", "run", "check:bundle"]],
+    expectedDependencies: {},
+    expectedPeerDependencies: {},
+  },
   {
     name: "@agenttool/adds",
     version: "0.2.3",
@@ -366,6 +381,17 @@ function validateSpecs(specs: readonly LovePackageSpec[]): void {
     if (!safePath.test(spec.packagePath) || isAbsolute(spec.packagePath) || spec.packagePath.includes("..")) {
       throw new Error(`${spec.name} packagePath must be a safe repository-relative path`);
     }
+    const sourcePaths = new Set([spec.packagePath]);
+    for (const path of spec.additionalSourcePaths ?? []) {
+      if (!safePath.test(path) || isAbsolute(path) || path.includes("..")) {
+        throw new Error(`${spec.name} additionalSourcePaths must contain safe repository-relative paths`);
+      }
+      if (sourcePaths.has(path)) throw new Error(`${spec.name} has a duplicate source path: ${path}`);
+      sourcePaths.add(path);
+    }
+    if (spec.mirrorRepository !== undefined) {
+      validateHttpsUrl(spec.mirrorRepository, `${spec.name} mirrorRepository`);
+    }
     if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(spec.releaseTag)) {
       throw new Error(`${spec.name} releaseTag must be one URL-safe path segment`);
     }
@@ -516,10 +542,23 @@ async function assertCleanReleaseSources(
     "--porcelain=v1",
     "--untracked-files=all",
     "--",
-    ...specs.map((spec) => spec.packagePath),
+    ...new Set(specs.flatMap((spec) => [spec.packagePath, ...(spec.additionalSourcePaths ?? [])])),
   ]);
   if (result.stdout.trim()) {
     throw new Error(`package source contains untracked or dirty files:\n${result.stdout.trimEnd()}`);
+  }
+}
+
+async function assertAdditionalSourcesAtRevision(
+  repoRoot: string,
+  revision: string,
+  spec: LovePackageSpec,
+): Promise<void> {
+  for (const path of spec.additionalSourcePaths ?? []) {
+    const result = await git(repoRoot, ["cat-file", "-e", `${revision}:${path}`], true);
+    if (result.exitCode !== 0) {
+      throw new Error(`${spec.name} additional source is absent from source revision: ${path}`);
+    }
   }
 }
 
@@ -960,7 +999,7 @@ function manifestDocument(options: {
       media_type: "application/gzip",
       mirrors: [
         { url: primaryUrl },
-        { url: `${githubRepository}/releases/download/${spec.releaseTag}/${artifact.filename}` },
+        { url: `${normalizeOrigin(spec.mirrorRepository ?? githubRepository)}/releases/download/${spec.releaseTag}/${artifact.filename}` },
       ],
     },
     runtime: {
@@ -1041,6 +1080,7 @@ export async function buildLovePackages(options: RegistryOptions): Promise<void>
       outputRoot,
       primaryOrigin,
       githubRepository,
+      specs,
     });
   } else if (await pathExists(existingPackages)) {
     throw new Error("existing packages/v1 tree has no verifiable index.json; refusing to replace it");
@@ -1062,6 +1102,7 @@ export async function buildLovePackages(options: RegistryOptions): Promise<void>
       // provenance instead of preserving the indexed release.
       if (existingReleaseKeys.has(`${spec.name}\0${spec.version}`)) continue;
       const packageRoot = join(repoRoot, spec.packagePath);
+      await assertAdditionalSourcesAtRevision(repoRoot, revision, spec);
       const packageJson = await readPackageJson(packageRoot);
       assertPackageIdentity(packageJson, spec);
       await runBuild(packageRoot, spec);
@@ -1180,6 +1221,7 @@ async function verifyRegistryTree(options: {
   outputRoot: string;
   primaryOrigin: string;
   githubRepository: string;
+  specs: readonly LovePackageSpec[];
 }): Promise<ReleaseIdentity[]> {
   const { repoRoot, outputRoot, primaryOrigin, githubRepository } = options;
   const discovery = await readFile(join(outputRoot, DISCOVERY_PATH.slice(1)), "utf8");
@@ -1208,6 +1250,9 @@ async function verifyRegistryTree(options: {
       packagePath: source.path,
       releaseTag: `${packageSlug(release)}-v${release.version}`,
       buildCommands: [],
+      mirrorRepository: [...options.specs, ...LOVE_PACKAGES].find(
+        (candidate) => candidate.name === release.name && candidate.version === release.version,
+      )?.mirrorRepository,
     };
     validateSpecs([spec]);
     const declaredArtifact = expectObject(manifest.artifact, `${release.name} manifest artifact`);
@@ -1259,7 +1304,7 @@ export async function verifyLovePackages(options: RegistryOptions): Promise<void
   validateSpecs(specs);
   validateHttpsUrl(primaryOrigin, "primaryOrigin", true);
   validateHttpsUrl(githubRepository, "githubRepository");
-  const releases = await verifyRegistryTree({ repoRoot, outputRoot, primaryOrigin, githubRepository });
+  const releases = await verifyRegistryTree({ repoRoot, outputRoot, primaryOrigin, githubRepository, specs });
   const releaseKeys = new Set(releases.map((release) => `${release.name}\0${release.version}`));
   for (const spec of specs) {
     if (!releaseKeys.has(`${spec.name}\0${spec.version}`)) {
@@ -1280,6 +1325,7 @@ export async function verifyLovePackages(options: RegistryOptions): Promise<void
       await packageJsonAtRevision(repoRoot, source.revision, spec.packagePath),
       spec,
     );
+    await assertAdditionalSourcesAtRevision(repoRoot, source.revision, spec);
     if (spec.releaseTag !== `${packageSlug(spec)}-v${spec.version}`) {
       throw new Error(`${spec.name}@${spec.version} releaseTag does not follow the immutable tag convention`);
     }

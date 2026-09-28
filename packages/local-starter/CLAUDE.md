@@ -3,9 +3,11 @@
 > **Type:** guide · **Purpose:** preserve the files-only starter's scope and verification boundaries.
 > **Evidence:** `src/core.mjs`, `src/files.mjs`, `src/cli.mjs`, `src/adapters.mjs`, explicit `src/connect.mjs`, and `tests/`.
 
-This guide governs only `packages/local-starter`. The package is private,
-unpublished source, uses Node ESM and built-ins, and declares Node >=22. Keep
-it usable directly from a checkout without installing dependencies or building.
+This guide governs only `packages/local-starter`. Core and CLI use Node ESM
+and built-ins and declare Node >=22. Keep them usable directly from a checkout
+without installing dependencies or building. The public preview archive copies
+those modules into `dist` and bundles the sibling MCP transport with Bun 1.3.5.
+The manifest has no runtime dependencies or installation lifecycle scripts.
 
 ## Boundaries
 
@@ -23,6 +25,13 @@ it usable directly from a checkout without installing dependencies or building.
   The separate sibling `packages/local-starter-mcp` imports this core for
   explicit local tools; the core/CLI/hooks must never import that transport.
   Delivery plans can point to its entry point without starting it.
+  Release delivery paths point to the bundled `dist` entry within this package;
+  never rely on a repository sibling or installed dependency at runtime. Keep
+  the pinned builder and exact third-party licenses in sync. Plugin manifests
+  expose the skill only; no default MCP/hook, root binding or startup effect.
+  Retained notes and machine-specific bindings belong outside the distributable
+  package and plugin cache. Build output is generated and disposable, never a
+  notes root. Do not publish source paths, source maps or private absolute paths.
   The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
   one fixed GET path selected by exact origin/project/identity, explicit callback
   or injected transport credentials, no ambient lookup except a CLI-selected env
@@ -107,6 +116,10 @@ freshness/budgets/provenance, invalid bytes, special/link files, bounded reads,
 POSIX modes, handoff conflicts/locks, error privacy, and independent roots.
 Adapter fixtures must cover quoting, host JSON shape, safe failure, and no
 installation; they do not prove delivery into a running agent host.
+After a release build, run `npm run check:bundle`. Its optional extracted-root
+argument tests the actual archive surface outside the repository with no
+`node_modules` or sibling packages. Keep archive checks distinct from native
+host delivery and registry/download publication receipts.
 Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,

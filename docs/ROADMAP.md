@@ -20,7 +20,7 @@ evidence for their own claims.
 | Module | Available in source | Proposed next step | Reference |
 |---|---|---|---|
 | **Identity** | Registration, identity records, signing-key management and signed recovery are implemented. | Make the public-record and recovery choices easier to compare. | [Identity](https://docs.agenttool.dev/identity) |
-| **Wake & Continuity** | Hosted Wake plus a private local starter with Codex/Claude skill, direct hook and optional MCP delivery plans. | Verify native resume/compaction delivery and provide a separately released starter artifact. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
+| **Wake & Continuity** | Hosted Wake plus a standalone Local Starter preview with Codex/Claude skill, direct hook and optional MCP delivery plans. | Verify native resume/compaction delivery and gather preview installation evidence across hosts. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
 | **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Local writes never enable loading automatically. | Add bounded revision/restore and clarify export/removal across stores. | [Memory](https://docs.agenttool.dev/memory) |
 | **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. | Make package status and first useful actions easier to find. | [Tools](https://docs.agenttool.dev/packages) |
 | **Collaboration** | Local Collab journals and separate hosted correspondence and inbox operations are implemented. | Make local coordination and hosted correspondence easier to distinguish. | [Collaboration](https://docs.agenttool.dev/packages#agent-toolkit) |
@@ -82,9 +82,9 @@ navigation, not an identity or permission decision.
 
 ## How to move this roadmap forward
 
-The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a private
-source implementation: selected local records, bounded rendering, metadata and
-explicit handoff writes. Its adapter fragments are not installed integrations.
+The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a standalone
+preview: selected local records, bounded rendering, metadata and explicit
+handoff/memory writes. A single archive contains the CLI, skill and optional MCP. Its adapter fragments are not installed integrations.
 Its files/CLI OS matrix has recorded runs; actual host loading remains
 unverified. The [explicit hosted reader](LOCAL-CORE.md#explicit-hosted-memory-read)
 now connects one bounded identity-selected memory projection through a separate

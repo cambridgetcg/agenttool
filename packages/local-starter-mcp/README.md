@@ -11,8 +11,11 @@ schemas. Both dependencies are pinned to the versions already used by
 [`wake-return`](../wake-return/package.json): `@modelcontextprotocol/server`
 `2.0.0-beta.5` and `zod` `4.4.3`.
 
-The package is **private, unpublished source**. It needs the sibling starter in
-the repository checkout; copying this directory alone is insufficient. Node
+This component is **private source**, bundled into the public
+`@agenttool/local-starter@0.1.0-dev.0` preview as
+`dist/agenttool-local-starter-mcp.js`. Use that standalone archive for distribution;
+its runtime needs no repository sibling, SDK install or Bun. This source package
+needs the sibling starter in the checkout; copying this directory alone is insufficient. Node
 22 or later runs it directly without a build. Preparing dependencies uses the
 committed Bun 1.3.5 lockfile:
 
@@ -21,6 +24,10 @@ cd packages/local-starter-mcp
 bun install --frozen-lockfile --ignore-scripts
 node src/cli.mjs --dir /absolute/path/to/selected-context
 ```
+
+Maintainers build the public bundle with `bun run build` in `../local-starter`.
+Its artifact check covers the extracted runtime under Node, including read-only
+defaults, explicit saves and notes held outside replaceable plugin caches.
 
 Dependency installation may contact a registry. The running transport makes no
 network calls, discovers no credentials, and never imports the hosted `connect`

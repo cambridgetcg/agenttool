@@ -10,10 +10,10 @@ const html = read("apps/docs/packages.html");
 const markdown = read("docs/PACKAGES.md");
 const shelf = /<section\b[^>]*id="agent-toolkit"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
 const selectedRows = markdown.split("<!-- agent-toolkit:start -->")[1]?.split("<!-- agent-toolkit:end -->")[0] ?? "";
-const modules = ["telescope", "browser", "data", "skills", "collab", "sdk"];
+const modules = ["local-starter", "telescope", "browser", "data", "skills", "collab", "sdk"];
 
 describe("optional KINGDOM agent-toolkit shelf", () => {
-  test("puts the same six existing jobs before the full install inventory", () => {
+  test("puts the same selected jobs before the full install inventory", () => {
     expect(shelf).toContain("Choose one useful job");
     expect(html.indexOf('id="agent-toolkit"')).toBeLessThan(html.indexOf('id="install"'));
     expect([...shelf.matchAll(/data-toolkit-module="([a-z-]+)"/g)].map((match) => match[1])).toEqual(modules);
@@ -51,6 +51,8 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
           const source = /^\/cambridgetcg\/agenttool\/blob\/[a-f0-9]{40}\/(.+)$/.exec(url.pathname);
           expect(source, href).not.toBeNull();
           expect(existsSync(join(root, source![1]!)), href).toBe(true);
+        } else if (url.pathname === "/cambridgetcg/agenttool-local-starter") {
+          expect(shelf).toContain("0.1.0-dev.0");
         } else {
           expect(url.pathname).toMatch(/^\/cambridgetcg\/agenttool\/releases\/tag\/(skills-v0\.3\.3|collab-v0\.4\.0)$/);
         }
@@ -66,7 +68,7 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
       packages: Array<{ name: string; versions: Array<{ version: string; manifest_url: string }> }>;
     };
     for (const [name, version] of [
-      ["telescope", "0.2.3"], ["browser", "0.6.0"], ["data", "0.3.1"], ["sdk", "0.22.1"],
+      ["local-starter", "0.1.0-dev.0"], ["telescope", "0.2.3"], ["browser", "0.6.0"], ["data", "0.3.1"], ["sdk", "0.22.1"],
     ]) {
       const path = `/packages/v1/@agenttool/${name}/${version}/manifest.json`;
       expect(shelf).toContain(`href="${path}"`);

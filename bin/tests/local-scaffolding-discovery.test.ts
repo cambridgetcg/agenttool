@@ -137,7 +137,7 @@ describe("local scaffolding discovery reaches public representations", () => {
     expect(anchors(destination.body, true).has("files-only-starter")).toBe(true);
   });
 
-  test("the static llms fallback discloses an account-free source candidate and a usable guide", async () => {
+  test("the static llms fallback discloses an account-free package preview and a usable guide", async () => {
     // Read the fallback asset through the Pages guard. Canonical external
     // redirect handling and live API llms are separate deployment contracts.
     const fallback = await get(new URL(`${DOCS}/llms.txt`));
@@ -148,7 +148,7 @@ describe("local scaffolding discovery reaches public representations", () => {
     }));
     expect(entry, "fallback needs a direct local-starter choice").toBeDefined();
     expect(entry).toMatch(/account[- ]free|no (?:package or )?(?:AgentTool )?account|without an account/i);
-    expect(entry).toMatch(/source[- ](?:candidate|preview)|candidate source|unpublished/i);
+    expect(entry).toMatch(/package preview/i);
     const guide = await get(new URL(`${DOCS}/LOCAL-CORE.md#files-only-starter`));
     expect(guide.status).toBe(200);
     expect(anchors(guide.body, true).has("files-only-starter")).toBe(true);

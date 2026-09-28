@@ -4,14 +4,15 @@
 
 > **Type:** guide
 > **Purpose:** Choose which context and records to keep locally, and understand what the host or server must supply.
-> **Evidence:** Source and tests describe implemented primitives and a private files-only starter. Existing implementation references use revision `a230ae4d`; the starter is a later source candidate. Host activation, package publication and each OS execution require separate evidence.
+> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Download integrity, registry publication and native host activation have separate receipts in [Now](NOW.md).
 > **Compass:** [Core map](CORE.md) · [API coverage](API-COVERAGE.md) · [Wake](WAKE.md) · [Identity anchor](IDENTITY-ANCHOR.md)
 > **Code:** Local starter source preview: `packages/local-starter/src/core.mjs` · Data (`packages/data/src/node.ts`) · Collab (`packages/collab/src/mcp.ts`) · SDK keys (`packages/sdk-ts/src/seed.ts`)
 > **Tests:** Source preview: `packages/local-starter/tests/core.test.mjs` and `packages/local-starter/tests/cli.test.mjs` · hosted scaffold boundaries (`api/tests/scaffold-safety.test.ts`)
 
-This guide is self-contained. Implementation and test paths refer to a private
-repository and require repository access; public visitors can use the manual
-files pattern below without access to that source.
+This guide is self-contained. Local Starter has a standalone preview archive;
+its [public distribution](https://github.com/cambridgetcg/agenttool-local-starter)
+contains the CLI, portable skill and optional MCP runtime. Implementation and
+test paths elsewhere in this guide refer to the private development repository.
 
 Start by choosing what a later session should be able to read: current context,
 useful notes, preferences, relationship context, or unfinished work. Ordinary
@@ -58,8 +59,8 @@ not claim that every source version is published or installed on your host.
 
 | Primitive | Implemented use | Boundary |
 |---|---|---|
-| [Local starter](#files-only-starter) | Creates selected local files, fingerprints records, and explicitly replaces a handoff or memory. | Private dependency-free Node source; delivery plans do not install host settings. |
-| Local starter MCP (`packages/local-starter-mcp/README.md`) | Explicit local status/read and optional fixed-slot handoff/memory saves. | Separate private stdio transport with pinned SDK dependencies; no hosted API, credentials or automatic memory capture. |
+| [Local starter](#files-only-starter) | Creates selected local files, fingerprints records, and explicitly replaces a handoff or memory. | Dependency-free Node CLI in the preview archive; delivery plans do not install host settings. |
+| Local starter MCP (`packages/local-starter-mcp/README.md`) | Explicit local status/read and optional fixed-slot handoff/memory saves. | Separate source module, bundled in the same preview archive with its SDK dependencies; no hosted API, credentials or automatic memory capture. |
 | Wake Continuity / AFTERGLOW (`packages/wake-continuity/README.md`) | Constructs and validates digest-linked capsules and a carry/park view. | Pure library: no persistence, source retrieval, session loading, or execution. A digest does not hide guessable private content. |
 | Wake Thread (`packages/wake-thread/README.md`) | Binds selected facts, omissions, retention declarations, and carry/fork/rest/refuse receipts. | Private source package. Caller supplies facts and time; retention validation does not delete stored copies or authenticate a choice. |
 | Wake Return (`packages/wake-return/README.md`) | Local MCP status and explicit observation of one host-selected project/identity. | Private source candidate. Observation uses two fixed hosted GETs; it does not restore a private session or read private memories. |
@@ -84,15 +85,30 @@ deliberately afterward. Merely creating the files does not load or save context.
 This manual pattern does not run the starter or enforce its byte budgets,
 freshness rules, file checks or write locks.
 
-**Source preview:** the commands below require a source checkout that contains
-`packages/local-starter`, a private source candidate in the private AgentTool
-repository. They are for readers with repository access. No registry release or
-standalone downloadable artifact is supplied here; reading performs no setup.
+**Preview package:** `@agenttool/local-starter@0.1.0-dev.0` contains the CLI,
+portable skill, Codex/Claude plugin manifests and a self-contained optional MCP
+runtime. Node 22 or newer is required. It has no runtime dependency installation
+or install scripts. Reading this guide performs no setup.
 
-In that checkout, Node 22 or newer is required; no build or dependency install
-is needed. Choose a new private directory with an existing parent, outside a
-shared repository or deliberately excluded from version control. The starter
-does not change Git ignores. Its filesystem must support hardlinks.
+- [Exact-version manifest and SHA-256](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
+- [Standalone archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz)
+- [Public distribution and plugin catalogs](https://github.com/cambridgetcg/agenttool-local-starter)
+- [npm package](https://www.npmjs.com/package/@agenttool/local-starter/v/0.1.0-dev.0)
+
+For an archive, verify its SHA-256 against the manifest, then extract it into a
+stable tool directory. The commands below run inside its extracted `package/`
+folder. Alternatively, install the exact version into a dedicated local prefix:
+
+```sh
+npm install --ignore-scripts --prefix ./agenttool-local-preview @agenttool/local-starter@0.1.0-dev.0
+cd agenttool-local-preview/node_modules/@agenttool/local-starter
+```
+
+Keep that tool directory separate from your notes. Choose a new private notes
+directory with an existing parent, outside a shared repository or deliberately
+excluded from version control. The starter does not change Git ignores. Its
+filesystem must support hardlinks. Upgrading or removing a plugin cache must
+not remove the notes folder.
 
 ```text
 local-starter/
@@ -106,12 +122,12 @@ local-starter/
   memories.md          # Empty and disabled initially
 ```
 
-From the root of a checkout containing the package, replace the chosen directory:
+From the installed or extracted package, replace the chosen notes directory:
 
 ```sh
-node packages/local-starter/src/cli.mjs init --dir /absolute/private/new-starter
-node packages/local-starter/src/cli.mjs status --dir /absolute/private/new-starter
-node packages/local-starter/src/cli.mjs render --dir /absolute/private/new-starter
+node dist/cli.mjs init --dir /absolute/private/new-starter
+node dist/cli.mjs status --dir /absolute/private/new-starter
+node dist/cli.mjs render --dir /absolute/private/new-starter
 ```
 
 `init` refuses existing destinations. `render` reads only enabled slots, emits
@@ -132,7 +148,7 @@ mechanism. The starter neither stores nor resolves keys.
 Take `HASH` from the current handoff entry in `status`, then supply a reviewed file:
 
 ```sh
-node packages/local-starter/src/cli.mjs handoff --dir /absolute/private/new-starter --expect HASH < /absolute/private/reviewed-handoff.md
+node dist/cli.mjs handoff --dir /absolute/private/new-starter --expect HASH < /absolute/private/reviewed-handoff.md
 ```
 
 `init_uncertain` or `write_uncertain` requires inspection before retrying; the
@@ -168,18 +184,20 @@ Collab backends and a universal installer remain outside this version.
 
 ### Codex and Claude Code delivery
 
-**Source:** one command emits a reviewable skill, binding, MCP and hook plan:
+**Explicit setup:** one command emits a reviewable skill, binding, MCP and hook plan:
 
 ```sh
-node packages/local-starter/src/cli.mjs delivery --dir /absolute/private/new-starter --harness codex
-node packages/local-starter/src/cli.mjs delivery --dir /absolute/private/new-starter --harness claude-code --write both
+node dist/cli.mjs delivery --dir /absolute/private/new-starter --harness codex
+node dist/cli.mjs delivery --dir /absolute/private/new-starter --harness claude-code --write both
 ```
 
 The default MCP mode is read-only. Choose `--write handoff`, `memory` or
 `both` to expose those fixed-slot saves. Choose `--transport cli` to use
 the dependency-free CLI instead of MCP. Neither mode installs or activates
-settings. Both source packages must exist on the execution host for MCP;
-only local-starter is needed for CLI mode. Source remains private/unpublished.
+settings. The standalone archive includes both modes; no sibling checkout is
+needed. Plugin installation exposes only the skill. Invoke it to choose or bind
+an external notes folder and review the generated project configuration. It
+does not start MCP, install hooks, create notes or read memory automatically.
 
 | Delivery | Why it exists | Codex | Claude Code |
 |---|---|---|---|
@@ -235,9 +253,7 @@ scope and native skill-validator limitation.
 POSIX owner-only modes are checked; Windows reports `windows-acl-unverified`.
 Initialization requires hard-link support for no-clobber manifest publication;
 network, synchronized or unusual filesystems may not support the same semantics.
-The source checkout's `packages/local-starter/README.md` contains the full
-limits, recovery details and runtime evidence. No public URL for that new
-source file is advertised by this preview.
+The [package guide](https://github.com/cambridgetcg/agenttool-local-starter/tree/main/plugins/agenttool-local-starter) contains the full limits, recovery details and runtime evidence.
 
 ## Existing host integrations are narrower
 

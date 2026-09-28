@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const HELP = `Usage: agenttool-local-starter-mcp --dir <absolute-directory> [--write none|handoff|memory|both]
 
-Private source checkout, Node >=22. Explicit local stdio MCP; no build required.
+Node >=22. Explicit local stdio MCP. The Local Starter release bundles its dependencies.
 Default: local_context_status and local_context_read only.
 --write exposes only the selected compare-and-swap save tools.
 Starting does not read note bodies, save, install host settings or contact a service.

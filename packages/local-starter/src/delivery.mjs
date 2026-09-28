@@ -13,7 +13,7 @@ export function createDelivery({
   harness, dir, write = 'none', transport = 'mcp', platform = process.platform,
   nodePath = process.execPath,
   cliPath = fileURLToPath(new URL('./cli.mjs', import.meta.url)),
-  mcpPath = fileURLToPath(new URL('../../local-starter-mcp/src/cli.mjs', import.meta.url)),
+  mcpPath = fileURLToPath(new URL('../dist/agenttool-local-starter-mcp.js', import.meta.url)),
 }) {
   if (!['codex', 'claude-code'].includes(harness)) throw new AdapterError('INVALID_HARNESS');
   if (!Object.hasOwn(WRITES, write)) throw new AdapterError('INVALID_WRITE_MODE');
@@ -58,8 +58,8 @@ export function createDelivery({
     ],
     hook,
     prerequisites: [
-      transport === 'mcp' ? 'Node >=22 and both sibling source packages must exist on the host that runs the commands.' : 'Node >=22 and the local-starter source package must exist on the execution host.',
-      transport === 'mcp' ? 'Install only local-starter-mcp dependencies with its frozen Bun lockfile before connecting MCP. The CLI, skill fallback and command hook require no dependencies.' : 'CLI transport requires no dependency installation or MCP connection.',
+      'Node >=22 and the complete local-starter package must exist on the host that runs the commands. Keep retained notes outside the package and plugin cache.',
+      transport === 'mcp' ? 'The release includes its MCP bundle and dependencies; no runtime dependency installation is needed. Source checkouts must build the bundle first.' : 'CLI transport requires no dependency installation or MCP connection.',
       'Review paths and merge selected entries into project settings; preserve existing entries and complete the host trust/reload steps. No files have been installed.',
       'The skill teaches the workflow; MCP enables explicit operations; the command hook loads selected files. Choose only the connections you want.',
     ],

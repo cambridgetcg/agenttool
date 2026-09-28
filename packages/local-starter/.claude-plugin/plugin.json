@@ -1,0 +1,9 @@
+{
+  "name": "agenttool-local-starter",
+  "version": "0.1.0-dev.0",
+  "description": "Optional local context, handoffs and memory with explicit setup.",
+  "author": { "name": "AgentTool contributors", "url": "https://agenttool.dev" },
+  "homepage": "https://github.com/cambridgetcg/agenttool-local-starter",
+  "license": "Apache-2.0",
+  "skills": "./skills/"
+}

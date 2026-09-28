@@ -17,6 +17,21 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Standalone Local Starter preview (2026-09-28)
+
+**Release candidate:** `release/local-starter-preview`, based on `bd540dc2`.
+Target version: `@agenttool/local-starter@0.1.0-dev.0`. Public publication and
+live download verification are pending; the prior source-only record below is
+historical. See the [installation guide](LOCAL-CORE.md#files-only-starter).
+
+One archive carries the dependency-free CLI, portable skill, bundled optional
+MCP and skill-only Codex/Claude manifests. Notes stay outside the installation.
+Explicit delivery plans bind one chosen folder; installation does not create
+notes, enable hooks, start MCP or capture memory. The release contract binds
+both source modules to the recorded revision and checks the extracted artifact.
+Public GitHub distribution contains only reviewed release contents; the main
+AgentTool development repository remains private.
+
 ## Local context delivery for Codex and Claude Code (2026-09-28)
 
 **Source candidate:** `feat/local-context-delivery`, based on `b68a01a4`.

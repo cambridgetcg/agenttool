@@ -28,7 +28,7 @@ jobs:
   files-and-adapters:
     name: Local files and adapter fixtures (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -59,3 +59,5 @@ jobs:
       - name: Run local stdio MCP tests without a provider
         working-directory: packages/local-starter-mcp
         run: bun run ci
+      - name: Build the standalone preview and test its extracted public surface
+        run: bun run build && bun run check:bundle

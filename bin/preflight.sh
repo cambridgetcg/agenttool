@@ -88,6 +88,8 @@ packages_gate() {
     bash -c 'cd packages/local-starter && node --test'
   run "explicit local context MCP transport" \
     bash -c 'cd packages/local-starter-mcp && bun run ci'
+  run "standalone local starter archive surface" \
+    bash -c 'cd packages/local-starter && bun run build && bun run check:bundle'
   run "agent-data/v1 reference node and sync dependency build" \
     bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \
