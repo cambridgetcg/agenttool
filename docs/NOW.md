@@ -25,7 +25,10 @@ GitHub prerelease](https://github.com/cambridgetcg/agenttool-local-starter/relea
 are available; anonymous download matches the tested 229,793-byte artifact.
 SHA-256: `b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c`.
 The source revision is `150c5c4725f34fb92493e490c49d0a96904505cf`.
-AgentTool-site and npm publication remain pending. The prior source-only record
+AgentTool-site publication follows clean-main deployment; its readback is a
+separate release receipt. npm registry publication is blocked
+by the current private-source/provenance mismatch; direct archive installation
+and the public plugin catalogs remain available. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28). The prior source-only record
 below is historical. See the [installation guide](LOCAL-CORE.md#files-only-starter).
 
 One archive carries the dependency-free CLI, portable skill, bundled optional
@@ -39,7 +42,11 @@ AgentTool development repository remains private.
 **Evidence:** 100 starter and 16 MCP tests, 60 release/catalog/link checks,
 extracted artifact CLI/MCP checks, native plugin validators and the full package
 gate passed. Archive has exactly 16 regular files with no machine binding,
-install script or runtime dependency installation. Native automatic resume/
+install script or runtime dependency installation. The six Linux/macOS/Windows
+× Node 22.18.0/24.18.0 Local Starter CI combinations passed in [run
+36394702520](https://github.com/cambridgetcg/agenttool/actions/runs/36394702520).
+The ordinary npm client also installed the anonymously downloaded archive
+without scripts or registry access and passed isolated CLI/MCP checks. Native automatic resume/
 compaction delivery remains unverified.
 
 ## Local context delivery for Codex and Claude Code (2026-09-28)

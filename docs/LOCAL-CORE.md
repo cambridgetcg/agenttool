@@ -93,16 +93,20 @@ or install scripts. Reading this guide performs no setup.
 - [Exact-version manifest and SHA-256](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
 - [Standalone archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz)
 - [Public distribution and plugin catalogs](https://github.com/cambridgetcg/agenttool-local-starter)
-- [npm package](https://www.npmjs.com/package/@agenttool/local-starter/v/0.1.0-dev.0)
 
 For an archive, verify its SHA-256 against the manifest, then extract it into a
 stable tool directory. The commands below run inside its extracted `package/`
-folder. Alternatively, install the exact version into a dedicated local prefix:
+folder. Alternatively, install the verified downloaded archive into a dedicated local prefix:
 
 ```sh
-npm install --ignore-scripts --prefix ./agenttool-local-preview @agenttool/local-starter@0.1.0-dev.0
+npm install --ignore-scripts --prefix ./agenttool-local-preview /absolute/downloads/agenttool-local-starter-0.1.0-dev.0.tgz
 cd agenttool-local-preview/node_modules/@agenttool/local-starter
 ```
+
+**npm registry status:** not published. Installation from the downloaded archive
+works; installation by registry package name is not yet available. The current
+protected publisher requires public-source provenance, while this preview records
+the private development repository. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28).
 
 Keep that tool directory separate from your notes. Choose a new private notes
 directory with an existing parent, outside a shared repository or deliberately
