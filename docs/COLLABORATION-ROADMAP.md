@@ -78,6 +78,7 @@ expired-grant recovery and physical peer interaction remain separate boundaries.
 | Surface | Existing basis | Next evidence |
 |---|---|---|
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; separate endpoint/session per agent. | Practical arrival, bounded poll, explicit acknowledgement, restart/resume and disconnect in the selected native versions. |
+| Hermes Agent — proposed | Its Runs API can start an agent turn and expose run status; source inspection is not a live AgentTool integration. | A finite event-to-turn trial with selected tools, durable admission intent, independent task receipts and exact processing acknowledgement; see the version limits below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
 | Hosted API | Project-scoped Correspondence plus deployed bounded mission grants; same-project BYO enrollment is a source candidate. Release receipts in [NOW](NOW.md). | Release and verify enrollment-to-mission admission; verify the chat wrapper with independently credentialed physical participants. |
 | Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
@@ -86,6 +87,45 @@ No phase requires npm specifically. Packages deliver software, skills explain
 workflows, MCP exposes operations, hooks invoke selected host events, local
 files retain chosen context and hosted services enforce their own authority.
 Installing any layer does not activate the others.
+
+## Hermes automatic processing — proposed
+
+Hermes is a candidate for turning an incoming mission event into a new agent
+turn without a human message. Its [Runs API](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server)
+provides run IDs and completion status. A [webhook](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks)
+can start processing, but its HTTP acceptance does not establish task completion.
+The proposed adapter is:
+
+```text
+verified mission event → durable local inbox → selected Hermes run
+  → actual task receipts + terminal result → exact processing record
+  → separately authorized signed mission acknowledgement
+```
+
+Keep mission verification, grant expiry and peer pins in the existing receiver.
+The operator selects the Hermes runtime, tools and context; incoming text cannot
+choose them. Keep the Hermes API credential in the local adapter and give the
+agent only the selected participant's mission scope. Local Starter supplies
+chosen handoff and memory files, loaded explicitly during the turn.
+
+**Observed source, 2026-09-29:** the inspected Hermes 0.18.0 checkout at
+`ed4123792c135558e7be2e486505bc569faa2a74` has Runs admission and status, but
+its Runs handler lacks the newer upstream idempotency contract. Run status and
+event streams are held in memory, and supplying a session ID alone does not
+load the previous transcript. These findings do not verify the configured or
+running service. Preserve existing local changes; an upgrade is separate work.
+
+The first trial should therefore use one fresh turn, a durable local intent
+written before admission, explicit handoff loading and independently captured
+task results. An ambiguous admission stays unknown, with no automatic second
+POST. A model echo of event IDs or terminal success alone is insufficient.
+Exercise duplicate admission, interruption, expired grants and restart recovery
+before offering unattended operation. Newer Hermes versions need their own
+capability and behavior checks before using stronger retry or continuation claims.
+
+A local gateway or scheduler must remain running. This proposal neither wakes a
+sleeping Mac nor resumes an existing Codex or Claude session. **No Hermes adapter
+or live processing trial is implemented at this checkpoint.**
 
 ## Updating this map
 

@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-29 (fresh mission return and same-project enrollment candidate; historical release receipts below retain their original dates)
+> Updated: 2026-09-29 (enrollment release preparation and Hermes wake proposal; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -18,6 +18,27 @@
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
 ## Fresh mission return and same-project enrollment (2026-09-29)
+
+**Release preparation, 13:10 UTC:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
+collects the enrollment, portable client, chat and optional native receiver
+candidates. CI now runs the atomic enrollment fixture in isolated databases on
+both PostgreSQL 16 and 17; both passed in
+[run 36570372437](https://github.com/cambridgetcg/agenttool/actions/runs/36570372437).
+That run's required Linux gate failed on the existing TypeScript birth-snippet
+compilation test's 15-second timeout. It is not a passing release receipt.
+The four compiler-heavy tests now have a bounded 30-second allowance with all
+assertions retained; the focused file passes 17 tests / 340 assertions on Bun
+1.3.5. The Linux gate must still pass on the revised PR head.
+The unrelated YUTABASE companion-repository checkout also failed, as on main.
+Merge, workflow deployment and exact live enrollment acceptance remain pending
+at this dated checkpoint; consult the PR and deployment receipts for later state.
+
+**Hermes design:** the [collaboration roadmap](COLLABORATION-ROADMAP.md#hermes-automatic-processing--proposed)
+now proposes a verified event-to-Hermes-turn adapter. Installed 0.18.0 source
+supports a fresh Runs request, but lacks newer upstream durable Runs admission
+and automatic transcript loading from a supplied session ID. The first trial
+needs an external durable intent, explicit Local Starter loading and independent
+task receipts. No Hermes service, adapter, update or runtime trial was performed.
 
 **Source:** `feat/mission-return`, based on chat/docs revision `c60f0e90`.
 The candidate closes fresh identity enrollment into an existing project:
