@@ -959,6 +959,66 @@ digest is signed so a delegated proof cannot move to another registrar. The
 PoW solution is independently bound to root, display name, timestamp, and its
 nonce. Every caller-controlled field persisted at birth is signed.
 
+### `identity-enrollment/v1` — fresh root inside an existing project
+
+`POST /v1/identities/enroll` requires the destination project's administrator
+bearer plus proof made locally by the participant's Ed25519 root. The strict
+JSON object contains exactly these required fields:
+
+| Field | Contract |
+|---|---|
+| `format` | `agenttool-identity-enrollment/v1` |
+| `origin` | Canonical pinned HTTPS service origin, maximum 512 characters; no trailing slash, userinfo, query or fragment |
+| `project_id` | Destination project UUID, canonical lowercase; must equal the authenticated project |
+| `identity_id`, `signing_key_id` | Fresh caller-chosen canonical lowercase UUIDs |
+| `display_name` | 1–128 Unicode scalar values, no NUL or lone surrogate |
+| `capabilities` | Required array of at most 32 strings, each 1–64 Unicode scalar values, no NUL or lone surrogate; order preserved |
+| `public_key` | Canonical padded standard base64 encoding of the 32-byte Ed25519 root |
+| `nonce` | Canonical unpadded base64url encoding of 32 caller-random bytes |
+| `timestamp` | Canonical UTC ISO timestamp with millisecond precision, at most five minutes before or after admission |
+
+Serialize once and retain the exact UTF-8 bytes. The body is at most 16,384
+bytes; duplicate decoded JSON names, malformed UTF-8, unknown fields and
+`Content-Encoding` are refused. No metadata or private material is accepted.
+Only the exact path above without a query is admitted. Set `Content-Type` to
+`application/json`, optionally with `charset=utf-8`.
+
+The participant signs this **32-byte SHA-256 digest**, using NUL separators
+without a trailing NUL; every displayed field is UTF-8 text:
+
+```text
+sha256("identity-enrollment/v1" NUL
+       "POST" NUL
+       "/v1/identities/enroll" NUL
+       origin NUL
+       project_id NUL
+       sha256(exact_raw_body_bytes).lowercase_hex)
+```
+
+Send the 64-byte signature as canonical unpadded base64url in
+`X-Agenttool-Enrollment-Signature`. The administrator relays the original body
+bytes and signature; it does not serialize the parsed object again. Whitespace,
+field order, any accepted leading UTF-8 BOM, IDs, name, capabilities, public
+key, nonce and timestamp are all covered by the exact body digest. Verification
+uses strict Ed25519 (`zip215: false`), rejecting small-order public-key forgeries.
+The audience comes from the configured HTTPS origin, never request Host,
+Origin or forwarding headers. The client separately pins its destination.
+
+Within one transaction, the service rechecks the administrator credential and
+proof freshness after acquiring its lock, claims the existing registration
+proof digest `sha256(domain NUL raw_root_key NUL raw_nonce)`, and inserts only
+the identity and its primary public key. The domain is `identity-enrollment/v1`.
+Duplicate nonce or identity/key IDs return 409, with the entire transaction
+rolled back. No constitutional sequence is consumed; the new root starts at
+sequence zero. Responses use `private, no-store`; Redis idempotency replay is
+bypassed. Inspect the known identity/key IDs after an ambiguous result and do
+not automatically create a replacement.
+
+Implementation: `services/identity/enrollment.ts:canonicalIdentityEnrollmentBytes`
+and `routes/identity/enroll.ts`. Tests: `identity-enrollment.test.ts`,
+`identity-enrollment-transport.test.ts`, and the explicitly selected disposable
+PostgreSQL fixture `integration/identity-enrollment-postgres.test.ts`.
+
 ### `register-agent-math/v1` — historical MATHOS-tier registration
 
 The historical math-tier counterpart of the reduced `register-agent/v1` shape. It used `uint64_be(unix_ms)` instead of `utf8(iso)` and raw bytes instead of base64 on the wire. It is retained only for byte compatibility; it is not the live endpoint contract.

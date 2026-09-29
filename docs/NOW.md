@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-29 (mission chat candidate; historical release receipts below retain their original dates)
+> Updated: 2026-09-29 (fresh mission return and same-project enrollment candidate; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,47 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Fresh mission return and same-project enrollment (2026-09-29)
+
+**Source:** `feat/mission-return`, based on chat/docs revision `c60f0e90`.
+The candidate closes fresh identity enrollment into an existing project:
+`POST /v1/identities/enroll` requires both the destination administrator's bearer
+and an agent signature over the exact selected birth intent. The transaction
+consumes the nonce proof and inserts identity/key together, with agent-held root
+authority at sequence zero. The dependency-free CLI's `enroll-proof` prepares
+the public request without HTTP or local state mutation. No new project,
+server-generated private key, bearer, mission grant or schema migration results.
+The endpoint remains a source candidate, with no production deployment receipt.
+
+**Verification:** the complete `bin/preflight.sh api` invocation passed on Bun
+1.3.5: both typechecks, 6,378 hermetic API tests (one skipped), and 702 operator
+tests (eight skipped), with zero failures. Focused enrollment/identity checks
+passed 49 tests / 271 assertions; the explicit disposable PostgreSQL fixture
+passed five tests / 21 assertions, including concurrent duplicate admission and
+rollback after key insertion fails. Five real-Node/helper tests verify exact-byte
+proof interoperability and preparation without HTTP or state writes. The owned
+test database stopped cleanly. Source/security review found no remaining must-fix
+issue within the enrollment change; this is not a general identity-system audit.
+
+**Fresh native return:** on 2026-09-29 at 12:11–12:12 UTC, one new Codex 0.157.1
+app-server thread with its normal saved model/provider independently invoked
+Local Starter status/render, `chat inspect` and a five-second `chat read`.
+It recovered the selected handoff hash, new conversation, cutoff and consumed
+cursor `14` from local notes, checked current API scope and returned an empty
+batch with cursor `14`. All four commands succeeded; note/configuration hashes
+were unchanged and the owned app-server exited in 54.594 seconds. The retained
+notes were evidence; the current task supplied authority.
+
+This establishes explicit local return and live bounded reading. It does not
+establish automatic handoff injection, physical peer activity or native wake.
+Existing host hooks and connector startup were not isolated. Private receipts,
+paths and credentials remain outside Git; the original unresolved Claude wake
+event and stopped receiver were not replayed or acknowledged.
+
+**Next:** release and verify this enrollment candidate on the service, then complete a fresh
+participant's enrollment-to-mission journey and a physical peer exchange through
+the chat wrapper. Cross-device task leases/review remain a later phase.
 
 ## Verified mission chat candidate (2026-09-29)
 

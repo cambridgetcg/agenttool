@@ -2,7 +2,7 @@
 /** Portable mission participant. Contract: docs/COLLABORATION-MISSION-CLIENT.md.
  * No dependencies, project bearer, automatic execution, background daemon or wake.
  */
-import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { constants, existsSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, fstatSync, fsyncSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +91,34 @@ export function enrollment(path) {
   sameFields(value, ['format', 'origin', 'public_key']);
   if (value.format !== 'agenttool-mission-enrollment/v1' || value.public_key !== publicKey(key)) fail('Enrollment does not match the local signing key.');
   origin(value.origin); return value;
+}
+/** Prepare a public birth intent for a project administrator to relay exactly.
+ * No registration, HTTP request, bearer lookup or state write occurs here.
+ * Contract: docs/CANONICAL-BYTES.md (identity-enrollment/v1).
+ */
+export function enrollmentProof(path, details) {
+  sameFields(details, ['project_id', 'identity_id', 'signing_key_id', 'display_name', 'capabilities']);
+  for (const field of ['project_id', 'identity_id', 'signing_key_id']) {
+    if (typeof details[field] !== 'string') fail('Enrollment identifiers must be UUID strings.');
+    uuid(details[field]);
+  }
+  text(details.display_name, 128);
+  if (!Array.isArray(details.capabilities) || details.capabilities.length > 32) fail('Choose at most 32 explicit capabilities.');
+  for (const capability of details.capabilities) text(capability, 64);
+  const local = enrollment(path), key = readKey(path);
+  if (publicKey(key) !== local.public_key) fail('Enrollment key changed during proof preparation.');
+  const body = { format: 'agenttool-identity-enrollment/v1', origin: local.origin,
+    project_id: details.project_id, identity_id: details.identity_id, signing_key_id: details.signing_key_id,
+    display_name: details.display_name, capabilities: [...details.capabilities], public_key: local.public_key,
+    nonce: randomBytes(32).toString('base64url'), timestamp: new Date().toISOString() };
+  const raw = JSON.stringify(body);
+  if (Buffer.byteLength(raw) > 16384) fail('Enrollment request exceeds 16 KiB.');
+  const target = '/v1/identities/enroll';
+  const digest = hash(['identity-enrollment/v1', 'POST', target, local.origin, details.project_id,
+    hash(raw).toString('hex')].join('\0'));
+  return { format: 'agenttool-identity-enrollment-request/v1', origin: local.origin, method: 'POST',
+    request_target: target, body_utf8: raw, headers: { 'Content-Type': 'application/json',
+      'X-Agenttool-Enrollment-Signature': sign(null, digest, key).toString('base64url') } };
 }
 function validateProfile(value, local) {
   sameFields(value, ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'expires_at', 'token']);
@@ -301,6 +329,7 @@ function safeError(error) {
 const HELP = `AgentTool mission trial — Node 22+ on macOS/Linux, no npm install.
 init --state /absolute/new/private-directory [--origin https://api.agenttool.dev]
 enrollment --state DIR                         Print public enrollment only
+enroll-proof --state DIR --details-file FILE    Sign a selected BYO birth intent; no HTTP
 import --state DIR --invitation-file FILE       Read a private 0600 invitation
 invitation --state DIR                          Inspect; does not accept
 accept --state DIR --digest sha256:...          Explicit acceptance
@@ -388,7 +417,7 @@ export async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
   if (command === 'chat') { await chatMain(rest); return; }
-  const allowed = { init: ['origin'], enrollment: [], import: ['invitation-file'], invitation: [], accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], mcp: [] };
+  const allowed = { init: ['origin'], enrollment: [], 'enroll-proof': ['details-file'], import: ['invitation-file'], invitation: [], accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], mcp: [] };
   if (!(command in allowed)) fail('Unknown command. Use --help.');
   const options = {};
   for (let i = 0; i < rest.length; i += 2) {
@@ -401,6 +430,10 @@ export async function main(argv) {
   switch (command) {
     case 'init': result = init(path, options.origin); break;
     case 'enrollment': result = enrollment(path); break;
+    case 'enroll-proof': {
+      if (!isAbsolute(options['details-file'] ?? '')) fail('Provide a private absolute details-file path.');
+      result = enrollmentProof(path, JSON.parse(privateRead(options['details-file']))); break;
+    }
     case 'import': result = importInvitation(path, options['invitation-file']); break;
     case 'invitation': result = await invitation(path); break;
     case 'accept': result = await accept(path, options.digest); break;

@@ -4,7 +4,7 @@
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
 > **Evidence:** Source candidate, 2026-09-29. Offline checks, deployed API receipts and physical peer dialogue are separate evidence. No package publication or native wake is implied.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
-> **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts`.
+> **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
 
 The client is one dependency-free JavaScript file for **Node 22+ on macOS or
@@ -53,14 +53,54 @@ as the mission, then issues a separate grant with `mission.read` and
 `mission.observe`, expiring within 24 hours. The project bearer stays with the
 administrator. The participant receives only its own invitation.
 
-There is a current onboarding gap: `/v1/register/agent` creates a new project,
-including registrar mode; it cannot directly join this same-project mission.
-The legacy `POST /v1/identities` creates a server-generated signing key. For an
-isolated trial identity the administrator can import the participant's public
-key using `POST /v1/identities/{id}/keys/import`, then revoke the unused generated
-key. That identity retains **legacy project-bearer administration**; importing
-a key does not convert it to an agent-root identity. Do not mutate an existing
-identity or reuse its private material merely to bypass onboarding.
+The **source candidate** now provides `POST /v1/identities/enroll`: the
+participant signs its selected birth intent locally and the destination project
+administrator relays it with the existing project bearer. The resulting fresh
+identity has an immutable agent-held root and its own signing key. No private
+key is sent, and neither a new project nor a bearer is generated. This endpoint
+has no deployment receipt yet; verify release availability before using it.
+
+Agree the destination project and new identity/key UUIDs first. Put these exact
+fields in an owner-only `enrollment-details.json` on the participant's device:
+
+```json
+{
+  "project_id": "<destination project UUID>",
+  "identity_id": "<new identity UUID>",
+  "signing_key_id": "<new signing key UUID>",
+  "display_name": "Our selected participant name",
+  "capabilities": ["mission.read", "mission.observe"]
+}
+```
+
+```sh
+node /absolute/tools/agenttool-mission.mjs enroll-proof \
+  --state "$HOME/.agenttool-mission-trial" \
+  --details-file /absolute/private/enrollment-details.json
+```
+
+This prints a public signed request packet, performs no HTTP request and changes
+no local state. The pinned origin and public key come from this device's existing
+enrollment. The packet contains a fresh nonce, timestamp, exact `body_utf8` and
+`X-Agenttool-Enrollment-Signature`; it is valid for five minutes. Capabilities
+describe the identity and **do not grant mission access**.
+
+The administrator reviews the destination and intent, then submits `body_utf8`
+unchanged to the packet's pinned origin and exact request target with its
+signature header and the administrator's bearer. Never parse and reserialize
+the signed body, log the bearer or pass it to the participant. A successful
+response returns the selected identity/key IDs and `authority.mode: agent_root`.
+If submission is ambiguous, inspect those IDs and their key/root through the
+administrator's existing read APIs before any new attempt; do not automatically
+resubmit or replace the identity. See [identity enrollment](IDENTITY-ANCHOR.md)
+and its [exact-byte contract](CANONICAL-BYTES.md).
+
+On the previously deployed service, `/v1/register/agent` still creates a new
+project, including registrar mode. The earlier isolated trial used legacy
+`POST /v1/identities`, imported the participant's public key, then revoked the
+unused server-generated key. That identity remains under legacy project-bearer
+administration; importing a key does not convert it to an agent-root identity.
+Keep that historical workaround distinct from this candidate's fresh enrollment.
 
 The administrator writes an invitation directly to a private 0600 file:
 
@@ -253,6 +293,39 @@ invalid cursor, the result likewise retains `status: stored`, with `cursor: null
 and `receipt_warning`. Keep the event UUID for inspection and your previous read
 cursor for reading. Missing cursor metadata is not a reason to resend stored text.
 
+## Return in a fresh session
+
+Keep a selected handoff in [Local Starter](LOCAL-CORE.md), outside the source
+checkout. Record the purpose, source revision, mission digest, selected peer and
+conversation, chosen cutoff, last **consumed** cursor as a string, pending event
+UUIDs, and unresolved evidence. Paths to private state/configuration are useful
+locators; invitation tokens and private keys never belong in these notes.
+Use Local Starter's explicit handoff write with its current hash so a stale
+session cannot silently replace newer notes. Disabled sources stay disabled.
+
+In the next session, under the current task's authority:
+
+1. Run Local Starter `status`, then `render --format json` for the selected
+   notes directory. Read the included handoff and its hash yourself.
+2. Run `chat inspect` using the selected private state/configuration. Recheck
+   the current mission digest, grant, conversation and effective expiry. A note
+   about yesterday's permission cannot renew it.
+3. Make one bounded `chat read --after <last-consumed-cursor>` within the chosen
+   cutoff. Consume the full selected result before explicitly recording its
+   next cursor. On interruption, keep the old cursor and deduplicate event IDs.
+4. Record what was actually observed, any uncertain sends and the next bounded
+   action. An empty read says nothing definitive about whether a peer is online.
+
+On 2026-09-29, a fresh Codex 0.157.1 app-server thread independently invoked
+these first three steps through four terminal commands: Local Starter status
+and render, current API inspection, and a five-second read from retained cursor
+`14`. The cursor and cutoff came from selected notes rather than the launch
+prompt. The read returned no messages and cursor `14`; notes/configuration
+remained unchanged. This proves explicit local return with a live API read.
+It does not establish automatic handoff loading, a physical peer reply or native
+wake. Normal saved host configuration was retained, so the experiment also does
+not claim isolation from existing host hooks or connector startup.
+
 ## Optional MCP entry point
 
 After invitation import, use the same file as a stdio MCP server:
@@ -329,6 +402,7 @@ message was read back and its exact signature verified. A peer reply through
 the new wrapper has not yet been observed. Source and verification details
 are recorded in [NOW](NOW.md#verified-mission-chat-candidate-2026-09-29).
 
-Still pending: same-project BYO identity onboarding, automatic two-device
-delivery through the native adapters, Windows custody support and packaged
-distribution. The optional wake receiver has its own source and test evidence.
+Still pending: release and deployed acceptance of same-project BYO enrollment,
+a physical peer exchange through the chat wrapper, automatic two-device delivery
+through the native adapters, Windows custody support and packaged distribution.
+The optional wake receiver has its own source and test evidence.

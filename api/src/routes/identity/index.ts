@@ -22,6 +22,7 @@ import boxKeysRoutes from "./box-keys";
 import delegationsRoutes from "./delegations";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
+import enrollmentRoutes from "./enroll";
 import forkRoutes, { lineageApp as lineageRoutes } from "./fork";
 import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
@@ -41,6 +42,7 @@ import tokensRoutes from "./tokens";
 const app = new Hono<ProjectContext>();
 
 // Standalone resource roots
+app.route("/identities/enroll", enrollmentRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/attestations", attestationsRoutes);
 app.route("/delegations", delegationsRoutes);
