@@ -33,6 +33,11 @@ and live enrollment acceptance still require separate successful receipts.
 The deterministic timer-boundary regression fails before the fix and passes
 afterward. Focused chat/client/CLI verification passes 52 tests / 877 assertions;
 syntax, whitespace and independent source review found no remaining must-fix.
+The next Linux run passed the original hung-request test and both new regression
+tests, then reached its overall 20-minute job limit during later passing operator
+checks. CI now allows the same bounded 25 minutes as the deployment gate; test
+steps, individual test limits and the required aggregate remain intact. That
+cancelled run is not a passing full-gate receipt.
 
 **Release preparation, 13:10 UTC:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
 collects the enrollment, portable client, chat and optional native receiver

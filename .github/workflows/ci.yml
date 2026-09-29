@@ -17,7 +17,9 @@ jobs:
   api-protocol-linux:
     name: API and protocol (Linux)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The complete gate can exceed 20m on shared runners; match deploy-api's
+    # bounded allowance while keeping every test and the required aggregate.
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
