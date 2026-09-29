@@ -83,11 +83,25 @@ function operation(options, seconds = 60) {
     limit(value) { expiry = Math.min(expiry, value); expiryDeadline = Math.min(expiryDeadline, clock.monotonic() + expiry - clock.now()); },
     async call(fn, effect = false) {
       check();
-      const budget = Math.max(1, Math.ceil(Math.min(timeout, deadline - clock.monotonic(), expiryDeadline - clock.monotonic(), expiry - clock.now())));
-      let result;
-      try { result = await fn({ fetchImpl: options.fetchImpl, signal: options.signal, timeout: budget }); }
-      catch (error) { if (!effect) check(); throw error; }
-      if (!effect) check(); return result;
+      const monotonic = clock.monotonic(), remaining = deadline - monotonic;
+      const lifetime = Math.min(expiryDeadline - monotonic, expiry - clock.now());
+      const budget = Math.max(1, Math.ceil(Math.min(timeout, remaining, lifetime)));
+      const timeoutReason = lifetime <= Math.min(timeout, remaining) ? 'grant_expired' : remaining <= timeout ? 'duration' : null;
+      let result, requestSignal;
+      const checkStopped = () => {
+        check();
+        // The request timer can fire just before a separately sampled clock reaches
+        // its boundary. Retain that actual timeout's selected cause after the base
+        // client redacts the transport error; do not reinterpret ambiguous effects.
+        if (requestSignal?.aborted && requestSignal.reason?.name === 'TimeoutError' && timeoutReason)
+          fail('The selected chat request deadline ended.', timeoutReason);
+      };
+      try { result = await fn({ fetchImpl: (url, init) => {
+        requestSignal = init.signal;
+        return (options.fetchImpl ?? fetch)(url, init);
+      }, signal: options.signal, timeout: budget }); }
+      catch (error) { if (!effect) checkStopped(); throw error; }
+      if (!effect) checkStopped(); return result;
     },
     async pause() {
       check();

@@ -431,7 +431,7 @@ describe("boring test spine", () => {
     expect(launchBrowser).not.toContain("secrets.");
     expect(linuxApi?.name).toBe("API and protocol (Linux)");
     expect(linuxApi?.["runs-on"]).toBe("ubuntu-24.04");
-    expect(linuxApi?.["timeout-minutes"]).toBe(20);
+    expect(linuxApi?.["timeout-minutes"]).toBe(25);
     expect(linuxApi?.["continue-on-error"]).toBeUndefined();
     expect(linuxApi?.steps?.map((step) => step.name)).toEqual([
       "Check out repository",
