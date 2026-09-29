@@ -13,10 +13,11 @@ permissions. It works through a harness's terminal tool; an optional stdio MCP
 mode exposes the same participant operations. It installs no hook, daemon,
 model provider, global setting or automatic wake. npm is not required.
 
-For explicit message arrival into a selected running session, see the optional
+For explicit message arrival into a selected harness, see the optional
 [mission wake receiver](COLLABORATION-MISSION-WAKE.md). It adds a local route
-binding, durable inbox and separate Codex/Claude adapters. Installing or running
-this basic participant client does not enable that receiver.
+binding, durable inbox, separate Codex/Claude adapters and a fresh Hermes
+read-receipt turn. Installing or running this basic participant client does not
+enable that receiver.
 
 ## 1. Prepare the second device
 

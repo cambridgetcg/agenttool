@@ -293,3 +293,81 @@ describe.skipIf(process.platform === "win32")("mission receiver authority and du
     expect(() => wake.message(to, "ack", "seen", "wrong-id")).toThrow();
   });
 });
+
+
+const HERMES_RECEIPT = { status: "processed", job_id: "20260929T164704-b451d117247b", session_id: "20260929_174704_5dc128", evidence_sha256: "a".repeat(64) };
+async function hermesBound() {
+  const f = fixture(), db = join(f.root, "fixture.db");
+  writeFileSync(db, "synthetic database, adapter not invoked", { mode: 0o600 });
+  const address = await wake.bind(f.state, { ...f.config, target: { kind: "hermes", cwd: f.root,
+    sol_executable: process.execPath, python_executable: process.execPath, state_db: db } }, f.options);
+  const receiver = open(f), e = event(f, address.route_id, 1);
+  page(f, [e]); await receiver.poll(f.options);
+  return { f, receiver, e };
+}
+async function processedHermes() {
+  const v = await hermesBound();
+  const delivery = await v.receiver.dispatch({ deliver: async () => HERMES_RECEIPT }, v.f.options);
+  return { ...v, delivery };
+}
+function ackTransport(f: Fixture, mode = "success") {
+  const sent: any[] = [];
+  const options = { fetchImpl: async (url: string, init: RequestInit) => {
+    if (init.method !== "POST") return f.options.fetchImpl(url);
+    expect(url).toBe(`${ORIGIN}/v1/collaboration/missions/${M}/events`);
+    const raw = String(init.body), b = JSON.parse(raw); sent.push(b);
+    expect(persisted(f).items[0].processing_ack.status).toBe("dispatching");
+    if (mode === "lost") throw new Error("lost after possible store");
+    return response({ event: { event_id: b.event_id, mission_id: mode === "wrong_mission" ? randomUUID() : M,
+      body_sha256: hash(raw), received_seq: "2" } });
+  } };
+  return { options, sent };
+}
+describe.skipIf(process.platform === "win32")("Hermes processing acknowledgements", () => {
+  test("signed ACK requires evidence, persists intent before send and deduplicates across reopen", async () => {
+    const { f, receiver, e, delivery } = await processedHermes(), to = randomUUID(), transport = ackTransport(f);
+    const ack = await receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options);
+    expect(ack.status).toBe("stored"); expect(transport.sent).toHaveLength(1);
+    const envelope = JSON.parse(transport.sent[0].summary), receipt = JSON.parse(envelope.text);
+    expect(envelope.kind).toBe("ack"); expect(envelope.to).toBe(to); expect(envelope.in_reply_to).toBe(e.event_id);
+    expect(receipt).toEqual({ format: "agenttool-hermes-read-ack/v1", event_id: e.event_id, delivery_id: delivery.delivery_id,
+      job_id: HERMES_RECEIPT.job_id, session_id: HERMES_RECEIPT.session_id, evidence_sha256: HERMES_RECEIPT.evidence_sha256 });
+    expect(await receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options)).toEqual(ack);
+    receiver.close(); const resumed = open(f);
+    expect(await resumed.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options)).toEqual(ack);
+    await expect(resumed.sendProcessingAck(e.event_id, delivery.delivery_id, randomUUID(), transport.options)).rejects.toThrow("destination changed");
+    expect(transport.sent).toHaveLength(1); expect(resumed.next()).toBeNull();
+    expect(wake.status(f.state).processing_acks[0].ack_event_id).toBe(ack.ack_event_id);
+  });
+  test("lost ACK response or wrong mission receipt remains uncertain and cannot resubmit", async () => {
+    for (const mode of ["lost", "wrong_mission"]) {
+      const { f, receiver, e, delivery } = await processedHermes(), to = randomUUID(), t = ackTransport(f, mode);
+      await expect(receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, t.options)).rejects.toThrow();
+      expect(persisted(f).items[0].status).toBe("processed"); expect(persisted(f).items[0].processing_ack.status).toBe("dispatching");
+      receiver.close(); const resumed = open(f);
+      await expect(resumed.sendProcessingAck(e.event_id, delivery.delivery_id, to, t.options)).rejects.toThrow("uncertain");
+      expect(t.sent).toHaveLength(1); expect(resumed.next()).toBeNull();
+    }
+  });
+  test("revocation, abort and manual processing cannot mint automatic evidence ACKs", async () => {
+    for (const mode of ["revoked", "aborted", "manual", "host_tool"]) {
+      const { f, receiver, e, delivery } = await processedHermes(), t = ackTransport(f);
+      if (mode === "revoked") f.controls.contextStatus = 401;
+      if (mode === "manual" || mode === "host_tool") {
+        receiver.close(); patchInbox(f, inbox => { inbox.items[0][mode === "manual" ? "resolved_by" : "acknowledged_by"] = "operator"; });
+      }
+      const current = mode === "manual" || mode === "host_tool" ? open(f) : receiver;
+      const controller = new AbortController(); if (mode === "aborted") controller.abort();
+      await expect(current.sendProcessingAck(e.event_id, delivery.delivery_id, randomUUID(), { ...t.options, signal: controller.signal })).rejects.toThrow();
+      expect(t.sent).toHaveLength(0); expect(persisted(f).items[0].processing_ack).toBeUndefined();
+    }
+  });
+  test("generic adapter completion and malformed saved ACK cannot pass as Hermes proof", async () => {
+    const { f, receiver } = await hermesBound();
+    await expect(receiver.dispatch({ deliver: async () => ({ status: "processed" }) }, f.options)).rejects.toThrow();
+    expect(receiver.next()).toBeNull(); receiver.close();
+    patchInbox(f, inbox => { inbox.items[0].status = "processed"; inbox.items[0].receipt = HERMES_RECEIPT;
+      inbox.items[0].processing_ack = { to: randomUUID(), status: "stored", summary_sha256: "b".repeat(64), attempted_at: new Date().toISOString(), ack_event_id: randomUUID(), cursor: "2", token: "must not project" }; });
+    expect(() => wake.status(f.state)).toThrow();
+  });
+});

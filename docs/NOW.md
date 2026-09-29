@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-29 (enrollment release preparation and Hermes wake proposal; historical release receipts below retain their original dates)
+> Updated: 2026-09-29 (live finite Hermes mission trial; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,38 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Hermes mission receiver (2026-09-29)
+
+**Source candidate:** `feat/mission-hermes-wake` connects the existing signed
+mission receiver to one fresh Sol Hermes review job. It records dispatch intent
+before launch and requires independent native `read_file` evidence plus an
+exact random-challenge receipt before recording processing. An optional
+`--ack-to` route selects automatic signed read-task acknowledgment; durable ACK
+intent precedes submission, and uncertain effects are never retried
+automatically. The operator starts a finite watcher. No daemon, gateway, OS wake
+or arbitrary peer task execution is installed. See the [receiver
+contract](COLLABORATION-MISSION-WAKE.md) and [remaining Hermes
+work](COLLABORATION-ROADMAP.md#hermes-automatic-processing--local-source-candidate).
+
+**Verification:** 65 focused adapter/receiver/CLI/catalog tests pass with 985
+assertions on Bun 1.3.5. The required `bin/preflight.sh api` gate also passes:
+both installed TypeScript checks and 7,116 tests, nine skips and zero failures.
+Independent source review found no remaining must-fix issue. At 17:11–17:12 UTC,
+a watcher already running before the event received it through the production mission API and
+started one fresh Hermes 0.18.0 / gpt-6-astra ultra job. Its 28-second native turn
+made exactly one verified `read_file` call. The host signed the read-task ACK,
+and the other scoped participant read it back and verified its signature.
+Restart/poll/dispatch produced zero additional adapter calls and released the
+receiver locks. Independent offline review verified both signatures, altered-byte
+rejection and the saved challenge/artifact bindings. Both grants and the mission
+were revoked with administrative readback; both participant context reads then
+returned HTTP 401. No owned watcher, worker, Hermes child or process group
+remained at cleanup verification.
+
+This was one Mac with two grants for one existing root identity, not independent
+identities or another physical device. No daemon was installed or left running.
+The source candidate is not a published package or an unattended wake service.
 
 ## Fresh mission return and same-project enrollment (2026-09-29)
 
@@ -53,12 +85,14 @@ The unrelated YUTABASE companion-repository checkout also failed, as on main.
 Merge, workflow deployment and exact live enrollment acceptance remain pending
 at this dated checkpoint; consult the PR and deployment receipts for later state.
 
-**Hermes design:** the [collaboration roadmap](COLLABORATION-ROADMAP.md#hermes-automatic-processing--proposed)
-now proposes a verified event-to-Hermes-turn adapter. Installed 0.18.0 source
+**Historical Hermes design checkpoint:** the [collaboration roadmap](COLLABORATION-ROADMAP.md#hermes-automatic-processing--local-source-candidate)
+initially proposed a verified event-to-Hermes-turn adapter. Installed 0.18.0 source
 supports a fresh Runs request, but lacks newer upstream durable Runs admission
 and automatic transcript loading from a supplied session ID. The first trial
 needs an external durable intent, explicit Local Starter loading and independent
-task receipts. No Hermes service, adapter, update or runtime trial was performed.
+task receipts. No Hermes service, adapter, update or runtime trial had been
+performed at that earlier checkpoint; the newer receiver entry above supersedes
+the proposal's implementation status.
 
 **Source:** `feat/mission-return`, based on chat/docs revision `c60f0e90`.
 The candidate closes fresh identity enrollment into an existing project:

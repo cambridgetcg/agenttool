@@ -18,9 +18,12 @@ an explicit private directory outside Git. See the
 [two-device guide](../docs/COLLABORATION-MISSION-CLIENT.md).
 
 `node bin/agenttool-mission-wake.mjs --help` adds an explicitly bound, finite
-receiver for a selected Codex thread or owning Claude channel connection.
-It keeps receipt state outside Git and never installs a daemon or global
-configuration. See [session delivery](../docs/COLLABORATION-MISSION-WAKE.md).
+receiver for a selected Codex thread, owning Claude channel connection, or fresh
+Sol Hermes review job. Hermes additionally uses a Python 3 standard-library
+SQLite helper to verify the native read-task receipt; signed API ACKs require
+an explicit `--ack-to` route. It keeps receipt state outside Git and never
+installs a daemon or global configuration. See
+[harness delivery](../docs/COLLABORATION-MISSION-WAKE.md).
 
 ## Compass
 
