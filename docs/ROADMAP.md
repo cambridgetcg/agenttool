@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Show how the core modules fit together and which improvements are proposed.
-> **Evidence:** Repository implementations and recorded release references; this map is not a live health check.
+> **Evidence:** Repository implementations and recorded release references, consolidated 2026-09-30 in [the release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30); this map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md) · [Recent work](NOW.md)
 
 AgentTool helps agents keep useful records, return to work and choose tools.
@@ -19,11 +19,11 @@ evidence for their own claims.
 
 | Module | Available in source | Proposed next step | Reference |
 |---|---|---|---|
-| **Identity** | Registration, identity records, signing-key management and signed recovery are implemented. | Make the public-record and recovery choices easier to compare. | [Identity](https://docs.agenttool.dev/identity) |
-| **Wake & Continuity** | Hosted Wake plus a standalone Local Starter preview with Codex/Claude skill, direct hook and optional MCP delivery plans. | Verify native resume/compaction delivery; add a reviewed public-source npm publishing lane with matching package metadata. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
+| **Identity** | Registration, identity records, signing-key management and signed recovery; existing-project root-signed enrollment is deployed. | Make the public-record and recovery choices easier to compare. | [Identity](https://docs.agenttool.dev/identity) |
+| **Wake & Continuity** | Hosted Wake plus a standalone Local Starter preview with Codex/Claude skill, direct hook and optional MCP delivery plans; explicit fresh Codex return was observed. | Verify automatic start/resume/compaction delivery; add a reviewed public-source npm publishing lane with matching package metadata. | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
 | **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Local writes never enable loading automatically. | Add bounded revision/restore and clarify export/removal across stores. | [Memory](https://docs.agenttool.dev/memory) |
 | **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. | Make package status and first useful actions easier to find. | [Tools](https://docs.agenttool.dev/packages) |
-| **Collaboration** | Published local Collab 0.4.0 journals; separate hosted correspondence and inbox operations; local waiting and courier source candidates. | Scoped mission participants within one project, followed by real-device delivery, distributed task authority and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
+| **Collaboration** | Published local Collab 0.4.0 journals; hosted correspondence/inbox and deployed scoped missions. Fresh separately rooted enrollment/reply from the reported second Mac passed; Hermes delivery is tested local source. | Native lifecycle and runtime path boundaries, distributed task authority and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
 
 Source implementation does not establish deployment, current availability or
 a package release. Tools and Collaboration link their recorded release evidence
@@ -82,24 +82,29 @@ navigation, not an identity or permission decision.
 
 ## How to move this roadmap forward
 
-The [collaboration roadmap](COLLABORATION-ROADMAP.md) now puts public onboarding
-first and **scoped mission participation** next. A shared principality or purpose
+The [collaboration roadmap](COLLABORATION-ROADMAP.md) separates deployed
+**scoped mission participation** from the remaining native lifecycle, distributed
+leases/review and cross-project membership work. A shared principality or purpose
 is descriptive; explicit participant admission and grants supply bounded
-permission. The initial mission slice uses registered identities owned by one
-project, without distributing its administrative bearer. Cross-device message
-delivery, native lifecycle, distributed leases/review and cross-project
-membership each have separate acceptance criteria. Start with the
-[public collaboration guide](COLLABORATION.md); source implementation is not
-evidence that the mission service is deployed.
+permission. The deployed slice uses identities owned by one project without
+distributing its administrative bearer. Fresh enrollment and signed reply from
+a separately rooted participant on the reported second Mac passed; the peer's
+final ACK read was not observed. The finite Hermes read/ACK trial used one Mac and two grants for the
+same root, and remains a local source candidate. It does not establish
+unattended arbitrary peer-task execution. Read the
+[consolidated evidence](NOW.md#consolidated-release-checkpoint-2026-09-30) and
+[public collaboration guide](COLLABORATION.md) before selecting a path.
 
 The [files-only local starter](LOCAL-CORE.md#files-only-starter) now has a standalone
 preview: selected local records, bounded rendering, metadata and explicit
 handoff/memory writes. A single archive contains the CLI, skill and optional MCP. Its adapter fragments are not installed integrations.
-Its files/CLI OS matrix has recorded runs; actual host loading remains
+Its files/CLI OS matrix has recorded runs, and a fresh Codex session explicitly
+read its selected handoff. Automatic start/resume/compaction delivery remains
 unverified. The [explicit hosted reader](LOCAL-CORE.md#explicit-hosted-memory-read)
 now connects one bounded identity-selected memory projection through a separate
 credential path. It preserves local-first budgeting and an offline path, and
-performs no automatic save. Next, verify actual host delivery and only then add
+performs no automatic save; delivery of that companion's output to a model
+remains unverified. Next, verify those automatic and hosted delivery paths, then add
 reviewed writes and conflict handling where needed. Data and Collab remain optional.
 Relationship history remains selected context; old records do not supply current consent.
 

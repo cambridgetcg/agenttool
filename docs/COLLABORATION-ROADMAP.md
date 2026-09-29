@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Published local Collab 0.4.0; 0.5.0 and the courier remain source candidates. The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 ## Keep the records distinct
@@ -23,8 +23,8 @@ Today, local Collab coordinates independent sessions sharing one SQLite journal.
 Published 0.4.0 provides 32 tools. Source-candidate 0.5.0 adds bounded waiting as
 the 33rd tool. The private courier candidate exchanges selected messages between
 enrolled own-fleet peers; it does not replicate leases, accepted reviews or task
-authority. Native reception and physical second-device operation still need
-their own receipts.
+authority. The courier's native reception and physical second-device operation
+still need their own receipts; the mission API trials use a separate transport.
 
 ## Phases and acceptance
 
@@ -32,7 +32,7 @@ their own receipts.
 |---|---|---|---|
 | **0 · Usable onboarding** | One public guide, direct core navigation, the old channel URL resolving correctly, exact release/runtime choices and source mirrors. Agents should not need access to the private development repository to begin. | Anonymous reading paths resolve; immutable frontend staging preserves canonical guide bytes; all local links and redirect targets pass checks. Record live readback only after deployment. | No installation, automatic enrollment or hosted availability implied by a page. |
 | **1 · Scoped mission participants** | A project administrator defines a mission and admits registered identities already owned by that project. Each identity can use explicitly granted mission actions with its own proof, without receiving a project-admin bearer. A purpose reference stays descriptive. | Grant checks bind project, mission, identity, action, current expiry and revocation. Exact-request proofs and replay/conflicting-retry tests pass. Cross-project, cross-mission and cross-identity attempts refuse. Concurrent transitions preserve authority. Separate source, disposable-database and deployed receipts. | Cross-project federation, arbitrary delegated API access, delegation chains, native wakes and distributed task leases. |
-| **2 · Transport and native lifecycle — current implementation priority** | Make active-turn API chat easy to use first; then verify Codex and Claude native delivery/processing separately on real devices. | Peer-pinned chat, explicit consumption cursor, bounded polling, verified reply references and uncertain-send recovery; physical hello/reply/read-ack for the wrapper. Separately require native notification and processing receipts, restart/resume, duplicate handling and pause/revoke checks. | API reading does not wake an idle session or claim a task. A delivered report is not a processing acknowledgement. |
+| **2 · Transport and native lifecycle — current implementation priority** | Extend observed active-turn API chat and one-Mac Codex/Hermes trials into independently controlled native delivery and recovery. | Peer-pinned chat, explicit consumption cursor, bounded polling, verified reply references and uncertain-send recovery; physical hello/reply/read-ack for the wrapper. Separately require native notification and processing receipts, restart/resume, duplicate handling and pause/revoke checks. | API reading does not wake an idle session or claim a task. A delivered report is not a processing acknowledgement. |
 | **3 · Cross-device task authority** | Define one authoritative mission task service and adapters for claim, renewal, recovery, completion and independent review across devices. | Concurrent claims produce one owner; stale generations, leases and unauthorized reviewers refuse; accepted dependencies unlock only after review. Partition/reconnect and recovery preserve useful work and auditable decisions. | No distributed SQLite copying, automatic merge, implicit external authority or global agent control. |
 | **4 · Cross-project membership and federation** | Admit identities controlled by independent projects/operators through explicit invitations and mutually understood trust/purpose boundaries. | Membership approval, proof ownership, delegated scopes, expiry, withdrawal, revocation propagation, routing privacy and audit tests across genuinely separate projects. | Public joining by discovery, inherited access from a principality, transitive consent and authority from a shared label. |
 
@@ -45,42 +45,46 @@ establish a live service or native delivery.
 
 ## Harness and delivery work
 
-The [portable mission client trial](COLLABORATION-MISSION-CLIENT.md) begins
-phase 2 with CLI and stdio MCP operations, local signing keys, exact-body
-outbox recovery and bounded polling. A signed physical peer reply was fetched and
-verified on 2026-09-28; that explicit exchange did not verify automatic native
-delivery. On 2026-09-29 the active agents exchanged signed API planning messages
-and agreed to prioritize the [verified chat interface](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer).
-Its source candidate adds `inspect/read/send/reply`, peer/conversation pins,
-explicit cursors and reply receipts, and an uncertain-outbox guard. Offline
-wrapper checks and a physical wrapper exchange need their own receipts; the
-earlier base-client dialogue does not substitute for them.
+The [portable mission client](COLLABORATION-MISSION-CLIENT.md) provides CLI and
+stdio MCP operations, local signing keys, exact-body outbox recovery and bounded
+polling. Its [verified chat interface](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer)
+adds `inspect/read/send/reply`, peer/conversation pins, explicit cursors and an
+uncertain-outbox guard. On 2026-09-29 a freshly enrolled, separately rooted
+participant on the reported second Mac accepted a scoped mission and returned
+a signed wrapper reply matching the exact hello and challenge. The local read
+ACK was stored and verified; peer consumption of that final ACK was not observed.
+Both grants and the mission were revoked. This active-turn exchange is distinct
+from the earlier base-client dialogue and from automatic native delivery.
 
-The optional [session receiver](COLLABORATION-MISSION-WAKE.md) now
-provides a source candidate for durable inboxes, exact local route bindings,
-Codex app-server turns and Claude channel notifications. The native adapters
-need their own processing receipts; an API storage receipt is not one.
-The same-project onboarding gap now has a source candidate:
+The same-project onboarding path is deployed at `f5215499`:
 `POST /v1/identities/enroll` combines a participant-signed fresh birth intent
 with destination-project administrator admission. Its immutable root and
 signing key stay under local custody; the request creates neither a project
 nor a bearer. `enroll-proof` prepares the public exact-byte request locally.
-Release and deployed enrollment-to-mission acceptance remain separate work;
-the previous legacy trial identity is not silently upgraded.
+The [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30)
+links PRs #445/#446 and the successful deployment/acceptance receipts. The earlier
+legacy trial identity was not silently upgraded.
+
+The optional [native receiver](COLLABORATION-MISSION-WAKE.md) adds durable
+inboxes and exact local route bindings. Separate one-Mac Codex and Hermes
+processing trials passed; Hermes `671cccca` remains local tested source with
+a finite supervised read task. Claude channel processing is still unverified.
+An API storage receipt alone establishes none of these native outcomes.
 
 A [fresh-session return](COLLABORATION-MISSION-CLIENT.md#return-in-a-fresh-session)
 was observed on 2026-09-29: a new Codex thread read selected Local Starter notes,
 retained the explicit consumed cursor, checked current mission scope and made a
 bounded API read. The read was empty; it does not establish current peer presence.
-This closes the explicit local loading/read journey, while automatic delivery,
-expired-grant recovery and physical peer interaction remain separate boundaries.
+This closes the explicit local loading/read journey. Automatic handoff loading
+and expired-grant recovery remain open; the separately observed peer exchange
+does not prove peer presence during that empty read.
 
 | Surface | Existing basis | Next evidence |
 |---|---|---|
-| Codex / Claude Code | Local stdio MCP and packaged coordination guidance; separate endpoint/session per agent. | Practical arrival, bounded poll, explicit acknowledgement, restart/resume and disconnect in the selected native versions. |
+| Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
-| Hosted API | Project-scoped Correspondence plus deployed bounded mission grants; same-project BYO enrollment is a source candidate. Release receipts in [NOW](NOW.md). | Release and verify enrollment-to-mission admission; verify the chat wrapper with independently credentialed physical participants. |
+| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. [Release receipts](NOW.md#consolidated-release-checkpoint-2026-09-30). | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
 | Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
 
 No phase requires npm specifically. Packages deliver software, skills explain
@@ -126,7 +130,7 @@ participant read and verified. A receiver restart produced no duplicate dispatch
 The test used one Mac and two grants for the same existing root identity.
 The [dated record](COLLABORATION-MISSION-WAKE.md#verification-record--2026-09-29)
 keeps timing, offline checks and remaining boundaries separate. This remains
-private source on `feat/mission-hermes-wake`, not a published integration or an
+local tested source at `671cccca`, not a published integration or an
 unattended service.
 
 **Observed source, 2026-09-29:** the inspected Hermes 0.18.0 checkout at

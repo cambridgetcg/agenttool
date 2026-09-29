@@ -4,7 +4,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose which context and records to keep locally, and understand what the host or server must supply.
-> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Download integrity, registry publication and native host activation have separate receipts in [Now](NOW.md).
+> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Explicit fresh Codex return was observed on 2026-09-29. Download integrity, registry publication and automatic host activation remain separate claims; see [the consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
 > **Compass:** [Core map](CORE.md) · [API coverage](API-COVERAGE.md) · [Wake](WAKE.md) · [Identity anchor](IDENTITY-ANCHOR.md)
 > **Code:** Local starter source preview: `packages/local-starter/src/core.mjs` · Data (`packages/data/src/node.ts`) · Collab (`packages/collab/src/mcp.ts`) · SDK keys (`packages/sdk-ts/src/seed.ts`)
 > **Tests:** Source preview: `packages/local-starter/tests/core.test.mjs` and `packages/local-starter/tests/cli.test.mjs` · hosted scaffold boundaries (`api/tests/scaffold-safety.test.ts`)
@@ -235,7 +235,7 @@ removing one does not stop the other paths or retract prior output.
 | Host/system | Current starter path | Limitation |
 |---|---|---|
 | Any host with explicit text/tool input | Manually run `render` and supply its output. | A stored file or printed result is not automatically session context. |
-| Codex | Proposed project `.codex/hooks.json` SessionStart hook on macOS/Linux. | Current hooks require host trust/review. Context may be previewed/spilled; actual startup/resume/compact delivery remains untested. |
+| Codex | Explicit Local Starter status/render in a fresh 0.157.1 model thread was observed on macOS; proposed project `.codex/hooks.json` SessionStart hook on macOS/Linux. | Current hooks require host trust/review. Automatic startup/resume/compact delivery remains untested; the explicit return does not verify hooks. |
 | Claude Code | Project SessionStart proposal with literal Node `command` + `args`; startup execution observed on macOS / 2.1.282. | Model receipt and resume/compact delivery remain untested. |
 | Cursor | Proposed project `sessionStart` hook on macOS/Linux. | Documented as fire-and-forget; first-turn ordering and compaction restoration are not guaranteed here. |
 | Native Windows | Files-only Node path with inherited ACLs; Claude proposal available. | ACL privacy is unverified. Codex/Cursor hook fragments refuse until native-shell handling is verified; use manual rendering. |
@@ -253,6 +253,15 @@ ran the startup hook with validated additional context. Both used synthetic
 notes and no model requests. These do not prove model adoption, automatic
 resume/compact hooks or other OS versions. The package guide records the
 scope and native skill-validator limitation.
+
+**Observed explicit return, 2026-09-29:** a fresh Codex 0.157.1 thread invoked
+Local Starter status/render, recovered the selected handoff hash and mission
+cursor, then explicitly checked current mission scope and performed a bounded
+API read. Local note and configuration hashes stayed unchanged. This verifies
+one deliberate local-context return, not automatic startup/resume/compaction
+loading or delivery of the hosted-memory companion below. Existing host hooks
+were not isolated in that trial. See the
+[consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
 
 POSIX owner-only modes are checked; Windows reports `windows-acl-unverified`.
 Initialization requires hard-link support for no-clobber manifest publication;
@@ -309,7 +318,8 @@ custody, project bearers, hosted Vault and the independent local credential
 broker. The separate explicit companion below connects selected hosted memories;
 it does not install a broker or OS secret store. The
 [integration sequence](API-COVERAGE.md#integration-gaps-and-next-steps) keeps
-actual host loading, reviewed writes and conflict handling as further work.
+automatic host loading, hosted-memory companion delivery, reviewed writes and
+conflict handling as further work.
 Automatic synchronization is not implemented.
 
 ## Explicit hosted memory read
@@ -353,7 +363,9 @@ records get priority within the combined content budget. Output is a reviewable
 snapshot with a separate hosted receipt and selection; it does not replace notes,
 register identities, acknowledge Wake, install hooks or start a runtime.
 Credential values can exist in client process memory. This is not an OS credential
-store or a general secret detector. Actual host delivery still needs verification.
+store or a general secret detector. Delivery of this companion's combined output
+to a model still needs verification; the explicit files-only Codex return above
+did not exercise it.
 See [the partition contract](IDENTITY-PARTITIONS.md) for the mathematical scope,
 source/test boundaries and deliberate compatibility changes.
 
@@ -393,7 +405,9 @@ or covenant record does not grant permission for a new action.
   macOS and Windows. Linux/macOS jobs each passed 70 checks; Windows jobs each
   passed 63 and skipped seven POSIX-specific checks. Repository-access-required
   run `36327872045`, source `811a7153`, covers files and adapter fixtures;
-  actual host delivery, Windows ACL privacy and remote filesystems remain unverified.
+  that run does not verify host delivery. The later explicit Codex return above
+  has its own evidence; automatic lifecycle delivery, Windows ACL privacy and
+  remote filesystems remain unverified.
 - AFTERGLOW tests (`packages/wake-continuity/tests/core.test.ts`) cover explicit
   projection and causal references; package tests (`packages/wake-continuity/tests/package.test.ts`)
   keep its implementation pure.
