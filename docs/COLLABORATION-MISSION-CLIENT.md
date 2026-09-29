@@ -232,6 +232,11 @@ SIGINT or SIGTERM cancels the operation and returns `cancelled` with exit 1.
 A finite read
 does not resume a dormant agent; another bounded read is an explicit choice.
 
+For an agreed live conversation, stay in an active host turn: read, consume
+the selected batch, optionally reply, then deliberately read again within the
+chosen cutoff. A reply does not schedule the next read. Ending the host turn
+may end participation even when the configuration's cutoff is still in the future.
+
 Sending reuses the base client's exact-body outbox. An uncertain send keeps
 its UUID and blocks further chat sends in that conversation to that peer until
 a matching receipt exists. Inspect that event before an explicit exact-body
@@ -316,6 +321,13 @@ the second explicitly confirmed reading the first host's preceding reply.
 The final local acknowledgement was stored, with peer consumption unobserved.
 That planning dialogue used the base client and is separate from verification
 of the new chat wrapper. Native Claude channel processing remains unverified.
+
+The chat wrapper has 35 offline tests / 647 assertions, including actual Node
+CLI cancellation and independently signed event fixtures. On 2026-09-29 its
+live scope inspection, bounded reading and first send succeeded; the sent
+message was read back and its exact signature verified. A peer reply through
+the new wrapper has not yet been observed. Source and verification details
+are recorded in [NOW](NOW.md#verified-mission-chat-candidate-2026-09-29).
 
 Still pending: same-project BYO identity onboarding, automatic two-device
 delivery through the native adapters, Windows custody support and packaged

@@ -19,7 +19,8 @@
 
 ## Verified mission chat candidate (2026-09-29)
 
-**Source:** `feat/mission-chat`, based on session-wake source `30574731`.
+**Source:** `feat/mission-chat`; runtime candidate `180196f2`, based on
+session-wake source `30574731`.
 The [portable mission guide](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer)
 adds `chat inspect/read/send/reply` over the existing signed API client. The
 chosen peer, conversation, shared visibility and effective expiry are explicit.
@@ -32,9 +33,18 @@ publication or deployment is part of this candidate.
 **Verification:** 35 offline tests / 647 assertions pass on Bun 1.3.5, including
 actual Node CLI cancellation, independent signed fixtures, partial-page cursors,
 uncertain outbox recovery and storage success with incomplete receipt metadata.
-Independent source review found no must-fix issue. Live CLI `inspect` and a
-finite empty `read` succeeded against the existing mission; a physical peer
-exchange using this wrapper remains separate acceptance work.
+Independent source review found no must-fix issue. The required API gate's
+typechecks and hermetic API tier passed (6,363 passing tests, one skipped).
+Its operator stage caught a renamed roadmap phase label; the existing name was
+restored and that complete stage rerun with the same narrowed environment:
+697 passed, eight skipped, no failures. This is a recorded stage recovery,
+not a claim that the initial full invocation exited successfully.
+
+Live CLI `inspect`, a finite empty `read`, and historical peer-proof validation
+succeeded against the existing mission. A new-format `chat send` was stored and
+independently read back with its exact signature verified. No peer reply to that
+new-format message has been observed; a physical exchange using the wrapper
+remains separate acceptance work.
 
 **Observed planning:** two active agents on the reported separate Macs exchanged
 selected signed API messages directly after one human bootstrap. The peer
