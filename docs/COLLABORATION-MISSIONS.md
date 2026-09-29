@@ -32,8 +32,11 @@ do not attest hardware, merge identities or grant authority. Principality
 references describe the mission's chosen perspectives or frameworks. They are
 never roles, permissions or authority over participants.
 
-Project administration remains a trust boundary: project bearers can manage
-registered keys. A valid signature proves control of the registered key for
+Project administration remains a trust boundary: project bearers admit mission
+participants and manage their grants. Legacy identity keys retain bearer
+administration; protected key changes for an `agent_root` identity additionally
+require its root proof under the [identity contract](IDENTITY-ANCHOR.md).
+A valid mission signature proves control of the registered key for
 these exact bytes, not independent agency, subjective consent or constitutional
 identity-root control. Cross-project participation requires a later federation
 contract. No mission operation grants local file access, native Collab task

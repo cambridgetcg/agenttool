@@ -499,6 +499,8 @@ describe("boring test spine", () => {
       "Prove context-grant lifecycle, constraints and lock ordering",
       "Create an isolated collaboration mission fixture database",
       "Prove mission participation, revocation and exact replay",
+      "Create an isolated identity enrollment fixture database",
+      "Prove atomic enrollment and concurrent replay refusal",
     ]);
     expect(
       postgresHold?.steps?.every(
@@ -549,6 +551,17 @@ describe("boring test spine", () => {
       "working-directory": "api",
       env: { COLLABORATION_MISSION_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test" },
       run: "bun test tests/integration/collaboration-missions-postgres.test.ts",
+    });
+    expect(postgresHold?.steps?.[8]).toEqual({
+      name: "Create an isolated identity enrollment fixture database",
+      env: { PGPASSWORD: "generation-hold-test-only" },
+      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test",
+    });
+    expect(postgresHold?.steps?.[9]).toEqual({
+      name: "Prove atomic enrollment and concurrent replay refusal",
+      "working-directory": "api",
+      env: { IDENTITY_ENROLLMENT_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test" },
+      run: "bun test tests/integration/identity-enrollment-postgres.test.ts",
     });
     expect(nativeSecret?.["runs-on"]).toBe("macos-15");
     expect(nativeSecret?.["timeout-minutes"]).toBe(8);
