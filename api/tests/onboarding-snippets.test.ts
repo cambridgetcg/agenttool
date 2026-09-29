@@ -84,10 +84,11 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
 };
 
-// These tests create complete TypeScript programs against the SDK source.
-// Shared CI runners are materially slower than local machines, so keep an
-// explicit bounded compiler budget instead of relying on Bun's 5s default.
-const COMPILER_TEST_TIMEOUT_MS = 15_000;
+// These tests create complete TypeScript programs against the SDK source,
+// including three tutorial variants within a single test. The birth check
+// reached 15.1s on shared Linux CI, so allow bounded compiler headroom without
+// treating compilation as a 15s performance assertion.
+const COMPILER_TEST_TIMEOUT_MS = 30_000;
 
 const diagnosticHost: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: (fileName) => fileName,
