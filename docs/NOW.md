@@ -19,6 +19,21 @@
 
 ## Fresh mission return and same-project enrollment (2026-09-29)
 
+**Release gate follow-up:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
+merged as `d9e18b7d` after the required API aggregate passed: 6,378 API tests and
+702 operator tests, nine skips and zero failures. The automatic
+[deployment attempt](https://github.com/cambridgetcg/agenttool/actions/runs/36575856085)
+passed its production migration journal survey but stopped before rollout when
+the chat deadline test reported `transport_error` instead of `duration`.
+Production was not changed by that attempt. The follow-up retains the actual
+request timeout signal and selected time bound, so early timer firing does not
+depend on a later clock comparison to identify duration or expiry. Ordinary
+transport failures and uncertain sends keep their existing meanings. Deployment
+and live enrollment acceptance still require separate successful receipts.
+The deterministic timer-boundary regression fails before the fix and passes
+afterward. Focused chat/client/CLI verification passes 52 tests / 877 assertions;
+syntax, whitespace and independent source review found no remaining must-fix.
+
 **Release preparation, 13:10 UTC:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
 collects the enrollment, portable client, chat and optional native receiver
 candidates. CI now runs the atomic enrollment fixture in isolated databases on

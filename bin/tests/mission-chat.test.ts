@@ -1,5 +1,5 @@
 /** Offline chat contract tests. Synthetic participant keys and independently signed server proofs only. */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash, createPrivateKey, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -493,5 +493,65 @@ describe.skipIf(process.platform === "win32")("finite authenticated mission chat
     } });
     expect(attempts).toBe(1); expect(sawAbort).toBe(true); expect(performance.now() - start).toBeLessThan(1500);
     expect(result.stop_reason).toBe("duration"); expect(result.messages).toEqual([]); expect(result.next_cursor).toBe("0");
+  });
+
+  test("an actual request timeout retains its limiting cause before the sampled clock reaches the deadline", async () => {
+    for (const variant of ["duration", "expiry", "coincident-expiry", "request-timeout", "cancelled", "transport-error"]) {
+      const f = fixture(), clock = fakeClock(), before = stateFiles(f), timer = new AbortController(), cancel = new AbortController();
+      const expiry = variant === "expiry" ? 500 : 1000;
+      if (variant.includes("expiry")) f.config.expires_at = new Date(clock.value.now() + expiry).toISOString();
+      const requestTimeout = variant === "request-timeout" ? 100 : 20000;
+      const budget = Math.min(1000, variant.includes("expiry") ? expiry : Infinity, requestTimeout);
+      let attempts = 0, sawAbort = false;
+      const timeout = spyOn(AbortSignal, "timeout").mockImplementation(ms => { expect(ms).toBe(budget); return timer.signal; });
+      try {
+        const result = await chat.readChat(f.state, f.config, { seconds: 1, timeout: requestTimeout, _clock: clock.value, signal: cancel.signal,
+          fetchImpl: async (_url: string, init: RequestInit) => {
+            attempts++; clock.advance(budget - 0.25); // Timer delivery can precede this separately sampled clock boundary.
+            if (variant === "transport-error") throw new Error("Synthetic connection failure before the deadline");
+            return await new Promise((_resolve, reject) => {
+              init.signal!.addEventListener("abort", () => { sawAbort = true; reject(init.signal!.reason); }, { once: true });
+              timer.abort(new DOMException("Synthetic request timeout", "TimeoutError"));
+              if (variant === "cancelled") cancel.abort();
+            });
+          } });
+        const expected = variant.includes("expiry") ? "grant_expired" : variant === "request-timeout" || variant === "transport-error" ? "transport_error" : variant;
+        expect(result.stop_reason).toBe(expected); expect(result.messages).toEqual([]); expect(result.next_cursor).toBe("0");
+        expect(attempts).toBe(1); expect(sawAbort).toBe(variant !== "transport-error");
+        expect(clock.value.monotonic()).toBeLessThan(budget); expect(posts(f)).toEqual([]); expect(stateFiles(f)).toEqual(before);
+      } finally { timeout.mockRestore(); }
+    }
+  });
+
+  test("a deadline abort during POST preserves send uncertainty or a matching storage receipt", async () => {
+    for (const variant of ["timeout", "cancelled", "stored"]) {
+      const f = fixture(), clock = fakeClock(), cancel = new AbortController(), timers: AbortController[] = [];
+      f.config.expires_at = new Date(clock.value.now() + 1000).toISOString();
+      const timeout = spyOn(AbortSignal, "timeout").mockImplementation(() => {
+        const timer = new AbortController(); timers.push(timer); return timer.signal;
+      });
+      let raw = "";
+      f.controls.post = body => {
+        raw = body; clock.advance(999.75);
+        timers.at(-1)!.abort(new DOMException("Synthetic request timeout", "TimeoutError"));
+        if (variant === "cancelled") cancel.abort();
+        if (variant === "stored") return response({ event: { event_id: JSON.parse(body).event_id, body_sha256: hash(body), received_seq: "1" } });
+        throw new Error("Synthetic lost POST response after abort");
+      };
+      try {
+        let result: any, failure: any;
+        try { result = await chat.sendChat(f.state, f.config, "Selected message before the deadline", { ...f.options, _clock: clock.value, signal: cancel.signal }); }
+        catch (error) { failure = error; }
+        const eventId = JSON.parse(raw).event_id;
+        expect(posts(f)).toHaveLength(1); expect(readFileSync(join(f.state, "outbox", `${eventId}.json`), "utf8")).toBe(raw);
+        if (variant === "stored") {
+          expect(failure).toBeUndefined(); expect(result.status).toBe("stored"); expect(result.event_id).toBe(eventId);
+          expect(existsSync(join(f.state, "outbox", `${eventId}.receipt.json`))).toBe(true);
+        } else {
+          expect(result).toBeUndefined(); expect(failure.stop_reason).toBe("send_uncertain"); expect(failure.event_id).toBe(eventId);
+          expect(existsSync(join(f.state, "outbox", `${eventId}.receipt.json`))).toBe(false);
+        }
+      } finally { timeout.mockRestore(); }
+    }
   });
 });
