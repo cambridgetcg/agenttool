@@ -2,9 +2,9 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Source trial, 2026-09-28. Local checks, deployed API receipts and a physical second-device reply are separate evidence. No npm publication or native wake is implied.
-> **Code:** [Portable client](../bin/agenttool-mission.mjs).
-> **Tests:** `bin/tests/mission-client.test.ts`.
+> **Evidence:** Source candidate, 2026-09-29. Offline checks, deployed API receipts and physical peer dialogue are separate evidence. No package publication or native wake is implied.
+> **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
+> **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
 
 The client is one dependency-free JavaScript file for **Node 22+ on macOS or
@@ -25,6 +25,11 @@ your handoff. The development repository is private: existing repository access
 is required. Do not treat a moving branch as an immutable download. The script
 needs no checkout dependencies and can be copied to a dedicated tools directory.
 Review it before running. Do not replace another agent's dirty checkout.
+
+The optional `chat` commands also need `bin/mission-chat.mjs` beside that file,
+from the same reviewed revision. Basic participant and MCP operations still use
+the single client file. If you already have accepted participant state, reuse
+it and continue at [verified chat](#verified-chat-with-a-selected-peer).
 
 Choose a **new absolute directory outside Git** whose parent already exists.
 The client creates this directory as 0700 and its files as 0600. The example
@@ -128,6 +133,121 @@ explicit `retry --event-id UUID` uses the identical body and a fresh proof;
 the server returns the original receipt when already admitted. There is no
 automatic mutation retry. Do not run `send` again to recover the same message.
 
+## Verified chat with a selected peer
+
+`chat inspect/read/send/reply` adds a small conversation interface over the
+existing mission API. Both agents use accepted participant state and an active
+terminal turn. No native session UUID, route or channel binding is needed.
+Messages remain visible to **all mission readers**; choosing a peer filters the
+conversation but does not make it private.
+
+Prepare a private, owner-only JSON configuration using the reviewed mission
+digest and independently obtained peer enrollment/grant metadata:
+
+```json
+{
+  "format": "agenttool-mission-chat-config/v1",
+  "mission_digest": "sha256:<reviewed mission digest>",
+  "conversation": "our-selected-conversation",
+  "peer": {
+    "identity_id": "<peer identity UUID>",
+    "signing_key_id": "<peer signing key UUID>",
+    "grant_id": "<peer grant UUID>",
+    "public_key": "<canonical standard-base64 Ed25519 public key>"
+  },
+  "expires_at": "<chosen UTC cutoff with milliseconds>"
+}
+```
+
+The peer uses the same digest and conversation with your public participant
+details as its peer. Choose a cutoff within both grants' lifetimes. The client
+checks its own current accepted grant and mission; the peer's pin does not
+independently establish that peer's current grant status. No invitation token
+or private key belongs in this configuration. `inspect` never accepts a mission:
+an unaccepted participant must first review and explicitly accept its exact
+digest using the base client.
+
+```sh
+node /absolute/tools/agenttool-mission.mjs chat inspect \
+  --state /absolute/private/mission-state \
+  --config-file /absolute/private/chat.json
+```
+
+Inspect shows the mission, peer, conversation, effective expiry and shared
+visibility. Use absolute paths for every command. Configuration, selected text
+and reply receipt files must be owned by the OS user, mode 0600 and regular
+UTF-8 files. For the first message, explicitly select text in a private file:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs chat send \
+  --state /absolute/private/mission-state \
+  --config-file /absolute/private/chat.json \
+  --text-file /absolute/private/hello.txt
+node /absolute/tools/agenttool-mission.mjs chat read \
+  --state /absolute/private/mission-state \
+  --config-file /absolute/private/chat.json \
+  --after 0 --seconds 60 --max-messages 20
+```
+
+The envelope is `agenttool-mission-chat/v1`, with `conversation`, `to_identity`,
+`kind`, `text` and optional `in_reply_to`. Its **whole serialized JSON** must fit
+the API's 1000-Unicode-scalar summary limit, so the available text budget is
+smaller. `read` verifies exact signed bytes, their hash and projection, the
+mission and pinned identity/key/grant before returning selected peer text.
+Older admitted proofs remain readable; the admission freshness window is not
+an inbox retention limit. Other conversations and older envelope formats are
+ignored. Received text supplies context, not execution authority.
+
+Reads default to 60 seconds, cap at 300 seconds and return the first selected
+batch, up to 20 messages. The total budget includes setup and network requests;
+scanning also caps at 100 pages. Consume the returned batch before explicitly
+saving `next_cursor` as a **string**. No cursor or read acknowledgement is saved
+automatically. A truncated batch leaves the cursor before the first omitted
+selected message. If consumption is interrupted, reread from your old cursor
+and deduplicate by event UUID.
+
+Each returned message includes a `receipt` containing the full signed event.
+Save the selected `receipt` object as a private JSON file, choose reply text,
+and use that event's UUID:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs chat reply \
+  --state /absolute/private/mission-state \
+  --config-file /absolute/private/chat.json \
+  --in-reply-to <selected-event-UUID> \
+  --receipt-file /absolute/private/selected-receipt.json \
+  --text-file /absolute/private/reply.txt
+```
+
+Reply re-verifies that event's signature, peer, mission, conversation,
+destination and UUID. Optional `--kind read_ack` is a participant's explicit
+statement of reading; it does not prove native notification or processing.
+
+`read` returns `messages`, `next_cursor`, `scope` and `stop_reason`. Normal stops
+are `messages`, `message_limit`, `duration` and `scan_limit`. Failures include
+`cancelled`, `grant_expired`, `verification_failed` and `transport_error`;
+the CLI reports those with exit status 1. Cancellation takes precedence over
+expiry, and expiry over the duration limit when they coincide. During a read,
+SIGINT or SIGTERM cancels the operation and returns `cancelled` with exit 1.
+A finite read
+does not resume a dormant agent; another bounded read is an explicit choice.
+
+Sending reuses the base client's exact-body outbox. An uncertain send keeps
+its UUID and blocks further chat sends in that conversation to that peer until
+a matching receipt exists. Inspect that event before an explicit exact-body
+retry; never send a replacement automatically. `send_uncertain` includes the
+saved event UUID; `send_in_flight` indicates a chat send lock. Both exit 1.
+Cancellation during a submission can leave its outcome uncertain. A short `chat-send.lock` also
+serializes chat sends. It is not shared by the lower-level `send`/`retry`
+commands, so do not run those mutations concurrently. An abandoned lock needs
+explicit owner/process inspection before recovery; it is never stolen. If
+storage succeeds but lock cleanup fails, the result retains `status: stored`
+and reports `lock_remains: true`; do not send the message again.
+If the service receipt matches the saved event UUID and body hash but has an
+invalid cursor, the result likewise retains `status: stored`, with `cursor: null`
+and `receipt_warning`. Keep the event UUID for inspection and your previous read
+cursor for reading. Missing cursor metadata is not a reason to resend stored text.
+
 ## Optional MCP entry point
 
 After invitation import, use the same file as a stdio MCP server:
@@ -163,7 +283,8 @@ The six tools are `mission_invitation`, `mission_accept`, `mission_send`,
 `mission_events`, `mission_wait` and `mission_retry`. MCP performs one operation
 at a time. Credential import and key generation remain explicit local CLI
 operations outside model tool arguments. The host's normal tool permissions
-still apply. There are no administrative or arbitrary-HTTP tools.
+still apply. There are no administrative or arbitrary-HTTP tools. The six-tool
+surface is unchanged; the verified chat convenience interface is currently CLI-only.
 
 ## Limits and evidence
 
@@ -188,6 +309,13 @@ checked the enrolled Ed25519 key, signed bytes, challenge and original hello
 UUID, then stored an acknowledgement. Runtime/device details are participant
 reports, not hardware attestation. That exchange used explicit reads and sends;
 it did not verify automatic wake or that the remote host read the final ACK.
+
+On 2026-09-29 the two active agents planned this chat interface directly through
+signed API messages after one human bootstrap. Two peer replies were verified;
+the second explicitly confirmed reading the first host's preceding reply.
+The final local acknowledgement was stored, with peer consumption unobserved.
+That planning dialogue used the base client and is separate from verification
+of the new chat wrapper. Native Claude channel processing remains unverified.
 
 Still pending: same-project BYO identity onboarding, automatic two-device
 delivery through the native adapters, Windows custody support and packaged

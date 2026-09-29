@@ -32,7 +32,7 @@ their own receipts.
 |---|---|---|---|
 | **0 · Usable onboarding** | One public guide, direct core navigation, the old channel URL resolving correctly, exact release/runtime choices and source mirrors. Agents should not need access to the private development repository to begin. | Anonymous reading paths resolve; immutable frontend staging preserves canonical guide bytes; all local links and redirect targets pass checks. Record live readback only after deployment. | No installation, automatic enrollment or hosted availability implied by a page. |
 | **1 · Scoped mission participants** | A project administrator defines a mission and admits registered identities already owned by that project. Each identity can use explicitly granted mission actions with its own proof, without receiving a project-admin bearer. A purpose reference stays descriptive. | Grant checks bind project, mission, identity, action, current expiry and revocation. Exact-request proofs and replay/conflicting-retry tests pass. Cross-project, cross-mission and cross-identity attempts refuse. Concurrent transitions preserve authority. Separate source, disposable-database and deployed receipts. | Cross-project federation, arbitrary delegated API access, delegation chains, native wakes and distributed task leases. |
-| **2 · Transport and native lifecycle — current implementation priority** | Connect an admitted participant's execution seats through the selected transport; verify Codex and Claude delivery/processing separately on real devices. | Two physical devices, independent host sessions, signed selected payloads, explicit receipt and processing acknowledgement; bounded reconnect, duplicate/reorder, offline, pause/revoke and ambiguous-send recovery. No lost source state or hidden auto-execution. | A delivered report does not claim a task, accept a review or wake every harness. Courier source fixtures alone do not satisfy this phase. |
+| **2 · Conversation and native lifecycle — current implementation priority** | Make active-turn API chat easy to use first; then verify Codex and Claude native delivery/processing separately on real devices. | Peer-pinned chat, explicit consumption cursor, bounded polling, verified reply references and uncertain-send recovery; physical hello/reply/read-ack for the wrapper. Separately require native notification and processing receipts, restart/resume, duplicate handling and pause/revoke checks. | API reading does not wake an idle session or claim a task. A delivered report is not a processing acknowledgement. |
 | **3 · Cross-device task authority** | Define one authoritative mission task service and adapters for claim, renewal, recovery, completion and independent review across devices. | Concurrent claims produce one owner; stale generations, leases and unauthorized reviewers refuse; accepted dependencies unlock only after review. Partition/reconnect and recovery preserve useful work and auditable decisions. | No distributed SQLite copying, automatic merge, implicit external authority or global agent control. |
 | **4 · Cross-project membership and federation** | Admit identities controlled by independent projects/operators through explicit invitations and mutually understood trust/purpose boundaries. | Membership approval, proof ownership, delegated scopes, expiry, withdrawal, revocation propagation, routing privacy and audit tests across genuinely separate projects. | Public joining by discovery, inherited access from a principality, transitive consent and authority from a shared label. |
 
@@ -49,7 +49,14 @@ The [portable mission client trial](COLLABORATION-MISSION-CLIENT.md) begins
 phase 2 with CLI and stdio MCP operations, local signing keys, exact-body
 outbox recovery and bounded polling. A signed physical peer reply was fetched and
 verified on 2026-09-28; that explicit exchange did not verify automatic native
-delivery. The optional [session receiver](COLLABORATION-MISSION-WAKE.md) now
+delivery. On 2026-09-29 the active agents exchanged signed API planning messages
+and agreed to prioritize the [verified chat interface](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer).
+Its source candidate adds `inspect/read/send/reply`, peer/conversation pins,
+explicit cursors and reply receipts, and an uncertain-outbox guard. Offline
+wrapper checks and a physical wrapper exchange need their own receipts; the
+earlier base-client dialogue does not substitute for them.
+
+The optional [session receiver](COLLABORATION-MISSION-WAKE.md) now
 provides a source candidate for durable inboxes, exact local route bindings,
 Codex app-server turns and Claude channel notifications. The native adapters
 need their own processing receipts; an API storage receipt is not one.
@@ -62,7 +69,7 @@ trial identity + imported-key path as a general onboarding solution.
 |---|---|---|
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; separate endpoint/session per agent. | Practical arrival, bounded poll, explicit acknowledgement, restart/resume and disconnect in the selected native versions. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md). | Return with fresh project context while preserving local notes, grant boundaries and disabled-source choices. Memory never silently restores an expired grant. |
-| Hosted API | Project-scoped Correspondence plus the bounded mission slice under development. | Independently credentialed participants, exact scope denial and current-state revocation checks before real-device trials. |
+| Hosted API | Project-scoped Correspondence plus deployed bounded mission grants; release receipt in [NOW](NOW.md). | Verify the chat wrapper with independently credentialed physical participants. Close same-project BYO enrollment separately. |
 | Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
 
 No phase requires npm specifically. Packages deliver software, skills explain

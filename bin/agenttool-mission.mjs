@@ -308,12 +308,86 @@ send --state DIR --summary-file FILE           Selected UTF-8 text, <=1000 scala
 events --state DIR [--after 0]                  One page, explicit string cursor
 wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 seconds
 retry --state DIR --event-id UUID               Explicit exact-body retry
+chat inspect|read|send|reply                    Verified peer conversation; chat --help
 mcp --state DIR                                STDIO MCP; no automatic wake
 Never paste keys or invitation tokens into chat, URLs, source or shell arguments.
 `;
+const CHAT_HELP = `AgentTool mission chat — selected shared mission messages, not private DMs.
+All commands use --state DIR --config-file FILE (private 0600 chat configuration).
+inspect                                        Show peer, conversation, expiry and scope
+read [--after 0] [--seconds 60] [--max-messages 20]
+                                               Verified batch and next_cursor; maximum 300s
+send --text-file FILE                           Explicit first message in a conversation
+reply --text-file FILE --in-reply-to UUID --receipt-file FILE [--kind message|read_ack]
+                                               Reverify the original peer event before replying
+Use absolute paths. Text and receipt files must be owner-only regular UTF-8 files.
+Each read message includes its full signed receipt; save only the selected receipt
+as a private file for reply. Save next_cursor explicitly after consuming the batch.
+API storage, read_ack and native processing are separate. This does not wake agents.
+An uncertain send remains in the outbox; inspect its UUID before explicit recovery.
+`;
+async function chatMain(argv) {
+  const [command, ...rest] = argv;
+  if (!command || command === '--help' || command === 'help') { process.stdout.write(CHAT_HELP); return; }
+  const allowed = { inspect: [], read: ['after', 'seconds', 'max-messages'], send: ['text-file'],
+    reply: ['text-file', 'in-reply-to', 'receipt-file', 'kind'] };
+  if (!Object.hasOwn(allowed, command)) fail('Unknown chat command. Use chat --help.');
+  const options = {};
+  for (let i = 0; i < rest.length; i += 2) {
+    const key = rest[i]?.slice(2);
+    if (!rest[i]?.startsWith('--') || !['state', 'config-file', ...allowed[command]].includes(key)
+      || Object.hasOwn(options, key) || !rest[i + 1]) fail('Unknown, repeated or incomplete chat option. Use chat --help.');
+    options[key] = rest[i + 1];
+  }
+  for (const key of ['state', 'config-file', ...(command === 'send' || command === 'reply' ? ['text-file'] : []),
+    ...(command === 'reply' ? ['receipt-file'] : [])]) {
+    if (!isAbsolute(options[key] ?? '')) fail('Provide absolute state, configuration and selected file paths.');
+  }
+  if (command === 'reply') {
+    uuid(options['in-reply-to']);
+    if (options.kind !== undefined && !['message', 'read_ack'].includes(options.kind)) fail('Choose message or read_ack.');
+  }
+  const config = JSON.parse(privateRead(options['config-file']));
+  const chat = await import('./mission-chat.mjs');
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once('SIGINT', cancel); process.once('SIGTERM', cancel);
+  const operation = { signal: controller.signal };
+  let result;
+  try {
+    if (command === 'inspect') result = await chat.inspectChat(options.state, config, operation);
+    else if (command === 'read') result = await chat.readChat(options.state, config, {
+      ...operation,
+      after: options.after ?? '0', seconds: options.seconds === undefined ? 60 : Number(options.seconds),
+      maxMessages: options['max-messages'] === undefined ? 20 : Number(options['max-messages']),
+    });
+    else {
+      const selected = privateRead(options['text-file'], 8192);
+      if (command === 'send') result = await chat.sendChat(options.state, config, selected, operation);
+      else result = await chat.replyChat(options.state, config, selected, {
+        ...operation,
+        inReplyTo: options['in-reply-to'], kind: options.kind ?? 'message',
+        reference: JSON.parse(privateRead(options['receipt-file'], 65536)),
+      });
+    }
+  } catch (error) {
+    if (!(error instanceof chat.ChatError)) throw error;
+    process.stderr.write(json({ stop_reason: error.stop_reason, error: safeError(error),
+      ...(error.event_id ? { event_id: error.event_id } : {}),
+      ...(error.lock_remains ? { lock_remains: true } : {}) }));
+    process.exitCode = 1;
+    return;
+  } finally {
+    process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel);
+  }
+  process.stdout.write(json(result));
+  if (['verification_failed', 'transport_error', 'grant_expired', 'cancelled', 'send_uncertain', 'send_in_flight']
+    .includes(result?.stop_reason)) process.exitCode = 1;
+}
 export async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
+  if (command === 'chat') { await chatMain(rest); return; }
   const allowed = { init: ['origin'], enrollment: [], import: ['invitation-file'], invitation: [], accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], mcp: [] };
   if (!(command in allowed)) fail('Unknown command. Use --help.');
   const options = {};

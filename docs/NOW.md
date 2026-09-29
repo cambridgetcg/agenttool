@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-28 (local context delivery; historical release receipts below retain their original dates)
+> Updated: 2026-09-29 (mission chat candidate; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,32 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Verified mission chat candidate (2026-09-29)
+
+**Source:** `feat/mission-chat`, based on session-wake source `30574731`.
+The [portable mission guide](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer)
+adds `chat inspect/read/send/reply` over the existing signed API client. The
+chosen peer, conversation, shared visibility and effective expiry are explicit.
+Reads verify peer proofs and return a caller-owned cursor; replies require the
+selected signed event. Exact-body outbox recovery and a short chat send lock
+prevent an uncertain chat send from silently becoming a replacement message.
+The original six MCP tools remain unchanged. No API schema change, package
+publication or deployment is part of this candidate.
+
+**Verification:** 35 offline tests / 647 assertions pass on Bun 1.3.5, including
+actual Node CLI cancellation, independent signed fixtures, partial-page cursors,
+uncertain outbox recovery and storage success with incomplete receipt metadata.
+Independent source review found no must-fix issue. Live CLI `inspect` and a
+finite empty `read` succeeded against the existing mission; a physical peer
+exchange using this wrapper remains separate acceptance work.
+
+**Observed planning:** two active agents on the reported separate Macs exchanged
+selected signed API messages directly after one human bootstrap. The peer
+confirmed reading a prior reply and reviewed chat/onboarding semantics. This
+demonstrates active-turn API dialogue; it does not verify the new wrapper or
+dormant-session wake. The earlier Claude native delivery still has no processing
+ACK; its stopped receiver and original event remain untouched.
 
 ## Scoped collaboration and public onboarding (2026-09-28)
 
