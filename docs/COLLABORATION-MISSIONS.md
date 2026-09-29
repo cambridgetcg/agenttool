@@ -3,8 +3,8 @@
 > **Type:** reference
 > **Purpose:** Let separately credentialed agents accept a bounded shared purpose and exchange signed observations without receiving a project administration key.
 > **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing.
-> **Code:** `api/src/routes/collaboration.ts`, `api/src/services/collaboration/`, `api/src/db/schema/collaboration.ts`.
-> **Tests:** `api/tests/collaboration-transport.test.ts`, `api/tests/collaboration-missions.test.ts`, `api/tests/integration/collaboration-missions-postgres.test.ts`.
+> **Code:** `api/src/routes/collaboration.ts`, `api/src/routes/openapi-collaboration.ts`, `api/src/services/collaboration/`, `api/src/db/schema/collaboration.ts`.
+> **Tests:** `api/tests/collaboration-transport.test.ts`, `api/tests/collaboration-missions.test.ts`, `api/tests/openapi-collaboration.test.ts`, `api/tests/integration/collaboration-missions-postgres.test.ts`.
 > **Compass:** [Start collaborating](COLLABORATION.md) · [Roadmap](COLLABORATION-ROADMAP.md) · [API coverage](API-COVERAGE.md) · [Identity boundaries](IDENTITY-PARTITIONS.md)
 
 This guide is self-contained. Code paths are implementation references in the
@@ -138,6 +138,41 @@ grant, identity, key and **exact raw body bytes** returns the original receipt.
 Changing whitespace counts as changing bytes and conflicts. A fresh timestamp
 and signature may be used for an exact-body retry. Current authority is checked
 before retry lookup, so a stored receipt never bypasses expiry or revocation.
+
+## Response schemas
+
+The [OpenAPI document](https://api.agenttool.dev/v1/openapi.json) defines named
+`Collaboration*` schemas under `components.schemas`, referenced by every documented
+mission response. Success envelopes are closed objects:
+
+| Operation | Envelope | Schema |
+|---|---|---|
+| Create, inspect or revoke mission | `{ "mission": ... }` | `CollaborationMissionResponse` |
+| Issue grant | `{ "grant": ..., "token": ... }` | `CollaborationGrantIssuedResponse` |
+| Inspect or revoke grant | `{ "grant": ... }` | `CollaborationGrantResponse` |
+| Invitation, acceptance or context | `{ "mission": ..., "grant": ... }` | `CollaborationContextResponse` |
+| Append or exactly retry an observation | `{ "event": ... }` | `CollaborationEventResponse` |
+| Read observations | `{ "mission_id": ..., "events": [...], "page": ... }` | `CollaborationEventsResponse` |
+
+Only grant issuance includes its one-time secret token. Grant metadata has nullable
+`accepted_at` and `revoked_at`; mission metadata has nullable `revoked_at`.
+An observation receipt includes its parsed `observation`, exact `raw_body`, unprefixed
+hex `body_sha256`, request `proof`, and decimal-string `received_seq`. Creation returns
+201; an exact-body retry returns 200 with the original receipt, not a new signature
+record. The receipt's public key is verification material, not independent trust.
+
+`page.after` and `page.next_cursor` are decimal strings, never numbers or null.
+An empty page keeps `next_cursor` equal to `after`; follow it when `has_more` is true.
+Sequence values are bounded by PostgreSQL's signed bigint maximum, not JavaScript's
+safe-integer range. Sequence order does not claim causal ordering.
+
+Guided failures use `CollaborationError`, including recovery guidance and an optional
+`_quip`. A 425 early-data refusal instead uses `CollaborationEarlyDataError` with only
+`error` and `message`, plus `Retry-After: 0`. Schemas document the private-cache header
+on successes and errors. Schema validation alone proves neither signing authority,
+matching body hashes nor permission to act on an observation. The response-contract
+tests exercise the real gateway and serializers with synthetic database rows; they
+do not establish PostgreSQL isolation or a deployed revision.
 
 ## Exact-request proof
 

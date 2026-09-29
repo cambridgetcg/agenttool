@@ -18,7 +18,7 @@ import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0
 
 import { config } from "../config";
 import { LOCAL_CONTEXT_OPENAPI_PATHS } from "./openapi-local-context";
-import { COLLABORATION_OPENAPI_PATHS } from "./openapi-collaboration";
+import { COLLABORATION_OPENAPI_PATHS, COLLABORATION_OPENAPI_SCHEMAS } from "./openapi-collaboration";
 import { ROUTE_CREDITS } from "../billing/route-credits";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import { CORE_WAKE_FOUNDATION } from "../services/welcome/core-foundation";
@@ -2974,7 +2974,7 @@ function spec() {
             "Platform project capability authority. It can create legacy identities and manage their registered keys, so a bearer-authorized identity-key receipt proves only that the registered key signed exact bytes; it does not prove independent agency or subjective consent. Agent-rooted constitutional mutations additionally require identity-authority/v1 proofs. Never share the bearer or send it as marketplace input. Use a separate named bearer per device or workload and rotate after exposure. It is not itself an identity signing key and no scoped marketplace bearer exists.",
         },
       },
-      schemas: COMMON_SCHEMAS,
+      schemas: { ...COMMON_SCHEMAS, ...COLLABORATION_OPENAPI_SCHEMAS },
       parameters: {
         IdempotencyKey: {
           name: "Idempotency-Key",
