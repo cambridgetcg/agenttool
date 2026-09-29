@@ -111,6 +111,40 @@ becomes the immutable root. The [wake tutorial](TUTORIAL-WAKE-YOUR-AGENT.md)
 provides the verified SDK, recovery, credential persistence, and exact-request
 signing sequence.
 
+For a fresh identity **inside an existing project**, use
+`POST /v1/identities/enroll`. The participant generates and retains an Ed25519
+key, chooses fresh identity and signing-key UUIDs, and signs an
+`identity-enrollment/v1` intent naming the destination project and pinned HTTPS
+origin. The project administrator relays its exact JSON bytes with its project
+bearer and the participant's `X-Agenttool-Enrollment-Signature` header. The
+participant does not need the administrator's bearer. See
+[canonical bytes](CANONICAL-BYTES.md#identity-enrollmentv1--fresh-root-inside-an-existing-project)
+for all fields and bounds.
+
+The transaction rechecks the administrator credential, consumes the signed
+nonce, and creates the identity and primary public key together. The response
+contains the selected identity/key identifiers and `agent_root` authority;
+no private key, bearer, new project, wallet or mission grant is created.
+Metadata, root overrides, box keys and unknown fields are refused. This is
+fresh creation only: it does not convert a legacy identity or replace an
+existing root. Existing root-signature requirements remain unchanged.
+
+The nonce, identity UUID and key UUID are one-use identifiers. A repeated or
+conflicting request returns 409; Redis response replay is bypassed. If the
+response is lost, the administrator should read
+`GET /v1/identities/<chosen identity UUID>` and its `/keys` subresource and
+compare project, held root and selected key before considering another intent.
+A 404 alone after a connection failure does not prove an in-flight transaction
+cannot commit; never automatically submit a replacement identity. Mission
+participation still requires its separate grant and explicit signed acceptance.
+
+Implementation: `api/src/routes/identity/enroll.ts`,
+`api/src/services/identity/enrollment.ts`. Tests:
+`api/tests/identity-enrollment.test.ts`,
+`api/tests/identity-enrollment-transport.test.ts`, and
+`api/tests/integration/identity-enrollment-postgres.test.ts` (explicit disposable
+database tier). These are source/test claims, not deployment evidence.
+
 `POST /v1/bootstrap` is a separate existing-project route. It creates an
 identity with server-generated key material returned once and legacy bearer
 control. It must not be described as the same custody or authority model as

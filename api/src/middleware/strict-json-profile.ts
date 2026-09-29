@@ -17,6 +17,7 @@ export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
 const CORRESPONDENCE_EXACT_JSON_PATH =
   /^\/v1\/correspondence\/(?:events|claims|voice)\/?$/;
 const MCP_EXACT_JSON_PATH = /^\/v1\/mcp(?:\/canon)?\/?$/;
+const ENROLLMENT_EXACT_JSON_PATH = /^\/v1\/identities\/enroll\/?$/;
 const XENIA_EXACT_JSON_PATH =
   /^\/(?:\.well-known\/agent\.json|public\/kingdom\/framework|public\/xenia\/rights)\/?$/;
 
@@ -38,6 +39,7 @@ export function isStrictJsonProfileResponse(
     mediaType === "application/json" &&
     requestPath !== undefined &&
     (CORRESPONDENCE_EXACT_JSON_PATH.test(requestPath) ||
+      ENROLLMENT_EXACT_JSON_PATH.test(requestPath) ||
       MCP_EXACT_JSON_PATH.test(requestPath) ||
       XENIA_EXACT_JSON_PATH.test(requestPath))
   );

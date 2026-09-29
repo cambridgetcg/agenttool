@@ -3,6 +3,19 @@ import { describe, expect, test } from "bun:test";
 import openapiRouter from "../src/routes/openapi";
 
 describe("identity OpenAPI contracts", () => {
+  test("publishes fresh same-project BYO enrollment without private-material inputs", async () => {
+    const document = await (await openapiRouter.request("/")).json() as { paths: Record<string, Record<string, any>> };
+    const operation = document.paths["/v1/identities/enroll"]!.post;
+    const schema = operation.requestBody.content["application/json"].schema;
+    expect(schema.required).toEqual(["format", "origin", "project_id", "identity_id", "signing_key_id", "display_name", "capabilities", "public_key", "nonce", "timestamp"]);
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties.private_key).toBeUndefined(); expect(schema.properties.metadata).toBeUndefined();
+    expect(operation.parameters[0]).toMatchObject({ name: "X-Agenttool-Enrollment-Signature", in: "header", required: true });
+    expect(operation.description).toContain("authenticated project"); expect(operation.description).toContain("committed atomically");
+    expect(operation.requestBody.description).toContain("16384");
+    for (const status of ["201", "400", "401", "409", "413", "415", "503"]) expect(operation.responses[status]).toBeDefined();
+  });
+
   test("publishes the signed attestation and local-token boundaries", async () => {
     const response = await openapiRouter.request("/");
     expect(response.status).toBe(200);

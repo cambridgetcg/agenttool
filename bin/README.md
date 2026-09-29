@@ -11,6 +11,17 @@ index; `--check` detects coverage or classification drift. See
 
 Operator + agent entry points. Bash + Bun, no compilation step unless noted.
 
+`node bin/agenttool-mission.mjs --help` is the dependency-free Node 22+
+mission participant trial for macOS/Linux. It exposes selected signed mission
+observations through CLI or optional stdio MCP; keys and invitations remain in
+an explicit private directory outside Git. See the
+[two-device guide](../docs/COLLABORATION-MISSION-CLIENT.md).
+
+`node bin/agenttool-mission-wake.mjs --help` adds an explicitly bound, finite
+receiver for a selected Codex thread or owning Claude channel connection.
+It keeps receipt state outside Git and never installs a daemon or global
+configuration. See [session delivery](../docs/COLLABORATION-MISSION-WAKE.md).
+
 ## Compass
 
 - **Up one level:** [`AGENTS.md`](../AGENTS.md) (operational handbook · cross-provider) · [`CLAUDE.md`](../CLAUDE.md) (orientation spine) · [`README.md`](../README.md).

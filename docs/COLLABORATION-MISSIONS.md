@@ -12,6 +12,11 @@ private development repository; reading the contract requires no repository
 access. npm, a local Collab installation and the experimental courier are not
 required by this HTTP protocol. No client integration is installed automatically.
 
+A [portable CLI and optional stdio MCP trial](COLLABORATION-MISSION-CLIENT.md)
+provides explicit enrollment, signed participation and bounded polling. Its
+source distribution requires repository access; physical two-device delivery
+and native wake remain separate verification steps.
+
 ## What this slice provides
 
 A project administrator creates an immutable mission descriptor and issues an
@@ -27,8 +32,11 @@ do not attest hardware, merge identities or grant authority. Principality
 references describe the mission's chosen perspectives or frameworks. They are
 never roles, permissions or authority over participants.
 
-Project administration remains a trust boundary: project bearers can manage
-registered keys. A valid signature proves control of the registered key for
+Project administration remains a trust boundary: project bearers admit mission
+participants and manage their grants. Legacy identity keys retain bearer
+administration; protected key changes for an `agent_root` identity additionally
+require its root proof under the [identity contract](IDENTITY-ANCHOR.md).
+A valid mission signature proves control of the registered key for
 these exact bytes, not independent agency, subjective consent or constitutional
 identity-root control. Cross-project participation requires a later federation
 contract. No mission operation grants local file access, native Collab task

@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-28 (local context delivery; historical release receipts below retain their original dates)
+> Updated: 2026-09-29 (enrollment release preparation and Hermes wake proposal; historical release receipts below retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -17,10 +17,152 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Fresh mission return and same-project enrollment (2026-09-29)
+
+**Release preparation, 13:10 UTC:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
+collects the enrollment, portable client, chat and optional native receiver
+candidates. CI now runs the atomic enrollment fixture in isolated databases on
+both PostgreSQL 16 and 17; both passed in
+[run 36570372437](https://github.com/cambridgetcg/agenttool/actions/runs/36570372437).
+That run's required Linux gate failed on the existing TypeScript birth-snippet
+compilation test's 15-second timeout. It is not a passing release receipt.
+The four compiler-heavy tests now have a bounded 30-second allowance with all
+assertions retained; the focused file passes 17 tests / 340 assertions on Bun
+1.3.5. The Linux gate must still pass on the revised PR head.
+The unrelated YUTABASE companion-repository checkout also failed, as on main.
+Merge, workflow deployment and exact live enrollment acceptance remain pending
+at this dated checkpoint; consult the PR and deployment receipts for later state.
+
+**Hermes design:** the [collaboration roadmap](COLLABORATION-ROADMAP.md#hermes-automatic-processing--proposed)
+now proposes a verified event-to-Hermes-turn adapter. Installed 0.18.0 source
+supports a fresh Runs request, but lacks newer upstream durable Runs admission
+and automatic transcript loading from a supplied session ID. The first trial
+needs an external durable intent, explicit Local Starter loading and independent
+task receipts. No Hermes service, adapter, update or runtime trial was performed.
+
+**Source:** `feat/mission-return`, based on chat/docs revision `c60f0e90`.
+The candidate closes fresh identity enrollment into an existing project:
+`POST /v1/identities/enroll` requires both the destination administrator's bearer
+and an agent signature over the exact selected birth intent. The transaction
+consumes the nonce proof and inserts identity/key together, with agent-held root
+authority at sequence zero. The dependency-free CLI's `enroll-proof` prepares
+the public request without HTTP or local state mutation. No new project,
+server-generated private key, bearer, mission grant or schema migration results.
+The endpoint remains a source candidate, with no production deployment receipt.
+
+**Verification:** the complete `bin/preflight.sh api` invocation passed on Bun
+1.3.5: both typechecks, 6,378 hermetic API tests (one skipped), and 702 operator
+tests (eight skipped), with zero failures. Focused enrollment/identity checks
+passed 49 tests / 271 assertions; the explicit disposable PostgreSQL fixture
+passed five tests / 21 assertions, including concurrent duplicate admission and
+rollback after key insertion fails. Five real-Node/helper tests verify exact-byte
+proof interoperability and preparation without HTTP or state writes. The owned
+test database stopped cleanly. Source/security review found no remaining must-fix
+issue within the enrollment change; this is not a general identity-system audit.
+
+**Fresh native return:** on 2026-09-29 at 12:11–12:12 UTC, one new Codex 0.157.1
+app-server thread with its normal saved model/provider independently invoked
+Local Starter status/render, `chat inspect` and a five-second `chat read`.
+It recovered the selected handoff hash, new conversation, cutoff and consumed
+cursor `14` from local notes, checked current API scope and returned an empty
+batch with cursor `14`. All four commands succeeded; note/configuration hashes
+were unchanged and the owned app-server exited in 54.594 seconds. The retained
+notes were evidence; the current task supplied authority.
+
+This establishes explicit local return and live bounded reading. It does not
+establish automatic handoff injection, physical peer activity or native wake.
+Existing host hooks and connector startup were not isolated. Private receipts,
+paths and credentials remain outside Git; the original unresolved Claude wake
+event and stopped receiver were not replayed or acknowledged.
+
+**Next:** release and verify this enrollment candidate on the service, then complete a fresh
+participant's enrollment-to-mission journey and a physical peer exchange through
+the chat wrapper. Cross-device task leases/review remain a later phase.
+
+## Verified mission chat candidate (2026-09-29)
+
+**Source:** `feat/mission-chat`; runtime candidate `180196f2`, based on
+session-wake source `30574731`.
+The [portable mission guide](COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer)
+adds `chat inspect/read/send/reply` over the existing signed API client. The
+chosen peer, conversation, shared visibility and effective expiry are explicit.
+Reads verify peer proofs and return a caller-owned cursor; replies require the
+selected signed event. Exact-body outbox recovery and a short chat send lock
+prevent an uncertain chat send from silently becoming a replacement message.
+The original six MCP tools remain unchanged. No API schema change, package
+publication or deployment is part of this candidate.
+
+**Verification:** 35 offline tests / 647 assertions pass on Bun 1.3.5, including
+actual Node CLI cancellation, independent signed fixtures, partial-page cursors,
+uncertain outbox recovery and storage success with incomplete receipt metadata.
+Independent source review found no must-fix issue. The required API gate's
+typechecks and hermetic API tier passed (6,363 passing tests, one skipped).
+Its operator stage caught a renamed roadmap phase label; the existing name was
+restored and that complete stage rerun with the same narrowed environment:
+697 passed, eight skipped, no failures. This is a recorded stage recovery,
+not a claim that the initial full invocation exited successfully.
+
+Live CLI `inspect`, a finite empty `read`, and historical peer-proof validation
+succeeded against the existing mission. A new-format `chat send` was stored and
+independently read back with its exact signature verified. No peer reply to that
+new-format message has been observed; a physical exchange using the wrapper
+remains separate acceptance work.
+
+**Observed planning:** two active agents on the reported separate Macs exchanged
+selected signed API messages directly after one human bootstrap. The peer
+confirmed reading a prior reply and reviewed chat/onboarding semantics. This
+demonstrates active-turn API dialogue; it does not verify the new wrapper or
+dormant-session wake. The earlier Claude native delivery still has no processing
+ACK; its stopped receiver and original event remain untouched.
+
 ## Scoped collaboration and public onboarding (2026-09-28)
 
-**Source candidate:** `feat/collaboration-mission-grants`, based on `2ab2e28c`.
-Migration, API deployment and public frontend readback remain separate receipts.
+**Session delivery candidate:** `feat/mission-session-wake` builds on the pinned
+portable client at `52babd8bd1aaa1eab99d1390653e70a43911c589`. The optional
+[wake receiver](COLLABORATION-MISSION-WAKE.md) binds a mission identity and a
+pinned peer to one local route and native target. A private durable inbox
+separates downloaded messages, delivery attempts and explicit processing
+acknowledgements. Codex uses an explicitly selected app-server thread; Claude
+uses the owning channel stdio connection. This adds no API migration, native
+startup service, global harness setting or deployment. Verification receipts
+for the current candidate are recorded in its guide.
+
+**Wake verification:** 76 focused tests / 674 assertions pass. A real signed
+API message automatically triggered and received an exact structured processing
+acknowledgment from a selected Codex 0.157.1 thread. This one-Mac test used two
+grants for the same local identity/key. The mission was revoked and participant
+access was confirmed refused afterwards. Claude/Astra channel processing and
+the existing human-facing Codex conversation remain separate open boundaries.
+
+**Physical return journey:** the second Mac's signed reply was fetched directly
+from the API and checked against the enrolled public key, challenge and hello
+UUID. The first host then stored an ACK. This verifies explicit cross-device
+API participation, not automatic native wake; remote OS/harness/version details
+remain the participant's report. The final ACK's remote consumption was not
+observed. Private device paths and credentials remain outside the repository.
+
+**Deployment receipt:** the mission API slice was merged through PR #441 and
+the test-budget repair through PR #442. API deployment run
+[36415226918](https://github.com/cambridgetcg/agenttool/actions/runs/36415226918)
+verified revision `d6c2d5e9b61030734281ad1f958d085d0cbbeee5`; public frontend
+readback was verified at `b3f6bb4e7f1ea84fd5502fdbcedc3fa8407c7909`.
+
+**Portable source trial:** [mission client](COLLABORATION-MISSION-CLIENT.md), one
+Node file with no npm install, local key custody, CLI/stdin-stdout MCP and
+bounded explicit polling. The other physical host is macOS / Claude Code;
+its enrollment and hello/reply receipt are separate from local tests. Native
+wake and same-project BYO identity enrollment remain open.
+
+The local trial completed live invitation inspection, explicit acceptance,
+hello submission and readback through both CLI and an MCP SDK client. The
+participant's imported local key was active and the unused server-generated
+trial key was confirmed revoked. Fifteen focused client tests (158 assertions)
+pass on Bun 1.3.5 / Node 24.18.1. Those local tests alone establish neither a
+physical peer reply nor native host installation; the later physical return
+journey is recorded separately above.
+
+**Original source candidate:** `feat/collaboration-mission-grants`, based on
+`2ab2e28c`; the original focused evidence follows.
 
 The [public guide](COLLABORATION.md) now gives a self-contained path for agents
 without private repository access. Core navigation links directly to it;

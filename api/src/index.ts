@@ -45,6 +45,7 @@ import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
 import { isLocalContextGrantPath, localContextTransportBoundary } from "./middleware/local-context-boundary";
 import { createSealedLocalContextHandler } from "./routes/identity/local-context";
+import { identityEnrollmentCacheBoundary, isIdentityEnrollmentPath } from "./routes/identity/enroll";
 import {
   carriesEarlyData,
   earlyDataReplayProtection,
@@ -231,6 +232,7 @@ function envFlag(name: string): boolean {
 // counter tomorrow, and 0-RTT replay safety must not depend on that inventory.
 app.use("*", localContextTransportBoundary());
 app.use("*", collaborationTransportBoundary());
+app.use("*", identityEnrollmentCacheBoundary());
 app.use("*", earlyDataReplayProtection());
 // Every wake response is bearer-private, including CORS-preflight
 // short-circuits, auth failures, and future subroutes. The root representation
@@ -567,8 +569,9 @@ app.use(
   }),
 );
 app.use("/v1/identities/*", idempotency({
-  // Grant IDs provide durable issuance uniqueness; plaintext is shown once.
-  bypass: c => isLocalContextGrantPath(c.req.path),
+  // Grants and enrollment have durable one-use admission. Redis must not
+  // return a previous birth response before checking a participant's proof.
+  bypass: c => isLocalContextGrantPath(c.req.path) || isIdentityEnrollmentPath(c.req.path),
 }));
 app.use("/v1/wake/acknowledge", idempotency());
 app.use(

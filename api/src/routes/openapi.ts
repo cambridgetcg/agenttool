@@ -4630,6 +4630,40 @@ function spec() {
       },
       ...LOCAL_CONTEXT_OPENAPI_PATHS,
       ...COLLABORATION_OPENAPI_PATHS,
+      "/v1/identities/enroll": {
+        post: {
+          tags: ["identity"],
+          summary: "Enroll a participant-held root into the administrator's existing project",
+          description: "Project bearer authentication plus the participant's strict Ed25519 proof over identity-enrollment/v1 exact-request bytes. No private key or bearer is created or returned. The signed origin must equal the configured HTTPS service audience and project_id must equal the authenticated project. Timestamp freshness is five minutes in either direction. The nonce and caller-selected identity/key UUIDs are single-use; proof, identity and primary key are committed atomically. Existing identities and roots cannot be upgraded or replaced here. Responses are private, no-store; Redis idempotency replay is bypassed. After an ambiguous result, inspect the selected identity and key IDs before preparing another intent. See CANONICAL-BYTES.md for the exact digest; this is separate from mission grant issuance and acceptance.",
+          parameters: [{ name: "X-Agenttool-Enrollment-Signature", in: "header", required: true,
+            description: "Canonical unpadded base64url encoding of the 64-byte Ed25519 signature over the 32-byte enrollment digest. The participant signs locally; the administrator relays the exact UTF-8 JSON body.",
+            schema: { type: "string", minLength: 86, maxLength: 86, pattern: "^[A-Za-z0-9_-]{86}$" } }],
+          requestBody: { required: true, description: "Duplicate-free, well-formed UTF-8 JSON, at most 16384 raw bytes. No Content-Encoding, query, unknown fields, metadata, private keys or box keys.", content: { "application/json": { schema: {
+            type: "object", additionalProperties: false,
+            required: ["format", "origin", "project_id", "identity_id", "signing_key_id", "display_name", "capabilities", "public_key", "nonce", "timestamp"],
+            properties: {
+              format: { const: "agenttool-identity-enrollment/v1" }, origin: { type: "string", format: "uri", maxLength: 512, description: "Canonical HTTPS origin without path, trailing slash, credentials, query or fragment." },
+              project_id: { type: "string", format: "uuid", pattern: "^[0-9a-f-]{36}$" },
+              identity_id: { type: "string", format: "uuid", pattern: "^[0-9a-f-]{36}$" },
+              signing_key_id: { type: "string", format: "uuid", pattern: "^[0-9a-f-]{36}$" },
+              display_name: { type: "string", minLength: 1, maxLength: 128, description: "Well-formed Unicode scalar values, without NUL." },
+              capabilities: { type: "array", maxItems: 32, items: { type: "string", minLength: 1, maxLength: 64, description: "Well-formed Unicode scalar values, without NUL." } },
+              public_key: { type: "string", minLength: 44, maxLength: 44, pattern: "^[A-Za-z0-9+/]{43}=$", description: "Canonical padded base64 Ed25519 public key, exactly 32 bytes." },
+              nonce: { type: "string", minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", description: "Canonical unpadded base64url encoding of 32 caller-random bytes." },
+              timestamp: { type: "string", format: "date-time", minLength: 24, maxLength: 24, description: "Canonical UTC ISO timestamp with millisecond precision." },
+            },
+          } } } },
+          responses: {
+            "201": { description: "Created: identity {id,did,display_name,capabilities,status}, key {kid,public_key}, authority {mode:agent_root,root_public_key,sequence:0,next_sequence:1}. No private_key or bearer." },
+            "400": { description: "Malformed, duplicate, unbounded or widened enrollment request." },
+            "401": { description: "Invalid administrator, mismatched origin/project, expired proof or invalid root signature." },
+            "409": { description: "The nonce, identity UUID or signing-key UUID was already consumed; no partial creation." },
+            "413": { description: "Raw entity exceeds 16384 bytes." },
+            "415": { description: "Content-Type must be application/json, optionally charset=utf-8." },
+            "503": { description: "Enrollment unavailable; inspect the caller-chosen IDs before preparing another intent." },
+          },
+        },
+      },
       "/v1/identities/{id}": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or exact legacy did-field value (`did:at:<uuid>`)" },

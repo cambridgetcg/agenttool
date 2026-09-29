@@ -8,7 +8,7 @@ import { cloudflareHeaderRulePaths, matchesCloudflarePathPattern } from "./cloud
 
 const root = resolve(import.meta.dir, "../..");
 const read = (name: string) => readFileSync(join(root, name), "utf8");
-const guides = ["COLLABORATION.md", "COLLABORATION-ROADMAP.md", "COLLABORATION-MISSIONS.md", "LOCAL-CORE.md", "API-COVERAGE.md"];
+const guides = ["COLLABORATION.md", "COLLABORATION-ROADMAP.md", "COLLABORATION-MISSIONS.md", "COLLABORATION-MISSION-CLIENT.md", "LOCAL-CORE.md", "API-COVERAGE.md"];
 const temporary: string[] = [];
 afterEach(() => { for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true }); });
 
@@ -34,7 +34,7 @@ describe("collaboration public onboarding", () => {
     const rules = cloudflareHeaderRulePaths(headers);
     expect(rules.length).toBeLessThanOrEqual(100);
     expect(rules).toContain("/COLLABORATION*.md");
-    for (const name of ["COLLABORATION.md", "COLLABORATION-ROADMAP.md", "COLLABORATION-MISSIONS.md"]) {
+    for (const name of ["COLLABORATION.md", "COLLABORATION-ROADMAP.md", "COLLABORATION-MISSIONS.md", "COLLABORATION-MISSION-CLIENT.md"]) {
       expect(matchesCloudflarePathPattern("/COLLABORATION*.md", `/${name}`)).toBe(true);
       expect(read("apps/docs/sitemap.xml")).toContain(`https://docs.agenttool.dev/${name}`);
     }
