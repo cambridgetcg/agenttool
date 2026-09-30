@@ -2,7 +2,7 @@
  * The owning stdio connection is the target; session_label is not a verified native session ID.
  * A successful write is delivery intent, never evidence that a model processed the message.
  */
-import { openReceiver } from './mission-wake-receiver.mjs';
+import { openReceiver, ReceiverPausedError, ReceiverQuietBusyError } from './mission-wake-receiver.mjs';
 
 const MAX_INPUT = 65536;
 const MAX_QUEUE = 16;
@@ -125,7 +125,13 @@ export async function runChannel(state, {
         });
         await delay(pollIntervalMs);
       }
-    })().catch(() => { if (!stopReason) stop('receiver_error', new Error('Channel receiver stopped after an unconfirmed operation.')); });
+    })().catch(error => {
+      // Keep this finite connection available for explicit ACKs of deliveries
+      // already written. Pause or control contention latches polling off;
+      // neither control completion nor resume restarts it.
+      if (error instanceof ReceiverPausedError || error instanceof ReceiverQuietBusyError) return;
+      if (!stopReason) stop('receiver_error', new Error('Channel receiver stopped after an unconfirmed operation.'));
+    });
   };
 
   let initialized = false, ready = false;

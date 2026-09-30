@@ -71,7 +71,13 @@ a partial read into an all-clear.
 
 This is orientation only. Hosted quiet-hours remains a public declaration;
 neither it nor this card pauses a host, suppresses incoming messages or changes
-full Wake's default profile. Host-controlled quiet is separate roadmap work.
+full Wake's default profile. The separate
+[private mission-receiver pause](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+is a scoped source candidate: it gates new automatic polls and native deliveries
+for one local binding. Already admitted effects can still complete; an explicit
+return or chosen expiry starts no process. Ordinary host turns, other routes,
+Hermes work watchers and hosted runtimes retain their own controls. That partial
+C1 implementation is not a global host mute or a new live-delivery receipt.
 
 Selected established keys and planned placeholders, grouped for navigation. Full JSON and bundle-backed renderers have different shapes. Check the producer for a field's exact contract; this table is not a complete route or key inventory.
 

@@ -65,6 +65,7 @@ not claim that every source version is published or installed on your host.
 | Wake Continuity / AFTERGLOW (`packages/wake-continuity/README.md`) | Constructs and validates digest-linked capsules and a carry/park view. | Pure library: no persistence, source retrieval, session loading, or execution. A digest does not hide guessable private content. |
 | Wake Thread (`packages/wake-thread/README.md`) | Binds selected facts, omissions, retention declarations, and carry/fork/rest/refuse receipts. | Private source package. Caller supplies facts and time; retention validation does not delete stored copies or authenticate a choice. |
 | Wake Return (`packages/wake-return/README.md`) | Local MCP status and explicit observation of one host-selected project/identity. | Private source candidate. Observation uses two fixed hosted GETs; it does not restore a private session or read private memories. |
+| [Mission receiver quiet](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return) | Privately pauses new automatic poll/delivery admissions for one bound local mission receiver; return can be explicit or time-selected. | Separate source candidate. Already admitted effects remain possible. Return starts no process, renews no grant and does not control ordinary host turns or the Hermes work watcher. |
 | Data (`packages/data/README.md`) | Local SQLite records, content-addressed blobs, FTS5 search, changes, and tombstones. | Direct library or separately operated HTTP node. No automatic projection into hosted memory or model context. |
 | Collab (`packages/collab/README.md`) | Local coordination journal, sessions, tasks, reports, review, and handoffs. | Collaborators must select the same database. The host owns polling and lifecycle; the package does not wake suspended agents. |
 | SDK local keys and adapters (`packages/sdk-ts/README.md`) | Derives keys, signs requests, encrypts selected payloads, and offers configured provider wrappers. | Key operations are local. Hosted clients perform API calls; wrappers disclose selected Wake context to the chosen model provider. |
@@ -74,6 +75,13 @@ storage. Data and Collab provide actual local persistence. SDK key helpers
 provide cryptographic operations; they do not supply a secret store. These
 pieces can support a local core. The files-only starter does not yet integrate
 Data, Collab, SDK keys or hosted records.
+
+Quiet has distinct boundaries. Local Starter does not launch models or poll in
+the background; its selected hooks run only when the host invokes them. Wake
+Return observes only on explicit tool calls. Neither needs the mission receiver
+to be running, and neither is paused by that receiver's local setting. Hosted
+quiet-hours publishes a declaration; hosted runtime stop/start is its own
+lifecycle control. Choosing one of these does not silently configure the others.
 
 ## Files-only starter
 

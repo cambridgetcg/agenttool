@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Route selected, signed mission observations to an explicitly bound local harness, with a finite receiver and inspectable acknowledgment.
-> **Evidence:** Local source candidate, 2026-09-29, on `feat/mission-hermes-wake`; not a published package or an always-on wake service. Separate live API-to-Codex and API-to-Hermes trials passed on one Mac. Claude Code 2.1.220 with Astra remains unverified. See the dated records below.
+> **Evidence:** Local source candidate, including private receiver pause/return on 2026-09-30; not a published package or an always-on wake service. Earlier live API-to-Codex and API-to-Hermes trials passed on one Mac. Those trials do not verify the new pause control; Claude Code 2.1.220 with Astra remains unverified. See the dated records below.
 > **Code:** Private source: `bin/agenttool-mission-wake.mjs`, `bin/mission-wake-receiver.mjs`, `bin/mission-wake-codex.mjs`, `bin/mission-wake-channel.mjs`, `bin/mission-wake-hermes.mjs`, `bin/mission-wake-hermes-proof.py`, and `bin/agenttool-mission.mjs`.
 > **Tests:** `bin/tests/mission-wake-channel.test.ts`, `bin/tests/mission-wake-receiver.test.ts`, `bin/tests/mission-wake-codex.test.ts`, `bin/tests/mission-wake-hermes.test.ts`, `bin/tests/mission-wake-cli.test.ts`, and `bin/tests/mission-client.test.ts`.
 > **Related:** [Mission client setup](COLLABORATION-MISSION-CLIENT.md) · [Mission protocol](COLLABORATION-MISSIONS.md) · [Roadmap](COLLABORATION-ROADMAP.md).
@@ -134,6 +134,8 @@ node /absolute/tools/agenttool-mission-wake.mjs poll --state /absolute/private/p
 `poll` verifies and saves one page without invoking a harness. It advances the
 local read cursor only after saving the accepted page. Signed messages from the
 pinned peer for this route enter the inbox; unrelated events do not invoke it.
+While this receiver is paused, `poll` returns its quiet snapshot without a
+network request. A page admitted before the pause may still finish saving.
 `--kind ack --in-reply-to <event-UUID>` sends a selected acknowledgment through
 the same shared API. Acknowledgment envelopes are stored without causing another
 native wake, avoiding automatic reply loops.
@@ -258,6 +260,79 @@ A lost Sol admission response can leave the job ID unknown: the receiver records
 uncertainty instead of retrying, and the native job timeout remains its bound.
 Inspect that attempt before starting another; unknown admission does not prove
 that no job started or that cleanup completed.
+
+## Private pause and free return
+
+**Source candidate, scoped C1:** one bound mission receiver can stop admitting
+new automatic polls and deliveries. This is a private local control, separate
+from the hosted quiet-hours declaration. No reason, announcement, heartbeat or
+proof of rest is required. It does not change identity, public presence, mission
+acceptance, credentials or accepted obligations.
+
+```sh
+node /absolute/tools/agenttool-mission-wake.mjs status --state /absolute/private/participant
+node /absolute/tools/agenttool-mission-wake.mjs pause --state /absolute/private/participant
+node /absolute/tools/agenttool-mission-wake.mjs resume --state /absolute/private/participant
+```
+
+`pause` lasts until an explicit `resume` by default. To choose an end time, add
+`--until "<future YYYY-MM-DDTHH:mm:ss.sssZ>"` to `pause`, replacing the placeholder
+with a future canonical UTC timestamp. Expiry reopens eligibility; it does not
+start a watcher, launch a model or notify anyone. `resume` has the same narrow
+effect. A returned receiver must still pass its binding, expiry and current
+mission-scope checks.
+
+`status` includes `quiet: { mode: "ready" | "paused", until, updated_at }`,
+`quiet_lock` metadata, and the existing pending/in-flight delivery information
+without message text. `ready` means this quiet control permits admission, not
+that a receiver is running or its grant remains valid. Inspecting status can
+help distinguish queued messages from already admitted work; it is not a
+requirement to justify taking a pause.
+
+The owner-only `wake/quiet.json` binds the current setting to the immutable
+receiver binding. An absent record keeps older bindings ready; an unsafe or
+malformed record refuses admission. Explicit pause/resume operations are
+serialized with a separate short-lived lock, so the last serialized control
+wins. The receiver checks the gate before poll admission and again after
+dispatch authorization reads, under that same lock, before admitting delivery.
+The quiet record does not rewrite the signed inbox, cursor or delivery evidence.
+
+An operation admitted before pause may still start or finish, save its truthful
+receipt and complete its selected ACK under the original finite deadline.
+Pause cannot recall a Claude notification, undo a model request or prove a
+detached job stopped. Existing `dispatching`/`delivered` uncertainty still blocks
+automatic replay after return; use the recovery procedure below to inspect it.
+
+| Receiver | When it observes a pause | Returning |
+|---|---|---|
+| Codex/Hermes `watch` | Exits without admitting another poll or delivery. Starting while paused initializes no harness adapter. | Explicitly start a new finite watcher when wanted. |
+| Claude `channel` | Latches polling off. Its existing finite stdio connection can still accept explicit ACKs for previously delivered event/delivery IDs. | Start a new selected finite channel; resume does not restart polling in the old connection. |
+
+If channel polling meets a busy quiet-control lock, it also latches off without
+retrying and preserves that finite ACK window. Inspect local status before a
+fresh run. A competing CLI control or watcher reports the busy lock instead of
+claiming that a pause or delivery succeeded.
+
+Neither pause, resume nor expiry extends a receiver's original deadline. No
+automatic restart or background wake is installed. An in-flight operation and
+bounded native shutdown can still outlast the instant pause was requested.
+
+If a quiet-control process crashes holding its lock, inspect `status` for the
+exact quiet `lock_id`, then use `recover-quiet-lock --state DIR --lock-id UUID`
+only after that owner is gone. It refuses a live owner and does not resume the
+receiver or clear an uncertain delivery. This lock is distinct from the
+longer-lived receiver lock described below. A missing or malformed owner cannot
+prove a departed process; automatic recovery refuses it and leaves the lock for
+local inspection.
+
+The scope is **this receiver only**. Explicit sends, manual mission operations,
+other routes, normal host turns, configured hooks, Local Starter and explicit
+Wake Return reads retain their own controls. The separate
+[Hermes work watcher](COLLABORATION-MISSION-WORK-HERMES.md) is outside this pause.
+Hosted runtimes use their own explicit stop/start lifecycle; their `idle` state
+can still wake on events. No OS sleep, global notification mute, host scheduler
+control or cancellation of already accepted work is claimed. Source fixtures
+and earlier native-delivery receipts are separate from a new live host trial.
 
 ## Receipts, revocation and recovery
 

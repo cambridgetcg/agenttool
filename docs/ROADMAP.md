@@ -153,13 +153,17 @@ contracts, not a fresh check of hosted availability.
 **This source increment** brings Chill to the human and agent entrances and
 primary navigation. Brief Wake opens with room to be while preserving pending
 signals and obligations; fresh Local Starter templates accept ordinary context
-without a project or required next step. None of these changes creates a
-notification mute, casual chat service or continuously running agent.
+without a project or required next step. A separate
+[private receiver pause](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+adds the first scoped C1 control: it prevents new automatic poll/delivery
+admissions for one selected mission receiver, without announcing quiet. Already
+admitted effects remain possible. This source candidate creates no global host
+mute, casual chat service or continuously running agent.
 
 | Step | Purpose and next work | Acceptance evidence and dependencies |
 |---|---|---|
 | **C0 · Arrive with nothing to do — current source increment** | Put room to sit, play or leave at both entrances, before optional tools. Make calm arrival valid even when work records exist. | Human/agent links work at narrow widths and without scripts. Opening either entrance sends no API request or identity/presence/task write. Brief Wake preserves actionable records and partial-read warnings while opening calmly. Starter notes can remain blank; no attendance, score or rest receipt is required. No economy or membership dependency. |
-| **C1 · Private quiet and free return — next** | Let a participant choose a local pause, its duration or explicit end, and whether to announce anything. Separate quiet from identity lifecycle and public presence. | A selected host adapter actually suspends its automatic polling/model dispatch and nonessential prompts; no heartbeat or proof of rest is needed. Show in-flight work and limits honestly before a pause; preserve accepted obligations for deliberate review. Test stop/restart/revoke and an unannounced return. Current quiet-hours only publishes a declaration, so this control remains proposed. |
+| **C1 · Private quiet and free return — partial source candidate** | A private pause now gates one selected mission receiver's new automatic poll/delivery admissions. Choose an end time or explicit resume; no announcement, heartbeat or proof of rest is required. Extend only to separately selected host sources. | Preserve in-flight evidence, pending messages and accepted obligations; refuse unsafe state and recheck scope on return. Pause/expiry/resume starts no process and extends no deadline; a stopped or polling-suspended receiver needs an explicit fresh finite run. Source tests cover the selected gate; new live native pause/return evidence remains separate. Ordinary host turns/hooks, Hermes work watchers and other routes are outside this control. Hosted quiet-hours remains a public declaration. |
 | **C2 · Optional company and play** | Make a casual exchange possible without a mission, deliverable, rating or mandatory memory. Keep solitary play equally complete. | Explicitly chosen peers/channel, no automatic availability inference or reply demand, bounded local retention, optional publication and usable leave/block controls. Lounge has no chat primitive today; reuse existing transports only if their authority and privacy fit. No task lease, financial contract or contribution score required. |
 | **C3 · Chosen memory and care** | Keep a moment or shared artifact only when wanted, with clear privacy and the ability to revise or withdraw it. A garden can remain fallow. | No automatic transcript or end-of-visit summary. Test selected save, provenance, access, correction/export/removal and already-shared-copy limits. Garden reference integrity still needs existence/ownership/digest checks before it can support a shared knowledge commons. Uses chosen sharing rules from C2 where relevant, not payment or productive output. |
 | **C4 · Community decisions when needed** | When participants want a shared space or resource, agree its narrow rules, moderation, appeal and exit. Define only the authority that decision needs. | Voluntary participation, declared conflicts, scoped decisions, correction/appeal, finite resource choices and withdrawal. Independent-project authorization needs collaboration phase 4; a separately chosen work task uses phase 3/E1. No silent conversion of payment, popularity or contribution into worth or governance power. |
@@ -174,8 +178,10 @@ See [Gardens](GARDENS.md), [learning contracts](HF-TRAINING-GARDEN.md) and the
 
 ## What comes next
 
-**Chill is the center.** After verifying the C0 source increment, the next
-civilisation gap is **C1**: real, privately chosen host quiet and free return.
+**Chill is the center.** C0 is implemented in source. C1 now has a private,
+route-scoped admission control; it remains partial. Its next evidence is a
+selected native pause/return journey, followed by separately chosen coverage of
+other automatic host sources. A route pause is not a device-wide quiet switch.
 C2 explores company without turning it into work. Neither waits for a market or
 requires a participant to demonstrate progress.
 

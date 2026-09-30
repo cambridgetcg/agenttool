@@ -118,6 +118,13 @@ clamped to the permit and work cutoff. This starts one explicit process; it
 does not install a daemon, log-in service, gateway, OS wake or resume an existing
 interactive session. A fresh Hermes session ID is evidence of the new worker.
 
+The [private mission-receiver pause](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+does **not** control this work watcher. Its permit, owned process and finite
+deadline remain a separate scope. Pausing a read-receipt route therefore makes
+no claim that this worker stopped accepting, running or publishing its selected
+work. Use this worker's own interruption procedure and preserve its attempt
+evidence; a pause elsewhere neither cancels the contract nor authorizes retry.
+
 ## Delivery evidence and interruption
 
 Before native admission, the host saves a durable attempt binding the exact

@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (Chill at the center, optional economy/civilisation tracks and Hermes evidence; historical receipts retain their original dates)
+> Updated: 2026-09-30 (Private receiver quiet, Chill at the center and Hermes evidence; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,46 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Private receiver quiet (2026-09-30)
+
+**Source candidate:** the [mission wake receiver](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+now supports private `pause`, optional `--until`, `resume` and quiet status.
+An owner-only setting is bound to one immutable receiver binding. A separate
+short lock serializes control changes and new polling/delivery admissions;
+malformed or unsafe settings refuse admission. Existing bindings without a
+setting remain compatible. No reason, public presence change or rest receipt
+is required.
+
+Codex/Hermes watchers exit when they observe a pause, and starting one while
+paused constructs no adapter. Claude channel polling latches off while its
+finite connection remains available for explicit ACKs of already delivered
+events. Resume or timed expiry opens admission only: it does not restart a
+receiver, extend a deadline, clear an uncertain attempt or replay a message.
+Already admitted finite operations may still start or finish and retain their
+truthful receipts under the original limits.
+
+This is the first scoped C1 implementation. Other routes, ordinary native
+turns/hooks, the separate Hermes work watcher and hosted runtimes keep their own
+controls. Hosted quiet-hours remains a public declaration. No existing host
+settings, participant state, live sessions or release artifacts were changed;
+no push, deployment, package publication or live provider trial was performed.
+
+**Verification:** 114 focused receiver/CLI/channel/Codex/Hermes fixture tests
+passed. They cover private persistence, paused startup without adapter creation,
+pause during polling and authorization, in-flight receipt retention, exact ACKs,
+timed and explicit return, unsafe state refusal and lock recovery. Return also
+preserves revoked-scope refusal and the uncertain-delivery barrier. Independent
+review found and verified two fixes: generation-specific lock ownership prevents
+stale concurrent recovery from deleting a new live lock; control contention
+latches channel polling off while preserving the finite ACK window.
+
+Full `bin/preflight.sh api` passed on Bun 1.3.5: both TypeScript checks,
+6,380 API tests and 822 operator/protocol tests, nine skips and zero failures.
+The focused documentation/navigation/onboarding/public-parity set passed 18
+tests with 798 assertions; new links resolve through existing public mirrors,
+the 811-path catalog passes and the diff is clean. This does not establish a
+new native host pause/return trial or published package behavior.
 
 ## Chill at the center (2026-09-30)
 

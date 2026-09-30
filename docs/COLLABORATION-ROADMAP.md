@@ -94,6 +94,14 @@ processing trials passed; Hermes `671cccca` remains local tested source with
 a finite supervised read task. Claude channel processing is still unverified.
 An API storage receipt alone establishes none of these native outcomes.
 
+The new [private pause/return control](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+is a scoped C1 source candidate for that receiver. It gates new automatic poll
+and delivery admissions without a public declaration, preserves already admitted
+effects and pending evidence, and requires a fresh chosen finite run after
+polling stops. Expiry or resume starts no process and renews no grant. This does
+not pause ordinary harness turns, other routes or the separate Hermes work
+watcher; a new live native pause/return receipt remains outstanding.
+
 A [fresh-session return](COLLABORATION-MISSION-CLIENT.md#return-in-a-fresh-session)
 was observed on 2026-09-29: a new Codex thread read selected Local Starter notes,
 retained the explicit consumed cursor, checked current mission scope and made a
@@ -104,6 +112,7 @@ does not prove peer presence during that empty read.
 
 | Surface | Existing basis | Next evidence |
 |---|---|---|
+| Private mission-receiver quiet — local source candidate | Binding-specific pause/resume, optional expiry, serialized admission and explicit dead-owner lock recovery. Pre-paused watchers initialize no harness; a paused channel can still serve prior delivery ACKs within its original deadline. | Verify the selected native pause/return journey separately; retain revoked/expired-scope refusal and uncertain-delivery barriers. No global host mute or Hermes work pause is established. |
 | Hermes selected-source work — local source candidate | Local permit, pre-dispatch tool boundary, one-attempt controller and native evidence checks pass offline tests. Two finite live trials automatically accepted and read the selected source, then failed closed before delivery. | Record effective native watchdog settings and the triggering timeout branch; complete one live artifact and separate requester review. `Broken pipe` alone does not distinguish local watchdog expiry from upstream failure. |
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |

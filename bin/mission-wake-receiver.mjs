@@ -1,6 +1,6 @@
 /** Host-owned session routing. Contract: docs/COLLABORATION-MISSION-WAKE.md. */
 import { createHash, createPublicKey, randomUUID, verify } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, openSync, closeSync, fsyncSync, renameSync, unlinkSync, rmdirSync, realpathSync, constants } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, openSync, opendirSync, closeSync, fsyncSync, renameSync, unlinkSync, rmdirSync, realpathSync, constants } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import * as client from './agenttool-mission.mjs';
 import { validateHermesTarget } from './mission-wake-hermes.mjs';
@@ -119,12 +119,112 @@ function load(state) {
   }
   return { root, binding, inbox };
 }
+export class ReceiverPausedError extends Error {
+  constructor(quiet) {
+    super('This local receiver is paused.');
+    this.name = 'ReceiverPausedError'; this.code = 'RECEIVER_PAUSED';
+    this.quiet = structuredClone(quiet);
+  }
+}
+export class ReceiverQuietBusyError extends Error {
+  constructor() {
+    super('Quiet control is busy; inspect its exact lock before recovery.');
+    this.name = 'ReceiverQuietBusyError'; this.code = 'QUIET_CONTROL_BUSY';
+  }
+}
+function readQuiet(root, bindingSha) {
+  privateDirectory(root);
+  const at = join(root, 'quiet.json');
+  try { lstatSync(at); } catch (error) {
+    if (error.code === 'ENOENT') return { mode: 'ready', until: null, updated_at: null };
+    throw error;
+  }
+  const value = JSON.parse(client.privateRead(at, 2048));
+  exact(value, ['format', 'binding_sha256', 'mode', 'until', 'updated_at']);
+  if (value.format !== 'agenttool-mission-quiet/v1' || value.binding_sha256 !== bindingSha ||
+      !['ready', 'paused'].includes(value.mode)) fail('Quiet control does not match this receiver.');
+  const updated = date(value.updated_at);
+  if ((value.mode === 'ready' && value.until !== null) ||
+      (value.until !== null && date(value.until) <= updated)) fail('Invalid quiet control time.');
+  return { mode: value.mode === 'paused' && (value.until === null || Date.now() < date(value.until)) ? 'paused' : 'ready',
+    until: value.until, updated_at: value.updated_at };
+}
+function quietLockOwner(root) {
+  const lock = join(root, 'quiet-control.lock');
+  try { lstatSync(lock); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  privateDirectory(lock);
+  const entries = opendirSync(lock);
+  let entry;
+  try {
+    entry = entries.readSync();
+    if (!entry || entries.readSync() || !entry.isFile() || !/^owner-[0-9a-f-]+\.json$/.test(entry.name))
+      fail('Quiet control requires exactly one private generation owner.');
+  } finally { entries.closeSync(); }
+  const generation = id(entry.name.slice(6, -5));
+  const owner = JSON.parse(client.privateRead(join(lock, entry.name), 2048));
+  exact(owner, ['lock_id', 'pid', 'created_at']); id(owner.lock_id); date(owner.created_at);
+  if (owner.lock_id !== generation || !Number.isSafeInteger(owner.pid) || owner.pid < 1) fail('Invalid quiet control lock owner.');
+  return owner;
+}
+// Only synchronous admission/control runs under this lock. Never hold it across
+// a network wait, native turn or stdout flush. See the mission Wake contract.
+function withQuietLock(root, operation) {
+  privateDirectory(root);
+  const lock = join(root, 'quiet-control.lock'), lockId = randomUUID();
+  const ownerPath = join(lock, `owner-${lockId}.json`);
+  try { mkdirSync(lock, { mode: 0o700 }); }
+  catch (error) { if (error.code === 'EEXIST') throw new ReceiverQuietBusyError(); throw error; }
+  let recorded = false;
+  try {
+    client.writeNew(ownerPath, json({ lock_id: lockId, pid: process.pid, created_at: new Date(Date.now()).toISOString() }));
+    recorded = true; syncDirectory(root);
+    return operation();
+  } finally {
+    if (recorded) {
+      if (quietLockOwner(root)?.lock_id !== lockId) fail('Quiet control lock changed.');
+      unlinkSync(ownerPath);
+    }
+    rmdirSync(lock); syncDirectory(root);
+  }
+}
+function requireReady(root, bindingSha) {
+  const quiet = readQuiet(root, bindingSha);
+  if (quiet.mode === 'paused') throw new ReceiverPausedError(quiet);
+  return quiet;
+}
+function setQuiet(state, mode, until) {
+  const { root, inbox } = load(state);
+  return withQuietLock(root, () => {
+    // A damaged control is never silently replaced by an apparently successful resume.
+    readQuiet(root, inbox.binding_sha256);
+    const updated = Date.now();
+    if (until !== null && date(until) <= updated) fail('Choose a future canonical UTC quiet cutoff.');
+    replace(root, 'quiet.json', { format: 'agenttool-mission-quiet/v1', binding_sha256: inbox.binding_sha256,
+      mode, until, updated_at: new Date(updated).toISOString() });
+    return readQuiet(root, inbox.binding_sha256);
+  });
+}
+export function pause(state, until = null) { return setQuiet(state, 'paused', until); }
+export function resume(state) { return setQuiet(state, 'ready', null); }
+export function recoverQuietLock(state, expectedLockId) {
+  id(expectedLockId); const { root } = load(state), owner = quietLockOwner(root);
+  if (!owner || owner.lock_id !== expectedLockId) fail('Quiet control lock owner does not match.');
+  try { process.kill(owner.pid, 0); fail('Quiet control lock owner is still alive; let it finish.'); }
+  catch (error) { if (error.code !== 'ESRCH') throw error; }
+  const lock = join(root, 'quiet-control.lock');
+  // Never unlink a reusable owner path: a concurrent recovery may have already
+  // cleared this generation and a new live owner may now hold the directory.
+  unlinkSync(join(lock, `owner-${expectedLockId}.json`)); rmdirSync(lock); syncDirectory(root);
+  return { recovered: true, lock_id: expectedLockId };
+}
 export function status(state) {
   const { binding, inbox, root } = load(state);
   const counts = Object.fromEntries(['pending', 'dispatching', 'delivered', 'processed', 'ack'].map(s => [s, inbox.items.filter(i => i.status === s).length]));
   const locked = existsSync(join(root, 'lock'));
   const owner = locked ? JSON.parse(client.privateRead(join(root, 'lock', 'owner.json'))) : null;
+  const quietOwner = quietLockOwner(root);
   return { route: routeAddress(binding), cursor: inbox.cursor, counts, locked, lock: owner ? { lock_id: owner.lock_id, pid: owner.pid } : null,
+    quiet: readQuiet(root, inbox.binding_sha256), quiet_lock: quietOwner ? { lock_id: quietOwner.lock_id, pid: quietOwner.pid } : null,
     in_flight: inbox.items.filter(i => ['dispatching', 'delivered'].includes(i.status)).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status, receipt: i.receipt ?? null })),
     processing_acks: inbox.items.filter(i => i.processing_ack).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, ...i.processing_ack })) };
 }
@@ -202,17 +302,24 @@ export function openReceiver(state) {
     if (busy) fail('Receiver operation already active.');
     busy = true; try { return await fn(); } finally { busy = false; }
   };
-  const next = () => {
+  const next = () => withQuietLock(root, () => {
     live();
+    requireReady(root, inbox.binding_sha256);
     if (inbox.items.some(i => ['dispatching', 'delivered'].includes(i.status))) return null;
     return structuredClone(inbox.items.find(i => i.status === 'pending') ?? null);
-  };
+  });
   return {
     binding: Object.freeze(structuredClone(binding)),
     snapshot: () => structuredClone(inbox),
+    quiet: () => { if (closed) fail('Receiver is closed.'); return readQuiet(root, inbox.binding_sha256); },
     next,
     async poll(options = {}) { return exclusive(async () => {
-      const p = live(), page = await client.events(state, inbox.cursor, options); live();
+      let p;
+      const request = withQuietLock(root, () => {
+        p = live(); requireReady(root, inbox.binding_sha256); options.signal?.throwIfAborted();
+        return client.events(state, inbox.cursor, options);
+      });
+      const page = await request; live();
       if (!page.events.length && page.page.has_more) fail('Empty page cannot claim more events.');
       const updated = structuredClone(inbox), seenPage = new Set();
       for (const event of page.events) {
@@ -231,11 +338,20 @@ export function openReceiver(state) {
     }); },
     async dispatch(adapter, options = {}) { return exclusive(async () => {
       const item = next(); if (!item) return null;
-      const view = await client.invitation(state, options);
+      const view = await withQuietLock(root, () => {
+        live(); requireReady(root, inbox.binding_sha256); options.signal?.throwIfAborted();
+        return client.invitation(state, options);
+      });
       if (view.mission.mission_digest !== binding.mission_digest) fail('Mission binding changed.');
-      await client.request(state, 'GET', '/context', '', options); live();
-      item.status = 'dispatching'; item.delivery_id = randomUUID();
-      save({ ...inbox, items: inbox.items.map(i => i.event_id === item.event_id ? item : i) });
+      await withQuietLock(root, () => {
+        live(); requireReady(root, inbox.binding_sha256); options.signal?.throwIfAborted();
+        return client.request(state, 'GET', '/context', '', options);
+      });
+      withQuietLock(root, () => {
+        live(); requireReady(root, inbox.binding_sha256); options.signal?.throwIfAborted();
+        item.status = 'dispatching'; item.delivery_id = randomUUID();
+        save({ ...inbox, items: inbox.items.map(i => i.event_id === item.event_id ? item : i) });
+      });
       // No catch/replay: a lost adapter response may already have started a native turn.
       const receipt = await adapter.deliver(structuredClone(item), structuredClone(binding));
       if (!receipt || !['delivered', 'processed'].includes(receipt.status)) fail('Invalid delivery receipt; inspect the saved attempt.');

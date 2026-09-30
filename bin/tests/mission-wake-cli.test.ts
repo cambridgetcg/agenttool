@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import * as client from "../agenttool-mission.mjs";
-import { bind, openReceiver, status } from "../mission-wake-receiver.mjs";
+import { bind, openReceiver, pause as pauseReceiver, status } from "../mission-wake-receiver.mjs";
 import { watch } from "../agenttool-mission-wake.mjs";
 
 const CLI = resolve(import.meta.dir, "../agenttool-mission-wake.mjs");
@@ -85,6 +85,62 @@ function stalledPoll(watchSignal: () => AbortSignal) {
 }
 
 describe.skipIf(process.platform === "win32")("mission wake public CLI boundary", () => {
+  test("pause, paused poll/watch and resume remain local across fresh CLI processes", async () => {
+    const f = await bound();
+    const protectedFiles = ["signing-key.pem", "invitation.json", "wake/binding.json", "wake/inbox.json"];
+    const before = protectedFiles.map(file => readFileSync(join(f.state, file)));
+    for (const command of ["pause", "status", "poll", "watch"]) {
+      const result = run(f, [command, "--state", f.state]);
+      expect(result.error).toBeUndefined(); expect(result.status).toBe(0); expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).quiet.mode).toBe("paused");
+      expect(result.stdout).not.toContain(TOKEN); expect(result.stdout).not.toContain(f.root);
+    }
+    const resumed = run(f, ["resume", "--state", f.state]);
+    expect(resumed.error).toBeUndefined(); expect(resumed.status).toBe(0); expect(resumed.stderr).toBe("");
+    expect(JSON.parse(resumed.stdout).quiet.mode).toBe("ready");
+    expect(protectedFiles.map(file => readFileSync(join(f.state, file)))).toEqual(before);
+    expect(readdirSync(join(f.state, "outbox"))).toEqual([]);
+    expect(status(f.state).locked).toBe(false);
+  });
+
+  test("pre-paused watch never constructs a native adapter", async () => {
+    const f = await bound(); pauseReceiver(f.state);
+    let created = 0;
+    const result = await watch(f.state, 1, { createAdapter: () => { created++; throw new Error("Unexpected adapter"); } });
+    expect(created).toBe(0); expect(result.quiet.mode).toBe("paused"); expect(result.locked).toBe(false);
+  });
+
+  test("pause during admitted polling saves its result then exits without dispatch or another poll", async () => {
+    const f = await bound(), started = deferred(), release = deferred();
+    const original = globalThis.fetch; let calls = 0, deliveries = 0, closes = 0;
+    cleanups.push(() => { globalThis.fetch = original; });
+    globalThis.fetch = (async (url: string) => {
+      calls++; expect(String(url)).toContain("/events?after=0&limit=20"); started.resolve();
+      await release.promise;
+      return response({ mission_id: M, events: [], page: { after: "0", next_cursor: "0", has_more: false } });
+    }) as typeof fetch;
+    const running = watch(f.state, 2, { createAdapter: () => ({
+      deliver: async () => { deliveries++; throw new Error("Unexpected delivery"); },
+      close: async () => { closes++; },
+    }) });
+    cleanups.push(() => { release.resolve(); return running.catch(() => {}); });
+    await started.promise; pauseReceiver(f.state); release.resolve();
+    const result = await running;
+    expect(calls).toBe(1); expect(deliveries).toBe(0); expect(closes).toBe(1);
+    expect(result.quiet.mode).toBe("paused"); expect(result.locked).toBe(false); expect(result.cursor).toBe("0");
+  });
+
+  test("invalid quiet deadlines and options leave the existing local policy untouched", async () => {
+    const f = await bound();
+    for (const until of ["tomorrow", "2026-01-01T00:00:00.000Z", "9999-01-01", "2028-01-01T01:00:00+01:00"]) {
+      const result = run(f, ["pause", "--state", f.state, "--until", until]);
+      expect(result.status).toBe(1); expect(result.stderr).not.toContain("CLI_FORBIDDEN_EFFECT");
+      expect(existsSync(join(f.state, "wake", "quiet.json"))).toBe(false);
+    }
+    const result = run(f, ["resume", "--state", f.state, "--until", "2028-01-01T00:00:00.000Z"]);
+    expect(result.status).toBe(1); expect(result.stderr).not.toContain("CLI_FORBIDDEN_EFFECT");
+  });
+
   test("help runs with absolute Node and an empty tool path without opening state", () => {
     const f = fixture();
     for (const args of [[], ["help"], ["--help"]]) {
