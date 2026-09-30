@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (Native pause/return, local return preview and offline play; historical receipts retain their original dates)
+> Updated: 2026-09-30 (Chill and collaboration released; publication receipt added afterward; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,48 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Chill and collaboration release (2026-09-30)
+
+**Source:** [PR #448](https://github.com/cambridgetcg/agenttool/pull/448)
+merged as `64392d72ee6a9ed390fd6077affe14d2a4e3716d`. Its tree matches the
+tested candidate. The release combines optional Chill entrances, brief Wake
+orientation, private receiver pause/return, local return preview and Pocket Sky,
+payment-free mission work, bounded Hermes source review, and the updated roadmap.
+
+**Hosted publication:** [API workflow 36775775764](https://github.com/cambridgetcg/agenttool/actions/runs/36775775764)
+passed the production migration-journal survey and hermetic gate, then rolled
+out the exact clean revision. All three started app Machines returned that
+revision with `dirty=false` and passed the database-backed `/public/window`
+probe. Independent public health matched at 21:14:43 UTC.
+The normal frontend wrapper published docs, dashboard, web and the apex Worker
+at 21:29:45 UTC from clean `64392d72`; its private v6 receipt records
+`frontends: deployed_verified`. All 70 configured committed-file parity checks
+and 21 marked, non-cacheable sensitive-path 404 checks passed. An additional
+13-file public readback matched the exact committed entrances, module map and
+changed guides using the deployment's normal curl client. Python's default
+urllib client received Cloudflare 1010; this does not establish access through
+every HTTP client. Saved OAuth was used with independent before/after GET
+checks of Pages production/preview fail-closed settings, exact apex/www routes,
+and the committed Worker observability settings; all matched.
+
+**Verification:** exact-candidate API/protocol aggregate, package gate, 126
+browser journeys, and all six Local Starter OS/Node jobs passed. The deployment
+gates also passed, including the full API and package tiers. The first local
+frontend invocation stopped before publication because its private launcher
+accidentally passed umask `077` into two permission-negative fixtures. Both
+failed under `077` and passed under the inherited `022`; preserving that original
+child umask resolved the issue without changing product guards or source, and
+the complete normal gate then passed. The two YUTABASE integration jobs still
+failed at private fixture checkout, matching previous main; their coverage
+remains unverified. Existing Cloudflare DNSSEC drift and permission-blocked
+broader infrastructure checks remain separate from the verified release controls.
+
+These are hosted/API and source-publication results. No npm/PyPI package was
+published and no resident receiver was installed. The bounded native pause/return
+trial below remains a short same-device admission test, not prolonged rest or
+whole-host quiet. This later documentation-only receipt was not part of deployed
+`64392d72`; its public mirror awaits the next ordinary frontend publication.
 
 ## Native pause/return and optional local play (2026-09-30)
 
