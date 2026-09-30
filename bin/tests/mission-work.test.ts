@@ -10,6 +10,7 @@ import { canonicalMissionRequestBytes } from "../../api/src/services/collaborati
 import { correspondenceCanonicalJson } from "../../api/src/services/correspondence/canonical";
 import * as client from "../agenttool-mission.mjs";
 import * as work from "../mission-work.mjs";
+import { encodeWorkRecord } from "../mission-work-contract.mjs";
 
 const ORIGIN = "https://work-fixture.invalid";
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -344,6 +345,49 @@ describe.skipIf(process.platform === "win32")("explicit signed mission work exch
       await expect(sync(f, f.worker)).rejects.toMatchObject({ stop_reason: "verification_failed" });
       await expect(advance(f, f.worker, "accept")).rejects.toMatchObject({ stop_reason: "verification_failed" });
       expect(posts(f)).toHaveLength(1);
+    }
+  });
+
+  test("an uncached local event with a corrupted proof key cannot disappear or permit a replacement offer", async () => {
+    for (const corrupt of ["different_key", "missing_key"]) {
+      const f = fixture();
+      expect((await sync(f, f.requester)).status).toBe("none");
+      const envelope = { format: "agenttool-mission-chat/v1", conversation: f.contract.task_id,
+        to_identity: f.worker.pin.identity_id, kind: "message", text: encodeWorkRecord(f.contract, "offer", null) };
+      // This valid admitted event has no local work intent or saved event yet,
+      // as when selected observations were sent through the lower-layer client.
+      const admitted = f.appendSigned(f.requester, JSON.stringify(envelope));
+      if (corrupt === "different_key") admitted.proof.public_key = f.worker.pin.public_key;
+      else delete admitted.proof.public_key;
+      const before = stateFiles(f.requester.state), eventsBefore = structuredClone(f.controls.events);
+      const taskRoot = join(f.requester.state, "work", f.contract.task_id);
+      await expect(sync(f, f.requester)).rejects.toMatchObject({ name: "ChatError", stop_reason: "verification_failed" });
+      await expect(advance(f, f.requester, "offer")).rejects.toMatchObject({ name: "ChatError", stop_reason: "verification_failed" });
+      expect(posts(f)).toHaveLength(0);
+      expect(f.controls.events).toEqual(eventsBefore);
+      expect(readdirSync(join(taskRoot, "events"))).toEqual([]);
+      expect(readdirSync(join(taskRoot, "intents"))).toEqual([]);
+      expect(readdirSync(join(f.requester.state, "outbox"))).toEqual([]);
+      expect(stateFiles(f.requester.state)).toEqual(before);
+    }
+  });
+
+  test("an uncached local fork with a corrupted proof key cannot hide beside a saved offer", async () => {
+    for (const corrupt of ["different_key", "missing_key"]) {
+      const f = fixture(), offer = await advance(f, f.requester, "offer");
+      const fork = f.appendSigned(f.requester, f.controls.events[0].observation.summary);
+      if (corrupt === "different_key") fork.proof.public_key = f.worker.pin.public_key;
+      else delete fork.proof.public_key;
+      const before = stateFiles(f.requester.state), eventsBefore = structuredClone(f.controls.events);
+      const taskRoot = join(f.requester.state, "work", f.contract.task_id), intentsBefore = readdirSync(join(taskRoot, "intents"));
+      const postsBefore = posts(f).length;
+      await expect(sync(f, f.requester)).rejects.toMatchObject({ name: "ChatError", stop_reason: "verification_failed" });
+      await expect(advance(f, f.requester, "cancel", { reason: "Selected stop" })).rejects.toMatchObject({ name: "ChatError", stop_reason: "verification_failed" });
+      expect(posts(f)).toHaveLength(postsBefore);
+      expect(f.controls.events).toEqual(eventsBefore);
+      expect(readdirSync(join(taskRoot, "events"))).toEqual([`${offer.event_id}.json`]);
+      expect(readdirSync(join(taskRoot, "intents"))).toEqual(intentsBefore);
+      expect(stateFiles(f.requester.state)).toEqual(before);
     }
   });
 

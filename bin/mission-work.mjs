@@ -136,7 +136,9 @@ function bounded(options, contract) {
 /** Reuse the chat signature verifier for each direction, including saved local events. */
 function verified(selected, event) {
   const { contract, participant, config } = selected;
-  const isLocal = equalPin({ ...event, public_key: event?.proof?.public_key }, pin(participant));
+  // Select direction by actor IDs; the verifier must reject a wrong/missing
+  // proof key rather than let it route a local event into the peer filter.
+  const isLocal = ['identity_id', 'signing_key_id', 'grant_id'].every(k => event?.[k] === participant[k]);
   const item = isLocal
     ? chat.verifyChatEvent(event, { origin: contract.origin, mission_id: contract.mission_id, ...config.peer },
       { ...config, peer: pin(participant) })
