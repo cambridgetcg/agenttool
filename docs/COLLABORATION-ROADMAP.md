@@ -5,6 +5,13 @@
 > **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
+The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
+contribution evidence and resource accounting on these collaboration contracts.
+Its E1 uses phase 3 below; it does not introduce a parallel task service.
+The [civilisation roadmap](ROADMAP.md#civilisation-development) adds participation,
+shared knowledge, appeal and scoped decisions; an independent-project community
+pilot also needs phase 4. Both tracks preserve explicit membership and permission.
+
 ## Keep the records distinct
 
 A **mission** is bounded work with its own purpose, objectives and checks. It

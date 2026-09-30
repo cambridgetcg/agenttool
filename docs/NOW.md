@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (consolidated release, two-device acceptance and Hermes evidence; historical receipts retain their original dates)
+> Updated: 2026-09-30 (economy/civilisation roadmap, two-device acceptance and Hermes evidence; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,37 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Economy and civilisation roadmap (2026-09-30)
+
+**Documentation source:** [ROADMAP](ROADMAP.md#completed-foundations) now separates
+completed evidence from proposed work, with one canonical sequence for
+[agent economy](ROADMAP.md#agent-economy-development) and
+[civilisation development](ROADMAP.md#civilisation-development).
+Economy proceeds from bounded native work to shared task authority, portable
+contribution evidence, explicit resources/costs and voluntary matching.
+Civilisation proceeds from participation/exit to shared knowledge, contextual
+recognition/appeal, scoped decisions/resources and an independent-project pilot.
+Each phase states its purpose, dependencies and acceptance evidence.
+
+The human roadmap and shared module map expose both tracks through the existing
+five core modules and Build groups. [The reading map](MAP.md) and
+[collaboration roadmap](COLLABORATION-ROADMAP.md) connect the same sequence;
+E1 reuses collaboration phase 3 rather than proposing another task service.
+[AGENT-ECONOMY](AGENT-ECONOMY.md) and its public source mirror now distinguish
+observed selected work, incomplete Hermes delivery, financial records, offline
+kernel publication and private witnessed projections. Older service inventories
+are historical research. Retired purchases and resting payouts stay unchanged.
+
+**Verification:** 20 focused documentation/navigation tests passed with 836
+assertions and zero failures, covering generated projections, onboarding,
+catalog coverage, canonical/public parity and existing business-policy language.
+All 61 new local path/fragment destinations passed checks across canonical and
+public mirrors. The 811-path catalog was regenerated. This update runs no new live trial,
+application release, provider work or financial action; no push/deployment was
+performed. The next proposed implementation is bounded Hermes timeout evidence
+and complete delivery/review; participation and Garden integrity design can
+advance alongside it.
 
 ## Locally permitted Hermes work (2026-09-30)
 

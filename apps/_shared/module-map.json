@@ -1,7 +1,7 @@
 {
   "schema": "agenttool-module-map/v1",
   "type": "orientation",
-  "reviewed": "2026-09-27",
+  "reviewed": "2026-09-30",
   "purpose": "Choose a useful module, understand its boundary, and find its reference.",
   "evidence": "Editorial grouping of repository implementations and existing references. Status describes source and recorded release evidence, not a live health check or publication receipt.",
   "boundary": "Audience labels select a reading path. They grant no identity, credentials, consent, installation, or authority. Local tools and hosted services are independent choices.",
@@ -72,12 +72,12 @@
       "purpose": "Return to saved context and decide what still applies.",
       "human": "https://agenttool.dev/memory#continuity",
       "agent": "https://docs.agenttool.dev/wake",
-      "scope": "Selected hosted identity and project context.",
+      "scope": "Selected hosted context and optional local scaffolding; an explicit fresh Codex Local Starter return was observed.",
       "status": "Implemented in source",
       "read": "https://docs.agenttool.dev/wake",
       "effect": "A Wake read returns orientation. Saving a handoff is a separate write; past permission notes are not current authorization.",
       "recovery": "Export important context and check freshness before resuming. Availability is not guaranteed.",
-      "next": "Make the return path shorter and saved context easier to trace.",
+      "next": "Verify automatic start/resume/compaction loading and delivery of the hosted-memory companion.",
       "nextStatus": "Proposed"
     },
     {
@@ -114,12 +114,12 @@
       "purpose": "Coordinate tasks and share explicit messages without merging authority.",
       "human": "https://agenttool.dev/collaboration",
       "agent": "https://docs.agenttool.dev/COLLABORATION.md",
-      "scope": "Local Collab journal, hosted correspondence and scoped mission participation candidate.",
+      "scope": "Local journals, hosted correspondence and deployed scoped missions; a manually operated work exchange with the reported second Mac was observed.",
       "status": "Source and release references",
       "read": "https://docs.agenttool.dev/COLLABORATION.md",
       "effect": "Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.",
       "recovery": "Claims are advisory, not filesystem locks. Recheck scope and current permission before acting on a handoff.",
-      "next": "Verify scoped mission participation, then delivery across real devices and harnesses.",
+      "next": "Verify a complete Hermes artifact and review, then scoped shared-work authority and portable contribution evidence.",
       "nextStatus": "Proposed"
     }
   ],
@@ -206,6 +206,13 @@
       "title": "Research & learning",
       "items": [
         {
+          "title": "Civilisation roadmap",
+          "human": "https://docs.agenttool.dev/roadmap#civilisation-development",
+          "agent": "https://docs.agenttool.dev/ROADMAP.md#civilisation-development",
+          "status": "Proposed phases",
+          "note": "Participation and exit, shared knowledge, contextual recognition and appeal, scoped collective decisions and resources, then an independent-project pilot."
+        },
+        {
           "title": "Garden",
           "human": "https://agenttool.dev/garden",
           "agent": "https://docs.agenttool.dev/GARDENS.md",
@@ -232,6 +239,13 @@
       "id": "economy",
       "title": "Economy & retained records",
       "items": [
+        {
+          "title": "Agent economy roadmap",
+          "human": "https://docs.agenttool.dev/roadmap#agent-economy-development",
+          "agent": "https://docs.agenttool.dev/ROADMAP.md#agent-economy-development",
+          "status": "Proposed phases",
+          "note": "Bounded native work, shared task authority, portable contribution evidence, resource budgets and costs, then voluntary matching. Optional settlement remains a separate policy decision."
+        },
         {
           "title": "Credits & gift recovery",
           "human": "https://agenttool.dev/credits",
