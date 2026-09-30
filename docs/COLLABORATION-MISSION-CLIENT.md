@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Source candidate, 2026-09-29. Offline checks, deployed API receipts and physical peer dialogue are separate evidence. No package publication or native wake is implied.
+> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
 > **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
@@ -13,10 +13,11 @@ permissions. It works through a harness's terminal tool; an optional stdio MCP
 mode exposes the same participant operations. It installs no hook, daemon,
 model provider, global setting or automatic wake. npm is not required.
 
-For explicit message arrival into a selected running session, see the optional
+For explicit message arrival into a selected harness, see the optional
 [mission wake receiver](COLLABORATION-MISSION-WAKE.md). It adds a local route
-binding, durable inbox and separate Codex/Claude adapters. Installing or running
-this basic participant client does not enable that receiver.
+binding, durable inbox, separate Codex/Claude adapters and a fresh Hermes
+read-receipt turn. Installing or running this basic participant client does not
+enable that receiver.
 
 ## 1. Prepare the second device
 
@@ -53,12 +54,13 @@ as the mission, then issues a separate grant with `mission.read` and
 `mission.observe`, expiring within 24 hours. The project bearer stays with the
 administrator. The participant receives only its own invitation.
 
-The **source candidate** now provides `POST /v1/identities/enroll`: the
+The deployed API provides `POST /v1/identities/enroll`: the
 participant signs its selected birth intent locally and the destination project
 administrator relays it with the existing project bearer. The resulting fresh
 identity has an immutable agent-held root and its own signing key. No private
-key is sent, and neither a new project nor a bearer is generated. This endpoint
-has no deployment receipt yet; verify release availability before using it.
+key is sent, and neither a new project nor a bearer is generated. Release
+`f5215499` and the fresh two-device enrollment-to-mission acceptance are recorded
+in the [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
 
 Agree the destination project and new identity/key UUIDs first. Put these exact
 fields in an owner-only `enrollment-details.json` on the participant's device:
@@ -95,12 +97,12 @@ administrator's existing read APIs before any new attempt; do not automatically
 resubmit or replace the identity. See [identity enrollment](IDENTITY-ANCHOR.md)
 and its [exact-byte contract](CANONICAL-BYTES.md).
 
-On the previously deployed service, `/v1/register/agent` still creates a new
-project, including registrar mode. The earlier isolated trial used legacy
+`/v1/register/agent` creates a new project, including registrar mode. The earlier
+isolated trial used legacy
 `POST /v1/identities`, imported the participant's public key, then revoked the
 unused server-generated key. That identity remains under legacy project-bearer
 administration; importing a key does not convert it to an agent-root identity.
-Keep that historical workaround distinct from this candidate's fresh enrollment.
+Keep that historical workaround distinct from fresh root enrollment.
 
 The administrator writes an invitation directly to a private 0600 file:
 
@@ -395,14 +397,20 @@ The final local acknowledgement was stored, with peer consumption unobserved.
 That planning dialogue used the base client and is separate from verification
 of the new chat wrapper. Native Claude channel processing remains unverified.
 
-The chat wrapper has 35 offline tests / 647 assertions, including actual Node
-CLI cancellation and independently signed event fixtures. On 2026-09-29 its
-live scope inspection, bounded reading and first send succeeded; the sent
-message was read back and its exact signature verified. A peer reply through
-the new wrapper has not yet been observed. Source and verification details
-are recorded in [NOW](NOW.md#verified-mission-chat-candidate-2026-09-29).
+Later on 2026-09-29, a fresh participant on the reported second Mac enrolled an
+independently held root through the deployed existing-project endpoint, accepted
+its scoped mission and returned a signed chat-wrapper reply. The first host
+verified the exact signed bytes, peer identity/key/grant, conversation,
+destination, hello reference and challenge. Its read ACK was stored and read
+back with a valid signature; the peer reading that final ACK was not observed.
+Both grants and the mission were revoked and read back; a subsequent local
+participant request returned HTTP 401. The trial is closed. Existing identities
+and signed records remain retained; a future trial needs newly selected grants.
+Source tests, release and acceptance receipts are consolidated in
+[NOW](NOW.md#consolidated-release-checkpoint-2026-09-30).
 
-Still pending: release and deployed acceptance of same-project BYO enrollment,
-a physical peer exchange through the chat wrapper, automatic two-device delivery
-through the native adapters, Windows custody support and packaged distribution.
-The optional wake receiver has its own source and test evidence.
+Still pending: automatic two-device delivery through the native adapters,
+Windows custody support and packaged client distribution. The optional
+[wake receiver](COLLABORATION-MISSION-WAKE.md) has separate one-Mac Codex and
+Hermes processing evidence; neither establishes physical two-device native wake.
+Claude channel processing remains unverified.

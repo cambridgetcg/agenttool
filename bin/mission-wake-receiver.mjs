@@ -3,6 +3,7 @@ import { createHash, createPublicKey, randomUUID, verify } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, openSync, closeSync, fsyncSync, renameSync, unlinkSync, rmdirSync, realpathSync, constants } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import * as client from './agenttool-mission.mjs';
+import { validateHermesTarget } from './mission-wake-hermes.mjs';
 
 const fail = message => { throw new Error(message); };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -63,7 +64,8 @@ function target(value) {
     if (!/^[A-Za-z0-9_-]+$/.test(value.thread_id) || !isAbsolute(value.cwd) || realpathSync(value.cwd) !== value.cwd || !lstatSync(value.cwd).isDirectory()) fail('Select an exact Codex thread and real absolute working directory.');
   } else if (value?.kind === 'claude-channel') {
     exact(value, ['kind', 'session_label']); text(value.session_label, 128);
-  } else fail('Select codex or claude-channel.');
+  } else if (value?.kind === 'hermes') validateHermesTarget(value);
+  else fail('Select codex, claude-channel or hermes.');
   return value;
 }
 export function routeAddress(binding) {
@@ -105,6 +107,15 @@ function load(state) {
     if (item.status !== 'pending' && item.status !== 'ack') id(item.delivery_id);
     if (!same(item.message, message(item.message?.to, item.message?.kind, item.message?.text, item.message?.in_reply_to)) || item.message.to !== binding.route_id ||
         (item.status === 'ack') !== (item.message.kind === 'ack') || !/^[0-9a-f]{64}$/.test(item.body_sha256)) fail('Invalid saved message.');
+    if (item.processing_ack) {
+      const ack = item.processing_ack;
+      exact(ack, ['to', 'status', 'summary_sha256', 'attempted_at', ...(ack.status === 'stored' ? ['ack_event_id', 'cursor'] : [])]);
+      if (binding.target.kind !== 'hermes' || item.status !== 'processed' || !['dispatching', 'stored'].includes(ack.status) ||
+          !/^[0-9a-f]{64}$/.test(ack.summary_sha256 ?? '')) fail('Invalid saved processing ACK.');
+      const receipt = hermesReceipt(item.receipt); id(ack.to); date(ack.attempted_at);
+      if (ack.summary_sha256 !== hash(processingSummary(item, receipt, ack.to))) fail('Saved ACK intent no longer matches its processing receipt.');
+      if (ack.status === 'stored') { id(ack.ack_event_id); if (typeof ack.cursor !== 'string' || ack.cursor === '0') fail('Invalid ACK cursor.'); client.cursor(ack.cursor); }
+    }
   }
   return { root, binding, inbox };
 }
@@ -114,7 +125,20 @@ export function status(state) {
   const locked = existsSync(join(root, 'lock'));
   const owner = locked ? JSON.parse(client.privateRead(join(root, 'lock', 'owner.json'))) : null;
   return { route: routeAddress(binding), cursor: inbox.cursor, counts, locked, lock: owner ? { lock_id: owner.lock_id, pid: owner.pid } : null,
-    in_flight: inbox.items.filter(i => ['dispatching', 'delivered'].includes(i.status)).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status, receipt: i.receipt ?? null })) };
+    in_flight: inbox.items.filter(i => ['dispatching', 'delivered'].includes(i.status)).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status, receipt: i.receipt ?? null })),
+    processing_acks: inbox.items.filter(i => i.processing_ack).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, ...i.processing_ack })) };
+}
+function hermesReceipt(receipt) {
+  exact(receipt, ['status', 'job_id', 'session_id', 'evidence_sha256']);
+  if (receipt?.status !== 'processed' || !/^[0-9]{8}T[0-9]{6}-[0-9a-f]{12}$/.test(receipt.job_id ?? '') ||
+      typeof receipt.session_id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(receipt.session_id) ||
+      !/^[0-9a-f]{64}$/.test(receipt.evidence_sha256 ?? '')) fail('Hermes receipt requires verified job, session and evidence.');
+  return { status: 'processed', job_id: receipt.job_id, session_id: receipt.session_id, evidence_sha256: receipt.evidence_sha256 };
+}
+function processingSummary(item, receipt, to) {
+  return JSON.stringify(message(to, 'ack', JSON.stringify({ format: 'agenttool-hermes-read-ack/v1',
+    event_id: item.event_id, delivery_id: item.delivery_id, job_id: receipt.job_id, session_id: receipt.session_id,
+    evidence_sha256: receipt.evidence_sha256 }), item.event_id));
 }
 export function message(to, kind, selectedText, inReplyTo) {
   id(to); if (!['message', 'ack'].includes(kind)) fail('Unknown message kind.');
@@ -216,10 +240,36 @@ export function openReceiver(state) {
       const receipt = await adapter.deliver(structuredClone(item), structuredClone(binding));
       if (!receipt || !['delivered', 'processed'].includes(receipt.status)) fail('Invalid delivery receipt; inspect the saved attempt.');
       if (binding.target.kind === 'codex' && (receipt.thread_id !== binding.target.thread_id || typeof receipt.turn_id !== 'string')) fail('Codex receipt does not match the bound thread.');
-      const cleanReceipt = { status: receipt.status, ...(binding.target.kind === 'codex' ? { thread_id: receipt.thread_id, turn_id: receipt.turn_id } : {}) };
+      const cleanReceipt = binding.target.kind === 'hermes' ? hermesReceipt(receipt) :
+        { status: receipt.status, ...(binding.target.kind === 'codex' ? { thread_id: receipt.thread_id, turn_id: receipt.turn_id } : {}) };
       // A channel tool may acknowledge while stdout is flushing. Do not downgrade it.
       save({ ...inbox, items: inbox.items.map(i => i.event_id === item.event_id ? { ...i, status: i.status === 'processed' ? 'processed' : receipt.status, receipt: cleanReceipt } : i) });
       return { event_id: item.event_id, delivery_id: item.delivery_id, ...cleanReceipt };
+    }); },
+    async sendProcessingAck(eventId, deliveryId, to, options = {}) { return exclusive(async () => {
+      live(); id(eventId); id(deliveryId); id(to);
+      const item = inbox.items.find(i => i.event_id === eventId && i.delivery_id === deliveryId);
+      if (binding.target.kind !== 'hermes' || !item || item.status !== 'processed' || item.resolved_by || item.acknowledged_by)
+        fail('Automatic ACK requires a verified Hermes processing receipt.');
+      const receipt = hermesReceipt(item.receipt);
+      if (item.processing_ack) {
+        if (item.processing_ack.to !== to) fail('Processing ACK destination changed.');
+        if (item.processing_ack.status !== 'stored') fail('Processing ACK outcome is uncertain; inspect its outbox, never automatically resend.');
+        return structuredClone(item.processing_ack);
+      }
+      const summary = processingSummary(item, receipt, to);
+      await client.request(state, 'GET', '/context', '', options); live();
+      options.signal?.throwIfAborted();
+      // The server rechecks active read/observe scope. Intent precedes even the
+      // client's durable outbox write: a crash at either boundary cannot resend.
+      const intent = { to, status: 'dispatching', summary_sha256: hash(summary), attempted_at: new Date().toISOString() };
+      save({ ...inbox, items: inbox.items.map(i => i === item ? { ...i, processing_ack: intent } : i) });
+      const sent = await client.send(state, summary, options);
+      if (sent.event.mission_id !== binding.mission_id || typeof sent.event.received_seq !== 'string' || sent.event.received_seq === '0')
+        fail('Processing ACK receipt does not match the mission.');
+      const stored = { ...intent, status: 'stored', ack_event_id: id(sent.event.event_id), cursor: client.cursor(sent.event.received_seq) };
+      save({ ...inbox, items: inbox.items.map(i => i.event_id === eventId ? { ...i, processing_ack: stored } : i) });
+      return structuredClone(stored);
     }); },
     acknowledge(eventId, deliveryId) {
       live(); id(eventId); id(deliveryId);

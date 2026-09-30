@@ -11,7 +11,9 @@ bind --state DIR --config-file FILE       Bind reviewed mission, peer and exact 
 status --state DIR                       Route address and receipt state; no message text
 poll --state DIR                         Save one verified page, without invoking a harness
 send --state DIR --to ROUTE_UUID --text-file FILE [--kind message|ack] [--in-reply-to EVENT_UUID]
-watch --state DIR [--seconds 60] [--max-deliveries 1]  Finite Codex delivery (maximum 20)
+watch --state DIR [--seconds 60] [--max-deliveries 1] [--ack-to ROUTE_UUID]
+                                        Finite Codex/Hermes delivery (maximum 20)
+                                        --ack-to opts into signed Hermes read ACKs
 channel --state DIR [--seconds 60]        Claude channel STDIO, bound to this host connection
 resolve --state DIR --event-id UUID --delivery-id UUID --outcome processed|retry
 recover-lock --state DIR --lock-id UUID   Explicit recovery only when the owning PID is gone
@@ -22,9 +24,10 @@ function seconds(value = '60') {
   if (!/^[1-9][0-9]*$/.test(value) || Number(value) > 900) throw new Error('Select 1–900 seconds.');
   return Number(value);
 }
-export async function watch(state, durationSeconds, { createAdapter, pollIntervalMs = 3000, maxDeliveries = 1 } = {}) {
+export async function watch(state, durationSeconds, { createAdapter, pollIntervalMs = 3000, maxDeliveries = 1, ackTo } = {}) {
   seconds(String(durationSeconds));
   if (!Number.isInteger(maxDeliveries) || maxDeliveries < 1 || maxDeliveries > 20) throw new Error('Select 1–20 deliveries.');
+  if (ackTo !== undefined) message(ackTo, 'ack', 'Validate the selected destination.');
   const receiver = openReceiver(state);
   let adapter, completed = 0;
   const controller = new AbortController(), deadline = Date.now() + durationSeconds * 1000;
@@ -32,8 +35,11 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
   const timer = setTimeout(stop, durationSeconds * 1000);
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   try {
-    if (receiver.binding.target.kind !== 'codex') throw new Error('Use channel for a Claude channel binding.');
-    const factory = createAdapter ?? (await import('./mission-wake-codex.mjs')).createCodexAdapter;
+    const kind = receiver.binding.target.kind;
+    if (!['codex', 'hermes'].includes(kind)) throw new Error('Use channel for a Claude channel binding.');
+    if (ackTo !== undefined && kind !== 'hermes') throw new Error('--ack-to requires a Hermes binding.');
+    const factory = createAdapter ?? (kind === 'hermes' ? (await import('./mission-wake-hermes.mjs')).createHermesAdapter :
+      (await import('./mission-wake-codex.mjs')).createCodexAdapter);
     adapter = factory({ signal: controller.signal, timeoutMs: Math.max(1, deadline - Date.now()) });
     while (!controller.signal.aborted) {
       const options = { signal: controller.signal, timeout: Math.max(1, Math.min(20000, deadline - Date.now())) };
@@ -42,6 +48,11 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
       const delivery = await receiver.dispatch(adapter, options);
       if (delivery) {
         process.stdout.write(JSON.stringify(delivery) + '\n');
+        if (ackTo !== undefined) {
+          const ack = await receiver.sendProcessingAck(delivery.event_id, delivery.delivery_id, ackTo,
+            { signal: controller.signal, timeout: Math.max(1, Math.min(20000, deadline - Date.now())) });
+          process.stdout.write(JSON.stringify({ event_id: delivery.event_id, processing_ack: ack }) + '\n');
+        }
         if (++completed >= maxDeliveries) break;
       }
       if (page.has_more || receiver.next()) continue;
@@ -64,7 +75,7 @@ export async function main(argv) {
   const [command, ...args] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
   const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
-    watch: ['seconds', 'max-deliveries'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'] };
+    watch: ['seconds', 'max-deliveries', 'ack-to'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'] };
   if (!Object.hasOwn(allowed, command)) throw new Error('Unknown wake command.');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
@@ -93,7 +104,7 @@ export async function main(argv) {
     try { result = command === 'poll' ? await receiver.poll() : receiver.resolve(options['event-id'], options['delivery-id'], options.outcome); }
     finally { receiver.close(); }
   }
-  if (command === 'watch') result = await watch(options.state, seconds(options.seconds), { maxDeliveries: Number(options['max-deliveries'] ?? 1) });
+  if (command === 'watch') result = await watch(options.state, seconds(options.seconds), { maxDeliveries: Number(options['max-deliveries'] ?? 1), ackTo: options['ack-to'] });
   if (command === 'channel') {
     const { runChannel } = await import('./mission-wake-channel.mjs');
     await runChannel(options.state, { durationSeconds: seconds(options.seconds) });

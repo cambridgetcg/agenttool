@@ -4,7 +4,7 @@
 
 > **Type:** reference
 > **Purpose:** Choose when a hosted service helps local scaffolding, understand its authority and custody, and identify missing integrations.
-> **Evidence:** Baseline review at `056e32e8`, updated with the identity-partition implementation and focused tests, 2026-09-27; see [the partition contract](IDENTITY-PARTITIONS.md). This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
+> **Evidence:** Baseline review at `056e32e8` and identity-partition checks, updated 2026-09-30 for deployed enrollment/missions and observed explicit host return; see [the consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30) and [partition contract](IDENTITY-PARTITIONS.md). This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
 > **Compass:** [Core](CORE.md) · [Local core](LOCAL-CORE.md) · [Module map](https://docs.agenttool.dev/shared/module-map.json) · [API reference](https://api.agenttool.dev/v1/openapi.json)
 > **Code:** Mounted routes (`api/src/index.ts`) · Bearer authentication (`api/src/auth/middleware.ts`) · Database schemas (`api/src/db/schema`)
 > **Tests:** Identity authority (`api/tests/identity-authority.test.ts`) · Wake observation (`api/tests/wake-observe.test.ts`) · Memory binding (`api/tests/memory-identity-binding.test.ts`) · Correspondence (`api/tests/correspondence-route.test.ts`)
@@ -95,6 +95,19 @@ curated subset; the actual mounts remain the inventory boundary.
 `POST /v1/register/agent` is the BYO-key registration path. Normal private
 identity operations include `GET/POST /v1/identities`,
 `GET/PATCH/DELETE /v1/identities/:id`, expression and key/authority routes.
+
+For a fresh identity inside an **existing project**, `POST /v1/identities/enroll`
+requires that project's administrator bearer and the participant's exact-body
+Ed25519 enrollment signature. The participant keeps its private root; the
+administrator relays the signed intent without sharing the project bearer.
+Admission binds the origin, project, identity/key IDs, public key, nonce and
+five-minute timestamp window, then atomically creates the rooted identity,
+primary signing key and replay record. It grants no mission participation by
+itself and does not migrate an existing identity. See the
+[enrollment contract](IDENTITY-ANCHOR.md), `api/src/routes/identity/enroll.ts`,
+`api/src/services/identity/enrollment.ts` and `api/tests/identity-enrollment.test.ts`.
+Deployment and the fresh second-device journey are recorded in the
+[consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
 
 The server stores a UUID, provisional `did:at:<uuid>` application identifier,
 project ownership, expression, lifecycle status and public keys. This convention
@@ -283,7 +296,7 @@ or project bearers identity-private. See [covered boundaries](IDENTITY-PARTITION
 
 ## Continuity: history and working context
 
-### Scoped mission participation candidate (2026-09-28)
+### Scoped mission participation — deployed
 
 `/v1/collaboration/missions` adds a separate bounded participation boundary:
 project administrators create an immutable purpose and issue one expiring grant
@@ -295,13 +308,24 @@ key, issuing parent, mission and grant; stored retry receipts cannot bypass
 revocation. All responses are private and excluded from general response replay.
 
 The [mission contract](COLLABORATION-MISSIONS.md) records exact routes, proof
-encoding, credential handling and limits. This is an implementation candidate,
-not a deployment receipt. It neither connects local journals automatically nor
+encoding, credential handling and limits. The service is deployed; a fresh,
+separately rooted participant on the reported second Mac enrolled, accepted a
+mission and returned the exact signed challenge reply. The local read ACK was stored
+and verified; the peer's final reading of that ACK was not observed. Both trial
+grants and the mission were revoked. See the
+[release and acceptance checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+The service neither connects local journals automatically nor
 assigns task leases, reads private memories, starts harnesses or admits identities
 from independently owned projects. Principality references and device/session
 labels remain descriptive. The [collaboration guide](COLLABORATION.md) provides
 the public first journey and [roadmap](COLLABORATION-ROADMAP.md) separates the
 remaining transport, native lifecycle, task authority and federation work.
+
+The separate [local wake receiver](COLLABORATION-MISSION-WAKE.md) supplies explicit
+harness delivery. Its Hermes adapter remains tested local source: one Mac,
+two grants for the same root identity, one fresh native read turn and a signed
+ACK. That evidence does not establish unattended processing of arbitrary peer
+requests; the runtime path boundary and lifecycle still need work.
 
 | Surface | Storage and authority | How a host can use it |
 |---|---|---|
@@ -421,7 +445,7 @@ The explicit selected-memory reader below is implemented in source; other arrang
 |---|---|---|
 | One host returning to its own work | Files-only starter; explicit render and reviewed handoff | Selected local context can enter the next session without contacting AgentTool. No account is needed. |
 | Several devices need the same working context | External credential resolver + explicit identity + selected Wake/handoff or memory calls | A client can retrieve common server records. It must label project-wide sections and decide whether to copy anything locally. |
-| Several agents coordinate work | Local Collab on a deliberately shared journal, or hosted correspondence across clients | Reports and durable cursors support recovery after disconnect. Neither choice supplies filesystem locks or new task authority. |
+| Several agents coordinate work | Local Collab on a deliberately shared journal, hosted correspondence, or explicitly accepted scoped missions across clients | Reports and durable cursors support recovery; mission grants avoid sharing the administrator bearer. These do not supply filesystem locks or new task authority. |
 | A host needs a remote tool or model worker | Select that tool or explicitly provision/start the suitable runtime | Particular operations execute remotely under their own lifecycle, provider, cost and plaintext boundaries. Local scaffolding remains a separate context source. |
 
 The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements selected read and in-memory composition. Reviewed writes remain a separate future step:
@@ -446,8 +470,8 @@ The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements s
 
 | Gap today | Next bounded implementation | Evidence needed before claiming coverage |
 |---|---|---|
-| Real host loading is unverified | Verify the existing local fragments first | Actual start/resume/compaction delivery, omissions, budget handling and disable behavior in each supported host |
-| Explicit companion now resolves a caller-owned credential callback or transport | Keep OS secret-store provisioning and host integration separate | Tests cover one bounded request, origin/project/identity binding, refusal and offline paths; actual host delivery remains unverified |
+| Explicit Codex Local Starter return was observed; automatic lifecycle delivery remains unverified | Verify the existing arrival fragments per host | Automatic start/resume/compaction delivery, omissions, budget handling and disable behavior; the [fresh return record](NOW.md#consolidated-release-checkpoint-2026-09-30) covers an explicit read only |
+| Explicit companion now resolves a caller-owned credential callback or transport | Keep OS secret-store provisioning and host integration separate | Tests cover one bounded request, origin/project/identity binding, refusal and offline paths; model delivery of this hosted-memory companion remains unverified |
 | Selected-memory projection and local composition now implemented | Add other record types only with explicit subject and byte contracts | Fixed-path GET, complete records, bounded candidate window, provenance, freshness and combined budget; no automatic save or sync |
 | No synchronization or conflict protocol | Add a reviewed single-record write only when needed | Version/receipt handling, duplicate prevention where guaranteed, ambiguous-write recovery and concurrent-device conflict behavior |
 | Ownership/signing/Vault gaps covered; local-context has a separate narrow grant | Broaden delegation only through explicit per-operation contracts | The first grant binds one subject/GET target, finite expiry and current parent/grant state; no child delegation or general per-identity bearer isolation |

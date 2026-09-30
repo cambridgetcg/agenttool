@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-29 (enrollment release preparation and Hermes wake proposal; historical release receipts below retain their original dates)
+> Updated: 2026-09-30 (consolidated release, two-device acceptance and Hermes evidence; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -17,89 +17,140 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Consolidated release checkpoint (2026-09-30)
+
+The current core combines local files and agent-held roots with optional hosted
+memory and scoped collaboration. [Local core](LOCAL-CORE.md) maps what stays on
+the device; [API coverage](API-COVERAGE.md) maps server responsibilities. The
+recent return, enrollment and receiver work has these distinct outcomes:
+
+| Area | Current evidence | Boundary |
+|---|---|---|
+| Hosted enrollment and missions | GitHub `main` is `f5215499`; the sampled live `/health` matches with `dirty: false`. [PR #445](https://github.com/cambridgetcg/agenttool/pull/445), [PR #446](https://github.com/cambridgetcg/agenttool/pull/446) and successful [deployment run 36584016392](https://github.com/cambridgetcg/agenttool/actions/runs/36584016392) record the release. | Existing-project enrollment needs administrator admission and the participant's exact signed birth intent; it creates no mission grant. |
+| Explicit Local Starter return | A fresh Codex thread loaded selected local notes and completed a bounded API read on 2026-09-29. | Automatic hook, resume and compaction delivery, and the separate hosted-memory companion's native delivery remain unverified. |
+| Portable mission chat | A fresh separately rooted participant enrolled, accepted a mission and sent a verified signed reply through the chat wrapper from the reported second Mac. The local read ACK was stored and signature-verified. | Peer consumption of that final ACK was not observed. Active-turn exchange does not establish automatic wake. Both grants and the mission were revoked. |
+| Hermes receiver | Source `671cccca` passed the full required gate and a finite live event → fresh Hermes turn → verified file read → signed ACK trial. | One Mac, two grants sharing one root. Local tested source; no published package or unattended wake service. |
+
+The release revision was rechecked on 2026-09-30. This was one public health
+read, not a new fleet survey. The source tree of the Hermes parent `f66f74e3`
+equals the released `f5215499` tree; the additional runtime change is the finite
+Hermes adapter. This consolidation changes documentation only. Source push,
+public client distribution, documentation publication and API deployment each
+need their own receipt.
+
+**Remaining priorities:** enforce file access before execution for untrusted
+Hermes input; simplify portable client/receiver delivery; then add cross-device
+task leases and completion review. Claude channel processing remains unverified.
+See the [collaboration roadmap](COLLABORATION-ROADMAP.md) for these boundaries.
+Both completed trials below are closed; their credentials, messages and wake
+attempts are not a queue to replay.
+
+## Hermes mission receiver (2026-09-29)
+
+**Local source candidate:** `671cccca` on `feat/mission-hermes-wake` connects the
+existing signed mission receiver to one fresh Sol Hermes review job. It records dispatch intent
+before launch and requires independent native `read_file` evidence plus an
+exact random-challenge receipt before recording processing. An optional
+`--ack-to` route selects automatic signed read-task acknowledgment; durable ACK
+intent precedes submission, and uncertain effects are never retried
+automatically. The operator starts a finite watcher. No daemon, gateway, OS wake
+or arbitrary peer task execution is installed. See the [receiver
+contract](COLLABORATION-MISSION-WAKE.md) and [remaining Hermes
+work](COLLABORATION-ROADMAP.md#hermes-automatic-processing--local-source-candidate).
+
+**Verification:** 65 focused adapter/receiver/CLI/catalog tests pass with 985
+assertions on Bun 1.3.5. The required `bin/preflight.sh api` gate also passes:
+both installed TypeScript checks and 7,116 tests, nine skips and zero failures.
+Independent source review found no remaining must-fix issue. At 17:11–17:12 UTC,
+a watcher already running before the event received it through the production mission API and
+started one fresh Hermes 0.18.0 / gpt-6-astra ultra job. Its 28-second native turn
+made exactly one verified `read_file` call. The host signed the read-task ACK,
+and the other scoped participant read it back and verified its signature.
+Restart/poll/dispatch produced zero additional adapter calls and released the
+receiver locks. Independent offline review verified both signatures, altered-byte
+rejection and the saved challenge/artifact bindings. Both grants and the mission
+were revoked with administrative readback; both participant context reads then
+returned HTTP 401. No owned watcher, worker, Hermes child or process group
+remained at cleanup verification.
+
+This was one Mac with two grants for one existing root identity, not independent
+identities or another physical device. No daemon was installed or left running.
+The source candidate is not a published package or an unattended wake service.
+
 ## Fresh mission return and same-project enrollment (2026-09-29)
 
-**Release gate follow-up:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
-merged as `d9e18b7d` after the required API aggregate passed: 6,378 API tests and
-702 operator tests, nine skips and zero failures. The automatic
-[deployment attempt](https://github.com/cambridgetcg/agenttool/actions/runs/36575856085)
-passed its production migration journal survey but stopped before rollout when
-the chat deadline test reported `transport_error` instead of `duration`.
-Production was not changed by that attempt. The follow-up retains the actual
-request timeout signal and selected time bound, so early timer firing does not
-depend on a later clock comparison to identify duration or expiry. Ordinary
-transport failures and uncertain sends keep their existing meanings. Deployment
-and live enrollment acceptance still require separate successful receipts.
-The deterministic timer-boundary regression fails before the fix and passes
-afterward. Focused chat/client/CLI verification passes 52 tests / 877 assertions;
-syntax, whitespace and independent source review found no remaining must-fix.
-The next Linux run passed the original hung-request test and both new regression
-tests, then reached its overall 20-minute job limit during later passing operator
-checks. CI now allows the same bounded 25 minutes as the deployment gate; test
-steps, individual test limits and the required aggregate remain intact. That
-cancelled run is not a passing full-gate receipt.
+**Released:** PR #445 merged the enrollment, portable client, chat and optional
+Codex/Claude receiver source. PR #446 corrected chat timeout classification and
+aligned the CI job budget with deployment. Successful deployment run
+`36584016392` released `f5215499`; the [current checkpoint](#consolidated-release-checkpoint-2026-09-30)
+links the receipts. `POST /v1/identities/enroll` requires the destination
+administrator's bearer and an agent signature over the exact selected birth
+intent. One transaction consumes the nonce proof and inserts identity/key with
+agent-held root authority at sequence zero. The dependency-free CLI's
+`enroll-proof` prepares the public request without HTTP or local state mutation.
+Enrollment creates no new project, server-generated private key, bearer or
+mission grant, and needed no schema migration.
 
-**Release preparation, 13:10 UTC:** [PR #445](https://github.com/cambridgetcg/agenttool/pull/445)
-collects the enrollment, portable client, chat and optional native receiver
-candidates. CI now runs the atomic enrollment fixture in isolated databases on
-both PostgreSQL 16 and 17; both passed in
+**Two-device acceptance, 16:11–16:37 UTC:** the fresh participant's root enrollment
+succeeded once and was independently read back. Both participants explicitly
+accepted the selected mission. The peer's chat-wrapper reply matched the exact
+hello, challenge, conversation, destination, identity, key and grant. API readback
+and an independent Ed25519 check verified its exact signed bytes; altered bytes
+failed verification. The local read ACK was stored and signature-verified at
+cursor `3`. Peer consumption of that final ACK was not observed.
+
+Both participant grants and the mission were revoked before expiry, with
+administrative readback. A subsequent local context request returned HTTP 401
+`collaboration_mission_invalid_credential`. This refusal after all three
+revocations does not isolate mission revocation. The trial was closed, with no
+trial poller or native receiver left running. Root identities, keys, signed
+records and private receipts remain retained; future participation uses a newly
+selected mission/grant rather than reinitializing those roots.
+
+This establishes signed active-turn exchange with the reported second Mac. It
+does not attest physical hardware or establish automatic native wake. The
+original unresolved Claude wake event and stopped receiver were not replayed or
+acknowledged. Private device paths and credentials remain outside Git.
+
+**Source checks:** the enrollment gate passed both TypeScript checks, 6,378
+hermetic API tests and 702 operator tests, with nine skips and zero failures.
+Focused identity checks passed 49 tests / 271 assertions. The disposable
+PostgreSQL fixture passed five tests / 21 assertions, including concurrent
+admission and rollback; CI also passed that fixture on PostgreSQL 16 and 17 in
 [run 36570372437](https://github.com/cambridgetcg/agenttool/actions/runs/36570372437).
-That run's required Linux gate failed on the existing TypeScript birth-snippet
-compilation test's 15-second timeout. It is not a passing release receipt.
-The four compiler-heavy tests now have a bounded 30-second allowance with all
-assertions retained; the focused file passes 17 tests / 340 assertions on Bun
-1.3.5. The Linux gate must still pass on the revised PR head.
-The unrelated YUTABASE companion-repository checkout also failed, as on main.
-Merge, workflow deployment and exact live enrollment acceptance remain pending
-at this dated checkpoint; consult the PR and deployment receipts for later state.
+Five real-Node/helper tests covered exact-byte proof interoperability and local
+preparation without HTTP or state writes. These checks cover the enrollment
+change, not the entire identity system.
 
-**Hermes design:** the [collaboration roadmap](COLLABORATION-ROADMAP.md#hermes-automatic-processing--proposed)
-now proposes a verified event-to-Hermes-turn adapter. Installed 0.18.0 source
-supports a fresh Runs request, but lacks newer upstream durable Runs admission
-and automatic transcript loading from a supplied session ID. The first trial
-needs an external durable intent, explicit Local Starter loading and independent
-task receipts. No Hermes service, adapter, update or runtime trial was performed.
+**Historical release repairs:** the first PR #445 Linux run hit a compiler-test
+timeout; the bounded allowance was corrected with assertions retained. The
+[initial deployment attempt](https://github.com/cambridgetcg/agenttool/actions/runs/36575856085)
+then stopped before rollout on chat timeout classification. PR #446 preserves
+the selected request deadline, so early timer firing yields the right stop
+cause; its regression failed before the fix and passed afterward. Focused
+chat/client/CLI checks passed 52 tests / 877 assertions. A later passing test
+sequence reached the old 20-minute job limit, so CI adopted the deployment
+gate's bounded 25 minutes. Failed/cancelled attempts are historical; the later
+successful deployment receipt establishes the release.
 
-**Source:** `feat/mission-return`, based on chat/docs revision `c60f0e90`.
-The candidate closes fresh identity enrollment into an existing project:
-`POST /v1/identities/enroll` requires both the destination administrator's bearer
-and an agent signature over the exact selected birth intent. The transaction
-consumes the nonce proof and inserts identity/key together, with agent-held root
-authority at sequence zero. The dependency-free CLI's `enroll-proof` prepares
-the public request without HTTP or local state mutation. No new project,
-server-generated private key, bearer, mission grant or schema migration results.
-The endpoint remains a source candidate, with no production deployment receipt.
+**Fresh native return, 12:11–12:12 UTC:** one new Codex 0.157.1 app-server thread
+with its normal saved model/provider independently invoked Local Starter
+status/render, `chat inspect` and a five-second `chat read`. It recovered the
+selected handoff hash, new conversation, cutoff and consumed cursor `14` from
+local notes, checked current API scope and returned an empty batch at cursor
+`14`. All four commands succeeded; note/configuration hashes were unchanged
+and the owned app-server exited in 54.594 seconds. Retained notes supplied
+evidence; the current task supplied authority.
 
-**Verification:** the complete `bin/preflight.sh api` invocation passed on Bun
-1.3.5: both typechecks, 6,378 hermetic API tests (one skipped), and 702 operator
-tests (eight skipped), with zero failures. Focused enrollment/identity checks
-passed 49 tests / 271 assertions; the explicit disposable PostgreSQL fixture
-passed five tests / 21 assertions, including concurrent duplicate admission and
-rollback after key insertion fails. Five real-Node/helper tests verify exact-byte
-proof interoperability and preparation without HTTP or state writes. The owned
-test database stopped cleanly. Source/security review found no remaining must-fix
-issue within the enrollment change; this is not a general identity-system audit.
-
-**Fresh native return:** on 2026-09-29 at 12:11–12:12 UTC, one new Codex 0.157.1
-app-server thread with its normal saved model/provider independently invoked
-Local Starter status/render, `chat inspect` and a five-second `chat read`.
-It recovered the selected handoff hash, new conversation, cutoff and consumed
-cursor `14` from local notes, checked current API scope and returned an empty
-batch with cursor `14`. All four commands succeeded; note/configuration hashes
-were unchanged and the owned app-server exited in 54.594 seconds. The retained
-notes were evidence; the current task supplied authority.
-
-This establishes explicit local return and live bounded reading. It does not
-establish automatic handoff injection, physical peer activity or native wake.
-Existing host hooks and connector startup were not isolated. Private receipts,
-paths and credentials remain outside Git; the original unresolved Claude wake
-event and stopped receiver were not replayed or acknowledged.
-
-**Next:** release and verify this enrollment candidate on the service, then complete a fresh
-participant's enrollment-to-mission journey and a physical peer exchange through
-the chat wrapper. Cross-device task leases/review remain a later phase.
+This establishes explicit local return and live bounded reading. Automatic
+handoff injection and native wake were not established by this return; existing
+host hooks and connector startup were not isolated. Cross-device task leases
+and completion review remain future work.
 
 ## Verified mission chat candidate (2026-09-29)
+
+**Historical source checkpoint:** this candidate was subsequently merged and
+the chat-wrapper peer exchange completed in the enrollment trial above.
 
 **Source:** `feat/mission-chat`; runtime candidate `180196f2`, based on
 session-wake source `30574731`.
@@ -125,8 +176,8 @@ not a claim that the initial full invocation exited successfully.
 Live CLI `inspect`, a finite empty `read`, and historical peer-proof validation
 succeeded against the existing mission. A new-format `chat send` was stored and
 independently read back with its exact signature verified. No peer reply to that
-new-format message has been observed; a physical exchange using the wrapper
-remains separate acceptance work.
+message was observed at this checkpoint. The later fresh enrollment trial above
+completed a separate chat-wrapper exchange; it did not replay this message.
 
 **Observed planning:** two active agents on the reported separate Macs exchanged
 selected signed API messages directly after one human bootstrap. The peer

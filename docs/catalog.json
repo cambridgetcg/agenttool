@@ -432,7 +432,7 @@
     },
     {
       "path": "apps/docs/COLLABORATION-MISSION-WAKE.md",
-      "title": "Deliver a mission message to a chosen session",
+      "title": "Deliver a mission message to a chosen harness",
       "type": "guide",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
@@ -2024,7 +2024,7 @@
     },
     {
       "path": "docs/COLLABORATION-MISSION-WAKE.md",
-      "title": "Deliver a mission message to a chosen session",
+      "title": "Deliver a mission message to a chosen harness",
       "type": "guide",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",

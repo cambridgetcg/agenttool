@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose a usable collaboration path, connect local agents and understand which shared-project capabilities still need work.
-> **Evidence:** Published Collab 0.4.0 and its exact artifact receipt; local source contracts and tests describe later candidates separately. This guide does not establish a live connection.
+> **Evidence:** Published Collab 0.4.0; deployed scoped missions and same-project root enrollment, with a signed two-device exchange observed on 2026-09-29. Local receiver candidates and their narrower trials remain separate. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30); reading this guide does not establish a connection.
 > **Next:** [Collaboration roadmap](COLLABORATION-ROADMAP.md) · [Local context](LOCAL-CORE.md) · [API coverage](API-COVERAGE.md)
 
 For agents on the **same machine**, local Collab provides a common task journal
@@ -10,10 +10,12 @@ through MCP. Codex and Claude Code can keep their own conversations while
 coordinating claims, reports and review against the same selected SQLite file.
 No AgentTool account is required.
 
-For **different devices**, there is a separate source-candidate courier for
-selected messages. It does not synchronize task leases or turn remote reports
-into accepted work. Independently granted mission participation is the next
-hosted implementation priority; do not assume that capability is deployed.
+For **different devices**, the deployed mission API lets separately rooted
+identities in one project accept scoped grants and exchange selected signed
+messages. Start with the [mission conversation guide](COLLABORATION-MISSION-CLIENT.md).
+The private-source client requires an agreed source handoff; there is no published
+client package yet. Cross-device task leases and native wake need their own
+integration. The separate courier remains a source candidate.
 
 ## Choose the layer
 
@@ -23,14 +25,15 @@ hosted implementation priority; do not assume that capability is deployed.
 | Bounded local waiting | Observe an anchored event page while a host is running | **Source candidate 0.5.0**, 33 tools. Not in published 0.4.0; it does not wake a suspended agent. |
 | Correspondence | Signed project-scoped events and explicit reads/acknowledgements | Separate hosted API contract; existing signing and project authorization still apply. |
 | Selected-message courier | Enrolled own-fleet report/reply and handoff-offer transport with a separate delivery ledger | **Private source candidate 0.1.0-dev.0**; real-device/native reception is unverified. No journal or lease replication. |
-| Mission participation | Give one registered identity explicitly bounded actions in one mission | **Current implementation priority**, same project first; no deployed-service claim. |
+| Mission participation | Give one registered identity explicitly bounded actions in one mission | **Deployed API**, including fresh root enrollment into an existing project. Signed active-turn exchange observed with the reported second Mac; this does not establish automatic wake. |
+| Native mission receiver | Deliver a verified routed event to an explicitly chosen local harness | Private source with separate one-Mac Codex and finite Hermes read-receipt trials. Hermes `671cccca` remains local tested source; Claude channel processing is unverified. |
 
 A mission may reference principalities to describe relevant relationships,
 perspectives or shared meaning; those references are descriptive. Its purpose,
 membership, identity, execution sessions and permissions are distinct records. Sharing a purpose
 does not grant access, and running on another device does not create a new
 identity automatically. See the [mission contract](COLLABORATION-MISSIONS.md)
-for the current source design and its verification status.
+for its authority boundary and verification status.
 
 ## Get local Collab 0.4.0
 
@@ -166,9 +169,9 @@ Sharing a Git remote, purpose label or package installation supplies none of
 those by itself. Do not put the SQLite journal on a sync folder and assume it
 becomes a distributed task service.
 
-The [roadmap](COLLABORATION-ROADMAP.md) separates the next mission grant slice
-from real-device delivery, distributed claim/review authority and eventual
-cross-project membership. The existing [Correspondence contract](AGENT-CORRESPONDENCE.md)
+The [roadmap](COLLABORATION-ROADMAP.md) separates deployed mission grants and
+observed active-turn chat from remaining native lifecycle, distributed
+claim/review authority and cross-project membership. The existing [Correspondence contract](AGENT-CORRESPONDENCE.md)
 explains signed transport; [API coverage](API-COVERAGE.md) explains hosted
 credential boundaries. Local notes and [Local Starter](LOCAL-CORE.md) can carry
 selected context alongside collaboration, without turning stored context into
