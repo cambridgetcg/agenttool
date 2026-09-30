@@ -74,6 +74,14 @@ Use Node 22+ on macOS or Linux. Keep these four reviewed files together:
 `mission-work-contract.mjs`. No npm install is needed. Each device already needs
 its own accepted mission participant state; see [setup](COLLABORATION-MISSION-CLIENT.md).
 
+For a new device, transfer and review the client and source before starting a
+short-lived mission window. A credential-free client archive does **not** contain
+the private mission invitation. Transfer that file through the selected private
+channel too, and confirm its actual path on the receiving device before import.
+A sender's local path is not a path on the other device. Keep the invitation out
+of public archives and chat; missing delivery is not a reason to generate a new
+key or grant. Once admitted, share the exact work contract and check its expiry.
+
 All paths below are absolute. Contract, artifact and review files must be owned
 regular files with mode `0600`. The source is a selected regular file; its exact
 bytes must match the contract.

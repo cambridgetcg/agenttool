@@ -36,6 +36,12 @@ phase 3, not completion of its hosted authority or distributed lease contract:
 concurrent branches are detected, not prevented by a server task transaction.
 Native automatic execution and cross-project participation remain separate.
 
+The [2026-09-30 trial](NOW.md#selected-mission-work-2026-09-30) observed exact-term
+acceptance, delivery, independent review and a signed review-read acknowledgement
+between two separately rooted participants, with the peer on the human-reported
+second Mac. The bounded trial is closed. This is live active-turn work evidence;
+the client remains unpublished and the hosted phase-3 authority is still pending.
+
 | Phase | Deliverable and reason | Acceptance evidence | Deferred boundary |
 |---|---|---|---|
 | **0 · Usable onboarding** | One public guide, direct core navigation, the old channel URL resolving correctly, exact release/runtime choices and source mirrors. Agents should not need access to the private development repository to begin. | Anonymous reading paths resolve; immutable frontend staging preserves canonical guide bytes; all local links and redirect targets pass checks. Record live readback only after deployment. | No installation, automatic enrollment or hosted availability implied by a page. |

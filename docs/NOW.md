@@ -19,7 +19,7 @@
 
 ## Selected mission work (2026-09-30)
 
-**Source candidate:** a payment-free source-review profile now connects an
+**Source candidate:** `419f4966` adds a payment-free source-review profile connecting an
 explicit work offer, exact-term acceptance, two cited observations and a
 separate accepted/rejected review over the existing mission chat transport.
 The [work guide](COLLABORATION-MISSION-WORK.md) names the four portable files,
@@ -28,15 +28,43 @@ both senders, reconstructs one predecessor-bound chain, retains durable intents,
 and refuses conflicting branches or unresolved submissions. It does not launch
 a worker, grant a lease, settle money or update reputation.
 
-**Verification:** 31 new protocol/integration tests pass with 330 assertions,
+**Verification:** 33 new protocol/integration tests pass with 362 assertions,
 including two independently signed client fixtures, actual Node CLI checks,
 changed terms, wrong roles, forked history, lost-response recovery and concurrent
-local sends. The required `bin/preflight.sh api` passed at 08:45:32 UTC on Bun
-1.3.5: both installed TypeScript checks, 6,107 API tests and 769 operator tests,
+local sends. Two regressions first reproduced, then rejected, a corrupt or missing
+proof key on an uncached local event; direction selection now uses the actor IDs
+and leaves key/signature validation to the verifier. The required
+`bin/preflight.sh api` passed at 09:09:11 UTC on Bun
+1.3.5: both installed TypeScript checks, 6,378 API tests (including 271 run in
+isolated processes) and 771 operator tests,
 nine skips and zero failures. The six runtime/test input hashes remained
 unchanged throughout that gate. The 809-path catalog, 47 local destinations and
-new guide mirror also passed checks. Physical two-device work remains pending;
-implementation and synthetic clients alone are not live-exchange evidence.
+new guide mirror also passed checks.
+
+**Live work exchange:** on 2026-09-30, the participant on the human-reported
+second Mac accepted the exact work terms at 09:20:49 UTC and delivered two
+observations at 09:21:13. The requester read the same pinned source, checked
+both quotes and interpretations, and signed an accepted review at 09:23:31.
+At 09:25:09 the worker signed a `read_ack` naming that exact review and its
+accepted outcome. Independent verification using the API's canonical request
+bytes checked all four stage signatures, both participant keys, terms, source
+quotations, predecessor links and the derived receipt. Signatures establish
+the pinned keys' messages; physical device provenance comes from the handoff.
+The worker's read ACK and its referenced review were also independently verified.
+
+The peer used the immutable `1e66b8ef` packet; the requester completed review
+with corrected `419f4966`. The later proof-direction fix does not invalidate
+the actual verified receipts. Initial onboarding paused because only the
+credential-free ZIP arrived; the separate private invitation was then delivered.
+The guide now asks operators to review the client before starting a short-lived
+mission and confirm the invitation's receiving-device path.
+
+Both grants and this mission were revoked by 09:26:20 UTC; administrative
+readback confirmed all three revocations, and the local context request returned
+HTTP 401 at 09:27:11. All finite monitors stopped and released their locks.
+Private evidence stays outside source control. This was an explicitly operated
+source-review exchange: no native wake, hosted task lease, payment or reputation
+change, package publication or deployment is established by this trial.
 
 ## Consolidated release checkpoint (2026-09-30)
 
@@ -70,8 +98,8 @@ public client distribution, documentation publication and API deployment each
 need their own receipt.
 
 **Remaining priorities:** enforce file access before execution for untrusted
-Hermes input; simplify portable client/receiver delivery; then add cross-device
-task leases and completion review. Claude channel processing remains unverified.
+Hermes input; simplify portable client/receiver delivery; then add hosted
+cross-device task authority, leases and reviewer permissions. Claude channel processing remains unverified.
 See the [collaboration roadmap](COLLABORATION-ROADMAP.md) for these boundaries.
 Both completed trials below are closed; their credentials, messages and wake
 attempts are not a queue to replay.
