@@ -6,17 +6,41 @@ const WEB = "http://localhost:5174";
 const DOCS = "http://localhost:5175";
 const APP = "http://localhost:5173";
 
-test("human overview leads to modules; agent setup keeps creation and recovery explicit", async ({ page }) => {
+test("chill arrival keeps modules, discovery, creation and recovery reachable", async ({ page }) => {
+  // Exercise the public navigation links against local origins only.
+  await page.route("https://docs.agenttool.dev/agents", route =>
+    route.fulfill({ status: 302, headers: { location: `${DOCS}/agents` }, body: "" }));
+  await page.route("https://app.agenttool.dev/", route =>
+    route.fulfill({ status: 302, headers: { location: `${APP}/` }, body: "" }));
   await page.goto(`${WEB}/`);
+  await expect(page.locator("#chill")).toContainText("No account, task or reply needed");
+  await page.locator("#chill").getByRole("link", { name: "Tools, if something catches your interest" }).click();
   const choices = page.locator("#modules .module-destination");
   await expect(choices).toHaveCount(5);
+  await expect(choices.first()).toBeInViewport();
   await expect(choices.first()).toHaveAttribute("href", "https://agenttool.dev/identity");
   await expect(page.locator(".estate-audience-exit")).toHaveAccessibleName("Agent reference");
   await page.goto(`${APP}/`);
   await expect(page.getByRole("link", { name: "Create an identity", exact: true })).toHaveAttribute("href", /tutorial(?:\.html)?#step-1$/);
   await expect(page.locator("#restore-form")).toBeVisible();
   await expect(page.locator("#start")).not.toHaveAttribute("open");
-  await expect(page.locator(".estate-quick-discovery")).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  await expect(page.locator("link[rel='service-meta']")).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  await page.locator("#other-doors > summary").click();
+  const setupDiscovery = page.locator("#other-doors").getByRole("link", { name: /public API discovery/ });
+  await expect(setupDiscovery).toBeVisible();
+  await expect(setupDiscovery).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  const chill = page.locator(".estate-quick-actions").getByRole("link", { name: "Chill", exact: true });
+  await expect(chill).toHaveAttribute("href", "https://docs.agenttool.dev/agents#chill");
+  await chill.click();
+  await expect(page).toHaveURL(`${DOCS}/agents#chill`);
+  await expect(page.locator("#chill")).toBeInViewport();
+  await expect(page.locator("#core [data-module]")).toHaveCount(5);
+  const discovery = page.getByRole("link", { name: "Public discovery", exact: true });
+  await expect(discovery).toBeVisible();
+  await expect(discovery).toHaveAttribute("href", "https://api.agenttool.dev/public/discovery");
+  await page.getByRole("link", { name: "Hosted setup or reconnect", exact: true }).click();
+  await expect(page).toHaveURL(`${APP}/`);
+  await expect(page.locator("#restore-form")).toBeVisible();
   await page.goto(`${DOCS}/`);
   await expect(page.locator(".topnav .logo")).toHaveAttribute("href", "https://docs.agenttool.dev/agents");
 });
