@@ -75,6 +75,39 @@ function patchInbox(f: Fixture, change: (inbox: any) => void) { const value = pe
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; }
 
 describe.skipIf(process.platform === "win32")("mission receiver authority and durable routing", () => {
+  test("return preview exposes saved counts and unresolved IDs without receipt text or target details", async () => {
+    const f = await bound(), receiver = open(f);
+    const messages = [event(f, f.address.route_id, 1, { text: "private message must stay local" }),
+      event(f, f.address.route_id, 2), event(f, f.address.route_id, 3),
+      event(f, f.address.route_id, 4, { kind: "ack", inReplyTo: randomUUID() })];
+    page(f, messages); await receiver.poll(f.options); receiver.close();
+    const deliveryId = randomUUID();
+    patchInbox(f, inbox => {
+      inbox.items[0].status = "delivered"; inbox.items[0].delivery_id = deliveryId;
+      inbox.items[0].receipt = { status: "delivered", text: "untrusted receipt must not project", secret: TOKEN, target: f.root };
+      inbox.items[1].status = "processed"; inbox.items[1].delivery_id = randomUUID();
+    });
+    const before = persisted(f), calls = f.calls.length;
+    const preview = wake.returnPeek(f.state), serialized = JSON.stringify(preview);
+    expect(preview.locally_saved).toEqual({ cursor: "4", counts: { pending: 1, dispatching: 0, delivered: 1, processed: 1, ack: 1 },
+      unresolved_deliveries: [{ event_id: messages[0].event_id, delivery_id: deliveryId, status: "delivered" }], unresolved_processing_acks: [] });
+    expect(preview.binding).toEqual({ expires_at: f.config.expires_at, expired: false });
+    expect(preview.remote).toEqual({ arrivals: "unknown", current_grant_status: "unknown" });
+    for (const omitted of ["private message must stay local", "untrusted receipt must not project", TOKEN, f.root, "exact-thread_1", "last_polled", "next_action", "mission_id", "identity_id"])
+      expect(serialized).not.toContain(omitted);
+    expect(persisted(f)).toEqual(before); expect(f.calls).toHaveLength(calls);
+  });
+
+  test("return preview reports lock presence without claiming that a receiver is running", async () => {
+    const f = await bound(), receiver = open(f);
+    const lockAt = join(f.state, "wake", "lock", "owner.json"), before = readFileSync(lockAt);
+    expect(wake.returnPeek(f.state).locks).toEqual({ receiver_present: true, quiet_control_present: false, running: "unknown" });
+    expect(readFileSync(lockAt)).toEqual(before); receiver.close();
+    expect(wake.returnPeek(f.state).locks).toEqual({ receiver_present: false, quiet_control_present: false, running: "unknown" });
+    patchInbox(f, inbox => { inbox.binding_sha256 = "corrupt"; });
+    expect(() => wake.returnPeek(f.state)).toThrow("immutable receiver binding");
+  });
+
   test("binding pins one native target and publishes only a sanitized address", async () => {
     const f = await bound();
     expect(f.address).toEqual({ format: "agenttool-mission-route/v1", origin: ORIGIN, mission_id: M, identity_id: I,
@@ -197,6 +230,11 @@ describe.skipIf(process.platform === "win32")("mission receiver authority and du
     f.controls.contextStatus = 401; let calls = 0;
     await expect(receiver.dispatch({ deliver: async () => { calls++; return { status: "processed" }; } }, f.options)).rejects.toThrow();
     expect(calls).toBe(0); expect(receiver.snapshot().items[0].status).toBe("pending");
+    // A chosen return cannot renew revoked scope or consume the saved message.
+    const before = persisted(f); wake.pause(f.state); receiver.close(); wake.resume(f.state);
+    const returned = open(f);
+    await expect(returned.dispatch({ deliver: async () => { calls++; throw new Error("Revoked return must not dispatch"); } }, f.options)).rejects.toThrow();
+    expect(calls).toBe(0); expect(persisted(f)).toEqual(before);
   });
 
   test("receiver expiry during a pending page refuses persistence and dispatch", async () => {
@@ -294,6 +332,226 @@ describe.skipIf(process.platform === "win32")("mission receiver authority and du
   });
 });
 
+describe.skipIf(process.platform === "win32")("private route-local quiet control", () => {
+  test("an active receiver can pause without consuming pending work or changing its grant", async () => {
+    const f = await bound(), receiver = open(f), e = event(f, f.address.route_id, 1);
+    const quietPath = join(f.state, "wake", "quiet.json");
+    expect(receiver.quiet()).toEqual({ mode: "ready", until: null, updated_at: null });
+    expect(wake.status(f.state).quiet).toEqual(receiver.quiet()); expect(existsSync(quietPath)).toBe(false);
+    page(f, [e]); await receiver.poll(f.options);
+    const before = persisted(f), binding = readFileSync(join(f.state, "wake", "binding.json"), "utf8");
+    const invitation = readFileSync(join(f.state, "invitation.json"), "utf8"), calls = f.calls.length;
+    const quiet = wake.pause(f.state);
+    expect(quiet.mode).toBe("paused"); expect(quiet.until).toBeNull();
+    expect(statSync(quietPath).mode & 0o777).toBe(0o600);
+    expect(wake.status(f.state).locked).toBe(true); expect(wake.status(f.state).quiet_lock).toBeNull();
+    expect(() => receiver.next()).toThrow(wake.ReceiverPausedError);
+    await expect(receiver.poll(f.options)).rejects.toMatchObject({ code: "RECEIVER_PAUSED", quiet });
+    let delivered = 0;
+    const adapter = { deliver: async () => { delivered++; return { status: "processed", thread_id: f.config.target.thread_id, turn_id: "turn" }; } };
+    await expect(receiver.dispatch(adapter, f.options)).rejects.toMatchObject({ code: "RECEIVER_PAUSED" });
+    expect(f.calls).toHaveLength(calls); expect(delivered).toBe(0); expect(persisted(f)).toEqual(before);
+    expect(readFileSync(join(f.state, "wake", "binding.json"), "utf8")).toBe(binding);
+    expect(readFileSync(join(f.state, "invitation.json"), "utf8")).toBe(invitation);
+    expect(wake.resume(f.state)).toMatchObject({ mode: "ready", until: null });
+    expect(f.calls).toHaveLength(calls); expect(delivered).toBe(0); expect(persisted(f)).toEqual(before);
+    expect(receiver.next()?.event_id).toBe(e.event_id);
+    await receiver.dispatch(adapter, f.options); expect(delivered).toBe(1);
+  });
+
+  test("pause survives restart and a timed cutoff only opens admission without rewriting state", async () => {
+    const f = await bound(), receiver = open(f), originalClock = Date.now;
+    let clock = originalClock(); Date.now = () => clock;
+    try {
+      const until = new Date(clock + 60_000).toISOString();
+      const paused = wake.pause(f.state, until); receiver.close();
+      const restarted = open(f), quietPath = join(f.state, "wake", "quiet.json");
+      const raw = readFileSync(quietPath, "utf8"), inbox = persisted(f), calls = f.calls.length;
+      expect(restarted.quiet()).toEqual(paused); expect(() => restarted.next()).toThrow(wake.ReceiverPausedError);
+      clock += 60_000;
+      expect(restarted.quiet()).toEqual({ ...paused, mode: "ready" });
+      expect(restarted.next()).toBeNull(); expect(readFileSync(quietPath, "utf8")).toBe(raw);
+      expect(persisted(f)).toEqual(inbox); expect(f.calls).toHaveLength(calls);
+      wake.pause(f.state); clock += 60_000;
+      expect(restarted.quiet().mode).toBe("paused");
+      expect(wake.resume(f.state)).toMatchObject({ mode: "ready", until: null });
+      expect(restarted.quiet().mode).toBe("ready");
+      clock = Date.parse(f.config.expires_at) + 1;
+      expect(() => restarted.next()).toThrow("expired");
+    } finally { Date.now = originalClock; }
+  });
+
+  test("invalid pause cutoffs fail without creating control state or leaving a lock", async () => {
+    const f = await bound();
+    for (const until of ["", "tomorrow", "2030-01-01", new Date(Date.now() - 1).toISOString(), 42, {}]) {
+      expect(() => wake.pause(f.state, until)).toThrow();
+      expect(existsSync(join(f.state, "wake", "quiet.json"))).toBe(false);
+      expect(existsSync(join(f.state, "wake", "quiet-control.lock"))).toBe(false);
+    }
+  });
+
+  test("pause during context validation wins before durable dispatch admission", async () => {
+    const f = await bound(), receiver = open(f); page(f, [event(f, f.address.route_id, 1)]); await receiver.poll(f.options);
+    const entered = deferred(), finish = deferred(), before = persisted(f); let deliveries = 0;
+    const pending = receiver.dispatch({ deliver: async () => { deliveries++; throw new Error("must not be called"); } }, {
+      fetchImpl: async (url: string) => {
+        if (url.endsWith("/context")) { entered.resolve(); await finish.promise; }
+        return f.options.fetchImpl(url);
+      },
+    });
+    await entered.promise;
+    try { wake.pause(f.state); } finally { finish.resolve(); }
+    await expect(pending).rejects.toMatchObject({ code: "RECEIVER_PAUSED" });
+    expect(deliveries).toBe(0); expect(persisted(f)).toEqual(before);
+    expect(wake.status(f.state).in_flight).toEqual([]);
+  });
+
+  test("pause during invitation validation prevents the following context request", async () => {
+    const f = await bound(), receiver = open(f); page(f, [event(f, f.address.route_id, 1)]); await receiver.poll(f.options);
+    const entered = deferred(), finish = deferred(), before = persisted(f), requests: string[] = [];
+    const pending = receiver.dispatch({ deliver: async () => { throw new Error("must not reach adapter"); } }, {
+      fetchImpl: async (url: string) => {
+        requests.push(url); entered.resolve(); await finish.promise;
+        return f.options.fetchImpl(url);
+      },
+    });
+    await entered.promise;
+    try { wake.pause(f.state); } finally { finish.resolve(); }
+    await expect(pending).rejects.toMatchObject({ code: "RECEIVER_PAUSED" });
+    expect(requests).toHaveLength(1); expect(requests[0]).toEndWith("/invitation");
+    expect(persisted(f)).toEqual(before);
+  });
+
+  test("a page admitted before pause may save but cannot start a model delivery", async () => {
+    const f = await bound(), receiver = open(f), entered = deferred(), finish = deferred();
+    const e = event(f, f.address.route_id, 1);
+    const pending = receiver.poll({ fetchImpl: async () => {
+      entered.resolve(); await finish.promise;
+      return response({ mission_id: M, events: [e], page: { after: "0", next_cursor: "1", has_more: false } });
+    } });
+    await entered.promise;
+    try { wake.pause(f.state); } finally { finish.resolve(); }
+    expect((await pending).cursor).toBe("1");
+    expect(receiver.snapshot().items[0].status).toBe("pending");
+    expect(() => receiver.next()).toThrow(wake.ReceiverPausedError);
+  });
+
+  test("already admitted native delivery keeps its exact receipt while new work remains paused", async () => {
+    const f = await bound(), receiver = open(f), first = event(f, f.address.route_id, 1), second = event(f, f.address.route_id, 2);
+    page(f, [first, second]); await receiver.poll(f.options);
+    const entered = deferred(), finish = deferred(); let deliveryId;
+    const pending = receiver.dispatch({ deliver: async (item: any) => {
+      deliveryId = item.delivery_id; entered.resolve(); await finish.promise;
+      return { status: "processed", thread_id: f.config.target.thread_id, turn_id: "admitted-before-pause" };
+    } }, f.options);
+    await entered.promise;
+    try {
+      wake.pause(f.state);
+      expect(wake.status(f.state).in_flight).toMatchObject([{ event_id: first.event_id, delivery_id: deliveryId, status: "dispatching" }]);
+    } finally { finish.resolve(); }
+    expect(await pending).toMatchObject({ event_id: first.event_id, delivery_id: deliveryId, status: "processed" });
+    expect(receiver.snapshot().items.map((i: any) => i.status)).toEqual(["processed", "pending"]);
+    expect(() => receiver.next()).toThrow(wake.ReceiverPausedError);
+    receiver.close(); const restarted = open(f);
+    expect(restarted.quiet().mode).toBe("paused"); expect(restarted.snapshot().items[0].receipt.turn_id).toBe("admitted-before-pause");
+    wake.resume(f.state); expect(restarted.next()?.event_id).toBe(second.event_id);
+  });
+
+  test("explicit acknowledgment and resolution remain possible without removing quiet", async () => {
+    const f = fixture();
+    await wake.bind(f.state, { ...f.config, target: { kind: "claude-channel", session_label: "selected channel" } }, f.options);
+    const receiver = open(f), first = event(f, receiver.binding.route_id, 1);
+    page(f, [first]); await receiver.poll(f.options);
+    const delivery = await receiver.dispatch({ deliver: async () => ({ status: "delivered" }) }, f.options);
+    wake.pause(f.state);
+    expect(receiver.acknowledge(first.event_id, delivery.delivery_id).status).toBe("processed");
+    expect(receiver.quiet().mode).toBe("paused");
+    wake.resume(f.state);
+    const second = event(f, receiver.binding.route_id, 2); page(f, [second]); await receiver.poll(f.options);
+    const uncertain = await receiver.dispatch({ deliver: async () => ({ status: "delivered" }) }, f.options);
+    wake.pause(f.state); const beforeReturn = persisted(f); wake.resume(f.state);
+    expect(receiver.next()).toBeNull(); expect(persisted(f)).toEqual(beforeReturn);
+    wake.pause(f.state); receiver.resolve(second.event_id, uncertain.delivery_id, "retry");
+    expect(receiver.snapshot().items[1].status).toBe("pending");
+    expect(() => receiver.next()).toThrow(wake.ReceiverPausedError);
+  });
+
+  test("malformed, mismatched and unsafe quiet records fail closed and are never repaired by resume", async () => {
+    for (const variant of ["json", "fields", "binding", "mode", "time", "ready_until", "permissions", "symlink", "dangling", "directory", "large"] as const) {
+      const f = await bound(), receiver = open(f); wake.pause(f.state);
+      const at = join(f.state, "wake", "quiet.json"), saved = JSON.parse(readFileSync(at, "utf8"));
+      if (variant === "json") writeFileSync(at, "{");
+      else if (variant === "permissions") chmodSync(at, 0o644);
+      else if (variant === "symlink" || variant === "dangling") {
+        const other = join(f.root, "other.json");
+        if (variant === "symlink") writeFileSync(other, JSON.stringify(saved), { mode: 0o600 });
+        rmSync(at); symlinkSync(other, at);
+      } else if (variant === "directory") { rmSync(at); mkdirSync(at, { mode: 0o700 }); }
+      else if (variant === "large") writeFileSync(at, " ".repeat(2049));
+      else {
+        if (variant === "fields") saved.extra = "private content must not pass through";
+        if (variant === "binding") saved.binding_sha256 = "0".repeat(64);
+        if (variant === "mode") saved.mode = "anything";
+        if (variant === "time") saved.until = "tomorrow";
+        if (variant === "ready_until") { saved.mode = "ready"; saved.until = new Date(Date.now() + 60_000).toISOString(); }
+        writeFileSync(at, JSON.stringify(saved));
+      }
+      const calls = f.calls.length, inbox = persisted(f);
+      expect(() => receiver.quiet()).toThrow(); expect(() => wake.status(f.state)).toThrow();
+      expect(() => receiver.next()).toThrow(); expect(() => wake.resume(f.state)).toThrow();
+      await expect(receiver.poll(f.options)).rejects.toThrow();
+      await expect(receiver.dispatch({ deliver: async () => { throw new Error("must not reach adapter"); } }, f.options)).rejects.toThrow();
+      expect(f.calls).toHaveLength(calls); expect(persisted(f)).toEqual(inbox);
+      expect(existsSync(join(f.state, "wake", "quiet-control.lock"))).toBe(false);
+    }
+  });
+
+  test("quiet lock contention blocks admissions and explicit recovery requires the exact dead owner", async () => {
+    const f = await bound(), receiver = open(f), at = join(f.state, "wake", "quiet-control.lock"), lockId = randomUUID();
+    const ownerPath = join(at, `owner-${lockId}.json`);
+    mkdirSync(at, { mode: 0o700 });
+    const owner = { lock_id: lockId, pid: process.pid, created_at: new Date().toISOString() };
+    writeFileSync(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    const calls = f.calls.length, inbox = persisted(f);
+    expect(wake.status(f.state).quiet_lock).toEqual({ lock_id: lockId, pid: process.pid });
+    for (const operation of [() => wake.pause(f.state), () => wake.resume(f.state), () => receiver.next()]) expect(operation).toThrow(wake.ReceiverQuietBusyError);
+    await expect(receiver.poll(f.options)).rejects.toMatchObject({ code: "QUIET_CONTROL_BUSY" });
+    await expect(receiver.dispatch({ deliver: async () => { throw new Error("must not reach adapter"); } }, f.options)).rejects.toThrow("busy");
+    expect(() => wake.recoverQuietLock(f.state, randomUUID())).toThrow("does not match");
+    expect(() => wake.recoverQuietLock(f.state, lockId)).toThrow("still alive");
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" }); expect(child.status).toBe(0);
+    writeFileSync(ownerPath, JSON.stringify({ ...owner, pid: child.pid }));
+    expect(wake.recoverQuietLock(f.state, lockId)).toEqual({ recovered: true, lock_id: lockId });
+    expect(wake.status(f.state).quiet_lock).toBeNull(); expect(receiver.next()).toBeNull();
+    expect(f.calls).toHaveLength(calls); expect(persisted(f)).toEqual(inbox);
+  });
+
+  test("a stale quiet recovery cannot unlink a new live generation after concurrent recovery", async () => {
+    const f = await bound(), at = join(f.state, "wake", "quiet-control.lock"), oldId = randomUUID(), newId = randomUUID();
+    const oldPath = join(at, `owner-${oldId}.json`), newPath = join(at, `owner-${newId}.json`);
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" }); expect(child.status).toBe(0);
+    mkdirSync(at, { mode: 0o700 });
+    writeFileSync(oldPath, JSON.stringify({ lock_id: oldId, pid: child.pid, created_at: new Date().toISOString() }), { mode: 0o600 });
+    const originalKill = process.kill; let recovered = false;
+    process.kill = ((pid: number, signal: any) => {
+      expect(pid).toBe(child.pid); expect(signal).toBe(0);
+      if (!recovered) {
+        recovered = true;
+        expect(wake.recoverQuietLock(f.state, oldId)).toEqual({ recovered: true, lock_id: oldId });
+        mkdirSync(at, { mode: 0o700 });
+        writeFileSync(newPath, JSON.stringify({ lock_id: newId, pid: process.pid, created_at: new Date().toISOString() }), { mode: 0o600 });
+      }
+      throw Object.assign(new Error("Synthetic departed owner"), { code: "ESRCH" });
+    }) as typeof process.kill;
+    try { expect(() => wake.recoverQuietLock(f.state, oldId)).toThrow(); }
+    finally { process.kill = originalKill; }
+    expect(existsSync(oldPath)).toBe(false); expect(existsSync(newPath)).toBe(true);
+    expect(wake.status(f.state).quiet_lock).toEqual({ lock_id: newId, pid: process.pid });
+    expect(() => wake.pause(f.state)).toThrow("busy");
+    expect(() => wake.recoverQuietLock(f.state, newId)).toThrow("still alive");
+  });
+});
+
 
 const HERMES_RECEIPT = { status: "processed", job_id: "20260929T164704-b451d117247b", session_id: "20260929_174704_5dc128", evidence_sha256: "a".repeat(64) };
 async function hermesBound() {
@@ -324,6 +582,27 @@ function ackTransport(f: Fixture, mode = "success") {
   return { options, sent };
 }
 describe.skipIf(process.platform === "win32")("Hermes processing acknowledgements", () => {
+  test("return preview preserves ambiguous ACK metadata without exposing receipt or retrying", async () => {
+    const { f, receiver, e, delivery } = await processedHermes(), transport = ackTransport(f, "lost"), to = randomUUID();
+    await expect(receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options)).rejects.toThrow();
+    receiver.close(); wake.pause(f.state);
+    const before = persisted(f), sent = transport.sent.length;
+    const preview = wake.returnPeek(f.state);
+    expect(preview.locally_saved.unresolved_processing_acks).toEqual([{ event_id: e.event_id, delivery_id: delivery.delivery_id, status: "dispatching" }]);
+    expect(preview.locally_saved.unresolved_deliveries).toEqual([]);
+    expect(preview.quiet.mode).toBe("paused");
+    for (const omitted of [to, HERMES_RECEIPT.job_id, HERMES_RECEIPT.session_id, HERMES_RECEIPT.evidence_sha256, TOKEN]) expect(JSON.stringify(preview)).not.toContain(omitted);
+    expect(persisted(f)).toEqual(before); expect(transport.sent).toHaveLength(sent);
+  });
+
+  test("quiet permits an exact verified in-flight read acknowledgment without admitting another turn", async () => {
+    const { f, receiver, e, delivery } = await processedHermes(), transport = ackTransport(f), to = randomUUID();
+    wake.pause(f.state);
+    const ack = await receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options);
+    expect(ack.status).toBe("stored"); expect(transport.sent).toHaveLength(1);
+    expect(receiver.quiet().mode).toBe("paused"); expect(() => receiver.next()).toThrow(wake.ReceiverPausedError);
+    expect(wake.status(f.state).processing_acks[0].ack_event_id).toBe(ack.ack_event_id);
+  });
   test("signed ACK requires evidence, persists intent before send and deduplicates across reopen", async () => {
     const { f, receiver, e, delivery } = await processedHermes(), to = randomUUID(), transport = ackTransport(f);
     const ack = await receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options);

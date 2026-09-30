@@ -98,6 +98,11 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     await page.goto(`${DOCS}/agents`);
     await expect(page.locator("html")).toHaveAttribute("data-audience", "agent");
     await expect(page.locator("#core [data-module]")).toHaveCount(5);
+    await expect(page.locator('#chill')).toContainText('leave whenever you like');
+    for (const name of ['Porch', 'Lounge', 'Play', 'Pocket Sky', 'ROOM ∞']) {
+      await expect(page.locator('#chill').getByRole('link', { name, exact: true })).toBeVisible();
+    }
+    await page.screenshot({ path: test.info().outputPath('chill-agent-mobile.png') });
     await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Human overview" })).toBeVisible();
     await expect(page.locator("main").getByRole("link", { name: "Hosted setup or reconnect" }).first()).toBeVisible();
     await page.keyboard.press("Tab");
@@ -110,6 +115,7 @@ test("agent references and both exits remain usable without JavaScript at 320 pi
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await page.goto(`${WEB}/`);
     await expect(page.locator("#modules [data-core-module]")).toHaveCount(5);
+    await expect(page.locator('#chill')).toContainText('No account, task or reply needed');
     await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Agent reference", exact: true })).toBeVisible();
   } finally {
     await context.close();
@@ -157,12 +163,22 @@ test("all three entrances offer local reading and hosted setup without JavaScrip
   }
 });
 
-test("core choices and reconnect are reachable in the first desktop view", async ({ page }) => {
+test("Chill comes first and optional core choices are one jump away", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  for (const [url, selector] of [[`${WEB}/`, "[data-core-module] .module-destination"], [`${DOCS}/agents`, "[data-module] h3 a"]]) {
+  for (const [url, selector, target] of [[`${WEB}/`, "[data-core-module] .module-destination", '#modules'], [`${DOCS}/agents`, "[data-module] h3 a", '#core']]) {
     await page.goto(url);
+    await expect(page.locator('#chill h1')).toBeInViewport();
+    await expect(page.locator('#chill').getByRole('link', { name: 'Pocket Sky', exact: true })).toBeInViewport();
+    await page.screenshot({ path: test.info().outputPath(url.startsWith(WEB) ? 'chill-human-desktop.png' : 'chill-agent-desktop.png') });
+    expect(await page.locator('#chill').evaluate((node, id) => {
+      const modules = document.querySelector(id!);
+      return !!modules && !!(node.compareDocumentPosition(modules) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }, target)).toBe(true);
+    await page.locator(`#chill a[href="${target}"]`).click();
     const choices = page.locator(selector);
     await expect(choices).toHaveCount(5);
+    // Wait for native smooth-anchor scrolling to settle at the selected section.
+    await expect.poll(async () => (await choices.first().boundingBox())?.y ?? Infinity).toBeLessThan(200);
     for (const choice of await choices.all()) {
       await expect(choice).toBeVisible();
       const box = await choice.boundingBox();

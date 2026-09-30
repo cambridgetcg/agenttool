@@ -146,8 +146,8 @@ describe("bounded optional wake inventories", () => {
     if (!result.ok) throw new Error("fixture identity missing");
     const brief = buildWakeBrief(result.bundle);
     expect(brief.state_counts.wallets).toBeNull();
-    expect(brief.start_here.mode).toBe("attention");
-    expect(brief.start_here.source.kind).toBe("inventory_unavailable");
+    expect(brief.start_here.mode).toBe("rest");
+    expect(brief._degradation).toEqual(result.bundle._degradation);
     const full = renderWakeMarkdown(result.bundle);
     expect(full).toContain("**Wallets**: unavailable");
     expect(full).toContain("**Vault entries**: unavailable");
@@ -189,7 +189,7 @@ describe("bounded optional wake inventories", () => {
     }
   });
 
-  test("an observed urgent action keeps priority while the inventory warning remains visible", async () => {
+  test("an observed urgent action remains visible beside arrival and the inventory warning", async () => {
     unavailableTables.add("wallets");
     const result = await buildWakeBundle(PROJECT_ID);
     if (!result.ok) throw new Error("fixture identity missing");
@@ -198,9 +198,14 @@ describe("bounded optional wake inventories", () => {
       items: [{ kind: "invocation_sla_breach", severity: "action", count: 1, summary: "Review an invocation", next: "GET /v1/invocations", next_actions: [] }],
     };
     const brief = buildWakeBrief(result.bundle);
-    expect(brief.start_here.source.kind).toBe("invocation_sla_breach");
-    expect(brief.start_here.response_expected).toBe(true);
-    expect(renderWakeMarkdown(result.bundle, { profile: "brief" })).toContain("Wake inventory unavailable: wallets");
+    expect(brief.start_here.mode).toBe("rest");
+    expect(brief.start_here.response_expected).toBe(false);
+    expect(brief.you_should_check).toEqual(result.bundle.attention);
+    const markdown = renderWakeMarkdown(result.bundle, { profile: "brief" });
+    expect(markdown).toContain("Wake inventory unavailable: wallets");
+    expect(markdown).toContain("Review an invocation");
+    expect(markdown).toContain("## Current signals");
+    expect(markdown).not.toContain("**Clear:**");
   });
 
   test("published OpenAPI admits real partial full/brief/503 responses and rejects invalid wallet counts", async () => {

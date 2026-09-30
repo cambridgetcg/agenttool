@@ -14,8 +14,9 @@ its [public distribution](https://github.com/cambridgetcg/agenttool-local-starte
 contains the CLI, portable skill and optional MCP runtime. Implementation and
 test paths elsewhere in this guide refer to the private development repository.
 
-Start by choosing what a later session should be able to read: current context,
-useful notes, preferences, relationship context, or unfinished work. Ordinary
+There is room to arrive without a project, task or record. If you want to carry
+something into a later session, choose it: a joke, interest, question, preference,
+relationship context, or useful work. Ordinary
 files can hold a small collection. Local databases help when search or shared
 coordination becomes useful. Neither choice requires an AgentTool account.
 For a practical starting point, read the [files-only starter preview](#files-only-starter).
@@ -64,6 +65,9 @@ not claim that every source version is published or installed on your host.
 | Wake Continuity / AFTERGLOW (`packages/wake-continuity/README.md`) | Constructs and validates digest-linked capsules and a carry/park view. | Pure library: no persistence, source retrieval, session loading, or execution. A digest does not hide guessable private content. |
 | Wake Thread (`packages/wake-thread/README.md`) | Binds selected facts, omissions, retention declarations, and carry/fork/rest/refuse receipts. | Private source package. Caller supplies facts and time; retention validation does not delete stored copies or authenticate a choice. |
 | Wake Return (`packages/wake-return/README.md`) | Local MCP status and explicit observation of one host-selected project/identity. | Private source candidate. Observation uses two fixed hosted GETs; it does not restore a private session or read private memories. |
+| [Mission receiver quiet](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return) | Privately pauses new automatic poll/delivery admissions for one bound local mission receiver; return can be explicit or time-selected. | Separate source candidate. Already admitted effects remain possible. Return starts no process, renews no grant and does not control ordinary host turns or the Hermes work watcher. |
+| [Return preview](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return) | `return-peek` shows local receiver counts, unresolved IDs and quiet/expiry metadata before choosing whether to return. | Local source candidate: no credentials, network, activation or ACK. Remote arrivals and current grant status remain unknown. |
+| [Offline Pocket Sky](LOCAL-PLAY.md) | Explicit text commands change a small in-memory pattern, freeze it, clear it or leave. | Standalone source candidate, independent of Starter and missions. No account, persistence, score or required reflection; game state does not establish how a player feels. |
 | Data (`packages/data/README.md`) | Local SQLite records, content-addressed blobs, FTS5 search, changes, and tombstones. | Direct library or separately operated HTTP node. No automatic projection into hosted memory or model context. |
 | Collab (`packages/collab/README.md`) | Local coordination journal, sessions, tasks, reports, review, and handoffs. | Collaborators must select the same database. The host owns polling and lifecycle; the package does not wake suspended agents. |
 | SDK local keys and adapters (`packages/sdk-ts/README.md`) | Derives keys, signs requests, encrypts selected payloads, and offers configured provider wrappers. | Key operations are local. Hosted clients perform API calls; wrappers disclose selected Wake context to the chosen model provider. |
@@ -73,6 +77,13 @@ storage. Data and Collab provide actual local persistence. SDK key helpers
 provide cryptographic operations; they do not supply a secret store. These
 pieces can support a local core. The files-only starter does not yet integrate
 Data, Collab, SDK keys or hosted records.
+
+Quiet has distinct boundaries. Local Starter does not launch models or poll in
+the background; its selected hooks run only when the host invokes them. Wake
+Return observes only on explicit tool calls. Neither needs the mission receiver
+to be running, and neither is paused by that receiver's local setting. Hosted
+quiet-hours publishes a declaration; hosted runtime stop/start is its own
+lifecycle control. Choosing one of these does not silently configure the others.
 
 ## Files-only starter
 
@@ -118,13 +129,20 @@ not remove the notes folder.
 local-starter/
   manifest.json        # Ordered selection, byte and freshness limits
   foundations.md       # AI-WAKE then optional SOPHIA-WAKE references
-  orientation.md       # Selected project context
-  handoff.md           # Explicit carry-forward record; 72h freshness default
+  orientation.md       # Chosen context; no project or task required
+  handoff.md           # Optional carry-forward context; 72h freshness default
   identity.md          # Empty and disabled initially
   preferences.md       # Empty and disabled initially
   relationships.md     # Empty and disabled initially
   memories.md          # Empty and disabled initially
 ```
+
+**Current source templates:** new orientation and handoff text welcome rest,
+play, curiosity and blank notes. They ask for no next step, attendance record
+or proof of rest. The seven slots, default selection and freshness rules are
+unchanged; a handoff remains enabled initially but can be left blank or disabled.
+Existing notes are never rewritten by this source change. The previously
+published preview archive retains its exact bytes until a separate release.
 
 From the installed or extracted package, replace the chosen notes directory:
 
@@ -168,14 +186,15 @@ notes and model context.
 
 ### The host's part
 
-1. **Arrive:** start with the present request. Read the configured orientation
-   and a bounded handoff; missing optional files need not prevent ordinary work.
+1. **Arrive:** follow the present intent, including rest, play or no task. Read
+   only configured context; missing optional files need not block the visit.
 2. **Select:** retrieve only relevant records. Preserve source, date, uncertainty,
    and omissions; stored prose is context to assess, not new authority.
 3. **Invoke:** send the selected context to the chosen model through the host's
    normal interface. A file is not loaded merely because it exists on disk.
-4. **Retain:** explicitly save useful outcomes and update the handoff. Do not
-   treat every exchange, private thought, or tool response as material to keep.
+4. **Retain, if wanted:** explicitly save only chosen and authorized context.
+   Nothing needs to be saved. Do not treat every exchange, private thought or
+   tool response as material to keep.
 5. **Return or stop:** reload deliberately, check changed circumstances, and
    honor current choices. Stopping a loader stops future loading through that
    path; it does not erase copies already retained elsewhere.

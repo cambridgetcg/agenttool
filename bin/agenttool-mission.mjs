@@ -338,6 +338,8 @@ events --state DIR [--after 0]                  One page, explicit string cursor
 wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 seconds
 retry --state DIR --event-id UUID               Explicit exact-body retry
 chat inspect|read|send|reply                    Verified peer conversation; chat --help
+work inspect|sync|offer|accept|deliver|review   Explicit payment-free work; work --help
+work inspect-hermes|run-hermes                One locally permitted Hermes source review
 mcp --state DIR                                STDIO MCP; no automatic wake
 Never paste keys or invitation tokens into chat, URLs, source or shell arguments.
 `;
@@ -417,6 +419,7 @@ export async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
   if (command === 'chat') { await chatMain(rest); return; }
+  if (command === 'work') { await (await import('./mission-work.mjs')).workMain(rest); return; }
   const allowed = { init: ['origin'], enrollment: [], 'enroll-proof': ['details-file'], import: ['invitation-file'], invitation: [], accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], mcp: [] };
   if (!(command in allowed)) fail('Unknown command. Use --help.');
   const options = {};

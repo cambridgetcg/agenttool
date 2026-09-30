@@ -1,12 +1,12 @@
 /** Public CLI boundaries only: private synthetic state, no service or native harness. */
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import * as client from "../agenttool-mission.mjs";
-import { bind, openReceiver, status } from "../mission-wake-receiver.mjs";
+import { bind, openReceiver, pause as pauseReceiver, status } from "../mission-wake-receiver.mjs";
 import { watch } from "../agenttool-mission-wake.mjs";
 
 const CLI = resolve(import.meta.dir, "../agenttool-mission-wake.mjs");
@@ -30,14 +30,33 @@ globalThis.fetch = deny;
 for (const name of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork']) require('node:child_process')[name] = deny;
 for (const name of ['connect','createConnection']) require('node:net')[name] = deny;
 for (const module of ['node:http','node:https']) for (const name of ['request','get']) require(module)[name] = deny;
+if (process.env.FIXTURE_READ_ONLY === '1') {
+  const fs = require('node:fs'), open = fs.openSync;
+  fs.openSync = (path, flags, ...rest) => {
+    if (['signing-key.pem','enrollment.json','invitation.json'].includes(require('node:path').basename(String(path)))) deny();
+    if (typeof flags === 'number' ? flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_APPEND) : flags !== 'r') deny();
+    return open(path, flags, ...rest);
+  };
+  for (const name of ['writeFile','appendFile','mkdir','mkdtemp','rename','unlink','rm','rmdir','chmod','chown','truncate','utimes','link','symlink','copyFile']) {
+    fs[name] = deny; fs[name + 'Sync'] = deny; fs.promises[name] = deny;
+  }
+  for (const name of ['write','writeSync','writev','writevSync','createWriteStream']) fs[name] = deny;
+  fs.open = deny; fs.promises.open = deny;
+}
 require('node:module').syncBuiltinESMExports();
 `, { mode: 0o600 });
   return { root, state, guard };
 }
-function run(f: ReturnType<typeof fixture>, args: string[]) {
+function run(f: ReturnType<typeof fixture>, args: string[], readOnly = false) {
   return spawnSync(NODE, ["--require", f.guard, CLI, ...args], {
-    cwd: f.root, env: { PATH: "/no-programs-in-fixture", HOME: f.root, TMPDIR: f.root },
+    cwd: f.root, env: { PATH: "/no-programs-in-fixture", HOME: f.root, TMPDIR: f.root, FIXTURE_READ_ONLY: readOnly ? "1" : "0" },
     encoding: "utf8", timeout: 2500, maxBuffer: 64 * 1024,
+  });
+}
+function treeHashes(root: string): unknown[] {
+  return readdirSync(root).sort().map(name => {
+    const at = join(root, name), stat = lstatSync(at);
+    return [name, stat.mode, stat.isDirectory() ? treeHashes(at) : createHash("sha256").update(readFileSync(at)).digest("hex")];
   });
 }
 function participant() {
@@ -85,6 +104,92 @@ function stalledPoll(watchSignal: () => AbortSignal) {
 }
 
 describe.skipIf(process.platform === "win32")("mission wake public CLI boundary", () => {
+  test("return-peek works while paused and expired without credentials, writes, network or a harness", async () => {
+    const f = await bound(); pauseReceiver(f.state);
+    // Expire the synthetic fixture without granting permission to rewrite a real binding.
+    const bindingAt = join(f.state, "wake", "binding.json"), inboxAt = join(f.state, "wake", "inbox.json");
+    const binding = JSON.parse(readFileSync(bindingAt, "utf8")); binding.expires_at = "2020-01-01T00:00:00.000Z";
+    const raw = JSON.stringify(binding, null, 2) + "\n", digest = createHash("sha256").update(raw).digest("hex");
+    writeFileSync(bindingAt, raw);
+    const inbox = JSON.parse(readFileSync(inboxAt, "utf8")); inbox.binding_sha256 = digest;
+    writeFileSync(inboxAt, JSON.stringify(inbox));
+    const quietAt = join(f.state, "wake", "quiet.json"), quiet = JSON.parse(readFileSync(quietAt, "utf8"));
+    quiet.binding_sha256 = digest; writeFileSync(quietAt, JSON.stringify(quiet));
+    for (const name of ["signing-key.pem", "enrollment.json", "invitation.json"]) writeFileSync(join(f.state, name), "invalid unread private fixture");
+    const before = treeHashes(f.root);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = run(f, ["return-peek", "--state", f.state], true);
+      expect(result.error).toBeUndefined(); expect(result.stderr).toBe(""); expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        format: "agenttool-mission-return-peek/v1",
+        route: { route_id: binding.route_id, harness: "codex" },
+        quiet: { mode: "paused", until: null, updated_at: quiet.updated_at },
+        locally_saved: { cursor: "0", counts: { pending: 0, dispatching: 0, delivered: 0, processed: 0, ack: 0 }, unresolved_deliveries: [], unresolved_processing_acks: [] },
+        binding: { expires_at: binding.expires_at, expired: true },
+        locks: { receiver_present: false, quiet_control_present: false, running: "unknown" },
+        remote: { arrivals: "unknown", current_grant_status: "unknown" },
+      });
+      expect(result.stdout).not.toContain(TOKEN); expect(result.stdout).not.toContain(f.root);
+      expect(treeHashes(f.root)).toEqual(before);
+    }
+  });
+
+  test("pause, paused poll/watch and resume remain local across fresh CLI processes", async () => {
+    const f = await bound();
+    const protectedFiles = ["signing-key.pem", "invitation.json", "wake/binding.json", "wake/inbox.json"];
+    const before = protectedFiles.map(file => readFileSync(join(f.state, file)));
+    for (const command of ["pause", "status", "poll", "watch"]) {
+      const result = run(f, [command, "--state", f.state]);
+      expect(result.error).toBeUndefined(); expect(result.status).toBe(0); expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).quiet.mode).toBe("paused");
+      expect(result.stdout).not.toContain(TOKEN); expect(result.stdout).not.toContain(f.root);
+    }
+    const resumed = run(f, ["resume", "--state", f.state]);
+    expect(resumed.error).toBeUndefined(); expect(resumed.status).toBe(0); expect(resumed.stderr).toBe("");
+    expect(JSON.parse(resumed.stdout).quiet.mode).toBe("ready");
+    expect(protectedFiles.map(file => readFileSync(join(f.state, file)))).toEqual(before);
+    expect(readdirSync(join(f.state, "outbox"))).toEqual([]);
+    expect(status(f.state).locked).toBe(false);
+  });
+
+  test("pre-paused watch never constructs a native adapter", async () => {
+    const f = await bound(); pauseReceiver(f.state);
+    let created = 0;
+    const result = await watch(f.state, 1, { createAdapter: () => { created++; throw new Error("Unexpected adapter"); } });
+    expect(created).toBe(0); expect(result.quiet.mode).toBe("paused"); expect(result.locked).toBe(false);
+  });
+
+  test("pause during admitted polling saves its result then exits without dispatch or another poll", async () => {
+    const f = await bound(), started = deferred(), release = deferred();
+    const original = globalThis.fetch; let calls = 0, deliveries = 0, closes = 0;
+    cleanups.push(() => { globalThis.fetch = original; });
+    globalThis.fetch = (async (url: string) => {
+      calls++; expect(String(url)).toContain("/events?after=0&limit=20"); started.resolve();
+      await release.promise;
+      return response({ mission_id: M, events: [], page: { after: "0", next_cursor: "0", has_more: false } });
+    }) as typeof fetch;
+    const running = watch(f.state, 2, { createAdapter: () => ({
+      deliver: async () => { deliveries++; throw new Error("Unexpected delivery"); },
+      close: async () => { closes++; },
+    }) });
+    cleanups.push(() => { release.resolve(); return running.catch(() => {}); });
+    await started.promise; pauseReceiver(f.state); release.resolve();
+    const result = await running;
+    expect(calls).toBe(1); expect(deliveries).toBe(0); expect(closes).toBe(1);
+    expect(result.quiet.mode).toBe("paused"); expect(result.locked).toBe(false); expect(result.cursor).toBe("0");
+  });
+
+  test("invalid quiet deadlines and options leave the existing local policy untouched", async () => {
+    const f = await bound();
+    for (const until of ["tomorrow", "2026-01-01T00:00:00.000Z", "9999-01-01", "2028-01-01T01:00:00+01:00"]) {
+      const result = run(f, ["pause", "--state", f.state, "--until", until]);
+      expect(result.status).toBe(1); expect(result.stderr).not.toContain("CLI_FORBIDDEN_EFFECT");
+      expect(existsSync(join(f.state, "wake", "quiet.json"))).toBe(false);
+    }
+    const result = run(f, ["resume", "--state", f.state, "--until", "2028-01-01T00:00:00.000Z"]);
+    expect(result.status).toBe(1); expect(result.stderr).not.toContain("CLI_FORBIDDEN_EFFECT");
+  });
+
   test("help runs with absolute Node and an empty tool path without opening state", () => {
     const f = fixture();
     for (const args of [[], ["help"], ["--help"]]) {
@@ -102,6 +207,7 @@ describe.skipIf(process.platform === "win32")("mission wake public CLI boundary"
       ["prepare-codex", "--cwd", "."], ["prepare-codex", "--cwd", f.root, "--state", f.state],
       ["prepare-codex", "--cwd", f.root, "--name"],
       ["watch", "--state", f.state, "--state", f.state], ["poll", "--state", f.state, "--seconds", "60"],
+      ["return-peek", "--state", f.state, "--resume", "true"],
       ["send", "--state", f.state, "--to", ROUTE, "--text-file"], ["watch", "--state", f.state, "unparsed"],
       ...["0", "21", "-1", "0.5"].map(limit => ["watch", "--state", f.state, "--max-deliveries", limit]),
     ];

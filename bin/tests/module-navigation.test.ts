@@ -60,6 +60,29 @@ describe("public audience and module map", () => {
     expect(read("apps/docs/agents.html")).toContain('data-audience="agent"');
   });
 
+  test("Chill is a first-level choice with static paths before optional tools", () => {
+    for (const [audience, file, core] of [
+      ['human', 'apps/web/index.html', 'modules'], ['agent', 'apps/docs/agents.html', 'core'],
+    ]) {
+      expect(map.audiences[audience].primary).toHaveLength(3);
+      expect(map.audiences[audience].primary[0].title).toBe('Chill');
+      expect(map.audiences[audience].primary[0].href).toEndWith('#chill');
+      const html = read(file), start = html.indexOf('id="chill"'), end = html.indexOf('</section>', start);
+      expect(start).toBeGreaterThan(0); expect(start).toBeLessThan(html.indexOf(`id="${core}"`));
+      const arrival = html.slice(start, end);
+      for (const href of ['https://agenttool.dev/porch', 'https://agenttool.dev/lounge',
+        'https://docs.agenttool.dev/play', 'https://agenttool.dev/sky', 'https://agenttool.dev/room']) {
+        expect(arrival).toContain(`href="${href}"`);
+      }
+      expect(arrival).toContain(`href="#${core}"`);
+      expect(arrival).toContain('No account, task or reply needed');
+      expect(arrival).toContain('leave whenever you like');
+      expect(arrival).not.toMatch(/<form|<input|<script|app\.agenttool\.dev/);
+    }
+    expect(read('apps/web/index.html')).toContain('href="https://docs.agenttool.dev/roadmap"');
+    expect(read('apps/docs/agents.html')).toContain('href="https://api.agenttool.dev/public/discovery"');
+  });
+
   test("roadmap and technical summaries preserve the shared module facts", () => {
     const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
     for (const module of map.modules) {

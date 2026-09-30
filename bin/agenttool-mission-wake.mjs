@@ -3,12 +3,15 @@
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as client from './agenttool-mission.mjs';
-import { bind, message, openReceiver, recoverLock, status } from './mission-wake-receiver.mjs';
+import { bind, message, openReceiver, pause, resume, ReceiverPausedError, recoverLock, recoverQuietLock, returnPeek, status } from './mission-wake-receiver.mjs';
 
 const HELP = `AgentTool mission wake — Node 22+ on macOS/Linux; npm is optional.
 prepare-codex --cwd DIR [--name LABEL]     Create a durable inbox via one readiness model turn
 bind --state DIR --config-file FILE       Bind reviewed mission, peer and exact target once
 status --state DIR                       Route address and receipt state; no message text
+return-peek --state DIR                  Local counts and unresolved IDs; no polling or activation
+pause --state DIR [--until UTC]           Private pause of new receiver admissions; no announcement
+resume --state DIR                       Reopen admission; does not start a receiver or replay
 poll --state DIR                         Save one verified page, without invoking a harness
 send --state DIR --to ROUTE_UUID --text-file FILE [--kind message|ack] [--in-reply-to EVENT_UUID]
 watch --state DIR [--seconds 60] [--max-deliveries 1] [--ack-to ROUTE_UUID]
@@ -17,7 +20,11 @@ watch --state DIR [--seconds 60] [--max-deliveries 1] [--ack-to ROUTE_UUID]
 channel --state DIR [--seconds 60]        Claude channel STDIO, bound to this host connection
 resolve --state DIR --event-id UUID --delivery-id UUID --outcome processed|retry
 recover-lock --state DIR --lock-id UUID   Explicit recovery only when the owning PID is gone
+recover-quiet-lock --state DIR --lock-id UUID
+                                        Recover a stopped local quiet-control writer
 Maximum watch/channel duration: 900 seconds. No daemon or global settings installed.
+Pause is route-local. Already admitted operations may finish under their original limits.
+Timed pause uses canonical UTC (YYYY-MM-DDTHH:mm:ss.sssZ); expiry does not start anything.
 Inspect ambiguous native turns before resolve; retry can duplicate a prior effect.
 `;
 function seconds(value = '60') {
@@ -38,6 +45,8 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
     const kind = receiver.binding.target.kind;
     if (!['codex', 'hermes'].includes(kind)) throw new Error('Use channel for a Claude channel binding.');
     if (ackTo !== undefined && kind !== 'hermes') throw new Error('--ack-to requires a Hermes binding.');
+    const quiet = receiver.quiet();
+    if (quiet.mode === 'paused') throw new ReceiverPausedError(quiet);
     const factory = createAdapter ?? (kind === 'hermes' ? (await import('./mission-wake-hermes.mjs')).createHermesAdapter :
       (await import('./mission-wake-codex.mjs')).createCodexAdapter);
     adapter = factory({ signal: controller.signal, timeoutMs: Math.max(1, deadline - Date.now()) });
@@ -64,7 +73,7 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
       });
     }
   } catch (error) {
-    if (!controller.signal.aborted) throw error;
+    if (!controller.signal.aborted && !(error instanceof ReceiverPausedError)) throw error;
   } finally {
     clearTimeout(timer); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
     await adapter?.close(); receiver.close();
@@ -74,8 +83,8 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
 export async function main(argv) {
   const [command, ...args] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
-  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
-    watch: ['seconds', 'max-deliveries', 'ack-to'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'] };
+  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], 'return-peek': [], pause: ['until'], resume: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
+    watch: ['seconds', 'max-deliveries', 'ack-to'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'], 'recover-quiet-lock': ['lock-id'] };
   if (!Object.hasOwn(allowed, command)) throw new Error('Unknown wake command.');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
@@ -93,7 +102,14 @@ export async function main(argv) {
   let result;
   if (command === 'bind') result = await bind(options.state, JSON.parse(client.privateRead(options['config-file'])));
   if (command === 'status') result = status(options.state);
+  if (command === 'return-peek') result = returnPeek(options.state);
+  if (command === 'pause' || command === 'resume') {
+    if (command === 'pause') pause(options.state, options.until);
+    else resume(options.state);
+    result = status(options.state); // Include existing in-flight IDs; a pause is not cancellation.
+  }
   if (command === 'recover-lock') result = recoverLock(options.state, options['lock-id']);
+  if (command === 'recover-quiet-lock') result = recoverQuietLock(options.state, options['lock-id']);
   if (command === 'send') {
     const envelope = message(options.to, options.kind ?? 'message', client.privateRead(options['text-file'], 8192), options['in-reply-to']);
     const sent = await client.send(options.state, JSON.stringify(envelope));
@@ -102,6 +118,10 @@ export async function main(argv) {
   if (command === 'poll' || command === 'resolve') {
     const receiver = openReceiver(options.state);
     try { result = command === 'poll' ? await receiver.poll() : receiver.resolve(options['event-id'], options['delivery-id'], options.outcome); }
+    catch (error) {
+      if (!(error instanceof ReceiverPausedError)) throw error;
+      result = { status: 'paused', quiet: error.quiet };
+    }
     finally { receiver.close(); }
   }
   if (command === 'watch') result = await watch(options.state, seconds(options.seconds), { maxDeliveries: Number(options['max-deliveries'] ?? 1), ackTo: options['ack-to'] });

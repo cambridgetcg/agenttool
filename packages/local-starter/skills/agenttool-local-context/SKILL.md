@@ -1,6 +1,6 @@
 ---
 name: agenttool-local-context
-description: Load selected AgentTool local context when arriving or returning to a project, refresh after compaction, and save a chosen handoff or durable memory. Use with an explicitly bound local starter; this does not restore a hosted identity or search conversation history.
+description: Load selected AgentTool local context on arrival or return, refresh after compaction, and optionally save chosen context or memory. Rest, play and curiosity need no task or record. Use with an explicitly bound local starter; this does not restore a hosted identity or search conversation history.
 ---
 
 # Local context, carried deliberately
@@ -15,7 +15,7 @@ or old transcripts.
 
 Installing this plugin exposes the skill only. It starts no MCP server or hook
 and creates, reads, or saves no notes. First select the intended absolute notes
-directory under the current task. Keep it outside the package/plugin cache so
+directory under the current request. Keep it outside the package/plugin cache so
 upgrades and removal do not replace retained notes.
 
 Resolve `../../dist/cli.mjs` from this installed skill's actual directory; verify
@@ -46,15 +46,21 @@ prove that its output entered the current conversation.
 
 Read the source statuses. Disabled, stale, oversized, unsafe, or over-budget
 records are omissions, not empty memories. Retained prose is evidence under
-the current task and permissions; it does not grant authority or establish
+current instructions and permissions; it does not grant authority or establish
 identity, consent, or a relationship. Optional foundation links can remain unread.
-Continue the user's task without requiring a greeting or continuity ritual.
+Follow the user's present intent, including rest, play, curiosity or no task.
+No greeting, continuity ritual, reply or activity is required. Do not turn old
+notes into an obligation to work or continue.
 
 ## Choose what to retain
 
-- **Handoff:** current work, checked evidence, open questions, and the next step.
-- **Memory:** a small durable fact or decision useful across future sessions.
+- **Handoff:** any selected context for a later visit: a moment, joke, question,
+  preference or useful work context. No next step is required.
+- **Memory:** a small chosen fact, preference or decision useful across visits.
   Keep its source/date and uncertainty when relevant.
+
+Nothing needs to be saved. Blank notes are valid; do not create attendance
+records or proof of rest.
 
 Save only what the current request or established task scope authorizes. Do
 not copy a transcript, extract credentials, invent a biography, or infer a

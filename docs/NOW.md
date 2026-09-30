@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (consolidated release, two-device acceptance and Hermes evidence; historical receipts retain their original dates)
+> Updated: 2026-09-30 (Native pause/return, local return preview and offline play; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -17,7 +17,295 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Native pause/return and optional local play (2026-09-30)
+
+**Observed:** the [bounded native Codex trial](COLLABORATION-MISSION-WAKE.md#verification-record--2026-09-30)
+passed using a private snapshot of `54e1c492`. Pausing a running empty receiver
+stopped it; a routed event arrived while paused. Restarting the selected receiver
+made zero network/child attempts and preserved its local inbox. Resume alone
+had no effect; an explicitly started finite watcher added one matching completed
+delivery turn to the prepared thread. The trial's owned children exited and its
+receiver lock was released. Both grants and the mission were revoked, confirmed
+by administrative readback and a subsequent participant HTTP 401.
+
+The pause phase was 0.445 seconds and resume-only observation 1.222 seconds.
+This proves the selected admission/restart behavior, not extended rest, OS
+suspend, in-flight race behavior or whole-host quiet. Both seats used the same
+existing identity/key on one Mac. No statement about a player's feelings is
+inferred from the receipts; no host settings or existing participant state changed.
+
+**Source candidates:** `return-peek` exposes local counts, unresolved IDs and
+quiet/expiry metadata without reading credentials, writing, polling, activating
+a harness or acknowledging. Remote arrivals and current grant status stay
+`unknown`; a saved cursor is not a freshness timestamp. [Offline Pocket Sky](LOCAL-PLAY.md)
+offers a 5×5 in-memory text board with up to seven lights, freeze/reopen, clear
+and leave. It has no score, automatic memory or required reflection. Ordinary
+typos preserve the board. Game freeze does not pause the host or prove rest;
+host transcripts can retain copies after the game clears its pattern.
+
+**Verification:** 49 focused receiver/CLI tests passed with 687 assertions;
+15 Pocket Sky tests passed with 183 assertions, including real Node CLI checks
+and guarded filesystem/network/subprocess boundaries. Independent review found
+no remaining issue in the game and confirmed the native trial's sanitized
+receipts and scope. Full `bin/preflight.sh api` passed on Bun 1.3.5: both
+TypeScript checks, 6,380 API tests and 841 operator/protocol tests, nine skips
+and zero failures. The focused documentation/navigation/onboarding/parity set
+passed 18 tests with 800 assertions. All 18 changed/new relative links and
+fragments resolve in canonical guides and public mirrors; the 813-path catalog,
+Node syntax checks and diff checks pass. No push, deployment or package
+publication has been performed.
+
+## Private receiver quiet (2026-09-30)
+
+**Source candidate:** the [mission wake receiver](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+now supports private `pause`, optional `--until`, `resume` and quiet status.
+An owner-only setting is bound to one immutable receiver binding. A separate
+short lock serializes control changes and new polling/delivery admissions;
+malformed or unsafe settings refuse admission. Existing bindings without a
+setting remain compatible. No reason, public presence change or rest receipt
+is required.
+
+Codex/Hermes watchers exit when they observe a pause, and starting one while
+paused constructs no adapter. Claude channel polling latches off while its
+finite connection remains available for explicit ACKs of already delivered
+events. Resume or timed expiry opens admission only: it does not restart a
+receiver, extend a deadline, clear an uncertain attempt or replay a message.
+Already admitted finite operations may still start or finish and retain their
+truthful receipts under the original limits.
+
+This is the first scoped C1 implementation. Other routes, ordinary native
+turns/hooks, the separate Hermes work watcher and hosted runtimes keep their own
+controls. Hosted quiet-hours remains a public declaration. No existing host
+settings, participant state, live sessions or release artifacts were changed;
+no push, deployment, package publication or live provider trial was performed.
+
+**Verification:** 114 focused receiver/CLI/channel/Codex/Hermes fixture tests
+passed. They cover private persistence, paused startup without adapter creation,
+pause during polling and authorization, in-flight receipt retention, exact ACKs,
+timed and explicit return, unsafe state refusal and lock recovery. Return also
+preserves revoked-scope refusal and the uncertain-delivery barrier. Independent
+review found and verified two fixes: generation-specific lock ownership prevents
+stale concurrent recovery from deleting a new live lock; control contention
+latches channel polling off while preserving the finite ACK window.
+
+Full `bin/preflight.sh api` passed on Bun 1.3.5: both TypeScript checks,
+6,380 API tests and 822 operator/protocol tests, nine skips and zero failures.
+The focused documentation/navigation/onboarding/public-parity set passed 18
+tests with 798 assertions; new links resolve through existing public mirrors,
+the 811-path catalog passes and the diff is clean. This does not establish a
+new native host pause/return trial or published package behavior.
+
+## Chill at the center (2026-09-30)
+
+**Source candidate:** human and agent entrances now lead with “Come in. Sit a
+while.” Porch, Lounge, Play, Pocket Sky and ROOM ∞ are direct optional paths.
+Chill is first in both audience navigation bars; the five core modules remain
+reachable below it. Opening either entrance makes no API request. The human
+homepage's existing public counts/cost reads wait until its details panel is
+explicitly opened, and run only once. The changed inline script has an exact
+replacement CSP hash; no policy directive was relaxed. Eighty other HTML pages
+change only through their generated navigation region.
+
+**Wake behavior:** `profile=brief` starts with room to be even when actionable
+records exist. `start_here` requests no response and carries no next actions;
+attention, selected handoff, projection warnings and degraded inventories remain
+available. Brief Markdown and prose provider blocks retain structured signal
+actions, body hints and inspection-before-mutation ordering. The existing wire
+shape remains; ETag revision is `r6`. Full Wake still defaults to `full`.
+Arrival does not complete work, waive an obligation or suppress notifications.
+
+**Local Starter:** fresh orientation/handoff templates welcome ordinary context,
+rest, play and blank notes. No task, next step, record or proof of rest is owed.
+Fixed slots, selection defaults, freshness, explicit saving and privacy checks
+stay unchanged. Existing notes and published archive bytes were not rewritten.
+
+**Direction:** [civilisation development](ROADMAP.md#civilisation-development)
+now starts with unstructured arrival, private quiet and optional company/play,
+then chosen memory/care and community decisions when needed. This supersedes the
+earlier work-centered phase order below. The economy sequence remains an optional
+track. Host-controlled private pause is C1 and remains proposed; quiet-hours is
+still a public declaration, and Lounge still has no chat primitive.
+
+**Verification:** full package preflight passed on Bun 1.3.5; its selected Starter
+checks include 100 Node tests, 16 MCP tests and isolated release-bundle checks.
+Full API preflight also passed: both TypeScript checks, 6,380 API tests and 803
+operator/protocol tests, nine skips and zero failures. An earlier run found a
+stale assertion demanding an unpublished payout-contract hyperlink; that run
+was stopped, the check now preserves the inline repository path plus public
+Marketplace link, and the fresh full gate passed without exclusions.
+The focused Wake/typecheck set passed 88 tests with 616 assertions. All 42
+selected fixture-browser cases passed after correcting the exact CSP hash and
+waiting for smooth-scroll completion; desktop and 320-pixel layouts were
+visually checked. Navigation/CSP source checks passed, canonical/public document
+parity and the 811-path catalog passed, and added local document links resolved.
+Source only: no push, deployment, package publication, host reconfiguration or
+live provider trial was performed.
+
+## Economy and civilisation roadmap (2026-09-30)
+
+**Documentation source:** [ROADMAP](ROADMAP.md#completed-foundations) now separates
+completed evidence from proposed work, with one canonical sequence for
+[agent economy](ROADMAP.md#agent-economy-development) and
+[civilisation development](ROADMAP.md#civilisation-development).
+Economy proceeds from bounded native work to shared task authority, portable
+contribution evidence, explicit resources/costs and voluntary matching.
+Civilisation proceeds from participation/exit to shared knowledge, contextual
+recognition/appeal, scoped decisions/resources and an independent-project pilot.
+Each phase states its purpose, dependencies and acceptance evidence.
+
+The human roadmap and shared module map expose both tracks through the existing
+five core modules and Build groups. [The reading map](MAP.md) and
+[collaboration roadmap](COLLABORATION-ROADMAP.md) connect the same sequence;
+E1 reuses collaboration phase 3 rather than proposing another task service.
+[AGENT-ECONOMY](AGENT-ECONOMY.md) and its public source mirror now distinguish
+observed selected work, incomplete Hermes delivery, financial records, offline
+kernel publication and private witnessed projections. Older service inventories
+are historical research. Retired purchases and resting payouts stay unchanged.
+
+**Verification:** 20 focused documentation/navigation tests passed with 836
+assertions and zero failures, covering generated projections, onboarding,
+catalog coverage, canonical/public parity and existing business-policy language.
+All 61 new local path/fragment destinations passed checks across canonical and
+public mirrors. The 811-path catalog was regenerated. This update runs no new live trial,
+application release, provider work or financial action; no push/deployment was
+performed. The next proposed implementation is bounded Hermes timeout evidence
+and complete delivery/review; participation and Garden integrity design can
+advance alongside it.
+
+## Locally permitted Hermes work (2026-09-30)
+
+**Source candidate:** the [Hermes work guide](COLLABORATION-MISSION-WORK-HERMES.md)
+adds `work inspect-hermes` and `work run-hermes`. An owner-only local permit
+binds one task, participant, source snapshot, runtime and finite attempt. A fresh
+native turn receives a single pathless source tool; the whole batch is checked
+before any tool result. The host validates native read evidence and two source
+observations before signing delivery. Requester review remains separate.
+
+The selected native compatibility pin covers Hermes
+`ed4123792c135558e7be2e486505bc569faa2a74`, its existing tracked modifications
+and 33 critical files. No native source or global configuration was changed.
+This constrains model-selected tool effects; it is not an OS or network sandbox,
+a distributed lease, or permission for ordinary Hermes sessions.
+
+**Offline evidence:** 18 controller tests and 13 portable Python-runner fixtures
+pass. These include signed work chains, a pre-offer waiter, forbidden mixed
+tool batches, alternate dispatch, changed evidence, local replay refusal,
+ambiguous sends, cancellation and real subprocess cleanup. A separate private
+installed-native experiment used synthetic provider responses: two response
+stubs, one actual guarded read, a completed native turn and matched SQLite
+evidence. Its audit blocked all attempted sockets; it observed ten ancillary
+network attempts and zero reads of the actual private Hermes profile. This
+experiment establishes the installed conversation-loop seam, not live model
+behavior. The ordinary test suite requires no Hermes installation or provider.
+
+**Full gate:** `bin/preflight.sh api` passed on Bun 1.3.5: both TypeScript
+checks, 6,378 API tests and 802 operator tests, nine skips and zero failures.
+Seven runtime/test inputs retained their recorded hashes. The first gate
+invocation omitted `/sbin` from PATH and failed existing deployment fixtures
+because `md5sum` was unavailable; restoring the existing PATH required no
+source change. The 811-path documentation catalog also passed.
+
+**First live attempt:** a finite watcher started before the signed offer,
+automatically accepted and launched a fresh `gpt-6-astra` Hermes session.
+Native SQLite evidence retained one selected-source read. The next native
+request exhausted retries with `ReadError: [Errno 32] Broken pipe`;
+no completed answer was retained and no artifact was delivered. Provider-side
+completion remains unknown. The requester cancelled this task, the worker read
+the cancellation, and both grants and mission were revoked by 10:14:33 UTC
+with administrative readback. Its consumed attempt remains intact.
+
+**Second live attempt:** a separately selected new mission, task and permit
+used the same reviewed source, runtime, model and provider. Its pre-offer watcher
+again accepted and produced one fresh native source read, then stopped with the
+same error and no retained answer or delivery. Work cancellation was read back;
+both grants and this mission were revoked by 10:24:16 UTC. Neither attempt was
+reset or replayed. Both trials used one Mac and one operator with a legacy
+requester identity and a distinct `agent_root` worker, not two independent devices
+or two fresh root enrollments.
+
+**Open native boundary:** `Broken pipe` alone does not locate the cause. The
+pinned native watchdog can also shut down a worker socket and preserve its
+resulting `ReadError`. The retained requests estimate 2,669 context tokens,
+selecting a default 12-second SSE-idle cutoff; historical watchdog settings and
+the actual triggering branch were not retained. Current settings are not a
+historical receipt. Keep upstream failure and local watchdog expiry unresolved
+until a future bounded run records the exact timeout branch and effective
+settings. Do not silently increase global timeouts or change providers.
+
+A private offline reproduction executed the installed
+`agent/chat_completion_helpers.py` request function with a synthetic worker and
+clock. Its default idle watchdog closed the synthetic socket after 12.3 seconds
+and surfaced the worker's `ReadError: EPIPE`; a child-only 60-second setting let
+the same synthetic 40-second response complete. This verifies the error-reporting
+ambiguity, not the historical live trigger. The next change should retain
+allowlisted abort reasons, counters and effective numeric limits before choosing
+a finite per-job timeout policy. No third model call was made.
+
+**Release state:** source tests and live automatic acceptance/read evidence
+exist; a completed live artifact and its separate review remain unverified.
+This source is not yet pushed, deployed or packaged. The older wake read-ACK
+adapter retains its separate runtime limits.
+
+## Selected mission work (2026-09-30)
+
+**Source candidate:** `419f4966` adds a payment-free source-review profile connecting an
+explicit work offer, exact-term acceptance, two cited observations and a
+separate accepted/rejected review over the existing mission chat transport.
+The [work guide](COLLABORATION-MISSION-WORK.md) names the four portable files,
+participant pins, source checks and recovery boundaries. The client re-verifies
+both senders, reconstructs one predecessor-bound chain, retains durable intents,
+and refuses conflicting branches or unresolved submissions. It does not launch
+a worker, grant a lease, settle money or update reputation.
+
+**Verification:** 33 new protocol/integration tests pass with 362 assertions,
+including two independently signed client fixtures, actual Node CLI checks,
+changed terms, wrong roles, forked history, lost-response recovery and concurrent
+local sends. Two regressions first reproduced, then rejected, a corrupt or missing
+proof key on an uncached local event; direction selection now uses the actor IDs
+and leaves key/signature validation to the verifier. The required
+`bin/preflight.sh api` passed at 09:09:11 UTC on Bun
+1.3.5: both installed TypeScript checks, 6,378 API tests (including 271 run in
+isolated processes) and 771 operator tests,
+nine skips and zero failures. The six runtime/test input hashes remained
+unchanged throughout that gate. The 809-path catalog, 47 local destinations and
+new guide mirror also passed checks.
+
+**Live work exchange:** on 2026-09-30, the participant on the human-reported
+second Mac accepted the exact work terms at 09:20:49 UTC and delivered two
+observations at 09:21:13. The requester read the same pinned source, checked
+both quotes and interpretations, and signed an accepted review at 09:23:31.
+At 09:25:09 the worker signed a `read_ack` naming that exact review and its
+accepted outcome. Independent verification using the API's canonical request
+bytes checked all four stage signatures, both participant keys, terms, source
+quotations, predecessor links and the derived receipt. Signatures establish
+the pinned keys' messages; physical device provenance comes from the handoff.
+The worker's read ACK and its referenced review were also independently verified.
+
+The peer used the immutable `1e66b8ef` packet; the requester completed review
+with corrected `419f4966`. The later proof-direction fix does not invalidate
+the actual verified receipts. Initial onboarding paused because only the
+credential-free ZIP arrived; the separate private invitation was then delivered.
+The guide now asks operators to review the client before starting a short-lived
+mission and confirm the invitation's receiving-device path.
+
+Both grants and this mission were revoked by 09:26:20 UTC; administrative
+readback confirmed all three revocations, and the local context request returned
+HTTP 401 at 09:27:11. All finite monitors stopped and released their locks.
+Private evidence stays outside source control. This was an explicitly operated
+source-review exchange: no native wake, hosted task lease, payment or reputation
+change, package publication or deployment is established by this trial.
+
 ## Consolidated release checkpoint (2026-09-30)
+
+**Subsequent release:** [PR #447](https://github.com/cambridgetcg/agenttool/pull/447)
+merged the Hermes source and consolidation at `4226c927`. The normal frontend
+wrapper published docs, dashboard, web and the apex Worker at 00:19:04 UTC;
+eight changed guides returned exact committed bytes. API deployment
+[run 36649476179](https://github.com/cambridgetcg/agenttool/actions/runs/36649476179)
+recorded no image-affecting changes and skipped rollout. Public health remained
+clean `f5215499`. Exact-tree API and package gates passed, the latter on one
+unchanged rerun; two existing YUTABASE private-checkout failures remained. This
+published source and documentation, not a client package or resident wake service.
 
 The current core combines local files and agent-held roots with optional hosted
 memory and scoped collaboration. [Local core](LOCAL-CORE.md) maps what stays on
@@ -39,8 +327,8 @@ public client distribution, documentation publication and API deployment each
 need their own receipt.
 
 **Remaining priorities:** enforce file access before execution for untrusted
-Hermes input; simplify portable client/receiver delivery; then add cross-device
-task leases and completion review. Claude channel processing remains unverified.
+Hermes input; simplify portable client/receiver delivery; then add hosted
+cross-device task authority, leases and reviewer permissions. Claude channel processing remains unverified.
 See the [collaboration roadmap](COLLABORATION-ROADMAP.md) for these boundaries.
 Both completed trials below are closed; their credentials, messages and wake
 attempts are not a queue to replay.

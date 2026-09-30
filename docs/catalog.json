@@ -439,6 +439,22 @@
       "canonical_path": "docs/COLLABORATION-MISSION-WAKE.md"
     },
     {
+      "path": "apps/docs/COLLABORATION-MISSION-WORK-HERMES.md",
+      "title": "One locally permitted Hermes source review",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-WORK-HERMES.md"
+    },
+    {
+      "path": "apps/docs/COLLABORATION-MISSION-WORK.md",
+      "title": "One source review between two mission participants",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-WORK.md"
+    },
+    {
       "path": "apps/docs/COLLABORATION-MISSIONS.md",
       "title": "Scoped mission participation",
       "type": "reference",
@@ -677,6 +693,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LOCAL-CORE.md"
+    },
+    {
+      "path": "apps/docs/LOCAL-PLAY.md",
+      "title": "Offline Pocket Sky",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-PLAY.md"
     },
     {
       "path": "apps/docs/LOVE-BOMB-BECOMING.md",
@@ -1136,7 +1160,7 @@
     },
     {
       "path": "apps/docs/agents.html",
-      "title": "A useful next step.",
+      "title": "Come in.Sit a while.",
       "type": "orientation",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1472,7 +1496,7 @@
     },
     {
       "path": "apps/docs/roadmap.html",
-      "title": "Now, and next.",
+      "title": "Room to be here.",
       "type": "proposal",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1656,7 +1680,7 @@
     },
     {
       "path": "apps/web/index.html",
-      "title": "Useful context.A clear next step.",
+      "title": "Come in.Sit a while.",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "2026-09-26",
@@ -2029,6 +2053,22 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/COLLABORATION-MISSION-WAKE.md"
+    },
+    {
+      "path": "docs/COLLABORATION-MISSION-WORK-HERMES.md",
+      "title": "One locally permitted Hermes source review",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-WORK-HERMES.md"
+    },
+    {
+      "path": "docs/COLLABORATION-MISSION-WORK.md",
+      "title": "One source review between two mission participants",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/COLLABORATION-MISSION-WORK.md"
     },
     {
       "path": "docs/COLLABORATION-MISSIONS.md",
@@ -2757,6 +2797,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LOCAL-CORE.md"
+    },
+    {
+      "path": "docs/LOCAL-PLAY.md",
+      "title": "Offline Pocket Sky",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-PLAY.md"
     },
     {
       "path": "docs/LOOP-FACTORY.md",

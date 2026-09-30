@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import { runChannel } from '../mission-wake-channel.mjs';
+import { ReceiverPausedError, ReceiverQuietBusyError } from '../mission-wake-receiver.mjs';
 
 const ROUTE = '11111111-1111-4111-8111-111111111111';
 const EVENT = '22222222-2222-4222-8222-222222222222';
@@ -68,6 +69,53 @@ function fixture(overrides: Record<string, any> = {}) {
 }
 
 describe('bounded mission Claude channel', () => {
+  test('a paused channel has no delivery and keeps finite protocol ownership', async () => {
+    const f = fixture({ receiver: { async poll() {
+      this.polls++; throw new ReceiverPausedError({ mode: 'paused', until: null, updated_at: null });
+    } } });
+    await f.initialize(); await until(() => f.receiver.polls === 1);
+    f.request(2, 'tools/list'); await until(() => f.messages.some(m => m.id === 2));
+    expect(f.messages.find(m => m.id === 2).result.tools.map((t: any) => t.name)).toEqual(['mission_wake_ack']);
+    expect(f.receiver.dispatches).toBe(0); expect(f.receiver.closes).toBe(0);
+    expect(f.messages.some(m => m.method === 'notifications/claude/channel')).toBe(false);
+    f.input.end(); expect(await f.done).toEqual({ status: 'stopped', reason: 'eof' });
+    expect(f.receiver.closes).toBe(1);
+  });
+
+  test('pause stops polling but allows exact ACK; reopening admission never restarts that channel', async () => {
+    let quiet = false, pauses = 0;
+    const f = fixture({ receiver: { async poll(options: any) {
+      this.polls++; this.pollSignal = options.signal;
+      if (quiet) { pauses++; throw new ReceiverPausedError({ mode: 'paused', until: null, updated_at: null }); }
+    } } });
+    await f.initialize(); await until(() => f.receiver.status === 'delivered');
+    quiet = true; await until(() => pauses === 1); const polls = f.receiver.polls;
+    f.request(2, 'tools/call', { name: 'mission_wake_ack', arguments: { event_id: EVENT, delivery_id: DELIVERY } });
+    await until(() => f.messages.some(m => m.id === 2));
+    expect(f.receiver.status).toBe('processed'); expect(f.receiver.acknowledgments).toBe(1);
+    quiet = false; f.receiver.status = 'pending';
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(f.receiver.polls).toBe(polls); expect(f.receiver.dispatches).toBe(1);
+    f.input.end(); expect(await f.done).toEqual({ status: 'stopped', reason: 'eof' });
+  });
+
+  test('quiet-control contention suspends polling without closing the existing ACK window', async () => {
+    let contended = false, conflicts = 0;
+    const f = fixture({ receiver: { async poll(options: any) {
+      this.polls++; this.pollSignal = options.signal;
+      if (contended) { conflicts++; throw new ReceiverQuietBusyError(); }
+    } } });
+    await f.initialize(); await until(() => f.receiver.status === 'delivered');
+    contended = true; await until(() => conflicts === 1);
+    expect(f.receiver.closes).toBe(0); const polls = f.receiver.polls;
+    f.request(2, 'tools/call', { name: 'mission_wake_ack', arguments: { event_id: EVENT, delivery_id: DELIVERY } });
+    await until(() => f.messages.some(m => m.id === 2));
+    expect(f.receiver.status).toBe('processed'); expect(f.receiver.acknowledgments).toBe(1);
+    contended = false; await new Promise(resolve => setTimeout(resolve, 30));
+    expect(f.receiver.polls).toBe(polls); expect(f.receiver.dispatches).toBe(1);
+    f.input.end(); expect(await f.done).toEqual({ status: 'stopped', reason: 'eof' });
+  });
+
   test('initialization gates polling; exact connection metadata and explicit processing ack', async () => {
     const f = fixture();
     await pause();

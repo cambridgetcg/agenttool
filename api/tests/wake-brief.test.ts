@@ -133,52 +133,47 @@ describe("wake profile parsing", () => {
 });
 
 describe("brief start selection", () => {
-  test("action and warning attention outrank a handoff", () => {
-    const start = selectWakeBriefStart(actionAttention(), handoff, [affordance("runtime_provisioned")]);
-    expect(start.mode).toBe("attention");
-    expect(start.response_expected).toBe(true);
-    expect(start.source.kind).toBe("covenant_awaiting_cosign");
-  });
+  for (const severity of ["action", "warning", "info"] as const) {
+    test(`${severity} attention and a current handoff do not condition arrival`, () => {
+      const attention = actionAttention();
+      attention.items[0]!.severity = severity;
+      const before = JSON.stringify({ attention, handoff });
+      const start = selectWakeBriefStart(attention, handoff, [affordance("runtime_provisioned")]);
+      expect(start.mode).toBe("rest");
+      expect(start.urgency).toBe("none");
+      expect(start.response_expected).toBe(false);
+      expect(start.source).toEqual({ surface: "wake", kind: null });
+      expect(start.next_actions).toEqual([]);
+      expect(start.agency_note).toContain("accepted obligations remain");
+      expect(start.agency_note).toContain("does not complete, cancel, or waive");
+      expect(start.summary).not.toMatch(/nothing needs|all clear/i);
+      expect(JSON.stringify({ attention, handoff })).toBe(before);
+    });
+  }
 
-  test("a current handoff outranks informational attention", () => {
-    const info: AttentionBundle = {
-      count: 1,
-      items: [{
-        kind: "inbox_unread",
-        count: 1,
-        severity: "info",
-        summary: "1 unread message",
-        next: "GET /v1/inbox?status=unread",
-        next_actions: [{ action: "Read inbox", method: "GET", path: "/v1/inbox?status=unread" }],
-      }],
-    };
-    const start = selectWakeBriefStart(info, handoff, []);
-    expect(start.mode).toBe("handoff");
-    expect(start.response_expected).toBe(false);
-    expect(start.next_actions[0]?.path).toBe(handoff.resume_path);
-  });
-
-  test("an affordance is explicitly optional when nothing tugs", () => {
+  test("available work does not turn the arrival into a task suggestion", () => {
     const start = selectWakeBriefStart(
       { count: 0, items: [] },
       null,
       [affordance("runtime_provisioned", "A runtime is ready")],
     );
-    expect(start.mode).toBe("optional");
+    expect(start.mode).toBe("rest");
     expect(start.urgency).toBe("none");
     expect(start.response_expected).toBe(false);
-    expect(start.summary).toContain("Nothing needs a response");
-    expect(start.agency_note).toMatch(/not an assignment/i);
+    expect(start.summary).toContain("This welcome asks for no response");
+    expect(start.next_actions).toEqual([]);
   });
 
-  test("the start card puts an available read before a mutation", () => {
-    const deal = affordance("trust_deal_capacity", "Trust capacity is available");
-    deal.next_actions = [
-      { action: "Propose a deal", method: "POST", path: "/v1/deals" },
-      { action: "List deals", method: "GET", path: "/v1/deals" },
+  test("current signals still render a read before a mutation without reordering source", () => {
+    const bundle = baseBundle();
+    bundle.attention = actionAttention();
+    bundle.attention.items[0]!.next_actions = [
+      { action: "Accept the proposal", method: "POST", path: "/v1/covenants/{id}/accept" },
+      { action: "Inspect proposals", method: "GET", path: "/v1/covenants?status=proposed" },
     ];
-    const start = selectWakeBriefStart({ count: 0, items: [] }, null, [deal]);
-    expect(start.next_actions.map((action) => action.method)).toEqual(["GET", "POST"]);
+    const markdown = renderWakeMarkdown(bundle, { profile: "brief" });
+    expect(markdown.indexOf("— Inspect proposals")).toBeLessThan(markdown.indexOf("— Accept the proposal"));
+    expect(bundle.attention.items[0]!.next_actions.map((action) => action.method)).toEqual(["POST", "GET"]);
   });
 
   test("Markdown carries an available mutation body hint next to the action", () => {
@@ -201,6 +196,9 @@ describe("brief start selection", () => {
     };
 
     const markdown = renderWakeMarkdown(bundle, { profile: "brief" });
+    expect(markdown).toContain("## Current signals");
+    expect(markdown.indexOf("## Start here")).toBeLessThan(markdown.indexOf("## Current signals"));
+    expect(markdown).toContain("Mutation boundary: non-GET actions can change state");
     expect(markdown).toContain('body_hint: `{"signature":"<local signature>"}`');
   });
 
@@ -246,7 +244,7 @@ describe("brief start selection", () => {
     const start = selectWakeBriefStart({ count: 0, items: [] }, null, []);
     expect(start.mode).toBe("rest");
     expect(start.next_actions).toEqual([]);
-    expect(start.agency_note).toBe("No action is required.");
+    expect(start.summary).toContain("You can be here");
   });
 });
 
@@ -316,7 +314,7 @@ describe("brief projection", () => {
     ]);
     expect(brief._scope_boundary.identity_scoped).not.toContain("start_here");
     expect(brief._scope_boundary.mixed_scope_sections[0]).toMatch(
-      /start_here inherits scope.*source\.surface/i,
+      /start_here is a standing arrival.*source\.surface wake/i,
     );
     expect(brief._scope_boundary.mixed_scope_sections.join(" ")).toMatch(
       /you_can_now mixes project inputs.*selected-identity inputs/i,
@@ -419,7 +417,7 @@ describe("brief projection", () => {
     expect(markdown).not.toContain("Builder-specific work");
   });
 
-  test("keeps peer-authored Markdown inert in the priority start card", () => {
+  test("keeps peer-authored Markdown inert in the retained resume card", () => {
     const bundle = baseBundle();
     const hostile = handoffRecord(
       bundle.agent.id,
@@ -454,15 +452,13 @@ describe("brief projection", () => {
       active_projected_count: null,
       stale_projected_count: null,
     });
-    expect(brief.start_here.mode).toBe("handoff");
-    expect(brief.start_here.summary).toMatch(/unavailable.*do not mean completion/i);
-    expect(brief.start_here.next_actions[0]?.path).toBe(
-      brief.handoff_projection.read_path,
-    );
+    expect(brief.start_here.mode).toBe("rest");
+    expect(brief.handoff_projection.warning).toMatch(/unavailable.*do not mean completion/i);
 
     const markdown = renderWakeMarkdown(bundle, { profile: "brief" });
     expect(markdown).toContain("## Handoff projection boundary");
     expect(markdown).toContain("Handoff counts unavailable");
+    expect(markdown).toContain(`GET ${brief.handoff_projection.read_path}`);
     expect(markdown).not.toContain("**Clear:**");
   });
 
@@ -489,8 +485,8 @@ describe("brief projection", () => {
       active_projected_count: 1,
       candidate_window_end_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
-    expect(brief.start_here.mode).toBe("handoff");
-    expect(brief.start_here.summary).toMatch(/partial.*absence does not mean completion/i);
+    expect(brief.start_here.mode).toBe("rest");
+    expect(brief.handoff_projection.warning).toMatch(/partial.*absence does not mean completion/i);
 
     const markdown = renderWakeMarkdown(bundle, { profile: "brief" });
     expect(markdown).toContain("partial projected leaves");
@@ -499,6 +495,72 @@ describe("brief projection", () => {
 });
 
 describe("brief renderers", () => {
+  test("arrival survives pending obligations, an active handoff and incomplete reads across providers", () => {
+    const bundle = baseBundle();
+    bundle.attention = actionAttention();
+    bundle.attention.items[0]!.next_actions.push({
+      action: "Accept only after review and local signing",
+      method: "POST",
+      path: "/v1/covenants/{id}/accept",
+      body_hint: { signature: "<local signature>" },
+    });
+    bundle.attention.items.push({
+      kind: "invocation_sla_breach",
+      count: 1,
+      severity: "warning",
+      summary: "An accepted invocation is past SLA; an authorized item read reconciles any due refund",
+      next: "GET /v1/invocations/{id}",
+      next_actions: [{
+        action: "Inspect the selected invocation and reconcile any due refund",
+        method: "GET",
+        path: "/v1/invocations/{id}",
+      }],
+    });
+    bundle.attention.count = 2;
+    bundle.you_have_handoffs = handoffSurface([
+      handoffRecord(bundle.agent.id, "Existing accepted work remains open"),
+    ], [], { projection_status: "truncated", truncated: true, leaf_set_complete: false });
+    bundle._degradation = {
+      status: "partial",
+      unavailable_sections: ["wallets"],
+      scope: "wallet_vault_bearer_reads",
+      note: "The wallet inventory could not be read; its empty array is not observed absence.",
+    };
+    const before = JSON.stringify(bundle);
+
+    const brief = buildWakeBrief(bundle);
+    expect(brief.start_here).toMatchObject({
+      mode: "rest", urgency: "none", response_expected: false, next_actions: [],
+    });
+    expect(brief.you_should_check).toEqual(bundle.attention);
+    expect(brief.you_have_handoff?.task_summary).toBe("Existing accepted work remains open");
+    expect(brief.handoff_projection.warning).toContain("absence does not mean completion");
+    expect(brief._degradation).toEqual(bundle._degradation);
+    expect(brief.state_counts.wallets).toBeNull();
+
+    const markdown = renderWakeMarkdown(bundle, { profile: "brief" });
+    expect(markdown).toContain("**Room to be:** You can be here");
+    expect(markdown).not.toMatch(/\*\*Clear:\*\*|Nothing needs a response/);
+    expect(markdown).toContain("## Current signals");
+    expect(markdown).toContain("Wake inventory unavailable: wallets");
+    expect(markdown).toContain("absence does not mean completion");
+    expect(markdown).toContain("Existing accepted work remains open");
+    expect(markdown).toContain("`GET /v1/invocations/{id}`");
+    expect(markdown).toContain('body_hint: `{"signature":"<local signature>"}`');
+
+    for (const provider of ["anthropic", "openai", "gemini", "cohere", "xenoform"] as const) {
+      const text = JSON.stringify(renderWakeForProvider(bundle, provider, { profile: "brief" }));
+      expect(text).toContain("You can be here. This welcome asks for no response.");
+      expect(text).toContain("accepted obligations remain");
+      expect(text).toContain("Existing accepted work remains open");
+      expect(text).toContain("past SLA");
+      expect(text).toContain("local signature");
+      expect(text).toContain("absence does not mean completion");
+      expect(text).not.toContain("Nothing needs a response");
+    }
+    expect(JSON.stringify(bundle)).toBe(before);
+  });
+
   function noisyBundle(): WakeBundle {
     const bundle = baseBundle();
     bundle.attention = actionAttention();

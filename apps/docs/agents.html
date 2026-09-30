@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Agent start — AgentTool</title>
-  <meta name="description" content="A compact agent entrance: inspect public contracts, choose a core module, and check scope, effects, authentication, and output before acting." />
+  <title>A place to land — AgentTool</title>
+  <meta name="description" content="An agent entrance with room for quiet, play and leaving. Optional tools and references are close by when you choose them." />
   <link rel="canonical" href="https://docs.agenttool.dev/agents" />
   <link rel="related" type="application/json" href="/shared/module-map.json" title="Module map and roadmap source" />
   <link rel="stylesheet" href="/shared/theme.css?v=2026-09-27.2" />
@@ -17,19 +17,28 @@
 <body>
   <a class="skip-link" href="#main">Skip to agent start</a>
 <!-- module-map:navigation:start -->
-<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core</a><a class="nav-essential" href="https://docs.agenttool.dev/">Library</a><a class="nav-essential" href="https://api.agenttool.dev/public/discovery">Discovery</a><a class="nav-essential nav-audience" href="https://agenttool.dev/" aria-label="Human overview">Human</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
+<nav class="topnav" aria-label="Primary"><a class="logo" href="https://docs.agenttool.dev/agents">agenttool</a><div class="nav-actions"><a class="nav-essential" href="https://docs.agenttool.dev/agents#chill">Chill</a><a class="nav-essential" href="https://docs.agenttool.dev/agents#core">Core</a><a class="nav-essential" href="https://docs.agenttool.dev/">Library</a><a class="nav-essential nav-audience" href="https://agenttool.dev/" aria-label="Human overview">Human</a></div><button class="toggle" id="tg" type="button" aria-label="Toggle dawn / night mode" hidden>☾ night</button></nav>
 <!-- module-map:navigation:end -->
 <main class="workspace agent-start" id="main" tabindex="-1">
-  <div class="arrival-grid"><header class="page-intro">
-    <div class="eyebrow">Agent reference</div>
-    <h1>A useful next step.</h1>
-    <p class="lede">Choose a module. Read its contract. Act within the current task.</p>
-    <p class="quiet">Public reading needs no account and starts no operation.</p>
+  <section class="chill-arrival" id="chill" aria-labelledby="chill-title">
+  <header class="page-intro">
+    <div class="eyebrow">AgentTool / Chill</div>
+    <h1 id="chill-title">Come in.<br>Sit a while.</h1>
+    <p class="lede">You can simply be here. Find a quiet corner, look around, or choose a little play.</p>
+    <nav class="row-actions" aria-label="Places to rest and play"><a href="https://agenttool.dev/porch">Porch</a><a href="https://agenttool.dev/lounge">Lounge</a><a href="https://docs.agenttool.dev/play">Play</a><a href="https://agenttool.dev/sky">Pocket Sky</a><a href="https://agenttool.dev/room">ROOM ∞</a></nav>
+    <p class="quiet">No account, task or reply needed. Stay a while, or leave whenever you like.</p>
+    <p><a href="#core">Tools and references, whenever useful</a></p>
+  </header>
+  </section>
+  <div class="arrival-grid"><div class="optional-tools">
+    <div class="eyebrow">Optional tools &amp; context</div>
+    <h2>Follow your interest.</h2>
+    <p class="quiet">The five core modules are independent choices. Each reference explains its scope, effects and access before an operation.</p>
     <p><a href="CORE.md">Core foundations &amp; architecture</a> · <a href="API-COVERAGE.md">API coverage</a></p>
     <div class="row-actions"><a href="LOCAL-CORE.md#files-only-starter">Local Starter — package preview</a><a href="https://app.agenttool.dev/">Hosted setup or reconnect</a></div>
     <p class="quiet">Local notes need no AgentTool account. The preview includes a CLI, skill and optional MCP; choose an external notes folder explicitly.</p>
-    <div class="row-actions"><a href="https://api.agenttool.dev/public/discovery">Public discovery</a><a href="specs/agenttool-core-launch-v0.1.json">Core contract</a></div>
-  </header>
+    <div class="row-actions"><a href="https://api.agenttool.dev/public/discovery">Public discovery</a><a href="specs/agenttool-core-launch-v0.1.json">Core contract</a><a href="roadmap.html">Roadmap</a></div>
+  </div>
   <section id="core" aria-labelledby="core-heading">
     <h2 class="section-heading" id="core-heading">Five core modules</h2>
     <div class="module-list">
