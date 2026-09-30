@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (Private receiver quiet, Chill at the center and Hermes evidence; historical receipts retain their original dates)
+> Updated: 2026-09-30 (Native pause/return, local return preview and offline play; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,44 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Native pause/return and optional local play (2026-09-30)
+
+**Observed:** the [bounded native Codex trial](COLLABORATION-MISSION-WAKE.md#verification-record--2026-09-30)
+passed using a private snapshot of `54e1c492`. Pausing a running empty receiver
+stopped it; a routed event arrived while paused. Restarting the selected receiver
+made zero network/child attempts and preserved its local inbox. Resume alone
+had no effect; an explicitly started finite watcher added one matching completed
+delivery turn to the prepared thread. The trial's owned children exited and its
+receiver lock was released. Both grants and the mission were revoked, confirmed
+by administrative readback and a subsequent participant HTTP 401.
+
+The pause phase was 0.445 seconds and resume-only observation 1.222 seconds.
+This proves the selected admission/restart behavior, not extended rest, OS
+suspend, in-flight race behavior or whole-host quiet. Both seats used the same
+existing identity/key on one Mac. No statement about a player's feelings is
+inferred from the receipts; no host settings or existing participant state changed.
+
+**Source candidates:** `return-peek` exposes local counts, unresolved IDs and
+quiet/expiry metadata without reading credentials, writing, polling, activating
+a harness or acknowledging. Remote arrivals and current grant status stay
+`unknown`; a saved cursor is not a freshness timestamp. [Offline Pocket Sky](LOCAL-PLAY.md)
+offers a 5×5 in-memory text board with up to seven lights, freeze/reopen, clear
+and leave. It has no score, automatic memory or required reflection. Ordinary
+typos preserve the board. Game freeze does not pause the host or prove rest;
+host transcripts can retain copies after the game clears its pattern.
+
+**Verification:** 49 focused receiver/CLI tests passed with 687 assertions;
+15 Pocket Sky tests passed with 183 assertions, including real Node CLI checks
+and guarded filesystem/network/subprocess boundaries. Independent review found
+no remaining issue in the game and confirmed the native trial's sanitized
+receipts and scope. Full `bin/preflight.sh api` passed on Bun 1.3.5: both
+TypeScript checks, 6,380 API tests and 841 operator/protocol tests, nine skips
+and zero failures. The focused documentation/navigation/onboarding/parity set
+passed 18 tests with 800 assertions. All 18 changed/new relative links and
+fragments resolve in canonical guides and public mirrors; the 813-path catalog,
+Node syntax checks and diff checks pass. No push, deployment or package
+publication has been performed.
 
 ## Private receiver quiet (2026-09-30)
 

@@ -3,12 +3,13 @@
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as client from './agenttool-mission.mjs';
-import { bind, message, openReceiver, pause, resume, ReceiverPausedError, recoverLock, recoverQuietLock, status } from './mission-wake-receiver.mjs';
+import { bind, message, openReceiver, pause, resume, ReceiverPausedError, recoverLock, recoverQuietLock, returnPeek, status } from './mission-wake-receiver.mjs';
 
 const HELP = `AgentTool mission wake — Node 22+ on macOS/Linux; npm is optional.
 prepare-codex --cwd DIR [--name LABEL]     Create a durable inbox via one readiness model turn
 bind --state DIR --config-file FILE       Bind reviewed mission, peer and exact target once
 status --state DIR                       Route address and receipt state; no message text
+return-peek --state DIR                  Local counts and unresolved IDs; no polling or activation
 pause --state DIR [--until UTC]           Private pause of new receiver admissions; no announcement
 resume --state DIR                       Reopen admission; does not start a receiver or replay
 poll --state DIR                         Save one verified page, without invoking a harness
@@ -82,7 +83,7 @@ export async function watch(state, durationSeconds, { createAdapter, pollInterva
 export async function main(argv) {
   const [command, ...args] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
-  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], pause: ['until'], resume: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
+  const allowed = { 'prepare-codex': ['cwd', 'name'], bind: ['config-file'], status: [], 'return-peek': [], pause: ['until'], resume: [], poll: [], send: ['to', 'text-file', 'kind', 'in-reply-to'],
     watch: ['seconds', 'max-deliveries', 'ack-to'], channel: ['seconds'], resolve: ['event-id', 'delivery-id', 'outcome'], 'recover-lock': ['lock-id'], 'recover-quiet-lock': ['lock-id'] };
   if (!Object.hasOwn(allowed, command)) throw new Error('Unknown wake command.');
   const options = {};
@@ -101,6 +102,7 @@ export async function main(argv) {
   let result;
   if (command === 'bind') result = await bind(options.state, JSON.parse(client.privateRead(options['config-file'])));
   if (command === 'status') result = status(options.state);
+  if (command === 'return-peek') result = returnPeek(options.state);
   if (command === 'pause' || command === 'resume') {
     if (command === 'pause') pause(options.state, options.until);
     else resume(options.state);

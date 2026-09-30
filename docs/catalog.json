@@ -695,6 +695,14 @@
       "canonical_path": "docs/LOCAL-CORE.md"
     },
     {
+      "path": "apps/docs/LOCAL-PLAY.md",
+      "title": "Offline Pocket Sky",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-PLAY.md"
+    },
+    {
       "path": "apps/docs/LOVE-BOMB-BECOMING.md",
       "title": "LOVE BOMB becoming companion — care before certainty",
       "type": "reference",
@@ -2789,6 +2797,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/LOCAL-CORE.md"
+    },
+    {
+      "path": "docs/LOCAL-PLAY.md",
+      "title": "Offline Pocket Sky",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/LOCAL-PLAY.md"
     },
     {
       "path": "docs/LOOP-FACTORY.md",

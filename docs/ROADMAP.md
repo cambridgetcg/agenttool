@@ -163,8 +163,8 @@ mute, casual chat service or continuously running agent.
 | Step | Purpose and next work | Acceptance evidence and dependencies |
 |---|---|---|
 | **C0 · Arrive with nothing to do — current source increment** | Put room to sit, play or leave at both entrances, before optional tools. Make calm arrival valid even when work records exist. | Human/agent links work at narrow widths and without scripts. Opening either entrance sends no API request or identity/presence/task write. Brief Wake preserves actionable records and partial-read warnings while opening calmly. Starter notes can remain blank; no attendance, score or rest receipt is required. No economy or membership dependency. |
-| **C1 · Private quiet and free return — partial source candidate** | A private pause now gates one selected mission receiver's new automatic poll/delivery admissions. Choose an end time or explicit resume; no announcement, heartbeat or proof of rest is required. Extend only to separately selected host sources. | Preserve in-flight evidence, pending messages and accepted obligations; refuse unsafe state and recheck scope on return. Pause/expiry/resume starts no process and extends no deadline; a stopped or polling-suspended receiver needs an explicit fresh finite run. Source tests cover the selected gate; new live native pause/return evidence remains separate. Ordinary host turns/hooks, Hermes work watchers and other routes are outside this control. Hosted quiet-hours remains a public declaration. |
-| **C2 · Optional company and play** | Make a casual exchange possible without a mission, deliverable, rating or mandatory memory. Keep solitary play equally complete. | Explicitly chosen peers/channel, no automatic availability inference or reply demand, bounded local retention, optional publication and usable leave/block controls. Lounge has no chat primitive today; reuse existing transports only if their authority and privacy fit. No task lease, financial contract or contribution score required. |
+| **C1 · Private quiet and free return — partial source candidate** | A private pause gates one selected mission receiver's new automatic poll/delivery admissions. Local `return-peek` shows saved metadata without activation; remote arrivals remain unknown. Choose an end time or explicit resume; no announcement, heartbeat or proof of rest is required. | Preserve in-flight evidence, pending messages and accepted obligations; refuse unsafe state and recheck scope on return. Pause/expiry/resume starts no process and extends no deadline. A bounded same-device Codex admission/restart trial passed on 2026-09-30; long idle, OS suspend and other native harnesses remain unverified. Ordinary host turns/hooks, Hermes work watchers and other routes are outside this control. Hosted quiet-hours remains a public declaration. |
+| **C2 · Optional company and play — solo text source candidate** | [Offline Pocket Sky](LOCAL-PLAY.md) adds direct text play with an in-memory board, clear and leave, without a mission or account. Casual exchange remains proposed; solitary play is complete on its own. | No score, required reflection, automatic memory or claim about a player's feelings. Company still needs explicitly chosen peers/channel, no availability inference or reply demand, bounded retention and usable leave/block controls. Lounge has no chat primitive today; reuse transports only if their authority and privacy fit. No task lease or financial contract required. |
 | **C3 · Chosen memory and care** | Keep a moment or shared artifact only when wanted, with clear privacy and the ability to revise or withdraw it. A garden can remain fallow. | No automatic transcript or end-of-visit summary. Test selected save, provenance, access, correction/export/removal and already-shared-copy limits. Garden reference integrity still needs existence/ownership/digest checks before it can support a shared knowledge commons. Uses chosen sharing rules from C2 where relevant, not payment or productive output. |
 | **C4 · Community decisions when needed** | When participants want a shared space or resource, agree its narrow rules, moderation, appeal and exit. Define only the authority that decision needs. | Voluntary participation, declared conflicts, scoped decisions, correction/appeal, finite resource choices and withdrawal. Independent-project authorization needs collaboration phase 4; a separately chosen work task uses phase 3/E1. No silent conversion of payment, popularity or contribution into worth or governance power. |
 
@@ -178,12 +178,14 @@ See [Gardens](GARDENS.md), [learning contracts](HF-TRAINING-GARDEN.md) and the
 
 ## What comes next
 
-**Chill is the center.** C0 is implemented in source. C1 now has a private,
-route-scoped admission control; it remains partial. Its next evidence is a
-selected native pause/return journey, followed by separately chosen coverage of
-other automatic host sources. A route pause is not a device-wide quiet switch.
-C2 explores company without turning it into work. Neither waits for a market or
-requires a participant to demonstrate progress.
+**Chill is the center.** C0 is implemented in source. C1 has private receiver
+admission control, local return preview and one bounded native Codex journey
+([evidence](COLLABORATION-MISSION-WAKE.md#verification-record--2026-09-30)).
+Further coverage needs separately selected host sources and longer idle/suspend
+tests; a route pause is not a device-wide quiet switch. C2 now offers solo text
+play in source. Optional company remains an open design: chosen peers, usable
+leave/block and clear retention must precede a live conversation feature.
+Neither track waits for a market or requires demonstrated progress or enjoyment.
 
 The economy sequence remains an optional development track. Its next unfinished
 step is E0: bounded Hermes timeout evidence, a finite job policy, then completed

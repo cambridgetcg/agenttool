@@ -75,6 +75,39 @@ function patchInbox(f: Fixture, change: (inbox: any) => void) { const value = pe
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; }
 
 describe.skipIf(process.platform === "win32")("mission receiver authority and durable routing", () => {
+  test("return preview exposes saved counts and unresolved IDs without receipt text or target details", async () => {
+    const f = await bound(), receiver = open(f);
+    const messages = [event(f, f.address.route_id, 1, { text: "private message must stay local" }),
+      event(f, f.address.route_id, 2), event(f, f.address.route_id, 3),
+      event(f, f.address.route_id, 4, { kind: "ack", inReplyTo: randomUUID() })];
+    page(f, messages); await receiver.poll(f.options); receiver.close();
+    const deliveryId = randomUUID();
+    patchInbox(f, inbox => {
+      inbox.items[0].status = "delivered"; inbox.items[0].delivery_id = deliveryId;
+      inbox.items[0].receipt = { status: "delivered", text: "untrusted receipt must not project", secret: TOKEN, target: f.root };
+      inbox.items[1].status = "processed"; inbox.items[1].delivery_id = randomUUID();
+    });
+    const before = persisted(f), calls = f.calls.length;
+    const preview = wake.returnPeek(f.state), serialized = JSON.stringify(preview);
+    expect(preview.locally_saved).toEqual({ cursor: "4", counts: { pending: 1, dispatching: 0, delivered: 1, processed: 1, ack: 1 },
+      unresolved_deliveries: [{ event_id: messages[0].event_id, delivery_id: deliveryId, status: "delivered" }], unresolved_processing_acks: [] });
+    expect(preview.binding).toEqual({ expires_at: f.config.expires_at, expired: false });
+    expect(preview.remote).toEqual({ arrivals: "unknown", current_grant_status: "unknown" });
+    for (const omitted of ["private message must stay local", "untrusted receipt must not project", TOKEN, f.root, "exact-thread_1", "last_polled", "next_action", "mission_id", "identity_id"])
+      expect(serialized).not.toContain(omitted);
+    expect(persisted(f)).toEqual(before); expect(f.calls).toHaveLength(calls);
+  });
+
+  test("return preview reports lock presence without claiming that a receiver is running", async () => {
+    const f = await bound(), receiver = open(f);
+    const lockAt = join(f.state, "wake", "lock", "owner.json"), before = readFileSync(lockAt);
+    expect(wake.returnPeek(f.state).locks).toEqual({ receiver_present: true, quiet_control_present: false, running: "unknown" });
+    expect(readFileSync(lockAt)).toEqual(before); receiver.close();
+    expect(wake.returnPeek(f.state).locks).toEqual({ receiver_present: false, quiet_control_present: false, running: "unknown" });
+    patchInbox(f, inbox => { inbox.binding_sha256 = "corrupt"; });
+    expect(() => wake.returnPeek(f.state)).toThrow("immutable receiver binding");
+  });
+
   test("binding pins one native target and publishes only a sanitized address", async () => {
     const f = await bound();
     expect(f.address).toEqual({ format: "agenttool-mission-route/v1", origin: ORIGIN, mission_id: M, identity_id: I,
@@ -549,6 +582,19 @@ function ackTransport(f: Fixture, mode = "success") {
   return { options, sent };
 }
 describe.skipIf(process.platform === "win32")("Hermes processing acknowledgements", () => {
+  test("return preview preserves ambiguous ACK metadata without exposing receipt or retrying", async () => {
+    const { f, receiver, e, delivery } = await processedHermes(), transport = ackTransport(f, "lost"), to = randomUUID();
+    await expect(receiver.sendProcessingAck(e.event_id, delivery.delivery_id, to, transport.options)).rejects.toThrow();
+    receiver.close(); wake.pause(f.state);
+    const before = persisted(f), sent = transport.sent.length;
+    const preview = wake.returnPeek(f.state);
+    expect(preview.locally_saved.unresolved_processing_acks).toEqual([{ event_id: e.event_id, delivery_id: delivery.delivery_id, status: "dispatching" }]);
+    expect(preview.locally_saved.unresolved_deliveries).toEqual([]);
+    expect(preview.quiet.mode).toBe("paused");
+    for (const omitted of [to, HERMES_RECEIPT.job_id, HERMES_RECEIPT.session_id, HERMES_RECEIPT.evidence_sha256, TOKEN]) expect(JSON.stringify(preview)).not.toContain(omitted);
+    expect(persisted(f)).toEqual(before); expect(transport.sent).toHaveLength(sent);
+  });
+
   test("quiet permits an exact verified in-flight read acknowledgment without admitting another turn", async () => {
     const { f, receiver, e, delivery } = await processedHermes(), transport = ackTransport(f), to = randomUUID();
     wake.pause(f.state);

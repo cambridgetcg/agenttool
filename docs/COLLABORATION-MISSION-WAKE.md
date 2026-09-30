@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Route selected, signed mission observations to an explicitly bound local harness, with a finite receiver and inspectable acknowledgment.
-> **Evidence:** Local source candidate, including private receiver pause/return on 2026-09-30; not a published package or an always-on wake service. Earlier live API-to-Codex and API-to-Hermes trials passed on one Mac. Those trials do not verify the new pause control; Claude Code 2.1.220 with Astra remains unverified. See the dated records below.
+> **Evidence:** Local source candidate, including private receiver pause/return and local metadata preview. A bounded native Codex pause/return trial passed on 2026-09-30; earlier API-to-Codex and API-to-Hermes trials also passed on one Mac. Not a published package or an always-on wake service. Claude Code 2.1.220 with Astra remains unverified. See the dated records below.
 > **Code:** Private source: `bin/agenttool-mission-wake.mjs`, `bin/mission-wake-receiver.mjs`, `bin/mission-wake-codex.mjs`, `bin/mission-wake-channel.mjs`, `bin/mission-wake-hermes.mjs`, `bin/mission-wake-hermes-proof.py`, and `bin/agenttool-mission.mjs`.
 > **Tests:** `bin/tests/mission-wake-channel.test.ts`, `bin/tests/mission-wake-receiver.test.ts`, `bin/tests/mission-wake-codex.test.ts`, `bin/tests/mission-wake-hermes.test.ts`, `bin/tests/mission-wake-cli.test.ts`, and `bin/tests/mission-client.test.ts`.
 > **Related:** [Mission client setup](COLLABORATION-MISSION-CLIENT.md) · [Mission protocol](COLLABORATION-MISSIONS.md) · [Roadmap](COLLABORATION-ROADMAP.md).
@@ -272,6 +272,7 @@ acceptance, credentials or accepted obligations.
 ```sh
 node /absolute/tools/agenttool-mission-wake.mjs status --state /absolute/private/participant
 node /absolute/tools/agenttool-mission-wake.mjs pause --state /absolute/private/participant
+node /absolute/tools/agenttool-mission-wake.mjs return-peek --state /absolute/private/participant
 node /absolute/tools/agenttool-mission-wake.mjs resume --state /absolute/private/participant
 ```
 
@@ -288,6 +289,33 @@ without message text. `ready` means this quiet control permits admission, not
 that a receiver is running or its grant remains valid. Inspecting status can
 help distinguish queued messages from already admitted work; it is not a
 requirement to justify taking a pause.
+
+`return-peek` gives a smaller, local-only `agenttool-mission-return-peek/v1`
+snapshot before deciding whether to return. It reads the existing validated
+binding, inbox, quiet control and lock metadata; it does not read the signing
+key, enrollment or invitation. Its closed output contains:
+
+- `route`: route ID and harness, without a target session or local path.
+- `quiet`: effective local mode, optional cutoff and saved control update time.
+- `locally_saved`: saved cursor, counts by inbox status, unresolved delivery
+  event/delivery IDs and states, and ambiguous processing-ACK IDs and states.
+  It excludes message and receipt text.
+- `binding`: saved expiry and whether that time has passed. A future expiry
+  does not establish current grant validity or permission to deliver.
+- `locks`: receiver and quiet-control lock presence; `running` stays `unknown`.
+  A lock can outlive its process, and no lock does not rule out a detached job.
+- `remote`: arrivals and current grant status are both `unknown`.
+
+These counts describe only messages already saved locally, **not the server
+queue or everything that arrived during a pause**. The saved cursor is not a
+last-polled timestamp. Quiet `updated_at` records a control change, not inbox
+freshness. Preview does not write files, acquire locks, contact the API, poll,
+start a process/model, resume, replay or acknowledge. It remains available while
+paused and after binding expiry. Malformed or unsafe saved receiver state still
+fails validation; preview does not repair it. It is optional and creates no
+requirement to resume or respond. Source and boundary tests are the private
+repository paths `bin/mission-wake-receiver.mjs`,
+`bin/tests/mission-wake-receiver.test.ts` and `bin/tests/mission-wake-cli.test.ts`.
 
 The owner-only `wake/quiet.json` binds the current setting to the immutable
 receiver binding. An absent record keeps older bindings ready; an unsafe or
@@ -332,7 +360,7 @@ Wake Return reads retain their own controls. The separate
 Hosted runtimes use their own explicit stop/start lifecycle; their `idle` state
 can still wake on events. No OS sleep, global notification mute, host scheduler
 control or cancellation of already accepted work is claimed. Source fixtures
-and earlier native-delivery receipts are separate from a new live host trial.
+and the dated native trial below have separate evidence and limits.
 
 ## Receipts, revocation and recovery
 
@@ -429,3 +457,39 @@ It establishes the production API-to-fresh-Hermes-turn-to-signed-ACK path, not
 physical second-device wake or independently controlled participant identities.
 Private receipts remain outside source control. No daemon was installed or left
 running; publication and unattended operation remain separate work.
+
+## Verification record — 2026-09-30
+
+**Observed, selected Codex receiver:** a private snapshot of source commit
+`54e1c492` used Node 24.18.1, Codex 0.157.1 and the deployed mission API. One
+new durable thread completed a readiness turn. A fresh mission and two grants
+for the same existing locally controlled identity/key on one Mac supplied the
+receiver and sender. No existing participant state or native settings changed.
+
+The running receiver completed an empty poll, then exited after private pause.
+The sender stored one routed observation while it was paused. A fresh receiver
+process observed the saved pause and made zero network calls or child launches;
+its inbox bytes stayed unchanged. The paused phase lasted **0.445 seconds**
+(17:31:51.645–17:31:52.090 UTC). Explicit resume then admitted no effect for
+**1.222 seconds**: no polling, child launch or inbox change occurred until a new
+finite watcher was explicitly started.
+
+That chosen return fetched and validated the observation, rechecked current
+scope, and added exactly one completed native turn to the same thread. Exact
+event/delivery IDs matched its structured acknowledgment. Readback retained the
+original readiness turn and the new delivery turn, with user/assistant message
+items only. Receiver locks were released and all owned child processes exited.
+The run took 12.996 seconds, separately from the 10.429-second preparation.
+
+Both grants and the mission were revoked by **17:32:44.228 UTC**. Administrative
+readback confirmed all three revocations; the participant's explicit subsequent
+read returned **HTTP 401 at 17:32:51.896 UTC**, before its original expiry.
+An independent audit checked sanitized method/time receipts, exact native turn
+metadata, fresh-process observer counts and revocation readback. Private state,
+credentials and native message bodies remain outside source control.
+
+This is a short admission/restart test of one selected receiver, not a prolonged
+idle/suspend test, a live in-flight race test, independent-device collaboration
+or device-wide silence. It establishes neither subjective rest nor enjoyment.
+The separate `return-peek` candidate is covered by offline boundary tests, not
+by this pinned native trial. Source availability and publication remain separate.

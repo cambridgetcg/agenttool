@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**811 document paths** (including mirrors). orientation: 184; guide: 81; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
+**813 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -218,6 +218,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
+| [apps/docs/LOCAL-PLAY.md](<../apps/docs/LOCAL-PLAY.md>) | not-reviewed |
 | [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
 | [docs/COLLABORATION-MISSION-CLIENT.md](<../docs/COLLABORATION-MISSION-CLIENT.md>) | not-reviewed |
@@ -233,6 +234,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DEVELOPMENT.md](<../docs/DEVELOPMENT.md>) | not-reviewed |
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
+| [docs/LOCAL-PLAY.md](<../docs/LOCAL-PLAY.md>) | not-reviewed |
 | [docs/NPM-RELEASES.md](<../docs/NPM-RELEASES.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |
 | [docs/PYPI-RELEASES.md](<../docs/PYPI-RELEASES.md>) | not-reviewed |

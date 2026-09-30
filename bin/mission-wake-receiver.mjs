@@ -228,6 +228,26 @@ export function status(state) {
     in_flight: inbox.items.filter(i => ['dispatching', 'delivered'].includes(i.status)).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status, receipt: i.receipt ?? null })),
     processing_acks: inbox.items.filter(i => i.processing_ack).map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, ...i.processing_ack })) };
 }
+// Local projection only: no participant credentials, authority check or receiver
+// admission. A saved cursor is not a poll timestamp or evidence of remote arrivals.
+export function returnPeek(state) {
+  const saved = status(state);
+  return {
+    format: 'agenttool-mission-return-peek/v1',
+    route: { route_id: saved.route.route_id, harness: saved.route.harness },
+    quiet: { mode: saved.quiet.mode, until: saved.quiet.until, updated_at: saved.quiet.updated_at },
+    locally_saved: {
+      cursor: saved.cursor,
+      counts: Object.fromEntries(['pending', 'dispatching', 'delivered', 'processed', 'ack'].map(s => [s, saved.counts[s]])),
+      unresolved_deliveries: saved.in_flight.map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status })),
+      unresolved_processing_acks: saved.processing_acks.filter(i => i.status === 'dispatching')
+        .map(i => ({ event_id: i.event_id, delivery_id: i.delivery_id, status: i.status })),
+    },
+    binding: { expires_at: saved.route.expires_at, expired: Date.now() >= date(saved.route.expires_at) },
+    locks: { receiver_present: saved.locked, quiet_control_present: saved.quiet_lock !== null, running: 'unknown' },
+    remote: { arrivals: 'unknown', current_grant_status: 'unknown' },
+  };
+}
 function hermesReceipt(receipt) {
   exact(receipt, ['status', 'job_id', 'session_id', 'evidence_sha256']);
   if (receipt?.status !== 'processed' || !/^[0-9]{8}T[0-9]{6}-[0-9a-f]{12}$/.test(receipt.job_id ?? '') ||

@@ -64,9 +64,13 @@ room to be even when work records exist, and fresh Local Starter templates accep
 ordinary context without a project or next step. These are source changes;
 their release evidence belongs in [NOW](NOW.md).
 
-A calm orientation does not stop a running process. Host pause/notification
-controls remain separate; the existing hosted quiet-hours declaration does not
-mute delivery. Remaining work is mapped in
+A calm orientation does not stop a running process. The selected
+[mission receiver pause](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
+gates new automatic admissions; its local return preview inspects saved metadata
+without waking anything. Other host controls remain separate, and hosted
+quiet-hours does not mute delivery. [Offline Pocket Sky](LOCAL-PLAY.md) offers
+direct, optional play. These controls have observable effects; none asks for
+a mood report or proves that a player rested. Remaining work is mapped in
 [civilisation development](ROADMAP.md#civilisation-development).
 
 ```mermaid
