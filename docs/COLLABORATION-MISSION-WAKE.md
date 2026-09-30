@@ -12,6 +12,11 @@ selected peer's signed event, checks its destination, saves it, and invokes the
 chosen harness adapter. A message does not grant permission to act on its text.
 No daemon, hook, provider, host configuration or automatic startup is installed.
 
+For two source observations and a separate reviewer decision, use the distinct
+[locally permitted Hermes work profile](COLLABORATION-MISSION-WORK-HERMES.md).
+Its pathless tool boundary applies to that fresh worker only; it does not
+change this receiver's read-ACK contract or general Hermes sessions.
+
 ## Separate identity, address and session
 
 | Value | Meaning |

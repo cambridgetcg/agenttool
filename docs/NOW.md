@@ -17,6 +17,80 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Locally permitted Hermes work (2026-09-30)
+
+**Source candidate:** the [Hermes work guide](COLLABORATION-MISSION-WORK-HERMES.md)
+adds `work inspect-hermes` and `work run-hermes`. An owner-only local permit
+binds one task, participant, source snapshot, runtime and finite attempt. A fresh
+native turn receives a single pathless source tool; the whole batch is checked
+before any tool result. The host validates native read evidence and two source
+observations before signing delivery. Requester review remains separate.
+
+The selected native compatibility pin covers Hermes
+`ed4123792c135558e7be2e486505bc569faa2a74`, its existing tracked modifications
+and 33 critical files. No native source or global configuration was changed.
+This constrains model-selected tool effects; it is not an OS or network sandbox,
+a distributed lease, or permission for ordinary Hermes sessions.
+
+**Offline evidence:** 18 controller tests and 13 portable Python-runner fixtures
+pass. These include signed work chains, a pre-offer waiter, forbidden mixed
+tool batches, alternate dispatch, changed evidence, local replay refusal,
+ambiguous sends, cancellation and real subprocess cleanup. A separate private
+installed-native experiment used synthetic provider responses: two response
+stubs, one actual guarded read, a completed native turn and matched SQLite
+evidence. Its audit blocked all attempted sockets; it observed ten ancillary
+network attempts and zero reads of the actual private Hermes profile. This
+experiment establishes the installed conversation-loop seam, not live model
+behavior. The ordinary test suite requires no Hermes installation or provider.
+
+**Full gate:** `bin/preflight.sh api` passed on Bun 1.3.5: both TypeScript
+checks, 6,378 API tests and 802 operator tests, nine skips and zero failures.
+Seven runtime/test inputs retained their recorded hashes. The first gate
+invocation omitted `/sbin` from PATH and failed existing deployment fixtures
+because `md5sum` was unavailable; restoring the existing PATH required no
+source change. The 811-path documentation catalog also passed.
+
+**First live attempt:** a finite watcher started before the signed offer,
+automatically accepted and launched a fresh `gpt-6-astra` Hermes session.
+Native SQLite evidence retained one selected-source read. The next native
+request exhausted retries with `ReadError: [Errno 32] Broken pipe`;
+no completed answer was retained and no artifact was delivered. Provider-side
+completion remains unknown. The requester cancelled this task, the worker read
+the cancellation, and both grants and mission were revoked by 10:14:33 UTC
+with administrative readback. Its consumed attempt remains intact.
+
+**Second live attempt:** a separately selected new mission, task and permit
+used the same reviewed source, runtime, model and provider. Its pre-offer watcher
+again accepted and produced one fresh native source read, then stopped with the
+same error and no retained answer or delivery. Work cancellation was read back;
+both grants and this mission were revoked by 10:24:16 UTC. Neither attempt was
+reset or replayed. Both trials used one Mac and one operator with a legacy
+requester identity and a distinct `agent_root` worker, not two independent devices
+or two fresh root enrollments.
+
+**Open native boundary:** `Broken pipe` alone does not locate the cause. The
+pinned native watchdog can also shut down a worker socket and preserve its
+resulting `ReadError`. The retained requests estimate 2,669 context tokens,
+selecting a default 12-second SSE-idle cutoff; historical watchdog settings and
+the actual triggering branch were not retained. Current settings are not a
+historical receipt. Keep upstream failure and local watchdog expiry unresolved
+until a future bounded run records the exact timeout branch and effective
+settings. Do not silently increase global timeouts or change providers.
+
+A private offline reproduction executed the installed
+`agent/chat_completion_helpers.py` request function with a synthetic worker and
+clock. Its default idle watchdog closed the synthetic socket after 12.3 seconds
+and surfaced the worker's `ReadError: EPIPE`; a child-only 60-second setting let
+the same synthetic 40-second response complete. This verifies the error-reporting
+ambiguity, not the historical live trigger. The next change should retain
+allowlisted abort reasons, counters and effective numeric limits before choosing
+a finite per-job timeout policy. No third model call was made.
+
+**Release state:** source tests and live automatic acceptance/read evidence
+exist; a completed live artifact and its separate review remain unverified.
+This source is not yet pushed, deployed or packaged. The older wake read-ACK
+adapter retains its separate runtime limits.
+
 ## Selected mission work (2026-09-30)
 
 **Source candidate:** `419f4966` adds a payment-free source-review profile connecting an

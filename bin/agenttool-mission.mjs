@@ -339,6 +339,7 @@ wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 sec
 retry --state DIR --event-id UUID               Explicit exact-body retry
 chat inspect|read|send|reply                    Verified peer conversation; chat --help
 work inspect|sync|offer|accept|deliver|review   Explicit payment-free work; work --help
+work inspect-hermes|run-hermes                One locally permitted Hermes source review
 mcp --state DIR                                STDIO MCP; no automatic wake
 Never paste keys or invitation tokens into chat, URLs, source or shell arguments.
 `;

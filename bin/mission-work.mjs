@@ -292,15 +292,21 @@ review --source-file ABS --review-file ABS
                                 Record an explicit accepted/rejected reviewer decision
 decline --reason-file ABS        Decline an offered task
 cancel --reason-file ABS         Cancel an offered or accepted task
+inspect-hermes --permit-file ABS Inspect an exact local Hermes work permit
+run-hermes --permit-file ABS     Run one permitted finite Hermes source-review job
 Contract, artifact, review and reason files must be owned regular files, mode 0600.
 Source bytes must match the contract. No file is executed. Every network operation
-lasts at most 60 seconds; there is no polling daemon, model launch or automatic retry.
+lasts at most 60 seconds. Only run-hermes launches a model, under its exact local
+permit and finite deadline. No polling daemon or automatic retry is installed.
 Messages are visible to all mission readers. Read ACK, work acceptance, delivery,
 review and payment are distinct; this protocol requires no payment.
 `;
 export async function workMain(argv) {
   const [command, ...args] = argv;
   if (!command || ['--help', 'help'].includes(command)) { process.stdout.write(HELP); return; }
+  if (['inspect-hermes', 'run-hermes'].includes(command)) {
+    return (await import('./mission-work-hermes.mjs')).hermesWorkMain(argv);
+  }
   const extras = { inspect: [], sync: [], offer: ['source-file'], accept: ['source-file'],
     deliver: ['source-file', 'artifact-file'], review: ['source-file', 'review-file'],
     decline: ['reason-file'], cancel: ['reason-file'] };

@@ -34,7 +34,9 @@ existing signed mission chat. Its first profile checks two quotations against
 one pinned source file, with payment not required. This is preparation for
 phase 3, not completion of its hosted authority or distributed lease contract:
 concurrent branches are detected, not prevented by a server task transaction.
-Native automatic execution and cross-project participation remain separate.
+The separate [locally permitted Hermes worker](COLLABORATION-MISSION-WORK-HERMES.md)
+adds a narrow automatic source-review profile; cross-project participation and
+general native execution remain separate.
 
 The [2026-09-30 trial](NOW.md#selected-mission-work-2026-09-30) observed exact-term
 acceptance, delivery, independent review and a signed review-read acknowledgement
@@ -95,6 +97,7 @@ does not prove peer presence during that empty read.
 
 | Surface | Existing basis | Next evidence |
 |---|---|---|
+| Hermes selected-source work — local source candidate | Local permit, pre-dispatch tool boundary, one-attempt controller and native evidence checks pass offline tests. Two finite live trials automatically accepted and read the selected source, then failed closed before delivery. | Record effective native watchdog settings and the triggering timeout branch; complete one live artifact and separate requester review. `Broken pipe` alone does not distinguish local watchdog expiry from upstream failure. |
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
@@ -107,6 +110,14 @@ files retain chosen context and hosted services enforce their own authority.
 Installing any layer does not activate the others.
 
 ## Hermes automatic processing — local source candidate
+
+The newer [selected-source worker](COLLABORATION-MISSION-WORK-HERMES.md) accepts
+only one exact work contract under an owner-only local permit. Its fresh native
+turn has a pathless source tool, pre-dispatch batch validation, a durable local
+attempt barrier and a bounded artifact for separate review. This targets the
+pre-execution tool-boundary gap below. It is a distinct profile, not a sandbox
+for the older receiver or a hosted task lease. Test and live evidence belong in
+[Now](NOW.md).
 
 The [Hermes receiver](COLLABORATION-MISSION-WAKE.md) starts a fresh native turn
 after a verified routed mission event arrives. An operator starts a finite

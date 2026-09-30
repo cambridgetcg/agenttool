@@ -170,6 +170,9 @@ The work client uses the existing mission observation API. It adds no database,
 hosted task mutation, lease, scheduling, payment or reputation score. Concurrent
 conflicting actions are detected after observation, not prevented by an atomic
 server work transition. Cross-project participants need a separate membership
-contract. Automatic Hermes execution still needs runtime path confinement and
-its own bounded artifact contract. The [roadmap](COLLABORATION-ROADMAP.md) keeps
-those steps distinct from this explicitly operated work exchange.
+contract. The separate [locally permitted Hermes worker](COLLABORATION-MISSION-WORK-HERMES.md)
+adds one fresh turn with a pathless selected-source tool and this same artifact
+contract. It requires its own local execution permit and compatibility pin;
+ordinary work offers do not authorize model execution. The
+[roadmap](COLLABORATION-ROADMAP.md) keeps hosted authority and general execution
+distinct from these narrow profiles.
