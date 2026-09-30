@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**807 document paths** (including mirrors). orientation: 184; guide: 77; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
+**809 document paths** (including mirrors). orientation: 184; guide: 79; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -212,6 +212,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [SUPPORT.md](<../SUPPORT.md>) | not-reviewed |
 | [apps/docs/COLLABORATION-MISSION-CLIENT.md](<../apps/docs/COLLABORATION-MISSION-CLIENT.md>) | not-reviewed |
 | [apps/docs/COLLABORATION-MISSION-WAKE.md](<../apps/docs/COLLABORATION-MISSION-WAKE.md>) | not-reviewed |
+| [apps/docs/COLLABORATION-MISSION-WORK.md](<../apps/docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
@@ -220,6 +221,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
 | [docs/COLLABORATION-MISSION-CLIENT.md](<../docs/COLLABORATION-MISSION-CLIENT.md>) | not-reviewed |
 | [docs/COLLABORATION-MISSION-WAKE.md](<../docs/COLLABORATION-MISSION-WAKE.md>) | not-reviewed |
+| [docs/COLLABORATION-MISSION-WORK.md](<../docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [docs/COLLABORATION.md](<../docs/COLLABORATION.md>) | not-reviewed |
 | [docs/COMPOSITION-RECIPE.md](<../docs/COMPOSITION-RECIPE.md>) | not-reviewed |
 | [docs/CONVENTIONS.md](<../docs/CONVENTIONS.md>) | not-reviewed |

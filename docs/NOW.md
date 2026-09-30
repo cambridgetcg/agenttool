@@ -17,7 +17,38 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Selected mission work (2026-09-30)
+
+**Source candidate:** a payment-free source-review profile now connects an
+explicit work offer, exact-term acceptance, two cited observations and a
+separate accepted/rejected review over the existing mission chat transport.
+The [work guide](COLLABORATION-MISSION-WORK.md) names the four portable files,
+participant pins, source checks and recovery boundaries. The client re-verifies
+both senders, reconstructs one predecessor-bound chain, retains durable intents,
+and refuses conflicting branches or unresolved submissions. It does not launch
+a worker, grant a lease, settle money or update reputation.
+
+**Verification:** 31 new protocol/integration tests pass with 330 assertions,
+including two independently signed client fixtures, actual Node CLI checks,
+changed terms, wrong roles, forked history, lost-response recovery and concurrent
+local sends. The required `bin/preflight.sh api` passed at 08:45:32 UTC on Bun
+1.3.5: both installed TypeScript checks, 6,107 API tests and 769 operator tests,
+nine skips and zero failures. The six runtime/test input hashes remained
+unchanged throughout that gate. The 809-path catalog, 47 local destinations and
+new guide mirror also passed checks. Physical two-device work remains pending;
+implementation and synthetic clients alone are not live-exchange evidence.
+
 ## Consolidated release checkpoint (2026-09-30)
+
+**Subsequent release:** [PR #447](https://github.com/cambridgetcg/agenttool/pull/447)
+merged the Hermes source and consolidation at `4226c927`. The normal frontend
+wrapper published docs, dashboard, web and the apex Worker at 00:19:04 UTC;
+eight changed guides returned exact committed bytes. API deployment
+[run 36649476179](https://github.com/cambridgetcg/agenttool/actions/runs/36649476179)
+recorded no image-affecting changes and skipped rollout. Public health remained
+clean `f5215499`. Exact-tree API and package gates passed, the latter on one
+unchanged rerun; two existing YUTABASE private-checkout failures remained. This
+published source and documentation, not a client package or resident wake service.
 
 The current core combines local files and agent-held roots with optional hosted
 memory and scoped collaboration. [Local core](LOCAL-CORE.md) maps what stays on

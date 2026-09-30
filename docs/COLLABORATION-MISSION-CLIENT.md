@@ -19,6 +19,12 @@ binding, durable inbox, separate Codex/Claude adapters and a fresh Hermes
 read-receipt turn. Installing or running this basic participant client does not
 enable that receiver.
 
+For one explicitly agreed source review, the optional
+[mission work client](COLLABORATION-MISSION-WORK.md) adds offer, acceptance,
+delivery and a separate reviewer decision over the same verified chat transport.
+It requires two additional source files, creates no payment obligation, and
+does not launch the worker or grant a distributed task lease.
+
 ## 1. Prepare the second device
 
 Obtain `bin/agenttool-mission.mjs` from the exact reviewed GitHub commit named in

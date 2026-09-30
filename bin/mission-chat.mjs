@@ -175,7 +175,9 @@ function observation(raw) {
   }
   return body;
 }
-function selectedEvent(event, p, config) {
+// Shared with the explicit work client for historical receipt re-verification.
+// This validates the signed event, not current grant authority or task consent.
+export function verifyChatEvent(event, p, config) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) fail('Invalid mission event.');
   id(event.event_id); client.cursor(event.received_seq);
   if (event.mission_id !== p.mission_id) fail('Event mission does not match.');
@@ -206,6 +208,7 @@ function selectedEvent(event, p, config) {
   receipt.proof = Object.fromEntries(['domain', 'origin', 'method', 'request_target', 'raw_body', 'body_sha256', 'timestamp', 'public_key', 'signature'].map(k => [k, proof[k]]));
   return { event_id: event.event_id, cursor: event.received_seq, body_sha256: event.body_sha256, message: validated, receipt };
 }
+const selectedEvent = verifyChatEvent;
 function failureReason(error) {
   if (error instanceof ChatError) return error.stop_reason;
   if (error instanceof Error && /^(Mission transport failed\.|Mission request refused:)/.test(error.message)) return 'transport_error';

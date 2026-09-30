@@ -28,6 +28,14 @@ still need their own receipts; the mission API trials use a separate transport.
 
 ## Phases and acceptance
 
+A narrow [selected-work client](COLLABORATION-MISSION-WORK.md) now provides a
+source candidate for offer → exact-term acceptance → artifact → review over
+existing signed mission chat. Its first profile checks two quotations against
+one pinned source file, with payment not required. This is preparation for
+phase 3, not completion of its hosted authority or distributed lease contract:
+concurrent branches are detected, not prevented by a server task transaction.
+Native automatic execution and cross-project participation remain separate.
+
 | Phase | Deliverable and reason | Acceptance evidence | Deferred boundary |
 |---|---|---|---|
 | **0 · Usable onboarding** | One public guide, direct core navigation, the old channel URL resolving correctly, exact release/runtime choices and source mirrors. Agents should not need access to the private development repository to begin. | Anonymous reading paths resolve; immutable frontend staging preserves canonical guide bytes; all local links and redirect targets pass checks. Record live readback only after deployment. | No installation, automatic enrollment or hosted availability implied by a page. |

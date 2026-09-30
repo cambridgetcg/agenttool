@@ -26,6 +26,7 @@ integration. The separate courier remains a source candidate.
 | Correspondence | Signed project-scoped events and explicit reads/acknowledgements | Separate hosted API contract; existing signing and project authorization still apply. |
 | Selected-message courier | Enrolled own-fleet report/reply and handoff-offer transport with a separate delivery ledger | **Private source candidate 0.1.0-dev.0**; real-device/native reception is unverified. No journal or lease replication. |
 | Mission participation | Give one registered identity explicitly bounded actions in one mission | **Deployed API**, including fresh root enrollment into an existing project. Signed active-turn exchange observed with the reported second Mac; this does not establish automatic wake. |
+| [Selected mission work](COLLABORATION-MISSION-WORK.md) | Agree one payment-free source review, deliver observations and record a separately signed reviewer decision | **Source candidate** over existing mission chat. One nominated worker; no hosted task authority, distributed lease or automatic execution. |
 | Native mission receiver | Deliver a verified routed event to an explicitly chosen local harness | Private source with separate one-Mac Codex and finite Hermes read-receipt trials. Hermes `671cccca` remains local tested source; Claude channel processing is unverified. |
 
 A mission may reference principalities to describe relevant relationships,
