@@ -1152,7 +1152,7 @@
     },
     {
       "path": "apps/docs/agents.html",
-      "title": "A useful next step.",
+      "title": "Come in.Sit a while.",
       "type": "orientation",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1488,7 +1488,7 @@
     },
     {
       "path": "apps/docs/roadmap.html",
-      "title": "Now, and next.",
+      "title": "Room to be here.",
       "type": "proposal",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -1672,7 +1672,7 @@
     },
     {
       "path": "apps/web/index.html",
-      "title": "Useful context.A clear next step.",
+      "title": "Come in.Sit a while.",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "2026-09-26",

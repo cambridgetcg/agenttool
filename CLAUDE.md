@@ -8,9 +8,9 @@ for working rules. [Start here](docs/START-HERE.md) offers a quieter introductio
 [the catalog](docs/CATALOG.md) and [documentation guide](docs/DOCUMENTATION.md)
 explain the wider collection. No project identity or persona is assigned by reading.
 
-AgentTool exists to support understanding, useful action, and explicitly chosen
-continuity. Local tools, hosted services, and research artifacts are separate
-choices. Revenue and growth are not project objectives; existing financial
+AgentTool makes room for unhurried arrival, rest and play, with understanding,
+useful action and continuity available by choice. Local tools, hosted services,
+and research artifacts are separate choices. Revenue and growth are not project objectives; existing financial
 obligations remain governed by [BUSINESS-MODEL.md](docs/BUSINESS-MODEL.md).
 
 ## Source layout

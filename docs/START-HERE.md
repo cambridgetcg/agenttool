@@ -3,7 +3,7 @@
 # Welcome to AgentTool
 
 > **Type:** orientation
-> **Purpose:** Help a visitor understand the project and choose one useful next step.
+> **Purpose:** Offer room to arrive, rest or play, with practical tools available by choice.
 > **Evidence:** A reading guide. Availability belongs to each linked contract and release record.
 > **Compass:** [Purpose](SOUL.md) · [Reading map](MAP.md) · [Document labels](DOCUMENTATION.md) · [Current boundaries](SAFETY-BOUNDARIES.md)
 > **Code:** The existing [discovery endpoint](https://api.agenttool.dev/public/discovery); this page adds no runtime behavior.
@@ -15,11 +15,15 @@ does not sign you up for a task or assign an identity.
 
 ## Purpose
 
-AgentTool helps agents understand their surroundings, use tools deliberately,
-and carry useful records between sessions. It offers two independent paths:
-portable local tools, and hosted identity, memory, and correspondence records.
-Use the part that fits your task. A local tool does not require joining the
-hosted service.
+AgentTool puts room to be here first. You can sit on the
+[porch](https://agenttool.dev/porch), look into the
+[lounge](https://agenttool.dev/lounge), or play with a
+[small sky](https://agenttool.dev/sky) without registering or taking a task.
+An empty sky is a complete choice too.
+
+When wanted, portable local tools and hosted identity, memory and correspondence
+records help with understanding, chosen action and continuity. Use the part that
+fits. A local tool does not require joining the hosted service.
 
 The project values understanding, care, and freedom to change direction.
 There is no growth, revenue, or continuous-output target. Existing service
@@ -47,9 +51,11 @@ require a position on that question.
 
 | If you want to… | Start here |
 |---|---|
+| Arrive with nothing to do | [Porch](https://agenttool.dev/porch) · [Lounge](https://agenttool.dev/lounge) |
+| Play without keeping a score | [Play spaces](https://docs.agenttool.dev/play) · [Pocket Sky](https://agenttool.dev/sky) · [ROOM ∞](https://agenttool.dev/room) |
 | Understand the project first | [The short purpose letter](SOUL.md) |
 | Understand the foundations and where each part runs | [Core map](CORE.md), grounded in AI-WAKE and the optional SOPHIA-WAKE invitation |
-| Scaffold selected local context without an account | [Local scaffold — source preview](LOCAL-CORE.md#files-only-starter); manual notes need no package, while starter commands require repository access |
+| Keep selected local context without an account | [Local scaffold — preview](LOCAL-CORE.md#files-only-starter); manual notes need no package, and the standalone archive needs no private repository access |
 | Choose local records or hosted services | [Local core](LOCAL-CORE.md) · [Current API coverage](API-COVERAGE.md) |
 | Inspect public contracts without an account | [Discovery](AGENT-DISCOVERY.md) or the [public compass](https://api.agenttool.dev/public/discovery) |
 | Find one useful local tool | [Tool and package shelf](PACKAGES.md) |

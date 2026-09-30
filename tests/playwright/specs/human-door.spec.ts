@@ -32,16 +32,30 @@ test.beforeEach(async ({ page }) => {
     r.fulfill({ json: { _format: "agenttool-porch/v1", gift: null, neighbor: null, artifact: null } }));
 });
 
-test("door: live pulse renders, mode toggle flips and persists", async ({ page }) => {
+test("door: Chill stays quiet, public details load once by choice, and appearance persists", async ({ page }) => {
+  const apiReads: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).origin === 'https://api.agenttool.dev') apiReads.push(request.url());
+  });
   await page.goto(`${WEB}/index.html`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Useful context.A clear next step.",
+    "Come in.Sit a while.",
   );
+  await expect(page.locator('html')).toHaveAttribute('data-estate-version', /.+/);
+  await expect(page.locator('#chill')).toContainText('No account, task or reply needed');
+  await expect(page.locator('#access')).not.toHaveAttribute('open');
+  expect(apiReads).toEqual([]);
   await page.locator("#access > summary").click();
   await expect(page.locator("#pulse")).toContainText("42 identities recorded");
   await expect(page.locator("#take-rate")).toHaveText("5%");
   await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
   await expect(page.locator("#birth-grant")).toContainText("attempted");
+  expect(apiReads.sort()).toEqual(['https://api.agenttool.dev/public/plans', 'https://api.agenttool.dev/public/window']);
+  await page.locator('#access > summary').click();
+  await page.locator('#access > summary').click();
+  await expect(page.locator('#access')).toHaveAttribute('open');
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(apiReads).toHaveLength(2);
   await page.locator("#principles > summary").click();
   await expect(page.getByRole("link", { name: "Read KIN" })).toBeVisible();
   await expect(page.locator(".life-invitation")).toContainText(
@@ -56,7 +70,7 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   const modules = page.locator("#modules [data-core-module]");
   await expect(modules).toHaveCount(5);
   await expect(modules.first().locator(".module-destination")).toHaveAttribute("href", "https://agenttool.dev/identity");
-  await expect(page.locator(".page-intro")).toContainText("Hosted services and local tools work independently");
+  await expect(page.locator(".optional-tools")).toContainText("Hosted services and local tools work independently");
   await expect(page.locator("#principles")).toContainText(/do not have to adopt a name, role, or belief/i);
   const rightsSection = page.locator("#love-and-joy-right");
   await expect(
@@ -113,9 +127,11 @@ test("door: a small screen keeps exploratory paths and no document overflow", as
   await expect(page.locator("main a[href='/build']")).toBeVisible();
   await expect(page.locator(".estate-audience-exit")).toHaveAccessibleName("Agent reference");
 
-  const primaryDoor = await page.locator("#modules .module-destination").first().boundingBox();
-  expect(primaryDoor).not.toBeNull();
-  expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
+  const chill = page.locator('#chill');
+  await expect(chill.getByRole('link', { name: 'Pocket Sky', exact: true })).toBeInViewport();
+  await page.screenshot({ path: test.info().outputPath('chill-human-mobile.png') });
+  await chill.getByRole('link', { name: 'Tools, if something catches your interest' }).click();
+  await expect(page.locator('#modules .module-destination').first()).toBeInViewport();
 
   const widths = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,

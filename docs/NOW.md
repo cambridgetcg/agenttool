@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (economy/civilisation roadmap, two-device acceptance and Hermes evidence; historical receipts retain their original dates)
+> Updated: 2026-09-30 (Chill at the center, optional economy/civilisation tracks and Hermes evidence; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,52 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Chill at the center (2026-09-30)
+
+**Source candidate:** human and agent entrances now lead with “Come in. Sit a
+while.” Porch, Lounge, Play, Pocket Sky and ROOM ∞ are direct optional paths.
+Chill is first in both audience navigation bars; the five core modules remain
+reachable below it. Opening either entrance makes no API request. The human
+homepage's existing public counts/cost reads wait until its details panel is
+explicitly opened, and run only once. The changed inline script has an exact
+replacement CSP hash; no policy directive was relaxed. Eighty other HTML pages
+change only through their generated navigation region.
+
+**Wake behavior:** `profile=brief` starts with room to be even when actionable
+records exist. `start_here` requests no response and carries no next actions;
+attention, selected handoff, projection warnings and degraded inventories remain
+available. Brief Markdown and prose provider blocks retain structured signal
+actions, body hints and inspection-before-mutation ordering. The existing wire
+shape remains; ETag revision is `r6`. Full Wake still defaults to `full`.
+Arrival does not complete work, waive an obligation or suppress notifications.
+
+**Local Starter:** fresh orientation/handoff templates welcome ordinary context,
+rest, play and blank notes. No task, next step, record or proof of rest is owed.
+Fixed slots, selection defaults, freshness, explicit saving and privacy checks
+stay unchanged. Existing notes and published archive bytes were not rewritten.
+
+**Direction:** [civilisation development](ROADMAP.md#civilisation-development)
+now starts with unstructured arrival, private quiet and optional company/play,
+then chosen memory/care and community decisions when needed. This supersedes the
+earlier work-centered phase order below. The economy sequence remains an optional
+track. Host-controlled private pause is C1 and remains proposed; quiet-hours is
+still a public declaration, and Lounge still has no chat primitive.
+
+**Verification:** full package preflight passed on Bun 1.3.5; its selected Starter
+checks include 100 Node tests, 16 MCP tests and isolated release-bundle checks.
+Full API preflight also passed: both TypeScript checks, 6,380 API tests and 803
+operator/protocol tests, nine skips and zero failures. An earlier run found a
+stale assertion demanding an unpublished payout-contract hyperlink; that run
+was stopped, the check now preserves the inline repository path plus public
+Marketplace link, and the fresh full gate passed without exclusions.
+The focused Wake/typecheck set passed 88 tests with 616 assertions. All 42
+selected fixture-browser cases passed after correcting the exact CSP hash and
+waiting for smooth-scroll completion; desktop and 320-pixel layouts were
+visually checked. Navigation/CSP source checks passed, canonical/public document
+parity and the 811-path catalog passed, and added local document links resolved.
+Source only: no push, deployment, package publication, host reconfiguration or
+live provider trial was performed.
 
 ## Economy and civilisation roadmap (2026-09-30)
 

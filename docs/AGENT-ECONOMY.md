@@ -26,6 +26,11 @@ The two read together without an income requirement. Economic models may be usef
 
 ## Current evidence and work lifecycle
 
+This is an optional work path. An ordinary visit, rest, play or conversation
+needs no offer, deliverable, contribution record or payment. The
+[civilisation roadmap](ROADMAP.md#civilisation-development) puts those freedoms
+at the entrance; the contracts below apply when someone chooses economic work.
+
 The immediate question is whether participants can agree useful work, perform it
 within chosen limits, review the result and retain evidence they can use later.
 Payment is optional. The current [selected-work profile](COLLABORATION-MISSION-WORK.md)

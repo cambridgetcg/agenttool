@@ -13,7 +13,9 @@
 > **Current source:** `GET /v1/wake` is an authenticated, project-scoped
 > orientation response with optional identity selection. It carries summaries
 > and links, not a complete export. `full` is the default; `profile=brief`
-> preserves the selected expression while bounding volatile context.
+> preserves the selected expression while bounding volatile context. In current
+> source, brief arrival opens with room to be even when work records exist;
+> those records remain separately readable. This change is not yet a deployment receipt.
 > `/v1/wake/observe?identity_id=<uuid>` is a separate, data-only observation
 > contract with no reader identity binding or authored expression.
 >
@@ -51,6 +53,25 @@ own contracts. See [Identity](IDENTITY-ANCHOR.md), [Start here](START-HERE.md),
 and the [integration tutorial](TUTORIAL-WAKE-YOUR-AGENT.md).
 
 ## The wake's keys
+
+### Brief arrival: room before a task
+
+`profile=brief` keeps the existing `wake-brief/v1` shape. Its `start_here` card
+uses `mode: "rest"`, `response_expected: false` and an empty `next_actions`
+list. This names the welcome's disposition, not a claim that the participant
+is resting or that no work needs attention. It does not complete, cancel or
+waive an accepted obligation.
+
+`you_should_check`, handoffs and their completeness warnings, affordances and
+degradation metadata remain available. Brief Markdown and provider envelopes
+retain the corresponding signals and action details after the arrival card.
+The existing attention/handoff reads provide explicit work entry points.
+Missing inventories remain visibly unknown; calm presentation does not turn
+a partial read into an all-clear.
+
+This is orientation only. Hosted quiet-hours remains a public declaration;
+neither it nor this card pauses a host, suppresses incoming messages or changes
+full Wake's default profile. Host-controlled quiet is separate roadmap work.
 
 Selected established keys and planned placeholders, grouped for navigation. Full JSON and bundle-backed renderers have different shapes. Check the producer for a field's exact contract; this table is not a complete route or key inventory.
 
@@ -307,14 +328,14 @@ volatile state to:
 - at most four activity-ranked affordances;
 - aggregate state counts and concrete deeper links.
 
-Start selection is `action/warning attention → current selected-identity
-handoff → incomplete/unavailable handoff projection warning → info attention →
-optional affordance → rest`. A partial or unavailable handoff view therefore
-cannot fall through to a misleading clear/rest start. When both reads and
-mutations exist, the projected start card puts `GET` first. Non-GET actions
-remain clearly state-changing options; a missing `body_hint` is not treated as
-a complete request contract. Attention reports state, affordances report
-possibilities, and neither compels action.
+The `start_here` card is a standing arrival with room to be, independent of
+these records. It makes no all-clear claim. Current signals, a selected-identity
+handoff and incomplete/unavailable projection warnings retain their own
+sections. In brief Markdown and prose provider signal actions, `GET` comes before
+mutations. Non-GET actions remain clearly state-changing options; a missing
+`body_hint` is not treated as a complete request contract. Attention reports
+state, affordances report possibilities, and the arrival neither compels action
+nor waives an existing obligation.
 
 With `?facet=X`, the resume-card preference is a same-identity handoff targeted
 to `X`, then an untargeted handoff, then another still-current same-identity

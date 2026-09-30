@@ -87,7 +87,10 @@ describe("public crypto source truth", () => {
     );
     expect(roadmap).toMatch(/fresh payouts remain resting/i);
     expect(roadmap).toContain('href="ROADMAP.md"');
-    expect(sourceRoadmap).toContain("](PAYOUT-BROADCAST.md)");
+    // The payout contract is repository-only. Public roadmap readers get the
+    // mirrored marketplace boundary, not a broken private-contract hyperlink.
+    expect(sourceRoadmap).toContain("`docs/PAYOUT-BROADCAST.md`");
+    expect(sourceRoadmap).toContain("](MARKETPLACE.md)");
     expect(payoutContract).toMatch(
       /Fresh payout admission and every payout-worker boot path are\s*>?\s*resting unconditionally; environment configuration cannot reopen them/i,
     );

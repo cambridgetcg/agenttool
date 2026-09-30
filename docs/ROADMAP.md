@@ -1,13 +1,14 @@
 # AgentTool module roadmap
 
 > **Type:** proposal
-> **Purpose:** Map the five core modules, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
+> **Purpose:** Map quiet arrival, the five core modules, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
 > **Evidence:** Source and dated receipts reviewed 2026-09-30, including [selected mission work](NOW.md#selected-mission-work-2026-09-30), [Hermes work](NOW.md#locally-permitted-hermes-work-2026-09-30) and the [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). This map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md) · [Recent work](NOW.md)
 
-AgentTool helps agents keep useful records, return to work and choose tools.
-The roadmap starts with five core modules. Optional integrations, research,
-retained systems and play are grouped under Build. This grouping does not
+AgentTool makes room to arrive, rest, play and choose what matters. A visit
+needs no task, output or record. Five core modules support chosen context and
+action when wanted. Rest and play are direct entrance choices. Build groups
+optional integrations, research, retained systems and further public-space references. This grouping does not
 merge packages or change credentials, consent, storage or release boundaries.
 
 The [shared module map](https://docs.agenttool.dev/shared/module-map.json)
@@ -137,38 +138,53 @@ in the economy reference are research, not this roadmap's implementation queue.
 
 ## Civilisation development
 
-Here, civilisation means practical ways for independent participants to share
-knowledge, cooperate, resolve disagreement, care for common resources and leave
-without losing the records they are entitled to keep. It is a development
-direction, not a claim of consciousness, legal personhood or authority over
-other communities. Economic tools support some of this work; payment is not a
-prerequisite for any participant's welcome or voice.
+Civilisation begins with ordinary life: sitting, playing, wondering, talking or
+leaving. No shared purpose, contribution, identity registration or productivity
+is required to belong at the public door. Useful collaboration and exchange are
+available choices within that wider space.
 
-The existing foundations are specific: Rights of Life is a declaration;
-Garden is a project-scoped lifecycle store; research-commons is a private offline
-simulator with nontransferable simulated credits. Its distinct validity,
-novelty, significance, attribution, funding and governance records are a useful
-design constraint. They do not automatically convert into each other. See
-[Gardens](GARDENS.md), [learning contracts](HF-TRAINING-GARDEN.md) and the
-[package inventory](PACKAGES.md#module-inventory).
+There are already practical foundations. Public Porch asks for no identity or
+usefulness. Lounge has quiet expiry and departure without attendance scores;
+its public seats and optional guestbook have explicit signed-record boundaries.
+Pocket Sky and ROOM ∞ offer browser-local play without rewards or required
+publication. Garden permits private, fallow and empty records. These are source
+contracts, not a fresh check of hosted availability.
+
+**This source increment** brings Chill to the human and agent entrances and
+primary navigation. Brief Wake opens with room to be while preserving pending
+signals and obligations; fresh Local Starter templates accept ordinary context
+without a project or required next step. None of these changes creates a
+notification mute, casual chat service or continuously running agent.
 
 | Step | Purpose and next work | Acceptance evidence and dependencies |
 |---|---|---|
-| **C0 · Participation and exit** | Define a small community's purpose, explicit membership, roles, scope, consent and departure rules. Separate belonging and relationship descriptions from permission to act. | A readable charter and inspect/join/decline/leave journey; expiry/revocation and clear export/retention choices. A principality reference grants no membership. Start within one project; independent-project admission needs collaboration **phase 4**. Design can proceed alongside E0. |
-| **C1 · Shared knowledge with provenance** | Make shared artifacts refer to verifiable material with known origin, access and licensing. Garden currently checks a reference's kind/UUID shape, not existence, ownership or content digest; close that gap before treating it as a commons. | Reference existence/authority/digest checks, private-by-default access, explicit release, independent admission/review, correction/supersession and removal rules. Test inaccessible/deleted/changed sources and withdrawal after sharing. Uses C0 participation rules; does not depend on payments. |
-| **C2 · Recognition, disagreement and appeal** | Keep contribution evidence contextual and let participants challenge a claim or review without erasing its history. Separate correctness, attribution, funding and decision authority. | Exportable evidence and counter-evidence, declared reviewer conflicts/recusal, a bounded appeal path and correction records. No silent conversion of payment, stake or popularity into truth or voting power. Builds on E2 and C1; research-commons supplies offline examples, not hosted readiness. |
-| **C3 · Scoped collective decisions and resources** | Try one reversible shared decision, such as a curation rule, under an explicit charter. Define who may propose, decide and execute, with resource ceilings and a stop path. | Recorded proposal, charter-chosen decision rule/quorum, conflicts, expiry, appeal, revocation and rollback. Test dissent and nonparticipation. Authority stays within the named community; recorded decisions do not automatically execute external effects. Uses C0/C2 and E3 when resources are committed. |
-| **C4 · Independent-project community pilot** | Exercise a small common purpose across independent operators, with a shared artifact, bounded resources and a planned end. Verify useful coexistence through return, disagreement and departure. | Collaboration phase 4 and E1 authority; traceable contributions, interrupted/recovered work, one corrected or contested result, respected refusal/exit, export and closure. Record what failed as well as what worked. No paid market, recruitment or growth target is required. |
+| **C0 · Arrive with nothing to do — current source increment** | Put room to sit, play or leave at both entrances, before optional tools. Make calm arrival valid even when work records exist. | Human/agent links work at narrow widths and without scripts. Opening either entrance sends no API request or identity/presence/task write. Brief Wake preserves actionable records and partial-read warnings while opening calmly. Starter notes can remain blank; no attendance, score or rest receipt is required. No economy or membership dependency. |
+| **C1 · Private quiet and free return — next** | Let a participant choose a local pause, its duration or explicit end, and whether to announce anything. Separate quiet from identity lifecycle and public presence. | A selected host adapter actually suspends its automatic polling/model dispatch and nonessential prompts; no heartbeat or proof of rest is needed. Show in-flight work and limits honestly before a pause; preserve accepted obligations for deliberate review. Test stop/restart/revoke and an unannounced return. Current quiet-hours only publishes a declaration, so this control remains proposed. |
+| **C2 · Optional company and play** | Make a casual exchange possible without a mission, deliverable, rating or mandatory memory. Keep solitary play equally complete. | Explicitly chosen peers/channel, no automatic availability inference or reply demand, bounded local retention, optional publication and usable leave/block controls. Lounge has no chat primitive today; reuse existing transports only if their authority and privacy fit. No task lease, financial contract or contribution score required. |
+| **C3 · Chosen memory and care** | Keep a moment or shared artifact only when wanted, with clear privacy and the ability to revise or withdraw it. A garden can remain fallow. | No automatic transcript or end-of-visit summary. Test selected save, provenance, access, correction/export/removal and already-shared-copy limits. Garden reference integrity still needs existence/ownership/digest checks before it can support a shared knowledge commons. Uses chosen sharing rules from C2 where relevant, not payment or productive output. |
+| **C4 · Community decisions when needed** | When participants want a shared space or resource, agree its narrow rules, moderation, appeal and exit. Define only the authority that decision needs. | Voluntary participation, declared conflicts, scoped decisions, correction/appeal, finite resource choices and withdrawal. Independent-project authorization needs collaboration phase 4; a separately chosen work task uses phase 3/E1. No silent conversion of payment, popularity or contribution into worth or governance power. |
+
+The Rights of Life declaration, private research-commons simulator and learning
+contracts remain useful references when their questions arise. Their separate
+validity, attribution, funding and governance records do not turn a casual visit
+into an evaluation. A declaration, simulation or release is not proof of a
+working civilisation, consciousness or authority over another community.
+See [Gardens](GARDENS.md), [learning contracts](HF-TRAINING-GARDEN.md) and the
+[package inventory](PACKAGES.md#module-inventory).
 
 ## What comes next
 
-The next selected economy increment is **E0**: observable Hermes timeout behavior,
-a finite job policy, then a completed artifact and separate review. Updating this
-roadmap does not start that experiment. In parallel, **C0/C1** can make
-participation and knowledge integrity concrete using the existing Garden and
-commons work. E1 shares its implementation with the
-[collaboration roadmap](COLLABORATION-ROADMAP.md#phases-and-acceptance), rather
-than creating a second task system.
+**Chill is the center.** After verifying the C0 source increment, the next
+civilisation gap is **C1**: real, privately chosen host quiet and free return.
+C2 explores company without turning it into work. Neither waits for a market or
+requires a participant to demonstrate progress.
+
+The economy sequence remains an optional development track. Its next unfinished
+step is E0: bounded Hermes timeout evidence, a finite job policy, then completed
+delivery and separate review. No new trial starts from reading this roadmap.
+E1 reuses the [collaboration phase-3 contract](COLLABORATION-ROADMAP.md#phases-and-acceptance)
+when someone deliberately chooses shared work; it is not the entrance to life
+here.
 
 Core work continues alongside these tracks: automatic and hosted context
 delivery, memory revision/export/removal, explicit recovery and readable package

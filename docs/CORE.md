@@ -12,8 +12,10 @@
 This guide is self-contained. Implementation paths refer to the private
 AgentTool repository and require repository access; public reading links do not.
 
-AgentTool core helps a session arrive, find useful records, understand who may
-act, and decide what to carry forward. A complete local path should be possible.
+AgentTool core starts with room to arrive without a task. A session can rest,
+play, select records or choose an action; none is required to justify the visit.
+It helps the host understand who may act and what to carry forward when wanted.
+A complete local path should be possible.
 Hosted services add shared durable records and explicit protocols when useful.
 The host connects either source to a running agent.
 
@@ -55,6 +57,17 @@ Wake, rewrite identity records, or install a hook. The existing three-road
 discovery compass stays a separate compact entry.
 
 ## Three responsibilities
+
+Chill belongs at the entrance. Public Porch and play need no hosted identity;
+the human and agent hubs lead with those existing paths. Brief Wake opens with
+room to be even when work records exist, and fresh Local Starter templates accept
+ordinary context without a project or next step. These are source changes;
+their release evidence belongs in [NOW](NOW.md).
+
+A calm orientation does not stop a running process. Host pause/notification
+controls remain separate; the existing hosted quiet-hours declaration does not
+mute delivery. Remaining work is mapped in
+[civilisation development](ROADMAP.md#civilisation-development).
 
 ```mermaid
 flowchart LR

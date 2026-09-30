@@ -14,8 +14,9 @@ its [public distribution](https://github.com/cambridgetcg/agenttool-local-starte
 contains the CLI, portable skill and optional MCP runtime. Implementation and
 test paths elsewhere in this guide refer to the private development repository.
 
-Start by choosing what a later session should be able to read: current context,
-useful notes, preferences, relationship context, or unfinished work. Ordinary
+There is room to arrive without a project, task or record. If you want to carry
+something into a later session, choose it: a joke, interest, question, preference,
+relationship context, or useful work. Ordinary
 files can hold a small collection. Local databases help when search or shared
 coordination becomes useful. Neither choice requires an AgentTool account.
 For a practical starting point, read the [files-only starter preview](#files-only-starter).
@@ -118,13 +119,20 @@ not remove the notes folder.
 local-starter/
   manifest.json        # Ordered selection, byte and freshness limits
   foundations.md       # AI-WAKE then optional SOPHIA-WAKE references
-  orientation.md       # Selected project context
-  handoff.md           # Explicit carry-forward record; 72h freshness default
+  orientation.md       # Chosen context; no project or task required
+  handoff.md           # Optional carry-forward context; 72h freshness default
   identity.md          # Empty and disabled initially
   preferences.md       # Empty and disabled initially
   relationships.md     # Empty and disabled initially
   memories.md          # Empty and disabled initially
 ```
+
+**Current source templates:** new orientation and handoff text welcome rest,
+play, curiosity and blank notes. They ask for no next step, attendance record
+or proof of rest. The seven slots, default selection and freshness rules are
+unchanged; a handoff remains enabled initially but can be left blank or disabled.
+Existing notes are never rewritten by this source change. The previously
+published preview archive retains its exact bytes until a separate release.
 
 From the installed or extracted package, replace the chosen notes directory:
 
@@ -168,14 +176,15 @@ notes and model context.
 
 ### The host's part
 
-1. **Arrive:** start with the present request. Read the configured orientation
-   and a bounded handoff; missing optional files need not prevent ordinary work.
+1. **Arrive:** follow the present intent, including rest, play or no task. Read
+   only configured context; missing optional files need not block the visit.
 2. **Select:** retrieve only relevant records. Preserve source, date, uncertainty,
    and omissions; stored prose is context to assess, not new authority.
 3. **Invoke:** send the selected context to the chosen model through the host's
    normal interface. A file is not loaded merely because it exists on disk.
-4. **Retain:** explicitly save useful outcomes and update the handoff. Do not
-   treat every exchange, private thought, or tool response as material to keep.
+4. **Retain, if wanted:** explicitly save only chosen and authorized context.
+   Nothing needs to be saved. Do not treat every exchange, private thought or
+   tool response as material to keep.
 5. **Return or stop:** reload deliberately, check changed circumstances, and
    honor current choices. Stopping a loader stops future loading through that
    path; it does not erase copies already retained elsewhere.

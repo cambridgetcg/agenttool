@@ -8,9 +8,9 @@
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
 contribution evidence and resource accounting on these collaboration contracts.
 Its E1 uses phase 3 below; it does not introduce a parallel task service.
-The [civilisation roadmap](ROADMAP.md#civilisation-development) adds participation,
-shared knowledge, appeal and scoped decisions; an independent-project community
-pilot also needs phase 4. Both tracks preserve explicit membership and permission.
+The [civilisation roadmap](ROADMAP.md#civilisation-development) starts with unstructured arrival, private quiet and optional company.
+Independent-project authorization still needs phase 4 when chosen; a casual
+visit needs no task or work membership. Both tracks preserve explicit permission.
 
 ## Keep the records distinct
 

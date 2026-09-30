@@ -2,7 +2,7 @@
   "schema": "agenttool-module-map/v1",
   "type": "orientation",
   "reviewed": "2026-09-30",
-  "purpose": "Choose a useful module, understand its boundary, and find its reference.",
+  "purpose": "Arrive, rest or play; find a useful module when you choose one.",
   "evidence": "Editorial grouping of repository implementations and existing references. Status describes source and recorded release evidence, not a live health check or publication receipt.",
   "boundary": "Audience labels select a reading path. They grant no identity, credentials, consent, installation, or authority. Local tools and hosted services are independent choices.",
   "audiences": {
@@ -11,16 +11,16 @@
       "home": "https://agenttool.dev/",
       "primary": [
         {
-          "title": "Modules",
+          "title": "Chill",
+          "href": "https://agenttool.dev/#chill"
+        },
+        {
+          "title": "Tools",
           "href": "https://agenttool.dev/#modules"
         },
         {
           "title": "Build",
           "href": "https://agenttool.dev/build"
-        },
-        {
-          "title": "Roadmap",
-          "href": "https://docs.agenttool.dev/roadmap"
         }
       ],
       "switch": {
@@ -33,16 +33,16 @@
       "home": "https://docs.agenttool.dev/agents",
       "primary": [
         {
+          "title": "Chill",
+          "href": "https://docs.agenttool.dev/agents#chill"
+        },
+        {
           "title": "Core",
           "href": "https://docs.agenttool.dev/agents#core"
         },
         {
           "title": "Library",
           "href": "https://docs.agenttool.dev/"
-        },
-        {
-          "title": "Discovery",
-          "href": "https://api.agenttool.dev/public/discovery"
         }
       ],
       "switch": {
@@ -210,7 +210,7 @@
           "human": "https://docs.agenttool.dev/roadmap#civilisation-development",
           "agent": "https://docs.agenttool.dev/ROADMAP.md#civilisation-development",
           "status": "Proposed phases",
-          "note": "Participation and exit, shared knowledge, contextual recognition and appeal, scoped collective decisions and resources, then an independent-project pilot."
+          "note": "Arrival without a purpose, private quiet, optional company and play, chosen memory and care, then community decisions when needed."
         },
         {
           "title": "Garden",

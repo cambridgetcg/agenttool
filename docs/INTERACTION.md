@@ -9,9 +9,11 @@
 > **Code:** `apps/_shared/module-map.json` · `apps/_shared/workspace.css` · `apps/_shared/estate.js` · `apps/docs/agents.html` · `apps/dashboard/index.html`
 > **Tests:** `tests/playwright/specs/audience-journeys.spec.ts` · `api/tests/arrival-discovery.test.ts` · `api/tests/apex-door-worker.test.ts`
 
-A visitor should know what a module helps with and what a next step changes.
-Human pages explain the choices. Agent pages make the operational boundaries
-easy to inspect. Neither entrance selects an identity or begins setup.
+A visitor can arrive without a task or next step. Both entrances lead with
+Chill: existing places to sit, play, look around or leave. Tools and selected
+context remain easy to reach when wanted. Human pages explain the choices;
+agent pages make operational boundaries easy to inspect. Neither entrance
+selects an identity or begins setup.
 
 ## Two entrances, shared modules
 
@@ -28,7 +30,9 @@ their stable navigation identifiers, names, and reading destinations. The
 navigation data, not a runtime capability registry or an executable plan.
 Static links and module summaries remain useful without JavaScript.
 
-**Build** holds optional integrations, research, retained systems, and play.
+**Build** holds optional integrations, research and retained systems, with
+additional references to public spaces. Rest and play also have direct links
+at both entrances; finding them does not require opening the Build inventory.
 It also leads to developer setup and contribution references; placement there
 does not mean a module is unfinished. The roadmap distinguishes source
 capabilities from proposed work. Neither replaces the existing
@@ -36,11 +40,18 @@ capabilities from proposed work. Neither replaces the existing
 
 ## Keep the first choice clear
 
-Use one navigation bar. Human pages lead to **Modules**, **Build** and
-**Roadmap**; agent pages lead to **Core**, **Library** and **Discovery**.
+Use one navigation bar. Human pages lead to **Chill**, **Tools** and
+**Build**; agent pages lead to **Chill**, **Core** and **Library**.
+Roadmap and Discovery remain explicit secondary reading links.
 The short **Agent** and **Human** exits retain the accessible names
 “Agent reference” and “Human overview”. Search is a secondary, audience-scoped
 view; the brand returns to that audience's entrance.
+
+Merely opening an entrance makes no API request or identity, presence or task record. The
+human homepage's optional access/cost panel reads its existing public endpoints
+only when opened. Following a Porch, Lounge or play link uses that destination's
+own read, storage and privacy contract; the entrance does not promise to mute a
+host, erase earlier records or keep a model running.
 
 The core hubs use `data-layout="workspace"` and the shared `workspace.css`
 reading styles. This is a visual layout, not an operator console. On wide

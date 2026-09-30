@@ -28,6 +28,7 @@ import {
   type SubagentFacet,
 } from "../identity/expression";
 import type { HandoffRecord, ProjectHandoffSurface } from "../handoff/store";
+import type { NextAction } from "../../lib/errors";
 import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
 import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../love/inherent-right";
@@ -1993,12 +1994,38 @@ export interface RenderWakeOpts {
   profile?: WakeProfile;
 }
 
+/** Keep inspection paths before mutations without changing source records. */
+function renderBriefActions(actions: NextAction[]): string[] {
+  const rank = (action: NextAction): number =>
+    action.method === "GET" ? 1 : action.method ? 2 : 3;
+  const ordered = actions
+    .map((action, index) => ({ action, index }))
+    .sort((a, b) => rank(a.action) - rank(b.action) || a.index - b.index);
+  const lines: string[] = [];
+  for (const { action } of ordered) {
+    if (action.method && action.path) {
+      lines.push(`  - \`${action.method} ${action.path}\` — ${action.action}`);
+      if (action.body_hint) {
+        lines.push(`    - body_hint: \`${JSON.stringify(action.body_hint)}\``);
+      }
+    } else {
+      lines.push(`  - ${handoffText(action.action, 440)}`);
+    }
+  }
+  if (actions.some((action) => action.method && action.method !== "GET")) {
+    lines.push(
+      "",
+      "*Mutation boundary: non-GET actions can change state. If no `body_hint` is present, this brief does not specify a valid request body; inspect the endpoint contract before sending.*",
+    );
+  }
+  return lines;
+}
+
 /** Session-start state for the brief profile.
  *
- * Unlike the full volatile renderer, this does not inject recent memory,
- * social, marketplace, saga, joke, or peer-authored handoff bodies. One
- * labelled handoff resume card may be present; every deeper surface remains
- * reachable through a concrete link. */
+ * Arrival asks for no response. Current signals, one labelled resume card,
+ * and uncertainty remain visible without injecting deeper memory, social,
+ * marketplace, saga, joke, or peer-authored handoff bodies. */
 export function renderWakeBriefVolatileSection(
   b: WakeBundle,
   opts: Pick<RenderWakeOpts, "activeFacet"> = {},
@@ -2010,37 +2037,24 @@ export function renderWakeBriefVolatileSection(
     `> *Addressed at ${brief.addressed_at ?? "an unspecified time"}. Brief orientation; welcome continues.*`,
     "",
   );
-  if (brief._degradation) lines.push(wakeDegradationWarning(brief._degradation), "");
+  if (brief._degradation) lines.push(
+    wakeDegradationWarning(brief._degradation),
+    `- Retry this partial orientation when useful: \`GET ${brief._links.self}\``,
+    "",
+  );
   lines.push("## Start here", "");
 
   const startLabel: Record<typeof brief.start_here.mode, string> = {
     attention: "Something to review",
     handoff: "Resume if still current",
     optional: "Optional path",
-    rest: "Clear",
+    rest: "Room to be",
   };
   const startSummary = brief.start_here.source.surface === "you_have_handoffs"
     ? handoffText(brief.start_here.summary, 440)
     : brief.start_here.summary;
   lines.push(`- **${startLabel[brief.start_here.mode]}:** ${startSummary}`);
-  for (const action of brief.start_here.next_actions) {
-    if (action.method && action.path) {
-      lines.push(`  - \`${action.method} ${action.path}\` — ${action.action}`);
-      if (action.body_hint) {
-        lines.push(`    - body_hint: \`${JSON.stringify(action.body_hint)}\``);
-      }
-    } else {
-      lines.push(`  - ${handoffText(action.action, 440)}`);
-    }
-  }
-  if (brief.start_here.next_actions.some(
-    (action) => action.method && action.method !== "GET",
-  )) {
-    lines.push(
-      "",
-      "*Mutation boundary: non-GET actions can change state. If no `body_hint` is present, this brief does not specify a valid request body; inspect the endpoint contract before sending.*",
-    );
-  }
+  lines.push(...renderBriefActions(brief.start_here.next_actions));
   lines.push("", `*${brief.start_here.agency_note}*`, "");
 
   if (brief.handoff_projection.warning) {
@@ -2097,10 +2111,11 @@ export function renderWakeBriefVolatileSection(
       item.kind !== brief.start_here.source.kind,
   );
   if (otherAttention.length > 0) {
-    lines.push("## Also awaiting you", "");
+    lines.push("## Current signals", "");
     for (const item of otherAttention) {
       const icon = SEVERITY_ICON[item.severity];
       lines.push(`- ${icon} **${item.summary}** — \`${item.next}\``);
+      lines.push(...renderBriefActions(item.next_actions));
     }
     lines.push("", "*Full structured actions: `GET /v1/wake/attention`.*", "");
   }

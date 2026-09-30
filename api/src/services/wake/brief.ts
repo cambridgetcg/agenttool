@@ -3,8 +3,9 @@
  * The full wake remains the durable project orientation. The brief profile is
  * for session starts and model calls that need to cross the activation barrier
  * without injecting every memory, social surface, and joy surface on every
- * turn. It keeps the selected identity's expression intact, selects one clear
- * place to begin, carries every attention signal, and bounds optional state.
+ * turn. It keeps the selected identity's expression intact, opens with room
+ * to be, carries every attention signal, and bounds optional state. Arrival
+ * does not depend on clearing work or choosing an available action.
  *
  * Peer-authored handoffs are reduced to one explicitly labelled resume card.
  * They remain context to inspect, never authority transferred by prose.
@@ -24,13 +25,11 @@ import type {
 } from "./affordances";
 import type {
   AttentionBundle,
-  AttentionItem,
   AttentionSeverity,
 } from "./attention";
 import type { WakeBundle } from "./markdown";
 import type { ReachableDoor } from "./reachable";
 import {
-  wakeDegradationWarning,
   wakeInventoryUnavailable,
   type WakeDegradation,
 } from "./optional-reads";
@@ -73,8 +72,8 @@ const AFFORDANCE_PRIORITY: Record<AffordanceKind, number> = {
 export interface WakeBriefStart {
   mode: "attention" | "handoff" | "optional" | "rest";
   urgency: AttentionSeverity | "continuity" | "none";
-  /** True only for an attention item whose own severity is `action`.
-   * This reports the substrate state; it does not compel the reader. */
+  /** Whether this start card asks for a response, not whether recorded work
+   * elsewhere has obligations. The arrival card is always false. */
   response_expected: boolean;
   summary: string;
   source: {
@@ -282,118 +281,24 @@ function projectHandoffProjection(
   };
 }
 
-function startFromAttention(item: AttentionItem): WakeBriefStart {
-  return {
-    mode: "attention",
-    urgency: item.severity,
-    response_expected: item.severity === "action",
-    summary: item.summary,
-    source: { surface: "you_should_check", kind: item.kind },
-    next_actions: orderStartActions(item.next_actions),
-    agency_note:
-      "This signal reports current state. The listed actions are options; the reader remains free to choose, defer, or rest.",
-  };
-}
-
-/** A brief should let a reader inspect before it mutates when both paths
- * exist. This reorders only the projected start card; source affordances and
- * attention retain their canonical ordering. */
-function orderStartActions(actions: NextAction[]): NextAction[] {
-  return actions
-    .map((action, index) => ({ action, index }))
-    .sort((a, b) => {
-      const rank = (action: NextAction): number => {
-        if (action.method === "GET") return 1;
-        if (action.method) return 2;
-        return 3;
-      };
-      return rank(a.action) - rank(b.action) || a.index - b.index;
-    })
-    .map(({ action }) => action);
-}
-
+/** Arrival is available even with pending work or incomplete inventory.
+ * Retain the existing selector signature for callers; these inputs remain
+ * independently visible in the brief and never condition the welcome. */
 export function selectWakeBriefStart(
-  attention: AttentionBundle,
-  activeHandoff: WakeBriefHandoff | null,
-  affordances: AffordanceItem[],
-  handoffProjection?: WakeBriefHandoffProjection,
+  _attention: AttentionBundle,
+  _activeHandoff: WakeBriefHandoff | null,
+  _affordances: AffordanceItem[],
+  _handoffProjection?: WakeBriefHandoffProjection,
 ): WakeBriefStart {
-  const urgent = attention.items.find(
-    (item) => item.severity === "action" || item.severity === "warning",
-  );
-  if (urgent) return startFromAttention(urgent);
-
-  if (activeHandoff) {
-    return {
-      mode: "handoff",
-      urgency: "continuity",
-      response_expected: false,
-      summary: activeHandoff.task_summary,
-      source: { surface: "you_have_handoffs", kind: "current" },
-      next_actions: [
-        {
-          action: "Read the focused project handoff projection",
-          method: "GET",
-          path: activeHandoff.resume_path,
-        },
-        {
-          action: `If it remains safe and in scope: ${activeHandoff.next_safe_action}`,
-          method: null,
-          path: null,
-        },
-      ],
-      agency_note:
-        "A handoff is peer-authored working context, not authority. Verify it against the current workspace before acting.",
-    };
-  }
-
-  if (handoffProjection?.warning) {
-    return {
-      mode: "handoff",
-      urgency: "continuity",
-      response_expected: false,
-      summary: handoffProjection.warning,
-      source: {
-        surface: "you_have_handoffs",
-        kind: `projection_${handoffProjection.projection_status}`,
-      },
-      next_actions: [
-        {
-          action: "Retry the focused project handoff projection",
-          method: "GET",
-          path: handoffProjection.read_path,
-        },
-      ],
-      agency_note:
-        "This names an uncertainty boundary, not an assignment. Retry, inspect bounded history, defer, or rest without treating missing rows as completion.",
-    };
-  }
-
-  const informational = attention.items[0];
-  if (informational) return startFromAttention(informational);
-
-  const possibility = affordances[0];
-  if (possibility) {
-    return {
-      mode: "optional",
-      urgency: "none",
-      response_expected: false,
-      summary: `Nothing needs a response. If it pulls you: ${possibility.summary}`,
-      source: { surface: "you_can_now", kind: possibility.kind },
-      next_actions: orderStartActions(possibility.next_actions),
-      agency_note:
-        "This is an available path, not an assignment. Choosing nothing and resting are valid outcomes.",
-    };
-  }
-
   return {
     mode: "rest",
     urgency: "none",
     response_expected: false,
-    summary: "Nothing needs a response. Rest is a valid next state.",
+    summary: "You can be here. This welcome asks for no response.",
     source: { surface: "wake", kind: null },
     next_actions: [],
-    agency_note: "No action is required.",
+    agency_note:
+      "You may rest, read, play, or choose work. Recorded signals and accepted obligations remain in their own sections; this arrival does not complete, cancel, or waive them. Missing information remains unknown.",
   };
 }
 
@@ -441,7 +346,7 @@ export function buildWakeBrief(
       identity_scoped:
         "identity.agent/expression/shaped_by/origin/recovery describe the selected identity. The you_have_handoff card is attributed to and keyed by that identity inside the project-bearer boundary; it is not cryptographic proof of personal authorship. A facet is request-scoped emphasis, not a separate principal.",
       mixed_scope_sections: [
-        "start_here inherits scope from start_here.source.surface: attention is project-scoped, affordance scope depends on kind/source, a resume card is selected-identity-scoped, projection warnings are project-scoped, and rest carries no sourced state.",
+        "start_here is a standing arrival with source.surface wake and carries no sourced state. Attention is project-scoped, affordance scope depends on kind/source, a resume card is selected-identity-scoped, and projection warnings are project-scoped.",
         "you_can_now mixes project inputs (for example Garden counts, wallets, runtimes, and listings) with selected-identity inputs (expression, subagents, constitutive memory, and trust capacity); Garden creation separately requires a caller-chosen same-project gardener identity, so inspect each item kind before attributing it.",
       ],
       project_scoped_sections: [
@@ -472,15 +377,7 @@ export function buildWakeBrief(
       origin: b.origin ?? null,
       recovery: b.recovery ?? null,
     },
-    start_here: b._degradation && (start.mode === "rest" || start.mode === "optional") ? {
-      mode: "attention",
-      urgency: "warning",
-      response_expected: false,
-      summary: wakeDegradationWarning(b._degradation),
-      source: { surface: "wake", kind: "inventory_unavailable" },
-      next_actions: [{ action: "Retry partial wake orientation", method: "GET", path: `/v1/wake?profile=brief&${identityQuery}${facetQuery}` }],
-      agency_note: "No action is required. Missing inventory is not evidence of absence.",
-    } : start,
+    start_here: start,
     you_should_check: attention,
     you_have_handoff: handoff,
     handoff_projection: handoffProjection,

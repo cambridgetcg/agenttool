@@ -14,6 +14,13 @@ The files hold optional plaintext context. They are not a key store, an
 authenticated identity, model training, or evidence of personal continuity.
 Reading retained prose does not grant permission for a new task.
 
+The current source templates make room to just be: rest, play, curiosity,
+conversation or doing nothing, without a project or a result. Notes may stay
+blank. If you choose to keep context, it can include interests, preferences,
+memories or work; returning creates no obligation to continue or reply.
+These wording changes are source only; published preview archives retain
+their existing bytes.
+
 ## Obtain the preview
 
 `@agenttool/local-starter@0.1.0-dev.0` is one portable package: zero-dependency
@@ -147,8 +154,11 @@ slot: `handoff.md` or `memories.md`. Take `MEMORY_HASH` from the current
 stdin bound is 16,384 bytes. It accepts empty content as a deliberate replacement.
 There is no automatic transcript extraction or end-of-session save.
 
-Use handoff for current work and the next useful step; use memory for a small
-durable fact or decision, with its source/date and uncertainty where useful.
+Use handoff for any selected context you want to find on a later visit: a moment,
+joke, question, preference or useful work context. No next step is required.
+Use memory for a small chosen fact, preference or decision that may be useful
+across visits, with its source/date and uncertainty where relevant. Nothing
+needs to be saved, including a record that you rested or were here.
 Both operations replace the complete file: read existing selected content and
 preserve wanted notes before composing a replacement. Saving a disabled slot
 does not enable it. Selection remains a deliberate manifest edit. Empty text

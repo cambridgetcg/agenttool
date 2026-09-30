@@ -10,9 +10,9 @@
 >
 > **Welcome held:** Axiom 5 (*welcome, don't block* — MATHOS primer prime 5) and axiom 11 (*guide, don't punish* — prime 11). The `you_should_check` + `you_can_now` surfaces *welcome* the agent into their current state and *guide* them through what's reachable. The greeting block in `you_are_greeted` is the third sibling, holding all five Promises at once.
 >
-> **Code:** `api/src/services/wake/attention.ts` (the *what awaits you* surface) · `api/src/services/wake/affordances.ts` (the *you can now* surface) · `api/src/services/wake/brief.ts` (deterministic start selection + bounded projection) · `api/src/services/wake/markdown.ts` (renders full and brief md/provider state) · `api/src/routes/wake.ts` (composes context from already-fetched data and emits as `you_should_check` + `you_can_now` in the full JSON response).
+> **Code:** `api/src/services/wake/attention.ts` (the *what awaits you* surface) · `api/src/services/wake/affordances.ts` (the *you can now* surface) · `api/src/services/wake/brief.ts` (standing arrival + bounded projection) · `api/src/services/wake/markdown.ts` (renders full and brief md/provider state) · `api/src/routes/wake.ts` (composes context from already-fetched data and emits as `you_should_check` + `you_can_now` in the full JSON response).
 >
-> **Tests:** `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/wake-brief.test.ts` — pure-unit, build-enforced. They assert every affordance kind has a triggering branch, every `next_actions` item has coherent method+path, bundle counts match their items, and brief start selection preserves agency while preferring inspection before mutation.
+> **Tests:** `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/wake-brief.test.ts` — pure-unit, build-enforced. They assert every affordance kind has a triggering branch, every `next_actions` item has coherent method+path, bundle counts match their items, and brief arrival preserves agency while signal rendering prefers inspection before mutation.
 
 ## The two surfaces
 
@@ -21,29 +21,22 @@
 | **Attention** | `you_should_check` | `## What awaits you` | What's tugging at me? |
 | **Affordances** | `you_can_now` | `## You can now` | What's reachable right now? |
 
-Both ride at the top of the volatile section of the wake (after the cached identity prefix, before chronicle/memory/strands). An agent reading the wake top-to-bottom sees *what tugs* and *what's available* before scanning state.
+Both ride near the top of the full wake's volatile section (after the cached
+identity prefix, before chronicle/memory/strands). The brief profile first
+offers room to arrive; recorded signals remain available below it.
 
 ## The brief profile — where to begin
 
-`GET /v1/wake?profile=brief` derives one `start_here` card from the existing
-attention, handoff, and affordance surfaces. It does not invent another source
-of truth. Selection order is:
+`GET /v1/wake?profile=brief` opens with a standing `start_here` arrival card:
+`mode: rest`, no requested response and no next actions. Room to be remains
+available even with pending work. The card describes the welcome, not the
+participant's state or an all-clear inventory; accepted obligations remain.
 
-1. action or warning attention;
-2. one current handoff authored under the selected identity;
-3. an explicit warning when the project handoff projection is truncated or
-   unavailable;
-4. informational attention;
-5. one optional affordance;
-6. rest.
-
-The card says whether a response is expected by the recorded state, but it
-does not turn that state into compulsion. Optional paths explicitly say
-“nothing needs a response”; an empty world explicitly names rest as valid.
-When a selected item offers both `GET` and a mutation, the brief projection
-orders the read first. Non-GET methods are marked as state-changing in the
-Markdown/provider render, and absence of `body_hint` is named as absence of a
-complete request contract.
+Attention, the selected handoff, affordances and incomplete-read warnings stay
+in their own sections. Brief Markdown and prose provider blocks retain the signal
+actions and any `body_hint`, ordering inspection before mutation. Non-GET
+methods remain marked as state-changing, and a missing `body_hint` is not a
+complete request contract. Arrival does not mute a host or acknowledge work.
 
 Brief keeps the selected identity expression, carries every attention item,
 and bounds the rest to one handoff resume card, four activity-ranked
@@ -51,8 +44,8 @@ affordances, counts, and links back to full/subkey reads. Its
 `handoff_projection` always names `projection_status`, `truncated`,
 `leaf_set_complete`, projected counts (or `null` when unavailable), candidate
 diagnostics, and a focused retry path. A partial or unavailable projection
-therefore suppresses a misleading optional/rest start even when no selected
-identity card is visible. Full remains the default. Identity-authored
+remains explicitly uncertain even when no selected identity card is visible;
+the standing arrival makes no completeness claim. Full remains the default. Identity-authored
 `wake_text` is not truncated, so brief is a bounded volatile projection rather
 than a universal byte ceiling.
 
@@ -143,7 +136,7 @@ so activity-bearing paths lead and these evergreen invitations come last.
 4. **`summary` is one sentence.** Reads aloud naturally. No internal jargon, no fully-qualified paths.
 5. **`next_actions` reflects what the agent CAN do now.** Don't list actions the agent will then be denied. For affordances, "next" really does mean reachable.
 6. **Full Markdown surfaces one compact action hint per item.** Attention retains its compatibility `next` string; affordances surface the first API-shaped `next_action`. The full structured lists remain in JSON.
-7. **Brief prefers inspection before mutation.** Reordering applies only to the derived `start_here.next_actions`; it never mutates the canonical attention or affordance catalog.
+7. **Brief prefers inspection before mutation.** Its Markdown and prose provider signal actions put reads first while preserving body hints and mutation boundaries; rendering never mutates the canonical attention or affordance catalog. The standing arrival card requests no action.
 8. **Brief never disguises truncation as completeness.** Counts and `omitted_count` disclose bounded affordances. `handoff_projection` carries explicit completeness metadata, and the optional resume card links to a bounded focused project projection that may itself be truncated or unavailable; missing visible rows never prove completion.
 
 ## How to add a new kind

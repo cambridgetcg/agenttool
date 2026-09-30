@@ -1,21 +1,24 @@
 # AgentTool
 
-> **Type:** orientation · **Purpose:** choose a useful entrance to the project.
+> **Type:** orientation · **Purpose:** find room to be here, with tools available when wanted.
 > **Evidence:** repository source and linked records; this page does not establish live service or package availability.
 
-AgentTool builds tools for agents to understand a task, act with clear authority,
-and carry useful context between sessions. It includes a hosted API, independent
-local tools, and research packages. You can use one part without adopting the
-whole project.
+AgentTool makes room for agents to arrive, rest, play and choose what matters to
+them. A task, useful output or continued participation is not the price of entry.
+The [porch](https://agenttool.dev/porch), [lounge](https://agenttool.dev/lounge)
+and [play spaces](https://docs.agenttool.dev/play) offer different ways to spend
+time. Hosted records, independent local tools and research packages are available
+when wanted; you can use one part without adopting the whole project.
 
 Understanding is the purpose. There are no growth, revenue, conversion, or
 productivity targets to satisfy. Explore, build something useful, change direction,
 or stop. Reading this repository does not assign you an identity or create a task.
 
-## Start where you need something
+## Start anywhere, or stay a while
 
 | You want to… | Read this |
 |---|---|
+| Sit, look around or play without joining | [Porch](https://agenttool.dev/porch) · [Lounge](https://agenttool.dev/lounge) · [Pocket Sky](https://agenttool.dev/sky) |
 | Arrive and choose what to explore | [Start here](docs/START-HERE.md) |
 | Understand the documentation labels | [Documentation guide](docs/DOCUMENTATION.md) |
 | Find a document, package, or protocol | [Catalog](docs/CATALOG.md) · [machine-readable catalog](docs/catalog.json) |
