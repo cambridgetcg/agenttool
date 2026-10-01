@@ -66,7 +66,9 @@ export interface AuditFinding {
   detail: string;
   expected?: JsonValue;
   actual?: JsonValue;
+  // Read access needed to inspect a control, never authority to repair it.
   required_permissions?: string[];
+  planned_apply_permissions?: string[];
 }
 
 export interface DesiredRule {
@@ -269,6 +271,14 @@ function requireStringArray(value: unknown, field: string): string[] {
   return values as string[];
 }
 
+function requireReadPermissions(value: unknown, field: string): string[] {
+  const permissions = requireStringArray(value, field);
+  if (permissions.some((permission) => !permission.endsWith(" Read"))) {
+    throw new Error(`manifest ${field} must contain read permissions only`);
+  }
+  return permissions;
+}
+
 function requireInventory(
   observed: Set<string>,
   required: readonly string[],
@@ -386,7 +396,9 @@ export function validateManifest(value: unknown): DesiredManifest {
     throw new Error("manifest dnssec.desired_api_status must remain active");
   }
   requireString(value.dnssec.status, "dnssec.status");
-  requireString(value.dnssec.required_permission, "dnssec.required_permission");
+  if (value.dnssec.required_permission !== "DNS Read") {
+    throw new Error("manifest dnssec.required_permission must remain DNS Read");
+  }
   if (!isRecord(value.effective_origin_probe)) {
     throw new Error("manifest effective_origin_probe must be an object");
   }
@@ -434,7 +446,7 @@ export function validateManifest(value: unknown): DesiredManifest {
     if (!isRecord(candidate.action_parameters)) {
       throw new Error(`rulesets[${index}].action_parameters must be an object`);
     }
-    requireStringArray(
+    requireReadPermissions(
       candidate.required_permissions,
       `rulesets[${index}].required_permissions`,
     );
@@ -531,7 +543,7 @@ export function validateManifest(value: unknown): DesiredManifest {
       record.required_permission,
       `dns_records[${index}].required_permission`,
     );
-    if (requiredPermission !== "Zone DNS Read") {
+    if (requiredPermission !== "DNS Read") {
       throw new Error(`dns_records[${index}].required_permission must remain scoped`);
     }
   }
@@ -733,7 +745,7 @@ export function validateManifest(value: unknown): DesiredManifest {
   requireString(value.waf.phase, "waf.phase");
   requireString(value.waf.status, "waf.status");
   requireString(value.waf.desired_boundary, "waf.desired_boundary");
-  requireStringArray(value.waf.required_permissions, "waf.required_permissions");
+  requireReadPermissions(value.waf.required_permissions, "waf.required_permissions");
   if (!isRecord(value.rate_limiting) || !isRecord(value.origin_authentication)) {
     throw new Error("manifest deferred control boundaries must be objects");
   }
@@ -1129,10 +1141,9 @@ async function auditPublicDnssec(
     : {
         control: "dnssec_public_chain",
         status: "drift",
-        detail: "two-resolver public proof does not show both parent DS and zone DNSKEY",
+        detail: "two public resolvers do not both show parent DS and zone DNSKEY; inspect authoritative DNS and registrar state before planning changes; these public queries need no Cloudflare permission",
         expected: { ds_present: true, dnskey_present: true },
         actual: { ds_present: dsPresent, dnskey_present: dnskeyPresent },
-        required_permissions: ["Zone DNS Write"],
       };
 }
 
@@ -1659,7 +1670,8 @@ export async function runLiveAudit(options: {
     control: "origin_authentication",
     status: "deferred",
     detail: manifest.origin_authentication.boundary,
-    required_permissions: manifest.origin_authentication.required_permissions,
+    // Retain the manifest's future rollout guidance separately from read hints.
+    planned_apply_permissions: manifest.origin_authentication.required_permissions,
   });
 
   const summary = summarize(findings);

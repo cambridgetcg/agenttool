@@ -161,7 +161,7 @@
       "DNSKEY in the agenttool.dev zone"
     ],
     "status": "required",
-    "required_permission": "Zone DNS Write"
+    "required_permission": "DNS Read"
   },
   "dns_records": [
     {
@@ -173,7 +173,7 @@
       ],
       "proxied": true,
       "minimum_records": 1,
-      "required_permission": "Zone DNS Read"
+      "required_permission": "DNS Read"
     }
   ],
   "effective_origin_probe": {
@@ -313,9 +313,7 @@
       },
       "status": "required",
       "required_permissions": [
-        "Zone Cache Rules Edit",
-        "Account Rulesets Edit",
-        "Account Filter Lists Edit"
+        "Cache Settings Read"
       ]
     },
     {
@@ -330,9 +328,7 @@
       "must_be_last_enabled": true,
       "status": "required",
       "required_permissions": [
-        "Zone Cache Rules Edit",
-        "Account Rulesets Edit",
-        "Account Filter Lists Edit"
+        "Cache Settings Read"
       ]
     },
     {
@@ -355,7 +351,7 @@
       },
       "status": "required",
       "required_permissions": [
-        "Zone Config Rules Edit"
+        "Config Settings Read"
       ]
     }
   ],
@@ -364,8 +360,7 @@
     "status": "inspect_before_change",
     "desired_boundary": "Retain managed protections without interactive challenges on bearer SDK, SSE, or other machine endpoints. Do not infer modern managed-rules state from the legacy waf zone flag.",
     "required_permissions": [
-      "Zone WAF Read",
-      "Zone WAF Edit only after inspection"
+      "Zone WAF Read"
     ]
   },
   "rate_limiting": {

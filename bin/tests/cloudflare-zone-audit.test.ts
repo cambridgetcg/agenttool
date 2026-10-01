@@ -128,6 +128,14 @@ describe("AgentTool Cloudflare desired state", () => {
       rule.ref === "agenttool_machine_transport_v1"
     )!;
     const invalidCandidates: unknown[] = [
+      { ...manifest, dnssec: { ...manifest.dnssec, required_permission: "DNS Write" } },
+      { ...manifest, waf: { ...manifest.waf, required_permissions: ["Zone WAF Write"] } },
+      {
+        ...manifest,
+        rulesets: manifest.rulesets.map((rule) => ({
+          ...rule, required_permissions: ["Cache Settings Write"],
+        })),
+      },
       { ...manifest, zone_settings: { ...manifest.zone_settings, "0rtt": "on" } },
       { ...manifest, zone_settings: { ...manifest.zone_settings, always_use_https: "off" } },
       { ...manifest, zone_settings: { ...manifest.zone_settings, browser_check: "off" } },
@@ -496,6 +504,80 @@ describe("Cloudflare audit projections", () => {
 });
 
 describe("live audit transport", () => {
+  test("denied control reads never escalate to writes and public DNS absence needs no grant", async () => {
+    const token = "read-only-token-never-serialize";
+    const zoneId = "private-zone-id";
+    const accountId = "private-account-id";
+    const seen: URL[] = [];
+    const result = await runLiveAudit({
+      manifest,
+      token,
+      fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url);
+        seen.push(url);
+        expect(request.method).toBe("GET");
+        expect(request.body).toBeNull();
+        expect(request.headers.get("Authorization")).toBe(
+          url.hostname === "api.cloudflare.com" ? `Bearer ${token}` : null,
+        );
+        if (url.hostname === "cloudflare-dns.com" || url.hostname === "dns.google") {
+          expect(url.searchParams.get("name")).toBe("agenttool.dev");
+          return Response.json({ Status: 0, Answer: [] });
+        }
+        if (url.hostname === "api.agenttool.dev") {
+          return Response.json({
+            service: "agenttool", status: "alive",
+            build: { revision: "test-revision", dirty: false },
+          }, { headers: { server: "cloudflare", via: "1.1 fly.io" } });
+        }
+        expect(url.hostname).toBe("api.cloudflare.com");
+        if (url.pathname === "/client/v4/zones") {
+          return cloudflare([{
+            id: zoneId, name: "agenttool.dev", status: "active",
+            account: { id: accountId },
+          }]);
+        }
+        return Response.json({
+          success: false, result: null,
+          errors: [{ code: 10000, message: `Denied ${token} in ${zoneId}` }],
+        }, { status: 403 });
+      }) as typeof fetch,
+    });
+    const expectedReads = new Map([
+      ["zone_settings", ["Zone Settings Read"]],
+      ["dnssec", ["DNS Read"]],
+      ["dns_record:api.agenttool.dev", ["DNS Read"]],
+      ["ruleset_phase:http_request_cache_settings", ["Cache Settings Read"]],
+      ["ruleset_phase:http_config_settings", ["Config Settings Read"]],
+      ["waf_managed", ["Zone WAF Read"]],
+    ]);
+    for (const [control, permissions] of expectedReads) {
+      expect(result.findings.find((finding) => finding.control === control))
+        .toMatchObject({ status: "blocked", required_permissions: permissions });
+    }
+    expect(result.findings.flatMap((finding) => finding.required_permissions ?? []))
+      .not.toEqual(expect.arrayContaining([expect.stringMatching(/Write|Edit/)]));
+    const publicProof = result.findings.find((finding) => finding.control === "dnssec_public_chain");
+    expect(publicProof).toMatchObject({
+      status: "drift", actual: { ds_present: false, dnskey_present: false },
+    });
+    expect(publicProof?.required_permissions).toBeUndefined();
+    expect(publicProof?.detail).toContain("inspect authoritative DNS and registrar state");
+    expect(seen.filter((url) => url.hostname === "cloudflare-dns.com" || url.hostname === "dns.google"))
+      .toHaveLength(4);
+    expect(result.findings.find((finding) => finding.control === "origin_authentication"))
+      .toMatchObject({
+        status: "deferred",
+        planned_apply_permissions: ["Zone Transform Rules Read", "Zone Transform Rules Write"],
+      });
+    expect(result.provider_writes).toBe(0);
+    expect(result.exit_code).toBe(1);
+    for (const privateValue of [token, zoneId, accountId]) {
+      expect(JSON.stringify(result)).not.toContain(privateValue);
+    }
+  });
+
   test("uses GET only, emits no identifiers/token, and tolerates intentional deferrals", async () => {
     const token = "test-token-never-serialize";
     const zoneId = "zone-id-never-serialize";

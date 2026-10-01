@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-09-30 (Chill and collaboration released; publication receipt added afterward; historical receipts retain their original dates)
+> Updated: 2026-10-01 (YUTABASE CI read access and audit permission hints; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,28 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## YUTABASE CI read access and audit hints (2026-10-01)
+
+**Source candidate:** the private YUTABASE PostgreSQL 16/17 fixture now uses a
+dedicated read-only SSH deploy key on trusted `main` pushes. The revision stays
+pinned, host verification stays strict, and checkout does not persist credentials.
+PRs retain credential-free package checks and explicitly report that this
+integration matrix did not run. The [projector guide](../packages/correspondence-yutabase-projector/README.md#postgresql-integration-test)
+documents setup, scope, rotation and revocation; deploy keys do not auto-expire.
+
+**Observed access:** GitHub readback confirmed a read-only key registered only on
+YUTABASE and its secret in the `yutabase-fixture-read` environment, restricted to
+the `main` branch with no tag rule. An isolated SSH read using only that key
+succeeded. This is not yet runner or PostgreSQL integration evidence; the first
+trusted-main run remains pending.
+
+**Audit behavior:** [Cloudflare inspection hints](STACK.md) now name read grants,
+including DNS/DNSSEC, cache, configuration and WAF reads. Public DS/DNSKEY
+absence asks for authoritative/registrar inspection without requesting write
+access. Deferred origin-auth rollout hints use `planned_apply_permissions`.
+No Cloudflare credential or production setting changed; existing permission
+gaps and DNSSEC observations remain unresolved.
 
 ## Chill and collaboration release (2026-09-30)
 

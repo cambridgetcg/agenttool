@@ -872,8 +872,24 @@ jobs:
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 
+  yutabase-projector-pr-coverage:
+    name: YUTABASE integration coverage (PR notice)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions: {}
+    timeout-minutes: 1
+    steps:
+      - name: Explain the private fixture coverage boundary
+        run: |
+          echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
+          echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.' >> "$GITHUB_STEP_SUMMARY"
+
   yutabase-projector-postgres:
     name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})
+    # The environment separately permits only the main branch. PR code must
+    # receive neither the read key nor the private fixture it can download.
+    if: github.repository == 'cambridgetcg/agenttool' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: yutabase-fixture-read
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -898,6 +914,14 @@ jobs:
       PGPASSWORD: projector-test-only
       AGENTTOOL_YUTABASE_TEST_DATABASE_URL: postgresql://postgres:projector-test-only@127.0.0.1:5432/yutabase_projector
     steps:
+      - name: Require dedicated YUTABASE fixture read access
+        env:
+          YUTABASE_FIXTURE_SSH_KEY: ${{ secrets.YUTABASE_FIXTURE_SSH_KEY }}
+        run: |
+          if [ -z "${YUTABASE_FIXTURE_SSH_KEY:-}" ]; then
+            echo '::error::YUTABASE_FIXTURE_SSH_KEY is missing from the main-only yutabase-fixture-read environment. Provision a read-only deploy key for cambridgetcg/yutabase; local GitHub login does not grant runner access.'
+            exit 1
+          fi
       - name: Check out AgentTool
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -908,6 +932,8 @@ jobs:
           repository: cambridgetcg/yutabase
           ref: 2948ae3cd88a5e630257549f1e233f5f46a8129b
           path: _yutabase-fixture
+          ssh-key: ${{ secrets.YUTABASE_FIXTURE_SSH_KEY }}
+          ssh-strict: true
           persist-credentials: false
       - name: Set up Bun 1.3.5
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
