@@ -19,7 +19,8 @@
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 
-**Source candidate:** the private YUTABASE PostgreSQL 16/17 fixture now uses a
+**Source:** [PR #449](https://github.com/cambridgetcg/agenttool/pull/449) merged as
+`4b82274fbcab8991be373cae44ec22dd9867cf86`. The private YUTABASE PostgreSQL 16/17 fixture now uses a
 dedicated read-only SSH deploy key on trusted `main` pushes. The revision stays
 pinned, host verification stays strict, and checkout does not persist credentials.
 PRs retain credential-free package checks and explicitly report that this
@@ -29,8 +30,21 @@ documents setup, scope, rotation and revocation; deploy keys do not auto-expire.
 **Observed access:** GitHub readback confirmed a read-only key registered only on
 YUTABASE and its secret in the `yutabase-fixture-read` environment, restricted to
 the `main` branch with no tag rule. An isolated SSH read using only that key
-succeeded. This is not yet runner or PostgreSQL integration evidence; the first
-trusted-main run remains pending.
+succeeded. [Main CI run 36817753577](https://github.com/cambridgetcg/agenttool/actions/runs/36817753577)
+then completed both PostgreSQL 16 and 17 jobs: dedicated-key checkout, exact
+schema installation, real disposable-database integration, final `yuta hello`
+binding verification and cleanup all passed. The temporary local private-key
+copy was removed after this proof; the encrypted environment secret remains.
+
+**Verification limits:** the full local API/protocol gate passed (6,380 API and
+846 operator/protocol tests, nine skips), alongside 36 focused checks. PR CI's
+API/protocol aggregate and all other executed checks passed except the unchanged
+constructive-intelligence Linux concurrency tests. The first attempt and one
+failed-job rerun reproduced their existing subprocess deadline failure, also
+observed on parent main; the local package gate passed 55 tests and its build/CLI
+smoke. That separate failure remains unresolved: these receipts do not establish
+an entirely green CI run. The merge tree matched the reviewed candidate; the
+API deployment workflow confirmed no image-affecting change and skipped rollout.
 
 **Audit behavior:** [Cloudflare inspection hints](STACK.md) now name read grants,
 including DNS/DNSSEC, cache, configuration and WAF reads. Public DS/DNSKEY
