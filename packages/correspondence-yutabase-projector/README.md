@@ -150,6 +150,37 @@ duplicate decoded JSON names, unknown fields, and cursor inconsistencies.
 
 ## PostgreSQL integration test
 
+CI runs the PostgreSQL 16/17 integration matrix only on pushes to
+`cambridgetcg/agenttool`'s `main` branch. The `yutabase-fixture-read` GitHub
+environment must independently restrict deployment branches to **only `main`**
+(no tag rule). Its `YUTABASE_FIXTURE_SSH_KEY` secret holds a dedicated read-only
+deploy key registered on `cambridgetcg/yutabase`, not a personal login token or
+database credential. Do not also store this key as a repository secret.
+Deploy keys do not expire automatically. To revoke access, remove the key from
+YUTABASE's deploy-key settings and remove the environment secret. To rotate,
+register a new read-only key on that same repository, replace the environment
+secret, verify the pinned checkout, then revoke the previous key. Keep private
+key material out of source, artifacts, documentation, and logs.
+
+The fixture checkout keeps revision
+`2948ae3cd88a5e630257549f1e233f5f46a8129b`, strict SSH host verification, and
+`persist-credentials: false`. A missing environment secret fails explicitly
+before checkout. The runner's ordinary `GITHUB_TOKEN` cannot read this second
+private repository; signing into GitHub on a developer machine does not change
+runner access.
+
+Pull requests receive a coverage notice and the credential-free package tests;
+they do **not** run this real PostgreSQL integration matrix. The notice is not an
+integration pass. Neither the key nor the downloaded private fixture should be
+made available to untrusted PR code. Do not change to `pull_request_target`,
+publish the fixture, or broaden the environment branch policy to bypass this
+boundary. A successful trusted-main run must complete both the projector test
+and the subsequent YUTABASE `hello --json` binding check.
+
+The workflow is [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml);
+its admission, credential placement, and missing-key checks are covered by
+[`bin/tests/yutabase-ci-access.test.ts`](../../bin/tests/yutabase-ci-access.test.ts).
+
 The integration fixture requires a disposable loopback PostgreSQL database
 with YUTABASE migrations `0001`, `0002`, `0004`, and `0005` already applied.
 The test creates its own LOGIN role, exercises denied destructive privileges,

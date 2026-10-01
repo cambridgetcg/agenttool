@@ -1079,6 +1079,14 @@ permission-blocked controls remain explicit and may keep the aggregate audit
 non-zero until the token receives the named read grants. Do not infer the
 observability result from a successful Wrangler deploy.
 
+`required_permissions` names read access for inspection, not repair authority;
+the [zone audit contract](STACK.md)
+maps those permissions. Public DNSSEC proof queries need no Cloudflare grant.
+An absent public DS/DNSKEY chain requires inspection of authoritative DNS and
+registrar state before a separately authorized DNSSEC change. Deferred
+origin-auth write guidance is labeled `planned_apply_permissions` in audit
+output; the manifest retains its existing rollout-permission field.
+
 ### Repo migration files and journal
 
 ```bash

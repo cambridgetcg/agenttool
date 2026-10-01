@@ -732,12 +732,24 @@ The bounded desired-state map is
 access using `bun bin/cloudflare-zone-audit.ts`; run the read-only live audit by
 scoping the `agenttool-cloudflare-token` Keychain value to that one child as
 `CLOUDFLARE_API_TOKEN`. The audit never mutates Cloudflare and never serializes
-record content, provider IDs, or credentials. Its current token can verify zone
-settings, Worker/Pages topology, script observability, and public routing, but
-DNS/DNSSEC, Cache Rules, Configuration Rules, and managed-WAF reads remain
-permission-blocked until the exact zone-scoped grants named by the audit are
-added. A future origin-auth rollout additionally needs zone-scoped Transform
-Rules Read/Write; those grants alone do not authorize enabling the gate before
+record content, provider IDs, or credentials. Read access depends on the selected
+credential; a working deployment session does not establish complete audit access.
+The audit's `required_permissions` hints request inspection only: `Zone Read`
+for lookup, `Zone Settings Read`, `DNS Read` for records and DNSSEC, `Cache Settings
+Read`, `Config Settings Read`, and `Zone WAF Read`, scoped to `agenttool.dev`.
+These follow Cloudflare's [permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/),
+[DNSSEC GET](https://developers.cloudflare.com/api/resources/dns/subresources/dnssec/methods/get/)
+and [ruleset viewing](https://developers.cloudflare.com/ruleset-engine/rulesets-api/view/)
+contracts; reading does not require account-wide Rulesets or Filter Lists edit access.
+Other Worker/Pages reads retain their own permission hints.
+
+Public DS/DNSKEY queries use no credential. Missing public records call for
+authoritative DNS and registrar inspection; they do not establish mismatched keys
+or request write access. DNSSEC activation, rule application and cache purging
+are separate authorized changes with their own write permissions. The deferred
+origin-auth rollout reports `planned_apply_permissions` separately from read
+hints, retaining its zone-scoped Transform Rules Read/Write guidance; those grants
+alone do not authorize enabling the gate before
 the legacy Fly-host federation choice is resolved. Unknown provider rules are
 preserved; the WAKE cache-bypass rule must be
 the final enabled Cache Rule because Cloudflare resolves conflicting cache
