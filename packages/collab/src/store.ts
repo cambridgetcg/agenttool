@@ -20,6 +20,7 @@ import {
   EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_ANCHOR_BYTES,
   MAX_WAIT_PAGE_BYTES,
+  SESSION_STALE_AFTER_MS,
   type SessionEventPageInput,
   type ArtifactRef,
   type ClaimTaskInput,
@@ -47,6 +48,7 @@ import {
   type SessionEndRelease,
   type SessionEndResult,
   type SessionHandle,
+  type SessionLiveness,
   type SessionMutationInput,
   type SessionPresence,
   type TaskConflict,
@@ -1953,7 +1955,7 @@ export class CollabStore {
       }
       this.appendEvent(row.workspace_id, "session.ended", row.id, row.actor, { reason }, row.id);
       return {
-        session: coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id)),
+        session: this.sessionProjection(this.requireCoordinationSessionRow(row.id)),
         released_leases: releasedLeases,
       };
     }).immediate();
@@ -1974,7 +1976,8 @@ export class CollabStore {
           WHERE workspace_id = ?
           ORDER BY joined_at, id
         `).all(workspace.id) as CoordinationSessionRow[];
-    return rows.map(coordinationSessionFromRow);
+    const observedAt = this.timestamp();
+    return rows.map((row) => this.sessionProjection(row, observedAt));
   }
 
   acknowledgeSessionCursor(input: {
@@ -2002,7 +2005,11 @@ export class CollabStore {
             "The cursor sequence now resolves to a different journal hash",
           );
         }
-        return coordinationSessionFromRow(row);
+        // A no-op ack (already at this sequence) still refreshes last_seen_at:
+        // ack and reset both count as the session being seen.
+        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
+          .run(this.timestamp(), row.id);
+        return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
       }
       if (row.cursor_version !== input.expected_cursor_version) {
         throw new CollabError("cursor_version_conflict", "The session cursor changed", {
@@ -2028,7 +2035,7 @@ export class CollabStore {
       if (changed.changes !== 1) {
         throw new CollabError("cursor_version_conflict", "The session cursor changed");
       }
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
     }).immediate();
     this.tightenFileModes();
     return acknowledged;
@@ -2108,7 +2115,7 @@ export class CollabStore {
         reason,
         reset_generation: resetGeneration,
       }, row.id);
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
       },
       { allow_cursor_recovery: true },
     );
@@ -2129,7 +2136,7 @@ export class CollabStore {
         },
       );
     }
-    return coordinationSessionFromRow(current);
+    return this.sessionProjection(current);
   }
 
   workspaceStatus(workspaceId: string): WorkspaceStatus {
@@ -3839,6 +3846,7 @@ export class CollabStore {
     claimable_tasks: Task[];
     conflicted_tasks: TaskConflict[];
     handoff_offers: Array<{ handoff: HandoffOffer; task: Task }>;
+    recovery_required: Task[];
     reports: CollabReport[];
     events: JournalPage;
     projection_scope: "snapshot_head";
@@ -3884,6 +3892,7 @@ export class CollabStore {
           handoff: handoffFromRow(row),
           task: this.requireTask(workspaceId, row.task_id),
         })),
+        recovery_required: recoveryRequiredFirst(tasks, () => false),
         reports: reportRows.map(reportFromRow),
         events,
         projection_scope: "snapshot_head" as const,
@@ -3908,6 +3917,7 @@ export class CollabStore {
     claimable_tasks: Task[];
     conflicted_tasks: TaskConflict[];
     handoff_offers: Array<{ handoff: HandoffOffer; task: Task }>;
+    recovery_required: Task[];
     reports: CollabReport[];
     events: JournalPage;
     projection_scope: "snapshot_head";
@@ -3995,7 +4005,7 @@ export class CollabStore {
       ) as ReportRow[];
       return {
         actor: current.actor,
-        session: coordinationSessionFromRow(current),
+        session: this.sessionProjection(current),
         own_claims: tasks.filter(
           (task) =>
             task.effective_status === "claimed"
@@ -4008,6 +4018,10 @@ export class CollabStore {
           handoff: handoffFromRow(handoff),
           task: this.requireTask(current.workspace_id, handoff.task_id),
         })),
+        recovery_required: recoveryRequiredFirst(
+          tasks,
+          (task) => task.assignee_session_id === current.id,
+        ),
         reports: reportRows.map(reportFromRow),
         events,
         projection_scope: "snapshot_head" as const,
@@ -4372,6 +4386,10 @@ export class CollabStore {
         return JSON.parse(existing.response_json) as T;
       }
 
+      // Refresh first so projections built inside apply (assignee_liveness)
+      // see the acting session as seen now; a throw rolls this back too.
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
+        .run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`)
         .run(guardNonce);
@@ -4391,8 +4409,6 @@ export class CollabStore {
           JSON.stringify(response),
           this.timestamp(),
         );
-        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
-          .run(this.timestamp(), session.id);
         return response;
       } finally {
         this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
@@ -4598,7 +4614,7 @@ export class CollabStore {
     return {
       workspace,
       worktree: worktreeFromRow(worktreeRow),
-      session: coordinationSessionFromRow(row),
+      session: this.sessionProjection(row),
       credential: {
         session_id: row.id,
         session_token: token,
@@ -5574,6 +5590,7 @@ export class CollabStore {
       completion_report_id: row.completion_report_id,
       assignee: row.assignee,
       assignee_session_id: row.assignee_session_id,
+      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
       claim_worktree_id: row.claim_worktree_id,
       lease_id: row.lease_id,
       lease_expires_at: row.lease_expires_at,
@@ -5591,6 +5608,21 @@ export class CollabStore {
       updated_at: row.updated_at,
       completed_at: row.completed_at,
     };
+  }
+
+  private sessionProjection(
+    row: CoordinationSessionRow,
+    observedAt = this.timestamp(),
+  ): CoordinationSession {
+    return coordinationSessionFromRow(row, observedAt);
+  }
+
+  private assigneeLiveness(sessionId: string | null): SessionLiveness | null {
+    if (!sessionId) return null;
+    const holder = this.db.query(`
+      SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
+    `).get(sessionId) as Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null;
+    return holder ? sessionLiveness(holder, this.timestamp()) : null;
   }
 
   private requireWorkspace(workspaceId: string, db = this.db): Workspace {
@@ -6163,7 +6195,31 @@ function requireMatchingPresenceSessionJoin(
   }
 }
 
-function coordinationSessionFromRow(row: CoordinationSessionRow): CoordinationSession {
+function sessionLiveness(
+  row: Pick<CoordinationSessionRow, "status" | "last_seen_at">,
+  observedAt: string,
+): SessionLiveness {
+  if (row.status !== "active") return "stale";
+  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
+  // NaN (an unparseable timestamp) fails this comparison and reads as stale.
+  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+
+function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): Task[] {
+  const byExpiry = (left: Task, right: Task) =>
+    (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "")
+    || left.id.localeCompare(right.id);
+  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
+  return [
+    ...pending.filter(isOwn).sort(byExpiry),
+    ...pending.filter((task) => !isOwn(task)).sort(byExpiry),
+  ];
+}
+
+function coordinationSessionFromRow(
+  row: CoordinationSessionRow,
+  observedAt: string,
+): CoordinationSession {
   return {
     id: row.id,
     workspace_id: row.workspace_id,
@@ -6184,6 +6240,7 @@ function coordinationSessionFromRow(row: CoordinationSessionRow): CoordinationSe
     cursor_version: row.cursor_version,
     reset_generation: row.reset_generation,
     cursor_recovery_required: row.cursor_recovery_required !== 0,
+    liveness: sessionLiveness(row, observedAt),
   };
 }
 
@@ -6329,6 +6386,7 @@ function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
     ),
     completion_report_id: hydrated.completion_report_id ?? null,
     assignee_session_id: hydrated.assignee_session_id ?? null,
+    assignee_liveness: hydrated.assignee_liveness ?? null,
     claim_worktree_id: hydrated.claim_worktree_id ?? null,
     reported_by: hydrated.reported_by ?? null,
     reported_by_session_id: hydrated.reported_by_session_id ?? null,

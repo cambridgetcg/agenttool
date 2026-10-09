@@ -116,6 +116,14 @@ export interface Worktree {
 
 export type SessionStatus = "active" | "ended";
 
+/**
+ * Derived view, never stored: an active session whose last_seen_at is older
+ * than SESSION_STALE_AFTER_MS reads as stale; an ended session never reads as
+ * live. Staleness changes no status, expires nothing, and grants nothing.
+ */
+export type SessionLiveness = "live" | "stale";
+export const SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 export interface CoordinationSession {
   id: string;
   workspace_id: string;
@@ -132,6 +140,7 @@ export interface CoordinationSession {
   cursor_version: number;
   reset_generation: number;
   cursor_recovery_required: boolean;
+  liveness: SessionLiveness;
 }
 
 export interface SessionJoinResult {
@@ -217,6 +226,8 @@ export interface Task {
   completion_report_id: string | null;
   assignee: string | null;
   assignee_session_id: string | null;
+  /** Liveness of assignee_session_id; null when no coordination session holds the task. */
+  assignee_liveness: SessionLiveness | null;
   claim_worktree_id: string | null;
   lease_id: string | null;
   lease_expires_at: string | null;
@@ -462,6 +473,8 @@ export interface NextCollabState {
   claimable_tasks: Task[];
   conflicted_tasks: TaskConflict[];
   handoff_offers: Array<{ handoff: HandoffOffer; task: Task }>;
+  /** Expired session leases awaiting collab_task_recover; the caller's own first. */
+  recovery_required: Task[];
   reports: CollabReport[];
   events: JournalPage;
 }
