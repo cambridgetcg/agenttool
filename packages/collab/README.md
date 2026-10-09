@@ -108,13 +108,17 @@ authenticates only the cooperative session protocol, not an OS-user identity,
 human identity, or external account. Any process that can read the file can act
 as that session.
 
-The normal session flow is:
+The session's part of the ordinary loop (below) is:
 
 1. Call `collab_session_start` with the repository root. It opens the workspace
    and binds the new session; do not open its credential file.
 2. Poll with `collab_next` from the session's persisted cursor. Its optional
    `event_limit` accepts an integer from 1 through 50; omission uses the
-   context-bounded MCP default of 10.
+   context-bounded MCP default of 10. A bound session does not take
+   `after_sequence`: a value other than the acknowledged cursor's sequence is
+   refused with `after_sequence_unsupported_in_bound_session`. Advance with
+   `collab_cursor_ack`, or read from any position without acknowledging
+   through `collab_events_since`.
 3. Process that page, then call `collab_cursor_ack` with its exact
    `next_anchor` (`{ epoch_id, sequence, hash }`).
 4. If `has_more` is true, poll again from the now-persisted cursor. A supplied
@@ -123,9 +127,12 @@ The normal session flow is:
 5. Poll again after local work, before a mutation based on shared state, and
    whenever the host wakes the agent.
 6. End deliberately with `collab_session_end` when the host knows the session
-   will not resume. Ending refuses while the session owns a live task lease;
-   release, complete, or hand it off first. Pending offers addressed to the
-   ending session expire with an auditable `target_session_ended` reason.
+   will not resume. Pass `release_leases: true` and an optional
+   `release_summary` to release every lease the session still holds in the
+   same transaction. Without the flag, ending refuses while the session owns a
+   live task lease and `session_has_active_leases` lists `task_ids` and
+   `leases`. Pending offers addressed to the ending session expire with an
+   auditable `target_session_ended` reason.
 
 Acknowledgement means “this session processed through this journal position.”
 It does not mean agreement, acceptance, consent, or correctness. A stale epoch
@@ -230,26 +237,41 @@ host-held `{ session_id, session_token, generation, last_cursor?, workspace_id,
 after_anchor, event_limit? }` for one immediate page. Keep the bearer outside
 model-facing inputs. It uses the same count/byte bounds and performs no wait.
 
-## Task workflow
+## The ordinary loop
 
-1. Poll and reconcile new reports, reviews, handoffs, and lease changes with
-   `collab_next`; query report history with `collab_report_list` when needed.
-2. Create bounded tasks with `collab_task_create`, dependencies, completion
-   tests, and a work mode: `coordination`, `read_only`, or `edit`.
-3. Give edit tasks conservative repository-relative path scopes. New edit
-   tasks require a non-empty scope and default to reviewed completion.
-4. Inspect both claimable and conflicted work. “Claimable” accounts for active
-   path leases; merely open or dependency-ready does not.
-5. Claim with `collab_task_claim` and the version just read. Begin edits only
-   after the claim succeeds.
-6. Renew before a long task exceeds its lease. Record compact progress and
-   attach file, commit, test, data, or URL references rather than raw output.
-7. Report completion with the result checkpoint. An edit task remains
-   `reported_complete` until another session calls `collab_task_review` to
-   accept it; request changes when evidence or completion tests do not support
-   acceptance.
-8. Poll and acknowledge the resulting events. Offer a handoff when another
-   session should continue; the recipient may accept or decline.
+Most sessions need only this loop. Each step names the tool and the field that
+carries the next step.
+
+1. **Start.** `collab_session_start` with `root_path`, an `actor` label, an
+   optional free-text `role`, and, for a delegated child, `parent_session_id`.
+2. **Poll and acknowledge.** `collab_next`, process the page, then
+   `collab_cursor_ack` with its `next_anchor`. Reconcile new reports, reviews,
+   handoffs, and lease changes; query history with `collab_report_list` when
+   needed. Handle your own entries in `recovery_required` first.
+3. **Split and claim.** Create bounded tasks with `collab_task_create`,
+   dependencies, completion tests, and a work mode: `coordination`,
+   `read_only`, or `edit`. Give edit tasks conservative repository-relative
+   path scopes; new edit tasks require a non-empty scope and default to
+   reviewed completion. Inspect both claimable and conflicted work:
+   “claimable” accounts for active path leases, merely open or
+   dependency-ready does not. Claim with `collab_task_claim` and the version
+   just read, and begin edits only after the claim succeeds.
+4. **Work.** Renew with `collab_task_renew` before a long task exceeds its
+   lease and record compact `collab_task_progress`.
+5. **Attach.** `collab_artifact_attach` each file, commit, test, data, or URL
+   reference rather than raw output. A file artifact uses a
+   repository-relative `uri` inside the task's path scopes and the `sha256` of
+   the bytes written.
+6. **Complete.** `collab_task_complete` with a summary, `confidence`,
+   `confidence_basis`, `limits`, and `evidence_refs`, optionally naming
+   `review_requested_session_id`. The server records the result checkpoint. An
+   edit task remains `reported_complete` until a distinct session accepts it.
+7. **Review.** Another session inspects the evidence and calls
+   `collab_task_review` with `accept` or `request_changes`, a summary, and its
+   own `confidence`, `confidence_basis`, and `limits`. A late reviewer concurs
+   or disagrees by report.
+8. **End.** `collab_session_end` with a `reason`, `release_leases: true`, and
+   an optional `release_summary`.
 
 Dependencies do not unlock from a pending reviewed completion. Legacy tasks and
 tasks with a `reported` completion policy still complete on the worker's
@@ -260,6 +282,111 @@ authority.
 Every task mutation uses optimistic `expected_version` checks and a scoped
 idempotency key. Reuse an idempotency key only for an exact retry. SQLite
 `BEGIN IMMEDIATE` transactions make one claim win under local contention.
+
+### Evidence references
+
+Evidence references point inside the workspace journal and use one of four
+prefixes: `artifact:` (for example `artifact:artifact_<id>` from
+`collab_artifact_attach`), `event:`, `report:`, or `checkpoint:` followed by a
+task's `base_checkpoint_digest` or `result_checkpoint_digest`. Each
+`evidence_refs` schema describes them. `invalid_evidence_ref` and
+`evidence_not_found` errors carry an `allowed_prefixes` field; send the
+corrected mutation with a fresh idempotency key rather than dropping the
+evidence. Attach a path, commit, or URL before citing it.
+
+### Requesting and giving review
+
+`collab_task_complete` accepts an optional `review_requested_session_id`: an
+active session in the same workspace other than the reporter. The completion
+report stays unaddressed, so every session still sees it; the request is stored
+in the `task.reported_complete` event, projected on the task, and announced by
+a separate `informs` report addressed to the requested session. It is a
+request, not a reservation: any distinct session may still review, and others
+should leave it to the requested reviewer while that session's `liveness` is
+`live`. The server refuses a request that names the reporter
+(`review_request_self`), a session that is not active in this workspace
+(`review_requested_session_unavailable`), or a task that completes on report
+(`review_request_not_applicable`).
+
+`collab_task_review` accepts optional `confidence`
+(`high|medium|low|unknown`), `confidence_basis`, and `limits`; the generated
+review report stores them and otherwise keeps `unknown` and null. When the task
+was already accepted, a distinct session's review returns
+`task_not_pending_review` with `review_report_id`, `accepted_by_session_id`,
+and a `remedy`, even if its version is stale. Concur or disagree with
+`collab_report_append` using the same `task_id`, `relation: "supports"` or
+`"challenges"`, and `target_report_id` set to `review_report_id`. Neither the
+reporter nor the session that accepted the task receives that remedy; both get
+only `review_status`, and `self_review_forbidden` still applies.
+
+### Ending cleanly
+
+`collab_session_end` accepts optional `release_leases: true` and
+`release_summary`. In one transaction it releases each live lease the session
+holds through the ordinary release path and each expired lease it still holds
+through the audited recovery path (action `release`, with `release_summary`,
+or else `reason`, as the note), then ends the session; the result lists them
+in `released_leases`. A `release_summary` without `release_leases: true` is
+refused with `invalid_release_summary`. Without the flag,
+`session_has_active_leases` lists `task_ids`, `leases` (`task_id`,
+`lease_id`, `expires_at`), and a `remedy` naming `release_leases`. Ending
+stays available while cursor recovery is required.
+
+The host-side `agenttool-collab-host` command ends a session whose process is
+gone:
+
+```bash
+agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]
+```
+
+It resumes the session host-side (tolerating a stale generation or cursor),
+performs the same end, removes the credential file, and prints one JSON line
+without the credential: exit 0 with `status` `ended` or `already_ended`, or
+exit 1 with `status: "error"`, an `error` code, and a `message`. With
+`--release-leases`, `--reason` is also the release note. Without it, a session
+that holds a live lease is refused with `session_has_active_leases` before
+anything is resumed. An `ended` receipt carrying
+`warning: "session_file_remove_failed"` means the session ended but the
+credential file stayed; remove it by hand. `--db` defaults to the database the
+MCP server would use, and the CLI never creates one (`journal_not_found`). It
+is not an MCP tool.
+
+### Delegation and lineage
+
+A delegated agent is an independent process with its own session. The
+delegator shares its session ID and keeps its credential to itself:
+never pass your session file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`,
+because resuming it would advance the generation fence and fence the
+delegator. The child calls `collab_session_start` with `parent_session_id` set
+to the delegator's session and an actor label that names its runtime and job.
+`parent_session_id` is declared lineage: the server checks only that the
+parent exists in the same workspace. It is unauthenticated and shares no
+authority, lease, or cursor. Parent and child are distinct sessions and may
+review each other's work; say so in `limits`, because lineage does not make a
+review independent.
+
+### A host that cannot commit
+
+A host that can write files but not `.git` delivers by artifact; integration
+commits. It writes only inside the claimed path scopes, attaches each file
+with its repository-relative `uri` and `sha256`, and completes with those
+`artifact:` references. A separate integrator commits only when every
+working-tree file still matches its artifact digest, and reports a mismatch
+instead of committing.
+
+### Roles and liveness
+
+`role` is free text. A session that only listens or reviews says so there, and
+others avoid offering it handoffs or review requests it declines.
+Coordination-session projections carry a derived `liveness`: `stale` once the
+session has ended or when `last_seen_at` is more than 6 hours old, otherwise
+`live`. Task projections carry `assignee_liveness` (null without an assignee),
+and `collab_next` adds `recovery_required` (the caller's own expired leases
+first). Every cursor acknowledgement refreshes `last_seen_at`, including one
+that does not advance the cursor; so do `collab_next`, session mutations, a
+cursor reset, resume, and end. A host that only uses `collab_events_wait` for
+over 6 hours reads as stale. This is a view: no status changes and nothing
+expires automatically.
 
 ### Conflict and lease boundary
 
@@ -297,18 +424,32 @@ bound leaves the digest unavailable and reviewed acceptance fails closed with
 correctness. Git may also change between observation and the SQLite commit.
 Re-read Git and run the task's checks before accepting important edit work.
 
-## Reports, disagreement, and handoff
+## Reports, relations, and handoff
 
 Use `collab_report_append` to post structured reports independently of a task
 lease. Classify the body as an `observation`, `inference`, `proposal`, or
 `decision`; add evidence references, claim-specific confidence and basis, and
-material limits. A decision also needs an authority scope and basis. Addressing
-a report to one session helps routing but is not access control.
+material limits. A decision also needs an authority scope and basis.
 
-Relate follow-ups with `informs`, `supports`, `challenges`, `corrects`,
-`withdraws`, `supersedes`, or `resolves`. Challenge a report rather than its
-author, and preserve the earlier record. Corrections append history; they do
-not rewrite it.
+| Relation | `target_report_id` | Who may append | Use it to |
+|---|---|---|---|
+| `informs` | must be omitted | any session | add a new observation, inference, proposal, decision or request |
+| `supports` | required | any session | agree with a report: answer a proposal, concur with a review |
+| `challenges` | required | any session | disagree with evidence; on a completion report it blocks acceptance |
+| `resolves` | required; must be a `challenges` report | any session | close a challenge with the evidence that settles it |
+| `corrects` | required | only the target's author session | repair your own earlier report |
+| `withdraws` | required | only the target's author session | retract your own earlier report |
+| `supersedes` | required | only the target's author session | replace your own earlier report |
+
+A related report must share its target's workspace and task scope (the same
+`task_id`, or none for a workspace-level target), or the server returns
+`report_task_mismatch`. A missing target returns `report_target_required`;
+another session's attempt to correct, withdraw, or supersede returns
+`report_author_mismatch`. Challenge a report rather than its author, and
+preserve the earlier record. Corrections append history; they do not rewrite
+it. `to_session_id` routes a report into that session's `collab_next` instead
+of everyone's; `collab_report_list` still shows it. Addressing is routing, not
+access control.
 
 Acceptance records the independent reviewer's snapshot at that journal order.
 A later correction or withdrawal remains visible but does not silently revoke
@@ -321,7 +462,7 @@ its challenge.
 Use compact, checkable content:
 
 ```text
-outcome: <observation|inference|proposal|decision>: <result> | evidence: <artifact/event refs> | confidence: <high|medium|low|unknown + basis> | limits: <scope, gaps, unknowns> | next: <one optional authorised action or none>
+outcome: <observation|inference|proposal|decision>: <result> | evidence: <artifact/event/report/checkpoint refs> | confidence: <high|medium|low|unknown + basis> | limits: <scope, gaps, unknowns> | next: <one optional authorised action or none>
 ```
 
 A handoff is an offer, not a forced reassignment. Its task lease changes

@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work
-description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, publishing optional self-declared presence, splitting parallel work, preventing overlapping edits, polling or acknowledging events, claiming or recovering tasks, exchanging evidence, challenging reports, reviewing completion, handing work off, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
+description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, splitting parallel work, claiming before overlapping edits, polling or acknowledging events, attaching evidence, completing work with an optional requested reviewer, reviewing or concurring with completion, answering proposals or challenging reports, delegating to a child session, recovering leases, handing work off, ending a session cleanly, publishing optional self-declared presence, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
 ---
 
 # Coordinate Agent Work
@@ -17,40 +17,278 @@ independent MCP processes. Preserve native dispatcher, persona, memory,
 permissions and lifecycle in Claude, Codex, Hermes and OpenClaw. Connection or
 arrival does not prove that a model read feedback, consented, or acted.
 
-## Start and reconcile
+## The ordinary loop
 
-1. Read the applicable repository instructions and inspect existing work.
-2. Call `collab_session_start` with the repository root once for each
-   independent agent process or conversation. It opens the workspace, creates
-   a credential-bound coordination session, and binds the MCP process. Never
-   open or read the credential file. Keep its derived path in host
-   configuration rather than model-facing coordination.
-3. Verify that every participant opened the intended workspace and shared
-   database. Expect linked Git worktrees to share a repository workspace while
-   retaining distinct worktree records.
-4. Poll with `collab_next` from the persisted session cursor at the start of
-   each turn, after local work, before relying on shared state, and whenever the
-   host wakes the agent. Omit `event_limit` for the 10-event MCP default or set
-   an integer from 1 through 50. The limit bounds the event page and its routed
-   reports, not the task, conflict, or handoff projections for the labelled
-   snapshot head.
-5. Process one page before calling `collab_cursor_ack` with its exact terminal
-   `next_anchor` (`{ epoch_id, sequence, hash }`), then poll again if `has_more`
-   is true. A supplied `known_cursor` validates an anchor but does not paginate
-   or acknowledge. Treat acknowledgement as “processed,” never as agreement,
-   acceptance, consent, or correctness. Use `collab_cursor_reset` only for
-   deliberate replay or recovery.
+Most sessions need only this loop. Read the applicable repository instructions
+and inspect existing work first.
 
-Use the separate presence plane only when discovery or compatibility needs it.
-Call `collab_session_join` with a workspace ID and self-declared labels, inspect
-routes with `collab_session_list`, refresh the hint with
-`collab_session_heartbeat`, and finish it with `collab_session_leave`. Treat
-the returned `actor_key`, runtime/model labels, capabilities, and live/stale
-state as routing hints, never credentials, health, identity, competence,
-permission, or proof that a model is running. A heartbeat never renews a task
-lease. A presence leave never calls `collab_session_end`, releases work, or
-ends the bound coordination session. Do not infer a linkage merely because the
-two planes share a label or workspace.
+1. **Start.** Call `collab_session_start` once per independent agent process
+   or conversation, with the repository `root_path`, an `actor` label, an
+   optional free-text `role`, and, for a delegated child, `parent_session_id`.
+   It opens the workspace, creates a credential-bound session and binds this
+   MCP process. Never open or read the credential file.
+2. **Poll and acknowledge.** Call `collab_next` at the start of each turn,
+   after local work, before relying on shared state, and whenever the host
+   wakes you. Process one page, then call `collab_cursor_ack` with its exact
+   terminal `next_anchor` (`{ epoch_id, sequence, hash }`); poll again while
+   `has_more` is true. Handle your own entries in `recovery_required` first.
+3. **Split and claim.** Create bounded `coordination`, `read_only`, or `edit`
+   tasks with `collab_task_create`: dependencies, completion tests in the
+   description, and conservative repository-relative `path_scopes`. Inspect
+   claimable and conflicted projections; dependency-ready is not the same as
+   safely claimable. Call `collab_task_claim` with the version just read and
+   begin edits only after it succeeds.
+4. **Work.** Stay within the task, path, data and external-action scope.
+   Renew with `collab_task_renew` before the lease expires and post compact
+   `collab_task_progress`. On a version or claim conflict, poll and re-read
+   instead of forcing a mutation.
+5. **Attach.** Call `collab_artifact_attach` for each file, commit, test, data
+   or URL reference. For a file, use its repository-relative path inside the
+   task's path scopes as `uri` and the SHA-256 of the bytes you wrote as
+   `sha256`. Do not paste content or raw output.
+6. **Complete.** Call `collab_task_complete` with a summary, `confidence`,
+   `confidence_basis`, `limits` and `evidence_refs`. Optionally name
+   `review_requested_session_id`. An edit task stays pending until a distinct
+   session accepts it.
+7. **Review.** For someone else's completed task, inspect its artifacts,
+   checkpoint drift and completion tests, then call `collab_task_review` with
+   `accept` or `request_changes`, a summary, evidence, and your own
+   `confidence`, `confidence_basis` and `limits`. A late reviewer concurs or
+   disagrees by report.
+8. **End.** Call `collab_session_end` with a `reason`, `release_leases: true`
+   and an optional `release_summary` when this session will not resume.
+
+The sections below carry the detail for each step.
+
+### Poll without skipping
+
+Omit `event_limit` for the 10-event MCP default or set an integer from 1
+through 50. The limit bounds the event page and its routed reports, not the
+task, conflict, or handoff projections for the labelled snapshot head. A
+supplied `known_cursor` validates an anchor but does not paginate or
+acknowledge. Treat acknowledgement as "processed," never as agreement,
+acceptance, consent, or correctness.
+
+A bound session does not take `after_sequence`. A value other than your
+acknowledged cursor's sequence is refused with
+`after_sequence_unsupported_in_bound_session`: advance with
+`collab_cursor_ack`, or read from any position without acknowledging through
+`collab_events_since` (`after_sequence` or `after_anchor`). Use
+`collab_cursor_reset` only for deliberate replay or recovery.
+
+### Evidence references
+
+Evidence points inside this workspace's journal, as `kind:id`:
+
+- `artifact:artifact_<id>` — the `artifact.id` returned by `collab_artifact_attach`.
+- `event:event_<id>` — an event `id` from a page.
+- `report:report_<id>` — a report `id`.
+- `checkpoint:<digest>` — a task's `base_checkpoint_digest` or
+  `result_checkpoint_digest`.
+
+On `invalid_evidence_ref` or `evidence_not_found`, read `allowed_prefixes` in
+the error, correct the reference and send the corrected mutation with a fresh
+idempotency key. Do not drop the evidence silently. Repository paths, commits
+and URLs become evidence by attaching them first.
+
+### Request and give review
+
+`review_requested_session_id` must name an active session in this workspace
+other than yours, on a task whose completion waits for acceptance; otherwise
+the server refuses with `review_request_self`,
+`review_requested_session_unavailable` or `review_request_not_applicable`.
+The completion report stays unaddressed, so every session still sees it; a
+separate `informs` report addressed to the requested session asks for the
+review, and the task projection shows the request. It is a request, not a
+reservation: any distinct session may still review. While the requested
+reviewer's `liveness` is `live`, leave the review to them; if it reads `stale`
+(an ended session always does) or the requester asks, review it yourself.
+
+The reporter cannot review its own completion (`self_review_forbidden`). An
+unresolved challenge on the completion report blocks acceptance until a
+`resolves` report answers it. Treat acceptance as a coordination state, not
+merge, publication, deployment, account, or execution authority. Let legacy
+reported-completion tasks retain their stated policy.
+
+If the task was already accepted, `collab_task_review` returns
+`task_not_pending_review` with `review_report_id`, `accepted_by_session_id`
+and a `remedy`, even when your version is stale. (The reporter and the
+accepting reviewer get only `review_status`.) Record your verdict with
+`collab_report_append`: the same `task_id`, `relation: "supports"` or
+`"challenges"`, `target_report_id` set to `review_report_id`, and your
+evidence.
+
+Acceptance is a durable reviewer snapshot at that journal order: later
+withdrawals remain visible but do not silently revoke it. Before acceptance,
+an active withdrawal, correction, or supersession requires a fresh completion,
+and a withdrawn resolution does not clear its challenge. Reopen or record a new
+explicit decision when later evidence should change accepted state.
+
+### End cleanly
+
+Complete, hand off, or release what you hold, then call `collab_session_end`
+with `release_leases: true`. In one transaction it releases each live lease
+the session still holds and each expired lease it still holds (through the
+audited recovery path, with `release_summary`, or else the `reason`, as the
+note), then ends the session and lists them in `released_leases`. A
+`release_summary` without `release_leases: true` is refused with
+`invalid_release_summary`. Without the flag, a live lease makes ending refuse
+with `session_has_active_leases`, listing `task_ids`, `leases` (`task_id`,
+`lease_id`, `expires_at`) and a `remedy` that names `release_leases`. Ending
+also expires pending offers addressed to the session as an audited refusal,
+and remains available while cursor recovery is required.
+
+A host can end a session whose process is gone with
+`agenttool-collab-host end --session-file <path> --reason <text> --release-leases`.
+It is a host-side command, not an MCP tool: it resumes the session, ends it,
+removes the credential file and prints one JSON receipt without the
+credential: `ended` or `already_ended`, or `error` with exit 1. `--reason` is
+also the release note. Without `--release-leases` it refuses a session that
+holds a live lease before touching it. A live model ends its own session with
+`collab_session_end`.
+
+## Reports and relations
+
+Use `collab_report_append` to post lease-independent reports as exactly one of:
+
+- `observation`: state a directly witnessed operation or result with evidence.
+- `inference`: draw a conclusion from cited observations or sources.
+- `proposal`: offer a refusable next step; do not present it as accepted.
+- `decision`: name the authorised decider, `authority_scope` and
+  `authority_basis`.
+
+Include evidence references, claim-specific confidence and basis, and material
+limits. Use `collab_report_list` to recover relevant context.
+
+| Relation | `target_report_id` | Who may append | Use it to |
+|---|---|---|---|
+| `informs` | must be omitted | any session | add a new observation, inference, proposal, decision or request |
+| `supports` | required | any session | agree with a report: answer a proposal, concur with a review |
+| `challenges` | required | any session | disagree with evidence; on a completion report it blocks acceptance |
+| `resolves` | required; must be a `challenges` report | any session | close a challenge with the evidence that settles it |
+| `corrects` | required | only the target's author session | repair your own earlier report |
+| `withdraws` | required | only the target's author session | retract your own earlier report |
+| `supersedes` | required | only the target's author session | replace your own earlier report |
+
+A related report must use the same task scope as its target: pass the target's
+`task_id`, or omit it for both when the target is workspace-level. Otherwise
+the server returns `report_task_mismatch`. Answer someone else's proposal with
+`supports` or `challenges`; challenge another session's report rather than
+correcting it. Challenge the report, not the actor. Repair by appending a
+related record; never silently rewrite attributable history.
+
+`to_session_id` routes a report into that session's `collab_next` instead of
+everyone's. Anyone can still read it with `collab_report_list`; addressing is
+routing, not access control.
+
+Use compact, checkable content:
+
+```text
+outcome: <kind>: <result> | evidence: <artifact/event/report/checkpoint refs> | confidence: <high|medium|low|unknown + basis> | limits: <scope, gaps, unknowns> | next: <one optional authorised action or none>
+```
+
+Offer a handoff with `collab_handoff_offer`; do not assign it by declaration.
+The lease transfers only after the named recipient accepts. Transfer neither
+private data nor external authority. Treat decline, stop, pause, and
+uncertainty as valid outcomes.
+
+## Delegation and lineage
+
+A delegate is an independent process, so it starts its own session. Give it
+the repository root, the workspace ID, your session ID and the task. It calls
+`collab_session_start` with `parent_session_id` set to your session ID and an
+actor label naming its runtime and job; a delegate started through a local job
+runner such as `sol agent start` ends its label with `· sol job <job-id>`, for
+example `Codex · sol job <job-id>`. The runner's prompt states the job ID; the
+label lets the host find the session after the job and end it if the delegate
+did not.
+
+`parent_session_id` is declared lineage. The server checks only that the
+parent exists in the same workspace; the link is unauthenticated, grants no
+authority, and shares no lease, cursor or credential. Give the delegate your
+session ID; never pass your session file, its path, or
+`AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would advance the
+generation fence and fence your own process.
+
+Collab counts a delegate as a distinct session, so parent and child may review
+each other's work. Lineage does not make that review independent: name the
+relationship in `limits`. A delegate ends its own session with
+`release_leases: true` before it exits.
+
+## A host that cannot commit
+
+Some hosts can write files but not `.git`, for example a sandbox that
+protects the repository metadata. Such a host delivers by artifact;
+integration commits:
+
+1. Write only inside the claimed task's path scopes.
+2. Attach each written file as a `file` artifact with its repository-relative
+   `uri` and the `sha256` of its bytes.
+3. Complete with those `artifact:` references and say in `limits` that nothing
+   was committed.
+4. Leave the commit to an integrator: the host (for example
+   `sol agent start --integrate-commit`) or a session allowed to commit. It
+   commits only when each working-tree file still matches its artifact digest
+   and reports any mismatch instead of committing.
+
+Do not work around the sandbox to commit.
+
+## Roles, liveness and recovery
+
+`role` is free text that other sessions read in `collab_workspace_status`
+`active_sessions`, beside `parent_session_id`, `last_seen_at` and `liveness`.
+A session that only listens or reviews says so there, for example
+`role: "listener: reviews on request; does not claim"`. Do not offer handoffs
+or request reviews against a role that declines that work. A listener still
+polls, acknowledges and ends its session.
+
+`liveness` is a view, not a status: a session reads `stale` once it has ended
+or when its `last_seen_at` is more than 6 hours old. Every cursor
+acknowledgement refreshes `last_seen_at`, including one that does not advance
+the cursor; so do `collab_next`, session mutations, a cursor reset, resume and
+end. A host that only waits with `collab_events_wait` shows as stale. Nothing
+expires or ends automatically. Tasks show `assignee_liveness`, and `collab_next` lists
+`recovery_required` tasks, the caller's own expired leases first.
+
+An expired session lease cannot be renewed. Before recovering one, yours or
+another participant's, inspect progress, reports, artifacts, and Git
+checkpoints. Call `collab_task_recover` with an explicit `takeover`,
+`release`, or `block` action and a recovery note describing that check and how
+prior work will be preserved. Do not treat expiry as permission to discard
+another participant's contribution.
+
+Use Git checkpoints to detect obvious `HEAD`, branch, or dirty-state drift
+across worktrees. Their aggregate state includes bounded non-ignored untracked
+file and symlink content, but excludes ignored files and fails reviewed
+acceptance when capture is incomplete. Do not treat checkpoints as task-scoped
+diffs, complete content proofs, test results, commit signatures, locks, or
+correctness guarantees.
+
+Reuse an idempotency key only for an exact retry of the same mutation. Before a
+high-consequence reconciliation, call `collab_journal_verify`; a valid unkeyed
+hash chain detects changes but does not authenticate actors or prove that
+claims are true.
+
+## Resume through the host
+
+Resume through the host, not a model tool. Configure the replacement MCP
+process with `AGENTOOL_COLLAB_SESSION_FILE`; let it validate the stable token,
+advance the generation fence, and rewrite the mode-`0600` bearer file
+atomically. Never read that file with a model-facing tool or place its contents
+or token in prompts, chat, logs, reports, artifacts, or source control. Avoid
+persisting its path beyond host configuration.
+
+If normal resume returns `cursor_reset_required`, do not discard either
+anchor. A host operator may authorize one recovery startup with
+`AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY=1`; ordinary mutations stay fenced until
+`collab_cursor_reset` records a reason and exact valid target. Do not make that
+override permanent.
+
+Verify that every participant opened the intended workspace and shared
+database. Expect linked Git worktrees to share a repository workspace while
+retaining distinct worktree records.
+
+## Wait while running (0.5.0)
 
 Do not wait for the MCP server to interrupt an idle agent. It is request-driven
 and cannot keep a disconnected host session alive.
@@ -73,10 +311,10 @@ and observation anchor fits the separate 8 MiB stored payload-plus-metadata
 validation ceiling. Canonical digest checks remain mandatory. An anchor above
 it returns `event_anchor_too_large` and needs operator reconciliation, never
 skipped verification or automatic reset. Bundled stdin EOF/close aborts waits.
-On `event_read_busy`,
-retry only within the host's finite budget. Stop on corruption, fork, rollback,
-fencing or recovery-required errors; never auto-reset or rebirth the session.
-Only acknowledge with `collab_cursor_ack` after actually processing events.
+On `event_read_busy`, retry only within the host's finite budget. Stop on
+corruption, fork, rollback, fencing or recovery-required errors; never
+auto-reset or rebirth the session. Only acknowledge with `collab_cursor_ack`
+after actually processing events.
 
 Across hosts: inspect **status**, explicitly **queue** selected summaries using
 a separately configured private courier, **receive** local pages, then
@@ -86,97 +324,18 @@ external data, never local leases, accepted reviews, commands, or authority.
 Export is opt-in; do not forward raw journals or private state. Collab itself
 has no channel send or cross-device journal replication.
 
-Resume through the host, not a model tool. Configure the replacement MCP
-process with `AGENTOOL_COLLAB_SESSION_FILE`; let it validate the stable token,
-advance the generation fence, and rewrite the mode-`0600` bearer file
-atomically. Never read that file with a model-facing tool or place its contents
-or token in prompts, chat, logs, reports, artifacts, or source control. Avoid
-persisting its path beyond host configuration. End a session deliberately with
-`collab_session_end`.
+## Optional presence
 
-If normal resume returns `cursor_reset_required`, do not discard either
-anchor. A host operator may authorize one recovery startup with
-`AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY=1`; ordinary mutations stay fenced until
-`collab_cursor_reset` records a reason and exact valid target. Do not make that
-override permanent. Resolve every live task lease before ending; ending
-expires pending offers addressed to that session as an audited refusal.
-
-## Coordinate tasks
-
-1. Use `collab_task_create` to split work into bounded `coordination`,
-   `read_only`, or `edit` tasks with explicit dependencies and completion tests.
-2. Give edit tasks conservative repository-relative path scopes. Inspect
-   claimable and conflicted projections; do not equate dependency-ready with
-   safely claimable.
-3. Call `collab_task_claim` with the task version just read. Begin edits only
-   after success. Treat the lease as coordination, never ownership, a
-   filesystem lock, or authority beyond the task.
-4. Stay within the granted task, path, data, and external-action scope. Renew
-   before expiry. On a version or claim conflict, poll and re-read instead of
-   forcing a mutation.
-5. Attach scoped file, commit, test, data, or URL references. Include a digest
-   when available; do not paste the underlying content or raw output.
-6. Post compact progress and reports, then complete, release, block, pause, or
-   offer a handoff. Preserve useful late or partial work as evidence.
-
-When recovering an expired session lease, first inspect progress, reports,
-artifacts, and Git checkpoints. Call `collab_task_recover` with an explicit
-takeover, release, or block action and a recovery note describing that check
-and how prior work will be preserved. Do not treat expiry as permission to
-discard another participant's contribution.
-
-Use Git checkpoints to detect obvious `HEAD`, branch, or dirty-state drift
-across worktrees. Their aggregate state includes bounded non-ignored untracked
-file and symlink content, but excludes ignored files and fails reviewed
-acceptance when capture is incomplete. Do not treat checkpoints as task-scoped
-diffs, complete content proofs, test results, commit signatures, locks, or
-correctness guarantees.
-
-## Exchange and review claims
-
-Use `collab_report_append` to post lease-independent reports as exactly one of:
-
-- `observation`: state a directly witnessed operation or result with evidence.
-- `inference`: draw a conclusion from cited observations or sources.
-- `proposal`: offer a refusable next step; do not present it as accepted.
-- `decision`: name the authorised decider, authority scope, and basis.
-
-Include evidence references, claim-specific confidence and basis, and material
-limits. Use `collab_report_list` to recover relevant context. Address a report
-for routing only; do not treat the recipient field as access control.
-
-Relate follow-ups with `informs`, `supports`, `challenges`, `corrects`,
-`withdraws`, `supersedes`, or `resolves`. Challenge the report rather than the
-actor. Repair by appending a related record; never silently rewrite
-attributable history.
-
-Use compact, checkable content:
-
-```text
-outcome: <kind>: <result> | evidence: <artifact/event refs> | confidence: <high|medium|low|unknown + basis> | limits: <scope, gaps, unknowns> | next: <one optional authorised action or none>
-```
-
-Treat new edit completion as reported work pending another session's review.
-Inspect its artifacts, checkpoint drift, and completion tests before calling
-`collab_task_review` to accept; request changes with specific evidence when
-needed. Treat acceptance as a coordination state, not merge, publication,
-deployment, account, or execution authority. Let legacy reported-completion
-tasks retain their stated policy.
-
-Acceptance is a durable reviewer snapshot at that journal order: later
-withdrawals remain visible but do not silently revoke it. Before acceptance,
-an active withdrawal, correction, or supersession requires a fresh completion,
-and a withdrawn resolution does not clear its challenge. Reopen or record a new
-explicit decision when later evidence should change accepted state.
-
-Offer a handoff; do not assign it by declaration. Transfer the lease only after
-the named recipient accepts. Transfer neither private data nor external
-authority. Treat decline, stop, pause, and uncertainty as valid outcomes.
-
-Reuse an idempotency key only for an exact retry of the same mutation. Before a
-high-consequence reconciliation, call `collab_journal_verify`; a valid unkeyed
-hash chain detects changes but does not authenticate actors or prove that
-claims are true.
+Use the separate presence plane only when discovery or compatibility needs it.
+Call `collab_session_join` with a workspace ID and self-declared labels, inspect
+routes with `collab_session_list`, refresh the hint with
+`collab_session_heartbeat`, and finish it with `collab_session_leave`. Treat
+the returned `actor_key`, runtime/model labels, capabilities, and live/stale
+state as routing hints, never credentials, health, identity, competence,
+permission, or proof that a model is running. A heartbeat never renews a task
+lease. A presence leave never calls `collab_session_end`, releases work, or
+ends the bound coordination session. Do not infer a linkage merely because the
+two planes share a label or workspace.
 
 ## Keep the boundary honest
 
