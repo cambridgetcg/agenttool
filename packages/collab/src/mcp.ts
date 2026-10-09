@@ -366,12 +366,16 @@ export function buildCollabMcpServer(
     {
       title: "Poll the next useful collaboration state",
       description:
-        "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
+        "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since.",
       annotations: localMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor: legacyActor,
-        after_sequence: z.number().int().nonnegative().optional(),
+        after_sequence: z.number().int().nonnegative().optional()
+          .describe(
+            "Legacy actor mode: page after this sequence. A bound session pages from its acknowledged cursor; " +
+            "any other value is refused with after_sequence_unsupported_in_bound_session.",
+          ),
         known_cursor: eventAnchor.optional(),
         event_limit: nextEventLimit,
       },
@@ -383,6 +387,7 @@ export function buildCollabMcpServer(
           ...boundCredential(),
           known_cursor,
           event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+          after_sequence,
         })
         : store.nextForActor(
           workspace_id,

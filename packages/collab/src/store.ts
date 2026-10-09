@@ -3899,6 +3899,7 @@ export class CollabStore {
     generation: number;
     known_cursor?: EventCursor;
     event_limit?: number;
+    after_sequence?: number;
   }): {
     actor: string;
     session: CoordinationSession;
@@ -3945,6 +3946,9 @@ export class CollabStore {
           }
           throw error;
         }
+      }
+      if (input.after_sequence !== undefined) {
+        requireBoundAfterSequence(input.after_sequence, authenticated);
       }
       const eventLimit = validateNextEventLimit(input.event_limit);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
@@ -5775,6 +5779,36 @@ function validateNextEventLimit(value: number | undefined): number {
     );
   }
   return limit;
+}
+
+const BOUND_AFTER_SEQUENCE_REMEDY =
+  "A bound collab_next always pages from the acknowledged session cursor. Advance it with "
+  + "collab_cursor_ack (next_anchor of the page you processed), or read from any position "
+  + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
+
+function requireBoundAfterSequence(
+  afterSequence: number,
+  session: CoordinationSessionRow,
+): void {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+  }
+  if (afterSequence === session.cursor_sequence) return;
+  throw new CollabError(
+    "after_sequence_unsupported_in_bound_session",
+    `after_sequence ${afterSequence} differs from this session's acknowledged cursor `
+      + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`,
+    {
+      after_sequence: afterSequence,
+      cursor: {
+        epoch_id: session.cursor_epoch_id,
+        sequence: session.cursor_sequence,
+        hash: session.cursor_hash,
+      },
+      cursor_version: session.cursor_version,
+      remedy: BOUND_AFTER_SEQUENCE_REMEDY,
+    },
+  );
 }
 
 function normalizeSessionLeaseInput(input: {

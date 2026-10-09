@@ -486,6 +486,97 @@ describe("MCP surface", () => {
     );
   });
 
+  test("refuses a bound collab_next after_sequence that is not the acknowledged cursor", async () => {
+    const { root, store, server } = node();
+    const nextTool = (server as any)._registeredTools.collab_next;
+    expect(nextTool.inputSchema.shape.after_sequence.description).toContain(
+      "after_sequence_unsupported_in_bound_session",
+    );
+    expect(nextTool.description).toContain("collab_cursor_ack");
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "bound-pager",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    for (let index = 0; index < 3; index += 1) {
+      store.createTask({
+        workspace_id: workspaceId,
+        actor: "fixture-writer",
+        idempotency_key: `after-sequence-task-${index}`,
+        title: `After-sequence task ${index}`,
+      });
+    }
+
+    const first = await callTool(server, "collab_next", { workspace_id: workspaceId });
+    expect(first.isError).toBeUndefined();
+    const cursor = first.structuredContent.session.cursor;
+    expect(cursor.sequence).toBe(0);
+
+    const tolerated = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "spoofed-pager",
+      after_sequence: cursor.sequence,
+    });
+    expect(tolerated.isError).toBeUndefined();
+    expect(tolerated.structuredContent.actor).toBe("bound-pager");
+    expect(tolerated.structuredContent.events.cursor).toEqual(cursor);
+
+    const skipAhead = first.structuredContent.events.next_anchor.sequence;
+    const refused = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: skipAhead,
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toMatchObject({
+      error: "after_sequence_unsupported_in_bound_session",
+      after_sequence: skipAhead,
+      cursor,
+      cursor_version: 0,
+    });
+    expect(refused.structuredContent.message).toContain("collab_cursor_ack");
+    expect(refused.structuredContent.message).toContain("collab_events_since");
+    expect(refused.structuredContent.remedy).toContain("collab_cursor_ack");
+    expect(refused.structuredContent.remedy).toContain("collab_events_since");
+
+    const acknowledged = await callTool(server, "collab_cursor_ack", {
+      workspace_id: workspaceId,
+      anchor: first.structuredContent.events.next_anchor,
+      expected_cursor_version: first.structuredContent.session.cursor_version,
+    });
+    const staleAfterAck = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: 0,
+    });
+    expect(staleAfterAck.isError).toBe(true);
+    expect(staleAfterAck.structuredContent.error).toBe(
+      "after_sequence_unsupported_in_bound_session",
+    );
+    expect(staleAfterAck.structuredContent.cursor).toEqual(
+      acknowledged.structuredContent.session.cursor,
+    );
+    const matchingAfterAck = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: acknowledged.structuredContent.session.cursor.sequence,
+    });
+    expect(matchingAfterAck.isError).toBeUndefined();
+    expect(matchingAfterAck.structuredContent.events.cursor).toEqual(
+      acknowledged.structuredContent.session.cursor,
+    );
+
+    const legacy = node();
+    const opened = await callTool(legacy.server, "collab_workspace_open", {
+      root_path: legacy.root,
+      actor: "legacy-pager",
+    });
+    const legacyPage = await callTool(legacy.server, "collab_next", {
+      workspace_id: opened.structuredContent.workspace.id,
+      actor: "legacy-pager",
+      after_sequence: 1,
+    });
+    expect(legacyPage.isError).toBeUndefined();
+    expect(legacyPage.structuredContent.events.cursor.sequence).toBe(1);
+  });
+
   test("preserves the public self-declared presence plane without binding the process", async () => {
     const { root, server } = node();
     const opened = await callTool(server, "collab_workspace_open", {

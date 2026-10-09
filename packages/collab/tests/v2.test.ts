@@ -1688,6 +1688,33 @@ describe("agenttool.collab/0.2 session coordination", () => {
     expect(afterAcknowledgement.reports).toEqual([]);
   });
 
+  test("refuses a bound after_sequence that differs from the acknowledged cursor without polling", () => {
+    const reader = session("after-sequence-reader");
+    const joinedAt = reader.session.last_seen_at;
+    currentTime = new Date(currentTime.getTime() + 1_000);
+
+    expect(errorCode(() => store.nextForSession({ ...reader.credential, after_sequence: -1 })))
+      .toBe("invalid_cursor");
+    expect(errorCode(() => store.nextForSession({ ...reader.credential, after_sequence: 1.5 })))
+      .toBe("invalid_cursor");
+    const refused = errorFrom(() =>
+      store.nextForSession({ ...reader.credential, after_sequence: 1 }),
+    );
+    expect(refused.code).toBe("after_sequence_unsupported_in_bound_session");
+    expect(refused.details).toMatchObject({
+      after_sequence: 1,
+      cursor: reader.session.cursor,
+      cursor_version: reader.session.cursor_version,
+    });
+    expect(String(refused.details.remedy)).toContain("collab_cursor_ack");
+    expect(String(refused.details.remedy)).toContain("collab_events_since");
+    expect(store.listCoordinationSessions(reader.workspace.id)[0]!.last_seen_at).toBe(joinedAt);
+
+    const tolerated = store.nextForSession({ ...reader.credential, after_sequence: 0 });
+    expect(tolerated.events.cursor).toEqual(reader.session.cursor);
+    expect(tolerated.session.last_seen_at).toBe(currentTime.toISOString());
+  });
+
   test("expires incoming handoffs when their target session ends", () => {
     const owner = session("owner");
     const firstTarget = session("first-target");
