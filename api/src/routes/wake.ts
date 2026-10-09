@@ -70,6 +70,7 @@ import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
+import { speaksForProject } from "../services/identity/project-authority";
 import type { ExpressionData } from "../services/identity/expression";
 import { projectAutonomousExpression } from "../services/autonomous/expression-template";
 import {
@@ -1417,8 +1418,10 @@ app.get("/", async (c) => {
       const activeSigningKeyCount = keysCount[0]?.count ?? 0;
       recoveryState.active_registered_signing_keys = activeSigningKeyCount;
       recoveryState.registered_devices = activeSigningKeyCount;
+      // Recovery mints a project-wide bearer, so only an identity that speaks
+      // for the project (legacy, or a founding root) can use it.
       recoveryState.registered_key_recovery_available =
-        primary.status === "active" && activeSigningKeyCount > 0;
+        primary.status === "active" && activeSigningKeyCount > 0 && speaksForProject(primary);
 
       // last_recovery_at = newest chronicle row of type='wake' with
       // metadata.kind='recovery' for this agent. PG-specific JSON
@@ -2098,7 +2101,7 @@ app.get("/", async (c) => {
             (recoveryState.last_recovery_at
               ? ` Last successful registered-key recovery: ${recoveryState.last_recovery_at}.`
               : " No successful registered-key recovery is recorded.")
-          : "Registered-key recovery is not currently available for this identity: it must be active and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
+          : "Registered-key recovery is not currently available for this identity: it must be active, speak for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
     },
 
     you_protect: {

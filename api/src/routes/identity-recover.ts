@@ -4,8 +4,12 @@
  *    Canonical defender of Ring 1's third commitment. Registered-signing-key
  *    recovery is Ring 1 — anonymous (no Bearer required), free of charge,
  *    and has no identity-inactivity deadline. Each signed request still has
- *    a five-minute acceptance window. An active agent dormant for any duration
- *    finds this door open. Adding a fee, an identity-inactivity deadline, or a platform-attestation
+ *    a five-minute acceptance window. An active agent that speaks for its
+ *    project (its founding root, or a legacy identity) finds this door open
+ *    after dormancy of any duration. A guest root enrolled into an existing
+ *    project governs only its own identity; possessing that key does not by
+ *    itself grant the project bearer (docs/IDENTITY-SEED.md), so it receives
+ *    the same not-authorized response. Adding a fee, an identity-inactivity deadline, or a platform-attestation
  *    requirement breaches the wall. Doctrine: docs/IDENTITY-SEED.md ·
  *    docs/RING-1.md §Commitment 3.
  *
@@ -66,6 +70,7 @@ import {
   readAuthorityBoundJson,
 } from "../services/identity/authority";
 import { canonicalRecoverBytes, verifyRecoverSignature } from "../services/identity/crypto";
+import { speaksForProjectSql } from "../services/identity/project-authority";
 import {
   recoveryProofDigest,
   recoveryProofExpiresAt,
@@ -201,6 +206,11 @@ app.post("/", async (c) => {
         and(
           eq(identities.did, body.did),
           eq(identities.status, "active"),
+          // A recovered bearer is project-wide, so only identities that speak
+          // for the project may mint one: legacy identities and founding roots.
+          // An enrolled guest root governs only itself and gets the same 401
+          // before any authority sequence is consumed.
+          speaksForProjectSql(),
         ),
       )
       .limit(1);
@@ -236,6 +246,7 @@ app.post("/", async (c) => {
             eq(identities.id, association.identityId),
             eq(identities.did, body.did),
             eq(identities.status, "active"),
+            speaksForProjectSql(),
           ),
         )
         .limit(1)

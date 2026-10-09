@@ -16,10 +16,11 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { foundingRootSql } from "./project-authority";
 import type { GuidedErrorBody } from "../../lib/errors";
 import { composeCanonicalBytes } from "../mathos/encode";
 import { verifyRecoverSignature } from "./crypto";
@@ -377,7 +378,10 @@ export async function getProjectRootedAuthorityIdentities(
     .where(
       and(
         eq(identities.projectId, projectId),
-        isNotNull(identities.authorityRootPublicKey),
+        // Only the root that founded this project speaks for its
+        // constitution. A guest root admitted by enrollment governs its own
+        // identity, never the administrator's project.
+        foundingRootSql(),
       ),
     );
 }

@@ -72,6 +72,18 @@ describe("same-project enrollment proof", () => {
       expect(f.events).toEqual([]);
     }
   });
+  test("refuses reserved platform and all-zero/all-one identity and key IDs before admission", async () => {
+    // The nil UUID is the platform identity and project; operator gates key on it.
+    const { PLATFORM_IDENTITY_ID, PLATFORM_PROJECT_ID } = await import("../src/services/wake/platform-bootstrap");
+    const reserved = [PLATFORM_IDENTITY_ID, PLATFORM_PROJECT_ID, "ffffffff-ffff-ffff-ffff-ffffffffffff"];
+    for (const id of reserved) {
+      for (const key of ["identity_id", "signing_key_id"]) {
+        const f = staged();
+        await expect(enrollIdentity(request({ ...body(), [key]: id }), f.options)).rejects.toMatchObject({ status: 400 });
+        expect(f.events).toEqual([]);
+      }
+    }
+  });
   test("strict schema excludes metadata, authority overrides and noncanonical encodings", async () => {
     for (const value of [
       { ...body(), metadata: { lifecycle: "at_rest" } }, { ...body(), authority_root_public_key: PUBLIC },

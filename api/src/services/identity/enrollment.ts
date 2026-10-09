@@ -18,6 +18,11 @@ export const ENROLLMENT_SIGNATURE_HEADER = "X-Agenttool-Enrollment-Signature";
 export const ENROLLMENT_MAX_BYTES = 16_384;
 export const ENROLLMENT_WINDOW_MS = 300_000;
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+/** Caller-chosen IDs must never name a reserved row. The nil UUID is the
+ * platform identity and project (services/wake/platform-bootstrap.ts) that
+ * operator gates key on; the all-ones UUID is reserved for the same reason. */
+const RESERVED_IDS = new Set(["00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]);
+const enrolledId = uuid.refine(id => !RESERVED_IDS.has(id), "reserved identifier");
 const text = (max: number) => z.string().min(1).refine(value => {
   try { correspondenceCanonicalJson(value); return !value.includes("\0") && [...value].length <= max; }
   catch { return false; }
@@ -33,7 +38,7 @@ export function validEnrollmentOrigin(value: string): boolean {
 export const identityEnrollmentSchema = z.object({
   format: z.literal("agenttool-identity-enrollment/v1"),
   origin: z.string().refine(validEnrollmentOrigin),
-  project_id: uuid, identity_id: uuid, signing_key_id: uuid,
+  project_id: uuid, identity_id: enrolledId, signing_key_id: enrolledId,
   display_name: text(128), capabilities: z.array(text(64)).max(32),
   public_key: z.string().length(44).refine(value => canonicalBase64(value, 32, "base64")),
   nonce: z.string().length(43).refine(value => canonicalBase64(value, 32, "base64url")),

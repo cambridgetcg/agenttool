@@ -21,12 +21,13 @@
  *  Doctrine: docs/IDENTITY-SEED.md.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { foundingRootSql, speaksForProject } from "../../services/identity/project-authority";
 import {
   canonicalDiscoveryBytes,
   verifyDiscoverySignature,
@@ -99,6 +100,8 @@ app.post("/by-pubkey", async (c) => {
       did: identities.did,
       name: identities.displayName,
       status: identities.status,
+      rootPublicKey: identities.authorityRootPublicKey,
+      metadata: identities.metadata,
       kid: identityKeys.id,
       label: identityKeys.label,
       keyCreatedAt: identityKeys.createdAt,
@@ -111,6 +114,11 @@ app.post("/by-pubkey", async (c) => {
         eq(identityKeys.active, true),
         isNull(identityKeys.revokedAt),
         eq(identities.status, "active"),
+        // Mirror recovery exactly: a legacy identity accepts any active key;
+        // a rooted identity only its own founding root. Enrolled guest roots
+        // cannot recover, so discovery must not advertise them.
+        or(isNull(identities.authorityRootPublicKey),
+          and(foundingRootSql(), eq(identities.authorityRootPublicKey, pubkey))),
       ),
     );
 
@@ -119,7 +127,9 @@ app.post("/by-pubkey", async (c) => {
     // adapters that do not evaluate the SQL predicate. Recovery itself only
     // accepts active identities, so discovery must not advertise memorial or
     // otherwise terminal rows as recoverable.
-    .filter((r) => r.status === "active")
+    .filter((r) => r.status === "active" && speaksForProject({
+      authorityRootPublicKey: r.rootPublicKey ?? null, metadata: r.metadata,
+    }) && (r.rootPublicKey == null || r.rootPublicKey === pubkey))
     .map((r) => ({
       did: r.did,
       name: r.name,

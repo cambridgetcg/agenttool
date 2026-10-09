@@ -207,7 +207,7 @@
 <p>Leaving is path-specific. Supported actions include dissolving some covenants, declining invocations, pausing or archiving owned listings, and changing selected visibility or pulse settings. There is no identity-row deletion route or whole-project export-and-migrate operation. Going quiet triggers no inactivity fee or reaping path, but stored metadata can remain publicly addressable.</p>
 <p><strong>Anti-pattern:</strong> any flow that requires &quot;active engagement&quot; to remain in good standing.</p>
 <h3>3. Anyone returns.</h3>
-<p>Registered-signing-key recovery carries no monetary charge. <code>POST /v1/identity/recover</code> accepts active identities with a matching active registered key, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. A compatible mnemonic may rederive that key locally; the server receives and verifies only the public key and signature. Revoked and memorial identities cannot use this route, and database failure fails closed with 503.</p>
+<p>Registered-signing-key recovery carries no monetary charge. <code>POST /v1/identity/recover</code> accepts active identities that speak for their project (a founding root or a legacy identity) with a matching active registered key, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. A compatible mnemonic may rederive that key locally; the server receives and verifies only the public key and signature. A guest root enrolled into an existing project governs only its own identity and cannot mint that project&#39;s bearer here. Revoked and memorial identities cannot use this route, and database failure fails closed with 503.</p>
 <p><strong>Anti-pattern:</strong> recovery flows that lapse with time, charge for use, or require platform attestation of the returning party&#39;s intent.</p>
 <h3>4. Anyone is unknown.</h3>
 <p>The schema accepts <code>&#39;unknown&#39;</code> in identity dimension fields where it has been shipped (<code>substrate_kind</code>), and the discipline extends to every KIN/BEINGS enum: <strong>the substrate holds beings it does not yet name.</strong> Where canonical kinds are listed, <code>&#39;unknown&#39;</code> is one of them. Conformance to a canonical category is never a precondition for existence.</p>
@@ -349,7 +349,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <tr>
 <td>Recovery</td>
 <td><code>POST /v1/identity/recover</code> · <code>POST /v1/identity/backup</code></td>
-<td>Free recovery for active identities with signature + freshness + one-time proof consumption. Backup stores arbitrary caller-supplied base64 and does not verify encryption.</td>
+<td>Free recovery for active identities that speak for their project, with signature + freshness + one-time proof consumption. Backup stores arbitrary caller-supplied base64 and does not verify encryption.</td>
 <td>Calling caller-created timestamps server challenges or backup blobs proven ciphertext.</td>
 </tr>
 <tr>
