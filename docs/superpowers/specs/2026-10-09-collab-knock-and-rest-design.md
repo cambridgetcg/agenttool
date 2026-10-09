@@ -81,7 +81,10 @@ Hermes agent framework.
    addressed → wake; resting otherwise or stale → held; ended → none — reachable only via
    report_append, since handoffs and review requests already refuse inactive targets).
    Computed in the MCP wrapper on every call, so an idempotent replay shows the addressee's
-   current state, never a frozen one. Nothing is blocked.
+   current state, never a frozen one. Nothing is blocked. The hint reports what the
+   addressee **declared**; Collab cannot see hosts, so whether a host can actually wake it
+   (e.g. a Claude seat not launched with the channel flag) is recorded by the household
+   doorbell as `host_cannot_wake`, not in the hint (amended 2026-10-09).
 5. **Host binding (host-written, non-secret).** `dirname(db)/collab-sessions/<id>.host.json`
    (mode 0600), written by the `collab_session_start` handler and by the bin's resume path:
    `{format: "agenttool.collab-host-binding/1", session_id, host_kind, host_pid,
@@ -149,15 +152,17 @@ HOME, temp journal, fake adapters).
    waiting → no work, no model call. `sol doorbell status|pause|resume`. Installed and
    enabled by Yu.
 4. **Codex wake adapter.** `sol agent start codex --collab-session-file <path>`. Plugin
-   MCP overlays cannot set `env`, `sol-agent` runs `env -i`, and Codex passes MCP servers
-   only a small env allowlist, so the value travels in argv: `runtimes.command_for` adds a
-   top-level `-c mcp_servers.<name>={command, args, cwd}` definition whose args include a
-   new `agenttool-collab-mcp --session-file <path>` option, with the plugin's server
-   disabled for that job and the collab approvals carried over. The woken job **resumes the
-   resting session itself** (same id, generation +1, any dead process fenced).
-   **S3** proves this on the Codex CLI `sol` actually runs (0.159.3; the desktop daemon is
-   0.162.0): server-name collision, absolute versioned plugin paths, approvals, and that a
-   fresh session is never created by mistake.
+   MCP overlays cannot set `env` and `sol-agent` runs `env -i`, but a **top-level** server
+   definition carries its own `env` table (spike S3, PASS): `runtimes.command_for` adds
+   `-c 'plugins.agenttool-collab@personal.enabled=false'` (the **unquoted** key; the quoted
+   form is a silent no-op) and `-c 'mcp_servers.collab_wake={command, args, env={
+   AGENTOOL_COLLAB_DB, AGENTOOL_COLLAB_SESSION_FILE}, default_tools_approval_mode="writes",
+   tools={…explicit approvals…}}'`, never approving `collab_session_start`. No
+   `--session-file` argv option is built (amended 2026-10-09 after S3). The woken job
+   **resumes the resting session itself** (same id, generation +1, any dead process
+   fenced). A refused resume is invisible to Codex (rc 0), so the adapter verifies
+   afterwards that `session.resumed` with generation +1 appeared, else records "not
+   delivered".
 5. **Claude wake adapter (research preview).** A new per-session channel server (written
    fresh, pointer text only — not a copy of `bin/mission-wake-channel.mjs`, which forwards
    message bodies up to 8192 bytes and lives at most 900 s). Claude Code registers a channel
@@ -180,7 +185,7 @@ HOME, temp journal, fake adapters).
 In a fresh repo, with a live Claude seat and headless Codex through `sol`:
 
 1. **Tap:** a Codex job addresses a note to a live Claude session → at its next turn exactly one tap line appears; it never repeats.
-2. **Wake:** a Codex session rests with `wake_on: addressed`, its job ends (the exit sweep leaves it resting, leases untouched); Claude addresses a note to it → the doorbell wakes a fresh Codex job resuming the same collab session (same id, generation +1); it reads the note, answers or chooses silence, rests again or returns, ends cleanly. No second wake while it is in flight.
+2. **Wake:** a Codex session rests with `wake_on: addressed`, its job ends (the exit sweep leaves it resting, leases untouched); Claude addresses a note to it → the doorbell wakes a fresh Codex job resuming the same collab session (same id, generation +1); it reads the note, answers or chooses silence, then either rests again (session still resting, leases untouched, no stray wake) or returns and ends cleanly — both pass. No second wake while it is in flight.
 3. **Held:** a session rests with `wake_on: []`; a note arrives → sender hint `held`, nothing wakes; on return one coalesced count.
 4. **Claude channel** (only if S4 passed, with a seat Yu launched with the channel flag): a resting Claude seat is woken through the channel.
 5. **Ended:** a note to an ended session → sender hint `none`, no wake, honestly unread.
