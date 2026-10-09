@@ -124,6 +124,26 @@ export type SessionStatus = "active" | "ended";
 export type SessionLiveness = "live" | "stale";
 export const SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
+/** v1 accepts only "addressed": consent to a wake for notes explicitly addressed to this session. */
+export type RestWakeOn = "addressed";
+export const MAX_REST_REASON_LENGTH = 200;
+
+/**
+ * A session's own declared rest: its latest session.rested event that no
+ * session.returned has followed. Expiry is computed on read, so once `until`
+ * has passed the rest reads as null and starts nothing. Rest is declared,
+ * never inferred, changes no status, and never releases, extends or
+ * reassigns leases, handoffs or accepted obligations.
+ */
+export interface SessionRest {
+  mode: "resting";
+  /** occurred_at of the session.rested event that declared this rest. */
+  since: string;
+  until: string | null;
+  reason: string | null;
+  wake_on: RestWakeOn[];
+}
+
 export interface CoordinationSession {
   id: string;
   workspace_id: string;
@@ -141,6 +161,8 @@ export interface CoordinationSession {
   reset_generation: number;
   cursor_recovery_required: boolean;
   liveness: SessionLiveness;
+  /** The declared, unexpired rest; always null once the session has ended. */
+  rest: SessionRest | null;
 }
 
 export interface SessionJoinResult {
@@ -323,6 +345,8 @@ export type CollabEventType =
   | "session.resumed"
   | "session.ended"
   | "session.cursor_reset"
+  | "session.rested"
+  | "session.returned"
   | "task.created"
   | "task.claimed"
   | "task.recovered"

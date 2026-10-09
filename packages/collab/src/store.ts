@@ -20,6 +20,7 @@ import {
   EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_ANCHOR_BYTES,
   MAX_WAIT_PAGE_BYTES,
+  MAX_REST_REASON_LENGTH,
   SESSION_STALE_AFTER_MS,
   type SessionEventPageInput,
   type ArtifactRef,
@@ -44,6 +45,7 @@ import {
   type ReportConfidence,
   type ReportKind,
   type ReportRelation,
+  type RestWakeOn,
   type ReviewStatus,
   type SessionEndRelease,
   type SessionEndResult,
@@ -51,6 +53,7 @@ import {
   type SessionLiveness,
   type SessionMutationInput,
   type SessionPresence,
+  type SessionRest,
   type TaskConflict,
   type TaskReview,
   type TaskWorkMode,
@@ -1998,6 +2001,62 @@ export class CollabStore {
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`)
       .get(id) as CoordinationSessionRow | null;
     return row ? this.sessionProjection(row) : null;
+  }
+
+  /**
+   * Declare (mode "resting") or end (mode "ready") the caller's own rest.
+   * Appends session.rested or session.returned through mutateAsSession; it
+   * changes no status or generation and never touches leases, handoffs or
+   * accepted obligations. An expired rest reads as not resting on its own.
+   */
+  restSessionForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    mode: "resting" | "ready";
+    until?: string;
+    reason?: string;
+    wake_on?: RestWakeOn[];
+  }): CoordinationSession {
+    const mode = validateRestMode(input.mode);
+    if (mode === "ready") {
+      // Judge the raw input, as release_summary does: a rest field sent with
+      // mode "ready" is refused, never silently dropped.
+      for (const field of ["until", "reason", "wake_on"] as const) {
+        if (input[field] !== undefined) {
+          throw new CollabError(`invalid_${field}`, `${field} applies only to mode "resting"`);
+        }
+      }
+    }
+    const until = input.until === undefined ? null : validateRestUntil(input.until);
+    const reason = optionalText(input.reason, "reason", MAX_REST_REASON_LENGTH);
+    const wakeOn = validateRestWakeOn(input.wake_on);
+    const request = mode === "resting"
+      ? { mode, until, reason, wake_on: wakeOn }
+      : { mode };
+    return this.mutateAsSession(input, input.idempotency_key, "session.rest.v2", request, (session) => {
+      if (mode === "resting") {
+        // Checked here, not before the receipt lookup, so an identical replay
+        // still returns its stored receipt after until has passed.
+        if (until !== null && Date.parse(until) <= Date.parse(this.timestamp())) {
+          throw new CollabError("invalid_until", "until must be a future instant");
+        }
+        this.appendEvent(session.workspace_id, "session.rested", session.id, session.actor, {
+          mode: "resting",
+          until,
+          reason,
+          wake_on: wakeOn,
+        }, session.id);
+      } else {
+        const open = this.latestRestDeclaration(session.id);
+        this.appendEvent(session.workspace_id, "session.returned", session.id, session.actor, {
+          mode: "ready",
+          prior_rest_sequence: open?.type === "session.rested" ? open.sequence : null,
+        }, session.id);
+      }
+      return this.sessionProjection(this.requireCoordinationSessionRow(session.id));
+    });
   }
 
   /**
@@ -5753,7 +5812,8 @@ export class CollabStore {
     row: CoordinationSessionRow,
     observedAt = this.timestamp(),
   ): CoordinationSession {
-    return coordinationSessionFromRow(row, observedAt);
+    const rest = row.status === "active" ? this.latestRest(row.id, observedAt) : null;
+    return coordinationSessionFromRow(row, observedAt, rest);
   }
 
   private assigneeLiveness(sessionId: string | null): SessionLiveness | null {
@@ -5762,6 +5822,30 @@ export class CollabStore {
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId) as Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null;
     return holder ? sessionLiveness(holder, this.timestamp()) : null;
+  }
+
+  /**
+   * The latest session.rested or session.returned this session appended, an
+   * events scan like reviewRequestedSessionId's. An ended or unknown session
+   * has none: the subquery yields NULL and matches no event.
+   */
+  private latestRestDeclaration(sessionId: string): RestDeclarationRow | null {
+    return this.db.query(`
+      SELECT type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = (
+          SELECT workspace_id FROM coordination_sessions WHERE id = ?1 AND status = 'active'
+        )
+        AND entity_id = ?1
+        AND type IN ('session.rested', 'session.returned')
+      ORDER BY sequence DESC
+      LIMIT 1
+    `).get(sessionId) as RestDeclarationRow | null;
+  }
+
+  /** The declared rest in force at observedAt; null when returned, expired, ended or never declared. */
+  private latestRest(sessionId: string, observedAt: string): SessionRest | null {
+    const declaration = this.latestRestDeclaration(sessionId);
+    return declaration ? restFromDeclaration(declaration, observedAt) : null;
   }
 
   private requireWorkspace(workspaceId: string, db = this.db): Workspace {
@@ -6041,6 +6125,62 @@ function cleanText(value: string, field: string, max: number): string {
 function optionalText(value: string | undefined, field: string, max: number): string | null {
   if (value === undefined || value.trim() === "") return null;
   return cleanText(value, field, max);
+}
+
+const REST_UNTIL_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+function validateRestMode(value: unknown): "resting" | "ready" {
+  if (value !== "resting" && value !== "ready") {
+    throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
+  }
+  return value;
+}
+
+/** A calendar-exact ISO-8601 instant with seconds and a zone, stored as UTC toISOString. */
+function validateRestUntil(value: unknown): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  const match = REST_UNTIL_PATTERN.exec(text);
+  if (match) {
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+      number, number, number, number, number, number,
+    ];
+    const offsetHours = Number(match[7] ?? 0);
+    const offsetMinutes = Number(match[8] ?? 0);
+    // Date.parse rolls 2026-02-30 over to March and accepts 24:00; this does not.
+    const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const parsed = Date.parse(text);
+    if (
+      year >= 1970
+      && calendar.getUTCFullYear() === year
+      && calendar.getUTCMonth() === month - 1
+      && calendar.getUTCDate() === day
+      && calendar.getUTCHours() === hour
+      && calendar.getUTCMinutes() === minute
+      && calendar.getUTCSeconds() === second
+      && offsetHours <= 23
+      && offsetMinutes <= 59
+      && Number.isFinite(parsed)
+    ) {
+      return new Date(parsed).toISOString();
+    }
+  }
+  throw new CollabError(
+    "invalid_until",
+    "until must be an ISO-8601 instant with seconds and a time zone, for example 2026-10-09T18:00:00Z",
+  );
+}
+
+function validateRestWakeOn(value: unknown): RestWakeOn[] {
+  if (value === undefined) return [];
+  if (
+    !Array.isArray(value)
+    || value.length > 1
+    || (value.length === 1 && value[0] !== "addressed")
+  ) {
+    throw new CollabError("invalid_wake_on", 'wake_on accepts [] or ["addressed"] in this version');
+  }
+  return value.length === 1 ? ["addressed"] : [];
 }
 
 function validateTtl(value: number | undefined): number {
@@ -6334,6 +6474,41 @@ function requireMatchingPresenceSessionJoin(
   }
 }
 
+interface RestDeclarationRow {
+  type: "session.rested" | "session.returned";
+  sequence: number;
+  occurred_at: string;
+  payload_json: string;
+}
+
+/** Expiry is computed on read; a returned, expired or damaged declaration reads as no rest. */
+function restFromDeclaration(row: RestDeclarationRow, observedAt: string): SessionRest | null {
+  if (row.type !== "session.rested") return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    return null;
+  }
+  if (!isRecordValue(payload) || payload.mode !== "resting") return null;
+  const until = typeof payload.until === "string" ? payload.until : payload.until === null ? null : undefined;
+  const reason = typeof payload.reason === "string" ? payload.reason : payload.reason === null ? null : undefined;
+  const wakeOn = payload.wake_on;
+  if (until === undefined || reason === undefined) return null;
+  if (!Array.isArray(wakeOn) || wakeOn.length > 1 || !wakeOn.every((item) => item === "addressed")) {
+    return null;
+  }
+  // NaN (an unparseable until or clock) fails this comparison and reads as expired.
+  if (until !== null && !(Date.parse(observedAt) < Date.parse(until))) return null;
+  return {
+    mode: "resting",
+    since: row.occurred_at,
+    until,
+    reason,
+    wake_on: wakeOn.length === 1 ? ["addressed"] : [],
+  };
+}
+
 function sessionLiveness(
   row: Pick<CoordinationSessionRow, "status" | "last_seen_at">,
   observedAt: string,
@@ -6358,6 +6533,7 @@ function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): T
 function coordinationSessionFromRow(
   row: CoordinationSessionRow,
   observedAt: string,
+  rest: SessionRest | null,
 ): CoordinationSession {
   return {
     id: row.id,
@@ -6380,6 +6556,7 @@ function coordinationSessionFromRow(
     reset_generation: row.reset_generation,
     cursor_recovery_required: row.cursor_recovery_required !== 0,
     liveness: sessionLiveness(row, observedAt),
+    rest,
   };
 }
 

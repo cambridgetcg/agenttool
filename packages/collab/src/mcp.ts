@@ -5,6 +5,7 @@ import { CollabError } from "./errors.js";
 import {
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_REST_REASON_LENGTH,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -320,6 +321,37 @@ export function buildCollabMcpServer(
         credential_file_removed: true,
         session_file_name: `${ended.session.id}.json`,
       };
+    }),
+  );
+
+  server.registerTool(
+    "collab_session_rest",
+    {
+      title: "Declare rest or return for the bound session",
+      description:
+        "Declare that the bound session is resting, or return with mode ready. Rest is declared, never inferred: " +
+        "until (a future ISO-8601 instant with a time zone) bounds it and is checked on read, and wake_on " +
+        "[\"addressed\"] consents to a host wake for notes explicitly addressed to this session; with the default [] " +
+        "they wait until you return. Rest changes no status and never releases, extends, or reassigns leases, " +
+        "handoffs, or accepted obligations.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId.optional(),
+        idempotency_key: key,
+        mode: z.enum(["resting", "ready"]),
+        until: z.string().min(1).max(64).optional()
+          .describe("Mode resting only: a future ISO-8601 instant with a time zone; omit to rest until you return"),
+        reason: z.string().max(MAX_REST_REASON_LENGTH).optional()
+          .describe(`Mode resting only: a short reason, at most ${MAX_REST_REASON_LENGTH} characters`),
+        wake_on: z.array(z.enum(["addressed"])).max(1).optional()
+          .describe('Mode resting only: [] (default) or ["addressed"] to consent to a wake for addressed notes'),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      if (workspace_id !== undefined) requireWorkspace(workspace_id);
+      const session = store.restSessionForSession({ ...boundCredential(), ...input });
+      if (binding) binding.handle = { ...binding.handle, session };
+      return { session };
     }),
   );
 
