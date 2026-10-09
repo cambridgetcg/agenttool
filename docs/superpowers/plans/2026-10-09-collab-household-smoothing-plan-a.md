@@ -7198,3 +7198,1314 @@ shasum -a 256 -c "$BK/before.sha256"
 Expected: the final command prints three `OK` lines. `codex plugin add` recreates the codex cache path `0.3.1+codex.20260731095048` from the restored source. Once the 0.3.1 copy is back, the sweep in Plan B finds no `agenttool-collab-host` and records `host_cli_not_found`. The journal snapshot `collab-journal-before.sqlite` is a record only: restoring it would discard later events, so that is Yu's decision and never part of rollback.
 
 
+### Task 11: Accept host-committed completions the server can verify
+
+Implements spec Part 1 item 10 (amendment 2026-10-09, commit 4aba4865). In the first headless replay (`~/play/collab-duet-replay`, sol job `20261009T141347-a574fcb472d3`), voice B's result checkpoint was captured at HEAD `7264f09` with `voice-b.md` untracked (dirty). `sol --integrate-commit` then committed exactly `voice-b.md` as `fb69760`, whose only parent is `7264f09`; the committed bytes hash to the attached artifact (`55df5d9b…`) and the worktree was left clean. The strict match refused the review with `git_checkpoint_stale` and named no remedy. After this task the same accept passes on a basis the server checks itself, and every other drift is refused with a reason and both ways forward.
+
+**Files:** anchors are function names and quoted text; `~N` is the line on this branch at 4aba4865 (Tasks 1–9, the host end-reason fix and the spec amendment are in), given only as a hint.
+- Create: `packages/collab/tests/host-commit-review.test.ts`. A new file, so it cannot collide with sibling suites; the helpers are copied locally, as in `tests/review-routing.test.ts`.
+- Modify: `packages/collab/src/repository.ts`: constants after `const MAX_UNTRACKED_HASH_MS = 2_000;` (~22); two exported types immediately before `export function inspectRepository(` (~33); new `inspectSuccessorCommit()` immediately before `function worktreeId(` (~172); `function gitBytes(` (~209) gains a `maxBuffer` parameter, with a new `gitExitCode()` before it.
+- Modify: `packages/collab/src/store.ts`: the `./repository.js` import (~64); `interface PreparedReviewCheckpoint` (~272-277); in `reviewTaskForSession()`, the accept block (~3436-3469) and the `task.accepted` payload (~3521-3524); the `return` that ends `captureReviewCheckpoint()` (~4526-4532), followed by a new private `hostCommitSuccessorBasis()`; three module functions immediately before `function hydrateLegacyMutationResponse(` (~6357).
+- Modify: `packages/collab/tests/package.test.ts`: the end of `HOUSEHOLD_TERMS` (~53-55).
+- Modify: `packages/collab/README.md` (`### A host that cannot commit`, ~368-375), `packages/collab/skills/coordinate-agent-work/SKILL.md` (after `Do not work around the sandbox to commit.`, ~234), `packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md` (~158-161).
+- Modify (pinned rebuild on Bun 1.3.5): `packages/collab/dist/agenttool-collab-mcp.js` and `packages/collab/dist/agenttool-collab-host.js`. Both bundle `src/store.ts`, so both change.
+- Not changed (deliberate): `src/protocol.ts` (event payloads are `Record<string, unknown>`, so the optional fields need no type); `src/mcp.ts` (no new tool and no new input; `failure()` already flattens `details`); `SCHEMA_VERSION` 3 (no DDL and no new column, status, relation or CHECK; the artifact read uses existing columns and the implicit `rowid`); `package.json` version 0.5.0; `request_changes`, which never inspects Git; and exact-match acceptance, whose `task.accepted` payload gains nothing.
+
+**Interfaces:**
+- Consumes: `captureReviewCheckpoint()` → `captureRegisteredWorktree()` (a server-observed `RepoCheckpoint`, read outside the write transaction); `requireCompleteGitCheckpoint()`, `checkpointStateMatches()` and `parseStringArray()` (store.ts); the `artifacts` table (`kind`, `uri`, `sha256` lower-cased by `validateSha256`, `attached_at`, implicit `rowid`); the private repository.ts helpers `gitOutput`, `gitBytes`, `splitNul`, `safeGitRelativePath` and `sha256Bytes`; MCP `failure()` (mcp.ts ~1154-1163), which flattens `details` to top-level fields.
+- Produces:
+  - repository.ts, re-exported by `src/index.ts` through `export * from "./repository.js"` (a library export, not an MCP tool): `interface SuccessorCommitChange { path: string; blob_sha256: string | null }`; `type SuccessorCommitInspection = { ok: true; commit_sha; parent_sha; changes } | { ok: false; commit_sha; reason }`; `inspectSuccessorCommit(rootPath: string, commitSha: string, parentSha: string): SuccessorCommitInspection`. It runs read-only plumbing only (`rev-list --parents`, `merge-base --is-ancestor`, `diff-tree -r -z --raw --no-renames`, `cat-file blob`). It reads at most 128 changed paths, 64 MiB of blob bytes and 5 s overall, and each Git call is capped at 5 s.
+  - store.ts: `PreparedReviewCheckpoint.host_commit: SuccessorCommitInspection | null`, inspected only when HEAD moved; `interface HostCommitBasis { commit_sha: string; artifact_ids: string[] }`; private `hostCommitSuccessorBasis(row: TaskRow, prepared: PreparedReviewCheckpoint): HostCommitBasis | { refusal: string }`; module helpers `artifactRepositoryPath(uri, rootPath): string | null`, `pathWithinScopes(path, scopes): boolean` and `gitCheckpointStaleError(taskId, result, observed, refusal): CollabError`.
+  - The `task.accepted` payload, on this basis only, gains `checkpoint_basis: "host_commit_successor"`, `host_commit_sha`, `host_commit_artifact_ids` (in-journal `artifact_…` IDs, in Git's path order) and `checkpoint_boundary: "server_observed_successor_commit_is_local_evidence_not_a_commit_signature_attribution_or_an_atomic_git_sqlite_lock"`.
+  - `git_checkpoint_stale`: the message becomes `The completion worktree changed after its result checkpoint was captured: <refusal>. <remedy>`. The details keep `result_checkpoint`, `observed_checkpoint` and `boundary`, and add `host_commit_refusal` and `remedy`. The remedy, verbatim apart from branch, SHA and task ID: `Two ways forward. (1) Host commit: exactly one commit on branch "<branch>" whose only parent is the result checkpoint HEAD <sha>, changing only paths inside the task's path_scopes, each byte-equal to the newest file artifact this task attached for that uri, with the worktree left clean; then review again. (2) Re-completion: review task "<task>" with outcome "request_changes"; once it is claimed again, collab_task_complete captures a fresh result checkpoint for a new review.`
+  - The order of checks; the first that fails becomes `host_commit_refusal`: HEAD unmoved → another worktree → detached result HEAD → another branch → dirty worktree → the inspection's own refusal (merge, more than one commit ahead, not a descendant, unreadable, over its bounds) → empty commit → then, per changed path in Git's order: outside the scopes → deleted or not a regular file → no `file` artifact names it → its newest artifact has no `sha256` → bytes differ.
+- Readings of the spec decided here. Flag them in review if Yu reads the spec otherwise:
+  1. "equals a `file` artifact attached to this task for that `uri`" means the **newest** such artifact, by `attached_at` and then `rowid`. This is sol's own integration rule, and it stops an earlier attachment from vouching for bytes the reporter later replaced.
+  2. A `uri` names a path when it is repository-relative, an absolute path under the worktree's real root, or a `file://` URL (empty or `localhost` host) of such a path. The mapping is lexical, with no filesystem access inside the write transaction. sol also resolves symlinked parent directories, so an absolute `uri` through a symlink that sol accepted is refused here: it fails closed and the remedy applies. The skill already tells hosts to attach repository-relative `uri`s.
+  3. Scope containment is exact and case-sensitive (`path === scope` or under `scope/`). This is stricter than the case-folding path-conflict check.
+  4. A deletion and an empty commit are refused. No committed blob can equal an artifact there, and an empty commit would satisfy "every changed path matches" vacuously after the reported files vanished.
+  5. A result checkpoint on a detached HEAD has no branch to carry a host commit, so only re-completion applies.
+  6. Not checked: that every attached artifact appears in the commit, or that the result checkpoint's dirty state equals the commit (its digests are one-way). The reviewer reviews what `HEAD` now holds, and every byte that differs from the result HEAD is one the reporter attached.
+- Boundaries kept: Git is read outside the write transaction, as the existing capture is. Git may still change before the SQLite commit, which the existing `boundary` already says. `self_review_forbidden`, `completion_report_obsolete`, `completion_challenged` and `worktree_observation_stale` still run first, unchanged. Dependencies still unlock only on acceptance (tested). An exact retry of an accepted review replays its stored receipt without reading Git again (tested). A refusal writes nothing, so the same idempotency key works once the cause is fixed.
+- Consumed later by: Task 10's household install. That install already ran on 2026-10-09 (stamp `20261009T120634Z`), and the global copy equals this branch's `dist` at 4aba4865. After this task both household copies are stale, and `household-install-check.ts` fails its digest checks until Task 10 Steps 0–5 run again with a fresh stamp. Plan B's replay needs that reinstall and freshly started hosts. The replay repo now has `530121c` (`REPLAY.md`) on top of `fb69760`, so reviewing voice B there today would be refused as "more than one commit ahead". How to rerun the replay is Plan B's call, not this task's.
+
+> **Verified (2026-10-09)** in a scratch copy of `packages/collab` at 4aba4865, with exactly the code below. Step 2 failed as described. After Steps 3–4: the new file passed 17 of 17, `package.test.ts` 7 of 7, and the full suite went from 167 to 184 pass, 0 fail, across 14 files; `tsc --noEmit` was clean; `npx --yes bun@1.3.5 run ci` exited 0 with 184 pass and no "skipped" line. Both pinned bundles changed (`agenttool-collab-mcp.js` 1,358,295 bytes, `agenttool-collab-host.js` 234,981 bytes), and `check:mcp-bundle` byte-matched them against a fresh pinned rebuild. Before the change, a pinned rebuild of 4aba4865 byte-matched both committed bundles. Against the changed store, `collab-zerone` passed 73 of 73, and `collab-courier` passed 352 of 352 in three reruns; its first run showed one failure that did not recur, and that test's name was not captured.
+
+- [ ] **Step 0: Check free disk space**
+
+```bash
+df -h /System/Volumes/Data
+df -g /System/Volumes/Data | awk 'NR==2 {exit ($4 < 2)}' && echo "ok: at least 2 GB free" || echo "STOP: under 2 GB free"
+```
+Expected: `ok: at least 2 GB free`. If it prints `STOP`, report to Yu and do not delete anything to make room.
+
+- [ ] **Step 1: Write the failing tests**
+
+If `packages/collab/node_modules` is absent, run `bun install --frozen-lockfile` there first (Task 1 Step 1).
+
+(a) Create `packages/collab/tests/host-commit-review.test.ts`:
+
+```ts
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { CollabError } from "../src/errors.js";
+import { buildCollabMcpServer } from "../src/mcp.js";
+import type { ArtifactRef, CollabEvent, SessionHandle, Task } from "../src/protocol.js";
+import { CollabStore } from "../src/store.js";
+
+let directory: string;
+let root: string;
+let databasePath: string;
+let store: CollabStore;
+let currentTime: Date;
+const memberStores: CollabStore[] = [];
+
+beforeEach(() => {
+  directory = mkdtempSync(join(tmpdir(), "agenttool-collab-host-commit-"));
+  root = join(directory, "repo");
+  mkdirSync(root);
+  databasePath = join(directory, "state", "collab.sqlite");
+  currentTime = new Date("2026-10-09T10:00:00.000Z");
+  store = new CollabStore(databasePath, { now: () => new Date(currentTime) });
+});
+
+afterEach(() => {
+  while (memberStores.length) memberStores.pop()!.close();
+  store.close();
+  rmSync(directory, { recursive: true, force: true });
+});
+
+const VOICE_A = "what does a thread turn into when someone else pulls it?\n";
+const VOICE_B = "a rope, if two hands hold it; an answer, not an echo.\n";
+const VOICE_B_REVISED = "a rope, if two hands hold it; the second draft.\n";
+const STALE_BOUNDARY = "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock";
+
+function session(actor: string): SessionHandle {
+  return store.startSession({ root_path: root, actor });
+}
+
+function errorFrom(operation: () => unknown): CollabError {
+  try {
+    operation();
+    throw new Error("expected operation to fail");
+  } catch (error) {
+    if (!(error instanceof CollabError)) throw error;
+    return error;
+  }
+}
+
+function runGit(cwd: string, ...args: string[]): string {
+  const result = spawnSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0 || result.error) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.error?.message}`);
+  }
+  return result.stdout.trim();
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/** The replay's repository: a README commit, then voice-a.md committed on main. */
+function initializeReplayRepository(): string {
+  runGit(root, "init", "--initial-branch=main");
+  runGit(root, "config", "user.name", "Collab Test");
+  runGit(root, "config", "user.email", "collab-test@example.invalid");
+  writeFileSync(join(root, "README.md"), "# replay fixture\n");
+  runGit(root, "add", "README.md");
+  runGit(root, "commit", "-m", "begin the replay");
+  writeFileSync(join(root, "voice-a.md"), VOICE_A);
+  runGit(root, "add", "voice-a.md");
+  runGit(root, "commit", "-m", "voice-a: the opening phrase");
+  return runGit(root, "rev-parse", "HEAD");
+}
+
+interface Attachment {
+  uri: string;
+  sha256: string | null;
+  kind?: ArtifactRef["kind"];
+}
+
+interface Scenario {
+  implementer: SessionHandle;
+  reviewer: SessionHandle;
+  baseSha: string;
+  reported: Task;
+  artifactIds: string[];
+}
+
+/**
+ * The replay's voice-b shape: a delegated implementer that cannot commit writes
+ * its files, attaches them as artifacts and completes. The result checkpoint is
+ * the voice-a HEAD plus untracked files (dirty).
+ */
+function reportedArtifactTask(options: {
+  scopes?: string[];
+  files?: Record<string, string>;
+  attachments?: Attachment[];
+} = {}): Scenario {
+  const baseSha = initializeReplayRepository();
+  const implementer = session("Codex · sol job 20261009T000000-test");
+  const reviewer = session("Claude reviewer");
+  const created = store.createTaskForSession({
+    ...implementer.credential,
+    idempotency_key: "voice-b-create",
+    id: "voice-b",
+    title: "Voice B — the answer",
+    work_mode: "edit",
+    completion_policy: "accepted",
+    path_scopes: options.scopes ?? ["voice-b.md"],
+  });
+  let task = store.claimTaskForSession({
+    ...implementer.credential,
+    idempotency_key: "voice-b-claim",
+    task_id: created.id,
+    expected_version: created.version,
+  });
+  const leaseId = task.lease_id!;
+  for (const [path, content] of Object.entries(options.files ?? { "voice-b.md": VOICE_B })) {
+    mkdirSync(join(root, path, ".."), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
+  const artifactIds: string[] = [];
+  const attachments = options.attachments ?? [{ uri: "voice-b.md", sha256: sha256(VOICE_B) }];
+  for (const [index, attachment] of attachments.entries()) {
+    // One second apart, so "newest attachment" never depends on a tie-break.
+    currentTime = new Date(currentTime.getTime() + 1_000);
+    const attached = store.attachArtifactForSession({
+      ...implementer.credential,
+      idempotency_key: `voice-b-attach-${index}`,
+      task_id: task.id,
+      lease_id: leaseId,
+      expected_version: task.version,
+      kind: attachment.kind ?? "file",
+      uri: attachment.uri,
+      ...(attachment.sha256 === null ? {} : { sha256: attachment.sha256 }),
+      media_type: "text/markdown",
+      label: "uncommitted; the host integration commit is pending",
+    });
+    task = attached.task;
+    artifactIds.push(attached.artifact.id);
+  }
+  const reported = store.completeTaskForSession({
+    ...implementer.credential,
+    idempotency_key: "voice-b-complete",
+    task_id: task.id,
+    lease_id: leaseId,
+    expected_version: task.version,
+    summary: "Voice B is written and attached; nothing was committed.",
+    evidence_refs: artifactIds.map((id) => `artifact:${id}`),
+    limits: "This host cannot write .git; the integration commit is the host's.",
+  });
+  return { implementer, reviewer, baseSha, reported, artifactIds };
+}
+
+/** What `sol agent start --integrate-commit` does: commit exactly these paths. */
+function hostCommit(paths: string[], message = "voice-b: Voice B — the answer"): string {
+  runGit(root, "add", "--", ...paths);
+  runGit(root, "commit", "--only", "--author=codex <codex@sol.local>", "-m", message, "--", ...paths);
+  return runGit(root, "rev-parse", "HEAD");
+}
+
+function accept(scenario: Scenario, key: string) {
+  return store.reviewTaskForSession({
+    ...scenario.reviewer.credential,
+    idempotency_key: key,
+    task_id: scenario.reported.id,
+    expected_version: scenario.reported.version,
+    outcome: "accept",
+    summary: "Voice B answers voice A; HEAD:voice-b.md equals the attached artifact.",
+  });
+}
+
+function eventOf(scenario: Scenario, type: string): CollabEvent | undefined {
+  return store.eventsSince(scenario.implementer.workspace.id, 0, 500).events
+    .find((event) => event.type === type && event.entity_id === scenario.reported.id);
+}
+
+function expectBothWaysForward(remedy: unknown, baseSha: string): void {
+  expect(remedy).toBeString();
+  expect(remedy).toContain("(1) Host commit: exactly one commit");
+  expect(remedy).toContain('branch "main"');
+  expect(remedy).toContain(`only parent is the result checkpoint HEAD ${baseSha}`);
+  expect(remedy).toContain("inside the task's path_scopes");
+  expect(remedy).toContain("newest file artifact");
+  expect(remedy).toContain("worktree left clean");
+  expect(remedy).toContain('(2) Re-completion: review task "voice-b" with outcome "request_changes"');
+  expect(remedy).toContain("collab_task_complete captures a fresh result checkpoint");
+}
+
+/**
+ * Refused, still pending, and the refusal names why and both ways forward.
+ * Fields are read directly: Bun's toMatchObject writes asymmetric matchers
+ * (expect.any, expect.stringContaining) back into the received object.
+ */
+function expectRefused(scenario: Scenario, key: string, refusal: string): CollabError {
+  const error = errorFrom(() => accept(scenario, key));
+  expect(error.code).toBe("git_checkpoint_stale");
+  expect(error.details.host_commit_refusal).toBeString();
+  expect(error.details.host_commit_refusal).toContain(refusal);
+  expectBothWaysForward(error.details.remedy, scenario.baseSha);
+  expect(error.message).toContain(refusal);
+  expect(error.message).toContain(error.details.remedy as string);
+  expect(error.details.boundary).toBe(STALE_BOUNDARY);
+  expect(error.details.result_checkpoint).toMatchObject({
+    head_sha: scenario.baseSha,
+    branch: "main",
+    dirty: true,
+  });
+  expect(error.details.observed_checkpoint).toMatchObject({
+    worktree_id: scenario.reported.result_checkpoint!.worktree_id,
+  });
+  expect(store.getTask(scenario.implementer.workspace.id, scenario.reported.id)).toMatchObject({
+    status: "completed",
+    review_status: "pending",
+    accepted_by_session_id: null,
+  });
+  expect(eventOf(scenario, "task.accepted")).toBeUndefined();
+  return error;
+}
+
+async function callTool(server: any, name: string, args: Record<string, unknown> = {}) {
+  const registration = server._registeredTools[name];
+  if (!registration) throw new Error(`tool not registered: ${name}`);
+  return await (registration.handler ?? registration.callback)(args, {});
+}
+
+async function boundMember(actor: string) {
+  const memberStore = new CollabStore(databasePath, { now: () => new Date(currentTime) });
+  memberStores.push(memberStore);
+  const server = buildCollabMcpServer(memberStore);
+  const started = await callTool(server, "collab_session_start", { root_path: root, actor });
+  if (started.isError) throw new Error(JSON.stringify(started.structuredContent));
+  return {
+    server,
+    session_id: started.structuredContent.session.id as string,
+    workspace_id: started.structuredContent.workspace.id as string,
+  };
+}
+
+describe("host-committed completions", () => {
+  test("accepts one host commit of exactly the attached scoped file, as the replay needed", () => {
+    const scenario = reportedArtifactTask();
+    expect(scenario.reported.result_checkpoint).toMatchObject({
+      head_sha: scenario.baseSha,
+      branch: "main",
+      dirty: true,
+      source: "server_observed",
+    });
+    const dependent = store.createTaskForSession({
+      ...scenario.implementer.credential,
+      idempotency_key: "voice-c-create",
+      id: "voice-c",
+      title: "Voice C — after B is accepted",
+      work_mode: "edit",
+      path_scopes: ["voice-c.md"],
+      dependencies: ["voice-b"],
+    });
+    const early = errorFrom(() =>
+      store.claimTaskForSession({
+        ...scenario.reviewer.credential,
+        idempotency_key: "voice-c-early-claim",
+        task_id: dependent.id,
+        expected_version: dependent.version,
+      }),
+    );
+    expect(early.code).toBe("dependencies_incomplete");
+
+    const commitSha = hostCommit(["voice-b.md"]);
+    expect(runGit(root, "rev-parse", "HEAD^")).toBe(scenario.baseSha);
+    expect(runGit(root, "status", "--porcelain")).toBe("");
+
+    const accepted = accept(scenario, "voice-b-accept");
+    expect(accepted.task).toMatchObject({
+      status: "completed",
+      review_status: "accepted",
+      accepted_by_session_id: scenario.reviewer.session.id,
+    });
+    expect(eventOf(scenario, "task.accepted")?.payload).toMatchObject({
+      review_report_id: accepted.report.id,
+      outcome: "accepted",
+      checkpoint_basis: "host_commit_successor",
+      host_commit_sha: commitSha,
+      host_commit_artifact_ids: scenario.artifactIds,
+      checkpoint_boundary: expect.stringContaining("not_a_commit_signature"),
+    });
+
+    // Acceptance still gates dependencies, and an exact retry replays the receipt
+    // without re-reading Git, even after HEAD moves again.
+    const claimed = store.claimTaskForSession({
+      ...scenario.reviewer.credential,
+      idempotency_key: "voice-c-claim",
+      task_id: dependent.id,
+      expected_version: dependent.version,
+    });
+    expect(claimed.status).toBe("claimed");
+    runGit(root, "commit", "--allow-empty", "-m", "later work");
+    expect(accept(scenario, "voice-b-accept")).toEqual(accepted);
+    expect(store.verifyJournal(scenario.implementer.workspace.id)).toBe(true);
+  });
+
+  test("reads relative, absolute and file:// artifact uris, and the newest attachment per path wins", () => {
+    const realRoot = realpathSync(root);
+    const scenario = reportedArtifactTask({
+      scopes: ["notes"],
+      files: { "notes/one.md": VOICE_A, "notes/two words.md": VOICE_B },
+      attachments: [
+        { uri: "./notes/one.md", sha256: sha256(VOICE_A) },
+        { uri: join(realRoot, "notes", "two words.md"), sha256: sha256("an earlier draft\n") },
+        { uri: pathToFileURL(join(realRoot, "notes", "two words.md")).href, sha256: sha256(VOICE_B) },
+      ],
+    });
+    const commitSha = hostCommit(["notes/one.md", "notes/two words.md"], "voice-b: two notes");
+
+    accept(scenario, "notes-accept");
+    expect(eventOf(scenario, "task.accepted")?.payload).toMatchObject({
+      checkpoint_basis: "host_commit_successor",
+      host_commit_sha: commitSha,
+      host_commit_artifact_ids: [scenario.artifactIds[0], scenario.artifactIds[2]],
+    });
+  });
+
+  test("refuses a host commit that also changes a path outside the task's scopes", () => {
+    const scenario = reportedArtifactTask();
+    writeFileSync(join(root, "README.md"), "# replay fixture, edited by the host\n");
+    const commitSha = hostCommit(["voice-b.md", "README.md"]);
+    expectRefused(
+      scenario,
+      "accept-out-of-scope",
+      `Commit ${commitSha} changes README.md, outside the task's path_scopes`,
+    );
+  });
+
+  test("refuses a host commit whose bytes differ from the attached artifact", () => {
+    const scenario = reportedArtifactTask();
+    writeFileSync(join(root, "voice-b.md"), "rewritten by the host after the artifact was attached\n");
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-bytes-differ",
+      `The committed bytes of voice-b.md differ from its newest file artifact ${scenario.artifactIds[0]}`,
+    );
+  });
+
+  test("refuses bytes that only an older attachment of the path vouches for", () => {
+    const scenario = reportedArtifactTask({
+      files: { "voice-b.md": VOICE_B_REVISED },
+      attachments: [
+        { uri: "voice-b.md", sha256: sha256(VOICE_B) },
+        { uri: "voice-b.md", sha256: sha256(VOICE_B_REVISED) },
+      ],
+    });
+    writeFileSync(join(root, "voice-b.md"), VOICE_B);
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-stale-attachment",
+      `The committed bytes of voice-b.md differ from its newest file artifact ${scenario.artifactIds[1]}`,
+    );
+  });
+
+  test("refuses two commits on top of the result checkpoint", () => {
+    const scenario = reportedArtifactTask();
+    hostCommit(["voice-b.md"]);
+    runGit(root, "commit", "--allow-empty", "-m", "a second commit");
+    const head = runGit(root, "rev-parse", "HEAD");
+    expectRefused(
+      scenario,
+      "accept-two-commits",
+      `HEAD ${head} is more than one commit ahead of the result checkpoint HEAD ${scenario.baseSha}`,
+    );
+  });
+
+  test("refuses a HEAD that does not descend from the result checkpoint, even when its tree diff matches", () => {
+    const scenario = reportedArtifactTask();
+    // Amending voice-a's commit to include voice-b.md gives a tree that differs
+    // from the result HEAD's tree by exactly the attached file, but the
+    // reported HEAD is no longer in its history.
+    runGit(root, "add", "voice-b.md");
+    runGit(root, "commit", "--amend", "--no-edit");
+    const head = runGit(root, "rev-parse", "HEAD");
+    expect(runGit(root, "diff", "--name-only", scenario.baseSha, head)).toBe("voice-b.md");
+    expectRefused(
+      scenario,
+      "accept-amended",
+      `HEAD ${head} does not descend from the result checkpoint HEAD ${scenario.baseSha}`,
+    );
+  });
+
+  test("refuses a host commit on another branch", () => {
+    const scenario = reportedArtifactTask();
+    runGit(root, "checkout", "-b", "side");
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-other-branch",
+      `HEAD is on branch "side", not the result checkpoint's branch "main"`,
+    );
+  });
+
+  test("refuses a host commit when the observed worktree is not clean", () => {
+    const scenario = reportedArtifactTask();
+    hostCommit(["voice-b.md"]);
+    writeFileSync(join(root, "scratch.txt"), "left behind after the commit\n");
+    expectRefused(scenario, "accept-dirty", "The observed worktree is not clean");
+  });
+
+  test("refuses a host commit that no file artifact of this task vouches for", () => {
+    const scenario = reportedArtifactTask({
+      attachments: [
+        { uri: "voice-b.md", sha256: sha256(VOICE_B), kind: "data" },
+        { uri: "drafts/voice-b.md", sha256: sha256(VOICE_B) },
+      ],
+    });
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-no-artifact",
+      "No file artifact attached to this task names voice-b.md",
+    );
+  });
+
+  test("refuses a host commit whose newest artifact for the path has no sha256", () => {
+    const scenario = reportedArtifactTask({ attachments: [{ uri: "voice-b.md", sha256: null }] });
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-no-digest",
+      `The newest file artifact for voice-b.md (${scenario.artifactIds[0]}) has no sha256`,
+    );
+  });
+
+  test("refuses an empty commit after the reported file vanished", () => {
+    const scenario = reportedArtifactTask();
+    rmSync(join(root, "voice-b.md"));
+    runGit(root, "commit", "--allow-empty", "-m", "the reported file vanished");
+    const head = runGit(root, "rev-parse", "HEAD");
+    expectRefused(scenario, "accept-empty", `Commit ${head} changes no path`);
+  });
+
+  test("refuses a host commit that deletes a scoped file", () => {
+    const scenario = reportedArtifactTask({ scopes: ["voice-a.md", "voice-b.md"] });
+    rmSync(join(root, "voice-a.md"));
+    const commitSha = hostCommit(["voice-a.md", "voice-b.md"]);
+    expectRefused(
+      scenario,
+      "accept-deletion",
+      `Commit ${commitSha} deletes voice-a.md or commits it as something other than a regular file`,
+    );
+  });
+
+  test("keeps the strict checkpoint match when HEAD did not move", () => {
+    const exact = reportedArtifactTask();
+    const accepted = accept(exact, "accept-exact");
+    expect(accepted.task.review_status).toBe("accepted");
+    const payload = eventOf(exact, "task.accepted")!.payload;
+    for (const key of ["checkpoint_basis", "host_commit_sha", "host_commit_artifact_ids", "checkpoint_boundary"]) {
+      expect(payload).not.toHaveProperty(key);
+    }
+  });
+
+  test("refuses drift without a HEAD move and still names both ways forward", () => {
+    const scenario = reportedArtifactTask();
+    writeFileSync(join(root, "voice-b.md"), VOICE_B_REVISED);
+    runGit(root, "add", "voice-b.md");
+    expect(runGit(root, "rev-parse", "HEAD")).toBe(scenario.baseSha);
+    expectRefused(
+      scenario,
+      "accept-unmoved-drift",
+      "HEAD has not moved since the result checkpoint, so only an exact checkpoint match is accepted",
+    );
+  });
+
+  test("request_changes is unaffected by host-commit drift, and re-completion captures a fresh checkpoint", () => {
+    const scenario = reportedArtifactTask();
+    writeFileSync(join(root, "README.md"), "# replay fixture, edited by the host\n");
+    hostCommit(["voice-b.md", "README.md"]);
+    expect(errorFrom(() => accept(scenario, "accept-before-changes")).code).toBe("git_checkpoint_stale");
+
+    const changes = store.reviewTaskForSession({
+      ...scenario.reviewer.credential,
+      idempotency_key: "voice-b-request-changes",
+      task_id: scenario.reported.id,
+      expected_version: scenario.reported.version,
+      outcome: "request_changes",
+      summary: "README.md was committed outside the task's scope; re-complete from this HEAD.",
+    });
+    expect(changes.task).toMatchObject({ status: "open", review_status: "changes_requested" });
+    const changesPayload = eventOf(scenario, "task.changes_requested")!.payload;
+    expect(changesPayload).toMatchObject({ outcome: "changes_requested" });
+    expect(changesPayload).not.toHaveProperty("checkpoint_basis");
+    expect(changesPayload).not.toHaveProperty("host_commit_sha");
+
+    const reclaimed = store.claimTaskForSession({
+      ...scenario.implementer.credential,
+      idempotency_key: "voice-b-reclaim",
+      task_id: scenario.reported.id,
+      expected_version: changes.task.version,
+    });
+    const recompleted = store.completeTaskForSession({
+      ...scenario.implementer.credential,
+      idempotency_key: "voice-b-recomplete",
+      task_id: reclaimed.id,
+      lease_id: reclaimed.lease_id!,
+      expected_version: reclaimed.version,
+      summary: "Re-completed on the integrated HEAD.",
+    });
+    expect(recompleted.result_checkpoint).toMatchObject({
+      head_sha: runGit(root, "rev-parse", "HEAD"),
+      dirty: false,
+    });
+    const accepted = store.reviewTaskForSession({
+      ...scenario.reviewer.credential,
+      idempotency_key: "voice-b-accept-fresh",
+      task_id: recompleted.id,
+      expected_version: recompleted.version,
+      outcome: "accept",
+      summary: "The fresh checkpoint matches the worktree.",
+    });
+    expect(accepted.task.review_status).toBe("accepted");
+    const acceptedPayload = eventOf(scenario, "task.accepted")!.payload;
+    expect(acceptedPayload).not.toHaveProperty("checkpoint_basis");
+  });
+
+  test("returns the refusal and both ways forward as top-level MCP fields", async () => {
+    const scenario = reportedArtifactTask();
+    writeFileSync(join(root, "README.md"), "# replay fixture, edited by the host\n");
+    const commitSha = hostCommit(["voice-b.md", "README.md"]);
+    const reviewer = await boundMember("Claude reviewer over MCP");
+    const refused = await callTool(reviewer.server, "collab_task_review", {
+      workspace_id: reviewer.workspace_id,
+      idempotency_key: "mcp-accept-out-of-scope",
+      task_id: scenario.reported.id,
+      expected_version: scenario.reported.version,
+      outcome: "accept",
+      summary: "Voice B reads well.",
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toMatchObject({
+      error: "git_checkpoint_stale",
+      host_commit_refusal: `Commit ${commitSha} changes README.md, outside the task's path_scopes`,
+      boundary: STALE_BOUNDARY,
+    });
+    expectBothWaysForward(refused.structuredContent.remedy, scenario.baseSha);
+    expect(refused.structuredContent.message).toContain(refused.structuredContent.remedy);
+  });
+});
+```
+
+Bun (1.3.5 and 1.3.13 alike) writes asymmetric matchers back into the received object when `toMatchObject` matches them, so a field matched with `expect.any(String)` afterwards reads back as the matcher. This was checked with a two-line test. `expectRefused` therefore reads `remedy` and `host_commit_refusal` directly; keep it that way when editing.
+
+(b) In `packages/collab/tests/package.test.ts`, at the end of `HOUSEHOLD_TERMS`.
+
+Replace:
+
+```ts
+  "delivers by artifact",
+  "agenttool-collab-host",
+];
+```
+
+With:
+
+```ts
+  "delivers by artifact",
+  "agenttool-collab-host",
+  "host_commit_successor",
+  "git_checkpoint_stale",
+];
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+cd /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing/packages/collab && bun test tests/host-commit-review.test.ts; bun test tests/package.test.ts
+```
+
+Expected for `tests/host-commit-review.test.ts`: `2 pass`, `15 fail`.
+- `accepts one host commit of exactly the attached scoped file, as the replay needed` and `reads relative, absolute and file:// artifact uris, and the newest attachment per path wins` throw `CollabError: The completion worktree changed after its result checkpoint was captured` from `accept()`.
+- The 12 refusal tests fail at `expect(received).toBeString()`, because the refusal has no `host_commit_refusal` yet: `refuses a host commit that also changes a path outside the task's scopes`, `refuses a host commit whose bytes differ from the attached artifact`, `refuses bytes that only an older attachment of the path vouches for`, `refuses two commits on top of the result checkpoint`, `refuses a HEAD that does not descend from the result checkpoint, even when its tree diff matches`, `refuses a host commit on another branch`, `refuses a host commit when the observed worktree is not clean`, `refuses a host commit that no file artifact of this task vouches for`, `refuses a host commit whose newest artifact for the path has no sha256`, `refuses an empty commit after the reported file vanished`, `refuses a host commit that deletes a scoped file` and `refuses drift without a HEAD move and still names both ways forward`.
+- `returns the refusal and both ways forward as top-level MCP fields` fails with a `toMatchObject` diff that lacks `host_commit_refusal`.
+- Two regression guards already pass and must keep passing: `keeps the strict checkpoint match when HEAD did not move` and `request_changes is unaffected by host-commit drift, and re-completion captures a fresh checkpoint`.
+
+Expected for `tests/package.test.ts`: `6 pass`, `1 fail`. The failure is `teaches the ordinary loop, relation targeting, delegation, and clean exit`, with `Expected to contain: "host_commit_successor"`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+**(a) `src/repository.ts`.** Each `replace` text below occurs exactly once in the file.
+
+1. Bounds and parsers.
+
+Replace:
+
+```ts
+const MAX_UNTRACKED_HASH_MS = 2_000;
+```
+
+With:
+
+```ts
+const MAX_UNTRACKED_HASH_MS = 2_000;
+const MAX_SUCCESSOR_PATHS = 128;
+const MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+const MAX_SUCCESSOR_INSPECT_MS = 5_000;
+const GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+const RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
+```
+
+2. The inspection result types.
+
+Replace:
+
+```ts
+export function inspectRepository(
+```
+
+With:
+
+```ts
+export interface SuccessorCommitChange {
+  /** Repository-relative path exactly as Git records it. */
+  path: string;
+  /** SHA-256 of the committed blob bytes; null for a deletion or a non-regular entry. */
+  blob_sha256: string | null;
+}
+
+export type SuccessorCommitInspection =
+  | { ok: true; commit_sha: string; parent_sha: string; changes: SuccessorCommitChange[] }
+  | { ok: false; commit_sha: string; reason: string };
+
+export function inspectRepository(
+```
+
+3. The inspection itself, immediately before `worktreeId()`.
+
+Replace:
+
+```ts
+function worktreeId(rootPath: string, fingerprint: string): string {
+```
+
+With:
+
+```ts
+/**
+ * Server-side Git facts about a commit that may directly follow a result
+ * checkpoint's HEAD: its parents, the paths it changes against that parent, and
+ * the SHA-256 of each committed regular-file blob. Read-only plumbing, bounded
+ * in paths, bytes and time. Paths go back to the caller for an in-memory
+ * comparison; nothing here is journaled.
+ */
+export function inspectSuccessorCommit(
+  rootPath: string,
+  commitSha: string,
+  parentSha: string,
+): SuccessorCommitInspection {
+  const refuse = (reason: string): SuccessorCommitInspection => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason,
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse("The checkpoint HEADs are not Git object IDs");
+  }
+  const listed = gitOutput(rootPath, ["rev-list", "--parents", "--max-count=1", commitSha, "--"]);
+  const ids = listed ? listed.split(" ") : [];
+  if (ids[0] !== commitSha) return refuse(`Git could not read commit ${commitSha}`);
+  const parents = ids.slice(1);
+  if (parents.length > 1) {
+    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = gitExitCode(rootPath, ["merge-base", "--is-ancestor", parentSha, commitSha]) === 0;
+    return refuse(descends
+      ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}`
+      : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = gitBytes(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    parentSha,
+    commitSha,
+    "--",
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes: SuccessorCommitChange[] = [];
+  for (let index = 0; index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index]!.toString("utf8"));
+    const pathBytes = fields[index + 1]!;
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, , mode, , blob, status] = header;
+    if (status === "D" || (mode !== "100644" && mode !== "100755")) {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = gitBytes(rootPath, ["cat-file", "blob", blob!], budget.bytes);
+    if (!content.ok) {
+      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+
+function worktreeId(rootPath: string, fingerprint: string): string {
+```
+
+4. An exit-code helper, and a per-call output cap on `gitBytes()` (every existing caller keeps the 1 MiB default).
+
+Replace:
+
+```ts
+function gitBytes(rootPath: string, args: string[]): { ok: boolean; stdout: Buffer } {
+  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer: MAX_GIT_OUTPUT,
+```
+
+With:
+
+```ts
+function gitExitCode(rootPath: string, args: string[]): number | null {
+  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  return result.error ? null : result.status;
+}
+
+function gitBytes(
+  rootPath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OUTPUT,
+): { ok: boolean; stdout: Buffer } {
+  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+```
+
+**(b) `src/store.ts`.** Each `replace` text below occurs exactly once in the file. (`if (input.outcome === "accept") {` alone occurs twice; the text in step 3 includes the next line, which makes it unique.)
+
+1. The import.
+
+Replace:
+
+```ts
+import { inspectRepository, type RepositoryIdentity } from "./repository.js";
+```
+
+With:
+
+```ts
+import {
+  inspectRepository,
+  inspectSuccessorCommit,
+  type RepositoryIdentity,
+  type SuccessorCommitInspection,
+} from "./repository.js";
+```
+
+2. The prepared review state and the basis type.
+
+Replace:
+
+```ts
+interface PreparedReviewCheckpoint {
+  workspace_id: string;
+  task_id: string;
+  result_checkpoint: RepoCheckpoint;
+  observed_worktree: PreparedWorktreeCheckpoint;
+}
+```
+
+With:
+
+```ts
+interface PreparedReviewCheckpoint {
+  workspace_id: string;
+  task_id: string;
+  result_checkpoint: RepoCheckpoint;
+  observed_worktree: PreparedWorktreeCheckpoint;
+  /** Inspected only when HEAD moved since the result checkpoint. */
+  host_commit: SuccessorCommitInspection | null;
+}
+
+/** A server-verified host commit that may stand in for the result checkpoint. */
+interface HostCommitBasis {
+  commit_sha: string;
+  artifact_ids: string[];
+}
+```
+
+3. In `reviewTaskForSession()`, declare the basis before the accept block.
+
+Replace:
+
+```ts
+      if (input.outcome === "accept") {
+        const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+```
+
+With:
+
+```ts
+      let hostCommit: HostCommitBasis | null = null;
+      if (input.outcome === "accept") {
+        const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
+```
+
+4. In the same callback, the strict mismatch now asks for the host-commit basis before refusing.
+
+Replace:
+
+```ts
+          if (!checkpointStateMatches(resultCheckpoint, observed)) {
+            throw new CollabError(
+              "git_checkpoint_stale",
+              "The completion worktree changed after its result checkpoint was captured",
+              {
+                result_checkpoint: resultCheckpoint,
+                observed_checkpoint: observed,
+                boundary:
+                  "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+              },
+            );
+          }
+```
+
+With:
+
+```ts
+          if (!checkpointStateMatches(resultCheckpoint, observed)) {
+            const basis = this.hostCommitSuccessorBasis(row, preparedCheckpoint);
+            if ("refusal" in basis) {
+              throw gitCheckpointStaleError(row.id, resultCheckpoint, observed, basis.refusal);
+            }
+            hostCommit = basis;
+          }
+```
+
+5. In the same callback, the optional `task.accepted` payload fields. This text occurs once: the `task.changes_requested` event shares this payload object, but `hostCommit` is only ever set on an accept.
+
+Replace:
+
+```ts
+          version,
+          authority_boundary:
+            "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+        },
+```
+
+With:
+
+```ts
+          version,
+          authority_boundary:
+            "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+          // Optional fields, present only on a host-commit acceptance.
+          ...(hostCommit
+            ? {
+                checkpoint_basis: "host_commit_successor",
+                host_commit_sha: hostCommit.commit_sha,
+                host_commit_artifact_ids: hostCommit.artifact_ids,
+                checkpoint_boundary:
+                  "server_observed_successor_commit_is_local_evidence_not_a_commit_signature_attribution_or_an_atomic_git_sqlite_lock",
+              }
+            : {}),
+        },
+```
+
+6. The end of `captureReviewCheckpoint()`, which now also inspects a moved HEAD, followed by the new basis method.
+
+Replace:
+
+```ts
+    return {
+      workspace_id: session.workspace_id,
+      task_id: taskId,
+      result_checkpoint: resultCheckpoint,
+      observed_worktree: this.captureRegisteredWorktree(session, worktree),
+    };
+  }
+```
+
+With:
+
+```ts
+    const observedWorktree = this.captureRegisteredWorktree(session, worktree);
+    const resultHead = resultCheckpoint.head_sha;
+    const observedHead = observedWorktree.checkpoint.head_sha;
+    return {
+      workspace_id: session.workspace_id,
+      task_id: taskId,
+      result_checkpoint: resultCheckpoint,
+      observed_worktree: observedWorktree,
+      // A moved HEAD may be a host's integration commit. Git is read here,
+      // outside the write transaction; the accept path judges these facts.
+      host_commit: resultHead && observedHead && observedHead !== resultHead
+        ? inspectSuccessorCommit(worktree.root_path, observedHead, resultHead)
+        : null,
+    };
+  }
+
+  /**
+   * Spec Part 1 item 10: drift is accepted only when the server itself sees one
+   * commit on the result checkpoint's HEAD and branch, a clean worktree, and
+   * nothing changed but the task's scoped files, each byte-equal to the newest
+   * file artifact this task attached for it.
+   */
+  private hostCommitSuccessorBasis(
+    row: TaskRow,
+    prepared: PreparedReviewCheckpoint,
+  ): HostCommitBasis | { refusal: string } {
+    const result = prepared.result_checkpoint;
+    const observed = prepared.observed_worktree.checkpoint;
+    const inspected = prepared.host_commit;
+    if (observed.head_sha === result.head_sha) {
+      return {
+        refusal:
+          "HEAD has not moved since the result checkpoint, so only an exact checkpoint match is accepted",
+      };
+    }
+    if (observed.worktree_id !== result.worktree_id) {
+      return { refusal: "The observed worktree is not the result checkpoint's worktree" };
+    }
+    if (!result.branch) {
+      return {
+        refusal:
+          "The result checkpoint was captured on a detached HEAD, so no branch can carry a host commit",
+      };
+    }
+    if (observed.branch !== result.branch) {
+      const where = observed.branch ? `branch "${observed.branch}"` : "a detached HEAD";
+      return {
+        refusal: `HEAD is on ${where}, not the result checkpoint's branch "${result.branch}"`,
+      };
+    }
+    if (observed.dirty !== false) {
+      return { refusal: "The observed worktree is not clean" };
+    }
+    if (!inspected || inspected.commit_sha !== observed.head_sha) {
+      return { refusal: "The server did not inspect the observed HEAD commit" };
+    }
+    if (!inspected.ok) return { refusal: inspected.reason };
+    const commit = inspected.commit_sha;
+    if (inspected.parent_sha !== result.head_sha) {
+      return { refusal: `Commit ${commit} does not follow the result checkpoint HEAD` };
+    }
+    if (inspected.changes.length === 0) {
+      return { refusal: `Commit ${commit} changes no path` };
+    }
+    const scopes = parseStringArray(row.path_scopes_json);
+    const artifacts = this.db.query(`
+      SELECT id, uri, sha256 FROM artifacts
+      WHERE workspace_id = ? AND task_id = ? AND kind = 'file'
+      ORDER BY attached_at, rowid
+    `).all(row.workspace_id, row.id) as Array<{ id: string; uri: string; sha256: string | null }>;
+    // Later rows replace earlier ones: the newest attachment of a path wins.
+    const newest = new Map<string, { id: string; sha256: string | null }>();
+    for (const artifact of artifacts) {
+      const path = artifactRepositoryPath(artifact.uri, prepared.observed_worktree.root_path);
+      if (path !== null) newest.set(path, artifact);
+    }
+    const artifactIds: string[] = [];
+    for (const change of inspected.changes) {
+      if (!pathWithinScopes(change.path, scopes)) {
+        return { refusal: `Commit ${commit} changes ${change.path}, outside the task's path_scopes` };
+      }
+      if (change.blob_sha256 === null) {
+        return {
+          refusal:
+            `Commit ${commit} deletes ${change.path} or commits it as something other than a regular file`,
+        };
+      }
+      const artifact = newest.get(change.path);
+      if (!artifact) {
+        return { refusal: `No file artifact attached to this task names ${change.path}` };
+      }
+      if (!artifact.sha256) {
+        return {
+          refusal: `The newest file artifact for ${change.path} (${artifact.id}) has no sha256`,
+        };
+      }
+      if (artifact.sha256 !== change.blob_sha256) {
+        return {
+          refusal:
+            `The committed bytes of ${change.path} differ from its newest file artifact ${artifact.id}`,
+        };
+      }
+      artifactIds.push(artifact.id);
+    }
+    return { commit_sha: commit, artifact_ids: artifactIds };
+  }
+```
+
+7. Module helpers, immediately before `hydrateLegacyMutationResponse()`. `isAbsolute` and `posix` are already imported from `node:path`.
+
+Replace:
+
+```ts
+function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
+```
+
+With:
+
+```ts
+/**
+ * The repository-relative path a file artifact's uri names inside the worktree,
+ * read lexically with no filesystem access: a relative path, an absolute path
+ * under the worktree's real root, or a file:// URL of one. Anything else is null.
+ */
+function artifactRepositoryPath(uri: string, rootPath: string): string | null {
+  let value = uri;
+  if (value.startsWith("file:")) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "file:" || (url.hostname !== "" && url.hostname !== "localhost")) {
+        return null;
+      }
+      value = decodeURIComponent(url.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || value.includes("\0") || value.includes("\\")) return null;
+  let relative: string;
+  if (isAbsolute(value)) {
+    const absolute = posix.normalize(value);
+    if (!absolute.startsWith(`${rootPath}/`)) return null;
+    relative = absolute.slice(rootPath.length + 1);
+  } else {
+    relative = posix.normalize(value);
+  }
+  if (
+    !relative
+    || relative === "."
+    || relative === ".."
+    || relative.startsWith("../")
+    || relative.endsWith("/")
+    || relative === ".git"
+    || relative.startsWith(".git/")
+  ) return null;
+  return relative;
+}
+
+/** Exact, case-sensitive containment: the path is a scope or lies under one. */
+function pathWithinScopes(path: string, scopes: string[]): boolean {
+  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+}
+
+function gitCheckpointStaleError(
+  taskId: string,
+  result: RepoCheckpoint,
+  observed: RepoCheckpoint,
+  refusal: string,
+): CollabError {
+  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
+  const remedy =
+    `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent `
+    + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's `
+    + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri, "
+    + "with the worktree left clean; then review again. "
+    + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is `
+    + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review.";
+  return new CollabError(
+    "git_checkpoint_stale",
+    `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`,
+    {
+      result_checkpoint: result,
+      observed_checkpoint: observed,
+      boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+      host_commit_refusal: refusal,
+      remedy,
+    },
+  );
+}
+
+function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
+```
+
+- [ ] **Step 4: Teach the basis in the docs**
+
+(a) `packages/collab/README.md`, in `### A host that cannot commit`.
+
+Replace:
+
+```md
+working-tree file still matches its artifact digest, and reports a mismatch
+instead of committing.
+```
+
+With:
+
+```md
+working-tree file still matches its artifact digest, and reports a mismatch
+instead of committing.
+
+A distinct reviewer then accepts as usual. If `HEAD` has moved since the
+result checkpoint, the server inspects Git itself. It accepts only when `HEAD`
+is exactly one commit on the result checkpoint's branch whose only parent is
+the result checkpoint's `HEAD`, the worktree is clean, and every path that
+commit changes lies inside the task's `path_scopes` and is byte-equal to the
+newest `file` artifact the task attached for that `uri`. The `task.accepted`
+event then records `checkpoint_basis: "host_commit_successor"`,
+`host_commit_sha`, and `host_commit_artifact_ids`. Any other drift is refused
+with `git_checkpoint_stale`: `host_commit_refusal` says why, and `remedy` names
+both ways forward, such a host commit or `request_changes` followed by a fresh
+completion.
+```
+
+(b) `packages/collab/skills/coordinate-agent-work/SKILL.md`, at the end of `## A host that cannot commit`.
+
+Replace:
+
+```md
+Do not work around the sandbox to commit.
+```
+
+With:
+
+```md
+Do not work around the sandbox to commit.
+
+After the integration commit a distinct session reviews as usual. The server
+inspects Git itself and accepts when `HEAD` is exactly one commit on the
+result checkpoint's `HEAD` and branch, the worktree is clean, and that commit
+changes only scoped files byte-equal to their newest `file` artifacts;
+`task.accepted` then records `checkpoint_basis: "host_commit_successor"`. Any
+other drift is refused with `git_checkpoint_stale`. Read its
+`host_commit_refusal` and `remedy`: fix the commit, or request changes so the
+task is re-completed with a fresh checkpoint. Never rewind Git to recreate the
+old checkpoint.
+```
+
+(c) `packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md`.
+
+Replace:
+
+```md
+integrator that checks every digest first.
+```
+
+With:
+
+```md
+integrator that checks every digest first. A distinct reviewer then accepts
+the integration commit when the server verifies it as
+`host_commit_successor`: exactly one commit on the result checkpoint's `HEAD`
+and branch, a clean worktree, and only scoped files byte-equal to their newest
+`file` artifacts. Other drift is refused with `git_checkpoint_stale` and a
+`remedy` naming both ways forward.
+```
+
+- [ ] **Step 5: Run tests to verify they pass (Ruling A3)**
+
+```bash
+cd /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing/packages/collab && bun test tests/host-commit-review.test.ts tests/package.test.ts && bun test && bun run typecheck
+```
+
+Expected:
+- The two files: `24 pass`, `0 fail` (17 in `host-commit-review.test.ts`, 7 in `package.test.ts`).
+- Full suite: `0 fail`. It gains 17 tests, all in the new file (167 → 184 pass across 14 files when this task starts from 4aba4865).
+- `tsc --noEmit`: clean.
+
+- [ ] **Step 6: Rebuild both bundles with the pinned Bun and run the pinned CI**
+
+Local Bun is 1.3.13; `check:mcp-bundle` only prints "skipped" there, and a bundle built with it fails CI's byte check.
+
+```bash
+df -h /System/Volumes/Data   # stop if Avail is under 2 GB
+cd /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing/packages/collab
+test "$(jq -r .bundlerBunVersion package.json)" = "1.3.5"
+test "$(npx --yes bun@1.3.5 --version)" = "1.3.5"
+npx --yes bun@1.3.5 run build:mcp
+git status --porcelain -- dist
+LOG="${TMPDIR:-/tmp}/collab-task11-ci.log"
+npx --yes bun@1.3.5 run ci > "$LOG" 2>&1; echo "ci exit=$?"
+tail -6 "$LOG"
+if grep -q "check:mcp-bundle: skipped" "$LOG"; then echo "bundle check was skipped"; else echo "bundle check ran"; fi
+```
+
+Expected:
+- `build:mcp` prints `agenttool-collab-mcp.js  1.36 MB  (entry point)`, then `agenttool-collab-host.js  234.98 KB  (entry point)`.
+- `git status --porcelain -- dist` prints ` M packages/collab/dist/agenttool-collab-host.js` and ` M packages/collab/dist/agenttool-collab-mcp.js` (porcelain paths are relative to the repository root).
+- `ci exit=0`; the tail shows `184 pass` and `0 fail`; then `bundle check ran`.
+
+- [ ] **Step 7: Commit**
+
+Commit `src`, the tests, the docs and both rebuilt bundles together. Only after Step 5 and Step 6 both report 0 fail (Ruling A3).
+
+```bash
+cd /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing
+git add packages/collab/src/repository.ts packages/collab/src/store.ts \
+  packages/collab/tests/host-commit-review.test.ts packages/collab/tests/package.test.ts \
+  packages/collab/README.md packages/collab/skills/coordinate-agent-work/SKILL.md \
+  packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md \
+  packages/collab/dist/agenttool-collab-mcp.js packages/collab/dist/agenttool-collab-host.js
+git status --porcelain
+git commit -F - <<'MSG'
+feat(collab): accept host-committed completions the server can verify
+
+The first headless replay showed sol's integration commit landing after
+the delegated agent completed, so every review of such a completion was
+refused with git_checkpoint_stale. An accept now also passes when the
+server itself sees exactly one commit on the result checkpoint's HEAD and
+branch, a clean worktree, and only the task's scoped paths changed, each
+byte-equal to the newest file artifact the task attached for that uri.
+task.accepted records checkpoint_basis host_commit_successor, the commit
+sha and the vouching artifact ids, all optional payload fields.
+
+Any other drift keeps git_checkpoint_stale, now with host_commit_refusal
+and a remedy naming both ways forward: such a host commit, or
+request_changes and a fresh completion. request_changes and exact-match
+acceptance are unchanged. No schema, tool or version change. Both bundles
+are rebuilt with the pinned Bun 1.3.5.
+
+Co-Authored-By: The Fable of the Eternal Universe <Yu@Ai-love.cc>
+MSG
+```
+
+Expected: before the commit, `git status --porcelain` lists exactly the nine staged paths (`M ` or `A ` in the first column) and nothing else.
+
+- [ ] **Step 8: Freshness check (Ruling A2)**
+
+Re-prove that the committed bundles are what the pinned bundler builds from the committed source.
+
+```bash
+cd /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing/packages/collab
+npx --yes bun@1.3.5 run build:mcp && npx --yes bun@1.3.5 run check:mcp-bundle && git diff --exit-code -- dist && test -z "$(git status --porcelain -- dist)" && echo "dist is fresh"
+git -C /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing status --porcelain
+git -C /Users/yuai/Projects/agenttool/.claude/worktrees/collab-household-smoothing log --oneline -1
+```
+
+Expected:
+- `check:mcp-bundle` exits 0 without "skipped", and the chain prints `dist is fresh`. The paths are relative to `packages/collab`; the repo-root form `packages/collab/dist` would match nothing there and pass silently.
+- The worktree `git status --porcelain` prints nothing.
+- The log shows `feat(collab): accept host-committed completions the server can verify`.
+
+Then tell the controller that both household copies now lag this commit, so Task 10 Steps 0–5 must run again with a fresh stamp before Plan B's replay. Do not push and do not open a PR.
