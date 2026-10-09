@@ -23,6 +23,7 @@ import type { Context, Next } from "hono";
 
 import { PLAY_ROUTE_REGISTRY } from "../lib/jests";
 import { isStrictJsonProfileResponse } from "./strict-json-profile";
+import { parseClonedJson } from "../lib/cloned-json";
 
 const SUPPRESSED_FIELDS = ["_jest", "_quip", "substrate_jest"] as const;
 
@@ -80,7 +81,7 @@ export function play() {
 
     let body: unknown;
     try {
-      body = await c.res.clone().json();
+      body = await parseClonedJson(c.res);
     } catch {
       return; // not JSON, leave alone
     }

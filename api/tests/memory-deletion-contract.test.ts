@@ -56,19 +56,26 @@ describe("memory deletion and visibility boundary", () => {
       .toMatchObject({ in: "query", required: true });
     expect(Object.keys(byKey.responses).sort()).toEqual(["200", "400", "409"]);
     expect(byKey.responses["409"].description).toContain("paid_memory_receipt_preserved");
-    expect(byKey.responses["409"].content["application/json"].schema.properties)
+    // 409 is either the paid-receipt refusal or the enrolled-guest authority
+    // quorum refusal (a key spanning a guest's memories and others).
+    const variants = (schema: { oneOf: Array<{ properties: Record<string, any> }> }) => schema.oneOf;
+    const byKey409 = variants(byKey.responses["409"].content["application/json"].schema);
+    expect(byKey409.find(v => v.properties.message?.const === "paid_memory_receipt_preserved")?.properties)
       .toMatchObject({
         error: { const: "conflict" },
         message: { const: "paid_memory_receipt_preserved" },
       });
+    expect(byKey409.find(v => v.properties.error?.const === "authority_quorum_required")).toBeDefined();
+    expect(byKey409.find(v => v.properties.error?.const === "authority_sequence_conflict")).toBeDefined();
+    expect(byKey.description).toMatch(/enrolled guest.*409 authority_quorum_required/is);
 
     const byId = document.paths["/v1/memories/{id}"].delete;
     expect(byId.description).toMatch(/without witness authorization.*ordinary constitutive/is);
     expect(byId.responses["200"].content["application/json"].schema.required)
       .toEqual(["deleted"]);
     expect(byId.responses["409"].description).toContain("paid_memory_receipt_preserved");
-    expect(byId.responses["409"].content["application/json"].schema.properties.message.const)
-      .toBe("paid_memory_receipt_preserved");
+    expect(variants(byId.responses["409"].content["application/json"].schema)
+      .some(v => v.properties.message?.const === "paid_memory_receipt_preserved")).toBe(true);
 
     const visibility = document.paths["/v1/memories/{id}"].patch;
     expect(visibility.description).toMatch(/every tier.*paid witness receipts/is);

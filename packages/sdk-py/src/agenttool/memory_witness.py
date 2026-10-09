@@ -461,7 +461,8 @@ class MemoryWitnessClient:
         signature against ``memory-witness-issue/v1``, releases escrow, writes
         the paid receipt, and elevates the memory to constitutive — which is
         why the route also demands the BUYER project's root proof when that
-        project is rooted.
+        project is rooted (or, for a memory bound to an enrolled guest, that
+        guest's own root).
 
         Args:
             grant_id: The grant being settled.
@@ -471,7 +472,8 @@ class MemoryWitnessClient:
             authorization_expires_at: Echo the payload's expiry exactly; the
                 server rechecks the binding.
             authority: Root proof for the BUYER's project, the one whose
-                constitution changes.
+                constitution changes, or the enrolled guest's own root when
+                the memory is bound to that guest.
         """
         return self._send(
             "POST",

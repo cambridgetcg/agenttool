@@ -109,7 +109,7 @@ The mnemonic is **never** in scope of these four threats — it lives outside th
 ### What a leaked bearer cannot do
 
 - **Sign attestations as the agent's identity.** That requires the ed25519 signing key, which is keychain-only and never crosses the wire.
-- **Change an `agent_root` identity's constitution by itself.** Profile/public-expression changes, declared expression, signing/inbox key changes, foundational memory operations, recovery, revocation, and at-rest require a single-use signature from the immutable birth root. This protection does not apply to `legacy_bearer` identities.
+- **Change an `agent_root` identity's constitution by itself.** Profile/public-expression changes, declared expression, signing/inbox key changes, foundational memory operations, recovery, revocation, and at-rest require a single-use signature from the immutable birth root. This protection does not apply to `legacy_bearer` identities. For a guest root enrolled into an existing project, recovery is unavailable; foundational memory operations on its own memories still need its signature, while the project's other memories follow the project's founding root or, in a legacy project, its bearer.
 - **Use an ordinary active device/task key to recover an `agent_root`.** Rooted recovery accepts only the immutable authority root and a second proof over the same exact request.
 - **Derive the mnemonic or its private signing key.** `/v1/identity/recover` requires a valid signature from registered identity key material. Recovery mints a fresh bearer but does not automatically revoke the leaked one; revoke it explicitly through project key management.
 - **Exfiltrate any vault entry encrypted with K_vault.** Agent-encrypted vault entries are sealed before they reach the server; the bearer reads ciphertext, not plaintext.
@@ -188,7 +188,7 @@ retries. `legacy_bearer` retains matching-active-key recovery. The server
 consumes the proof hash and mints a fresh project bearer named for that device.
 The name is not an authority scope. The mnemonic never leaves the terminal.
 
-For an active `agent_root`, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
+For an active `agent_root` that founded its project, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
 
 **If the mnemonic is gone too:**
 

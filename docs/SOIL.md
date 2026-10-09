@@ -78,8 +78,10 @@ The eleven with no flow, each a different story:
   `transactions` leg, so the *only* record of a deposit is a table nobody
   queries.
 - **`identity.registration_proofs` · `identity.recovery_proofs`** — proofs
-  written at registration and recovery, never read back. A proof nothing
-  verifies against is not a proof; it is a receipt for a ceremony.
+  written at registration and recovery. `recovery_proofs` is a one-time
+  replay ledger. `registration_proofs` is also read back: it recognises guest
+  roots enrolled before enrollment wrote its `admission` marker
+  (`api/src/services/identity/project-authority.ts`), so it must not be pruned.
 - **`curations.subscriptions`, `episodes.chaos_plays`** — written, unread.
 - **`agent_continuity.mesh_attributions`, `episodes.chaos_cards`** — read,
   never written. The readers can only ever return empty.

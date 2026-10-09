@@ -102,10 +102,12 @@ function assertNotSelfWitness(opts: {
  * Root consent for a mutation whose effect composes across a whole project.
  *
  * The witness and cosign routes reach `authorizeProjectConstitutionMutation`,
- * which — for a project holding exactly one agent-rooted identity — requires
+ * which — for a project holding exactly one constitutional root (enrolled
+ * guest roots do not count) — requires
  * that root's `identity-authority/v1` proof over the exact request bytes.
  * Projects with no rooted identity keep the bearer-only posture and need
- * nothing here.
+ * nothing here. For an agent enrolled into an existing project as a guest,
+ * that guest's own root signs instead.
  */
 export interface SyneidesisAuthorityOptions {
   authority?: AuthorityBinding;

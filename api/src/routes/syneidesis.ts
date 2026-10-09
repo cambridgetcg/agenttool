@@ -163,6 +163,7 @@ app.post("/witness", async (c) => {
   if (platformWitness) {
     const authority = await authorizeProjectConstitutionMutation({
       projectId: project.id,
+      subjectIdentityIds: [agent.id],
       method: c.req.method,
       requestTarget: authorityRequestTarget(c.req.url),
       bodyBytes,
@@ -711,6 +712,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
 
   const authority = await authorizeProjectConstitutionMutation({
     projectId: bootstrappingAgent.projectId,
+    subjectIdentityIds: [bootstrappingAgent.id],
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes,

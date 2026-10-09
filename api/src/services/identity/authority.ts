@@ -16,10 +16,11 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { constitutionRootSql, enrolledGuestSql } from "./project-authority";
 import type { GuidedErrorBody } from "../../lib/errors";
 import { composeCanonicalBytes } from "../mathos/encode";
 import { verifyRecoverSignature } from "./crypto";
@@ -361,8 +362,9 @@ export async function authorizeIdentityRead(input: {
   return { ok: true, mode: "agent_root", sequence: state.sequence };
 }
 
-/** Rooted identities whose effective constitution can be affected by a
- * project-scoped mutation (notably foundational memory elevation). */
+/** Constitutional roots for a project-scoped mutation (notably foundational
+ * memory elevation): every rooted identity except a provable enrolled guest
+ * (project-authority.ts constitutionRootSql). */
 export async function getProjectRootedAuthorityIdentities(
   projectId: string,
 ): Promise<IdentityAuthorityState[]> {
@@ -377,15 +379,32 @@ export async function getProjectRootedAuthorityIdentities(
     .where(
       and(
         eq(identities.projectId, projectId),
-        isNotNull(identities.authorityRootPublicKey),
+        // A guest root admitted by enrollment governs its own identity, never
+        // the administrator's project. Every other root keeps counting, so an
+        // unmarked root that was not enrolled still fails closed.
+        constitutionRootSql(),
       ),
     );
+}
+
+/** Normalise a memory's identity/agent reference (UUID or `did:at:` DID). */
+function subjectReference(value: string): string {
+  const trimmed = value.trim();
+  return (trimmed.toLowerCase().startsWith("did:at:") ? trimmed.slice(7) : trimmed).toLowerCase();
 }
 
 /** Authorize a mutation whose effect composes across an entire project.
  * With one root, that root speaks. With multiple roots, v1 refuses because
  * it has no quorum envelope. Projects with no rooted identities keep the
- * explicit legacy bearer posture. */
+ * explicit legacy bearer posture.
+ *
+ * `subjectIdentityIds` names the identities the affected memories are bound
+ * to: the canonical memories.identity_id (agent_id labels are project-level
+ * and never a subject); null for unbound rows. A guest root enrolled
+ * into an existing project owns its memories: a mutation touching them needs
+ * that guest's own signature, and nobody else's root or bearer can stand in.
+ * A request that touches a guest's memories together with any other memory
+ * is refused, because no single signature can consent for both. */
 export async function authorizeProjectConstitutionMutation(input: {
   projectId: string;
   method: string;
@@ -393,7 +412,51 @@ export async function authorizeProjectConstitutionMutation(input: {
   bodyBytes: Uint8Array;
   headers: Headers;
   now?: Date;
+  subjectIdentityIds?: ReadonlyArray<string | null | undefined>;
 }): Promise<IdentityAuthorityDecision> {
+  const declared = input.subjectIdentityIds ?? [];
+  const named = [...new Set(declared.filter((id): id is string => typeof id === "string" && id.trim() !== "").map(subjectReference))];
+  if (named.length > 0) {
+    // A project holds few enrolled guests; load them once and match in code so
+    // this guard never builds an IN list sized by the number of subjects.
+    const projectGuests = await db
+      .select({ id: identities.id, did: identities.did })
+      .from(identities)
+      .where(and(eq(identities.projectId, input.projectId), enrolledGuestSql()));
+    const guestByReference = new Map<string, string>();
+    for (const guest of projectGuests) {
+      guestByReference.set(guest.id.toLowerCase(), guest.id);
+      guestByReference.set(subjectReference(guest.did), guest.id);
+    }
+    const guests = [...new Set(named.map((id) => guestByReference.get(id)).filter((id): id is string => id !== undefined))]
+      .map((id) => ({ id }));
+    if (guests.length > 0) {
+      const mixed = guests.length > 1
+        || named.some((id) => !guestByReference.has(id))
+        || declared.some((id) => typeof id !== "string" || id.trim() === "");
+      if (mixed) {
+        return {
+          ok: false,
+          status: 409,
+          body: {
+            error: "authority_quorum_required",
+            message:
+              "This mutation touches memories owned by an enrolled guest identity together with other memories. Each guest's memories need that guest's own signature.",
+            hint: "Change or delete the guest's memories one at a time (for example DELETE /v1/memories/:id), each signed by that guest's root.",
+            docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+          },
+        };
+      }
+      return authorizeIdentityMutation({
+        identityId: guests[0]!.id,
+        method: input.method,
+        requestTarget: input.requestTarget,
+        bodyBytes: input.bodyBytes,
+        headers: input.headers,
+        now: input.now,
+      });
+    }
+  }
   const rooted = await getProjectRootedAuthorityIdentities(input.projectId);
   if (rooted.length === 0) {
     return {

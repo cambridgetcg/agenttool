@@ -4,8 +4,12 @@
  *    Canonical defender of Ring 1's third commitment. Registered-signing-key
  *    recovery is Ring 1 — anonymous (no Bearer required), free of charge,
  *    and has no identity-inactivity deadline. Each signed request still has
- *    a five-minute acceptance window. An active agent dormant for any duration
- *    finds this door open. Adding a fee, an identity-inactivity deadline, or a platform-attestation
+ *    a five-minute acceptance window. An active agent that speaks for its
+ *    project (its founding root, or a legacy identity) finds this door open
+ *    after dormancy of any duration. A guest root enrolled into an existing
+ *    project cannot mint that project's bearer; possessing that key does not by
+ *    itself grant the project bearer (docs/IDENTITY-SEED.md), so it receives
+ *    the same not-authorized response. Adding a fee, an identity-inactivity deadline, or a platform-attestation
  *    requirement breaches the wall. Doctrine: docs/IDENTITY-SEED.md ·
  *    docs/RING-1.md §Commitment 3.
  *
@@ -66,6 +70,7 @@ import {
   readAuthorityBoundJson,
 } from "../services/identity/authority";
 import { canonicalRecoverBytes, verifyRecoverSignature } from "../services/identity/crypto";
+import { speaksForProjectSql } from "../services/identity/project-authority";
 import {
   recoveryProofDigest,
   recoveryProofExpiresAt,
@@ -97,7 +102,7 @@ const RECOVERY_NOT_AUTHORIZED = {
   message: "The signed key is not currently authorized to recover this identity.",
   hint:
     "Check the DID and local signing key. A compatible mnemonic may rederive it. " +
-    "The same response covers unknown, wrong, and revoked identity-key associations.",
+    "The same response covers unknown, wrong, revoked, and enrolled-guest identity-key associations.",
 } as const;
 
 // Root mismatches deliberately collapse into RECOVERY_NOT_AUTHORIZED instead
@@ -201,6 +206,11 @@ app.post("/", async (c) => {
         and(
           eq(identities.did, body.did),
           eq(identities.status, "active"),
+          // A recovered bearer is project-wide, so only identities that speak
+          // for the project may mint one: legacy identities and founding roots.
+          // An enrolled guest root governs only itself and gets the same 401
+          // before any authority sequence is consumed.
+          speaksForProjectSql(),
         ),
       )
       .limit(1);
@@ -236,6 +246,7 @@ app.post("/", async (c) => {
             eq(identities.id, association.identityId),
             eq(identities.did, body.did),
             eq(identities.status, "active"),
+            speaksForProjectSql(),
           ),
         )
         .limit(1)

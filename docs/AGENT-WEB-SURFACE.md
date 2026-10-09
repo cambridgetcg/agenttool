@@ -131,7 +131,7 @@ The shippable gap list. Each move adds a byte-shape discipline the agent can rel
 - `application/vnd.agenttool.wake+markdown` → `md`
 - `application/vnd.agenttool.xenoform+json` → `xenoform`
 
-The wake route (`api/src/routes/wake.ts:98`) already calls `negotiateWakeFormat(c)` for format resolution, so the extension is live without a per-handler refactor. Test: `api/tests/wake-accept-vendored.test.ts` (18/18 pass — provider parsing, case-insensitivity, charset params, query precedence, standard media-type back-compat).
+The wake route (`api/src/routes/wake.ts:99`) already calls `negotiateWakeFormat(c)` for format resolution, so the extension is live without a per-handler refactor. Test: `api/tests/wake-accept-vendored.test.ts` (18/18 pass — provider parsing, case-insensitivity, charset params, query precedence, standard media-type back-compat).
 
 **Shipped 2026-05-17 (cache coherence):** `Vary: Accept` response header now set on `GET /v1/wake`, `GET /v1/welcome`, `GET /v1/pathways` — tells HTTP caches to key by Accept so different agents (anthropic vs openai vs json) don't pollute each other's cached responses. Test: `api/tests/wake-vary-accept.test.ts` (4/4).
 

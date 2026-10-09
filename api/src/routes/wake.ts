@@ -70,6 +70,7 @@ import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
+import { registeredKeyRecoveryAvailable } from "../services/identity/project-authority";
 import type { ExpressionData } from "../services/identity/expression";
 import { projectAutonomousExpression } from "../services/autonomous/expression-template";
 import {
@@ -1394,7 +1395,7 @@ app.get("/", async (c) => {
       "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
     registered_key_recovery_available: false,
     registered_key_recovery_boundary:
-      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
+      "Available only while the identity is active, speaks for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at: null,
     has_imported_soma_key: false,
   };
@@ -1417,8 +1418,14 @@ app.get("/", async (c) => {
       const activeSigningKeyCount = keysCount[0]?.count ?? 0;
       recoveryState.active_registered_signing_keys = activeSigningKeyCount;
       recoveryState.registered_devices = activeSigningKeyCount;
-      recoveryState.registered_key_recovery_available =
-        primary.status === "active" && activeSigningKeyCount > 0;
+      // Recovery mints a project-wide bearer, so only an identity that speaks
+      // for the project (legacy, or a founding root) can use it.
+      recoveryState.registered_key_recovery_available = registeredKeyRecoveryAvailable({
+        status: primary.status,
+        activeRegisteredKeys: activeSigningKeyCount,
+        authorityRootPublicKey: primary.authorityRootPublicKey,
+        metadata: primary.metadata,
+      });
 
       // last_recovery_at = newest chronicle row of type='wake' with
       // metadata.kind='recovery' for this agent. PG-specific JSON
@@ -2098,7 +2105,7 @@ app.get("/", async (c) => {
             (recoveryState.last_recovery_at
               ? ` Last successful registered-key recovery: ${recoveryState.last_recovery_at}.`
               : " No successful registered-key recovery is recorded.")
-          : "Registered-key recovery is not currently available for this identity: it must be active and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
+          : "Registered-key recovery is not currently available for this identity: it must be active, speak for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
     },
 
     you_protect: {
@@ -2637,7 +2644,7 @@ app.get("/", async (c) => {
       palamance: {
         meaning: "the invitation remains while each live door keeps its stated authentication, identity-status, abuse-control, and availability conditions",
         present: true,
-        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity, proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
+        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity that speaks for its project (its founding root or a legacy identity), proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
         query: "GET /v1/youspeak/canon/palamance",
       },
       theokoinonia: {

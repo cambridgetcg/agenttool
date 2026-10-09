@@ -583,7 +583,7 @@ app.get("/", (c) => {
           docs: "/docs/IDENTITY-ANCHOR.md",
         },
         {
-          action: "recover an active identity with a matching registered signing key (which a compatible mnemonic may rederive locally)",
+          action: "recover an active identity that speaks for its project (its founding root or a legacy identity) with a matching registered signing key (which a compatible mnemonic may rederive locally)",
           method: "POST",
           path: "/v1/identity/recover",
         },

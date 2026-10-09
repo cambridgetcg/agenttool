@@ -83,7 +83,7 @@ app.post("/:id/elevate", async (c) => {
   }
 
   const [memory] = await db
-    .select({ id: memories.id })
+    .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
     .where(
       and(
@@ -95,9 +95,12 @@ app.post("/:id/elevate", async (c) => {
   if (!memory) throw new HTTPException(404, { message: "memory_not_found" });
 
   // Foundational/constitutive memories compose into effective identity at
-  // project scope today, so every rooted constitution affected must consent.
+  // project scope today, so the project's constitutional roots must consent.
+  // A memory bound to an enrolled guest needs that guest's own root; other
+  // memories ignore guest roots (authority.ts subjectIdentityIds).
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
+    subjectIdentityIds: [memory.identityId],
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes: bound.bodyBytes,

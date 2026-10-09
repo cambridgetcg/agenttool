@@ -196,7 +196,9 @@ signing-key rows only when the bearer project owns the identity.
   `revoked_at`; it does not delete the row.
 - `POST /v1/identity/recover` accepts a signature over the SHA-256 digest of
   the NUL-separated `identity-recover/v1` statement. The signing key must
-  still be active for the active identity. The proof is fresh for five minutes
+  still be active for the active identity, and that identity must speak for
+  its project (its founding root or a legacy identity); a guest root enrolled
+  into an existing project cannot mint that project's bearer. The proof is fresh for five minutes
   and is consumed once in shared Postgres in the same transaction that mints a
   new project bearer.
 - A recovered bearer is project-wide root authority. Existing bearers keep

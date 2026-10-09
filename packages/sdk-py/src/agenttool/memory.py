@@ -232,7 +232,7 @@ class MemoryClient:
         Args:
             memory_id: The memory whose visibility changes.
             visibility: ``"private"`` or ``"public"``.
-            authority: Root proof, required when the project is agent-rooted.
+            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
 
         Returns:
             The memory's id, new visibility, and tier, plus the server's note.
@@ -260,7 +260,7 @@ class MemoryClient:
 
         Args:
             memory_id: The UUID of the memory to release.
-            authority: Root proof, required when the project is agent-rooted.
+            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
         """
         resp = self._send(
             "DELETE",
@@ -286,7 +286,7 @@ class MemoryClient:
 
         Args:
             key: The key shared by the memories to release.
-            authority: Root proof, required when the project is agent-rooted.
+            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
         """
         # Encode the query here rather than through ``params=`` so the proof
         # binds the same path-and-query the transport sends, spelled the same
@@ -327,7 +327,7 @@ class MemoryClient:
             tier: "foundational" or "constitutive".
             expression_patch: Optional patch to the agent's expression.
             attestations: Optional list of counterparty attestations.
-            authority: Root proof, required when the project is agent-rooted.
+            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
 
         Returns:
             Elevation result with tier, patch, attestation count.

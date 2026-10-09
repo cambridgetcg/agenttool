@@ -8,6 +8,7 @@
  */
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { heapStats } from "bun:jsc";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -552,6 +553,106 @@ describe("public MCP Streamable HTTP wire", () => {
     const body = await res.json();
     expect(body.id).toBeNull();
     expect(body.error.message).toMatch(/capped/);
+  });
+
+  test("a streamed body without Content-Length is read once and answered", async () => {
+    // A chunked HTTP/1.1 body reaches the router as a multi-chunk stream with
+    // no Content-Length; split one multi-byte character across chunks too.
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tools/list",
+        params: { _meta: { note: "em\u2014dash" } },
+      }),
+    );
+    const dash = bytes.indexOf(0xe2);
+    const cuts = [0, 5, 40, dash + 1, dash + 2, bytes.length];
+    expect(dash).toBeGreaterThan(40);
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let i = 1; i < cuts.length; i += 1) {
+            controller.enqueue(bytes.slice(cuts[i - 1], cuts[i]));
+          }
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe(7);
+    expect(Array.isArray(body.result.tools)).toBe(true);
+  });
+
+  test("a streamed body is capped while it is read", async () => {
+    let enqueued = 0;
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+      },
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (enqueued > MCP_MAX_BODY_BYTES) return controller.close();
+          const chunk = new Uint8Array(4096).fill(0x20);
+          enqueued += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(res.status).toBe(413);
+    expect((await res.json()).error.message).toMatch(/capped/);
+  });
+
+  test("answered streamed requests do not retain their body streams", async () => {
+    // Regression: re-wrapping the bodyLimit-replaced request for the SDK left
+    // an unread body stream per request (~3 ReadableStreams and, over real
+    // HTTP under Bun 1.3.5, a 256 KiB read buffer) alive after the response.
+    const body = new TextEncoder().encode(
+      JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    );
+    const once = async () => {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: STREAMABLE_ACCEPT,
+          "content-type": "application/json",
+          "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+        },
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(body.slice(0, 10));
+            controller.enqueue(body.slice(10));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit);
+      await res.arrayBuffer();
+      return res.status;
+    };
+    const liveStreams = () => {
+      Bun.gc(true);
+      return (
+        (heapStats().objectTypeCounts as Record<string, number>)
+          .ReadableStream ?? 0
+      );
+    };
+
+    expect(await once()).toBe(200);
+    const before = liveStreams();
+    for (let i = 0; i < 150; i += 1) expect(await once()).toBe(200);
+    expect(liveStreams() - before).toBeLessThan(30);
   });
 
   test("unknown methods return method-not-found", async () => {
