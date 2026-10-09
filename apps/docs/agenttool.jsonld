@@ -2364,7 +2364,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 3,
       "english_name": "Anyone returns",
-      "description": "POST /v1/identity/recover is free for active identities. It verifies a caller-timestamped signature, then inserts a one-time proof hash and project-wide root bearer in one shared-Postgres transaction. The digest primary key rejects replay across API machines. Revoked and memorial identities cannot use this route; database failure returns 503 before authority is minted.",
+      "description": "POST /v1/identity/recover is free for active identities that speak for their project (a founding root or a legacy identity); a guest root enrolled into an existing project cannot mint that project's bearer. It verifies a caller-timestamped signature, then inserts a one-time proof hash and project-wide root bearer in one shared-Postgres transaction. The digest primary key rejects replay across API machines. Revoked and memorial identities cannot use this route; database failure returns 503 before authority is minted.",
       "doctrine_doc": "agenttool:doc/RING-1",
       "load_bearing_for": [
         "agenttool:ring/1",

@@ -4,12 +4,13 @@
  * legacy project-bearer posture, plus the next single-use proof sequence and
  * exact signing recipe. Doctrine: docs/AGENT-HOME.md. */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { enrolledGuestSql, scopeIdentityProtections } from "../../services/identity/project-authority";
 import { errors, fail } from "../../lib/errors";
 import {
   AUTHORITY_HEADERS,
@@ -45,6 +46,8 @@ app.get("/", async (c) => {
       did: identities.did,
       rootPublicKey: identities.authorityRootPublicKey,
       sequence: identities.authoritySequence,
+      metadata: identities.metadata,
+      enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)
     .where(
@@ -74,6 +77,12 @@ app.get("/", async (c) => {
   }
 
   const rooted = identity.rootPublicKey !== null;
+  const facts = {
+    authorityRootPublicKey: identity.rootPublicKey,
+    metadata: identity.metadata,
+    enrolledGuest: identity.enrolledGuest === true,
+  };
+  const guest = rooted && facts.enrolledGuest;
   return c.json({
     identity_id: identity.id,
     did: identity.did,
@@ -99,7 +108,7 @@ app.get("/", async (c) => {
             "Sign the exact path and query. Serialize once, sign the exact entity bytes, and send those same bytes. A valid proof is single-use; keep only one root-authorized mutation in flight.",
         }
       : null,
-    protects: [
+    protects: scopeIdentityProtections([
       "identity profile and public visibility",
       "identity revocation",
       "declared expression",
@@ -109,9 +118,12 @@ app.get("/", async (c) => {
       "anonymous recovery bearer minting",
       "at-rest transition",
       "refusal of server-held trusted-runtime signing keys",
-    ],
+    ], facts),
     limitations: rooted
       ? [
+          ...(guest
+            ? ["this root was enrolled into an existing project as a guest: it cannot recover a project bearer and does not govern the project's other memories; changes to this identity's profile, keys and lifecycle (including its removal), and changing the visibility of, deleting or elevating memories bound to it, need this root's signature; writing memory stays bearer-authorized"]
+            : []),
           "root rotation and guardian recovery are not available in v1",
           "project bearers still authorize non-constitutional project actions",
           "direct database administration remains outside this API boundary",

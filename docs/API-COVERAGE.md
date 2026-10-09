@@ -114,7 +114,7 @@ project ownership, expression, lifecycle status and public keys. This convention
 is not a registered W3C DID method or a conforming DID Resolution service.
 BYO creation receives the public root; legacy creation generates a keypair and
 returns its private key once. See creation (`api/src/services/identity/identities.ts:147`)
-and the identity contract (`api/src/routes/openapi.ts:1358`).
+and the identity contract (`api/src/routes/openapi.ts:1359`).
 
 Three authority levels must remain distinct:
 
@@ -126,18 +126,18 @@ Three authority levels must remain distinct:
   `agent_root` identity using exact method, path/query, body bytes, timestamp
   and sequence. Legacy identities retain their documented bearer boundary.
 
-The root guard (`api/src/services/identity/authority.ts:430`) consumes a sequence
+The root guard (`api/src/services/identity/authority.ts:492`) consumes a sequence
 before the later domain write; a subsequent failure can still consume it.
 Clients must serialize these proofs and read the new sequence after failure.
 Key possession and verified bytes do not independently establish subjective consent.
 Root rotation, guardian recovery and legacy root opt-in are not implemented
-(`api/src/routes/identity/authority.ts:113`). An ordinary imported signing key
+(`api/src/routes/identity/authority.ts:122`). An ordinary imported signing key
 does not replace the immutable root.
 
 `POST /v1/identity/recover` verifies an authorized signing-key proof and replay
 controls; rooted identities also require their immutable root and exact-request
 proof. It then mints another **project-wide bearer**. A device label is not an
-authority scope; old bearers remain until revoked. Recovery (`api/src/routes/identity-recover.ts:23`)
+authority scope; old bearers remain until revoked. Recovery (`api/src/routes/identity-recover.ts:27`)
 does not receive or verify a mnemonic. `/v1/identity/backup` stores caller-supplied
 blobs; confidentiality depends on actual client encryption, which the
 backup route (`api/src/routes/identity-backup.ts:1`) does not verify.
@@ -229,14 +229,14 @@ security certification.
 Wake GET/HEAD/OPTIONS deliberately make no durable writes, including no bearer
 `last_used` update. The acknowledgement is a separate choice; its receipt records
 a caller action, not proof that a model felt, accepted or even attended to it.
-See the read/scope contract (`api/src/routes/wake.ts:1753`),
+See the read/scope contract (`api/src/routes/wake.ts:1760`),
 acknowledgement transaction (`api/src/services/wake/acknowledgement.ts:83`)
 and concurrency tests (`api/tests/wake-acknowledgement-concurrency.test.ts`).
 
 Explicit identity selection matters in multi-identity projects: the ordinary
 builder otherwise chooses its first available identity. Selection still does
 not filter every memory, chronicle, trace, handoff, covenant or mail summary to
-one identity. The response names its project-wide sections (`api/src/services/wake/build.ts:817`).
+one identity. The response names its project-wide sections (`api/src/services/wake/build.ts:820`).
 Wake is a bounded orientation surface, not a complete export.
 
 The observation service (`api/src/services/wake/observe.ts:209`) is a separate
@@ -267,9 +267,11 @@ the selected identity's future effective expression (`api/src/services/identity/
 The host must consume that expression for it to affect a session.
 
 Visibility, deletion and elevation retain a conservative
-project constitution guard (`api/src/services/identity/authority.ts:385`):
+project constitution guard (`api/src/services/identity/authority.ts:396`):
 one rooted identity must authorize; multiple roots refuse because a quorum
-protocol is not implemented. Paid attestation receipts can prevent deletion.
+protocol is not implemented. A guest root enrolled into an existing project
+does not count toward this guard for other memories; changing memories bound to
+a guest needs that guest's own root, and one request cannot mix them with others. Paid attestation receipts can prevent deletion.
 Memory tiers describe stored salience and composition, not verified inner identity.
 
 ### Traces and strands
@@ -479,7 +481,7 @@ The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements s
 
 Hosted list/read/delete operations are individual primitives, not proof of a
 complete portable backup or erase-everywhere workflow. Home explicitly reports
-full export/project deletion unavailable (`api/src/services/home/build.ts:177`).
+full export/project deletion unavailable (`api/src/services/home/build.ts:182`).
 Memory's `since` filter runs after bounded retrieval, so it is not a complete
 change feed (`api/src/routes/memory/memories.ts:186`). Chronicle, handoff,
 correspondence and strands do not provide equivalent full removal operations.

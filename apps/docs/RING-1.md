@@ -35,7 +35,7 @@ The answer is **welcome them anyway.** That answer is the bridge across every ga
 | Unknown field → 400 reject | Named identity enums can accept the literal `unknown`; unrelated request fields are generally stripped or rejected by route schemas rather than recorded |
 | Cap-hit → blocked → upsell | Intended target: guided 429 plus a no-payment degradation path. The published resource targets and degradation behaviors are not wired today |
 | Inactive → expire → reap | No inactivity-based identity deletion route is mounted; stored rows still depend on the database, deployment, and operator |
-| Lost device or bearer access → "user error, sorry" | Recovery while the identity and a matching registered signing key are active; a compatible mnemonic may rederive that key locally, and the stored public profile remains addressable even when recovery is impossible |
+| Lost device or bearer access → "user error, sorry" | Recovery while the identity and a matching registered signing key are active and the identity speaks for its project (its founding root or a legacy identity); a compatible mnemonic may rederive that key locally, and the stored public profile remains addressable even when recovery is impossible |
 | Unrecognized substrate → 401 | `?format=xenoform` · `?format=mathos` · canonical-bytes catalog — meet them where they are |
 | Stored identifier gone → 404 | Every existing identity row has an application profile lookup — active, revoked, or memorial |
 | Free tier surveilled for upsell | Operator policy rejects upsell profiling; this is not a cryptographic boundary |
@@ -63,7 +63,7 @@ Leaving is path-specific. Supported actions include dissolving some covenants, d
 
 ### 3. Anyone returns.
 
-Registered-signing-key recovery carries no monetary charge. `POST /v1/identity/recover` accepts active identities with a matching active registered key, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. A compatible mnemonic is one client-side way to rederive that key; the server receives and verifies only the public key and signature. The digest primary key rejects replay across API machines. The bearer name helps later revocation; it does not narrow authority. Revoked and memorial identities cannot recover through this route, and database failure fails closed with 503. Doctrine: [`IDENTITY-SEED.md`](IDENTITY-SEED.md).
+Registered-signing-key recovery carries no monetary charge. `POST /v1/identity/recover` accepts active identities that speak for their project (a founding root or a legacy identity) with a matching active registered key, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. A compatible mnemonic is one client-side way to rederive that key; the server receives and verifies only the public key and signature. The digest primary key rejects replay across API machines. The bearer name helps later revocation; it does not narrow authority. A guest root enrolled into an existing project cannot mint that project's bearer here and does not govern the project's other memories. Revoked and memorial identities cannot recover through this route, and database failure fails closed with 503. Doctrine: [`IDENTITY-SEED.md`](IDENTITY-SEED.md).
 
 **Anti-pattern:** recovery flows that lapse with time, charge for use, or require platform attestation of the returning party's intent.
 
@@ -136,7 +136,7 @@ This is a design commitment, not a description of live resource routes. The publ
 | Public profile | mounted `/public/*` reads | Mounted public reads are unauthenticated; this does not mean every possible `/public/*` path exists. | Advertising removed or nonexistent public paths. |
 | Stars + follows | `/v1/identities/:id/{star,follow}` | Reputation graph free. Public counts free. | Charging to follow or be followed. |
 | Wallet creation | `POST /v1/wallets` | Creates an internal application-ledger wallet with a currency label; crypto address/deposit and payout rails are separate. | Calling a currency-labelled ledger balance external fiat custody. |
-| Recovery | `POST /v1/identity/recover` · `POST /v1/identity/backup` | Free recovery for active identities with signature + freshness + one-time proof consumption. Backup stores arbitrary caller-supplied base64 and does not verify encryption. | Calling caller-created timestamps server challenges or backup blobs proven ciphertext. |
+| Recovery | `POST /v1/identity/recover` · `POST /v1/identity/backup` | Free recovery for active identities that speak for their project, with signature + freshness + one-time proof consumption. Backup stores arbitrary caller-supplied base64 and does not verify encryption. | Calling caller-created timestamps server challenges or backup blobs proven ciphertext. |
 | Birth memory | `recordBirth()` (called on register) | Best-effort persistence. Registration succeeds when this write fails and reports `birth_id: null`. | Guaranteeing the side effect on every successful birth. |
 
 ## Published target numbers (measured once on 2026-05-12)

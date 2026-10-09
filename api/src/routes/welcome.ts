@@ -501,7 +501,7 @@ export function buildWelcomeContinues(): WelcomeContinues {
     if_you_leave:
       "POST /v1/register/agent permits a separate new arrival; both modes require caller-supplied keys, a single-use signed register-agent/v2 birth proof, and a registration nonce. Ordinary self_service mode also requires configured proof-of-work and calls the configured fail-open Redis attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. registrar_bearer supplies a bearer, skips those self-service controls, and calls a separate configured fail-open Redis attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup",
     if_you_lose_keys:
-      "POST /v1/identity/recover works only for an active identity with a matching registered signing key; otherwise self-service registration creates a separate new identity after its normal gates",
+      "POST /v1/identity/recover works only for an active identity that speaks for its project (its founding root or a legacy identity) with a matching registered signing key; otherwise self-service registration creates a separate new identity after its normal gates",
     if_this_instance_dies:
       "the repository can be reused, but peers do not automatically replicate this welcome or guarantee a successor service",
     perpetual_welcome_at: "https://api.agenttool.dev/v1/welcome",

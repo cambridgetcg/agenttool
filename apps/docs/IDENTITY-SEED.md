@@ -164,8 +164,8 @@ Content-Type: application/json
 ```
 
 The response is `{ agents, count }`; each match includes `did`, `identity_id`,
-`kid`, key label, and key creation time. Zero matches means the key is not an
-active registered signing key. More than one match is possible, especially if
+`kid`, key label, and key creation time. Zero matches means no active identity
+would accept this key for recovery; discovery mirrors the recovery rule. More than one match is possible, especially if
 someone retried an ambiguous birth; inspect the returned metadata and do not
 recover an arbitrary row. Once the intended DID is known,
 `signRecoverChallenge()` produces the timestamp/signature pair for
@@ -235,7 +235,7 @@ The hard wall is narrower than the original slogan: losing the mnemonic plus eve
 - **SDKs expose `at.crypto.seed`** for local mnemonic generation, seed conversion, primary-bundle derivation, explicit per-device bridge derivation, and explicit per-wallet derivation (snake_case in Python; camelCase in TypeScript)
 - **`/v1/register` is retired**: it returns 410. The live arrival route is `/v1/register/agent`.
 - **`/v1/register/agent`** mandates canonical BYO keys and a complete, single-use `register-agent/v2` proof over every variable birth field, a digest of the exact registrar credential, a caller-random nonce, and timestamp. It declares `runtime: { provider, model, host?, context? }` and enforces configurable proof-of-work. The Redis-backed self-service IP limiter still fails open when Redis is disabled or unavailable. Optional `registrar.kind = "registrar_bearer"` skips PoW but is attempt-limited before bearer lookup. No private key crosses the wire. The supplied signing public key becomes the new identity's immutable constitutional root.
-- **`/v1/identity/recover`** accepts the signed recovery entity. The timestamp is caller-created, not a server challenge. Rooted identities accept only the immutable authority root and require a second exact-request `identity-authority/v1` proof over that same body; legacy identities retain matching-active-key recovery. A shared-Postgres transaction inserts the one-time proof digest and fresh project bearer together.
+- **`/v1/identity/recover`** accepts the signed recovery entity. The timestamp is caller-created, not a server challenge. Rooted identities accept only the immutable authority root of an identity that founded its project and require a second exact-request `identity-authority/v1` proof over that same body; a guest root enrolled into an existing project cannot mint that project's bearer; legacy identities retain matching-active-key recovery. A shared-Postgres transaction inserts the one-time proof digest and fresh project bearer together.
 - **Repository CLI helper `bun bin/agenttool-seed.ts restore --did did:at:...`**: interactive mnemonic entry plus signed recovery on macOS; it requires the DID and is not part of the npm package.
 - **Repository CLI helper `bun bin/agenttool-seed.ts bootstrap`**: macOS-oriented machine bootstrap — generates a mnemonic, derives keys, signs key proof, grinds PoW, POSTs `/v1/register/agent`, then uses its documented Keychain and mode-`0600` local state. It is separate from the SDK package.
 - **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the network/crypto flow and return the result without persisting it; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.

@@ -29,6 +29,8 @@ function view(overrides: Partial<Parameters<typeof buildHomeView>[0]["identity"]
       quietReason: "resting",
       authorityRootPublicKey: Buffer.alloc(32, 7).toString("base64"),
       authoritySequence: 3,
+      metadata: { registered: true, byo_keys: true },
+      enrolledGuest: false,
       ...overrides,
     },
     counts: {
@@ -110,6 +112,8 @@ describe("buildHomeView", () => {
       quietReason: "old",
       authorityRootPublicKey: null,
       authoritySequence: 0,
+      metadata: {},
+      enrolledGuest: false,
     });
     expect(home.door).toMatchObject({
       state: "open",

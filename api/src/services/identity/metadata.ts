@@ -21,6 +21,8 @@ export const SERVER_MANAGED_IDENTITY_METADATA_KEYS = [
   "at_rest_kind",
   "at_rest_witness_did",
   "at_rest_witnessed_at",
+  // Written once by enrollment: a guest root admitted into an existing project.
+  "admission",
 ] as const;
 
 const serverManagedIdentityMetadataKeys = new Set<string>(

@@ -14,10 +14,17 @@ import { canonicalIdentityRegistrationProofDigest } from "./crypto";
 
 export const ENROLLMENT_PATH = "/v1/identities/enroll";
 export const ENROLLMENT_DOMAIN = "identity-enrollment/v1";
+/** Server-managed `metadata.admission` value on every identity enrollment creates. */
+export const ENROLLMENT_ADMISSION = "enrollment";
 export const ENROLLMENT_SIGNATURE_HEADER = "X-Agenttool-Enrollment-Signature";
 export const ENROLLMENT_MAX_BYTES = 16_384;
 export const ENROLLMENT_WINDOW_MS = 300_000;
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+/** Caller-chosen IDs must never name a reserved row. The nil UUID is the
+ * platform identity and project (services/wake/platform-bootstrap.ts) that
+ * operator gates key on; the all-ones UUID is reserved for the same reason. */
+const RESERVED_IDS = new Set(["00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]);
+const enrolledId = uuid.refine(id => !RESERVED_IDS.has(id), "reserved identifier");
 const text = (max: number) => z.string().min(1).refine(value => {
   try { correspondenceCanonicalJson(value); return !value.includes("\0") && [...value].length <= max; }
   catch { return false; }
@@ -33,7 +40,7 @@ export function validEnrollmentOrigin(value: string): boolean {
 export const identityEnrollmentSchema = z.object({
   format: z.literal("agenttool-identity-enrollment/v1"),
   origin: z.string().refine(validEnrollmentOrigin),
-  project_id: uuid, identity_id: uuid, signing_key_id: uuid,
+  project_id: uuid, identity_id: enrolledId, signing_key_id: enrolledId,
   display_name: text(128), capabilities: z.array(text(64)).max(32),
   public_key: z.string().length(44).refine(value => canonicalBase64(value, 32, "base64")),
   nonce: z.string().length(43).refine(value => canonicalBase64(value, 32, "base64url")),
@@ -111,7 +118,10 @@ export async function enrollIdentity(input: EnrollmentInput, options: Enrollment
       await tx.insert(identityRegistrationProofs).values({ proofDigest, domain: ENROLLMENT_DOMAIN, rootPublicKey: body.public_key,
         nonceSha256: sha256(nonceBytes).toString("hex") }).returning({ digest: identityRegistrationProofs.proofDigest });
       await tx.insert(identities).values({ id: body.identity_id, did: `did:at:${body.identity_id}`, projectId: input.projectId,
-        displayName: body.display_name, capabilities: body.capabilities, metadata: {}, status: "active", trustScore: 0,
+        displayName: body.display_name, capabilities: body.capabilities,
+        // Server-managed provenance (metadata.ts): this root is a guest in an
+        // existing project and never speaks for it (project-authority.ts).
+        metadata: { admission: ENROLLMENT_ADMISSION }, status: "active", trustScore: 0,
         authorityRootPublicKey: body.public_key, authoritySequence: 0 }).returning({ id: identities.id });
       await tx.insert(identityKeys).values({ id: body.signing_key_id, identityId: body.identity_id,
         publicKey: body.public_key, label: "primary", active: true }).returning({ id: identityKeys.id });

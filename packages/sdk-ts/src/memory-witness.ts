@@ -324,7 +324,8 @@ export interface IssueMemoryWitnessGrantOptions {
   /**
    * Root proof. Issue elevates a memory to constitutive, so the route runs
    * `authorizeProjectConstitutionMutation` — against the BUYER's project, the
-   * one whose constitution changes, not the witness's.
+   * one whose constitution changes, not the witness's. A memory bound to an
+   * enrolled guest needs that guest's own root instead.
    */
   authority?: AuthorityBinding;
 }
@@ -513,7 +514,8 @@ export class MemoryWitnessClient {
    * The server relocks and rechecks every bound term, verifies the signature
    * against `memory-witness-issue/v1`, releases escrow, writes the paid
    * receipt, and elevates the memory to constitutive — which is why the route
-   * also demands the BUYER project's root proof when that project is rooted.
+   * also demands the BUYER project's root proof when that project is rooted
+   * (or, for a memory bound to an enrolled guest, that guest's own root).
    */
   async issue(
     grantId: string,

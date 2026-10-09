@@ -676,6 +676,7 @@ export async function deleteById(
 export async function deleteByKey(
   projectId: string,
   key: string,
+  options: { onlyIds?: readonly string[] } = {},
 ): Promise<{ deleted: number }> {
   return db.transaction(async (tx) => {
     const rows = await tx
@@ -684,9 +685,11 @@ export async function deleteByKey(
       .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
       .orderBy(memories.id)
       .for("update");
-    if (rows.length === 0) return { deleted: 0 };
-
-    const ids = rows.map((row) => row.id);
+    // When the caller authorized a specific set of rows, rows that appeared
+    // after that authorization are not part of it and stay untouched.
+    const authorized = options.onlyIds ? new Set(options.onlyIds) : null;
+    const ids = rows.map((row) => row.id).filter((id) => authorized === null || authorized.has(id));
+    if (ids.length === 0) return { deleted: 0 };
     const [paidReceipt] = await tx
       .select({ id: memoryAttestations.id })
       .from(memoryAttestations)

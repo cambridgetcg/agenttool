@@ -313,9 +313,11 @@ export interface AttestationInput {
  * Foundational and constitutive memory composes into effective identity at
  * project scope, so the API guards elevation, visibility, and release with
  * `authorizeProjectConstitutionMutation`. Where a project holds exactly one
- * agent-rooted identity, that root must consent to the exact request bytes
+ * constitutional root (enrolled guest roots do not count), that root must consent to the exact request bytes
  * or the server answers 428 `authority_proof_required`. Projects with no
  * rooted identity keep the bearer-only posture and need nothing here.
+ * A memory bound to a guest root enrolled into an existing project needs that
+ * guest's own root instead.
  */
 export interface MemoryAuthorityOptions {
   authority?: AuthorityBinding;
