@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
+import type { HostBindingRecorder } from "./host-binding.js";
 import {
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
@@ -83,6 +84,12 @@ export interface CollabMcpServerOptions {
     handle: SessionHandle;
     credential_file: string;
   };
+  /**
+   * Records which host process runs each session this server binds, in
+   * `dirname(db)/collab-sessions/<id>.host.json`. The bin supplies it; when
+   * omitted (tests, in-memory stores) no binding file is written.
+   */
+  host_binding?: HostBindingRecorder;
 }
 
 interface BoundSession {
@@ -284,10 +291,9 @@ export function buildCollabMcpServer(
       }
       const handle = store.startSession(input);
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
+      let path: string;
       try {
-        const path = writeSessionCredentialFile(credentialFile, handle.credential);
-        binding = { handle, credential_file: path };
-        return publicSessionBinding(binding);
+        path = writeSessionCredentialFile(credentialFile, handle.credential);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -297,6 +303,11 @@ export function buildCollabMcpServer(
         }
         throw error;
       }
+      binding = { handle, credential_file: path };
+      // Best effort and never throws: a session whose host cannot be read is
+      // still bound; it simply cannot be knocked or woken.
+      options.host_binding?.record(handle.session.id, path);
+      return publicSessionBinding(binding);
     }),
   );
 
@@ -333,6 +344,7 @@ export function buildCollabMcpServer(
         release_summary,
       });
       binding = null;
+      options.host_binding?.forget(ended.session.id);
       removeSessionCredentialFile(current.credential_file);
       return {
         session: ended.session,

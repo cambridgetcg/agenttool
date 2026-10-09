@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { resolveDatabasePath } from "./database-path.js";
 import { CollabError } from "./errors.js";
+import { removeHostBinding } from "./host-binding.js";
 import type { SessionCredential, SessionEndRelease, SessionHandle } from "./protocol.js";
 import {
   readSessionCredentialFile,
@@ -136,14 +137,14 @@ export function runCollabHostCli(
     secret = credential.session_token;
     const store = new CollabStore(databasePath);
     try {
-      return emit(
-        endSessionFromCredential(store, credential, {
-          session_file: args.session_file,
-          reason: args.reason,
-          release_leases: args.release_leases,
-        }),
-        0,
-      );
+      const receipt = endSessionFromCredential(store, credential, {
+        session_file: args.session_file,
+        reason: args.reason,
+        release_leases: args.release_leases,
+      });
+      // An ended session is never knocked or woken; its host binding goes with it.
+      removeHostBinding(databasePath, receipt.session_id);
+      return emit(receipt, 0);
     } finally {
       store.close();
     }
