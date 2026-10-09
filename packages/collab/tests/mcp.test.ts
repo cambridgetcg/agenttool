@@ -1397,4 +1397,96 @@ describe("MCP surface", () => {
       lease_id: null,
     });
   }, 30_000);
+
+  test("carries declared rest, the addressee hint and the read-only host verbs through the checked-in bundles", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-mcp-rest-"));
+    const root = join(directory, "repo");
+    const databasePath = join(directory, "state", "collab.sqlite");
+    const mcpBundle = join(packageRoot, "dist", "agenttool-collab-mcp.js");
+    const hostBundle = join(packageRoot, "dist", "agenttool-collab-host.js");
+    mkdirSync(root);
+    cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+
+    const rester = new StdioMcpHarness(mcpBundle, databasePath);
+    cleanup.push(() => rester.close());
+    await rester.initialize();
+    const sender = new StdioMcpHarness(mcpBundle, databasePath);
+    cleanup.push(() => sender.close());
+    await sender.initialize();
+
+    // A bundle built before the rest tool fails here (33 tools).
+    const tools = new Map<string, any>(
+      (await rester.listTools()).tools.map((tool: any) => [tool.name, tool]),
+    );
+    expect(tools.size).toBe(34);
+    const rest = tools.get("collab_session_rest");
+    expect(Object.keys(rest.inputSchema.properties).sort()).toEqual([
+      "idempotency_key",
+      "mode",
+      "reason",
+      "until",
+      "wake_on",
+      "workspace_id",
+    ]);
+    expect(rest.inputSchema.properties.mode.enum).toEqual(["resting", "ready"]);
+    expect(rest.annotations).toEqual(tools.get("collab_report_append").annotations);
+
+    const resterJoin = await rester.callTool("collab_session_start", {
+      root_path: root,
+      actor: "stdio-rester",
+    });
+    const workspaceId = resterJoin.structuredContent.workspace.id;
+    const resterId = resterJoin.structuredContent.session.id;
+    const rested = await rester.callTool("collab_session_rest", {
+      workspace_id: workspaceId,
+      idempotency_key: "stdio-rest",
+      mode: "resting",
+      reason: "between turns",
+      wake_on: ["addressed"],
+    });
+    expect(rested.isError).toBeUndefined();
+    await sender.callTool("collab_session_start", { root_path: root, actor: "stdio-sender" });
+    const note = await sender.callTool("collab_report_append", {
+      workspace_id: workspaceId,
+      idempotency_key: "stdio-note",
+      to_session_id: resterId,
+      kind: "observation",
+      body: "One addressed note over stdio.",
+    });
+    expect(note.isError).toBeUndefined();
+    expect(note.structuredContent.addressee).toMatchObject({
+      session_id: resterId,
+      liveness: "resting",
+      rest: { mode: "resting", reason: "between turns", wake_on: ["addressed"] },
+      delivery: "wake",
+    });
+    const next = await rester.callTool("collab_next", { workspace_id: workspaceId });
+    expect(next.structuredContent.session).toMatchObject({ liveness: "resting", addressed_waiting: 1 });
+
+    const host = (args: string[]) => Bun.spawnSync(
+      [process.execPath, hostBundle, ...args, "--db", databasePath],
+      {
+        cwd: packageRoot,
+        env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir() },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const scan = host(["doorbell-scan"]);
+    expect(scan.exitCode).toBe(0);
+    const scanned = JSON.parse(scan.stdout.toString());
+    expect(scanned.protocol).toBe("agenttool.collab-doorbell-scan/1");
+    expect(scanned.sessions.map((entry: any) => entry.session_id)).toEqual([resterId]);
+    // A pointer, never a body.
+    expect(scanned.sessions[0].new).toEqual([{
+      seq: expect.any(Number),
+      kind: "report.posted",
+      from_actor: "stdio-sender",
+      ref_id: note.structuredContent.report.id,
+    }]);
+    // pid 1 is never a recorded host: the read verb prints nothing at all.
+    const unbound = host(["knocks", "--host-ancestor", "1"]);
+    expect(unbound.exitCode).toBe(0);
+    expect(unbound.stdout.toString()).toBe("");
+  }, 30_000);
 });
