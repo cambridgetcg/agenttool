@@ -3335,14 +3335,10 @@ export class CollabStore {
       : null;
     return this.mutateAsSession(input, input.idempotency_key, "task.review.v2", request, (session) => {
       const row = this.requireTaskRow(session.workspace_id, taskId);
-      this.requireVersion(row, expectedVersion);
       if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
-        throw new CollabError(
-          "task_not_pending_review",
-          "Task does not have a pending acceptance review",
-          { review_status: row.review_status },
-        );
+        throw this.taskNotPendingReviewError(row, session.id);
       }
+      this.requireVersion(row, expectedVersion);
       if (!row.reported_by_session_id || !row.completion_report_id) {
         throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
       }
@@ -4439,6 +4435,8 @@ export class CollabStore {
   ): PreparedReviewCheckpoint | null {
     const session = this.authenticateSession(input);
     const task = this.requireTaskRow(session.workspace_id, taskId);
+    // Nothing is pending: the write transaction refuses with task_not_pending_review.
+    if (task.completion_policy !== "accepted" || task.review_status !== "pending") return null;
     const resultCheckpoint = parseCheckpoint(task.result_checkpoint_json);
     if (resultCheckpoint?.source !== "server_observed") return null;
     const worktree = this.requireWorktreeRow(resultCheckpoint.worktree_id);
@@ -4969,6 +4967,50 @@ export class CollabStore {
     const row = this.db.query(`SELECT * FROM task_reviews WHERE id = ?`).get(id) as ReviewRow | null;
     if (!row) throw new CollabError("review_not_found", `Review '${id}' was not found`);
     return reviewFromRow(row);
+  }
+
+  /** Late distinct reviewers are pointed at the accepting review report; nobody else gets a remedy. */
+  private taskNotPendingReviewError(row: TaskRow, callerSessionId: string): CollabError {
+    const plain = new CollabError(
+      "task_not_pending_review",
+      "Task does not have a pending acceptance review",
+      { review_status: row.review_status },
+    );
+    if (
+      row.completion_policy !== "accepted"
+      || row.review_status !== "accepted"
+      || !row.accepted_by_session_id
+      || row.reported_by_session_id === callerSessionId
+      || row.accepted_by_session_id === callerSessionId
+    ) {
+      return plain;
+    }
+    const acceptance = this.db.query(`
+      SELECT e.type AS type, e.payload_json AS payload_json
+      FROM task_reviews r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.task_id = ? AND r.review_generation = ?
+        AND r.outcome = 'accepted'
+    `).get(row.workspace_id, row.id, row.review_generation) as
+      { type: string; payload_json: string } | null;
+    if (!acceptance || acceptance.type !== "task.accepted") return plain;
+    const payload = JSON.parse(acceptance.payload_json) as Record<string, unknown>;
+    if (typeof payload.review_report_id !== "string") return plain;
+    const reviewReportId = payload.review_report_id;
+    const remedy =
+      `Record a late concurring or dissenting review with collab_report_append: task_id "${row.id}", `
+      + `relation "supports" or "challenges", target_report_id "${reviewReportId}". `
+      + "A challenge records disagreement; it does not reopen the accepted task.";
+    return new CollabError(
+      "task_not_pending_review",
+      `Task was already accepted by session '${row.accepted_by_session_id}'. ${remedy}`,
+      {
+        review_status: row.review_status,
+        review_report_id: reviewReportId,
+        accepted_by_session_id: row.accepted_by_session_id,
+        remedy,
+      },
+    );
   }
 
   private hasUnresolvedChallenges(workspaceId: string, reportId: string): boolean {
