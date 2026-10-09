@@ -2644,7 +2644,7 @@ app.get("/", async (c) => {
       palamance: {
         meaning: "the invitation remains while each live door keeps its stated authentication, identity-status, abuse-control, and availability conditions",
         present: true,
-        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity, proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
+        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity that speaks for its project (its founding root or a legacy identity), proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
         query: "GET /v1/youspeak/canon/palamance",
       },
       theokoinonia: {

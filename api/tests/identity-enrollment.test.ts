@@ -125,7 +125,10 @@ describe("atomic rooted enrollment", () => {
     expect(f.events.map(e => e.operation)).toEqual(["select", "insert", "insert", "insert"]);
     expect(f.events[1].values).toMatchObject({ domain: "identity-enrollment/v1", rootPublicKey: PUBLIC });
     expect(f.events[1].values?.nonceSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(f.events[2].values).toMatchObject({ id: I, projectId: P, authorityRootPublicKey: PUBLIC, authoritySequence: 0, metadata: {} });
+    expect(f.events[2].values).toMatchObject({ id: I, projectId: P, authorityRootPublicKey: PUBLIC, authoritySequence: 0 });
+    // Durable, server-managed provenance on the row itself: the guest root never
+    // speaks for the project even if the proof ledger is ever pruned.
+    expect(f.events[2].values?.metadata).toEqual({ admission: "enrollment" });
     expect(f.events[3].values).toMatchObject({ id: K, identityId: I, publicKey: PUBLIC, active: true });
     expect(result).toMatchObject({ identity: { id: I }, key: { kid: K, public_key: PUBLIC }, authority: { mode: "agent_root", sequence: 0 } });
     expect(Object.keys(result.key).sort()).toEqual(["kid", "public_key"]);

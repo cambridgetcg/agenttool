@@ -4,13 +4,13 @@
  * legacy project-bearer posture, plus the next single-use proof sequence and
  * exact signing recipe. Doctrine: docs/AGENT-HOME.md. */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
-import { scopeIdentityProtections, speaksForProject } from "../../services/identity/project-authority";
+import { enrolledGuestSql, scopeIdentityProtections } from "../../services/identity/project-authority";
 import { errors, fail } from "../../lib/errors";
 import {
   AUTHORITY_HEADERS,
@@ -47,6 +47,7 @@ app.get("/", async (c) => {
       rootPublicKey: identities.authorityRootPublicKey,
       sequence: identities.authoritySequence,
       metadata: identities.metadata,
+      enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)
     .where(
@@ -76,8 +77,12 @@ app.get("/", async (c) => {
   }
 
   const rooted = identity.rootPublicKey !== null;
-  const facts = { authorityRootPublicKey: identity.rootPublicKey, metadata: identity.metadata };
-  const guest = rooted && !speaksForProject(facts);
+  const facts = {
+    authorityRootPublicKey: identity.rootPublicKey,
+    metadata: identity.metadata,
+    enrolledGuest: identity.enrolledGuest === true,
+  };
+  const guest = rooted && facts.enrolledGuest;
   return c.json({
     identity_id: identity.id,
     did: identity.did,
@@ -117,7 +122,7 @@ app.get("/", async (c) => {
     limitations: rooted
       ? [
           ...(guest
-            ? ["this root was enrolled into an existing project: it governs this identity only; project memory mutations and project bearers stay with the project's founding root or administrator"]
+            ? ["this root was enrolled into an existing project as a guest: it governs this identity's profile, keys and lifecycle; it cannot recover a project bearer, and project memory mutations (including foundational memories bound to this identity) follow the project's founding root or administrator"]
             : []),
           "root rotation and guardian recovery are not available in v1",
           "project bearers still authorize non-constitutional project actions",

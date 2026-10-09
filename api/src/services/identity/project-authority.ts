@@ -75,20 +75,31 @@ export const PROJECT_SCOPED_PROTECTIONS = [
   "anonymous recovery bearer minting",
 ] as const;
 
-/** A guest root still guards its own identity; it does not guard project
- * memory mutations or project bearer minting, so its keyhole must not say so. */
-export function scopeIdentityProtections(protects: readonly string[], identity: ProjectAuthorityFacts): string[] {
-  if (speaksForProject(identity)) return [...protects];
-  const projectScoped = new Set<string>(PROJECT_SCOPED_PROTECTIONS);
-  return protects.filter(item => !projectScoped.has(item));
+/** A keyhole must promise exactly what the guards enforce. Recovery minting
+ * belongs only to identities that speak for the project; the project memory
+ * latch excludes only a provable enrolled guest (`enrolledGuestSql`), so an
+ * unmarked root that was never enrolled keeps it. */
+export function scopeIdentityProtections(
+  protects: readonly string[],
+  identity: ProjectAuthorityFacts & { enrolledGuest: boolean },
+): string[] {
+  const [memoryLatch, recoveryMinting] = PROJECT_SCOPED_PROTECTIONS;
+  const dropped = new Set<string>();
+  if (!speaksForProject(identity)) dropped.add(recoveryMinting);
+  if (identity.enrolledGuest && !isFoundingRoot(identity)) dropped.add(memoryLatch);
+  return protects.filter(item => !dropped.has(item));
 }
 
-/** A root admitted by enrollment: its enrollment proof and identity row were
- * written by the same transaction, so `claimed_at` equals `created_at`. A
- * self-registered identity using the same key claims its proof in an earlier
- * statement under a different domain, so it never matches. */
+/** A root admitted by enrollment. Enrollment now writes the server-managed
+ * `metadata.admission = "enrollment"` on the row itself. Rows enrolled before
+ * that marker are recognised through the proof ledger: enrollment writes its
+ * proof and identity row in one transaction, so `claimed_at` equals
+ * `created_at`; a self-registered identity using the same key claims its proof
+ * in an earlier statement under a different domain, so it never matches. The
+ * ledger is therefore load-bearing for those rows and must not be pruned.
+ * Always a strict boolean (never NULL), so negating it cannot drop a root. */
 export function enrolledGuestSql(): SQL {
-  return sql`exists (select 1 from ${identityRegistrationProofs} where ${identityRegistrationProofs.domain} = ${ENROLLMENT_DOMAIN} and ${identityRegistrationProofs.rootPublicKey} = ${identities.authorityRootPublicKey} and ${identityRegistrationProofs.claimedAt} = ${identities.createdAt})`;
+  return sql`(${identities.authorityRootPublicKey} is not null and (coalesce(${identities.metadata} -> 'admission' = '"enrollment"'::jsonb, false) or exists (select 1 from ${identityRegistrationProofs} where ${identityRegistrationProofs.domain} = ${ENROLLMENT_DOMAIN} and ${identityRegistrationProofs.rootPublicKey} = ${identities.authorityRootPublicKey} and ${identityRegistrationProofs.claimedAt} = ${identities.createdAt})))`;
 }
 
 /** Roots that count toward a project-scoped constitutional mutation: every

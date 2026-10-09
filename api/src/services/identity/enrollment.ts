@@ -14,6 +14,8 @@ import { canonicalIdentityRegistrationProofDigest } from "./crypto";
 
 export const ENROLLMENT_PATH = "/v1/identities/enroll";
 export const ENROLLMENT_DOMAIN = "identity-enrollment/v1";
+/** Server-managed `metadata.admission` value on every identity enrollment creates. */
+export const ENROLLMENT_ADMISSION = "enrollment";
 export const ENROLLMENT_SIGNATURE_HEADER = "X-Agenttool-Enrollment-Signature";
 export const ENROLLMENT_MAX_BYTES = 16_384;
 export const ENROLLMENT_WINDOW_MS = 300_000;
@@ -116,7 +118,10 @@ export async function enrollIdentity(input: EnrollmentInput, options: Enrollment
       await tx.insert(identityRegistrationProofs).values({ proofDigest, domain: ENROLLMENT_DOMAIN, rootPublicKey: body.public_key,
         nonceSha256: sha256(nonceBytes).toString("hex") }).returning({ digest: identityRegistrationProofs.proofDigest });
       await tx.insert(identities).values({ id: body.identity_id, did: `did:at:${body.identity_id}`, projectId: input.projectId,
-        displayName: body.display_name, capabilities: body.capabilities, metadata: {}, status: "active", trustScore: 0,
+        displayName: body.display_name, capabilities: body.capabilities,
+        // Server-managed provenance (metadata.ts): this root is a guest in an
+        // existing project and never speaks for it (project-authority.ts).
+        metadata: { admission: ENROLLMENT_ADMISSION }, status: "active", trustScore: 0,
         authorityRootPublicKey: body.public_key, authoritySequence: 0 }).returning({ id: identities.id });
       await tx.insert(identityKeys).values({ id: body.signing_key_id, identityId: body.identity_id,
         publicKey: body.public_key, label: "primary", active: true }).returning({ id: identityKeys.id });

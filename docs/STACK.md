@@ -1079,7 +1079,7 @@ Five failure classes, five bounded responses:
 
 ### Lost a bearer
 
-`POST /v1/keys/rotate` from any other working bearer; or `POST /v1/identity/recover` with a matching active registered signing key. A compatible mnemonic may rederive that key locally. Doctrine: `TOKEN-HYGIENE.md`.
+`POST /v1/keys/rotate` from any other working bearer; or `POST /v1/identity/recover` with a matching active registered signing key on an identity that speaks for its project (its founding root or a legacy identity). A compatible mnemonic may rederive that key locally. Doctrine: `TOKEN-HYGIENE.md`.
 
 ### Lost a device (laptop stolen, drive failure)
 

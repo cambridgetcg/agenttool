@@ -227,3 +227,9 @@ databaseTest("an unmarked root that was not enrolled still counts toward the con
   await enrollIdentity(request(), options());
   expect(await projectGuard(P)).toMatchObject({ ok: false, status: 428 });
 });
+databaseTest("an enrolled guest stays out of the constitution even if the proof ledger is pruned", async () => {
+  await enrollIdentity(request(), options());
+  expect((await sql`SELECT metadata FROM identity.identities WHERE id = ${I}`)[0].metadata).toEqual({ admission: "enrollment" });
+  await sql`DELETE FROM identity.registration_proofs`;
+  expect(await projectGuard(P)).toMatchObject({ ok: true, mode: "legacy_bearer" });
+});

@@ -95,7 +95,8 @@ app.post("/:id/elevate", async (c) => {
   if (!memory) throw new HTTPException(404, { message: "memory_not_found" });
 
   // Foundational/constitutive memories compose into effective identity at
-  // project scope today, so every rooted constitution affected must consent.
+  // project scope today, so the project's constitutional roots must consent.
+  // An enrolled guest root does not count (services/identity/project-authority.ts).
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
     method: c.req.method,

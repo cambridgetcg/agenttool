@@ -18,7 +18,7 @@ import { identities } from "../../db/schema/identity";
 import { countUnread } from "../inbox/store";
 import { countMemories } from "../memory/store";
 import { countStrands } from "../strand/store";
-import { scopeIdentityProtections } from "../identity/project-authority";
+import { enrolledGuestSql, scopeIdentityProtections } from "../identity/project-authority";
 
 export interface HomeIdentitySnapshot {
   id: string;
@@ -32,6 +32,8 @@ export interface HomeIdentitySnapshot {
   authoritySequence: number;
   /** Birth provenance; founder markers decide project-scoped protections. */
   metadata: unknown;
+  /** True only for a provable enrolled guest root (project-authority.ts). */
+  enrolledGuest: boolean;
 }
 
 export interface HomeCounts {
@@ -250,6 +252,7 @@ export async function buildHome(
       authorityRootPublicKey: identities.authorityRootPublicKey,
       authoritySequence: identities.authoritySequence,
       metadata: identities.metadata,
+      enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))

@@ -51,15 +51,28 @@ describe("recovery availability and protections follow the same rule", () => {
     expect(registeredKeyRecoveryAvailable({ ...founder, status: "at_rest", activeRegisteredKeys: 1 })).toBe(false);
   });
   test("a guest root's keyhole does not promise project-scoped protections", () => {
-    const list = ["identity revocation", ...PROJECT_SCOPED_PROTECTIONS, "at-rest transition"];
-    expect(scopeIdentityProtections(list, founder)).toEqual(list);
-    expect(scopeIdentityProtections(list, { authorityRootPublicKey: null, metadata: {} })).toEqual(list);
-    expect(scopeIdentityProtections(list, guest)).toEqual(["identity revocation", "at-rest transition"]);
+    const [memory, recovery] = PROJECT_SCOPED_PROTECTIONS;
+    const list = ["identity revocation", memory, recovery, "at-rest transition"];
+    expect(scopeIdentityProtections(list, { ...founder, enrolledGuest: false })).toEqual(list);
+    expect(scopeIdentityProtections(list, { authorityRootPublicKey: null, metadata: {}, enrolledGuest: false })).toEqual(list);
+    expect(scopeIdentityProtections(list, { ...guest, enrolledGuest: true })).toEqual(["identity revocation", "at-rest transition"]);
+  });
+  test("an unmarked root that was not enrolled keeps the memory latch the guard still enforces", () => {
+    const [memory, recovery] = PROJECT_SCOPED_PROTECTIONS;
+    const list = ["identity revocation", memory, recovery];
+    expect(scopeIdentityProtections(list, { ...guest, enrolledGuest: false })).toEqual(["identity revocation", memory]);
+  });
+  test("the enrollment admission marker is server-managed", async () => {
+    const { SERVER_MANAGED_IDENTITY_METADATA_KEYS } = await import("../src/services/identity/metadata");
+    expect(SERVER_MANAGED_IDENTITY_METADATA_KEYS).toContain("admission");
   });
   test("the constitution excludes only provable enrolled guests, so unmarked roots fail closed", () => {
     const query = new PgDialect().sqlToQuery(constitutionRootSql());
     expect(query.sql).toContain(`"authority_root_public_key" is not null`);
-    expect(query.sql).toContain(`not exists`);
+    expect(query.sql).toContain(`or not (`);
+    expect(query.sql).toContain(`coalesce(`);
+    expect(query.sql).toContain(`exists (select 1 from "identity"."registration_proofs"`);
+    expect(query.sql).toContain(`-> 'admission' = '"enrollment"'::jsonb`);
     expect(query.sql).toContain(`"registration_proofs"`);
     expect(query.sql).toContain(`"registration_proofs"."claimed_at" = "identity"."identities"."created_at"`);
     expect(query.params).toContain("identity-enrollment/v1");

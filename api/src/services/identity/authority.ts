@@ -362,8 +362,9 @@ export async function authorizeIdentityRead(input: {
   return { ok: true, mode: "agent_root", sequence: state.sequence };
 }
 
-/** Rooted identities whose effective constitution can be affected by a
- * project-scoped mutation (notably foundational memory elevation). */
+/** Constitutional roots for a project-scoped mutation (notably foundational
+ * memory elevation): every rooted identity except a provable enrolled guest
+ * (project-authority.ts constitutionRootSql). */
 export async function getProjectRootedAuthorityIdentities(
   projectId: string,
 ): Promise<IdentityAuthorityState[]> {
