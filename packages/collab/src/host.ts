@@ -14,6 +14,9 @@ export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
 
+/** The trimmed-length limit endSession applies to its reason. */
+const MAX_HOST_REASON = 2_000;
+
 export interface HostEndReceipt {
   protocol: typeof COLLAB_HOST_PROTOCOL;
   status: "ended" | "already_ended";
@@ -43,7 +46,9 @@ export interface HostEndOptions {
  * release_leases it first refuses, read-only, while a lease is live. It then
  * resumes with cursor recovery allowed (a stale generation or cursor in the
  * file is tolerated), ends through the store, and removes the credential
- * file. The returned receipt never contains the credential.
+ * file. The returned receipt never contains the credential. The reason is
+ * judged only by the end, after the resume, so callers pass one already
+ * checked (parseHostArgs does this for the CLI).
  */
 export function endSessionFromCredential(
   store: CollabStore,
@@ -168,6 +173,17 @@ function parseHostArgs(argv: string[]): HostEndOptions & { db?: string } {
   }
   if (!reason || reason.trim() === "") {
     throw new CollabError("usage_error", `--reason is required; ${COLLAB_HOST_USAGE}`);
+  }
+  // The resume raises the generation and appends an event before the end
+  // judges its reason, so refuse here what endSession would refuse there.
+  if (reason.trim().length > MAX_HOST_REASON) {
+    throw new CollabError(
+      "usage_error",
+      `--reason exceeds ${MAX_HOST_REASON} characters; ${COLLAB_HOST_USAGE}`,
+    );
+  }
+  if (reason.includes("\0")) {
+    throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
   if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
     throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);

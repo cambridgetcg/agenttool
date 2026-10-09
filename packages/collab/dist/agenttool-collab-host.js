@@ -4945,6 +4945,7 @@ function addSeconds(iso, seconds) {
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
 var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
+var MAX_HOST_REASON = 2000;
 function endSessionFromCredential(store, credential, options) {
   let resumed;
   try {
@@ -5048,6 +5049,12 @@ function parseHostArgs(argv) {
   }
   if (!reason || reason.trim() === "") {
     throw new CollabError("usage_error", `--reason is required; ${COLLAB_HOST_USAGE}`);
+  }
+  if (reason.trim().length > MAX_HOST_REASON) {
+    throw new CollabError("usage_error", `--reason exceeds ${MAX_HOST_REASON} characters; ${COLLAB_HOST_USAGE}`);
+  }
+  if (reason.includes("\x00")) {
+    throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
   if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
     throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);

@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { defaultDatabasePath, resolveDatabasePath } from "../src/database-path.js";
+import { runCollabHostCli } from "../src/host.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
@@ -204,6 +205,74 @@ describe("agenttool-collab-host end", () => {
     expect(sessionRow(handle.session.id)).toEqual(before);
     expect(before.cursor_recovery_required).toBe(0);
     expect(store.getWorkspace(handle.workspace.id)!.event_head_sequence).toBe(headBefore);
+  });
+
+  test("refuses a reason endSession would refuse before any store call, with or without --release-leases", () => {
+    // No lease: the read-only preflight passes, so only an argument check
+    // made before the resume can keep the generation and the journal still.
+    const { handle, file } = startWithCredentialFile("host-long-reason");
+    const before = sessionRow(handle.session.id);
+    const headBefore = store.getWorkspace(handle.workspace.id)!.event_head_sequence;
+    const expectUnchanged = () => {
+      expect(existsSync(file)).toBe(true);
+      expect(sessionRow(handle.session.id)).toEqual(before);
+      expect(store.getWorkspace(handle.workspace.id)!.event_head_sequence).toBe(headBefore);
+    };
+
+    // 2,001 characters once trimmed: one past the limit endSession applies.
+    const tooLong = `  ${"x".repeat(2_001)}  `;
+    for (const flags of [[], ["--release-leases"]]) {
+      const run = runHost([
+        "end",
+        "--session-file",
+        file,
+        "--reason",
+        tooLong,
+        ...flags,
+        "--db",
+        databasePath,
+      ]);
+      expect(run.exitCode).toBe(1);
+      expect(run.lines).toHaveLength(1);
+      expect(run.receipt).toMatchObject({
+        protocol: "agenttool.collab-host/1",
+        status: "error",
+        error: "usage_error",
+      });
+      expect(run.receipt.message).toContain("--reason");
+      expect(run.receipt.message).toContain("2000");
+      expect(run.stdout).not.toContain(handle.credential.session_token);
+      expectUnchanged();
+    }
+
+    // argv cannot carry a NUL byte, but the exported entry point can.
+    const nul = runCollabHostCli(
+      ["end", "--session-file", file, "--reason", "host exit\0sweep", "--db", databasePath],
+      {},
+    );
+    expect(nul.exit_code).toBe(1);
+    expect(JSON.parse(nul.line)).toMatchObject({ status: "error", error: "usage_error" });
+    expectUnchanged();
+
+    // Exactly 2,000 characters once trimmed is still accepted, as endSession accepts it.
+    const atLimit = "y".repeat(2_000);
+    const accepted = runHost([
+      "end",
+      "--session-file",
+      file,
+      "--reason",
+      ` ${atLimit} `,
+      "--release-leases",
+      "--db",
+      databasePath,
+    ]);
+    expect(accepted.exitCode).toBe(0);
+    expect(accepted.receipt).toMatchObject({ status: "ended", session_id: handle.session.id });
+    const endedEvent = store.eventsSince(handle.workspace.id, 0, 500).events.find(
+      (event) => event.type === "session.ended" && event.entity_id === handle.session.id,
+    );
+    expect(endedEvent?.payload.reason).toBe(atLimit);
+    expect(store.verifyJournal(handle.workspace.id)).toBe(true);
   });
 
   test("reports an ended session with a warning when the revoked file cannot be removed", () => {
