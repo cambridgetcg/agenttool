@@ -494,7 +494,12 @@ export interface HandoffOffer {
 
 export interface NextCollabState {
   actor: string;
-  session: CoordinationSession | null;
+  /**
+   * The bound session (null in legacy actor mode). addressed_waiting counts
+   * notes addressed to it past its acknowledged cursor: report.posted with its
+   * to_session_id and session-path handoff.offered naming it, never its own.
+   */
+  session: (CoordinationSession & { addressed_waiting: number }) | null;
   own_claims: Task[];
   ready_tasks: Task[];
   claimable_tasks: Task[];

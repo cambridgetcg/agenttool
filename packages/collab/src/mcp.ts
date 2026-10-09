@@ -400,6 +400,8 @@ export function buildCollabMcpServer(
       description:
         "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " +
         "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " +
+        "A bound session's addressed_waiting counts notes addressed to it past its acknowledged cursor (addressed reports, " +
+        "review requests and results, session handoff offers; never its own); it falls as collab_cursor_ack advances. " +
         "Session liveness and task assignee_liveness are a derived view, never a status change: ended, else resting " +
         "while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
       annotations: localMutation,

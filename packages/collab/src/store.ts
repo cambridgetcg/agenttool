@@ -4010,7 +4010,7 @@ export class CollabStore {
     after_sequence?: number;
   }): {
     actor: string;
-    session: CoordinationSession;
+    session: CoordinationSession & { addressed_waiting: number };
     own_claims: Task[];
     ready_tasks: Task[];
     claimable_tasks: Task[];
@@ -4104,7 +4104,10 @@ export class CollabStore {
       ) as ReportRow[];
       return {
         actor: current.actor,
-        session: this.sessionProjection(current),
+        session: {
+          ...this.sessionProjection(current),
+          addressed_waiting: this.addressedWaiting(current),
+        },
         own_claims: tasks.filter(
           (task) =>
             task.effective_status === "claimed"
@@ -5851,6 +5854,20 @@ export class CollabStore {
     return declaration ? restFromDeclaration(declaration, observedAt) : null;
   }
 
+  /**
+   * Notes addressed to this session past its acknowledged cursor (the whole
+   * backlog, not one event page). See isAddressedTo for what counts.
+   */
+  private addressedWaiting(session: CoordinationSessionRow): number {
+    const rows = this.db.query(`
+      SELECT type, session_id, payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ?
+        AND type IN ('report.posted', 'handoff.offered')
+      ORDER BY sequence
+    `).all(session.workspace_id, session.cursor_sequence) as AddressedEventRow[];
+    return rows.filter((row) => isAddressedTo(row, session.id)).length;
+  }
+
   private requireWorkspace(workspaceId: string, db = this.db): Workspace {
     const workspace = this.getWorkspace(workspaceId, db);
     if (!workspace) throw new CollabError("workspace_not_found", `Workspace '${workspaceId}' was not found`);
@@ -6522,6 +6539,37 @@ function sessionLiveness(
   const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
   // NaN (an unparseable timestamp) fails this comparison and reads as stale.
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+
+/** The events-table columns isAddressedTo reads. */
+export interface AddressedEventRow {
+  type: string;
+  session_id: string | null;
+  payload_json: string;
+}
+
+/**
+ * True when a journal event explicitly addresses sessionId from another
+ * session: a report.posted whose to_session_id is sessionId (ordinary
+ * addressed reports, review requests, review results), or a session-path
+ * handoff.offered whose handoff.to_session_id is sessionId. Nothing else
+ * matches: not task.reported_complete (its paired review-request report
+ * already counts), not handoff.accepted (its to_session_id is the acceptor
+ * itself), not an actor-path offer, never an event this session authored.
+ * A payload that does not parse reads as not addressed; this never throws.
+ */
+export function isAddressedTo(event: AddressedEventRow, sessionId: string): boolean {
+  if (event.session_id === sessionId) return false;
+  if (event.type !== "report.posted" && event.type !== "handoff.offered") return false;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(event.payload_json);
+  } catch {
+    return false;
+  }
+  if (!isRecordValue(payload)) return false;
+  if (event.type === "report.posted") return payload.to_session_id === sessionId;
+  return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
 }
 
 function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): Task[] {
