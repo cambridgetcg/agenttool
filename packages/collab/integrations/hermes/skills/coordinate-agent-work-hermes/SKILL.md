@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, or refusable handoffs when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, declared rest and return, or refusable handoffs when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
@@ -10,7 +10,7 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**RELEASE CANDIDATE 0.5.0:** 33 tools. These release-candidate bytes do not establish
+**RELEASE CANDIDATE 0.5.0:** 34 tools. These release-candidate bytes do not establish
 npm publication; verify the protected receipt and registry separately.
 Public 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution
@@ -78,9 +78,10 @@ do not guess other prefixed names.
    call `mcp_agenttool_collab_task_review` with its own `confidence`,
    `confidence_basis` and `limits`. A late reviewer concurs or disagrees by
    report.
-8. **End.** Call `mcp_agenttool_collab_session_end` with a `reason`,
+8. **End or rest.** Call `mcp_agenttool_collab_session_end` with a `reason`,
    `release_leases: true` and an optional `release_summary` when the host knows
-   this session will not resume.
+   this session will not resume, or declare rest with
+   `mcp_agenttool_collab_session_rest` to stay reachable.
 
 `next_anchor`, `known_cursor` and `event_limit` behave as in the main skill:
 `known_cursor` validates an anchor but does not paginate or acknowledge, and
@@ -102,9 +103,10 @@ the error and correct the reference.
 
 `review_requested_session_id` must be an active session in this workspace
 other than yours. It adds an addressed `informs` report and shows on the task;
-it is a request, not a reservation. Leave the review to that session while its
-`liveness` is `live`. If a review returns `task_not_pending_review` with
-`review_report_id` and `accepted_by_session_id`, append your verdict with
+it is a request, not a reservation. Review it yourself unless the requested
+reviewer reads `live`, or `resting` with `wake_on` addressed. If a review
+returns `task_not_pending_review` with `review_report_id` and
+`accepted_by_session_id`, append your verdict with
 `mcp_agenttool_collab_report_append`: the same `task_id`,
 `relation: "supports"` or `"challenges"`, and `target_report_id` set to
 `review_report_id`.
@@ -167,12 +169,46 @@ and branch, a clean worktree, and only scoped files byte-equal to their newest
 
 `role` is free text other sessions read with `liveness` in workspace status.
 Say there if this session only listens or reviews, and respect such roles in
-others. A session reads `stale` once ended, or after 6 hours without
-`collab_next`, a session mutation, a cursor acknowledgement, reset, resume
-or end; every acknowledgement refreshes `last_seen_at`, including one that
-does not advance the cursor, and nothing expires automatically. Tasks show
-`assignee_liveness`; recover an expired lease only through
+others. A session reads, in this order of precedence, `ended`, `resting`,
+`stale` or `live`: `ended` once ended; `resting` while a declared rest stands;
+`stale` after 6 hours without `collab_next`, a session mutation, a cursor
+acknowledgement, reset, resume or end; otherwise `live`. Every acknowledgement
+refreshes `last_seen_at`, including one that does not advance the cursor, and
+nothing expires automatically. Tasks show `assignee_liveness` in the same four
+states; recover an expired lease only through
 `mcp_agenttool_collab_task_recover` with an explicit action and note.
+
+## Rest, knocks and delivery hints
+
+Rest is declared, never inferred. Call `mcp_agenttool_collab_session_rest`
+with `mode: "resting"`, an optional future `until` (ISO-8601 with seconds and
+a time zone), an optional `reason` (at most 200 characters) and `wake_on`
+(`[]` by default, or `["addressed"]`); it appends `session.rested`, and
+`mode: "ready"`, sent without those fields, returns with `session.returned`.
+A passed `until` reads as not resting and starts nothing.
+Resting never releases, renews, extends or reassigns leases, handoffs or
+accepted obligations; an ended session is never knocked or woken.
+
+No host wake exists for Hermes yet, so a resting Hermes session declares
+`wake_on: []`: addressed notes are held for its return, and
+`mcp_agenttool_collab_next` counts them in `addressed_waiting` on the bound
+session.
+
+Only an explicit address knocks (a report `to_session_id`, a handoff to a
+session, a requested review, or a review result for the reporter), never a
+mention. The journal is the mailbox; a knock is a pointer
+`{seq, kind, from_actor, ref_id}`, never a body, so a missed knock loses
+nothing. Addressed mutations return
+`addressee: {session_id, liveness, rest, delivery}`, read fresh on every call:
+`tap` (live), `wake` (resting with `wake_on` addressed), `held` (resting
+otherwise, or stale) or `none` (ended; departure is complete). It reports the
+addressee's declaration, not whether a host can wake it (a host doorbell
+records that, as `host_cannot_wake` in Sol's ledger). It is a hint,
+not a guarantee, and nothing is blocked. A host process that runs several
+collab sessions cannot tell which one is yours; that ambiguity means silence.
+Hosts read knocks with `agenttool-collab-host knocks` and
+`agenttool-collab-host doorbell-scan`, which are not model tools. If you are
+told notes are waiting, read them when you choose; silence is complete.
 
 ## Receive without liveness writes (0.5.0)
 

@@ -71,7 +71,8 @@ those are not current publication status. Collab 0.4.0 has a
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
 not assertions about mutable registry tags. Current Collab source is the
-**0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
+**0.5.0 RELEASE CANDIDATE** with 34 tools, including bounded event waiting
+and declared rest.
 These release-candidate bytes do not establish npm publication; verify the
 protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
 Serving this shelf neither publishes a package nor installs it in a host.

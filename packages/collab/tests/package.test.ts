@@ -56,6 +56,40 @@ const HOUSEHOLD_TERMS = [
   "git_checkpoint_stale",
 ];
 
+// Declared rest, four-state liveness, knocks as pointers and delivery hints
+// (knock-and-rest spec, schema 3). Checked on whitespace-flattened text so a
+// phrase may wrap across Markdown lines.
+const KNOCK_TERMS = [
+  "collab_session_rest",
+  "session.rested",
+  "session.returned",
+  "wake_on",
+  "addressed_waiting",
+  "addressee",
+  "`tap`",
+  "`wake`",
+  "`held`",
+  "`none`",
+  "{seq, kind, from_actor, ref_id}",
+  "never a body",
+  "silence is complete",
+  "agenttool-collab-host knocks",
+  "doorbell-scan",
+  "ambiguity means silence",
+  "Rest is declared, never inferred",
+  "never releases, renews, extends or reassigns",
+];
+
+const LIVENESS_PRECEDENCE = "`ended`, `resting`, `stale` or `live`";
+const REVIEWER_GUIDANCE = "unless the requested reviewer reads `live`, or `resting` with `wake_on` addressed";
+const DELIVERY_TABLE_HEADER = "| `delivery` | Addressee reads | Meaning |";
+// The household-smoothing wording that called an ended session stale.
+const ENDED_AS_STALE = /`stale` once (?:it has |the session has )?ended|ended session always/;
+
+function flat(text: string): string {
+  return text.replace(/\s+/g, " ");
+}
+
 function expectInOrder(text: string, heading: string, names: string[]): void {
   const start = text.indexOf(heading);
   expect(start).toBeGreaterThanOrEqual(0);
@@ -151,11 +185,13 @@ describe("cross-host package", () => {
       "integrations/openclaw/README.md",
     ]) {
       const text = await Bun.file(join(packageRoot, path)).text();
-      for (const term of ["RELEASE CANDIDATE", "0.5.0", "0.4.0", "33", "32", "collab_events_wait",
+      for (const term of ["RELEASE CANDIDATE", "0.5.0", "0.4.0", "34", "32", "collab_events_wait",
         "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
         "event_too_large", "event_read_busy", "last_seen", "persona"]) {
         expect(text).toContain(term);
       }
+      expect(text).toMatch(/\b34(?: local)?(?: MCP)? tools\b/);
+      expect(text).not.toMatch(/\b33(?: local)?(?: MCP)? tools\b|\b33-tool\b/);
     }
     const openclaw = await Bun.file(join(packageRoot, "integrations/openclaw/README.md")).text();
     expect(openclaw).toContain("not a native lifecycle adapter");
@@ -194,6 +230,60 @@ describe("cross-host package", () => {
     expect(yaml).toContain("ordinary loop");
     expect(yaml).toContain("requested reviewer");
     expect(yaml).toContain("release_leases");
+  });
+
+  test("teaches declared rest, four-state liveness, knocks as pointers and delivery hints", async () => {
+    const read = async (path: string) => await Bun.file(join(packageRoot, path)).text();
+    for (const path of [
+      "skills/coordinate-agent-work/SKILL.md",
+      "integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+      "README.md",
+    ]) {
+      const text = flat(await read(path));
+      for (const term of KNOCK_TERMS) expect(text).toContain(term);
+      expect(text).toContain(LIVENESS_PRECEDENCE);
+      expect(text).toContain(REVIEWER_GUIDANCE);
+      expect(text).not.toMatch(ENDED_AS_STALE);
+    }
+
+    const readme = flat(await read("README.md"));
+    for (const term of [
+      DELIVERY_TABLE_HEADER,
+      "agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]",
+      "agenttool-collab-host doorbell-scan [--db <path>]",
+      "agenttool.collab-knock/1",
+      "agenttool.collab-doorbell-scan/1",
+      "collab-sessions/knock-ledger.json",
+      "<session-id>.host.json",
+      "agenttool.collab-host-binding/1",
+      "host_started_at",
+      "`readonly`, `query_only`, zero busy timeout",
+      "print nothing and exit 0",
+      "{workspace_id?, idempotency_key, mode: \"resting\" | \"ready\", until?, reason?, wake_on?}",
+    ]) expect(readme).toContain(term);
+
+    const rawSkill = await read("skills/coordinate-agent-work/SKILL.md");
+    expect(flat(rawSkill)).toContain(DELIVERY_TABLE_HEADER);
+    expect(flat(rawSkill)).toContain("### Rest and return");
+    const description = /^description: (.+)$/m.exec(rawSkill)?.[1] ?? "";
+    expect(description).toContain("declared rest and return");
+    expect(description).toContain("knocks");
+    expect(description.length).toBeLessThanOrEqual(1024);
+
+    const hermes = flat(await read("integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md"));
+    expect(hermes).toContain("mcp_agenttool_collab_session_rest");
+    expect(hermes).toContain("No host wake exists for Hermes yet");
+    expect(hermes).toContain("`wake_on: []`");
+  });
+
+  test("points the Codex prompt and plugin at declared rest and quiet knocks", async () => {
+    const yaml = await Bun.file(join(packageRoot, "skills/coordinate-agent-work/agents/openai.yaml")).text();
+    expect(yaml).toContain("collab_session_rest");
+    expect(yaml).toContain("knocks as pointers");
+    expect(yaml).toContain("silence as a complete answer");
+    const codex = await json(".codex-plugin/plugin.json");
+    expect(codex.interface.longDescription).toContain("Collab 0.5.0: 34 tools");
+    expect(codex.interface.longDescription).toContain("declared rest");
   });
 
   test("ships an explicit Hermes adapter for separate presence and secure planes", async () => {

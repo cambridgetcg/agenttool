@@ -5,7 +5,7 @@
 > **Code:** `../../src/mcp.ts`, `../../dist/agenttool-collab-mcp.js`.
 > **Tests:** `../../tests/events-wait.test.ts`, `../../tests/package.test.ts`.
 
-**RELEASE CANDIDATE 0.5.0, 33 tools.** These release-candidate bytes do not establish
+**RELEASE CANDIDATE 0.5.0, 34 tools.** These release-candidate bytes do not establish
 npm publication; verify the protected receipt and registry separately.
 Published 0.4.0 has 32 tools and no
 `collab_events_wait`. This example has not been exercised in live OpenClaw.
@@ -43,7 +43,7 @@ Use the same local database as the cooperating Claude/Codex/Hermes MCP
 processes. Each independently attributed child needs its own MCP process and
 `collab_session_start`; a shared endpoint exposes one coordination binding,
 not an independently identified fleet. Verify the intended workspace and the
-33-tool inventory after connecting. Native tool-name prefixes depend on the
+34-tool inventory after connecting. Native tool-name prefixes depend on the
 selected adapter; the names below are the underlying MCP names.
 
 ## Status, queue, receive, acknowledge

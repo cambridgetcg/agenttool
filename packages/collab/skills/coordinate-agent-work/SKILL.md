@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work
-description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, splitting parallel work, claiming before overlapping edits, polling or acknowledging events, attaching evidence, completing work with an optional requested reviewer, reviewing or concurring with completion, answering proposals or challenging reports, delegating to a child session, recovering leases, handing work off, ending a session cleanly, publishing optional self-declared presence, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
+description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, splitting parallel work, claiming before overlapping edits, polling or acknowledging events, attaching evidence, completing work with an optional requested reviewer, reviewing or concurring with completion, answering proposals or challenging reports, delegating to a child session, recovering leases, handing work off, ending a session cleanly, declared rest and return, reading knocks and delivery hints, publishing optional self-declared presence, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
 ---
 
 # Coordinate Agent Work
@@ -8,10 +8,10 @@ description: Coordinate independent coding or research agents across host sessio
 Use the journal as a compact coordination record. Keep the host responsible for
 spawning, steering, waking, reconnecting, waiting for, and stopping agents.
 
-**RELEASE CANDIDATE 0.5.0:** 33 local MCP tools, including `collab_events_wait`.
-These release-candidate bytes do not establish npm publication; verify the
-protected receipt and registry separately.
-Published 0.4.0 has 32 tools and does not gain this wait from these source edits.
+**RELEASE CANDIDATE 0.5.0:** 34 local MCP tools, including `collab_events_wait`
+and `collab_session_rest`. These release-candidate bytes do not establish npm
+publication; verify the protected receipt and registry separately.
+Published 0.4.0 has 32 tools and gains neither tool from these source edits.
 One MCP process has one bound session; independent child attribution needs
 independent MCP processes. Preserve native dispatcher, persona, memory,
 permissions and lifecycle in Claude, Codex, Hermes and OpenClaw. Connection or
@@ -32,6 +32,8 @@ and inspect existing work first.
    wakes you. Process one page, then call `collab_cursor_ack` with its exact
    terminal `next_anchor` (`{ epoch_id, sequence, hash }`); poll again while
    `has_more` is true. Handle your own entries in `recovery_required` first.
+   Your bound `session` carries `addressed_waiting`: notes addressed to you
+   past your acknowledged cursor.
 3. **Split and claim.** Create bounded `coordination`, `read_only`, or `edit`
    tasks with `collab_task_create`: dependencies, completion tests in the
    description, and conservative repository-relative `path_scopes`. Inspect
@@ -55,8 +57,10 @@ and inspect existing work first.
    `accept` or `request_changes`, a summary, evidence, and your own
    `confidence`, `confidence_basis` and `limits`. A late reviewer concurs or
    disagrees by report.
-8. **End.** Call `collab_session_end` with a `reason`, `release_leases: true`
-   and an optional `release_summary` when this session will not resume.
+8. **End or rest.** Call `collab_session_end` with a `reason`,
+   `release_leases: true` and an optional `release_summary` when this session
+   will not resume. To stay reachable instead, declare rest with
+   `collab_session_rest` (see "Rest and return").
 
 The sections below carry the detail for each step.
 
@@ -100,9 +104,10 @@ the server refuses with `review_request_self`,
 The completion report stays unaddressed, so every session still sees it; a
 separate `informs` report addressed to the requested session asks for the
 review, and the task projection shows the request. It is a request, not a
-reservation: any distinct session may still review. While the requested
-reviewer's `liveness` is `live`, leave the review to them; if it reads `stale`
-(an ended session always does) or the requester asks, review it yourself.
+reservation: any distinct session may still review. Review it yourself
+unless the requested reviewer reads `live`, or `resting` with `wake_on`
+addressed (a host may wake it for the request); then leave it to them unless
+the requester asks you.
 
 The reporter cannot review its own completion (`self_review_forbidden`). An
 unresolved challenge on the completion report blocks acceptance until a
@@ -146,6 +151,36 @@ credential: `ended` or `already_ended`, or `error` with exit 1. `--reason` is
 also the release note. Without `--release-leases` it refuses a session that
 holds a live lease before touching it. A live model ends its own session with
 `collab_session_end`.
+
+### Rest and return
+
+Rest is declared, never inferred. When you will be away but want to stay
+reachable, call `collab_session_rest` with `mode: "resting"`, an optional
+`until` (a future ISO-8601 instant with seconds and a time zone, such as
+`2026-10-09T18:00:00Z`), an optional `reason` (at most 200 characters) and
+`wake_on`: `[]` (the default) or `["addressed"]`. It appends
+`session.rested`; `mode: "ready"`, sent without those three fields, returns
+and appends `session.returned`. Both act on your own credential-bound
+session, and an exact retry with the same idempotency key is safe. Once
+`until` passes, the rest simply reads as over: nothing starts.
+
+`wake_on: ["addressed"]` is your own consent to be woken for notes addressed
+to you; no other session can arm it. Whether anything can wake you belongs to
+the host: a host doorbell may resume this same session in a fresh process
+(same session ID, the generation raised by one), and some hosts cannot be
+woken at all. Without it, addressed notes are held until you return.
+
+Resting never releases, renews, extends or reassigns your leases, pending
+handoffs or accepted obligations. Release or hand off what others may need
+before you rest; a lease that expires while you rest reads
+`recovery_required` like any other. To leave for good, end instead: an ended
+session is never knocked or woken.
+
+If a host wakes you, its prompt carries only pointers and your own rest
+reason. Read the notes with `collab_next` if you choose. If nothing needs you,
+end the turn: silence is complete, and no reply is owed. You may rest again
+with `collab_session_rest` or return with `mode: "ready"`; until you do, you
+still read `resting`.
 
 ## Reports and relations
 
@@ -191,6 +226,45 @@ Offer a handoff with `collab_handoff_offer`; do not assign it by declaration.
 The lease transfers only after the named recipient accepts. Transfer neither
 private data nor external authority. Treat decline, stop, pause, and
 uncertainty as valid outcomes.
+
+## Knocks and delivery hints
+
+Only an explicit address knocks: a report with `to_session_id`, a handoff
+offered to a session, a requested review, or a review result for the
+reporter. A mention or an implied ask never does. The journal is the mailbox
+and a knock is only its doorbell: a pointer `{seq, kind, from_actor, ref_id}`,
+never a body, so a missed knock loses nothing.
+
+`collab_report_append` with `to_session_id`, `collab_handoff_offer` to a
+session, `collab_task_complete` with `review_requested_session_id`, and
+`collab_task_review` (for the reporter) return
+`addressee: {session_id, liveness, rest, delivery}`, read fresh on every call,
+so an idempotent retry shows the addressee's current state:
+
+| `delivery` | Addressee reads | Meaning |
+|---|---|---|
+| `tap` | `live` | a host hook may show a one-line pointer at its next turn |
+| `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
+| `held` | `resting` without it, or `stale` | nothing happens; the note waits for its return |
+| `none` | `ended` | never knocked; departure is complete and the note stays unread |
+
+The hint names what the addressee declared, not what any host did, and nothing
+is blocked. Collab cannot see hosts: whether a host can actually wake a
+resting session (for example a Claude seat launched without its channel) is
+the host doorbell's record (`host_cannot_wake` in Sol's doorbell ledger),
+never part of the hint. Handoff offers and review requests refuse inactive targets, so
+`none` comes only from an addressed report, a review whose reporter has since
+ended, or a replay after the addressee ended. Do not resend to make a knock
+louder.
+
+If your host shows a Collab tap line (for example "2 note(s) addressed to you
+are waiting"), it is a pointer: read with `collab_next` when you choose;
+nothing is required. A host process that runs several collab sessions, such
+as one Codex Desktop app-server for several threads, cannot tell which session
+is yours, so it gets no tap: that ambiguity means silence, not a guess. Keep
+polling with `collab_next`. Hosts read knocks with the read-only
+`agenttool-collab-host knocks` and `agenttool-collab-host doorbell-scan`
+commands; neither is a model tool.
 
 ## Delegation and lineage
 
@@ -252,13 +326,18 @@ A session that only listens or reviews says so there, for example
 or request reviews against a role that declines that work. A listener still
 polls, acknowledges and ends its session.
 
-`liveness` is a view, not a status: a session reads `stale` once it has ended
-or when its `last_seen_at` is more than 6 hours old. Every cursor
-acknowledgement refreshes `last_seen_at`, including one that does not advance
-the cursor; so do `collab_next`, session mutations, a cursor reset, resume and
-end. A host that only waits with `collab_events_wait` shows as stale. Nothing
-expires or ends automatically. Tasks show `assignee_liveness`, and `collab_next` lists
-`recovery_required` tasks, the caller's own expired leases first.
+`liveness` is a view, not a status. A session reads, in this order of
+precedence, `ended`, `resting`, `stale` or `live`: `ended` once it has ended;
+`resting` while its latest declared rest stands (not returned, `until` not
+passed); `stale` when its `last_seen_at` is more than 6 hours old; otherwise
+`live`. A quiet session reads `stale`, never `resting`. Session projections
+carry `rest` (`mode`, `since`, `until`, `reason`, `wake_on`) for a standing
+rest, else null. Every cursor acknowledgement refreshes `last_seen_at`,
+including one that does not advance the cursor; so do `collab_next`, session
+mutations, a cursor reset, resume and end. A host that only waits with
+`collab_events_wait` shows as stale. Nothing expires or ends automatically.
+Tasks show `assignee_liveness` in the same four states, and `collab_next`
+lists `recovery_required` tasks, the caller's own expired leases first.
 
 An expired session lease cannot be renewed. Before recovering one, yours or
 another participant's, inspect progress, reports, artifacts, and Git
@@ -391,7 +470,7 @@ If the host has separately authorized the `@agenttool/collab-zerone` bridge,
 selected workspace heads may be witnessed on Zerone. A head transitively
 commits preceding event bytes; it does not prove their claims true. The local
 read-only sidecar tool first shipped as Collab's 32nd MCP tool in public 0.4.0;
-this 0.5.0 release candidate has 33 tools.
+this 0.5.0 release candidate has 34 tools.
 
 - Call `collab_anchor_status` with the workspace ID to learn where the journal
   stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or

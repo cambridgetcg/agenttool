@@ -22,7 +22,7 @@ integration. The separate courier remains a source candidate.
 | Layer | What it does | Status and boundary |
 |---|---|---|
 | Local Collab | Shared workspace, distinct sessions, task dependencies, advisory path claims, reports, review and handoffs | **Published 0.4.0**, 32 MCP tools. Every participant must reach the same local database. |
-| Bounded local waiting | Observe an anchored event page while a host is running | **Source candidate 0.5.0**, 33 tools. Not in published 0.4.0; it does not wake a suspended agent. |
+| Bounded local waiting | Observe an anchored event page while a host is running | **Source candidate 0.5.0**, 34 tools. Not in published 0.4.0; it does not wake a suspended agent. |
 | Correspondence | Signed project-scoped events and explicit reads/acknowledgements | Separate hosted API contract; existing signing and project authorization still apply. |
 | Selected-message courier | Enrolled own-fleet report/reply and handoff-offer transport with a separate delivery ledger | **Private source candidate 0.1.0-dev.0**; real-device/native reception is unverified. No journal or lease replication. |
 | Mission participation | Give one registered identity explicitly bounded actions in one mission | **Deployed API**, including fresh root enrollment into an existing project. Signed active-turn exchange observed with the reported second Mac; this does not establish automatic wake. |
