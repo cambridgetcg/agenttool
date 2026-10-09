@@ -251,7 +251,7 @@ describe("agenttool-collab-host end", () => {
       {},
     );
     expect(nul.exit_code).toBe(1);
-    expect(JSON.parse(nul.line)).toMatchObject({ status: "error", error: "usage_error" });
+    expect(JSON.parse(nul.line!)).toMatchObject({ status: "error", error: "usage_error" });
     expectUnchanged();
 
     // Exactly 2,000 characters once trimmed is still accepted, as endSession accepts it.

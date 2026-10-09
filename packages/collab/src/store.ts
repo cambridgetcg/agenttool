@@ -6522,7 +6522,7 @@ function requireMatchingPresenceSessionJoin(
   }
 }
 
-interface RestDeclarationRow {
+export interface RestDeclarationRow {
   type: "session.rested" | "session.returned";
   sequence: number;
   occurred_at: string;
@@ -6530,7 +6530,7 @@ interface RestDeclarationRow {
 }
 
 /** Expiry is computed on read; a returned, expired or damaged declaration reads as no rest. */
-function restFromDeclaration(row: RestDeclarationRow, observedAt: string): SessionRest | null {
+export function restFromDeclaration(row: RestDeclarationRow, observedAt: string): SessionRest | null {
   if (row.type !== "session.rested") return null;
   let payload: unknown;
   try {
