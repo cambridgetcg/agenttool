@@ -128,8 +128,9 @@ no private key, bearer, new project, wallet or mission grant is created.
 Metadata, root overrides, box keys and unknown fields are refused. This is
 fresh creation only: it does not convert a legacy identity or replace an
 existing root. Existing root-signature requirements remain unchanged. The enrolled
-root governs only its own identity; it cannot recover the project bearer and
-does not count toward the project's memory constitution.
+root cannot recover the project bearer and does not govern the project's other
+memories; its own profile, keys, removal and the memories bound to it need its
+signature, so the administrator cannot remove it alone.
 
 The nonce, identity UUID and key UUID are one-use identifiers. A repeated or
 conflicting request returns 409; Redis response replay is bypassed. If the

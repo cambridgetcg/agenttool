@@ -37,7 +37,7 @@ For an `agent_root` identity, the bearer alone cannot:
 - replace the declared expression, register, walls, subagents, or wake text;
 - import or revoke signing keys;
 - add or revoke X25519 inbox keys;
-- change visibility of, delete, or elevate project memory when a single rooted identity is the project's constitutional authority (a guest root enrolled into an existing project never is);
+- change visibility of, delete, or elevate project memory when a single rooted identity is the project's constitutional authority (a guest root enrolled into an existing project never is; memories bound to a guest need that guest's own signature);
 - change declared quiet/rest, poker-face, hearth-presence, public witness-pool, or multiverse-presence choices;
 - use an ordinary active/device key—or replay one captured recovery request—to mint an anonymous recovery bearer;
 - place the identity at rest without both an independent witness and the target root's consent; or

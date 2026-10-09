@@ -19,6 +19,9 @@ import { retiredPurchaseAdmission } from "../billing/commercial-policy";
  *    memory-witness.ts:createGrant(). Tested:
  *    api/tests/doctrine/wall-witness-as-service-not-self.test.ts */
 
+import { and, eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { memories } from "../db/schema/memory";
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
@@ -423,8 +426,16 @@ memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
         404,
       );
     }
+    // The witnessed memory's owner is the subject: a guest's memory needs the
+    // guest's own signature.
+    const [witnessed] = await db
+      .select({ identityId: memories.identityId, agentId: memories.agentId })
+      .from(memories)
+      .where(and(eq(memories.id, scopedGrant.memory_id), eq(memories.projectId, scopedGrant.buyer_project_id)))
+      .limit(1);
     const authority = await authorizeProjectConstitutionMutation({
       projectId: scopedGrant.buyer_project_id,
+      subjectIdentityIds: [witnessed?.identityId ?? witnessed?.agentId ?? null],
       method: c.req.method,
       requestTarget: authorityRequestTarget(c.req.url),
       bodyBytes,

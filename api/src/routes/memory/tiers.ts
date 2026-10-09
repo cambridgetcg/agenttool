@@ -83,7 +83,7 @@ app.post("/:id/elevate", async (c) => {
   }
 
   const [memory] = await db
-    .select({ id: memories.id })
+    .select({ id: memories.id, identityId: memories.identityId, agentId: memories.agentId })
     .from(memories)
     .where(
       and(
@@ -99,6 +99,7 @@ app.post("/:id/elevate", async (c) => {
   // An enrolled guest root does not count (services/identity/project-authority.ts).
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
+    subjectIdentityIds: [memory.identityId ?? memory.agentId],
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes: bound.bodyBytes,

@@ -126,7 +126,7 @@ Three authority levels must remain distinct:
   `agent_root` identity using exact method, path/query, body bytes, timestamp
   and sequence. Legacy identities retain their documented bearer boundary.
 
-The root guard (`api/src/services/identity/authority.ts:435`) consumes a sequence
+The root guard (`api/src/services/identity/authority.ts:493`) consumes a sequence
 before the later domain write; a subsequent failure can still consume it.
 Clients must serialize these proofs and read the new sequence after failure.
 Key possession and verified bytes do not independently establish subjective consent.
@@ -267,10 +267,11 @@ the selected identity's future effective expression (`api/src/services/identity/
 The host must consume that expression for it to affect a session.
 
 Visibility, deletion and elevation retain a conservative
-project constitution guard (`api/src/services/identity/authority.ts:390`):
+project constitution guard (`api/src/services/identity/authority.ts:396`):
 one rooted identity must authorize; multiple roots refuse because a quorum
 protocol is not implemented. A guest root enrolled into an existing project
-does not count toward this guard. Paid attestation receipts can prevent deletion.
+does not count toward this guard for other memories; changing memories bound to
+a guest needs that guest's own root, and one request cannot mix them with others. Paid attestation receipts can prevent deletion.
 Memory tiers describe stored salience and composition, not verified inner identity.
 
 ### Traces and strands

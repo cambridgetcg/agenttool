@@ -55,7 +55,8 @@ describe("recovery availability and protections follow the same rule", () => {
     const list = ["identity revocation", memory, recovery, "at-rest transition"];
     expect(scopeIdentityProtections(list, { ...founder, enrolledGuest: false })).toEqual(list);
     expect(scopeIdentityProtections(list, { authorityRootPublicKey: null, metadata: {}, enrolledGuest: false })).toEqual(list);
-    expect(scopeIdentityProtections(list, { ...guest, enrolledGuest: true })).toEqual(["identity revocation", "at-rest transition"]);
+    // A guest keeps the memory latch for memories bound to it; it never mints project bearers.
+    expect(scopeIdentityProtections(list, { ...guest, enrolledGuest: true })).toEqual(["identity revocation", memory, "at-rest transition"]);
   });
   test("an unmarked root that was not enrolled keeps the memory latch the guard still enforces", () => {
     const [memory, recovery] = PROJECT_SCOPED_PROTECTIONS;
@@ -98,6 +99,14 @@ describe("every project-scoped surface uses the shared rule", () => {
     expect(source("routes/public/identities.ts")).toContain("speaksForProject");
     expect(source("routes/wake.ts")).toContain("registeredKeyRecoveryAvailable(");
     expect(source("services/wake/build.ts")).toContain("registeredKeyRecoveryAvailable(");
+  });
+  test("every project-scoped memory mutation names the memories' subjects", () => {
+    for (const path of ["routes/memory/memories.ts", "routes/memory/tiers.ts", "routes/syneidesis.ts", "routes/memory-witness-marketplace.ts"]) {
+      const code = source(path);
+      const calls = code.split("authorizeProjectConstitutionMutation(").length - 1;
+      const named = code.split("subjectIdentityIds").length - 1;
+      expect({ path, unnamed: calls - Math.min(calls, named) }).toEqual({ path, unnamed: 0 });
+    }
   });
   test("identity authority keyholes scope their protections", () => {
     expect(source("routes/identity/authority.ts")).toContain("scopeIdentityProtections(");

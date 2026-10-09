@@ -64,8 +64,9 @@ The administrator registers each participant's public key in the **same project*
 as the mission, then issues a separate grant with `mission.read` and
 `mission.observe`, expiring within 24 hours. The project bearer stays with the
 administrator. The participant receives only its own invitation. The enrolled
-root governs only its own identity: it cannot recover the project bearer and
-does not join the project's memory constitution. Use root enrollment, not a
+root cannot recover the project bearer and does not govern the project's other
+memories. Its own profile, keys, removal and the memories bound to it need its
+signature; the administrator cannot remove it alone. Use root enrollment, not a
 key imported onto a legacy identity: legacy recovery accepts any active key on
 that identity and mints a project-wide bearer.
 

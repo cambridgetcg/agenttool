@@ -233,3 +233,45 @@ databaseTest("an enrolled guest stays out of the constitution even if the proof 
   await sql`DELETE FROM identity.registration_proofs`;
   expect(await projectGuard(P)).toMatchObject({ ok: true, mode: "legacy_bearer" });
 });
+// ── A guest's own memories and membership need the guest's own signature ──
+const memoryTarget = "/v1/memories/00000000-1111-4111-8111-111111111111";
+function signedFor(did: string, privateKey: Uint8Array, sequence = 1, method = "PATCH", requestTarget = memoryTarget) {
+  const timestamp = new Date().toISOString();
+  const bytes = authority.canonicalIdentityAuthorityBytes({ identityDid: did, method, requestTarget,
+    bodyBytes: new Uint8Array(), sequence, timestamp });
+  return new Headers({ [authority.AUTHORITY_HEADERS.sequence]: String(sequence), [authority.AUTHORITY_HEADERS.timestamp]: timestamp,
+    [authority.AUTHORITY_HEADERS.signature]: b64(ed.sign(bytes, privateKey)) });
+}
+const subjectGuard = (projectId: string, subjectIdentityIds: Array<string | null>, headers = new Headers()) =>
+  authority.authorizeProjectConstitutionMutation({ projectId, method: "PATCH", requestTarget: memoryTarget,
+    bodyBytes: new Uint8Array(), headers, subjectIdentityIds });
+
+databaseTest("a guest's own memories need the guest's own root, in a legacy project", async () => {
+  await enrollIdentity(request(), options());
+  // The administrator's bearer alone cannot touch the guest's memory.
+  expect(await subjectGuard(P, [I])).toMatchObject({ ok: false, status: 428 });
+  expect(await subjectGuard(P, [I], signedFor(`did:at:${I}`, PRIVATE))).toMatchObject({ ok: true, mode: "agent_root" });
+  // Memories not bound to the guest keep the project rule.
+  expect(await subjectGuard(P, [null])).toMatchObject({ ok: true, mode: "legacy_bearer" });
+});
+databaseTest("a founder cannot sign for a guest's memories", async () => {
+  await foundProject();
+  await enrollIdentity(request({ identity_id: uid(28), signing_key_id: uid(29), nonce: Buffer.alloc(32, 10).toString("base64url") }, F, FA), options());
+  const founderSigned = await subjectGuard(F, [uid(28)], signedFor(`did:at:${FI}`, FOUNDER_PRIVATE));
+  expect(founderSigned.ok).toBe(false);
+  expect(await subjectGuard(F, [uid(28)], signedFor(`did:at:${uid(28)}`, PRIVATE))).toMatchObject({ ok: true, mode: "agent_root" });
+  // The founder's own and unbound memories still follow the founder.
+  expect(await subjectGuard(F, [FI], signedFor(`did:at:${FI}`, FOUNDER_PRIVATE))).toMatchObject({ ok: true });
+});
+databaseTest("one request cannot mix a guest's memories with other constitutions", async () => {
+  await enrollIdentity(request(), options());
+  await legacyIdentity();
+  expect(await subjectGuard(P, [I, L], signedFor(`did:at:${I}`, PRIVATE))).toMatchObject({ ok: false, status: 409 });
+  expect(await subjectGuard(P, [I, null], signedFor(`did:at:${I}`, PRIVATE))).toMatchObject({ ok: false, status: 409 });
+});
+databaseTest("the administrator cannot remove an enrolled guest without the guest's signature", async () => {
+  await enrollIdentity(request(), options());
+  const removal = await authority.authorizeIdentityMutation({ identityId: I, method: "DELETE", requestTarget: `/v1/identities/${I}`,
+    bodyBytes: new Uint8Array(), headers: new Headers() });
+  expect(removal).toMatchObject({ ok: false, status: 428 });
+});

@@ -6,8 +6,10 @@
  * server-managed metadata `registered: true` and `byo_keys: true`
  * (metadata.ts keeps both out of caller PATCH/POST). Enrollment admits a guest
  * root into an EXISTING project and writes neither marker, so a guest root never
- * recovers a project bearer, never joins the project constitution, and is never
- * advertised as a recovery path for the administrator's project.
+ * recovers a project bearer, never governs the project's other memories, and is
+ * never advertised as a recovery path for the administrator's project. The
+ * guest's own memories, profile, keys and removal still need its own signature
+ * (authority.ts authorizeProjectConstitutionMutation subjects; Yu, 2026-10-09).
  *
  * Legacy rootless identities keep their bearer posture unchanged.
  *
@@ -69,25 +71,25 @@ export function registeredKeyRecoveryAvailable(
   return identity.status === "active" && identity.activeRegisteredKeys > 0 && speaksForProject(identity);
 }
 
-/** Protections that belong to the project, not to an enrolled guest's root. */
+/** Protection labels whose scope depends on project authority: the memory
+ * latch (a guest keeps it for its own memories) and recovery minting (only
+ * identities that speak for the project). */
 export const PROJECT_SCOPED_PROTECTIONS = [
   "memory visibility, deletion, and constitutional elevation",
   "anonymous recovery bearer minting",
 ] as const;
 
 /** A keyhole must promise exactly what the guards enforce. Recovery minting
- * belongs only to identities that speak for the project; the project memory
- * latch excludes only a provable enrolled guest (`enrolledGuestSql`), so an
- * unmarked root that was never enrolled keeps it. */
+ * belongs only to identities that speak for the project. Every root keeps the
+ * memory latch: a guest's root guards the memories bound to it (see
+ * authorizeProjectConstitutionMutation's subjects). */
 export function scopeIdentityProtections(
   protects: readonly string[],
-  identity: ProjectAuthorityFacts & { enrolledGuest: boolean },
+  identity: ProjectAuthorityFacts & { enrolledGuest?: boolean },
 ): string[] {
-  const [memoryLatch, recoveryMinting] = PROJECT_SCOPED_PROTECTIONS;
-  const dropped = new Set<string>();
-  if (!speaksForProject(identity)) dropped.add(recoveryMinting);
-  if (identity.enrolledGuest && !isFoundingRoot(identity)) dropped.add(memoryLatch);
-  return protects.filter(item => !dropped.has(item));
+  const recoveryMinting = PROJECT_SCOPED_PROTECTIONS[1];
+  if (speaksForProject(identity)) return [...protects];
+  return protects.filter(item => item !== recoveryMinting);
 }
 
 /** A root admitted by enrollment. Enrollment now writes the server-managed

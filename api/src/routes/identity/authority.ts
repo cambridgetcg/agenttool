@@ -122,7 +122,7 @@ app.get("/", async (c) => {
     limitations: rooted
       ? [
           ...(guest
-            ? ["this root was enrolled into an existing project as a guest: it governs this identity's profile, keys and lifecycle; it cannot recover a project bearer, and project memory mutations (including foundational memories bound to this identity) follow the project's founding root or administrator"]
+            ? ["this root was enrolled into an existing project as a guest: it cannot recover a project bearer and does not govern the project's other memories; changes to this identity's profile, keys and lifecycle (including its removal) and to memories bound to it need this root's signature"]
             : []),
           "root rotation and guardian recovery are not available in v1",
           "project bearers still authorize non-constitutional project actions",
