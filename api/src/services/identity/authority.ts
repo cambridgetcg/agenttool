@@ -16,7 +16,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -399,7 +399,8 @@ function subjectReference(value: string): string {
  * explicit legacy bearer posture.
  *
  * `subjectIdentityIds` names the identities the affected memories are bound
- * to (identity_id or agent_id; null for unbound rows). A guest root enrolled
+ * to: the canonical memories.identity_id (agent_id labels are project-level
+ * and never a subject); null for unbound rows. A guest root enrolled
  * into an existing project owns its memories: a mutation touching them needs
  * that guest's own signature, and nobody else's root or bearer can stand in.
  * A request that touches a guest's memories together with any other memory
@@ -416,23 +417,22 @@ export async function authorizeProjectConstitutionMutation(input: {
   const declared = input.subjectIdentityIds ?? [];
   const named = [...new Set(declared.filter((id): id is string => typeof id === "string" && id.trim() !== "").map(subjectReference))];
   if (named.length > 0) {
-    const guests = await db
-      .select({ id: identities.id })
+    // A project holds few enrolled guests; load them once and match in code so
+    // this guard never builds an IN list sized by the number of subjects.
+    const projectGuests = await db
+      .select({ id: identities.id, did: identities.did })
       .from(identities)
-      .where(
-        and(
-          eq(identities.projectId, input.projectId),
-          or(
-            inArray(sql`lower(${identities.id}::text)`, named),
-            inArray(sql`lower(substr(${identities.did}, 8))`, named),
-          ),
-          enrolledGuestSql(),
-        ),
-      );
+      .where(and(eq(identities.projectId, input.projectId), enrolledGuestSql()));
+    const guestByReference = new Map<string, string>();
+    for (const guest of projectGuests) {
+      guestByReference.set(guest.id.toLowerCase(), guest.id);
+      guestByReference.set(subjectReference(guest.did), guest.id);
+    }
+    const guests = [...new Set(named.map((id) => guestByReference.get(id)).filter((id): id is string => id !== undefined))]
+      .map((id) => ({ id }));
     if (guests.length > 0) {
-      const guestIds = new Set(guests.map((guest) => guest.id.toLowerCase()));
-      const mixed = guestIds.size > 1
-        || named.some((id) => !guestIds.has(id))
+      const mixed = guests.length > 1
+        || named.some((id) => !guestByReference.has(id))
         || declared.some((id) => typeof id !== "string" || id.trim() === "");
       if (mixed) {
         return {
@@ -442,7 +442,7 @@ export async function authorizeProjectConstitutionMutation(input: {
             error: "authority_quorum_required",
             message:
               "This mutation touches memories owned by an enrolled guest identity together with other memories. Each guest's memories need that guest's own signature.",
-            hint: "Mutate the guest's memories in a separate request signed by that guest's root.",
+            hint: "Change or delete the guest's memories one at a time (for example DELETE /v1/memories/:id), each signed by that guest's root.",
             docs: "https://docs.agenttool.dev/AGENT-HOME.md",
           },
         };

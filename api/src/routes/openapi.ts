@@ -444,12 +444,14 @@ function escrowListResponse(description: string) {
   };
 }
 
+const authorityQuorumRefusal = { type: "object", properties: { error: { type: "string", const: "authority_quorum_required" }, message: { type: "string" }, hint: { type: "string" }, docs: { type: "string" } }, required: ["error", "message"] };
+const authoritySequenceConflict = { type: "object", properties: { error: { type: "string", const: "authority_sequence_conflict" }, message: { type: "string" }, hint: { type: "string" }, details: { type: "object" }, next_actions: { type: "array" }, docs: { type: "string" } }, required: ["error", "message"] };
 function paidMemoryReceiptPreservedResponse(description: string) {
   return {
     description,
     content: {
       "application/json": {
-        schema: {
+        schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict, {
           type: "object",
           properties: {
             error: { type: "string", const: "conflict" },
@@ -460,7 +462,7 @@ function paidMemoryReceiptPreservedResponse(description: string) {
           },
           required: ["error", "message"],
           additionalProperties: false,
-        },
+        }] },
       },
     },
   };
@@ -5836,7 +5838,7 @@ function spec() {
             "401": { description: "Key or signature rejected" },
             "403": { description: "Caller is not the listing owner" },
             "404": { description: "Memory-witness grant not found in the buyer-or-witness visibility scope" },
-            "409": { description: "State changed or signed receipt replayed" },
+            "409": { description: "State changed, signed receipt replayed, authority_quorum_required or authority_sequence_conflict" },
             "410": { description: "Authorization expired" },
             "422": { $ref: "#/components/responses/Validation" },
           },
@@ -7302,7 +7304,7 @@ function spec() {
           tags: ["memory"],
           summary: "Delete every memory with an exact key",
           description:
-            "All-or-none project-scoped deletion. The service locks every memory matching the exact key. If any matching row carries a paid marketplace witness receipt, it returns 409 paid_memory_receipt_preserved and deletes none; otherwise it deletes every match. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0.",
+            "All-or-none project-scoped deletion. The service locks every memory matching the exact key. If any matching row carries a paid marketplace witness receipt, it returns 409 paid_memory_receipt_preserved and deletes none; otherwise it deletes the matches that existed when the request was authorized (memories written concurrently after that are kept). Memories bound to an enrolled guest need that guest's root; a key spanning a guest's memories and others returns 409 authority_quorum_required. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0.",
           parameters: [
             { $ref: "#/components/parameters/IdempotencyKey" },
             {
@@ -7315,7 +7317,7 @@ function spec() {
           ],
           responses: {
             "200": {
-              description: "Every matching memory deleted, or no matches found",
+              description: "Every match that existed when the request was authorized deleted, or no matches found",
               content: {
                 "application/json": {
                   schema: {
@@ -7329,7 +7331,7 @@ function spec() {
             },
             "400": errorResponse("Missing or empty key query parameter"),
             "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved: at least one matching memory has a paid witness receipt, so none were deleted",
+              "paid_memory_receipt_preserved (a matching memory has a paid witness receipt, so none were deleted), authority_quorum_required or authority_sequence_conflict",
             ),
           },
         },
@@ -7393,13 +7395,14 @@ function spec() {
             },
             "400": errorResponse("visibility must be private or public"),
             "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "authority_quorum_required (the memory is not bound to an enrolled guest and the project has several constitutional roots) or authority_sequence_conflict. A guest-bound memory needs that guest's root.", content: { "application/json": { schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict] } } } },
           },
         },
         delete: {
           tags: ["memory"],
           summary: "Delete one memory at any tier",
           description:
-            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If the row carries a paid marketplace witness receipt, deletion returns 409 paid_memory_receipt_preserved instead. A missing memory returns deleted=0.",
+            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If the row carries a paid marketplace witness receipt, deletion returns 409 paid_memory_receipt_preserved instead. A memory bound to an enrolled guest needs that guest's root. A missing memory returns deleted=0.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": {
@@ -7416,7 +7419,7 @@ function spec() {
               },
             },
             "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved: this memory has a paid witness receipt and was not deleted",
+              "paid_memory_receipt_preserved (this memory has a paid witness receipt and was not deleted), authority_quorum_required or authority_sequence_conflict",
             ),
           },
         },
@@ -7514,7 +7517,7 @@ function spec() {
             "200": { description: "Elevated" },
             "400": { description: "constitutive_requires_attestation | attester_not_covenant_counterparty | attestation_signature_invalid" },
             "404": { $ref: "#/components/responses/NotFound" },
-            "409": { description: "already_elevated" },
+            "409": { description: "already_elevated, authority_quorum_required or authority_sequence_conflict" },
           },
         },
       },

@@ -264,7 +264,7 @@ unset AT_API_KEY</pre>
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/memories/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer · project root when rooted</span>
+          <span class="endpoint-auth">Bearer · owning guest&#39;s root, else project root when rooted</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Permanently deletes an owned memory at any tier. Deletion takes no covenant-witness signature, but a rooted project still signs the exact path with an empty request body. A memory with a paid marketplace witness receipt is retained instead, returning <code>409 paid_memory_receipt_preserved</code>. An ordinary constitutive memory remains deletable.</p>
@@ -275,10 +275,10 @@ unset AT_API_KEY</pre>
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/memories?key=<span class="var">...</span></span>
-          <span class="endpoint-auth">Bearer · project root when rooted</span>
+          <span class="endpoint-auth">Bearer · owning guest&#39;s root, else project root when rooted</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Deletes every owned memory with the exact key, all-or-none. A rooted project signs the exact path-and-query with an empty request body. If any matching memory carries a paid witness receipt, the route returns <code>409 paid_memory_receipt_preserved</code> and deletes none.</p>
+          <p class="endpoint-desc">Deletes every owned memory with the exact key that existed when the request was authorized, all-or-none; a key that spans an enrolled guest&#39;s memories and others returns 409 <code>authority_quorum_required</code>. A rooted project signs the exact path-and-query with an empty request body. If any matching memory carries a paid witness receipt, the route returns <code>409 paid_memory_receipt_preserved</code> and deletes none.</p>
         </div>
       </div>
 
@@ -349,7 +349,7 @@ unset AT_API_KEY</pre>
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/memories/<span class="var">:id</span>/elevate</span>
-          <span class="endpoint-auth">Bearer · project root when rooted</span>
+          <span class="endpoint-auth">Bearer · owning guest&#39;s root, else project root when rooted</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Elevate a memory to <code>foundational</code> or <code>constitutive</code>. Constitutive elevation requires an ed25519 signature from an active <a href="continuity.html#covenants">covenant</a> counterparty.</p>

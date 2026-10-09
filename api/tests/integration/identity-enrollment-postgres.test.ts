@@ -45,8 +45,10 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity')`).length) throw new Error("refusing existing application schemas");
-  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity;
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory')`).length) throw new Error("refusing existing application schemas");
+  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory;
+    CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
+    CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
     CREATE TABLE tools.api_keys (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL REFERENCES tools.projects(id),
       key_hash text UNIQUE, key_prefix text, name text, created_at timestamptz NOT NULL DEFAULT now(), last_used timestamptz,
@@ -75,12 +77,12 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   if (!owned) return;
-  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
+  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
@@ -126,10 +128,11 @@ databaseTest("invalid current administrator cannot consume the participant nonce
 });
 
 // ── Enrolled guest roots never speak for the administrator's project ──────
-// A root admitted by enrollment governs only its own identity. Project-wide
-// authority (a recovered project bearer, the project constitution, and the
-// recovery discovery that advertises it) stays with founding roots born by
-// register-agent/MATHOS and with legacy rootless identities.
+// A root admitted by enrollment never speaks for the project: a recovered
+// project bearer, the constitution over the project's other memories, and the
+// recovery discovery that advertises it stay with founding roots born by
+// register-agent/MATHOS and with legacy rootless identities. Its own identity
+// and the memories bound to it still need its own signature (cases below).
 const F = uid(21), FI = uid(22), FK = uid(23), FA = uid(24), L = uid(25), LK = uid(26);
 const FOUNDER_PRIVATE = new Uint8Array(32).fill(11), FOUNDER_PUBLIC = Buffer.from(ed.getPublicKey(FOUNDER_PRIVATE)).toString("base64");
 const LEGACY_PRIVATE = new Uint8Array(32).fill(13), LEGACY_PUBLIC = Buffer.from(ed.getPublicKey(LEGACY_PRIVATE)).toString("base64");
@@ -274,4 +277,45 @@ databaseTest("the administrator cannot remove an enrolled guest without the gues
   const removal = await authority.authorizeIdentityMutation({ identityId: I, method: "DELETE", requestTarget: `/v1/identities/${I}`,
     bodyBytes: new Uint8Array(), headers: new Headers() });
   expect(removal).toMatchObject({ ok: false, status: 428 });
+});
+databaseTest("a keyed delete removes only the memories it authorized", async () => {
+  // Rows that appear between authorization and the locked delete are not part
+  // of what was authorized, whoever owns them.
+  const { deleteByKey } = await import("../../src/services/memory/store");
+  const authorized = uid(41), arrivedLater = uid(42);
+  await sql`INSERT INTO memory.memories (id, project_id, key, identity_id) VALUES (${authorized},${P},'shared',NULL),(${arrivedLater},${P},'shared',${I})`;
+  expect(await deleteByKey(P, "shared", { onlyIds: [authorized] })).toEqual({ deleted: 1 });
+  expect((await sql`SELECT id FROM memory.memories`).map(row => row.id)).toEqual([arrivedLater]);
+});
+databaseTest("the subject guard stays bounded for very large keyed deletes", async () => {
+  const many = Array.from({ length: 40_000 }, (_, n) => `${n.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`);
+  expect(await subjectGuard(P, many)).toMatchObject({ ok: true, mode: "legacy_bearer" });
+});
+databaseTest("the keyed delete route keeps memories written after it was authorized", async () => {
+  // Park the request inside authorization (its guest lookup reads
+  // identity.identities), commit a same-key memory, then release the lock.
+  const memoriesRouter = (await import("../../src/routes/memory/memories")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); }).route("/v1/memories", memoriesRouter);
+  const authorized = uid(43), late = uid(44);
+  await sql`INSERT INTO memory.memories (id, project_id, key, identity_id) VALUES (${authorized},${P},'race',${uid(45)})`;
+  const lock = await sql.reserve();
+  try {
+    await lock`BEGIN`;
+    await lock`LOCK TABLE identity.identities IN ACCESS EXCLUSIVE MODE`;
+    const pending = app.request("/v1/memories?key=race", { method: "DELETE" });
+    await Bun.sleep(150);
+    await sql`INSERT INTO memory.memories (id, project_id, key, identity_id) VALUES (${late},${P},'race',NULL)`;
+    await lock`COMMIT`;
+    const res = await pending;
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: 1 });
+  } finally {
+    lock.release();
+  }
+  expect((await sql`SELECT id FROM memory.memories WHERE key = 'race'`).map(row => row.id)).toEqual([late]);
+});
+databaseTest("a very large request that includes a guest's memory is still refused", async () => {
+  await enrollIdentity(request(), options());
+  const many = Array.from({ length: 40_000 }, (_, n) => `${n.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`);
+  expect(await subjectGuard(P, [...many, `DID:AT:${I.toUpperCase()}`])).toMatchObject({ ok: false, status: 409 });
 });

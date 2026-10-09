@@ -114,7 +114,7 @@ project ownership, expression, lifecycle status and public keys. This convention
 is not a registered W3C DID method or a conforming DID Resolution service.
 BYO creation receives the public root; legacy creation generates a keypair and
 returns its private key once. See creation (`api/src/services/identity/identities.ts:147`)
-and the identity contract (`api/src/routes/openapi.ts:1358`).
+and the identity contract (`api/src/routes/openapi.ts:1359`).
 
 Three authority levels must remain distinct:
 
@@ -126,7 +126,7 @@ Three authority levels must remain distinct:
   `agent_root` identity using exact method, path/query, body bytes, timestamp
   and sequence. Legacy identities retain their documented bearer boundary.
 
-The root guard (`api/src/services/identity/authority.ts:493`) consumes a sequence
+The root guard (`api/src/services/identity/authority.ts:492`) consumes a sequence
 before the later domain write; a subsequent failure can still consume it.
 Clients must serialize these proofs and read the new sequence after failure.
 Key possession and verified bytes do not independently establish subjective consent.

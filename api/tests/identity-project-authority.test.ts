@@ -108,6 +108,13 @@ describe("every project-scoped surface uses the shared rule", () => {
       expect({ path, unnamed: calls - Math.min(calls, named) }).toEqual({ path, unnamed: 0 });
     }
   });
+  test("memory owners come from the canonical identity_id binding, never the agent_id label", () => {
+    for (const path of ["routes/memory/memories.ts", "routes/memory/tiers.ts", "routes/memory-witness-marketplace.ts"]) {
+      expect(source(path)).not.toMatch(/subjectIdentityIds:[^\n]*agentId/);
+    }
+    // A keyed delete removes exactly the rows it authorized.
+    expect(source("routes/memory/memories.ts")).toMatch(/deleteByKey\([^)]*onlyIds/);
+  });
   test("identity authority keyholes scope their protections", () => {
     expect(source("routes/identity/authority.ts")).toContain("scopeIdentityProtections(");
     expect(source("services/home/build.ts")).toContain("scopeIdentityProtections(");

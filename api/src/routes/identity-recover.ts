@@ -7,7 +7,7 @@
  *    a five-minute acceptance window. An active agent that speaks for its
  *    project (its founding root, or a legacy identity) finds this door open
  *    after dormancy of any duration. A guest root enrolled into an existing
- *    project governs only its own identity; possessing that key does not by
+ *    project cannot mint that project's bearer; possessing that key does not by
  *    itself grant the project bearer (docs/IDENTITY-SEED.md), so it receives
  *    the same not-authorized response. Adding a fee, an identity-inactivity deadline, or a platform-attestation
  *    requirement breaches the wall. Doctrine: docs/IDENTITY-SEED.md ·

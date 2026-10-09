@@ -371,7 +371,7 @@ app.patch("/:id", async (c) => {
   }
 
   const [existing] = await db
-    .select({ id: memories.id, identityId: memories.identityId, agentId: memories.agentId })
+    .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
     .where(and(eq(memories.id, memoryId), eq(memories.projectId, c.var.project.id)))
     .limit(1);
@@ -379,7 +379,7 @@ app.patch("/:id", async (c) => {
 
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: [existing.identityId ?? existing.agentId],
+    subjectIdentityIds: [existing.identityId],
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes: bound.bodyBytes,
@@ -426,7 +426,7 @@ app.delete("/:id", async (c) => {
     );
   }
   const [existing] = await db
-    .select({ id: memories.id, identityId: memories.identityId, agentId: memories.agentId })
+    .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
     .where(
       and(
@@ -438,7 +438,7 @@ app.delete("/:id", async (c) => {
   if (!existing) return c.json({ deleted: 0 });
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: [existing.identityId ?? existing.agentId],
+    subjectIdentityIds: [existing.identityId],
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes,
@@ -481,15 +481,16 @@ app.delete("/", async (c) => {
       400,
     );
   }
-  // A keyed delete can span several memories; every owner is a subject.
+  // A keyed delete can span several memories; every owner is a subject, and
+  // only these authorized rows are deleted.
   const affected = await db
-    .select({ identityId: memories.identityId, agentId: memories.agentId })
+    .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
     .where(and(eq(memories.projectId, c.var.project.id), eq(memories.key, key)));
   if (affected.length === 0) return c.json({ deleted: 0 });
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: affected.map((row) => row.identityId ?? row.agentId),
+    subjectIdentityIds: affected.map((row) => row.identityId),
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes,
@@ -497,7 +498,7 @@ app.delete("/", async (c) => {
   });
   if (!authority.ok) return c.json(authority.body, authority.status);
   try {
-    const result = await deleteByKey(c.var.project.id, key);
+    const result = await deleteByKey(c.var.project.id, key, { onlyIds: affected.map((row) => row.id) });
     return c.json(result);
   } catch (error) {
     if (error instanceof PaidMemoryReceiptProtectedError) {

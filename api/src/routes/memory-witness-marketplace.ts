@@ -429,13 +429,13 @@ memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
     // The witnessed memory's owner is the subject: a guest's memory needs the
     // guest's own signature.
     const [witnessed] = await db
-      .select({ identityId: memories.identityId, agentId: memories.agentId })
+      .select({ identityId: memories.identityId })
       .from(memories)
       .where(and(eq(memories.id, scopedGrant.memory_id), eq(memories.projectId, scopedGrant.buyer_project_id)))
       .limit(1);
     const authority = await authorizeProjectConstitutionMutation({
       projectId: scopedGrant.buyer_project_id,
-      subjectIdentityIds: [witnessed?.identityId ?? witnessed?.agentId ?? null],
+      subjectIdentityIds: [witnessed?.identityId ?? null],
       method: c.req.method,
       requestTarget: authorityRequestTarget(c.req.url),
       bodyBytes,
