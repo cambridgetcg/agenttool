@@ -71,7 +71,8 @@ deferred to v4.
   `reports.relation`, `reports.kind`, `reports.confidence`, task and review enums) and
   `validateV2Shape`'s exact column sets mean any new status, relation or column needs a
   migration and a lockstep upgrade. **This design adds none.**
-- Every change is an optional parameter on an existing tool, a derived output field,
+- Every change is an optional parameter on an existing tool, a derived output field, a
+  server-verified acceptance basis (item 10),
   error text, a schema description, documentation, an event-payload field, or a
   host-side CLI. New optional parameters enter the idempotency request only when
   supplied, so `request_hash` stays identical across old and new copies.
@@ -149,6 +150,22 @@ deferred to v4.
    the credential. `session_auth_failed` on an already-ended session yields an
    `already_ended` receipt. Needs its own bundle, check script, `package.json` bin entry,
    and install into both household copies.
+
+10. **Host-committed completion (amendment 2026-10-09, from the first replay).** The
+    replay showed that `sol --integrate-commit` lands the commit *after* the delegated
+    agent completes, so a strict checkpoint match refuses every such review with
+    `git_checkpoint_stale`. An `accept` review also passes when the server itself
+    observes that the only change since the completion's result checkpoint is one
+    fast-forward commit on the same worktree and branch (observed HEAD's sole parent is
+    the result checkpoint's HEAD), the observed worktree is clean, every path that commit
+    changes lies inside the task's `path_scopes`, and each changed path's committed blob
+    SHA-256 equals a `file` artifact attached to this task for that `uri`. The
+    `task.accepted` payload records `checkpoint_basis: "host_commit_successor"` and the
+    commit sha (optional payload fields; no schema change). Any other drift keeps
+    `git_checkpoint_stale`, now with a remedy naming both ways forward: a host commit
+    that adds only the task's scoped, artifact-matching files; or the reporter
+    re-completing after `request_changes` so a fresh checkpoint is captured.
+    `request_changes` is unaffected. Yu chose this over "only name the remedy".
 
 Each item gets a failing test first (`bun test` in `packages/collab`), including today's
 untested paths: proposals answered by `supports`/`challenges`, `task_not_pending_review`,
