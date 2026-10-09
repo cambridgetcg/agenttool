@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -606,6 +607,96 @@ describe("MCP surface", () => {
     expect(result.structuredContent.error).toBe("session_file_exists");
     expect(JSON.stringify(result)).not.toContain(hiddenPath);
     expect(JSON.stringify(result)).not.toContain(resolve(root, ".."));
+  });
+
+  test("ends a bound session with release_leases and names the flag when refusing", async () => {
+    const { root, store, server } = node();
+    const endTool = (server as any)._registeredTools.collab_session_end;
+    expect(Object.keys(endTool.inputSchema.shape).sort()).toEqual([
+      "reason",
+      "release_leases",
+      "release_summary",
+    ]);
+    expect(endTool.description).toContain("release_leases");
+    expect(
+      endTool.inputSchema.safeParse({
+        reason: "parse check",
+        release_leases: true,
+        release_summary: "parse check summary",
+      }).data,
+    ).toEqual({
+      reason: "parse check",
+      release_leases: true,
+      release_summary: "parse check summary",
+    });
+    expect(endTool.inputSchema.safeParse({ release_leases: "yes" }).success).toBe(false);
+
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "mcp-release-on-end",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    const credentialPath = store.defaultSessionCredentialPath(
+      joined.structuredContent.session.id,
+    );
+    const created = await callTool(server, "collab_task_create", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-end-create",
+      title: "Release on end",
+      work_mode: "edit",
+      path_scopes: ["src/mcp-end.ts"],
+    });
+    const taskId = created.structuredContent.task.id;
+    const claimed = await callTool(server, "collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      idempotency_key: "mcp-end-claim",
+      expected_version: created.structuredContent.task.version,
+    });
+
+    const refused = await callTool(server, "collab_session_end", {
+      reason: "Trying to leave with a live lease",
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent.error).toBe("session_has_active_leases");
+    expect(refused.structuredContent.task_ids).toEqual([taskId]);
+    expect(refused.structuredContent.leases).toEqual([
+      {
+        task_id: taskId,
+        lease_id: claimed.structuredContent.task.lease_id,
+        expires_at: claimed.structuredContent.task.lease_expires_at,
+      },
+    ]);
+    expect(refused.structuredContent.remedy).toContain("release_leases: true");
+    const blankSummary = await callTool(server, "collab_session_end", {
+      reason: "Summary without the flag",
+      release_summary: "",
+    });
+    expect(blankSummary.isError).toBe(true);
+    expect(blankSummary.structuredContent.error).toBe("invalid_release_summary");
+    expect(existsSync(credentialPath)).toBe(true);
+
+    const ended = await callTool(server, "collab_session_end", {
+      reason: "Leaving cleanly",
+      release_leases: true,
+      release_summary: "Returned to the pool by the leaving session.",
+    });
+    expect(ended.isError).toBeUndefined();
+    expect(ended.structuredContent.session.status).toBe("ended");
+    expect(ended.structuredContent.released_leases).toEqual([
+      {
+        task_id: taskId,
+        lease_id: claimed.structuredContent.task.lease_id,
+        via: "release",
+      },
+    ]);
+    expect(ended.structuredContent.credential_file_removed).toBe(true);
+    expect(existsSync(credentialPath)).toBe(false);
+    expect(store.getTask(workspaceId, taskId)).toMatchObject({
+      status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+    });
   });
 
   test("coordinates reported completion, distinct review, and explicit cursor acknowledgement across handlers", async () => {

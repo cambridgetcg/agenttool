@@ -285,20 +285,40 @@ export function buildCollabMcpServer(
     {
       title: "End the bound collaboration session",
       description:
-        "Fence future session mutations and remove the credential file. Live leases must be resolved first; incoming offers expire as an audited refusal.",
+        "Fence future session mutations and remove the credential file. Live leases must be resolved first, " +
+        "or pass release_leases: true to release every live lease and recovery-release every expired lease " +
+        "this session holds in the same transaction; incoming offers expire as an audited refusal.",
       annotations: localDestructiveMutation,
-      inputSchema: { reason: z.string().max(2000).optional() },
+      inputSchema: {
+        reason: z.string().max(2000).optional(),
+        release_leases: z.boolean().optional()
+          .describe(
+            "Release every lease this session holds before ending: live leases through task release, " +
+              "expired leases through recovery with action release",
+          ),
+        release_summary: z.string().max(2000).optional()
+          .describe(
+            "Release summary and recovery note recorded for each released lease; requires release_leases: true. " +
+              "Defaults to reason",
+          ),
+      },
     },
-    async ({ reason }) => call(() => {
+    async ({ reason, release_leases, release_summary }) => call(() => {
       const current = binding;
       if (!current) throw new CollabError("session_not_bound", "No session is bound");
-      const ended = store.endSession({ ...current.handle.credential, reason });
+      const ended = store.endSessionWithReleases({
+        ...current.handle.credential,
+        reason,
+        release_leases,
+        release_summary,
+      });
       binding = null;
       removeSessionCredentialFile(current.credential_file);
       return {
-        session: ended,
+        session: ended.session,
+        released_leases: ended.released_leases,
         credential_file_removed: true,
-        session_file_name: `${ended.id}.json`,
+        session_file_name: `${ended.session.id}.json`,
       };
     }),
   );

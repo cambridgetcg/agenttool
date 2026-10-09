@@ -169,6 +169,19 @@ export interface SessionHandle extends SessionJoinResult {
   cursor_recovery?: SessionCursorRecovery;
 }
 
+/** One lease a session gave up while ending with `release_leases: true`. */
+export interface SessionEndRelease {
+  task_id: string;
+  lease_id: string;
+  /** "release" = live lease via task release; "recovery" = expired lease via recovery action "release". */
+  via: "release" | "recovery";
+}
+
+export interface SessionEndResult {
+  session: CoordinationSession;
+  released_leases: SessionEndRelease[];
+}
+
 export interface ArtifactRef {
   id: string;
   task_id: string;

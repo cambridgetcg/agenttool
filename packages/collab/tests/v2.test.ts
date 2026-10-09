@@ -1197,6 +1197,388 @@ describe("agenttool.collab/0.2 session coordination", () => {
     ).toBe("ended");
   });
 
+  test("names every live lease and the release_leases remedy when refusing to end", () => {
+    const worker = session("refused-ender");
+    const task = createAcceptedEditTask(worker, "refused-end-task", "src/refused-end.ts");
+    const claim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-refused-end",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 3600,
+    });
+
+    const refused = errorFrom(() =>
+      store.endSession({ ...worker.credential, reason: "Leaving without the flag" }),
+    );
+    expect(refused.code).toBe("session_has_active_leases");
+    expect(refused.message).toContain("release_leases");
+    expect(refused.details.task_ids).toEqual([task.id]);
+    expect(refused.details.leases).toEqual([
+      {
+        task_id: task.id,
+        lease_id: claim.lease_id,
+        expires_at: claim.lease_expires_at,
+      },
+    ]);
+    expect(refused.details.required_action).toBe("resolve_active_task_leases");
+    expect(String(refused.details.remedy)).toContain("release_leases: true");
+
+    // A summary without the flag is refused even when it is blank: never silently ignored.
+    for (const release_summary of ["This summary has no leases to describe.", "   ", ""]) {
+      expect(
+        errorCode(() =>
+          store.endSession({
+            ...worker.credential,
+            reason: "Summary without the flag",
+            release_summary,
+          }),
+        ),
+      ).toBe("invalid_release_summary");
+    }
+    expect(
+      errorCode(() =>
+        store.endSession({
+          ...worker.credential,
+          release_leases: false,
+          release_summary: "The flag is explicitly off.",
+        }),
+      ),
+    ).toBe("invalid_release_summary");
+    expect(
+      errorCode(() =>
+        store.endSession({
+          ...worker.credential,
+          release_leases: "yes" as unknown as boolean,
+        }),
+      ),
+    ).toBe("invalid_release_leases");
+    expect(store.listCoordinationSessions(worker.workspace.id, "active")).toHaveLength(1);
+    expect(store.getTask(worker.workspace.id, task.id).lease_id).toBe(claim.lease_id);
+  });
+
+  test("ends with release_leases by releasing live leases and recovering its own expired ones", () => {
+    const worker = session("release-on-end-worker");
+    const successor = session("release-on-end-successor");
+    const liveTask = createAcceptedEditTask(worker, "end-release-live", "src/end-live.ts");
+    const expiredTask = createAcceptedEditTask(
+      worker,
+      "end-release-expired",
+      "src/end-expired.ts",
+    );
+    const expiredClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-end-expired",
+      task_id: expiredTask.id,
+      expected_version: expiredTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    const liveClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-end-live",
+      task_id: liveTask.id,
+      expected_version: liveTask.version,
+      ttl_seconds: 3600,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id).effective_status).toBe(
+      "recovery_required",
+    );
+
+    const ended = store.endSessionWithReleases({
+      ...worker.credential,
+      reason: "Host exit",
+      release_leases: true,
+      release_summary: "Returning both tasks to the pool on exit.",
+    });
+
+    expect(ended.session.status).toBe("ended");
+    expect(ended.released_leases).toEqual(
+      [
+        { task_id: liveTask.id, lease_id: liveClaim.lease_id!, via: "release" as const },
+        { task_id: expiredTask.id, lease_id: expiredClaim.lease_id!, via: "recovery" as const },
+      ].sort((left, right) => (left.task_id < right.task_id ? -1 : 1)),
+    );
+    expect(store.getTask(worker.workspace.id, liveTask.id)).toMatchObject({
+      status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: liveClaim.version + 1,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id)).toMatchObject({
+      status: "open",
+      effective_status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: expiredClaim.version + 2,
+    });
+
+    const events = store.eventsSince(worker.workspace.id, 0, 500).events;
+    const released = events.find(
+      (event) => event.type === "task.released" && event.entity_id === liveTask.id,
+    );
+    expect(released?.session_id).toBe(worker.session.id);
+    expect(released?.payload).toMatchObject({
+      summary: "Returning both tasks to the pool on exit.",
+      released_by_session_end: true,
+    });
+    const recovered = events.find(
+      (event) => event.type === "task.recovered" && event.entity_id === expiredTask.id,
+    );
+    expect(recovered?.session_id).toBe(worker.session.id);
+    expect(recovered?.payload).toMatchObject({
+      action: "release",
+      recovery_note: "Returning both tasks to the pool on exit.",
+      recovery_checkpoint: null,
+    });
+    expect(events.at(-1)?.type).toBe("session.ended");
+    expect(
+      store.db.query(`
+        SELECT action, prior_session_id, recovered_by_session_id, note
+        FROM task_recoveries WHERE task_id = ?
+      `).get(expiredTask.id),
+    ).toEqual({
+      action: "release",
+      prior_session_id: worker.session.id,
+      recovered_by_session_id: worker.session.id,
+      note: "Returning both tasks to the pool on exit.",
+    });
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM v2_write_guard").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(store.verifyJournal(worker.workspace.id)).toBe(true);
+
+    const reclaimed = store.claimTaskForSession({
+      ...successor.credential,
+      idempotency_key: "successor-claims-released",
+      task_id: liveTask.id,
+      expected_version: liveClaim.version + 1,
+    });
+    expect(reclaimed.assignee_session_id).toBe(successor.session.id);
+  });
+
+  test("rolls back every release when ending with release_leases fails at the final event", () => {
+    const worker = session("atomic-ender");
+    const liveTask = createAcceptedEditTask(worker, "atomic-live", "src/atomic-live.ts");
+    const expiredTask = createAcceptedEditTask(worker, "atomic-expired", "src/atomic-expired.ts");
+    const expiredClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-atomic-expired",
+      task_id: expiredTask.id,
+      expected_version: expiredTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    const liveClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-atomic-live",
+      task_id: liveTask.id,
+      expected_version: liveTask.version,
+      ttl_seconds: 3600,
+    });
+    const headBefore = store.getWorkspace(worker.workspace.id)!.event_head_sequence;
+    // Fail on the very last write, after both leases went through their
+    // release and recovery paths, so the rollback has to undo all of it.
+    const internals = store as unknown as {
+      appendEvent: (workspaceId: string, type: string, ...rest: unknown[]) => unknown;
+    };
+    const appendEvent = internals.appendEvent.bind(store);
+    const attempted: string[] = [];
+    internals.appendEvent = (workspaceId, type, ...rest) => {
+      attempted.push(type);
+      if (type === "session.ended") {
+        throw new CollabError("injected_failure", "Injected failure inside session end");
+      }
+      return appendEvent(workspaceId, type, ...rest);
+    };
+
+    expect(
+      errorCode(() =>
+        store.endSessionWithReleases({
+          ...worker.credential,
+          reason: "Must roll back",
+          release_leases: true,
+        }),
+      ),
+    ).toBe("injected_failure");
+    expect([...attempted].sort()).toEqual([
+      "session.ended",
+      "task.claim_expired",
+      "task.recovered",
+      "task.released",
+    ]);
+    expect(attempted.at(-1)).toBe("session.ended");
+
+    expect(store.getTask(worker.workspace.id, liveTask.id)).toMatchObject({
+      status: "claimed",
+      assignee_session_id: worker.session.id,
+      lease_id: liveClaim.lease_id,
+      version: liveClaim.version,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id)).toMatchObject({
+      status: "claimed",
+      assignee_session_id: worker.session.id,
+      lease_id: expiredClaim.lease_id,
+      version: expiredClaim.version,
+    });
+    expect(store.getWorkspace(worker.workspace.id)!.event_head_sequence).toBe(headBefore);
+    expect(store.listCoordinationSessions(worker.workspace.id, "active")).toHaveLength(1);
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM task_recoveries").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM v2_write_guard").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(store.verifyJournal(worker.workspace.id)).toBe(true);
+  });
+
+  test("releases leases on end while cursor recovery is still required", () => {
+    const worker = session("cursor-recovery-ender");
+    const task = createAcceptedEditTask(worker, "cursor-recovery-end", "src/cursor-end.ts");
+    const claim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-cursor-recovery-end",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 3600,
+    });
+    const page = store.nextForSession(worker.credential).events;
+    store.acknowledgeSessionCursor({
+      ...worker.credential,
+      anchor: page.next_anchor,
+      expected_cursor_version: worker.session.cursor_version,
+    });
+    const recovered = store.resumeSession(worker.credential, {
+      allow_cursor_recovery: true,
+    });
+    expect(recovered.session.cursor_recovery_required).toBe(true);
+
+    const ended = store.endSessionWithReleases({
+      ...recovered.credential,
+      reason: "Host exit during cursor recovery",
+      release_leases: true,
+    });
+    expect(ended.session.status).toBe("ended");
+    expect(ended.released_leases).toEqual([
+      { task_id: task.id, lease_id: claim.lease_id!, via: "release" },
+    ]);
+    const released = store.eventsSince(worker.workspace.id, 0, 500).events.find(
+      (event) => event.type === "task.released" && event.entity_id === task.id,
+    );
+    expect(released?.payload.summary).toBe("Host exit during cursor recovery");
+  });
+
+  test("treats a blank release_summary as absent and falls back to the reason or the default note", () => {
+    const withReason = session("blank-summary-with-reason");
+    const reasonTask = createAcceptedEditTask(
+      withReason,
+      "blank-summary-reason",
+      "src/blank-reason.ts",
+    );
+    const reasonClaim = store.claimTaskForSession({
+      ...withReason.credential,
+      idempotency_key: "claim-blank-summary-reason",
+      task_id: reasonTask.id,
+      expected_version: reasonTask.version,
+      ttl_seconds: 3600,
+    });
+    expect(
+      store.endSessionWithReleases({
+        ...withReason.credential,
+        reason: "Host exit with a blank summary",
+        release_leases: true,
+        release_summary: "   ",
+      }).released_leases,
+    ).toEqual([{ task_id: reasonTask.id, lease_id: reasonClaim.lease_id!, via: "release" }]);
+
+    const blank = session("blank-summary-blank-reason");
+    const blankTask = createAcceptedEditTask(blank, "blank-summary-expired", "src/blank-expired.ts");
+    const blankClaim = store.claimTaskForSession({
+      ...blank.credential,
+      idempotency_key: "claim-blank-summary-expired",
+      task_id: blankTask.id,
+      expected_version: blankTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    expect(
+      store.endSessionWithReleases({
+        ...blank.credential,
+        reason: "  ",
+        release_leases: true,
+        release_summary: "",
+      }).released_leases,
+    ).toEqual([{ task_id: blankTask.id, lease_id: blankClaim.lease_id!, via: "recovery" }]);
+
+    const events = store.eventsSince(withReason.workspace.id, 0, 500).events;
+    expect(
+      events.find((event) => event.type === "task.released" && event.entity_id === reasonTask.id)
+        ?.payload.summary,
+    ).toBe("Host exit with a blank summary");
+    expect(
+      events.find((event) => event.type === "task.recovered" && event.entity_id === blankTask.id)
+        ?.payload.recovery_note,
+    ).toBe("collab_session_end with release_leases released this expired lease from its own session");
+    expect(
+      events.find((event) => event.type === "session.ended" && event.entity_id === blank.session.id)
+        ?.payload.reason,
+    ).toBeNull();
+  });
+
+  test("lets the expired holder recover-release its own lease without a second session", () => {
+    const holder = session("self-recovering-holder");
+    const task = createAcceptedEditTask(holder, "self-recovery", "src/self-recovery.ts");
+    const claim = store.claimTaskForSession({
+      ...holder.credential,
+      idempotency_key: "claim-self-recovery",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+
+    const released = store.recoverTaskForSession({
+      ...holder.credential,
+      idempotency_key: "self-recover-release",
+      task_id: task.id,
+      expected_version: claim.version,
+      recovery_note: "My own lease expired; returning the task to the pool.",
+      action: "release",
+    });
+    expect(released).toMatchObject({
+      status: "open",
+      effective_status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: claim.version + 2,
+    });
+    expect(
+      store.db.query(`
+        SELECT action, prior_lease_id, prior_session_id, recovered_by_session_id, note
+        FROM task_recoveries WHERE task_id = ?
+      `).get(task.id),
+    ).toEqual({
+      action: "release",
+      prior_lease_id: claim.lease_id,
+      prior_session_id: holder.session.id,
+      recovered_by_session_id: holder.session.id,
+      note: "My own lease expired; returning the task to the pool.",
+    });
+    const recovered = store.eventsSince(holder.workspace.id, 0, 500).events.find(
+      (event) => event.type === "task.recovered" && event.entity_id === task.id,
+    );
+    expect(recovered?.session_id).toBe(holder.session.id);
+    expect(recovered?.payload).toMatchObject({ action: "release", recovery_checkpoint: null });
+    expect(store.endSession({ ...holder.credential, reason: "Recovered my own lease" }).status)
+      .toBe("ended");
+  });
+
   test("bounds session event pages while preserving exact reports and acknowledgement", () => {
     const sender = session("sender");
     const observer = session("observer");

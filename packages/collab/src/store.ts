@@ -44,6 +44,8 @@ import {
   type ReportKind,
   type ReportRelation,
   type ReviewStatus,
+  type SessionEndRelease,
+  type SessionEndResult,
   type SessionHandle,
   type SessionMutationInput,
   type SessionPresence,
@@ -82,6 +84,8 @@ const MAX_SESSION_LIST_LIMIT = 500;
 const DEFAULT_NEXT_EVENT_LIMIT = 50;
 const MAX_NEXT_EVENT_LIMIT = 50;
 const SESSION_TOKEN_BYTES = 32;
+const SESSION_END_RECOVERY_NOTE =
+  "collab_session_end with release_leases released this expired lease from its own session";
 const PRESENCE_SESSION_COLUMNS = [
   "id",
   "workspace_id",
@@ -313,6 +317,14 @@ interface CoordinationSessionRow {
   cursor_version: number;
   reset_generation: number;
   cursor_recovery_required: number;
+}
+
+interface ExpiredSessionLease {
+  assignee: string | null;
+  session_id: string | null;
+  lease_id: string | null;
+  lease_expires_at: string | null;
+  checkpoint: RepoCheckpoint | null;
 }
 
 interface ReportRow {
@@ -1832,27 +1844,83 @@ export class CollabStore {
     session_token: string;
     generation: number;
     reason?: string;
+    release_leases?: boolean;
+    release_summary?: string;
   }): CoordinationSession {
+    return this.endSessionWithReleases(input).session;
+  }
+
+  endSessionWithReleases(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    reason?: string;
+    release_leases?: boolean;
+    release_summary?: string;
+  }): SessionEndResult {
     const reason = optionalText(input.reason, "reason", 2_000);
+    if (input.release_leases !== undefined && typeof input.release_leases !== "boolean") {
+      throw new CollabError("invalid_release_leases", "release_leases must be a boolean");
+    }
+    const releaseLeases = input.release_leases === true;
+    // Judge the raw input: a summary sent without the flag is refused even when
+    // it is blank, so it is never silently ignored.
+    if (input.release_summary !== undefined && !releaseLeases) {
+      throw new CollabError(
+        "invalid_release_summary",
+        "release_summary applies only together with release_leases: true",
+      );
+    }
+    // A blank summary next to the flag counts as absent and falls back to reason.
+    const releaseSummary = optionalText(input.release_summary, "release_summary", 2_000);
     const ended = this.db.transaction(() => {
       const row = this.authenticateSession(input, { allow_cursor_recovery: true });
       const now = this.timestamp();
-      const activeLeases = this.db.query(`
-        SELECT id FROM tasks
-        WHERE workspace_id = ? AND assignee_session_id = ?
-          AND status = 'claimed' AND lease_expires_at > ?
-        ORDER BY id
-      `).all(row.workspace_id, row.id, now) as Array<{ id: string }>;
-      if (activeLeases.length > 0) {
-        throw new CollabError(
-          "session_has_active_leases",
-          "Release, complete, or hand off active task leases before ending the session",
-          {
-            task_ids: activeLeases.map((task) => task.id),
-            required_action: "resolve_active_task_leases",
-          },
-        );
+      const releasedLeases: SessionEndRelease[] = [];
+      if (releaseLeases) {
+        const held = this.db.query(`
+          SELECT * FROM tasks
+          WHERE workspace_id = ? AND assignee_session_id = ?
+            AND status = 'claimed' AND lease_id IS NOT NULL
+          ORDER BY id
+        `).all(row.workspace_id, row.id) as TaskRow[];
+        if (held.length > 0) {
+          const releaseNote = releaseSummary ?? reason;
+          // The same v2 write guard mutateAsSession sets, for this transaction only.
+          const guardNonce = `guard_${randomUUID()}`;
+          this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`)
+            .run(guardNonce);
+          try {
+            for (const task of held) {
+              const leaseId = task.lease_id!;
+              // One clock reading decides live versus expired for every lease.
+              const expired = task.lease_expires_at !== null && now >= task.lease_expires_at;
+              if (expired) {
+                const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
+                this.recordRecoveryWithoutTakeover(task, row, {
+                  prior: lapsed.prior,
+                  expiry_version: lapsed.expiryVersion,
+                  action: "release",
+                  recovery_note: releaseNote ?? SESSION_END_RECOVERY_NOTE,
+                  blocker: null,
+                  now,
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "recovery" });
+              } else {
+                this.clearSessionClaim(task, row, "task.released", {
+                  summary: releaseNote,
+                  released_by_session_end: true,
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "release" });
+              }
+            }
+          } finally {
+            this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
+          }
+        }
       }
+      const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, now);
+      if (refusal) throw refusal;
       const incomingHandoffs = this.db.query(`
         SELECT * FROM handoffs
         WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending'
@@ -1884,7 +1952,10 @@ export class CollabStore {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
       this.appendEvent(row.workspace_id, "session.ended", row.id, row.actor, { reason }, row.id);
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return {
+        session: coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id)),
+        released_leases: releasedLeases,
+      };
     }).immediate();
     this.tightenFileModes();
     return ended;
@@ -2409,86 +2480,18 @@ export class CollabStore {
           "Only an expired session-owned lease can be explicitly recovered",
         );
       }
-      const prior = {
-        assignee: row.assignee,
-        session_id: row.assignee_session_id,
-        lease_id: row.lease_id,
-        lease_expires_at: row.lease_expires_at,
-        checkpoint: parseCheckpoint(row.base_checkpoint_json),
-      };
       const now = this.timestamp();
-      const expiryVersion = row.version + 1;
-      this.db.query(`
-        UPDATE tasks
-        SET status = 'open', assignee = NULL, assignee_session_id = NULL,
-          claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
-          version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(expiryVersion, now, row.workspace_id, row.id);
-      this.expirePendingHandoffs(
-        row.workspace_id,
-        row.id,
-        now,
-        "system:clock",
-        "source_lease_expired",
-      );
-      this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
-        ...prior,
-        effective_at: prior.lease_expires_at,
-        observed_by_session_id: session.id,
-        version: expiryVersion,
-      });
+      const { prior, expiryVersion } = this.expireSessionLeaseForRecovery(row, session, now);
 
       if (action !== "takeover") {
-        const version = expiryVersion + 1;
-        this.db.query(`
-          UPDATE tasks
-          SET status = ?, blocker = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(
-          action === "block" ? "blocked" : "open",
-          action === "block" ? blocker : null,
-          version,
-          now,
-          row.workspace_id,
-          row.id,
-        );
-        const event = this.appendEvent(
-          row.workspace_id,
-          "task.recovered",
-          row.id,
-          session.actor,
-          {
-            prior_lease: prior,
-            action,
-            recovery_note: recoveryNote,
-            recovery_checkpoint: null,
-            version,
-            note:
-              "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work.",
-          },
-          session.id,
-        );
-        this.db.query(`
-          INSERT INTO task_recoveries (
-            id, workspace_id, task_id, prior_lease_id, prior_session_id,
-            recovered_by_session_id, action, note, prior_checkpoint_json,
-            new_lease_id, recovered_at, event_sequence
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-        `).run(
-          `recovery_${randomUUID()}`,
-          row.workspace_id,
-          row.id,
-          prior.lease_id,
-          prior.session_id,
-          session.id,
+        return this.recordRecoveryWithoutTakeover(row, session, {
+          prior,
+          expiry_version: expiryVersion,
           action,
-          recoveryNote,
-          prior.checkpoint ? canonicalJson(prior.checkpoint) : null,
+          recovery_note: recoveryNote,
+          blocker,
           now,
-          event.sequence,
-        );
-        return this.requireTask(row.workspace_id, row.id);
+        });
       }
 
       const worktree = this.requirePreparedWorktree(session, preparedCheckpoint!);
@@ -4837,6 +4840,138 @@ export class CollabStore {
       ...payload,
       version,
     }, session.id);
+    return this.requireTask(row.workspace_id, row.id);
+  }
+
+  private liveLeaseRefusal(
+    workspaceId: string,
+    sessionId: string,
+    now: string,
+  ): CollabError | null {
+    const live = this.db.query(`
+      SELECT id, lease_id, lease_expires_at FROM tasks
+      WHERE workspace_id = ? AND assignee_session_id = ?
+        AND status = 'claimed' AND lease_expires_at > ?
+      ORDER BY id
+    `).all(workspaceId, sessionId, now) as Array<{
+      id: string;
+      lease_id: string;
+      lease_expires_at: string;
+    }>;
+    if (live.length === 0) return null;
+    return new CollabError(
+      "session_has_active_leases",
+      "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true",
+      {
+        task_ids: live.map((task) => task.id),
+        leases: live.map((task) => ({
+          task_id: task.id,
+          lease_id: task.lease_id,
+          expires_at: task.lease_expires_at,
+        })),
+        required_action: "resolve_active_task_leases",
+        remedy:
+          "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first.",
+      },
+    );
+  }
+
+  private expireSessionLeaseForRecovery(
+    row: TaskRow,
+    session: CoordinationSessionRow,
+    now: string,
+  ): { prior: ExpiredSessionLease; expiryVersion: number } {
+    const prior: ExpiredSessionLease = {
+      assignee: row.assignee,
+      session_id: row.assignee_session_id,
+      lease_id: row.lease_id,
+      lease_expires_at: row.lease_expires_at,
+      checkpoint: parseCheckpoint(row.base_checkpoint_json),
+    };
+    const expiryVersion = row.version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
+        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
+        version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(expiryVersion, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(
+      row.workspace_id,
+      row.id,
+      now,
+      "system:clock",
+      "source_lease_expired",
+    );
+    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
+      ...prior,
+      effective_at: prior.lease_expires_at,
+      observed_by_session_id: session.id,
+      version: expiryVersion,
+    });
+    return { prior, expiryVersion };
+  }
+
+  private recordRecoveryWithoutTakeover(
+    row: TaskRow,
+    session: CoordinationSessionRow,
+    input: {
+      prior: ExpiredSessionLease;
+      expiry_version: number;
+      action: "release" | "block";
+      recovery_note: string;
+      blocker: string | null;
+      now: string;
+    },
+  ): Task {
+    const version = input.expiry_version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = ?, blocker = ?, version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(
+      input.action === "block" ? "blocked" : "open",
+      input.action === "block" ? input.blocker : null,
+      version,
+      input.now,
+      row.workspace_id,
+      row.id,
+    );
+    const event = this.appendEvent(
+      row.workspace_id,
+      "task.recovered",
+      row.id,
+      session.actor,
+      {
+        prior_lease: input.prior,
+        action: input.action,
+        recovery_note: input.recovery_note,
+        recovery_checkpoint: null,
+        version,
+        note:
+          "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work.",
+      },
+      session.id,
+    );
+    this.db.query(`
+      INSERT INTO task_recoveries (
+        id, workspace_id, task_id, prior_lease_id, prior_session_id,
+        recovered_by_session_id, action, note, prior_checkpoint_json,
+        new_lease_id, recovered_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      `recovery_${randomUUID()}`,
+      row.workspace_id,
+      row.id,
+      input.prior.lease_id,
+      input.prior.session_id,
+      session.id,
+      input.action,
+      input.recovery_note,
+      input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null,
+      input.now,
+      event.sequence,
+    );
     return this.requireTask(row.workspace_id, row.id);
   }
 
