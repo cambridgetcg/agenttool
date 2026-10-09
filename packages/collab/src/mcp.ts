@@ -4,6 +4,7 @@ import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import {
   DEFAULT_WAIT_EVENT_LIMIT,
+  EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -39,6 +40,8 @@ const eventAnchor = z.object({
   sequence: z.number().int().nonnegative(),
   hash: z.string().length(64),
 });
+const evidenceRefs = z.array(z.string().min(1).max(2000)).max(128).optional()
+  .describe(EVIDENCE_REFS_DESCRIPTION);
 const nextEventLimit = z.number().int().min(1).max(50).optional()
   .describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 
@@ -282,20 +285,40 @@ export function buildCollabMcpServer(
     {
       title: "End the bound collaboration session",
       description:
-        "Fence future session mutations and remove the credential file. Live leases must be resolved first; incoming offers expire as an audited refusal.",
+        "Fence future session mutations and remove the credential file. Live leases must be resolved first, " +
+        "or pass release_leases: true to release every live lease and recovery-release every expired lease " +
+        "this session holds in the same transaction; incoming offers expire as an audited refusal.",
       annotations: localDestructiveMutation,
-      inputSchema: { reason: z.string().max(2000).optional() },
+      inputSchema: {
+        reason: z.string().max(2000).optional(),
+        release_leases: z.boolean().optional()
+          .describe(
+            "Release every lease this session holds before ending: live leases through task release, " +
+              "expired leases through recovery with action release",
+          ),
+        release_summary: z.string().max(2000).optional()
+          .describe(
+            "Release summary and recovery note recorded for each released lease; requires release_leases: true. " +
+              "Defaults to reason",
+          ),
+      },
     },
-    async ({ reason }) => call(() => {
+    async ({ reason, release_leases, release_summary }) => call(() => {
       const current = binding;
       if (!current) throw new CollabError("session_not_bound", "No session is bound");
-      const ended = store.endSession({ ...current.handle.credential, reason });
+      const ended = store.endSessionWithReleases({
+        ...current.handle.credential,
+        reason,
+        release_leases,
+        release_summary,
+      });
       binding = null;
       removeSessionCredentialFile(current.credential_file);
       return {
-        session: ended,
+        session: ended.session,
+        released_leases: ended.released_leases,
         credential_file_removed: true,
-        session_file_name: `${ended.id}.json`,
+        session_file_name: `${ended.session.id}.json`,
       };
     }),
   );
@@ -331,7 +354,7 @@ export function buildCollabMcpServer(
     {
       title: "Read collaboration status",
       description:
-        "Return task counts, active sessions and claims, blockers, pending reviews, reports, and decisions.",
+        "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
       annotations: localReadOnly,
       inputSchema: { workspace_id: workspaceId },
     },
@@ -343,12 +366,18 @@ export function buildCollabMcpServer(
     {
       title: "Poll the next useful collaboration state",
       description:
-        "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
+        "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " +
+        "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " +
+        "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
       annotations: localMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor: legacyActor,
-        after_sequence: z.number().int().nonnegative().optional(),
+        after_sequence: z.number().int().nonnegative().optional()
+          .describe(
+            "Legacy actor mode: page after this sequence. A bound session pages from its acknowledged cursor; " +
+            "any other value is refused with after_sequence_unsupported_in_bound_session.",
+          ),
         known_cursor: eventAnchor.optional(),
         event_limit: nextEventLimit,
       },
@@ -360,6 +389,7 @@ export function buildCollabMcpServer(
           ...boundCredential(),
           known_cursor,
           event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+          after_sequence,
         })
         : store.nextForActor(
           workspace_id,
@@ -696,18 +726,28 @@ export function buildCollabMcpServer(
     {
       title: "Report a claimed task complete",
       description:
-        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review.",
+        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         summary: z.string().min(1).max(4000),
         confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
         confidence_basis: z.string().max(2000).optional(),
         limits: z.string().max(2000).optional(),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
+        review_requested_session_id: z.string().min(1).max(200).optional()
+          .describe(
+            "Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation. Only on a task whose completion waits for acceptance.",
+          ),
       }),
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
+      if (!binding && input.review_requested_session_id !== undefined) {
+        throw new CollabError(
+          "session_required_for_review_request",
+          "review_requested_session_id requires a bound v0.2 session",
+        );
+      }
       const task = binding
         ? store.completeTaskForSession({ ...boundCredential(), ...input })
         : store.completeTask({
@@ -737,7 +777,10 @@ export function buildCollabMcpServer(
         expected_version: expectedVersion,
         outcome: z.enum(["accept", "request_changes"]),
         summary: z.string().min(1).max(4000),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
+        confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
+        confidence_basis: z.string().max(2000).optional(),
+        limits: z.string().max(2000).optional(),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -760,7 +803,7 @@ export function buildCollabMcpServer(
         to_session_id: z.string().min(1).optional(),
         kind: z.enum(["observation", "inference", "proposal", "decision"]),
         body: z.string().min(1).max(8000),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
         confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
         confidence_basis: z.string().max(2000).optional(),
         limits: z.string().max(2000).optional(),
@@ -772,8 +815,14 @@ export function buildCollabMcpServer(
           "withdraws",
           "supersedes",
           "resolves",
-        ]).optional(),
-        target_report_id: z.string().min(1).optional(),
+        ]).optional().describe(
+          "informs (the default) targets no report. supports / challenges answer any report; "
+          + "corrects / withdraws / supersedes only your own; resolves only a challenge. "
+          + "To say yes to a proposal, use supports with its target_report_id.",
+        ),
+        target_report_id: z.string().min(1).optional().describe(
+          "The earlier report this one answers. Required for every relation except informs.",
+        ),
         authority_scope: z.string().max(1000).optional(),
         authority_basis: z.string().max(2000).optional(),
       },

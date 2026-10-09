@@ -4,6 +4,71 @@ import { join } from "node:path";
 
 const packageRoot = join(import.meta.dir, "..");
 
+const ORDINARY_LOOP = [
+  "collab_session_start",
+  "collab_next",
+  "collab_cursor_ack",
+  "collab_task_claim",
+  "collab_artifact_attach",
+  "collab_task_complete",
+  "collab_task_review",
+  "collab_session_end",
+];
+
+const RELATION_TABLE_HEADER = "| Relation | `target_report_id` | Who may append | Use it to |";
+
+const RELATIONS = [
+  "informs",
+  "supports",
+  "challenges",
+  "resolves",
+  "corrects",
+  "withdraws",
+  "supersedes",
+];
+
+const HOUSEHOLD_TERMS = [
+  RELATION_TABLE_HEADER,
+  "release_leases",
+  "release_summary",
+  "session_has_active_leases",
+  "review_requested_session_id",
+  "review_report_id",
+  "accepted_by_session_id",
+  "confidence_basis",
+  "allowed_prefixes",
+  "artifact:artifact_",
+  "event:",
+  "report:",
+  "checkpoint:",
+  "result_checkpoint_digest",
+  "parent_session_id",
+  "declared lineage",
+  "never pass your session file",
+  "liveness",
+  "assignee_liveness",
+  "recovery_required",
+  "after_sequence_unsupported_in_bound_session",
+  "collab_events_since",
+  "delivers by artifact",
+  "agenttool-collab-host",
+  "host_commit_successor",
+  "git_checkpoint_stale",
+];
+
+function expectInOrder(text: string, heading: string, names: string[]): void {
+  const start = text.indexOf(heading);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end = text.indexOf("\n## ", start + heading.length);
+  const section = text.slice(start, end === -1 ? undefined : end);
+  let cursor = -1;
+  for (const name of names) {
+    const at = section.indexOf(name, cursor + 1);
+    expect(at).toBeGreaterThan(cursor);
+    cursor = at;
+  }
+}
+
 async function json(path: string): Promise<any> {
   return await Bun.file(join(packageRoot, path)).json();
 }
@@ -49,9 +114,11 @@ describe("cross-host package", () => {
     expect(files).toContain("dist");
     expect(files).toContain("THIRD_PARTY_LICENSES");
     expect(packageManifest.bin["agenttool-collab-mcp"]).toBe("./dist/agenttool-collab-mcp.js");
+    expect(packageManifest.bin["agenttool-collab-host"]).toBe("./dist/agenttool-collab-host.js");
     expect(packageManifest.keywords).toContain("hermes-agent");
     expect(packageManifest.keywords).toContain("zerone");
     expect(statSync(join(packageRoot, "dist", "agenttool-collab-mcp.js")).mode & 0o111).not.toBe(0);
+    expect(statSync(join(packageRoot, "dist", "agenttool-collab-host.js")).mode & 0o111).not.toBe(0);
   });
 
   test("pins the bundler Bun to the version CI builds with", async () => {
@@ -98,6 +165,35 @@ describe("cross-host package", () => {
     expect(openclaw).toContain("SOUL.md");
     expect(openclaw).toContain("IDENTITY.md");
     expect(openclaw).toContain("USER.md");
+  });
+
+  test("teaches the ordinary loop, relation targeting, delegation, and clean exit", async () => {
+    for (const path of [
+      "skills/coordinate-agent-work/SKILL.md",
+      "integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+      "README.md",
+    ]) {
+      const text = await Bun.file(join(packageRoot, path)).text();
+      for (const term of HOUSEHOLD_TERMS) expect(text).toContain(term);
+      for (const relation of RELATIONS) expect(text).toContain(`| \`${relation}\` |`);
+      expectInOrder(text, "## The ordinary loop", ORDINARY_LOOP);
+    }
+
+    const skill = await Bun.file(join(packageRoot, "skills/coordinate-agent-work/SKILL.md")).text();
+    expect(skill).toContain("· sol job <job-id>");
+    expect(skill).toContain("agenttool-collab-host end --session-file <path> --reason <text> --release-leases");
+    const description = /^description: (.+)$/m.exec(skill)?.[1] ?? "";
+    expect(description).toContain("requested reviewer");
+    expect(description).toContain("ending a session cleanly");
+    expect(description.length).toBeLessThanOrEqual(1024);
+  });
+
+  test("points the Codex skill prompt at the ordinary loop", async () => {
+    const yaml = await Bun.file(join(packageRoot, "skills/coordinate-agent-work/agents/openai.yaml")).text();
+    expect(yaml).toContain("$coordinate-agent-work");
+    expect(yaml).toContain("ordinary loop");
+    expect(yaml).toContain("requested reviewer");
+    expect(yaml).toContain("release_leases");
   });
 
   test("ships an explicit Hermes adapter for separate presence and secure planes", async () => {

@@ -116,6 +116,14 @@ export interface Worktree {
 
 export type SessionStatus = "active" | "ended";
 
+/**
+ * Derived view, never stored: an active session whose last_seen_at is older
+ * than SESSION_STALE_AFTER_MS reads as stale; an ended session never reads as
+ * live. Staleness changes no status, expires nothing, and grants nothing.
+ */
+export type SessionLiveness = "live" | "stale";
+export const SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 export interface CoordinationSession {
   id: string;
   workspace_id: string;
@@ -132,6 +140,7 @@ export interface CoordinationSession {
   cursor_version: number;
   reset_generation: number;
   cursor_recovery_required: boolean;
+  liveness: SessionLiveness;
 }
 
 export interface SessionJoinResult {
@@ -169,6 +178,19 @@ export interface SessionHandle extends SessionJoinResult {
   cursor_recovery?: SessionCursorRecovery;
 }
 
+/** One lease a session gave up while ending with `release_leases: true`. */
+export interface SessionEndRelease {
+  task_id: string;
+  lease_id: string;
+  /** "release" = live lease via task release; "recovery" = expired lease via recovery action "release". */
+  via: "release" | "recovery";
+}
+
+export interface SessionEndResult {
+  session: CoordinationSession;
+  released_leases: SessionEndRelease[];
+}
+
 export interface ArtifactRef {
   id: string;
   task_id: string;
@@ -196,10 +218,16 @@ export interface Task {
   review_status: ReviewStatus;
   expected_base_sha: string | null;
   base_checkpoint: RepoCheckpoint | null;
+  /** SHA-256 of the canonical base checkpoint; cite it as `checkpoint:<digest>`. */
+  base_checkpoint_digest: string | null;
   result_checkpoint: RepoCheckpoint | null;
+  /** SHA-256 of the canonical result checkpoint; cite it as `checkpoint:<digest>`. */
+  result_checkpoint_digest: string | null;
   completion_report_id: string | null;
   assignee: string | null;
   assignee_session_id: string | null;
+  /** Liveness of assignee_session_id; null when no coordination session holds the task. */
+  assignee_liveness: SessionLiveness | null;
   claim_worktree_id: string | null;
   lease_id: string | null;
   lease_expires_at: string | null;
@@ -211,6 +239,8 @@ export interface Task {
   accepted_by: string | null;
   accepted_by_session_id: string | null;
   accepted_at: string | null;
+  /** Derived from the current completion's task.reported_complete event; a request, not a reservation. */
+  review_requested_session_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -244,6 +274,13 @@ export type ReportRelation =
   | "resolves";
 
 export type ReportConfidence = "high" | "medium" | "low" | "unknown";
+
+/** Evidence references always point inside one workspace's journal. */
+export const EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"] as const;
+export const EVIDENCE_REFS_DESCRIPTION =
+  "Evidence references point inside this workspace's journal and start with artifact:, event:, " +
+  "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " +
+  "for example \"artifact:artifact_<id>\".";
 
 export interface CollabReport {
   id: string;
@@ -436,6 +473,8 @@ export interface NextCollabState {
   claimable_tasks: Task[];
   conflicted_tasks: TaskConflict[];
   handoff_offers: Array<{ handoff: HandoffOffer; task: Task }>;
+  /** Expired session leases awaiting collab_task_recover; the caller's own first. */
+  recovery_required: Task[];
   reports: CollabReport[];
   events: JournalPage;
 }

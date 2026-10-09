@@ -705,6 +705,7 @@ describe("standard npm release policy", () => {
     ]);
     expect(requiredArchiveEntries(releaseSpec("collab"))).toEqual(expect.arrayContaining([
       "package/dist/agenttool-collab-mcp.js",
+      "package/dist/agenttool-collab-host.js",
       "package/.codex-plugin/plugin.json",
       "package/.claude-plugin/plugin.json",
       "package/skills/coordinate-agent-work/SKILL.md",

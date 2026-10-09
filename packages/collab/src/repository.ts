@@ -20,6 +20,11 @@ const MAX_GIT_OUTPUT = 1024 * 1024;
 const MAX_UNTRACKED_FILES = 10_000;
 const MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
 const MAX_UNTRACKED_HASH_MS = 2_000;
+const MAX_SUCCESSOR_PATHS = 128;
+const MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+const MAX_SUCCESSOR_INSPECT_MS = 5_000;
+const GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+const RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
 
 export interface RepositoryIdentity {
   requested_root_path: string;
@@ -29,6 +34,17 @@ export interface RepositoryIdentity {
   worktree_fingerprint: string;
   checkpoint: RepoCheckpoint;
 }
+
+export interface SuccessorCommitChange {
+  /** Repository-relative path exactly as Git records it. */
+  path: string;
+  /** SHA-256 of the committed blob bytes; null for a deletion or a non-regular entry. */
+  blob_sha256: string | null;
+}
+
+export type SuccessorCommitInspection =
+  | { ok: true; commit_sha: string; parent_sha: string; changes: SuccessorCommitChange[] }
+  | { ok: false; commit_sha: string; reason: string };
 
 export function inspectRepository(
   rootInput: string,
@@ -169,6 +185,101 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
   };
 }
 
+/**
+ * Server-side Git facts about a commit that may directly follow a result
+ * checkpoint's HEAD: its parents, the paths it changes against that parent, and
+ * the SHA-256 of each committed regular-file blob. Read-only plumbing, bounded
+ * in paths, bytes and time. Paths go back to the caller for an in-memory
+ * comparison; nothing here is journaled.
+ */
+export function inspectSuccessorCommit(
+  rootPath: string,
+  commitSha: string,
+  parentSha: string,
+): SuccessorCommitInspection {
+  const refuse = (reason: string): SuccessorCommitInspection => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason,
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse("The checkpoint HEADs are not Git object IDs");
+  }
+  // Parents come from the commit object itself. Grafts, a commit-graph and
+  // replace refs can each make a later commit look like one fast-forward.
+  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
+  if (!commitObject.ok) return refuse(`Git could not read commit ${commitSha}`);
+  const headerEnd = commitObject.stdout.indexOf("\n\n");
+  const parents = commitObject.stdout
+    .subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd)
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("parent "))
+    .map((line) => line.slice("parent ".length));
+  if (parents.length > 1) {
+    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = successorGitExitCode(rootPath, [
+      "merge-base",
+      "--is-ancestor",
+      parentSha,
+      commitSha,
+    ]) === 0;
+    return refuse(descends
+      ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}`
+      : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = successorGit(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    // A submodule ignore setting would otherwise hide a gitlink change.
+    "--ignore-submodules=none",
+    parentSha,
+    commitSha,
+    "--",
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes: SuccessorCommitChange[] = [];
+  for (let index = 0; index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index]!.toString("utf8"));
+    const pathBytes = fields[index + 1]!;
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, oldMode, mode, , blob, status] = header;
+    // A changed mode or type is refused even when the blob is byte-identical:
+    // no artifact vouches for the exec bit, and a symlink/submodule/etc. that
+    // newly lands at a regular mode is not "the file the task attached".
+    const modeVouched = status === "A" || (status === "M" && oldMode === mode);
+    if (status === "D" || (mode !== "100644" && mode !== "100755") || !modeVouched) {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = successorGit(rootPath, ["cat-file", "blob", blob!], budget.bytes);
+    if (!content.ok) {
+      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+
 function worktreeId(rootPath: string, fingerprint: string): string {
   return `wt_${sha256(`${rootPath}\0${fingerprint}`).slice(0, 24)}`;
 }
@@ -206,16 +317,57 @@ function gitDigest(rootPath: string, args: string[]): string | null {
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
 
-function gitBytes(rootPath: string, args: string[]): { ok: boolean; stdout: Buffer } {
+function gitBytes(
+  rootPath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OUTPUT,
+): { ok: boolean; stdout: Buffer } {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
-    maxBuffer: MAX_GIT_OUTPUT,
+    maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
   });
   return {
     ok: result.status === 0 && !result.error,
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
+}
+
+/**
+ * Git for successor inspection: the real object graph only. Replace refs,
+ * grafts and the commit-graph are each switched off, because each can change
+ * what a commit's parents appear to be.
+ */
+const SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
+
+function successorGitEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
+}
+
+function successorGit(
+  rootPath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OUTPUT,
+): { ok: boolean; stdout: Buffer } {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: successorGitEnv(),
+  });
+  return {
+    ok: result.status === 0 && !result.error,
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
+  };
+}
+
+function successorGitExitCode(rootPath: string, args: string[]): number | null {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv(),
+  });
+  return result.error ? null : result.status;
 }
 
 function digestUntrackedContent(rootPath: string, paths: Buffer): string | null {

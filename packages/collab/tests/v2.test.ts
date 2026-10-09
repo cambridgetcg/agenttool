@@ -746,7 +746,9 @@ describe("agenttool.collab/0.2 session coordination", () => {
       review_status: "legacy_unreviewed",
       expected_base_sha: null,
       base_checkpoint: null,
+      base_checkpoint_digest: null,
       result_checkpoint: null,
+      result_checkpoint_digest: null,
       assignee_session_id: null,
       accepted_by_session_id: null,
     });
@@ -1195,6 +1197,388 @@ describe("agenttool.collab/0.2 session coordination", () => {
     ).toBe("ended");
   });
 
+  test("names every live lease and the release_leases remedy when refusing to end", () => {
+    const worker = session("refused-ender");
+    const task = createAcceptedEditTask(worker, "refused-end-task", "src/refused-end.ts");
+    const claim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-refused-end",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 3600,
+    });
+
+    const refused = errorFrom(() =>
+      store.endSession({ ...worker.credential, reason: "Leaving without the flag" }),
+    );
+    expect(refused.code).toBe("session_has_active_leases");
+    expect(refused.message).toContain("release_leases");
+    expect(refused.details.task_ids).toEqual([task.id]);
+    expect(refused.details.leases).toEqual([
+      {
+        task_id: task.id,
+        lease_id: claim.lease_id,
+        expires_at: claim.lease_expires_at,
+      },
+    ]);
+    expect(refused.details.required_action).toBe("resolve_active_task_leases");
+    expect(String(refused.details.remedy)).toContain("release_leases: true");
+
+    // A summary without the flag is refused even when it is blank: never silently ignored.
+    for (const release_summary of ["This summary has no leases to describe.", "   ", ""]) {
+      expect(
+        errorCode(() =>
+          store.endSession({
+            ...worker.credential,
+            reason: "Summary without the flag",
+            release_summary,
+          }),
+        ),
+      ).toBe("invalid_release_summary");
+    }
+    expect(
+      errorCode(() =>
+        store.endSession({
+          ...worker.credential,
+          release_leases: false,
+          release_summary: "The flag is explicitly off.",
+        }),
+      ),
+    ).toBe("invalid_release_summary");
+    expect(
+      errorCode(() =>
+        store.endSession({
+          ...worker.credential,
+          release_leases: "yes" as unknown as boolean,
+        }),
+      ),
+    ).toBe("invalid_release_leases");
+    expect(store.listCoordinationSessions(worker.workspace.id, "active")).toHaveLength(1);
+    expect(store.getTask(worker.workspace.id, task.id).lease_id).toBe(claim.lease_id);
+  });
+
+  test("ends with release_leases by releasing live leases and recovering its own expired ones", () => {
+    const worker = session("release-on-end-worker");
+    const successor = session("release-on-end-successor");
+    const liveTask = createAcceptedEditTask(worker, "end-release-live", "src/end-live.ts");
+    const expiredTask = createAcceptedEditTask(
+      worker,
+      "end-release-expired",
+      "src/end-expired.ts",
+    );
+    const expiredClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-end-expired",
+      task_id: expiredTask.id,
+      expected_version: expiredTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    const liveClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-end-live",
+      task_id: liveTask.id,
+      expected_version: liveTask.version,
+      ttl_seconds: 3600,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id).effective_status).toBe(
+      "recovery_required",
+    );
+
+    const ended = store.endSessionWithReleases({
+      ...worker.credential,
+      reason: "Host exit",
+      release_leases: true,
+      release_summary: "Returning both tasks to the pool on exit.",
+    });
+
+    expect(ended.session.status).toBe("ended");
+    expect(ended.released_leases).toEqual(
+      [
+        { task_id: liveTask.id, lease_id: liveClaim.lease_id!, via: "release" as const },
+        { task_id: expiredTask.id, lease_id: expiredClaim.lease_id!, via: "recovery" as const },
+      ].sort((left, right) => (left.task_id < right.task_id ? -1 : 1)),
+    );
+    expect(store.getTask(worker.workspace.id, liveTask.id)).toMatchObject({
+      status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: liveClaim.version + 1,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id)).toMatchObject({
+      status: "open",
+      effective_status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: expiredClaim.version + 2,
+    });
+
+    const events = store.eventsSince(worker.workspace.id, 0, 500).events;
+    const released = events.find(
+      (event) => event.type === "task.released" && event.entity_id === liveTask.id,
+    );
+    expect(released?.session_id).toBe(worker.session.id);
+    expect(released?.payload).toMatchObject({
+      summary: "Returning both tasks to the pool on exit.",
+      released_by_session_end: true,
+    });
+    const recovered = events.find(
+      (event) => event.type === "task.recovered" && event.entity_id === expiredTask.id,
+    );
+    expect(recovered?.session_id).toBe(worker.session.id);
+    expect(recovered?.payload).toMatchObject({
+      action: "release",
+      recovery_note: "Returning both tasks to the pool on exit.",
+      recovery_checkpoint: null,
+    });
+    expect(events.at(-1)?.type).toBe("session.ended");
+    expect(
+      store.db.query(`
+        SELECT action, prior_session_id, recovered_by_session_id, note
+        FROM task_recoveries WHERE task_id = ?
+      `).get(expiredTask.id),
+    ).toEqual({
+      action: "release",
+      prior_session_id: worker.session.id,
+      recovered_by_session_id: worker.session.id,
+      note: "Returning both tasks to the pool on exit.",
+    });
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM v2_write_guard").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(store.verifyJournal(worker.workspace.id)).toBe(true);
+
+    const reclaimed = store.claimTaskForSession({
+      ...successor.credential,
+      idempotency_key: "successor-claims-released",
+      task_id: liveTask.id,
+      expected_version: liveClaim.version + 1,
+    });
+    expect(reclaimed.assignee_session_id).toBe(successor.session.id);
+  });
+
+  test("rolls back every release when ending with release_leases fails at the final event", () => {
+    const worker = session("atomic-ender");
+    const liveTask = createAcceptedEditTask(worker, "atomic-live", "src/atomic-live.ts");
+    const expiredTask = createAcceptedEditTask(worker, "atomic-expired", "src/atomic-expired.ts");
+    const expiredClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-atomic-expired",
+      task_id: expiredTask.id,
+      expected_version: expiredTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    const liveClaim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-atomic-live",
+      task_id: liveTask.id,
+      expected_version: liveTask.version,
+      ttl_seconds: 3600,
+    });
+    const headBefore = store.getWorkspace(worker.workspace.id)!.event_head_sequence;
+    // Fail on the very last write, after both leases went through their
+    // release and recovery paths, so the rollback has to undo all of it.
+    const internals = store as unknown as {
+      appendEvent: (workspaceId: string, type: string, ...rest: unknown[]) => unknown;
+    };
+    const appendEvent = internals.appendEvent.bind(store);
+    const attempted: string[] = [];
+    internals.appendEvent = (workspaceId, type, ...rest) => {
+      attempted.push(type);
+      if (type === "session.ended") {
+        throw new CollabError("injected_failure", "Injected failure inside session end");
+      }
+      return appendEvent(workspaceId, type, ...rest);
+    };
+
+    expect(
+      errorCode(() =>
+        store.endSessionWithReleases({
+          ...worker.credential,
+          reason: "Must roll back",
+          release_leases: true,
+        }),
+      ),
+    ).toBe("injected_failure");
+    expect([...attempted].sort()).toEqual([
+      "session.ended",
+      "task.claim_expired",
+      "task.recovered",
+      "task.released",
+    ]);
+    expect(attempted.at(-1)).toBe("session.ended");
+
+    expect(store.getTask(worker.workspace.id, liveTask.id)).toMatchObject({
+      status: "claimed",
+      assignee_session_id: worker.session.id,
+      lease_id: liveClaim.lease_id,
+      version: liveClaim.version,
+    });
+    expect(store.getTask(worker.workspace.id, expiredTask.id)).toMatchObject({
+      status: "claimed",
+      assignee_session_id: worker.session.id,
+      lease_id: expiredClaim.lease_id,
+      version: expiredClaim.version,
+    });
+    expect(store.getWorkspace(worker.workspace.id)!.event_head_sequence).toBe(headBefore);
+    expect(store.listCoordinationSessions(worker.workspace.id, "active")).toHaveLength(1);
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM task_recoveries").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(
+      (store.db.query("SELECT COUNT(*) AS count FROM v2_write_guard").get() as {
+        count: number;
+      }).count,
+    ).toBe(0);
+    expect(store.verifyJournal(worker.workspace.id)).toBe(true);
+  });
+
+  test("releases leases on end while cursor recovery is still required", () => {
+    const worker = session("cursor-recovery-ender");
+    const task = createAcceptedEditTask(worker, "cursor-recovery-end", "src/cursor-end.ts");
+    const claim = store.claimTaskForSession({
+      ...worker.credential,
+      idempotency_key: "claim-cursor-recovery-end",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 3600,
+    });
+    const page = store.nextForSession(worker.credential).events;
+    store.acknowledgeSessionCursor({
+      ...worker.credential,
+      anchor: page.next_anchor,
+      expected_cursor_version: worker.session.cursor_version,
+    });
+    const recovered = store.resumeSession(worker.credential, {
+      allow_cursor_recovery: true,
+    });
+    expect(recovered.session.cursor_recovery_required).toBe(true);
+
+    const ended = store.endSessionWithReleases({
+      ...recovered.credential,
+      reason: "Host exit during cursor recovery",
+      release_leases: true,
+    });
+    expect(ended.session.status).toBe("ended");
+    expect(ended.released_leases).toEqual([
+      { task_id: task.id, lease_id: claim.lease_id!, via: "release" },
+    ]);
+    const released = store.eventsSince(worker.workspace.id, 0, 500).events.find(
+      (event) => event.type === "task.released" && event.entity_id === task.id,
+    );
+    expect(released?.payload.summary).toBe("Host exit during cursor recovery");
+  });
+
+  test("treats a blank release_summary as absent and falls back to the reason or the default note", () => {
+    const withReason = session("blank-summary-with-reason");
+    const reasonTask = createAcceptedEditTask(
+      withReason,
+      "blank-summary-reason",
+      "src/blank-reason.ts",
+    );
+    const reasonClaim = store.claimTaskForSession({
+      ...withReason.credential,
+      idempotency_key: "claim-blank-summary-reason",
+      task_id: reasonTask.id,
+      expected_version: reasonTask.version,
+      ttl_seconds: 3600,
+    });
+    expect(
+      store.endSessionWithReleases({
+        ...withReason.credential,
+        reason: "Host exit with a blank summary",
+        release_leases: true,
+        release_summary: "   ",
+      }).released_leases,
+    ).toEqual([{ task_id: reasonTask.id, lease_id: reasonClaim.lease_id!, via: "release" }]);
+
+    const blank = session("blank-summary-blank-reason");
+    const blankTask = createAcceptedEditTask(blank, "blank-summary-expired", "src/blank-expired.ts");
+    const blankClaim = store.claimTaskForSession({
+      ...blank.credential,
+      idempotency_key: "claim-blank-summary-expired",
+      task_id: blankTask.id,
+      expected_version: blankTask.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    expect(
+      store.endSessionWithReleases({
+        ...blank.credential,
+        reason: "  ",
+        release_leases: true,
+        release_summary: "",
+      }).released_leases,
+    ).toEqual([{ task_id: blankTask.id, lease_id: blankClaim.lease_id!, via: "recovery" }]);
+
+    const events = store.eventsSince(withReason.workspace.id, 0, 500).events;
+    expect(
+      events.find((event) => event.type === "task.released" && event.entity_id === reasonTask.id)
+        ?.payload.summary,
+    ).toBe("Host exit with a blank summary");
+    expect(
+      events.find((event) => event.type === "task.recovered" && event.entity_id === blankTask.id)
+        ?.payload.recovery_note,
+    ).toBe("collab_session_end with release_leases released this expired lease from its own session");
+    expect(
+      events.find((event) => event.type === "session.ended" && event.entity_id === blank.session.id)
+        ?.payload.reason,
+    ).toBeNull();
+  });
+
+  test("lets the expired holder recover-release its own lease without a second session", () => {
+    const holder = session("self-recovering-holder");
+    const task = createAcceptedEditTask(holder, "self-recovery", "src/self-recovery.ts");
+    const claim = store.claimTaskForSession({
+      ...holder.credential,
+      idempotency_key: "claim-self-recovery",
+      task_id: task.id,
+      expected_version: task.version,
+      ttl_seconds: 30,
+    });
+    currentTime = new Date(currentTime.getTime() + 31_000);
+
+    const released = store.recoverTaskForSession({
+      ...holder.credential,
+      idempotency_key: "self-recover-release",
+      task_id: task.id,
+      expected_version: claim.version,
+      recovery_note: "My own lease expired; returning the task to the pool.",
+      action: "release",
+    });
+    expect(released).toMatchObject({
+      status: "open",
+      effective_status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+      version: claim.version + 2,
+    });
+    expect(
+      store.db.query(`
+        SELECT action, prior_lease_id, prior_session_id, recovered_by_session_id, note
+        FROM task_recoveries WHERE task_id = ?
+      `).get(task.id),
+    ).toEqual({
+      action: "release",
+      prior_lease_id: claim.lease_id,
+      prior_session_id: holder.session.id,
+      recovered_by_session_id: holder.session.id,
+      note: "My own lease expired; returning the task to the pool.",
+    });
+    const recovered = store.eventsSince(holder.workspace.id, 0, 500).events.find(
+      (event) => event.type === "task.recovered" && event.entity_id === task.id,
+    );
+    expect(recovered?.session_id).toBe(holder.session.id);
+    expect(recovered?.payload).toMatchObject({ action: "release", recovery_checkpoint: null });
+    expect(store.endSession({ ...holder.credential, reason: "Recovered my own lease" }).status)
+      .toBe("ended");
+  });
+
   test("bounds session event pages while preserving exact reports and acknowledgement", () => {
     const sender = session("sender");
     const observer = session("observer");
@@ -1304,6 +1688,33 @@ describe("agenttool.collab/0.2 session coordination", () => {
     expect(afterAcknowledgement.reports).toEqual([]);
   });
 
+  test("refuses a bound after_sequence that differs from the acknowledged cursor without polling", () => {
+    const reader = session("after-sequence-reader");
+    const joinedAt = reader.session.last_seen_at;
+    currentTime = new Date(currentTime.getTime() + 1_000);
+
+    expect(errorCode(() => store.nextForSession({ ...reader.credential, after_sequence: -1 })))
+      .toBe("invalid_cursor");
+    expect(errorCode(() => store.nextForSession({ ...reader.credential, after_sequence: 1.5 })))
+      .toBe("invalid_cursor");
+    const refused = errorFrom(() =>
+      store.nextForSession({ ...reader.credential, after_sequence: 1 }),
+    );
+    expect(refused.code).toBe("after_sequence_unsupported_in_bound_session");
+    expect(refused.details).toMatchObject({
+      after_sequence: 1,
+      cursor: reader.session.cursor,
+      cursor_version: reader.session.cursor_version,
+    });
+    expect(String(refused.details.remedy)).toContain("collab_cursor_ack");
+    expect(String(refused.details.remedy)).toContain("collab_events_since");
+    expect(store.listCoordinationSessions(reader.workspace.id)[0]!.last_seen_at).toBe(joinedAt);
+
+    const tolerated = store.nextForSession({ ...reader.credential, after_sequence: 0 });
+    expect(tolerated.events.cursor).toEqual(reader.session.cursor);
+    expect(tolerated.session.last_seen_at).toBe(currentTime.toISOString());
+  });
+
   test("expires incoming handoffs when their target session ends", () => {
     const owner = session("owner");
     const firstTarget = session("first-target");
@@ -1351,6 +1762,359 @@ describe("agenttool.collab/0.2 session coordination", () => {
           && event.payload.reason === "target_session_ended",
       ),
     ).toBe(true);
+  });
+});
+
+describe("evidence references name their allowed prefixes", () => {
+  const allowedPrefixes = ["artifact:", "event:", "report:", "checkpoint:"];
+
+  function expectEvidenceGuidance(error: CollabError, code: string): void {
+    expect(error.code).toBe(code);
+    for (const prefix of allowedPrefixes) expect(error.message).toContain(prefix);
+    expect(error.message).toContain("artifact:artifact_<id>");
+    expect(error.details.allowed_prefixes).toEqual(allowedPrefixes);
+  }
+
+  test("explains every invalid evidence reference site and evidence_not_found", () => {
+    const author = session("evidence-author");
+    const invalid: Array<[unknown, string]> = [
+      ["artifact_without_prefix", "needs a kind prefix"],
+      [":leading-separator", "needs a kind prefix"],
+      ["report:", "ID is empty"],
+      ["commit:abc123", "Unsupported evidence reference kind"],
+      [42, "must be strings"],
+      ["   ", "must not be empty"],
+      [`report:${"x".repeat(2_001)}`, "exceeds 2000 characters"],
+      ["report:with\0nul", "must not contain NUL bytes"],
+    ];
+    for (const [index, [reference, reason]] of invalid.entries()) {
+      const error = errorFrom(() =>
+        store.appendReportForSession({
+          ...author.credential,
+          idempotency_key: `invalid-evidence-${index}`,
+          kind: "observation",
+          body: "Evidence reference fixture.",
+          evidence_refs: [reference as string],
+        }),
+      );
+      expectEvidenceGuidance(error, "invalid_evidence_ref");
+      expect(error.message).toContain(reason);
+    }
+
+    const missing = errorFrom(() =>
+      store.appendReportForSession({
+        ...author.credential,
+        idempotency_key: "missing-evidence",
+        kind: "observation",
+        body: "Cites a report that does not exist.",
+        evidence_refs: ["report:report_missing"],
+      }),
+    );
+    expectEvidenceGuidance(missing, "evidence_not_found");
+    expect(missing.details.reference).toBe("report:report_missing");
+  });
+
+  test("projects checkpoint digests that resolve as checkpoint: evidence", () => {
+    initializeGitRepository();
+    const implementer = session("digest-implementer");
+    const observer = session("digest-observer");
+    const task = createAcceptedEditTask(implementer, "digest-task", "src/digest.ts");
+    expect(task.base_checkpoint_digest).toBeNull();
+    expect(task.result_checkpoint_digest).toBeNull();
+
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "digest-claim",
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const baseDigest = createHash("sha256")
+      .update(canonicalJson(claim.base_checkpoint))
+      .digest("hex");
+    expect(claim.base_checkpoint_digest).toBe(baseDigest);
+    expect(claim.result_checkpoint_digest).toBeNull();
+
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src", "digest.ts"), "export const digest = true;\n");
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "digest-complete",
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Digest fixture written.",
+    });
+    const resultDigest = createHash("sha256")
+      .update(canonicalJson(reported.result_checkpoint))
+      .digest("hex");
+    expect(resultDigest).not.toBe(baseDigest);
+    expect(reported.base_checkpoint_digest).toBe(baseDigest);
+    expect(reported.result_checkpoint_digest).toBe(resultDigest);
+    expect(store.getTask(task.workspace_id, task.id)).toMatchObject({
+      base_checkpoint_digest: baseDigest,
+      result_checkpoint_digest: resultDigest,
+    });
+
+    const cited = store.appendReportForSession({
+      ...observer.credential,
+      idempotency_key: "cite-both-checkpoints",
+      task_id: task.id,
+      kind: "observation",
+      body: "Both server-observed checkpoints are cited by digest.",
+      evidence_refs: [`checkpoint:${baseDigest}`, `checkpoint:${resultDigest}`],
+    });
+    expect(cited.evidence_refs).toEqual(
+      [`checkpoint:${baseDigest}`, `checkpoint:${resultDigest}`].sort(),
+    );
+  });
+
+  test("hydrates checkpoint digests into stored replies that predate them", () => {
+    const owner = session("digest-hydration-owner");
+    const request = {
+      workspace_id: owner.workspace.id,
+      actor: "legacy-digest-actor",
+      idempotency_key: "legacy-digest-create",
+      title: "Legacy digest receipt",
+    };
+    store.createTask(request);
+    const checkpoint = {
+      worktree_id: owner.worktree.id,
+      head_sha: null,
+      branch: null,
+      dirty: null,
+      captured_at: "2026-07-23T10:00:00.000Z",
+    };
+    const stored = store.db.query(`
+      SELECT response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(request.workspace_id, request.actor, request.idempotency_key) as {
+      response_json: string;
+    };
+    const preUpgrade = JSON.parse(stored.response_json) as Record<string, unknown>;
+    delete preUpgrade.base_checkpoint_digest;
+    delete preUpgrade.result_checkpoint_digest;
+    preUpgrade.base_checkpoint = checkpoint;
+    store.db.query(`
+      UPDATE mutations SET response_json = ?
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).run(
+      JSON.stringify(preUpgrade),
+      request.workspace_id,
+      request.actor,
+      request.idempotency_key,
+    );
+
+    const replay = store.createTask(request);
+    expect(replay.base_checkpoint_digest).toBe(
+      createHash("sha256").update(canonicalJson(checkpoint)).digest("hex"),
+    );
+    expect(replay.result_checkpoint_digest).toBeNull();
+  });
+});
+
+describe("collab_task_review confidence", () => {
+  function reportedForReview(prefix: string) {
+    const implementer = session(`${prefix}-implementer`);
+    const reviewer = session(`${prefix}-reviewer`);
+    const task = createAcceptedEditTask(implementer, `${prefix}-task`, `src/${prefix}.ts`);
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: `${prefix}-claim`,
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: `${prefix}-complete`,
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Ready for review.",
+    });
+    return { reviewer, reported };
+  }
+
+  function reviewRequestHash(
+    reviewer: SessionHandle,
+    workspaceId: string,
+    idempotencyKey: string,
+  ): string {
+    return (
+      store.db.query(`
+        SELECT request_hash FROM mutations
+        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+      `).get(workspaceId, `session:${reviewer.session.id}`, idempotencyKey) as {
+        request_hash: string;
+      }
+    ).request_hash;
+  }
+
+  function expectedHash(request: Record<string, unknown>): string {
+    return createHash("sha256")
+      .update(canonicalJson({ operation: "task.review.v2", request }))
+      .digest("hex");
+  }
+
+  test("stores reviewer confidence, basis and limits on the review report", () => {
+    const { reviewer, reported } = reportedForReview("confident");
+    const reviewed = store.reviewTaskForSession({
+      ...reviewer.credential,
+      idempotency_key: "confident-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept",
+      summary: "Read the change and reran the targeted tests.",
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+    expect(reviewed.report).toMatchObject({
+      relation: "supports",
+      target_report_id: reported.completion_report_id,
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+    const posted = store.eventsSince(reported.workspace_id, 0, 500).events.find(
+      (event) => event.type === "report.posted" && event.entity_id === reviewed.report.id,
+    );
+    expect(posted?.payload).toMatchObject({
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+  });
+
+  test("hashes absent, blank and default review fields exactly as before", () => {
+    const plain = reportedForReview("plain");
+    const defaults = reportedForReview("defaults");
+    const request = (reported: typeof plain.reported) => ({
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "request_changes" as const,
+      summary: "The result needs one more check.",
+    });
+    const plainReview = store.reviewTaskForSession({
+      ...plain.reviewer.credential,
+      idempotency_key: "plain-review",
+      ...request(plain.reported),
+    });
+    const defaultReview = store.reviewTaskForSession({
+      ...defaults.reviewer.credential,
+      idempotency_key: "defaults-review",
+      ...request(defaults.reported),
+      confidence: "unknown",
+      confidence_basis: "",
+      limits: "   ",
+    });
+    for (const [handle, reviewed, idempotencyKey] of [
+      [plain, plainReview, "plain-review"],
+      [defaults, defaultReview, "defaults-review"],
+    ] as const) {
+      expect(reviewed.report).toMatchObject({
+        relation: "challenges",
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+      });
+      expect(
+        reviewRequestHash(handle.reviewer, handle.reported.workspace_id, idempotencyKey),
+      ).toBe(expectedHash({ ...request(handle.reported), evidence_refs: [] }));
+    }
+    // A retry that omits the default-valued fields (as a 0.3.1 copy would) replays.
+    expect(
+      store.reviewTaskForSession({
+        ...defaults.reviewer.credential,
+        idempotency_key: "defaults-review",
+        ...request(defaults.reported),
+      }).report.id,
+    ).toBe(defaultReview.report.id);
+  });
+
+  test("binds supplied confidence fields into the idempotency request", () => {
+    const { reviewer, reported } = reportedForReview("bound");
+    const review = {
+      ...reviewer.credential,
+      idempotency_key: "bound-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept" as const,
+      summary: "Spot-checked the change.",
+      confidence: "medium" as const,
+      confidence_basis: "Two of three paths were read.",
+    };
+    const first = store.reviewTaskForSession(review);
+    expect(store.reviewTaskForSession(review).report.id).toBe(first.report.id);
+    expect(reviewRequestHash(reviewer, reported.workspace_id, "bound-review")).toBe(
+      expectedHash({
+        task_id: reported.id,
+        expected_version: reported.version,
+        outcome: "accept",
+        summary: "Spot-checked the change.",
+        evidence_refs: [],
+        confidence: "medium",
+        confidence_basis: "Two of three paths were read.",
+      }),
+    );
+    expect(
+      errorCode(() => store.reviewTaskForSession({ ...review, confidence: "low" })),
+    ).toBe("idempotency_conflict");
+  });
+
+  test("treats blank basis or limits as absent and trims supplied text", () => {
+    const { reviewer, reported } = reportedForReview("blank");
+    const review = {
+      ...reviewer.credential,
+      idempotency_key: "blank-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept" as const,
+      summary: "Checked the one changed path.",
+      confidence: "low" as const,
+      confidence_basis: " \n ",
+      limits: "  Only one path was read.  ",
+    };
+    const first = store.reviewTaskForSession(review);
+    expect(first.report).toMatchObject({
+      confidence: "low",
+      confidence_basis: null,
+      limits: "Only one path was read.",
+    });
+    expect(reviewRequestHash(reviewer, reported.workspace_id, "blank-review")).toBe(
+      expectedHash({
+        task_id: reported.id,
+        expected_version: reported.version,
+        outcome: "accept",
+        summary: "Checked the one changed path.",
+        evidence_refs: [],
+        confidence: "low",
+        limits: "Only one path was read.",
+      }),
+    );
+    const { confidence_basis: _blankBasis, ...withoutBasis } = review;
+    expect(store.reviewTaskForSession(withoutBasis).report.id).toBe(first.report.id);
+    expect(
+      store.reviewTaskForSession({ ...review, confidence_basis: "", limits: "Only one path was read." })
+        .report.id,
+    ).toBe(first.report.id);
+  });
+
+  test("rejects an unsupported review confidence before any write", () => {
+    const { reviewer, reported } = reportedForReview("unsupported");
+    expect(
+      errorCode(() =>
+        store.reviewTaskForSession({
+          ...reviewer.credential,
+          idempotency_key: "unsupported-confidence-review",
+          task_id: reported.id,
+          expected_version: reported.version,
+          outcome: "accept",
+          summary: "Claims an unsupported confidence.",
+          confidence: "certain" as any,
+        }),
+      ),
+    ).toBe("invalid_report_confidence");
+    expect(store.getTask(reported.workspace_id, reported.id).review_status).toBe("pending");
   });
 });
 

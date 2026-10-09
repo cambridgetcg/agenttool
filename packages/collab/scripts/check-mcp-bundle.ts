@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { buildMcpBundle } from "./build-mcp-bundle.js";
+import { basename, join, resolve } from "node:path";
+import { buildBundle, COLLAB_BUNDLES } from "./build-mcp-bundle.js";
 
 /** The tracked bundle is compared byte-for-byte against a fresh local build.
  *
@@ -18,16 +18,16 @@ import { buildMcpBundle } from "./build-mcp-bundle.js";
  *  comparison was skipped. CI runs the pinned version and stays the enforcer. */
 
 const packageRoot = resolve(import.meta.dir, "..");
-const checkedInBundle = join(packageRoot, "dist", "agenttool-collab-mcp.js");
 
 const manifest = (await Bun.file(join(packageRoot, "package.json")).json()) as {
   bundlerBunVersion?: string;
 };
 const pinnedBunVersion = manifest.bundlerBunVersion;
 
-const checkedInFile = Bun.file(checkedInBundle);
-if (!(await checkedInFile.exists())) {
-  throw new Error("tracked MCP bundle is missing; run `bun run build:mcp`");
+for (const bundle of COLLAB_BUNDLES) {
+  if (!(await Bun.file(join(packageRoot, bundle.output)).exists())) {
+    throw new Error(`tracked ${bundle.name} bundle is missing; run \`bun run build:mcp\``);
+  }
 }
 
 if (pinnedBunVersion && Bun.version !== pinnedBunVersion) {
@@ -40,20 +40,24 @@ if (pinnedBunVersion && Bun.version !== pinnedBunVersion) {
 }
 
 const temporaryDirectory = await mkdtemp(join(tmpdir(), "agenttool-collab-bundle-"));
-const candidateBundle = join(temporaryDirectory, "agenttool-collab-mcp.js");
 
 try {
-  await buildMcpBundle(candidateBundle);
+  for (const bundle of COLLAB_BUNDLES) {
+    const candidateBundle = join(temporaryDirectory, basename(bundle.output));
+    await buildBundle(bundle, candidateBundle);
 
-  const checkedIn = new Uint8Array(await checkedInFile.arrayBuffer());
-  const candidate = new Uint8Array(await Bun.file(candidateBundle).arrayBuffer());
-  const matches =
-    checkedIn.byteLength === candidate.byteLength &&
-    checkedIn.every((byte, index) => byte === candidate[index]);
-  if (!matches) {
-    throw new Error(
-      `tracked MCP bundle is stale; run \`bun run build:mcp\` and commit the result (Bun ${Bun.version})`,
+    const checkedIn = new Uint8Array(
+      await Bun.file(join(packageRoot, bundle.output)).arrayBuffer(),
     );
+    const candidate = new Uint8Array(await Bun.file(candidateBundle).arrayBuffer());
+    const matches =
+      checkedIn.byteLength === candidate.byteLength &&
+      checkedIn.every((byte, index) => byte === candidate[index]);
+    if (!matches) {
+      throw new Error(
+        `tracked ${bundle.name} bundle ${bundle.output} is stale; run \`bun run build:mcp\` and commit the result (Bun ${Bun.version})`,
+      );
+    }
   }
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

@@ -1,4 +1,4 @@
 interface:
   display_name: "Coordinate Agent Work"
   short_description: "Coordinate sessions with local evidence"
-  default_prompt: "Use $coordinate-agent-work to start credential-bound coordination, reconcile bounded event pages and evidence, distinguish optional presence hints, and check local witness status without contacting a chain."
+  default_prompt: "Use $coordinate-agent-work to follow the ordinary loop: start a credential-bound session, poll and acknowledge, claim before editing, attach evidence, complete with an optional requested reviewer, review with stated confidence, and end with release_leases. Distinguish optional presence hints and check local witness status without contacting a chain."

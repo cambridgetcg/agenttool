@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildCollabMcpServer } from "../src/mcp.js";
+import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
 import { CollabStore } from "../src/store.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
@@ -90,6 +92,10 @@ class StdioMcpHarness {
 
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<any> {
     return await this.request("tools/call", { name, arguments: args });
+  }
+
+  async listTools(): Promise<any> {
+    return await this.request("tools/list", {});
   }
 
   async close(): Promise<void> {
@@ -484,6 +490,97 @@ describe("MCP surface", () => {
     );
   });
 
+  test("refuses a bound collab_next after_sequence that is not the acknowledged cursor", async () => {
+    const { root, store, server } = node();
+    const nextTool = (server as any)._registeredTools.collab_next;
+    expect(nextTool.inputSchema.shape.after_sequence.description).toContain(
+      "after_sequence_unsupported_in_bound_session",
+    );
+    expect(nextTool.description).toContain("collab_cursor_ack");
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "bound-pager",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    for (let index = 0; index < 3; index += 1) {
+      store.createTask({
+        workspace_id: workspaceId,
+        actor: "fixture-writer",
+        idempotency_key: `after-sequence-task-${index}`,
+        title: `After-sequence task ${index}`,
+      });
+    }
+
+    const first = await callTool(server, "collab_next", { workspace_id: workspaceId });
+    expect(first.isError).toBeUndefined();
+    const cursor = first.structuredContent.session.cursor;
+    expect(cursor.sequence).toBe(0);
+
+    const tolerated = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "spoofed-pager",
+      after_sequence: cursor.sequence,
+    });
+    expect(tolerated.isError).toBeUndefined();
+    expect(tolerated.structuredContent.actor).toBe("bound-pager");
+    expect(tolerated.structuredContent.events.cursor).toEqual(cursor);
+
+    const skipAhead = first.structuredContent.events.next_anchor.sequence;
+    const refused = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: skipAhead,
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toMatchObject({
+      error: "after_sequence_unsupported_in_bound_session",
+      after_sequence: skipAhead,
+      cursor,
+      cursor_version: 0,
+    });
+    expect(refused.structuredContent.message).toContain("collab_cursor_ack");
+    expect(refused.structuredContent.message).toContain("collab_events_since");
+    expect(refused.structuredContent.remedy).toContain("collab_cursor_ack");
+    expect(refused.structuredContent.remedy).toContain("collab_events_since");
+
+    const acknowledged = await callTool(server, "collab_cursor_ack", {
+      workspace_id: workspaceId,
+      anchor: first.structuredContent.events.next_anchor,
+      expected_cursor_version: first.structuredContent.session.cursor_version,
+    });
+    const staleAfterAck = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: 0,
+    });
+    expect(staleAfterAck.isError).toBe(true);
+    expect(staleAfterAck.structuredContent.error).toBe(
+      "after_sequence_unsupported_in_bound_session",
+    );
+    expect(staleAfterAck.structuredContent.cursor).toEqual(
+      acknowledged.structuredContent.session.cursor,
+    );
+    const matchingAfterAck = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: acknowledged.structuredContent.session.cursor.sequence,
+    });
+    expect(matchingAfterAck.isError).toBeUndefined();
+    expect(matchingAfterAck.structuredContent.events.cursor).toEqual(
+      acknowledged.structuredContent.session.cursor,
+    );
+
+    const legacy = node();
+    const opened = await callTool(legacy.server, "collab_workspace_open", {
+      root_path: legacy.root,
+      actor: "legacy-pager",
+    });
+    const legacyPage = await callTool(legacy.server, "collab_next", {
+      workspace_id: opened.structuredContent.workspace.id,
+      actor: "legacy-pager",
+      after_sequence: 1,
+    });
+    expect(legacyPage.isError).toBeUndefined();
+    expect(legacyPage.structuredContent.events.cursor.sequence).toBe(1);
+  });
+
   test("preserves the public self-declared presence plane without binding the process", async () => {
     const { root, server } = node();
     const opened = await callTool(server, "collab_workspace_open", {
@@ -605,6 +702,96 @@ describe("MCP surface", () => {
     expect(result.structuredContent.error).toBe("session_file_exists");
     expect(JSON.stringify(result)).not.toContain(hiddenPath);
     expect(JSON.stringify(result)).not.toContain(resolve(root, ".."));
+  });
+
+  test("ends a bound session with release_leases and names the flag when refusing", async () => {
+    const { root, store, server } = node();
+    const endTool = (server as any)._registeredTools.collab_session_end;
+    expect(Object.keys(endTool.inputSchema.shape).sort()).toEqual([
+      "reason",
+      "release_leases",
+      "release_summary",
+    ]);
+    expect(endTool.description).toContain("release_leases");
+    expect(
+      endTool.inputSchema.safeParse({
+        reason: "parse check",
+        release_leases: true,
+        release_summary: "parse check summary",
+      }).data,
+    ).toEqual({
+      reason: "parse check",
+      release_leases: true,
+      release_summary: "parse check summary",
+    });
+    expect(endTool.inputSchema.safeParse({ release_leases: "yes" }).success).toBe(false);
+
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "mcp-release-on-end",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    const credentialPath = store.defaultSessionCredentialPath(
+      joined.structuredContent.session.id,
+    );
+    const created = await callTool(server, "collab_task_create", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-end-create",
+      title: "Release on end",
+      work_mode: "edit",
+      path_scopes: ["src/mcp-end.ts"],
+    });
+    const taskId = created.structuredContent.task.id;
+    const claimed = await callTool(server, "collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      idempotency_key: "mcp-end-claim",
+      expected_version: created.structuredContent.task.version,
+    });
+
+    const refused = await callTool(server, "collab_session_end", {
+      reason: "Trying to leave with a live lease",
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent.error).toBe("session_has_active_leases");
+    expect(refused.structuredContent.task_ids).toEqual([taskId]);
+    expect(refused.structuredContent.leases).toEqual([
+      {
+        task_id: taskId,
+        lease_id: claimed.structuredContent.task.lease_id,
+        expires_at: claimed.structuredContent.task.lease_expires_at,
+      },
+    ]);
+    expect(refused.structuredContent.remedy).toContain("release_leases: true");
+    const blankSummary = await callTool(server, "collab_session_end", {
+      reason: "Summary without the flag",
+      release_summary: "",
+    });
+    expect(blankSummary.isError).toBe(true);
+    expect(blankSummary.structuredContent.error).toBe("invalid_release_summary");
+    expect(existsSync(credentialPath)).toBe(true);
+
+    const ended = await callTool(server, "collab_session_end", {
+      reason: "Leaving cleanly",
+      release_leases: true,
+      release_summary: "Returned to the pool by the leaving session.",
+    });
+    expect(ended.isError).toBeUndefined();
+    expect(ended.structuredContent.session.status).toBe("ended");
+    expect(ended.structuredContent.released_leases).toEqual([
+      {
+        task_id: taskId,
+        lease_id: claimed.structuredContent.task.lease_id,
+        via: "release",
+      },
+    ]);
+    expect(ended.structuredContent.credential_file_removed).toBe(true);
+    expect(existsSync(credentialPath)).toBe(false);
+    expect(store.getTask(workspaceId, taskId)).toMatchObject({
+      status: "open",
+      assignee_session_id: null,
+      lease_id: null,
+    });
   });
 
   test("coordinates reported completion, distinct review, and explicit cursor acknowledgement across handlers", async () => {
@@ -756,6 +943,121 @@ describe("MCP surface", () => {
     expect(result.structuredContent.error).toBe("task_not_found");
   });
 
+  test("describes every evidence_refs input with the allowed prefixes", () => {
+    const { server } = node();
+    const tools = (server as any)._registeredTools;
+    const withEvidence = Object.keys(tools)
+      .filter((name) => tools[name].inputSchema?.shape?.evidence_refs !== undefined)
+      .sort();
+    expect(withEvidence).toEqual([
+      "collab_report_append",
+      "collab_task_complete",
+      "collab_task_review",
+    ]);
+    for (const name of withEvidence) {
+      expect(tools[name].inputSchema.shape.evidence_refs.description).toBe(
+        EVIDENCE_REFS_DESCRIPTION,
+      );
+    }
+    for (const prefix of EVIDENCE_REF_PREFIXES) {
+      expect(EVIDENCE_REFS_DESCRIPTION).toContain(prefix);
+    }
+    expect(EVIDENCE_REFS_DESCRIPTION).toContain("artifact:artifact_<id>");
+  });
+
+  test("flattens allowed evidence prefixes into MCP evidence errors", async () => {
+    const { root, server } = node();
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "evidence-reporter",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    const unsupported = await callTool(server, "collab_report_append", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-unsupported-evidence",
+      kind: "observation",
+      body: "Cites an unsupported evidence kind.",
+      evidence_refs: ["commit:abc123"],
+    });
+    expect(unsupported.isError).toBe(true);
+    expect(unsupported.structuredContent.error).toBe("invalid_evidence_ref");
+    expect(unsupported.structuredContent.allowed_prefixes).toEqual([...EVIDENCE_REF_PREFIXES]);
+    expect(unsupported.structuredContent.message).toContain(EVIDENCE_REFS_DESCRIPTION);
+
+    const missing = await callTool(server, "collab_report_append", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-missing-evidence",
+      kind: "observation",
+      body: "Cites an artifact that does not exist.",
+      evidence_refs: ["artifact:artifact_missing"],
+    });
+    expect(missing.isError).toBe(true);
+    expect(missing.structuredContent.error).toBe("evidence_not_found");
+    expect(missing.structuredContent.reference).toBe("artifact:artifact_missing");
+    expect(missing.structuredContent.allowed_prefixes).toEqual([...EVIDENCE_REF_PREFIXES]);
+  });
+
+  test("carries review confidence, basis and limits through collab_task_review", async () => {
+    const { root, store, server } = node();
+    const implementer = store.startSession({
+      root_path: root,
+      actor: "mcp-confidence-implementer",
+    });
+    const task = store.createTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-create",
+      title: "Confidence review",
+      work_mode: "edit",
+      completion_policy: "accepted",
+      path_scopes: ["src/confidence.ts"],
+    });
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-claim",
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-complete",
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Ready for an MCP review.",
+    });
+    await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "mcp-confidence-reviewer",
+    });
+
+    const review = {
+      workspace_id: reported.workspace_id,
+      task_id: reported.id,
+      idempotency_key: "mcp-confidence-review",
+      expected_version: reported.version,
+      outcome: "accept",
+      summary: "Reviewed through MCP.",
+      confidence: "medium",
+      confidence_basis: "Read the change; did not rerun tests.",
+      limits: "No full-suite run.",
+    };
+    const inputSchema = (server as any)._registeredTools.collab_task_review.inputSchema;
+    expect(inputSchema.safeParse(review).success).toBe(true);
+    expect(inputSchema.safeParse({ ...review, confidence_basis: "" }).success).toBe(true);
+    expect(inputSchema.safeParse({ ...review, confidence: "certain" }).success).toBe(false);
+    expect(inputSchema.safeParse({ ...review, confidence_basis: "b".repeat(2_001) }).success)
+      .toBe(false);
+    expect(inputSchema.safeParse({ ...review, limits: "l".repeat(2_001) }).success).toBe(false);
+
+    const reviewed = await callTool(server, "collab_task_review", review);
+    expect(reviewed.isError).toBeUndefined();
+    expect(reviewed.structuredContent.report).toMatchObject({
+      confidence: "medium",
+      confidence_basis: "Read the change; did not rerun tests.",
+      limits: "No full-suite run.",
+    });
+  });
+
   test("verifies the full journal and labels the verification scope", async () => {
     const { root, store, server } = node();
     const opened = await callTool(server, "collab_workspace_open", { root_path: root, actor: "root" });
@@ -887,4 +1189,210 @@ describe("MCP surface", () => {
       reviewerJoin.structuredContent.session.id,
     );
   }, 20_000);
+
+  test("carries every new optional input over stdio through the checked-in bundles", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-mcp-inputs-"));
+    const root = join(directory, "repo");
+    const databasePath = join(directory, "state", "collab.sqlite");
+    const mcpBundle = join(packageRoot, "dist", "agenttool-collab-mcp.js");
+    const hostBundle = join(packageRoot, "dist", "agenttool-collab-host.js");
+    mkdirSync(root);
+    cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+
+    const implementer = new StdioMcpHarness(mcpBundle, databasePath);
+    cleanup.push(() => implementer.close());
+    await implementer.initialize();
+    const reviewer = new StdioMcpHarness(mcpBundle, databasePath);
+    cleanup.push(() => reviewer.close());
+    await reviewer.initialize();
+
+    // The shipped bundle must advertise every new input; a stale bundle fails here.
+    const tools = new Map<string, any>(
+      (await implementer.listTools()).tools.map((tool: any) => [tool.name, tool]),
+    );
+    const properties = (name: string) => Object.keys(tools.get(name).inputSchema.properties);
+    expect(properties("collab_session_end")).toEqual(
+      expect.arrayContaining(["reason", "release_leases", "release_summary"]),
+    );
+    expect(tools.get("collab_session_end").inputSchema.properties.release_leases.type).toBe("boolean");
+    expect(properties("collab_task_complete")).toContain("review_requested_session_id");
+    expect(properties("collab_task_review")).toEqual(
+      expect.arrayContaining(["confidence", "confidence_basis", "limits"]),
+    );
+    expect(tools.get("collab_task_review").inputSchema.properties.confidence.enum).toEqual([
+      "high",
+      "medium",
+      "low",
+      "unknown",
+    ]);
+    expect(properties("collab_next")).toContain("after_sequence");
+
+    const implementerJoin = await implementer.callTool("collab_session_start", {
+      root_path: root,
+      actor: "stdio-inputs-implementer",
+    });
+    const reviewerJoin = await reviewer.callTool("collab_session_start", {
+      root_path: root,
+      actor: "stdio-inputs-reviewer",
+    });
+    const workspaceId = implementerJoin.structuredContent.workspace.id;
+    const reviewerSessionId = reviewerJoin.structuredContent.session.id;
+
+    // review_requested_session_id (collab_task_complete)
+    const created = await implementer.callTool("collab_task_create", {
+      workspace_id: workspaceId,
+      idempotency_key: "stdio-inputs-create",
+      title: "Requested review over stdio",
+      work_mode: "edit",
+      path_scopes: ["src/stdio-inputs.ts"],
+    });
+    const claimed = await implementer.callTool("collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: created.structuredContent.task.id,
+      idempotency_key: "stdio-inputs-claim",
+      expected_version: created.structuredContent.task.version,
+    });
+    const reported = await implementer.callTool("collab_task_complete", {
+      workspace_id: workspaceId,
+      task_id: claimed.structuredContent.task.id,
+      lease_id: claimed.structuredContent.task.lease_id,
+      idempotency_key: "stdio-inputs-complete",
+      expected_version: claimed.structuredContent.task.version,
+      summary: "Ready for the requested reviewer",
+      review_requested_session_id: reviewerSessionId,
+    });
+    expect(reported.isError).toBeUndefined();
+    expect(reported.structuredContent.task.review_requested_session_id).toBe(reviewerSessionId);
+
+    // bound after_sequence (collab_next): the acknowledged cursor is tolerated, anything else refused
+    const cursorSequence = reviewerJoin.structuredContent.session.cursor.sequence;
+    const routed = await reviewer.callTool("collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: cursorSequence,
+      event_limit: 50,
+    });
+    expect(routed.isError).toBeUndefined();
+    expect(routed.structuredContent.reports.some(
+      (report: any) => report.to_session_id === reviewerSessionId,
+    )).toBe(true);
+    const skipped = await reviewer.callTool("collab_next", {
+      workspace_id: workspaceId,
+      after_sequence: cursorSequence + 1,
+    });
+    expect(skipped.isError).toBe(true);
+    expect(skipped.structuredContent.error).toBe("after_sequence_unsupported_in_bound_session");
+
+    // confidence, confidence_basis, limits (collab_task_review)
+    const reviewed = await reviewer.callTool("collab_task_review", {
+      workspace_id: workspaceId,
+      task_id: created.structuredContent.task.id,
+      idempotency_key: "stdio-inputs-review",
+      expected_version: reported.structuredContent.task.version,
+      outcome: "accept",
+      summary: "Requested reviewer accepts over stdio",
+      confidence: "medium",
+      confidence_basis: "Read the reported change.",
+      limits: "Ran no tests.",
+    });
+    expect(reviewed.isError).toBeUndefined();
+    expect(reviewed.structuredContent.report).toMatchObject({
+      confidence: "medium",
+      confidence_basis: "Read the reported change.",
+      limits: "Ran no tests.",
+    });
+
+    // release_leases + release_summary (collab_session_end)
+    const second = await implementer.callTool("collab_task_create", {
+      workspace_id: workspaceId,
+      idempotency_key: "stdio-inputs-create-second",
+      title: "Released on end over stdio",
+      work_mode: "edit",
+      path_scopes: ["src/stdio-release.ts"],
+    });
+    const secondClaim = await implementer.callTool("collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: second.structuredContent.task.id,
+      idempotency_key: "stdio-inputs-claim-second",
+      expected_version: second.structuredContent.task.version,
+    });
+    const blankSummary = await implementer.callTool("collab_session_end", {
+      reason: "A blank summary without the flag",
+      release_summary: "",
+    });
+    expect(blankSummary.isError).toBe(true);
+    expect(blankSummary.structuredContent.error).toBe("invalid_release_summary");
+    const ended = await implementer.callTool("collab_session_end", {
+      reason: "Leaving over stdio",
+      release_leases: true,
+      release_summary: "Released by the stdio implementer on exit",
+    });
+    expect(ended.isError).toBeUndefined();
+    expect(ended.structuredContent.released_leases).toEqual([
+      {
+        task_id: second.structuredContent.task.id,
+        lease_id: secondClaim.structuredContent.task.lease_id,
+        via: "release",
+      },
+    ]);
+
+    // Host exit without collab_session_end: the host CLI bundle ends the
+    // reviewer from the credential file its MCP process wrote.
+    const third = await reviewer.callTool("collab_task_create", {
+      workspace_id: workspaceId,
+      idempotency_key: "stdio-inputs-create-third",
+      title: "Held when the reviewer host exits",
+      work_mode: "edit",
+      path_scopes: ["src/stdio-host-exit.ts"],
+    });
+    const thirdClaim = await reviewer.callTool("collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: third.structuredContent.task.id,
+      idempotency_key: "stdio-inputs-claim-third",
+      expected_version: third.structuredContent.task.version,
+    });
+    await reviewer.close();
+    const reviewerFile = join(directory, "state", "collab-sessions", `${reviewerSessionId}.json`);
+    expect(existsSync(reviewerFile)).toBe(true);
+    const host = Bun.spawnSync([
+      process.execPath,
+      hostBundle,
+      "end",
+      "--session-file",
+      reviewerFile,
+      "--reason",
+      "host exit sweep: stdio reviewer exited",
+      "--release-leases",
+      "--db",
+      databasePath,
+    ], {
+      cwd: packageRoot,
+      env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir() },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(host.exitCode).toBe(0);
+    expect(JSON.parse(host.stdout.toString())).toMatchObject({
+      protocol: "agenttool.collab-host/1",
+      status: "ended",
+      session_id: reviewerSessionId,
+      released: [{
+        task_id: third.structuredContent.task.id,
+        lease_id: thirdClaim.structuredContent.task.lease_id,
+        via: "release",
+      }],
+    });
+    expect(existsSync(reviewerFile)).toBe(false);
+
+    const verified = await implementer.callTool("collab_journal_verify", {
+      workspace_id: workspaceId,
+    });
+    expect(verified.structuredContent.chain_valid).toBe(true);
+    const observer = new CollabStore(databasePath);
+    cleanup.push(() => observer.close());
+    expect(observer.getCoordinationSession(reviewerSessionId)?.status).toBe("ended");
+    expect(observer.getTask(workspaceId, third.structuredContent.task.id)).toMatchObject({
+      status: "open",
+      lease_id: null,
+    });
+  }, 30_000);
 });

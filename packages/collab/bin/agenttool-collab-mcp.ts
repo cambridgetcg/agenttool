@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
-import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { resolveDatabasePath } from "../src/database-path.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import {
   readSessionCredentialFile,
@@ -9,16 +8,8 @@ import {
 } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
 
-function defaultDatabasePath(): string {
-  const dataHome = process.env.XDG_DATA_HOME;
-  const base = dataHome
-    ? (isAbsolute(dataHome) ? dataHome : resolve(dataHome))
-    : join(homedir(), ".local", "share");
-  return join(base, "agenttool", "collab.sqlite");
-}
-
 async function main(): Promise<void> {
-  const databasePath = process.env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath();
+  const databasePath = resolveDatabasePath(process.env);
   const store = new CollabStore(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile

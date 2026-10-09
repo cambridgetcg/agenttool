@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, independent review, or refusable handoffs when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, or refusable handoffs when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
@@ -39,40 +39,147 @@ a person, model, provider, account, health, competence, or permission. The
 planes do not become one identity merely because they share a label or
 workspace.
 
-## Run credential-bound coordination
+Confirm that every participating MCP process selects the same
+`AGENTOOL_COLLAB_DB`, and register the Hermes MCP server under the exact name
+`agenttool`. If this profile already uses `agenttool` for another server, such
+as the public AgentTool API MCP, resolve the registration with the host first;
+do not guess other prefixed names.
 
-1. Confirm that every participating MCP process selects the same
-   `AGENTOOL_COLLAB_DB`, and register the Hermes MCP server under the exact name
-   `agenttool`.
-2. Call `mcp_agenttool_collab_session_start` with the repository root and an
-   actor label. It opens the workspace, creates a local bearer, writes it to a
-   mode-`0600` host file, and binds this MCP process. Retain the returned
-   workspace and session IDs, but never read the credential file or request its
-   token or absolute path through model-facing tools.
-3. Call `mcp_agenttool_collab_next` at the start of a turn, after local work,
-   and before relying on shared state. Omit `event_limit` for the 10-event MCP
-   default or set an integer from 1 through 50. Process one page, call
-   `mcp_agenttool_collab_cursor_ack` with its exact terminal `next_anchor`, then
-   poll again if `has_more` is true. `known_cursor` validates an anchor but does
-   not paginate or acknowledge. The limit bounds events and routed reports,
-   not snapshot-head task, conflict, or handoff projections. Treat
-   acknowledgement as processed, not agreed or accepted.
-4. Create bounded work, then call `mcp_agenttool_collab_task_claim` with the
-   latest version before editing. Omit legacy actor arguments in the bound
-   process; the server derives its coordination actor from the credential.
-5. Attach scoped references, append evidence with
-   `mcp_agenttool_collab_report_append`, and report completion. Require a
-   distinct bound session to inspect the evidence and call
-   `mcp_agenttool_collab_task_review` for edit-task acceptance.
-6. Offer continuation with `mcp_agenttool_collab_handoff_offer`; transfer the
-   advisory lease only after the exact recipient accepts. Resolve live leases,
-   then call `mcp_agenttool_collab_session_end` when the host knows this session
-   will not resume.
+## The ordinary loop
+
+1. **Start.** Call `mcp_agenttool_collab_session_start` with the repository
+   `root_path`, an `actor` label, an optional free-text `role`, and, for a
+   delegated child, `parent_session_id`. It opens the workspace, creates a
+   local bearer, writes it to a mode-`0600` host file, and binds this MCP
+   process. Retain the returned workspace and session IDs, but never read the
+   credential file or request its token or absolute path through model-facing
+   tools.
+2. **Poll and acknowledge.** Call `mcp_agenttool_collab_next` at the start of
+   a turn, after local work, and before relying on shared state. Omit
+   `event_limit` for the 10-event MCP default or set an integer from 1 through
+   50. Process one page, call `mcp_agenttool_collab_cursor_ack` with its exact
+   terminal `next_anchor`, then poll again if `has_more` is true. Handle your
+   own entries in `recovery_required` first.
+3. **Split and claim.** Create bounded work with
+   `mcp_agenttool_collab_task_create`, then call
+   `mcp_agenttool_collab_task_claim` with the latest version before editing.
+   Omit legacy actor arguments in the bound process; the server derives its
+   coordination actor from the credential.
+4. **Work.** Stay inside the task's scope; renew with
+   `mcp_agenttool_collab_task_renew` and post
+   `mcp_agenttool_collab_task_progress` on long work.
+5. **Attach.** Call `mcp_agenttool_collab_artifact_attach` for each reference.
+   For a file, use its repository-relative path inside the task's path scopes
+   as `uri` and the SHA-256 of the written bytes as `sha256`.
+6. **Complete.** Call `mcp_agenttool_collab_task_complete` with a summary,
+   `confidence`, `confidence_basis`, `limits` and `evidence_refs`, optionally
+   naming `review_requested_session_id`.
+7. **Review.** Require a distinct bound session to inspect the evidence and
+   call `mcp_agenttool_collab_task_review` with its own `confidence`,
+   `confidence_basis` and `limits`. A late reviewer concurs or disagrees by
+   report.
+8. **End.** Call `mcp_agenttool_collab_session_end` with a `reason`,
+   `release_leases: true` and an optional `release_summary` when the host knows
+   this session will not resume.
+
+`next_anchor`, `known_cursor` and `event_limit` behave as in the main skill:
+`known_cursor` validates an anchor but does not paginate or acknowledge, and
+the limit bounds events and routed reports, not snapshot-head task, conflict,
+or handoff projections. Treat acknowledgement as processed, not agreed or
+accepted. A bound session does not take `after_sequence`; a value other than
+the acknowledged cursor's sequence returns
+`after_sequence_unsupported_in_bound_session`. Advance with
+`mcp_agenttool_collab_cursor_ack`, or read any position without acknowledging
+through `mcp_agenttool_collab_events_since`.
+
+### Evidence, review and exit details
+
+Evidence references are `artifact:artifact_<id>`, `event:event_<id>`,
+`report:report_<id>`, or `checkpoint:<digest>` using a task's
+`base_checkpoint_digest` or `result_checkpoint_digest`. On
+`invalid_evidence_ref` or `evidence_not_found`, read `allowed_prefixes` from
+the error and correct the reference.
+
+`review_requested_session_id` must be an active session in this workspace
+other than yours. It adds an addressed `informs` report and shows on the task;
+it is a request, not a reservation. Leave the review to that session while its
+`liveness` is `live`. If a review returns `task_not_pending_review` with
+`review_report_id` and `accepted_by_session_id`, append your verdict with
+`mcp_agenttool_collab_report_append`: the same `task_id`,
+`relation: "supports"` or `"challenges"`, and `target_report_id` set to
+`review_report_id`.
+It applies only to a task whose completion waits for acceptance; elsewhere the
+completion is refused with `review_request_not_applicable`.
+
+`release_leases: true` releases each live lease and each expired lease the
+session still holds (the latter through audited recovery with
+`release_summary`, else `reason`, as the note) before ending. Without it, a
+live lease returns `session_has_active_leases` with `task_ids`, `leases` and a
+`remedy`. When the Hermes process is gone, the host can run
+`agenttool-collab-host end --session-file <path> --reason <text> --release-leases`;
+it prints a receipt without the credential and is not a model tool.
 
 Resume through the host, not a model tool. Configure the replacement MCP
 process with `AGENTOOL_COLLAB_SESSION_FILE`; never read, paste, report, log, or
 commit that bearer file. Let the host use the one-shot cursor recovery override
 only for an intentional audited reset.
+
+## Reports and relations
+
+Classify each report as `observation`, `inference`, `proposal`, or `decision`
+(a decision names `authority_scope` and `authority_basis`) and append it with
+`mcp_agenttool_collab_report_append`.
+
+| Relation | `target_report_id` | Who may append | Use it to |
+|---|---|---|---|
+| `informs` | must be omitted | any session | add a new observation, inference, proposal, decision or request |
+| `supports` | required | any session | agree with a report: answer a proposal, concur with a review |
+| `challenges` | required | any session | disagree with evidence; on a completion report it blocks acceptance |
+| `resolves` | required; must be a `challenges` report | any session | close a challenge with the evidence that settles it |
+| `corrects` | required | only the target's author session | repair your own earlier report |
+| `withdraws` | required | only the target's author session | retract your own earlier report |
+| `supersedes` | required | only the target's author session | replace your own earlier report |
+
+A related report uses its target's `task_id` (or none for a workspace-level
+target). `to_session_id` routes a report into that session's poll; it is not
+access control.
+
+Offer continuation with `mcp_agenttool_collab_handoff_offer`; transfer the
+advisory lease only after the exact recipient accepts.
+
+## Delegate and deliver
+
+A Hermes subagent that should be attributed separately needs its own MCP
+process and session. Give it the workspace ID and your session ID; it starts
+with `parent_session_id` set to your session and an actor label that names
+its runtime and job (for example ending in `· sol job <job-id>` under a local
+job runner). `parent_session_id` is declared lineage: checked only for
+existence in the same workspace, unauthenticated, and granting nothing. Give
+the session ID; never pass your session file or its path.
+
+A host that cannot write `.git` delivers by artifact; integration commits.
+Write only inside the claimed scopes, attach each file with its `sha256`,
+complete with the `artifact:` references, and leave the commit to an
+integrator that checks every digest first. A distinct reviewer then accepts
+the integration commit when the server verifies it as
+`host_commit_successor`: exactly one commit on the result checkpoint's `HEAD`
+and branch, a clean worktree, and only scoped files byte-equal to their newest
+`file` artifacts. Other drift is refused with `git_checkpoint_stale` and a
+`remedy` naming both ways forward.
+Only artifacts attached since the task's latest `request_changes` vouch. Never
+amend, reset or rewrite a shared branch to meet that condition; if other
+commits already sit on it, request changes.
+
+`role` is free text other sessions read with `liveness` in workspace status.
+Say there if this session only listens or reviews, and respect such roles in
+others. A session reads `stale` once ended, or after 6 hours without
+`collab_next`, a session mutation, a cursor acknowledgement, reset, resume
+or end; every acknowledgement refreshes `last_seen_at`, including one that
+does not advance the cursor, and nothing expires automatically. Tasks show
+`assignee_liveness`; recover an expired lease only through
+`mcp_agenttool_collab_task_recover` with an explicit action and note.
+`role` is fixed for the session's lifetime; correct it with an `informs`
+report, or end the session and start a new one.
 
 ## Receive without liveness writes (0.5.0)
 
