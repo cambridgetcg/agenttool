@@ -34,7 +34,6 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 
 import { clientIp } from "../middleware/client-ip";
 import { isAllowedPublicMcpOrigin } from "../services/mcp/http-boundary";
@@ -174,14 +173,86 @@ function isJsonContentType(header: string | null): boolean {
   );
 }
 
-function withCanonicalMcpMediaHeaders(request: Request): Request {
+/** The request the SDK transport sees. Our checks above already established
+ * that the client accepts both types and sent JSON. Normalize only for SDK
+ * 1.x, whose duplicate media checks currently compare header values
+ * case-sensitively.
+ *
+ * The body has already been read exactly once and reaches the transport as
+ * `parsedBody`, so this request deliberately carries no body. Re-wrapping the
+ * original request (`new Request(request, { headers })`) would hand the SDK
+ * a second, never-consumed body stream; under Bun 1.3.5-1.3.13 that unread
+ * stream stayed reachable after the response (~262 KB per chunked request).
+ * The SDK reads neither the body nor the signal when parsedBody is given. */
+function transportRequestWithoutBody(request: Request): Request {
   const headers = new Headers(request.headers);
-  // Our checks above already established that the client accepts both types
-  // and sent JSON. Normalize only for SDK 1.x, whose duplicate media checks
-  // currently compare header values case-sensitively.
   headers.set("accept", "application/json, text/event-stream");
   headers.set("content-type", "application/json");
-  return new Request(request, { headers });
+  return new Request(request.url, { method: request.method, headers });
+}
+
+class McpBodyTooLargeError extends Error {}
+
+/** Read the request body once, enforcing the byte cap while it streams.
+ *
+ * A declared Content-Length above the cap is refused before reading, as
+ * hono/body-limit did. Every chunk is copied into one compact buffer as it
+ * arrives instead of being held: Bun can return a small chunk as a view over
+ * a much larger freshly allocated buffer (256 KiB per read under Bun 1.3.x),
+ * so holding chunk views until the body ends would pin that backing store
+ * for every separately delivered chunk. */
+async function readMcpBodyOnce(
+  request: Request,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const declared = request.headers.get("content-length");
+  const declaredBytes =
+    declared !== null && !request.headers.has("transfer-encoding")
+      ? Number.parseInt(declared, 10)
+      : Number.NaN;
+  if (declaredBytes > maxBytes) throw new McpBodyTooLargeError();
+
+  const body = request.body;
+  if (body === null) return new Uint8Array(0);
+
+  let buffer = new Uint8Array(
+    Number.isSafeInteger(declaredBytes) && declaredBytes > 0
+      ? declaredBytes
+      : Math.min(4096, maxBytes),
+  );
+  let length = 0;
+  const reader = body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const nextLength = length + value.byteLength;
+      if (nextLength > maxBytes) throw new McpBodyTooLargeError();
+      if (nextLength > buffer.byteLength) {
+        const grown = new Uint8Array(
+          Math.min(maxBytes, Math.max(nextLength, buffer.byteLength * 2)),
+        );
+        grown.set(buffer.subarray(0, length));
+        buffer = grown;
+      }
+      buffer.set(value, length);
+      length = nextLength;
+    }
+  } catch (error) {
+    // Stop the rest of an oversize or broken body instead of leaving the
+    // stream open behind the error response.
+    await reader.cancel().catch(() => {});
+    throw error;
+  }
+  return buffer.subarray(0, length);
+}
+
+function bodyTooLargeResponse(): Response {
+  return protocolHttpError(
+    413,
+    -32000,
+    `MCP request bodies are capped at ${MCP_MAX_BODY_BYTES} bytes.`,
+  );
 }
 
 /** Create the public server afresh for one stateless HTTP request. */
@@ -336,24 +407,24 @@ for (const endpointPath of ["/", "/canon"] as const) {
     await next();
   });
 
-  app.use(
-    endpointPath,
-    bodyLimit({
-      maxSize: MCP_MAX_BODY_BYTES,
-      onError: () =>
-        protocolHttpError(
-          413,
-          -32000,
-          `MCP request bodies are capped at ${MCP_MAX_BODY_BYTES} bytes.`,
-        ),
-    }),
-  );
-
   app.all(endpointPath, async (c) => {
     const request = c.req.raw;
+    // Read the body exactly once (no clone/tee, no replacement stream), with
+    // the byte cap enforced before protocol parsing.
+    let bytes: Uint8Array;
+    try {
+      bytes = await readMcpBodyOnce(request, MCP_MAX_BODY_BYTES);
+    } catch (error) {
+      if (error instanceof McpBodyTooLargeError) return bodyTooLargeResponse();
+      return protocolHttpError(
+        400,
+        ErrorCode.ParseError,
+        "Parse error: Invalid UTF-8 JSON.",
+      );
+    }
+
     let parsedBody: unknown;
     try {
-      const bytes = await request.clone().arrayBuffer();
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       parsedBody = JSON.parse(text);
     } catch {
@@ -456,7 +527,7 @@ for (const endpointPath of ["/", "/canon"] as const) {
         ? createKnowledgeMcpServer()
         : createPublicMcpServer();
     await server.connect(transport);
-    return transport.handleRequest(withCanonicalMcpMediaHeaders(request), {
+    return transport.handleRequest(transportRequestWithoutBody(request), {
       parsedBody,
     });
   });
