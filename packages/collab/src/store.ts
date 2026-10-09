@@ -5821,7 +5821,10 @@ export class CollabStore {
     const holder = this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId) as Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null;
-    return holder ? sessionLiveness(holder, this.timestamp()) : null;
+    if (!holder) return null;
+    const observedAt = this.timestamp();
+    const rest = holder.status === "active" ? this.latestRest(sessionId, observedAt) : null;
+    return sessionLiveness(holder, observedAt, rest);
   }
 
   /**
@@ -6512,8 +6515,10 @@ function restFromDeclaration(row: RestDeclarationRow, observedAt: string): Sessi
 function sessionLiveness(
   row: Pick<CoordinationSessionRow, "status" | "last_seen_at">,
   observedAt: string,
+  rest: SessionRest | null,
 ): SessionLiveness {
-  if (row.status !== "active") return "stale";
+  if (row.status !== "active") return "ended";
+  if (rest) return "resting";
   const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
   // NaN (an unparseable timestamp) fails this comparison and reads as stale.
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
@@ -6555,7 +6560,7 @@ function coordinationSessionFromRow(
     cursor_version: row.cursor_version,
     reset_generation: row.reset_generation,
     cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLiveness(row, observedAt),
+    liveness: sessionLiveness(row, observedAt, rest),
     rest,
   };
 }

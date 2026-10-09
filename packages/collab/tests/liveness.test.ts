@@ -98,7 +98,7 @@ describe("staleness as a derived view", () => {
 
     const ended = store.endSession({ ...poller.credential, reason: "liveness test done" });
     expect(ended.status).toBe("ended");
-    expect(ended.liveness).toBe("stale");
+    expect(ended.liveness).toBe("ended");
   });
 
   // Controller ruling A1: the spec treats ack and reset alike, so a no-op ack
@@ -174,12 +174,12 @@ describe("staleness as a derived view", () => {
     expect(otherClaim.lease_expires_at! < ownClaim.lease_expires_at!).toBe(true);
 
     // An expired lease does not block session_end, so a holder can leave it
-    // behind; an ended holder reads stale even though it was just seen.
+    // behind; an ended holder reads ended even though it was just seen.
     store.endSession({ ...holder.credential, reason: "leaves an expired lease behind" });
     expect(store.getTask(ownTask.workspace_id, ownTask.id)).toMatchObject({
       effective_status: "recovery_required",
       assignee_session_id: holder.session.id,
-      assignee_liveness: "stale",
+      assignee_liveness: "ended",
     });
   });
 
@@ -250,6 +250,143 @@ describe("staleness as a derived view", () => {
       status.structuredContent.active_sessions.find((item: any) => item.id === ghost.session.id)
         .liveness,
     ).toBe("stale");
+    await server.close();
+  });
+});
+
+describe("four-state liveness: ended, then resting, then stale, then live", () => {
+  test("reads a declared, unexpired rest as resting after six hours unseen, never a quiet ghost", () => {
+    const rester = session("liveness-rester");
+    const ghost = session("liveness-quiet-ghost");
+    const until = new Date(currentTime.getTime() + 2 * STALE_AFTER_MS).toISOString();
+    const rested = store.restSessionForSession({
+      ...rester.credential,
+      idempotency_key: "rest-for-liveness",
+      mode: "resting",
+      until,
+      wake_on: ["addressed"],
+    });
+    expect(rested.liveness).toBe("resting");
+    const headBefore = store.eventsSince(rester.workspace.id, 0, 500).head_sequence;
+
+    advance(STALE_AFTER_MS + 1);
+    const byId = () => new Map(
+      store.listCoordinationSessions(rester.workspace.id).map((item) => [item.id, item.liveness]),
+    );
+    expect(byId().get(rester.session.id)).toBe("resting");
+    expect(byId().get(ghost.session.id)).toBe("stale");
+    const active = new Map(
+      store.workspaceStatus(rester.workspace.id).active_sessions
+        .map((item) => [item.id, item.liveness]),
+    );
+    expect(active.get(rester.session.id)).toBe("resting");
+    expect(active.get(ghost.session.id)).toBe("stale");
+
+    // Expiry is computed on read: one millisecond before until it still rests,
+    // at until a quiet session reads stale, never resting.
+    currentTime = new Date(Date.parse(until) - 1);
+    expect(store.getCoordinationSession(rester.session.id)?.liveness).toBe("resting");
+    currentTime = new Date(until);
+    expect(store.getCoordinationSession(rester.session.id)).toMatchObject({
+      status: "active",
+      rest: null,
+      liveness: "stale",
+    });
+    expect(store.eventsSince(rester.workspace.id, 0, 500).head_sequence).toBe(headBefore);
+  });
+
+  test("lets ended outrank resting and a return fall back to live, then stale", () => {
+    const returner = session("liveness-returner");
+    store.restSessionForSession({
+      ...returner.credential,
+      idempotency_key: "rest-then-return",
+      mode: "resting",
+    });
+    advance(STALE_AFTER_MS + 1);
+    expect(store.getCoordinationSession(returner.session.id)?.liveness).toBe("resting");
+    const back = store.restSessionForSession({
+      ...returner.credential,
+      idempotency_key: "return-to-live",
+      mode: "ready",
+    });
+    expect(back).toMatchObject({ rest: null, liveness: "live" });
+    advance(STALE_AFTER_MS + 1);
+    expect(store.getCoordinationSession(returner.session.id)?.liveness).toBe("stale");
+
+    const leaver = session("liveness-leaver");
+    store.restSessionForSession({
+      ...leaver.credential,
+      idempotency_key: "rest-then-end",
+      mode: "resting",
+      wake_on: ["addressed"],
+    });
+    const ended = store.endSession({ ...leaver.credential, reason: "departure is complete" });
+    expect(ended).toMatchObject({ status: "ended", rest: null, liveness: "ended" });
+    expect(
+      store.listCoordinationSessions(leaver.workspace.id, "ended")
+        .map((item) => [item.id, item.liveness]),
+    ).toEqual([[leaver.session.id, "ended"]]);
+  });
+
+  test("projects a resting holder through assignee_liveness without touching its lease", () => {
+    const holder = session("resting-holder");
+    const task = createEditTask(holder, "held-while-resting", "src/resting.ts");
+    const claimed = store.claimTaskForSession({
+      ...holder.credential,
+      idempotency_key: "claim-before-rest",
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    expect(claimed.assignee_liveness).toBe("live");
+    store.restSessionForSession({
+      ...holder.credential,
+      idempotency_key: "rest-while-holding",
+      mode: "resting",
+    });
+    expect(store.getTask(task.workspace_id, task.id)).toMatchObject({
+      assignee_session_id: holder.session.id,
+      assignee_liveness: "resting",
+      lease_id: claimed.lease_id,
+      lease_expires_at: claimed.lease_expires_at,
+      version: claimed.version,
+    });
+    advance(STALE_AFTER_MS + 1);
+    expect(store.getTask(task.workspace_id, task.id)).toMatchObject({
+      effective_status: "recovery_required",
+      assignee_liveness: "resting",
+    });
+  });
+
+  test("reports resting through the MCP surface and names all four states", async () => {
+    const server = buildCollabMcpServer(store);
+    const tools = (server as any)._registeredTools;
+    // The exact precedence phrase: a per-word check would pass vacuously,
+    // since "liveness" already contains "live".
+    expect(tools.collab_next.description as string).toContain(
+      "ended, else resting while a declared rest is unexpired, else stale after 6 hours unseen, else live",
+    );
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "mcp-resting",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    const rested = await callTool(server, "collab_session_rest", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-liveness-rest",
+      mode: "resting",
+      wake_on: ["addressed"],
+    });
+    expect(rested.structuredContent.session.liveness).toBe("resting");
+
+    advance(STALE_AFTER_MS + 1);
+    const next = await callTool(server, "collab_next", { workspace_id: workspaceId });
+    expect(next.isError).toBeUndefined();
+    expect(next.structuredContent.session.liveness).toBe("resting");
+    const status = await callTool(server, "collab_workspace_status", {
+      workspace_id: workspaceId,
+    });
+    expect(status.structuredContent.active_sessions.map((item: any) => item.liveness))
+      .toEqual(["resting"]);
     await server.close();
   });
 });

@@ -117,11 +117,14 @@ export interface Worktree {
 export type SessionStatus = "active" | "ended";
 
 /**
- * Derived view, never stored: an active session whose last_seen_at is older
- * than SESSION_STALE_AFTER_MS reads as stale; an ended session never reads as
- * live. Staleness changes no status, expires nothing, and grants nothing.
+ * Derived view, never stored, in this precedence: an ended session reads
+ * "ended"; an active session with a declared, unexpired rest reads "resting";
+ * an active session whose last_seen_at is older than SESSION_STALE_AFTER_MS
+ * reads "stale"; any other reads "live". Rest is declared, never inferred, so
+ * a quiet session without a declaration reads stale, never resting. Liveness
+ * changes no status, expires nothing, and grants nothing.
  */
-export type SessionLiveness = "live" | "stale";
+export type SessionLiveness = "live" | "resting" | "stale" | "ended";
 export const SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 /** v1 accepts only "addressed": consent to a wake for notes explicitly addressed to this session. */
