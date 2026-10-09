@@ -23,6 +23,7 @@ import {
   MAX_REST_REASON_LENGTH,
   SESSION_STALE_AFTER_MS,
   type SessionEventPageInput,
+  type AddresseeHint,
   type ArtifactRef,
   type ClaimTaskInput,
   type CollabEvent,
@@ -39,6 +40,7 @@ import {
   type HeartbeatSessionInput,
   type JoinSessionInput,
   type JournalPage,
+  type KnockDelivery,
   type LeaseTaskInput,
   type MutationContext,
   type RepoCheckpoint,
@@ -2001,6 +2003,32 @@ export class CollabStore {
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`)
       .get(id) as CoordinationSessionRow | null;
     return row ? this.sessionProjection(row) : null;
+  }
+
+  /**
+   * The sender hint for one addressed session, read now. It appends nothing
+   * and does not mark the addressee seen.
+   */
+  addresseeHint(workspaceId: string, sessionId: string): AddresseeHint {
+    const id = validateId(sessionId, "session_id");
+    const read = this.db.transaction(() => {
+      const row = this.requireCoordinationSessionRow(id);
+      if (row.workspace_id !== workspaceId) {
+        throw new CollabError(
+          "session_workspace_mismatch",
+          "The addressed session belongs to another workspace",
+          { session_id: id },
+        );
+      }
+      const session = this.sessionProjection(row);
+      return {
+        session_id: session.id,
+        liveness: session.liveness,
+        rest: session.rest,
+        delivery: knockDelivery(session.liveness, session.rest),
+      };
+    });
+    return read.deferred();
   }
 
   /**
@@ -6570,6 +6598,14 @@ export function isAddressedTo(event: AddressedEventRow, sessionId: string): bool
   if (!isRecordValue(payload)) return false;
   if (event.type === "report.posted") return payload.to_session_id === sessionId;
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+
+/** live: tap; resting with wake_on addressed: wake; resting otherwise or stale: held; ended: none. */
+function knockDelivery(liveness: SessionLiveness, rest: SessionRest | null): KnockDelivery {
+  if (liveness === "live") return "tap";
+  if (liveness === "ended") return "none";
+  if (liveness === "resting" && rest?.wake_on.includes("addressed")) return "wake";
+  return "held";
 }
 
 function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): Task[] {

@@ -168,6 +168,27 @@ export interface CoordinationSession {
   rest: SessionRest | null;
 }
 
+/** How a note would reach its addressee now; computed per call, never stored. */
+export type KnockDelivery = "tap" | "wake" | "held" | "none";
+
+/**
+ * Sender hint beside an addressed mutation: the addressee's state when this
+ * call ran, so an idempotent replay shows the current state, never a stored
+ * one. It reports what the addressee declared, never its host: tap: live,
+ * it reads the note at its next turn. wake: it declared rest with wake_on
+ * addressed, so the household doorbell may wake it; whether its host can be
+ * woken is recorded by the doorbell's ledger (host_cannot_wake), not here.
+ * held: resting without that, or stale; the note waits for its return.
+ * none: ended, departure is complete and nothing knocks. A hint only: it
+ * blocks nothing and promises no delivery.
+ */
+export interface AddresseeHint {
+  session_id: string;
+  liveness: SessionLiveness;
+  rest: SessionRest | null;
+  delivery: KnockDelivery;
+}
+
 export interface SessionJoinResult {
   workspace: Workspace;
   worktree: Worktree;

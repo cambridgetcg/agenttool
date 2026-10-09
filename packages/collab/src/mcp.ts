@@ -43,6 +43,10 @@ const eventAnchor = z.object({
 });
 const evidenceRefs = z.array(z.string().min(1).max(2000)).max(128).optional()
   .describe(EVIDENCE_REFS_DESCRIPTION);
+const addresseeNote =
+  "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), " +
+  "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). " +
+  "A hint: it blocks nothing and promises no delivery.";
 const nextEventLimit = z.number().int().min(1).max(50).optional()
   .describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 
@@ -152,6 +156,21 @@ export function buildCollabMcpServer(
         "session_workspace_mismatch",
         "The bound session belongs to another workspace",
       );
+    }
+  };
+  /** Adds the addressee's current state, computed on every call (replays too) and never stored. */
+  const withAddressee = <T extends object>(
+    result: T,
+    workspace: string,
+    addressedSessionId: string | null | undefined,
+  ) => {
+    if (!addressedSessionId) return result;
+    try {
+      return { ...result, addressee: store.addresseeHint(workspace, addressedSessionId) };
+    } catch {
+      // The mutation already committed; a hint that cannot be read is omitted,
+      // never turned into an error that invites a duplicate send.
+      return result;
     }
   };
   const requireLegacyActor = (value: string | undefined): string => {
@@ -761,7 +780,8 @@ export function buildCollabMcpServer(
     {
       title: "Report a claimed task complete",
       description:
-        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
+        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review. " +
+        `With review_requested_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         summary: z.string().min(1).max(4000),
@@ -794,7 +814,8 @@ export function buildCollabMcpServer(
             expected_version: input.expected_version,
             summary: input.summary,
           });
-      return { task };
+      // Unbound calls with review_requested_session_id were refused above.
+      return withAddressee({ task }, task.workspace_id, input.review_requested_session_id);
     }),
   );
 
@@ -803,7 +824,8 @@ export function buildCollabMcpServer(
     {
       title: "Review reported task completion",
       description:
-        "A distinct active session accepts or requests changes. Acceptance is local coordination review—not merge, deploy, truth, or external authority.",
+        "A distinct active session accepts or requests changes. Acceptance is local coordination review—not merge, deploy, truth, or external authority. " +
+        `The review result is addressed to the reporter: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -820,7 +842,8 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return store.reviewTaskForSession({ ...boundCredential(), ...input });
+      const reviewed = store.reviewTaskForSession({ ...boundCredential(), ...input });
+      return withAddressee(reviewed, reviewed.report.workspace_id, reviewed.report.to_session_id);
     }),
   );
 
@@ -829,7 +852,8 @@ export function buildCollabMcpServer(
     {
       title: "Append a structured collaboration report",
       description:
-        "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease.",
+        "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease. " +
+        `With to_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -858,9 +882,8 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return {
-        report: store.appendReportForSession({ ...boundCredential(), ...input }),
-      };
+      const report = store.appendReportForSession({ ...boundCredential(), ...input });
+      return withAddressee({ report }, report.workspace_id, report.to_session_id);
     }),
   );
 
@@ -932,7 +955,8 @@ export function buildCollabMcpServer(
     {
       title: "Offer a task handoff",
       description:
-        "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance.",
+        "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance. " +
+        `A bound session's offer names to_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         to_actor: z.string().min(1).max(200).optional(),
@@ -943,18 +967,20 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return binding
-        ? store.offerHandoffForSession({
-            ...boundCredential(),
-            ...input,
-            to_session_id: requiredString(to_session_id, "to_session_id"),
-          })
-        : store.offerHandoff({
-            workspace_id,
-            actor: requireLegacyActor(actor),
-            ...input,
-            to_actor: requiredString(to_actor, "to_actor"),
-          });
+      if (binding) {
+        const offered = store.offerHandoffForSession({
+          ...boundCredential(),
+          ...input,
+          to_session_id: requiredString(to_session_id, "to_session_id"),
+        });
+        return withAddressee(offered, offered.handoff.workspace_id, offered.handoff.to_session_id);
+      }
+      return store.offerHandoff({
+        workspace_id,
+        actor: requireLegacyActor(actor),
+        ...input,
+        to_actor: requiredString(to_actor, "to_actor"),
+      });
     }),
   );
 
