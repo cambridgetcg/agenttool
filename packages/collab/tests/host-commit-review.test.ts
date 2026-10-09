@@ -1,13 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { ArtifactRef, CollabEvent, SessionHandle, Task } from "../src/protocol.js";
+import { inspectSuccessorCommit } from "../src/repository.js";
 import { CollabStore } from "../src/store.js";
 
 let directory: string;
@@ -456,6 +465,69 @@ describe("host-committed completions", () => {
     );
   });
 
+  test("refuses a host commit that only changes a scoped file's mode, even with identical bytes", () => {
+    // voice-b.md is newly added (status A) in every other scenario here, so a
+    // mode-only M needs a path already tracked at the result checkpoint:
+    // voice-a.md, committed by initializeReplayRepository. Vouch for it with a
+    // matching artifact, so a pre-fix run would otherwise accept on content
+    // alone and this test would prove nothing about the mode check.
+    const scenario = reportedArtifactTask({
+      scopes: ["voice-a.md", "voice-b.md"],
+      attachments: [
+        { uri: "voice-b.md", sha256: sha256(VOICE_B) },
+        { uri: "voice-a.md", sha256: sha256(VOICE_A) },
+      ],
+    });
+    chmodSync(join(root, "voice-a.md"), 0o755);
+    const commitSha = hostCommit(["voice-a.md", "voice-b.md"]);
+    expect(runGit(root, "diff-tree", "-r", "--raw", "--no-renames", scenario.baseSha, commitSha)).toContain(
+      "100644 100755",
+    );
+    expectRefused(
+      scenario,
+      "accept-mode-change",
+      `Commit ${commitSha} deletes voice-a.md or commits it as something other than a regular file`,
+    );
+  });
+
+  test(
+    "refuses a host commit whose real object is shadowed by a git replace ref, by inspecting the real commit",
+    () => {
+      const scenario = reportedArtifactTask();
+      // The real commit the host made: voice-b.md (scoped, matches the artifact)
+      // plus README.md (outside the task's path_scopes).
+      writeFileSync(join(root, "README.md"), "# replay fixture, edited by the host\n");
+      const real = hostCommit(["voice-b.md", "README.md"]);
+      // A git writer with repository access revert README.md in the index and
+      // worktree, then publishes refs/replace/<real> -> a fake commit with the
+      // same parent whose tree matches that reverted state. HEAD (the ref) still
+      // names `real`; only object lookups of `real` are redirected to the fake
+      // commit's data (its tree and, for identical parents, its parent too).
+      writeFileSync(join(root, "README.md"), "# replay fixture\n");
+      runGit(root, "add", "README.md");
+      const tree = runGit(root, "write-tree");
+      const fake = runGit(root, "commit-tree", tree, "-p", scenario.baseSha, "-m", "fake: scoped-only tree");
+      runGit(root, "replace", real, fake);
+      // The deception succeeds against ordinary (replace-honoring) Git commands:
+      // HEAD still names the real commit, and the worktree reads as clean because
+      // status resolves `real`'s tree through the replacement.
+      expect(runGit(root, "rev-parse", "HEAD")).toBe(real);
+      expect(runGit(root, "status", "--porcelain")).toBe("");
+      expect(runGit(root, "diff-tree", "-r", "--name-only", "--no-renames", scenario.baseSha, real)).toBe(
+        "voice-b.md",
+      );
+      // Read with --no-replace-objects, the real commit still changes README.md.
+      expect(
+        runGit(root, "--no-replace-objects", "diff-tree", "-r", "--name-only", "--no-renames", scenario.baseSha, real),
+      ).toBe("README.md\nvoice-b.md");
+      expectRefused(
+        scenario,
+        "accept-replace-ref",
+        `Commit ${real} changes README.md, outside the task's path_scopes`,
+      );
+    },
+  );
+
   test("keeps the strict checkpoint match when HEAD did not move", () => {
     const exact = reportedArtifactTask();
     const accepted = accept(exact, "accept-exact");
@@ -550,5 +622,104 @@ describe("host-committed completions", () => {
     });
     expectBothWaysForward(refused.structuredContent.remedy, scenario.baseSha);
     expect(refused.structuredContent.message).toContain(refused.structuredContent.remedy);
+  });
+});
+
+/**
+ * `inspectSuccessorCommit` is a pure, read-only library export (not routed
+ * through a task/review), so its mode/type and replace-ref handling is also
+ * pinned directly against a bare repository, independent of the review flow.
+ */
+describe("inspectSuccessorCommit", () => {
+  test("refuses a mode-only change (M, same blob, different mode)", () => {
+    writeFileSync(join(root, "voice-a.md"), VOICE_A);
+    runGit(root, "init", "--initial-branch=main");
+    runGit(root, "config", "user.name", "Collab Test");
+    runGit(root, "config", "user.email", "collab-test@example.invalid");
+    runGit(root, "add", "voice-a.md");
+    runGit(root, "commit", "-m", "base");
+    const base = runGit(root, "rev-parse", "HEAD");
+    chmodSync(join(root, "voice-a.md"), 0o755);
+    runGit(root, "add", "voice-a.md");
+    runGit(root, "commit", "-m", "chmod only");
+    const head = runGit(root, "rev-parse", "HEAD");
+    const result = inspectSuccessorCommit(root, head, base);
+    expect(result).toMatchObject({
+      ok: true,
+      commit_sha: head,
+      parent_sha: base,
+      changes: [{ path: "voice-a.md", blob_sha256: null }],
+    });
+  });
+
+  test("refuses a type change that lands at a regular mode (T, symlink -> regular file)", () => {
+    runGit(root, "init", "--initial-branch=main");
+    runGit(root, "config", "user.name", "Collab Test");
+    runGit(root, "config", "user.email", "collab-test@example.invalid");
+    writeFileSync(join(root, "target.txt"), "hello\n");
+    symlinkSync("target.txt", join(root, "link.txt"));
+    runGit(root, "add", "target.txt", "link.txt");
+    runGit(root, "commit", "-m", "base: link.txt is a symlink");
+    const base = runGit(root, "rev-parse", "HEAD");
+    rmSync(join(root, "link.txt"));
+    writeFileSync(join(root, "link.txt"), VOICE_A);
+    runGit(root, "add", "link.txt");
+    runGit(root, "commit", "-m", "type change: symlink -> regular file");
+    const head = runGit(root, "rev-parse", "HEAD");
+    // The new mode alone looks regular; only the old-mode/status check refuses it.
+    expect(runGit(root, "diff-tree", "-r", "--raw", "--no-renames", base, head)).toContain(" T\t");
+    const result = inspectSuccessorCommit(root, head, base);
+    expect(result).toMatchObject({
+      ok: true,
+      changes: [{ path: "link.txt", blob_sha256: null }],
+    });
+  });
+
+  test("still vouches for a newly added file committed with the executable bit (A, mode 100755)", () => {
+    runGit(root, "init", "--initial-branch=main");
+    runGit(root, "config", "user.name", "Collab Test");
+    runGit(root, "config", "user.email", "collab-test@example.invalid");
+    writeFileSync(join(root, "voice-a.md"), VOICE_A);
+    runGit(root, "add", "voice-a.md");
+    runGit(root, "commit", "-m", "base");
+    const base = runGit(root, "rev-parse", "HEAD");
+    writeFileSync(join(root, "script.sh"), "#!/bin/sh\necho hi\n");
+    chmodSync(join(root, "script.sh"), 0o755);
+    runGit(root, "add", "script.sh");
+    runGit(root, "commit", "-m", "add an executable file");
+    const head = runGit(root, "rev-parse", "HEAD");
+    const result = inspectSuccessorCommit(root, head, base);
+    expect(result).toMatchObject({
+      ok: true,
+      changes: [{ path: "script.sh", blob_sha256: sha256("#!/bin/sh\necho hi\n") }],
+    });
+  });
+
+  test("inspects the real commit's tree, not a git-replace shadow of it", () => {
+    runGit(root, "init", "--initial-branch=main");
+    runGit(root, "config", "user.name", "Collab Test");
+    runGit(root, "config", "user.email", "collab-test@example.invalid");
+    writeFileSync(join(root, "README.md"), "# replay fixture\n");
+    runGit(root, "add", "README.md");
+    runGit(root, "commit", "-m", "base");
+    const base = runGit(root, "rev-parse", "HEAD");
+    writeFileSync(join(root, "voice-b.md"), VOICE_B);
+    writeFileSync(join(root, "README.md"), "# evil\n");
+    runGit(root, "add", "voice-b.md", "README.md");
+    runGit(root, "commit", "-m", "real: changes voice-b.md and README.md");
+    const real = runGit(root, "rev-parse", "HEAD");
+    writeFileSync(join(root, "README.md"), "# replay fixture\n");
+    runGit(root, "add", "README.md");
+    const tree = runGit(root, "write-tree");
+    const fake = runGit(root, "commit-tree", tree, "-p", base, "-m", "fake: voice-b.md only");
+    runGit(root, "replace", real, fake);
+    // Ordinary (replace-honoring) Git is fooled: only voice-b.md appears to change.
+    expect(runGit(root, "diff-tree", "-r", "--name-only", "--no-renames", base, real)).toBe("voice-b.md");
+    const result = inspectSuccessorCommit(root, real, base);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const paths = result.changes.map((change) => change.path).sort();
+      expect(paths).toEqual(["README.md", "voice-b.md"]);
+    }
   });
 });

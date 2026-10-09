@@ -277,7 +277,14 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
     return refuse("The checkpoint HEADs are not Git object IDs");
   }
-  const listed = gitOutput(rootPath, ["rev-list", "--parents", "--max-count=1", commitSha, "--"]);
+  const listed = gitOutput(rootPath, [
+    "--no-replace-objects",
+    "rev-list",
+    "--parents",
+    "--max-count=1",
+    commitSha,
+    "--"
+  ]);
   const ids = listed ? listed.split(" ") : [];
   if (ids[0] !== commitSha)
     return refuse(`Git could not read commit ${commitSha}`);
@@ -286,10 +293,17 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
     return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
   }
   if (parents[0] !== parentSha) {
-    const descends = gitExitCode(rootPath, ["merge-base", "--is-ancestor", parentSha, commitSha]) === 0;
+    const descends = gitExitCode(rootPath, [
+      "--no-replace-objects",
+      "merge-base",
+      "--is-ancestor",
+      parentSha,
+      commitSha
+    ]) === 0;
     return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
   }
   const diff = gitBytes(rootPath, [
+    "--no-replace-objects",
     "diff-tree",
     "-r",
     "-z",
@@ -315,15 +329,16 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
       return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
     }
     const path = pathBytes.toString("utf8");
-    const [, , mode, , blob, status] = header;
-    if (status === "D" || mode !== "100644" && mode !== "100755") {
+    const [, oldMode, mode, , blob, status] = header;
+    const modeVouched = status === "A" || status === "M" && oldMode === mode;
+    if (status === "D" || mode !== "100644" && mode !== "100755" || !modeVouched) {
       changes.push({ path, blob_sha256: null });
       continue;
     }
     if (Date.now() > budget.deadline || budget.bytes <= 0) {
       return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
-    const content = gitBytes(rootPath, ["cat-file", "blob", blob], budget.bytes);
+    const content = gitBytes(rootPath, ["--no-replace-objects", "cat-file", "blob", blob], budget.bytes);
     if (!content.ok) {
       return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
     }
