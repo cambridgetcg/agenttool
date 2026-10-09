@@ -699,7 +699,7 @@ export function buildCollabMcpServer(
     {
       title: "Report a claimed task complete",
       description:
-        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review.",
+        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         summary: z.string().min(1).max(4000),
@@ -707,10 +707,20 @@ export function buildCollabMcpServer(
         confidence_basis: z.string().max(2000).optional(),
         limits: z.string().max(2000).optional(),
         evidence_refs: evidenceRefs,
+        review_requested_session_id: z.string().min(1).max(200).optional()
+          .describe(
+            "Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation.",
+          ),
       }),
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
+      if (!binding && input.review_requested_session_id !== undefined) {
+        throw new CollabError(
+          "session_required_for_review_request",
+          "review_requested_session_id requires a bound v0.2 session",
+        );
+      }
       const task = binding
         ? store.completeTaskForSession({ ...boundCredential(), ...input })
         : store.completeTask({

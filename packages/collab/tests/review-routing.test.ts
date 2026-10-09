@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { canonicalJson } from "../src/canonical.js";
 import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { SessionHandle, Task } from "../src/protocol.js";
@@ -379,5 +381,298 @@ describe("late reviewers", () => {
       accepted_by_session_id: reviewer.session_id,
     });
     expect(late.structuredContent.remedy).toContain("collab_report_append");
+  });
+});
+
+describe("requested reviewers", () => {
+  test("routes a review request to one session without reserving the review", () => {
+    const implementer = session("implementer");
+    const requested = session("requested-reviewer");
+    const bystander = session("bystander");
+    const claimed = claimedEditTask(implementer, "requested");
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "requested-complete",
+      task_id: claimed.id,
+      lease_id: claimed.lease_id!,
+      expected_version: claimed.version,
+      summary: "Ready for the requested reviewer.",
+      review_requested_session_id: requested.session.id,
+    });
+    expect(reported.review_requested_session_id).toBe(requested.session.id);
+    expect(store.getTask(reported.workspace_id, reported.id).review_requested_session_id)
+      .toBe(requested.session.id);
+
+    const completedEvent = store.db.query(`
+      SELECT payload_json FROM events
+      WHERE entity_id = ? AND type = 'task.reported_complete'
+    `).get(reported.id) as { payload_json: string };
+    expect(JSON.parse(completedEvent.payload_json).review_requested_session_id)
+      .toBe(requested.session.id);
+
+    const taskReports = store.listReports(reported.workspace_id, { task_id: reported.id });
+    const completion = taskReports.find((report) => report.id === reported.completion_report_id)!;
+    expect(completion.to_session_id).toBeNull();
+    const requests = taskReports.filter((report) => report.to_session_id === requested.session.id);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      from_session_id: implementer.session.id,
+      kind: "proposal",
+      relation: "informs",
+      target_report_id: null,
+      evidence_refs: [`report:${reported.completion_report_id}`],
+    });
+    expect(requests[0]!.body).toContain("not a reservation");
+
+    const requestedNext = store.nextForSession({ ...requested.credential, event_limit: 50 });
+    expect(requestedNext.reports.map((report) => report.id)).toContain(requests[0]!.id);
+    const bystanderNext = store.nextForSession({ ...bystander.credential, event_limit: 50 });
+    expect(bystanderNext.reports.map((report) => report.id)).toContain(completion.id);
+    expect(bystanderNext.reports.map((report) => report.id)).not.toContain(requests[0]!.id);
+
+    expect(
+      errorFrom(() =>
+        store.completeTaskForSession({
+          ...implementer.credential,
+          idempotency_key: "requested-complete",
+          task_id: claimed.id,
+          lease_id: claimed.lease_id!,
+          expected_version: claimed.version,
+          summary: "Ready for the requested reviewer.",
+        }),
+      ).code,
+    ).toBe("idempotency_conflict");
+
+    const accepted = store.reviewTaskForSession({
+      ...bystander.credential,
+      idempotency_key: "bystander-accepts",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept",
+      summary: "A request is not a reservation; this distinct review counts.",
+    });
+    expect(accepted.task.review_status).toBe("accepted");
+    expect(accepted.task.review_requested_session_id).toBe(requested.session.id);
+  });
+
+  test("refuses review requests that cannot be honoured and leaves the claim intact", () => {
+    const implementer = session("implementer");
+    const departed = session("departed-reviewer");
+    store.endSession({ ...departed.credential, reason: "left before the request" });
+    const elsewhereRoot = join(directory, "elsewhere");
+    mkdirSync(elsewhereRoot);
+    const elsewhere = session("elsewhere-reviewer", elsewhereRoot);
+    expect(elsewhere.workspace.id).not.toBe(implementer.workspace.id);
+    const claimed = claimedEditTask(implementer, "refused-request");
+    const attempt = (key: string, reviewRequestedSessionId: string) =>
+      errorFrom(() =>
+        store.completeTaskForSession({
+          ...implementer.credential,
+          idempotency_key: key,
+          task_id: claimed.id,
+          lease_id: claimed.lease_id!,
+          expected_version: claimed.version,
+          summary: "Ready.",
+          review_requested_session_id: reviewRequestedSessionId,
+        }),
+      );
+    expect(attempt("request-self", implementer.session.id).code).toBe("review_request_self");
+    const ended = attempt("request-ended", departed.session.id);
+    expect(ended.code).toBe("review_requested_session_unavailable");
+    expect(ended.details).toEqual({ review_requested_session_id: departed.session.id });
+    expect(attempt("request-elsewhere", elsewhere.session.id).code)
+      .toBe("review_requested_session_unavailable");
+    expect(attempt("request-missing", "session_missing").code)
+      .toBe("review_requested_session_unavailable");
+    expect(attempt("request-blank", "   ").code).toBe("invalid_review_requested_session_id");
+    expect(store.getTask(claimed.workspace_id, claimed.id).status).toBe("claimed");
+    expect(store.listReports(claimed.workspace_id, { task_id: claimed.id })).toEqual([]);
+
+    const coordination = store.createTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "request-reported-only-create",
+      title: "Reported-only coordination",
+      work_mode: "coordination",
+      completion_policy: "reported",
+    });
+    const coordinationClaim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "request-reported-only-claim",
+      task_id: coordination.id,
+      expected_version: coordination.version,
+    });
+    const notApplicable = errorFrom(() =>
+      store.completeTaskForSession({
+        ...implementer.credential,
+        idempotency_key: "request-reported-only-complete",
+        task_id: coordination.id,
+        lease_id: coordinationClaim.lease_id!,
+        expected_version: coordinationClaim.version,
+        summary: "Coordinated.",
+        review_requested_session_id: departed.session.id,
+      }),
+    );
+    expect(notApplicable.code).toBe("review_request_not_applicable");
+    expect(notApplicable.details).toEqual({ completion_policy: "reported" });
+
+    const plain = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "request-none",
+      task_id: claimed.id,
+      lease_id: claimed.lease_id!,
+      expected_version: claimed.version,
+      summary: "Ready.",
+    });
+    expect(plain.review_requested_session_id).toBeNull();
+    const receipt = store.db.query(`
+      SELECT request_hash FROM mutations WHERE actor = ? AND idempotency_key = 'request-none'
+    `).get(`session:${implementer.session.id}`) as { request_hash: string };
+    expect(receipt.request_hash).toBe(
+      createHash("sha256").update(canonicalJson({
+        operation: "task.complete.v2",
+        request: {
+          task_id: claimed.id,
+          lease_id: claimed.lease_id,
+          expected_version: claimed.version,
+          summary: "Ready.",
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          evidence_refs: [],
+        },
+      })).digest("hex"),
+    );
+  });
+
+  test("drops or switches the requested reviewer when changes are requested and the task is re-reported", () => {
+    const implementer = session("implementer");
+    const firstRequested = session("first-requested");
+    const secondRequested = session("second-requested");
+    const claimed = claimedEditTask(implementer, "re-request");
+    const first = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "re-request-complete-1",
+      task_id: claimed.id,
+      lease_id: claimed.lease_id!,
+      expected_version: claimed.version,
+      summary: "First attempt.",
+      review_requested_session_id: firstRequested.session.id,
+    });
+    expect(first.review_requested_session_id).toBe(firstRequested.session.id);
+
+    const firstChanges = store.reviewTaskForSession({
+      ...firstRequested.credential,
+      idempotency_key: "re-request-changes-1",
+      task_id: first.id,
+      expected_version: first.version,
+      outcome: "request_changes",
+      summary: "One more check, please.",
+    });
+    expect(firstChanges.task.review_requested_session_id).toBeNull();
+    const secondClaim = reclaim(implementer, firstChanges.task, "re-request-2");
+    expect(secondClaim.review_requested_session_id).toBeNull();
+    const second = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "re-request-complete-2",
+      task_id: secondClaim.id,
+      lease_id: secondClaim.lease_id!,
+      expected_version: secondClaim.version,
+      summary: "Second attempt, no particular reviewer.",
+    });
+    expect(second.review_requested_session_id).toBeNull();
+    expect(store.getTask(second.workspace_id, second.id).review_requested_session_id).toBeNull();
+
+    const secondChanges = store.reviewTaskForSession({
+      ...firstRequested.credential,
+      idempotency_key: "re-request-changes-2",
+      task_id: second.id,
+      expected_version: second.version,
+      outcome: "request_changes",
+      summary: "Still one gap.",
+    });
+    const thirdClaim = reclaim(implementer, secondChanges.task, "re-request-3");
+    const third = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "re-request-complete-3",
+      task_id: thirdClaim.id,
+      lease_id: thirdClaim.lease_id!,
+      expected_version: thirdClaim.version,
+      summary: "Third attempt, for a fresh pair of eyes.",
+      review_requested_session_id: secondRequested.session.id,
+    });
+    expect(third.review_requested_session_id).toBe(secondRequested.session.id);
+
+    const requests = store.listReports(third.workspace_id, { task_id: third.id })
+      .filter((report) => report.kind === "proposal" && report.from_session_id === implementer.session.id);
+    expect(requests.map((report) => [report.to_session_id, report.evidence_refs])).toEqual([
+      [firstRequested.session.id, [`report:${first.completion_report_id}`]],
+      [secondRequested.session.id, [`report:${third.completion_report_id}`]],
+    ]);
+
+    const accepted = store.reviewTaskForSession({
+      ...secondRequested.credential,
+      idempotency_key: "re-request-accept",
+      task_id: third.id,
+      expected_version: third.version,
+      outcome: "accept",
+      summary: "The third attempt holds.",
+    });
+    expect(accepted.task.review_requested_session_id).toBe(secondRequested.session.id);
+  });
+
+  test("carries review_requested_session_id through MCP and refuses it without a bound session", async () => {
+    const implementer = await boundMember("implementer");
+    const reviewer = await boundMember("reviewer");
+    const completeTool = (implementer.server as any)._registeredTools.collab_task_complete;
+    expect(completeTool.inputSchema.shape.review_requested_session_id.description)
+      .toContain("not a reservation");
+    const created = await callTool(implementer.server, "collab_task_create", {
+      workspace_id: implementer.workspace_id,
+      idempotency_key: "mcp-request-create",
+      title: "MCP requested review",
+      work_mode: "edit",
+      path_scopes: ["src/mcp-request.ts"],
+    });
+    const claimed = await callTool(implementer.server, "collab_task_claim", {
+      workspace_id: implementer.workspace_id,
+      idempotency_key: "mcp-request-claim",
+      task_id: created.structuredContent.task.id,
+      expected_version: created.structuredContent.task.version,
+    });
+    const reported = await callTool(implementer.server, "collab_task_complete", {
+      workspace_id: implementer.workspace_id,
+      idempotency_key: "mcp-request-complete",
+      task_id: claimed.structuredContent.task.id,
+      lease_id: claimed.structuredContent.task.lease_id,
+      expected_version: claimed.structuredContent.task.version,
+      summary: "Ready for review.",
+      review_requested_session_id: reviewer.session_id,
+    });
+    expect(reported.isError).toBeUndefined();
+    expect(reported.structuredContent.task.review_requested_session_id).toBe(reviewer.session_id);
+    const routed = await callTool(reviewer.server, "collab_next", {
+      workspace_id: reviewer.workspace_id,
+      event_limit: 50,
+    });
+    expect(routed.isError).toBeUndefined();
+    expect(routed.structuredContent.reports.some(
+      (report: any) => report.to_session_id === reviewer.session_id && report.kind === "proposal",
+    )).toBe(true);
+
+    const legacyStore = new CollabStore(databasePath, { now: () => new Date(currentTime) });
+    memberStores.push(legacyStore);
+    const legacyServer = buildCollabMcpServer(legacyStore);
+    const refused = await callTool(legacyServer, "collab_task_complete", {
+      workspace_id: implementer.workspace_id,
+      actor: "legacy-actor",
+      task_id: created.structuredContent.task.id,
+      lease_id: "lease_unused",
+      idempotency_key: "legacy-review-request",
+      expected_version: 1,
+      summary: "Legacy completion cannot route a review request.",
+      review_requested_session_id: reviewer.session_id,
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent.error).toBe("session_required_for_review_request");
   });
 });

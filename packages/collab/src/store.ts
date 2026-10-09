@@ -2818,6 +2818,7 @@ export class CollabStore {
     confidence_basis?: string;
     limits?: string;
     evidence_refs?: string[];
+    review_requested_session_id?: string;
   }): Task {
     const normalized = normalizeSessionLeaseInput(input);
     const summary = cleanText(input.summary, "summary", 4_000);
@@ -2825,6 +2826,9 @@ export class CollabStore {
     const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2_000);
     const limits = optionalText(input.limits, "limits", 2_000);
     const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const reviewRequestedSessionId = input.review_requested_session_id === undefined
+      ? null
+      : validateId(input.review_requested_session_id, "review_requested_session_id");
     const request = {
       ...normalized.request,
       summary,
@@ -2832,6 +2836,10 @@ export class CollabStore {
       confidence_basis: confidenceBasis,
       limits,
       evidence_refs: evidenceRefs,
+      // Present only when supplied, so unrequested completions keep their 0.3.1 request_hash.
+      ...(reviewRequestedSessionId
+        ? { review_requested_session_id: reviewRequestedSessionId }
+        : {}),
     };
     const replay = this.readSessionMutationReceipt<Task>(
       input,
@@ -2852,6 +2860,9 @@ export class CollabStore {
         this.requireActiveSessionLease(row, session, normalized.lease_id);
         for (const reference of evidenceRefs) {
           this.requireEvidenceRef(row.workspace_id, reference);
+        }
+        if (reviewRequestedSessionId) {
+          this.requireRequestedReviewer(row, session, reviewRequestedSessionId);
         }
         this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
@@ -2923,9 +2934,31 @@ export class CollabStore {
             note: reviewStatus === "pending"
               ? "Reported completion does not satisfy dependencies until a distinct session accepts it."
               : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance.",
+            ...(reviewRequestedSessionId
+              ? { review_requested_session_id: reviewRequestedSessionId }
+              : {}),
           },
           session.id,
         );
+        if (reviewRequestedSessionId) {
+          this.appendReportInternal(session, {
+            task_id: row.id,
+            to_session_id: reviewRequestedSessionId,
+            kind: "proposal",
+            body:
+              `Review requested: please review the reported completion of task ${row.id} `
+              + `(${row.title}) with collab_task_review. This is a request, not a reservation; `
+              + "any distinct session may still review.",
+            evidence_refs: [`report:${report.id}`],
+            confidence: "unknown",
+            confidence_basis: null,
+            limits: null,
+            relation: "informs",
+            target_report_id: null,
+            authority_scope: null,
+            authority_basis: null,
+          });
+        }
         return this.requireTask(row.workspace_id, row.id);
       },
     );
@@ -5013,6 +5046,68 @@ export class CollabStore {
     );
   }
 
+  private requireRequestedReviewer(
+    row: TaskRow,
+    session: CoordinationSessionRow,
+    requestedSessionId: string,
+  ): void {
+    if (row.completion_policy !== "accepted") {
+      throw new CollabError(
+        "review_request_not_applicable",
+        "Only tasks with completion_policy \"accepted\" wait for review; omit review_requested_session_id",
+        { completion_policy: row.completion_policy },
+      );
+    }
+    if (requestedSessionId === session.id) {
+      throw new CollabError(
+        "review_request_self",
+        "A requested reviewer must be a session distinct from the reporter",
+      );
+    }
+    const requested = this.db.query(`
+      SELECT workspace_id, status FROM coordination_sessions WHERE id = ?
+    `).get(requestedSessionId) as { workspace_id: string; status: string } | null;
+    if (
+      !requested
+      || requested.workspace_id !== session.workspace_id
+      || requested.status !== "active"
+    ) {
+      throw new CollabError(
+        "review_requested_session_unavailable",
+        "The requested reviewer must be an active session in this workspace; collab_workspace_status lists active_sessions",
+        { review_requested_session_id: requestedSessionId },
+      );
+    }
+  }
+
+  /** Derived from the current completion's task.reported_complete payload; there is no column. */
+  private reviewRequestedSessionId(row: TaskRow): string | null {
+    if (
+      row.status !== "completed"
+      || row.completion_policy !== "accepted"
+      || !row.completion_report_id
+    ) {
+      return null;
+    }
+    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ?`)
+      .get(row.completion_report_id) as { event_sequence: number } | null;
+    if (!completion) return null;
+    // The completion report and its task.reported_complete event share one transaction,
+    // so the first such event after the report's own event is this completion's.
+    const event = this.db.query(`
+      SELECT payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ? AND entity_id = ? AND type = 'task.reported_complete'
+      ORDER BY sequence
+      LIMIT 1
+    `).get(row.workspace_id, completion.event_sequence, row.id) as { payload_json: string } | null;
+    if (!event) return null;
+    const payload = JSON.parse(event.payload_json) as Record<string, unknown>;
+    return payload.completion_report_id === row.completion_report_id
+      && typeof payload.review_requested_session_id === "string"
+      ? payload.review_requested_session_id
+      : null;
+  }
+
   private hasUnresolvedChallenges(workspaceId: string, reportId: string): boolean {
     const challenges = this.db.query(`
       SELECT id FROM reports
@@ -5351,6 +5446,7 @@ export class CollabStore {
       accepted_by: row.accepted_by,
       accepted_by_session_id: row.accepted_by_session_id,
       accepted_at: row.accepted_at,
+      review_requested_session_id: this.reviewRequestedSessionId(row),
       version: row.version,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -6071,6 +6167,7 @@ function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
     accepted_by: hydrated.accepted_by ?? null,
     accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
     accepted_at: hydrated.accepted_at ?? null,
+    review_requested_session_id: hydrated.review_requested_session_id ?? null,
   };
 }
 

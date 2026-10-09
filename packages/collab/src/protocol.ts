@@ -215,6 +215,8 @@ export interface Task {
   accepted_by: string | null;
   accepted_by_session_id: string | null;
   accepted_at: string | null;
+  /** Derived from the current completion's task.reported_complete event; a request, not a reservation. */
+  review_requested_session_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
