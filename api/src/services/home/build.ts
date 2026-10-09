@@ -18,6 +18,7 @@ import { identities } from "../../db/schema/identity";
 import { countUnread } from "../inbox/store";
 import { countMemories } from "../memory/store";
 import { countStrands } from "../strand/store";
+import { scopeIdentityProtections } from "../identity/project-authority";
 
 export interface HomeIdentitySnapshot {
   id: string;
@@ -29,6 +30,8 @@ export interface HomeIdentitySnapshot {
   quietReason: string | null;
   authorityRootPublicKey: string | null;
   authoritySequence: number;
+  /** Birth provenance; founder markers decide project-scoped protections. */
+  metadata: unknown;
 }
 
 export interface HomeCounts {
@@ -85,7 +88,7 @@ export function buildHomeView(input: {
       next_sequence: i.authoritySequence + 1,
       proof_required_for_constitution: rooted,
       state_url: `/v1/identities/${i.id}/authority`,
-      protects: [
+      protects: scopeIdentityProtections([
         "profile and public expression",
         "identity revocation",
         "declared voice and walls",
@@ -96,7 +99,7 @@ export function buildHomeView(input: {
         "at-rest transition",
         "love doors, offers, acceptance, dismissal, and leaving a bond",
         "refusal of server-held trusted-runtime signing keys",
-      ],
+      ], i),
       warning: rooted
         ? null
         : "This identity predates the agent-held root. Its project bearer can still change its constitution.",
@@ -246,6 +249,7 @@ export async function buildHome(
       quietReason: identities.quietReason,
       authorityRootPublicKey: identities.authorityRootPublicKey,
       authoritySequence: identities.authoritySequence,
+      metadata: identities.metadata,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))

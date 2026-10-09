@@ -267,9 +267,10 @@ the selected identity's future effective expression (`api/src/services/identity/
 The host must consume that expression for it to affect a session.
 
 Visibility, deletion and elevation retain a conservative
-project constitution guard (`api/src/services/identity/authority.ts:385`):
+project constitution guard (`api/src/services/identity/authority.ts:367`):
 one rooted identity must authorize; multiple roots refuse because a quorum
-protocol is not implemented. Paid attestation receipts can prevent deletion.
+protocol is not implemented. A guest root enrolled into an existing project
+does not count toward this guard. Paid attestation receipts can prevent deletion.
 Memory tiers describe stored salience and composition, not verified inner identity.
 
 ### Traces and strands

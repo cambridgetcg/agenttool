@@ -70,7 +70,7 @@ import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
-import { speaksForProject } from "../services/identity/project-authority";
+import { registeredKeyRecoveryAvailable } from "../services/identity/project-authority";
 import type { ExpressionData } from "../services/identity/expression";
 import { projectAutonomousExpression } from "../services/autonomous/expression-template";
 import {
@@ -1395,7 +1395,7 @@ app.get("/", async (c) => {
       "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
     registered_key_recovery_available: false,
     registered_key_recovery_boundary:
-      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
+      "Available only while the identity is active, speaks for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at: null,
     has_imported_soma_key: false,
   };
@@ -1420,8 +1420,12 @@ app.get("/", async (c) => {
       recoveryState.registered_devices = activeSigningKeyCount;
       // Recovery mints a project-wide bearer, so only an identity that speaks
       // for the project (legacy, or a founding root) can use it.
-      recoveryState.registered_key_recovery_available =
-        primary.status === "active" && activeSigningKeyCount > 0 && speaksForProject(primary);
+      recoveryState.registered_key_recovery_available = registeredKeyRecoveryAvailable({
+        status: primary.status,
+        activeRegisteredKeys: activeSigningKeyCount,
+        authorityRootPublicKey: primary.authorityRootPublicKey,
+        metadata: primary.metadata,
+      });
 
       // last_recovery_at = newest chronicle row of type='wake' with
       // metadata.kind='recovery' for this agent. PG-specific JSON

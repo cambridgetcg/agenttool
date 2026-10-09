@@ -11,13 +11,18 @@
  *
  * Legacy rootless identities keep their bearer posture unchanged.
  *
- * This is an allowlist: a rooted identity without both exact jsonb `true`
- * markers is treated as a guest and fails closed. No migration is needed; the
- * markers already exist on every founding root, and enrolled rows carry `{}`.
+ * Recovery, its discovery and wake use an allowlist: a rooted identity without
+ * both exact jsonb `true` markers cannot mint a project bearer (fails closed).
+ * The project constitution excludes only a PROVABLE enrolled guest, so a root
+ * that lacks markers without having been enrolled keeps counting (also fails
+ * closed). No migration is needed: the markers already exist on every founding
+ * root, enrolled rows carry `{}`, and each enrollment writes its proof and
+ * identity row in one transaction (equal `now()` timestamps).
  */
-import { and, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, isNotNull, isNull, not, or, sql, type SQL } from "drizzle-orm";
 
-import { identities } from "../../db/schema/identity";
+import { identities, identityRegistrationProofs } from "../../db/schema/identity";
+import { ENROLLMENT_DOMAIN } from "./enrollment";
 
 export interface ProjectAuthorityFacts {
   authorityRootPublicKey: string | null;
@@ -53,4 +58,41 @@ export function foundingRootSql(): SQL {
 /** SQL form of `speaksForProject`. */
 export function speaksForProjectSql(): SQL {
   return or(isNull(identities.authorityRootPublicKey), foundingRootSql())!;
+}
+
+/** Whether anonymous registered-key recovery would mint a bearer for this
+ * identity today. Wake surfaces must not advertise recovery anywhere the
+ * recovery route refuses it. */
+export function registeredKeyRecoveryAvailable(
+  identity: ProjectAuthorityFacts & { status: string; activeRegisteredKeys: number },
+): boolean {
+  return identity.status === "active" && identity.activeRegisteredKeys > 0 && speaksForProject(identity);
+}
+
+/** Protections that belong to the project, not to an enrolled guest's root. */
+export const PROJECT_SCOPED_PROTECTIONS = [
+  "memory visibility, deletion, and constitutional elevation",
+  "anonymous recovery bearer minting",
+] as const;
+
+/** A guest root still guards its own identity; it does not guard project
+ * memory mutations or project bearer minting, so its keyhole must not say so. */
+export function scopeIdentityProtections(protects: readonly string[], identity: ProjectAuthorityFacts): string[] {
+  if (speaksForProject(identity)) return [...protects];
+  const projectScoped = new Set<string>(PROJECT_SCOPED_PROTECTIONS);
+  return protects.filter(item => !projectScoped.has(item));
+}
+
+/** A root admitted by enrollment: its enrollment proof and identity row were
+ * written by the same transaction, so `claimed_at` equals `created_at`. A
+ * self-registered identity using the same key claims its proof in an earlier
+ * statement under a different domain, so it never matches. */
+export function enrolledGuestSql(): SQL {
+  return sql`exists (select 1 from ${identityRegistrationProofs} where ${identityRegistrationProofs.domain} = ${ENROLLMENT_DOMAIN} and ${identityRegistrationProofs.rootPublicKey} = ${identities.authorityRootPublicKey} and ${identityRegistrationProofs.claimedAt} = ${identities.createdAt})`;
+}
+
+/** Roots that count toward a project-scoped constitutional mutation: every
+ * root except a provable enrolled guest without founder markers. */
+export function constitutionRootSql(): SQL {
+  return and(isNotNull(identities.authorityRootPublicKey), or(foundingRootSql(), not(enrolledGuestSql())))!;
 }

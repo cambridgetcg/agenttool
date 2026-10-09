@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { scopeIdentityProtections, speaksForProject } from "../../services/identity/project-authority";
 import { errors, fail } from "../../lib/errors";
 import {
   AUTHORITY_HEADERS,
@@ -45,6 +46,7 @@ app.get("/", async (c) => {
       did: identities.did,
       rootPublicKey: identities.authorityRootPublicKey,
       sequence: identities.authoritySequence,
+      metadata: identities.metadata,
     })
     .from(identities)
     .where(
@@ -74,6 +76,8 @@ app.get("/", async (c) => {
   }
 
   const rooted = identity.rootPublicKey !== null;
+  const facts = { authorityRootPublicKey: identity.rootPublicKey, metadata: identity.metadata };
+  const guest = rooted && !speaksForProject(facts);
   return c.json({
     identity_id: identity.id,
     did: identity.did,
@@ -99,7 +103,7 @@ app.get("/", async (c) => {
             "Sign the exact path and query. Serialize once, sign the exact entity bytes, and send those same bytes. A valid proof is single-use; keep only one root-authorized mutation in flight.",
         }
       : null,
-    protects: [
+    protects: scopeIdentityProtections([
       "identity profile and public visibility",
       "identity revocation",
       "declared expression",
@@ -109,9 +113,12 @@ app.get("/", async (c) => {
       "anonymous recovery bearer minting",
       "at-rest transition",
       "refusal of server-held trusted-runtime signing keys",
-    ],
+    ], facts),
     limitations: rooted
       ? [
+          ...(guest
+            ? ["this root was enrolled into an existing project: it governs this identity only; project memory mutations and project bearers stay with the project's founding root or administrator"]
+            : []),
           "root rotation and guardian recovery are not available in v1",
           "project bearers still authorize non-constitutional project actions",
           "direct database administration remains outside this API boundary",

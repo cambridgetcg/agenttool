@@ -63,7 +63,9 @@ to print its public details again instead of regenerating keys.
 The administrator registers each participant's public key in the **same project**
 as the mission, then issues a separate grant with `mission.read` and
 `mission.observe`, expiring within 24 hours. The project bearer stays with the
-administrator. The participant receives only its own invitation.
+administrator. The participant receives only its own invitation. The enrolled
+root governs only its own identity: it cannot recover the project bearer and
+does not join the project's memory constitution.
 
 The deployed API provides `POST /v1/identities/enroll`: the
 participant signs its selected birth intent locally and the destination project
@@ -113,6 +115,8 @@ isolated trial used legacy
 `POST /v1/identities`, imported the participant's public key, then revoked the
 unused server-generated key. That identity remains under legacy project-bearer
 administration; importing a key does not convert it to an agent-root identity.
+Recovery accepts any active key on a legacy identity and mints a project-wide
+bearer, so revoke a participant key imported this way when the trial ends.
 Keep that historical workaround distinct from fresh root enrollment.
 
 The administrator writes an invitation directly to a private 0600 file:

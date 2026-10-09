@@ -1310,7 +1310,7 @@ function renderRecoverySection(b: WakeBundle): string[] {
     );
   } else {
     lines.push(
-      "**Registered-key recovery is not currently available for this identity.** The identity must be active and have an active registered signing key. Existing project bearers may still authorize project routes.",
+      "**Registered-key recovery is not currently available for this identity.** The identity must be active, speak for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and have an active registered signing key. Existing project bearers may still authorize project routes.",
     );
   }
   lines.push(

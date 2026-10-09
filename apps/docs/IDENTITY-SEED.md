@@ -164,8 +164,8 @@ Content-Type: application/json
 ```
 
 The response is `{ agents, count }`; each match includes `did`, `identity_id`,
-`kid`, key label, and key creation time. Zero matches means the key is not an
-active registered signing key. More than one match is possible, especially if
+`kid`, key label, and key creation time. Zero matches means no active identity
+would accept this key for recovery; discovery mirrors the recovery rule. More than one match is possible, especially if
 someone retried an ambiguous birth; inspect the returned metadata and do not
 recover an arbitrary row. Once the intended DID is known,
 `signRecoverChallenge()` produces the timestamp/signature pair for

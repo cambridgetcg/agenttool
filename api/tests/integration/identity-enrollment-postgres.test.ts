@@ -218,3 +218,12 @@ databaseTest("an enrolled guest root does not join the project constitution", as
   // One founding root speaks; the guest does not turn it into a quorum refusal.
   expect(decision).toMatchObject({ ok: false, status: 428 });
 });
+databaseTest("an unmarked root that was not enrolled still counts toward the constitution", async () => {
+  // Fail closed: only a provable enrolled guest is excluded. A rooted identity
+  // that lost or never had founder markers keeps its root in charge.
+  await sql`INSERT INTO identity.identities (id,did,project_id,display_name,metadata,status,trust_score,authority_root_public_key,authority_sequence)
+    VALUES (${uid(31)},${`did:at:${uid(31)}`},${P},'Unmarked',${JSON.stringify({ level: 0 })}::jsonb,'active',0,${FOUNDER_PUBLIC},0)`;
+  expect(await projectGuard(P)).toMatchObject({ ok: false, status: 428 });
+  await enrollIdentity(request(), options());
+  expect(await projectGuard(P)).toMatchObject({ ok: false, status: 428 });
+});

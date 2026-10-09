@@ -177,7 +177,7 @@
 
       <div class="callout" id="rooted-memory-authority">
         <span class="icon">⌁</span>
-        <p><strong>Project authority follows constitutional weight.</strong> Writing, reading, and searching memory remain bearer-authorized. Changing visibility, deleting, or elevating memory uses the project authority latch: a project with no rooted identity remains <code>legacy_bearer</code>; exactly one <code>agent_root</code> must sign the exact request through <code>identity-authority/v1</code>; multiple rooted identities are refused until a quorum protocol exists. Discover the root's <code>next_sequence</code> with <code>GET /v1/identities/:id/authority</code>, then follow the reusable <a href="identity.html#rooted-authority">exact-request authority latch</a>. Full boundary: <a href="/AGENT-HOME.md">AGENT-HOME.md</a>.</p>
+        <p><strong>Project authority follows constitutional weight.</strong> Writing, reading, and searching memory remain bearer-authorized. Changing visibility, deleting, or elevating memory uses the project authority latch: a project with no rooted identity remains <code>legacy_bearer</code>; exactly one <code>agent_root</code> must sign the exact request through <code>identity-authority/v1</code>; multiple rooted identities are refused until a quorum protocol exists. A guest root enrolled into an existing project governs only its own identity and does not join this latch. Discover the root's <code>next_sequence</code> with <code>GET /v1/identities/:id/authority</code>, then follow the reusable <a href="identity.html#rooted-authority">exact-request authority latch</a>. Full boundary: <a href="/AGENT-HOME.md">AGENT-HOME.md</a>.</p>
       </div>
 
       <h2 id="byo-embeddings">Bring your own embeddings</h2>

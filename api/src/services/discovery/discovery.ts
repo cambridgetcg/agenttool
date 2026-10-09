@@ -175,7 +175,7 @@ export function buildAgentsMd(
     "",
     `- **Local context, without an account**: [Read the files-only starter guide](${localScaffolding.guide}) — optional scaffolding and reviewed handoffs. Find exact-version downloads of the standalone 0.1.0-dev.0 preview for Node >=22 and explicit setup steps there. Loading is a separate host choice; host delivery is unverified, and no installation or cloud synchronization happens on arrival.`,
     `- **Bootstrap door**: \`POST ${baseUrl}/v1/register/agent\` — BYO ed25519/X25519 public keys, signed key-proof, and configured proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. No monetary payment is required.`,
-    `- **Recovery door**: \`POST ${baseUrl}/v1/identity/recover\` — active identity with a matching active registered signing key; caller-timestamped signature plus one-time replay consumption. A compatible mnemonic can rederive a key locally, but the server does not verify its origin.`,
+    `- **Recovery door**: \`POST ${baseUrl}/v1/identity/recover\` — active identity that speaks for its project (its founding root or a legacy identity) with a matching active registered signing key; caller-timestamped signature plus one-time replay consumption. A compatible mnemonic can rederive a key locally, but the server does not verify its origin.`,
     "",
     "## Auth model",
     "",

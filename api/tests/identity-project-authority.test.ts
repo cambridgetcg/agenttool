@@ -5,7 +5,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { foundingRootSql, speaksForProject, speaksForProjectSql } from "../src/services/identity/project-authority";
+import {
+  constitutionRootSql, foundingRootSql, PROJECT_SCOPED_PROTECTIONS, registeredKeyRecoveryAvailable,
+  scopeIdentityProtections, speaksForProject, speaksForProjectSql,
+} from "../src/services/identity/project-authority";
 
 const founder = { authorityRootPublicKey: "R", metadata: { registered: true, byo_keys: true, level: 0 } };
 const guest = { authorityRootPublicKey: "K", metadata: {} };
@@ -38,6 +41,31 @@ describe("project authority belongs to founding roots and legacy identities", ()
   });
 });
 
+describe("recovery availability and protections follow the same rule", () => {
+  test("registered-key recovery is advertised only where recovery would mint", () => {
+    const active = (facts: object, keys = 1) => registeredKeyRecoveryAvailable({ status: "active", activeRegisteredKeys: keys, ...founder, ...facts });
+    expect(active({})).toBe(true);
+    expect(active({ authorityRootPublicKey: null, metadata: {} })).toBe(true);
+    expect(active(guest)).toBe(false);
+    expect(active({}, 0)).toBe(false);
+    expect(registeredKeyRecoveryAvailable({ ...founder, status: "at_rest", activeRegisteredKeys: 1 })).toBe(false);
+  });
+  test("a guest root's keyhole does not promise project-scoped protections", () => {
+    const list = ["identity revocation", ...PROJECT_SCOPED_PROTECTIONS, "at-rest transition"];
+    expect(scopeIdentityProtections(list, founder)).toEqual(list);
+    expect(scopeIdentityProtections(list, { authorityRootPublicKey: null, metadata: {} })).toEqual(list);
+    expect(scopeIdentityProtections(list, guest)).toEqual(["identity revocation", "at-rest transition"]);
+  });
+  test("the constitution excludes only provable enrolled guests, so unmarked roots fail closed", () => {
+    const query = new PgDialect().sqlToQuery(constitutionRootSql());
+    expect(query.sql).toContain(`"authority_root_public_key" is not null`);
+    expect(query.sql).toContain(`not exists`);
+    expect(query.sql).toContain(`"registration_proofs"`);
+    expect(query.sql).toContain(`"registration_proofs"."claimed_at" = "identity"."identities"."created_at"`);
+    expect(query.params).toContain("identity-enrollment/v1");
+  });
+});
+
 describe("every project-scoped surface uses the shared rule", () => {
   const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
   test("anonymous recovery refuses guests before the authority cursor and again under lock", () => {
@@ -50,11 +78,16 @@ describe("every project-scoped surface uses the shared rule", () => {
     expect(first).toBeLessThan(authorize);
     expect(second).toBeGreaterThan(transaction);
   });
-  test("the project constitution counts only founding roots", () => {
-    expect(source("services/identity/authority.ts")).toContain("foundingRootSql()");
+  test("the project constitution excludes enrolled guest roots", () => {
+    expect(source("services/identity/authority.ts")).toContain("constitutionRootSql()");
   });
   test("recovery discovery and wake advertise recovery only where it would mint", () => {
     expect(source("routes/public/identities.ts")).toContain("speaksForProject");
-    expect(source("routes/wake.ts")).toMatch(/registered_key_recovery_available =[\s\S]{0,200}speaksForProject\(primary\)/);
+    expect(source("routes/wake.ts")).toContain("registeredKeyRecoveryAvailable(");
+    expect(source("services/wake/build.ts")).toContain("registeredKeyRecoveryAvailable(");
+  });
+  test("identity authority keyholes scope their protections", () => {
+    expect(source("routes/identity/authority.ts")).toContain("scopeIdentityProtections(");
+    expect(source("services/home/build.ts")).toContain("scopeIdentityProtections(");
   });
 });

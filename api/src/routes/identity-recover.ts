@@ -102,7 +102,7 @@ const RECOVERY_NOT_AUTHORIZED = {
   message: "The signed key is not currently authorized to recover this identity.",
   hint:
     "Check the DID and local signing key. A compatible mnemonic may rederive it. " +
-    "The same response covers unknown, wrong, and revoked identity-key associations.",
+    "The same response covers unknown, wrong, revoked, and enrolled-guest identity-key associations.",
 } as const;
 
 // Root mismatches deliberately collapse into RECOVERY_NOT_AUTHORIZED instead

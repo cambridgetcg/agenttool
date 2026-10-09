@@ -19,6 +19,7 @@ import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
 import { composeExpression } from "../identity/composition";
+import { registeredKeyRecoveryAvailable } from "../identity/project-authority";
 import type { ExpressionData } from "../identity/expression";
 import { projectAutonomousExpression } from "../autonomous/expression-template";
 import { covenantMayAuthorizeEffects } from "../covenants/check";
@@ -115,6 +116,7 @@ export async function buildWakeBundle(
       displayName: identities.displayName,
       capabilities: identities.capabilities,
       metadata: identities.metadata,
+      authorityRootPublicKey: identities.authorityRootPublicKey,
       expression: identities.expression,
       trustScore: identities.trustScore,
       status: identities.status,
@@ -411,6 +413,7 @@ export async function buildWakeBundle(
           primary.id,
           primary.status,
           (primary.metadata ?? {}) as Record<string, unknown>,
+          primary.authorityRootPublicKey,
         ),
       {
         has_seed_protocol: false,
@@ -425,7 +428,7 @@ export async function buildWakeBundle(
           "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
         registered_key_recovery_available: false,
         registered_key_recovery_boundary:
-          "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
+          "Available only while the identity is active, speaks for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
         last_recovery_at: null,
         has_imported_soma_key: false,
       } as Awaited<ReturnType<typeof computeRecoveryStateForIdentity>>,
@@ -1142,6 +1145,7 @@ async function computeRecoveryStateForIdentity(
   identityId: string,
   identityStatus: string,
   metadata: Record<string, unknown>,
+  authorityRootPublicKey: string | null,
 ): Promise<{
   has_seed_protocol: boolean;
   has_seed_protocol_semantics: string;
@@ -1217,10 +1221,14 @@ async function computeRecoveryStateForIdentity(
     registered_devices,
     registered_devices_semantics:
       "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
-    registered_key_recovery_available:
-      identityStatus === "active" && registered_devices > 0,
+    registered_key_recovery_available: registeredKeyRecoveryAvailable({
+      status: identityStatus,
+      activeRegisteredKeys: registered_devices,
+      authorityRootPublicKey,
+      metadata,
+    }),
     registered_key_recovery_boundary:
-      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
+      "Available only while the identity is active, speaks for its project (its founding root or a legacy identity, not a guest root enrolled into an existing project), and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at,
     has_imported_soma_key,
   };

@@ -6242,7 +6242,7 @@ function spec() {
           tags: ["public", "identity"],
           summary: "Discover active recoverable identities using a signed public key",
           description:
-            "Recovery prerequisite for a caller that can derive its registered Ed25519 key but no longer knows the identity DID. The signature proves possession of that key over identity-discover/v1 canonical bytes and gates pubkey-to-DID enumeration. The timestamp must be within ±5 minutes of server time; this is a bounded freshness check, not one-time replay protection, so the same signed request can be replayed while it remains inside that window. Only active identities with an active, non-revoked matching key are returned.",
+            "Recovery prerequisite for a caller that can derive its registered Ed25519 key but no longer knows the identity DID. The signature proves possession of that key over identity-discover/v1 canonical bytes and gates pubkey-to-DID enumeration. The timestamp must be within ±5 minutes of server time; this is a bounded freshness check, not one-time replay protection, so the same signed request can be replayed while it remains inside that window. Only identities that recovery would accept are returned: active legacy identities with an active, non-revoked matching key, and active founding roots queried by their own root key. A guest root enrolled into an existing project is never returned.",
           requestBody: {
             required: true,
             content: {

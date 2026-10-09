@@ -188,7 +188,7 @@ retries. `legacy_bearer` retains matching-active-key recovery. The server
 consumes the proof hash and mints a fresh project bearer named for that device.
 The name is not an authority scope. The mnemonic never leaves the terminal.
 
-For an active `agent_root`, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
+For an active `agent_root` that founded its project, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
 
 **If the mnemonic is gone too:**
 
