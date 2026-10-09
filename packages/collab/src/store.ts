@@ -1980,6 +1980,27 @@ export class CollabStore {
     return rows.map((row) => this.sessionProjection(row, observedAt));
   }
 
+  getCoordinationSession(sessionId: string): CoordinationSession | null {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`)
+      .get(id) as CoordinationSessionRow | null;
+    return row ? this.sessionProjection(row) : null;
+  }
+
+  /**
+   * Read-only check before a host-side end without lease release. It checks
+   * the resume token (as resumeSession does, never the generation) and throws
+   * the same session_has_active_leases refusal endSession would, while the
+   * session still holds a live lease. It writes nothing: no generation bump,
+   * no session.resumed event, no cursor-recovery flag.
+   */
+  preflightSessionEnd(credential: { session_id: string; session_token: string }): void {
+    const sessionId = validateId(credential.session_id, "session_id");
+    const row = this.authenticateResumeToken(sessionId, credential.session_token);
+    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp());
+    if (refusal) throw refusal;
+  }
+
   acknowledgeSessionCursor(input: {
     session_id: string;
     session_token: string;

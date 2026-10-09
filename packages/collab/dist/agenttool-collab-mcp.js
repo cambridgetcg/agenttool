@@ -28280,9 +28280,17 @@ var StdioServerTransport = class {
   }
 };
 
-// bin/agenttool-collab-mcp.ts
+// src/database-path.ts
 import { homedir } from "os";
-import { isAbsolute as isAbsolute2, join as join2, resolve as resolve4 } from "path";
+import { isAbsolute, join, resolve } from "path";
+function defaultDatabasePath(env = process.env) {
+  const dataHome = env.XDG_DATA_HOME;
+  const base = dataHome ? isAbsolute(dataHome) ? dataHome : resolve(dataHome) : join(homedir(), ".local", "share");
+  return join(base, "agenttool", "collab.sqlite");
+}
+function resolveDatabasePath(env = process.env) {
+  return env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath(env);
+}
 // src/anchor-status.ts
 import { closeSync, constants, fstatSync, openSync, readSync } from "fs";
 
@@ -28528,6 +28536,9 @@ var COLLAB_PROTOCOL = "agenttool.collab/0.1";
 var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
 var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
 var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
+var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
+var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_MS = 30000;
@@ -28550,10 +28561,10 @@ import {
   unlinkSync,
   writeFileSync
 } from "fs";
-import { dirname, resolve } from "path";
+import { dirname, resolve as resolve2 } from "path";
 import { randomUUID } from "crypto";
 function readSessionCredentialFile(pathInput) {
-  const path = resolve(pathInput);
+  const path = resolve2(pathInput);
   try {
     assertPrivateDirectory(dirname(path));
     const stat = lstatSync(path);
@@ -28580,7 +28591,7 @@ function readSessionCredentialFile(pathInput) {
   }
 }
 function writeSessionCredentialFile(pathInput, credential, options = {}) {
-  const path = resolve(pathInput);
+  const path = resolve2(pathInput);
   const parent = dirname(path);
   const parentExisted = existsSync(parent);
   let temporary = null;
@@ -28646,7 +28657,7 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
   }
 }
 function removeSessionCredentialFile(pathInput) {
-  const path = resolve(pathInput);
+  const path = resolve2(pathInput);
   try {
     if (!existsSync(path))
       return;
@@ -28690,6 +28701,7 @@ var eventAnchor = exports_external.object({
   sequence: exports_external.number().int().nonnegative(),
   hash: exports_external.string().length(64)
 });
+var evidenceRefs = exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional().describe(EVIDENCE_REFS_DESCRIPTION);
 var nextEventLimit = exports_external.number().int().min(1).max(50).optional().describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 var localReadOnly = {
   readOnlyHint: true,
@@ -28829,20 +28841,30 @@ function buildCollabMcpServer(store, options = {}) {
   }));
   server.registerTool("collab_session_end", {
     title: "End the bound collaboration session",
-    description: "Fence future session mutations and remove the credential file. Live leases must be resolved first; incoming offers expire as an audited refusal.",
+    description: "Fence future session mutations and remove the credential file. Live leases must be resolved first, " + "or pass release_leases: true to release every live lease and recovery-release every expired lease " + "this session holds in the same transaction; incoming offers expire as an audited refusal.",
     annotations: localDestructiveMutation,
-    inputSchema: { reason: exports_external.string().max(2000).optional() }
-  }, async ({ reason }) => call(() => {
+    inputSchema: {
+      reason: exports_external.string().max(2000).optional(),
+      release_leases: exports_external.boolean().optional().describe("Release every lease this session holds before ending: live leases through task release, " + "expired leases through recovery with action release"),
+      release_summary: exports_external.string().max(2000).optional().describe("Release summary and recovery note recorded for each released lease; requires release_leases: true. " + "Defaults to reason")
+    }
+  }, async ({ reason, release_leases, release_summary }) => call(() => {
     const current = binding;
     if (!current)
       throw new CollabError("session_not_bound", "No session is bound");
-    const ended = store.endSession({ ...current.handle.credential, reason });
+    const ended = store.endSessionWithReleases({
+      ...current.handle.credential,
+      reason,
+      release_leases,
+      release_summary
+    });
     binding = null;
     removeSessionCredentialFile(current.credential_file);
     return {
-      session: ended,
+      session: ended.session,
+      released_leases: ended.released_leases,
       credential_file_removed: true,
-      session_file_name: `${ended.id}.json`
+      session_file_name: `${ended.session.id}.json`
     };
   }));
   server.registerTool("collab_workspace_open", {
@@ -28863,18 +28885,18 @@ function buildCollabMcpServer(store, options = {}) {
   }));
   server.registerTool("collab_workspace_status", {
     title: "Read collaboration status",
-    description: "Return task counts, active sessions and claims, blockers, pending reviews, reports, and decisions.",
+    description: "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId }
   }, async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)));
   server.registerTool("collab_next", {
     title: "Poll the next useful collaboration state",
-    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
+    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
     annotations: localMutation,
     inputSchema: {
       workspace_id: workspaceId,
       actor: legacyActor,
-      after_sequence: exports_external.number().int().nonnegative().optional(),
+      after_sequence: exports_external.number().int().nonnegative().optional().describe("Legacy actor mode: page after this sequence. A bound session pages from its acknowledged cursor; " + "any other value is refused with after_sequence_unsupported_in_bound_session."),
       known_cursor: eventAnchor.optional(),
       event_limit: nextEventLimit
     }
@@ -28883,7 +28905,8 @@ function buildCollabMcpServer(store, options = {}) {
     return binding ? store.nextForSession({
       ...boundCredential(),
       known_cursor,
-      event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT
+      event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+      after_sequence
     }) : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
   }));
   server.registerTool("collab_cursor_ack", {
@@ -29099,17 +29122,21 @@ function buildCollabMcpServer(store, options = {}) {
   }));
   server.registerTool("collab_task_complete", {
     title: "Report a claimed task complete",
-    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review.",
+    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
     annotations: localRetrySafeMutation,
     inputSchema: leaseMutationSchema({
       summary: exports_external.string().min(1).max(4000),
       confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
       confidence_basis: exports_external.string().max(2000).optional(),
       limits: exports_external.string().max(2000).optional(),
-      evidence_refs: exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional()
+      evidence_refs: evidenceRefs,
+      review_requested_session_id: exports_external.string().min(1).max(200).optional().describe("Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation.")
     })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
+    if (!binding && input.review_requested_session_id !== undefined) {
+      throw new CollabError("session_required_for_review_request", "review_requested_session_id requires a bound v0.2 session");
+    }
     const task = binding ? store.completeTaskForSession({ ...boundCredential(), ...input }) : store.completeTask({
       workspace_id,
       actor: requireLegacyActor(actor),
@@ -29132,7 +29159,10 @@ function buildCollabMcpServer(store, options = {}) {
       expected_version: expectedVersion,
       outcome: exports_external.enum(["accept", "request_changes"]),
       summary: exports_external.string().min(1).max(4000),
-      evidence_refs: exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional()
+      evidence_refs: evidenceRefs,
+      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
+      confidence_basis: exports_external.string().max(2000).optional(),
+      limits: exports_external.string().max(2000).optional()
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
@@ -29149,7 +29179,7 @@ function buildCollabMcpServer(store, options = {}) {
       to_session_id: exports_external.string().min(1).optional(),
       kind: exports_external.enum(["observation", "inference", "proposal", "decision"]),
       body: exports_external.string().min(1).max(8000),
-      evidence_refs: exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional(),
+      evidence_refs: evidenceRefs,
       confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
       confidence_basis: exports_external.string().max(2000).optional(),
       limits: exports_external.string().max(2000).optional(),
@@ -29379,12 +29409,12 @@ Rationale: ${input.rationale}` : ""}`,
   return server;
 }
 function waitDelay(ms, signals) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const finish = () => {
       clearTimeout(timer);
       for (const signal of signals)
         signal?.removeEventListener("abort", finish);
-      resolve2();
+      resolve3();
     };
     const timer = setTimeout(finish, ms);
     for (const signal of signals)
@@ -29458,7 +29488,7 @@ import {
   mkdirSync as mkdirSync2,
   openSync as openSync4
 } from "fs";
-import { dirname as dirname2, isAbsolute, join, posix, resolve as resolve3 } from "path";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join2, posix, resolve as resolve4 } from "path";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -29487,7 +29517,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { resolve as resolve2 } from "path";
+import { resolve as resolve3 } from "path";
 import { spawnSync } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -29495,7 +29525,7 @@ var MAX_UNTRACKED_FILES = 1e4;
 var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
 var MAX_UNTRACKED_HASH_MS = 2000;
 function inspectRepository(rootInput, explicitRepositoryKey) {
-  const requested = resolve2(rootInput);
+  const requested = resolve3(rootInput);
   if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
@@ -29602,10 +29632,10 @@ function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve2(rootPath, value);
+  return value.startsWith("/") ? value : resolve3(rootPath, value);
 }
 function realpathIfPresent(path) {
-  return existsSync2(path) ? realpathSync(path) : resolve2(path);
+  return existsSync2(path) ? realpathSync(path) : resolve3(path);
 }
 function gitOutput(rootPath, args) {
   const result = runGit(rootPath, args);
@@ -29785,6 +29815,7 @@ var MAX_SESSION_LIST_LIMIT = 500;
 var DEFAULT_NEXT_EVENT_LIMIT = 50;
 var MAX_NEXT_EVENT_LIMIT = 50;
 var SESSION_TOKEN_BYTES = 32;
+var SESSION_END_RECOVERY_NOTE = "collab_session_end with release_leases released this expired lease from its own session";
 var PRESENCE_SESSION_COLUMNS = [
   "id",
   "workspace_id",
@@ -29841,7 +29872,7 @@ class CollabStore {
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
-    const databasePath = path === ":memory:" ? path : resolve3(path);
+    const databasePath = path === ":memory:" ? path : resolve4(path);
     if (databasePath !== ":memory:") {
       const parent = dirname2(databasePath);
       const parentAlreadyExisted = existsSync3(parent);
@@ -29903,7 +29934,7 @@ class CollabStore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId2, "session_id");
-    return join(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join2(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -31058,22 +31089,64 @@ class CollabStore {
     return resumed;
   }
   endSession(input) {
+    return this.endSessionWithReleases(input).session;
+  }
+  endSessionWithReleases(input) {
     const reason = optionalText(input.reason, "reason", 2000);
+    if (input.release_leases !== undefined && typeof input.release_leases !== "boolean") {
+      throw new CollabError("invalid_release_leases", "release_leases must be a boolean");
+    }
+    const releaseLeases = input.release_leases === true;
+    if (input.release_summary !== undefined && !releaseLeases) {
+      throw new CollabError("invalid_release_summary", "release_summary applies only together with release_leases: true");
+    }
+    const releaseSummary = optionalText(input.release_summary, "release_summary", 2000);
     const ended = this.db.transaction(() => {
       const row = this.authenticateSession(input, { allow_cursor_recovery: true });
       const now = this.timestamp();
-      const activeLeases = this.db.query(`
-        SELECT id FROM tasks
-        WHERE workspace_id = ? AND assignee_session_id = ?
-          AND status = 'claimed' AND lease_expires_at > ?
-        ORDER BY id
-      `).all(row.workspace_id, row.id, now);
-      if (activeLeases.length > 0) {
-        throw new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session", {
-          task_ids: activeLeases.map((task) => task.id),
-          required_action: "resolve_active_task_leases"
-        });
+      const releasedLeases = [];
+      if (releaseLeases) {
+        const held = this.db.query(`
+          SELECT * FROM tasks
+          WHERE workspace_id = ? AND assignee_session_id = ?
+            AND status = 'claimed' AND lease_id IS NOT NULL
+          ORDER BY id
+        `).all(row.workspace_id, row.id);
+        if (held.length > 0) {
+          const releaseNote = releaseSummary ?? reason;
+          const guardNonce = `guard_${randomUUID2()}`;
+          this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
+          try {
+            for (const task of held) {
+              const leaseId2 = task.lease_id;
+              const expired = task.lease_expires_at !== null && now >= task.lease_expires_at;
+              if (expired) {
+                const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
+                this.recordRecoveryWithoutTakeover(task, row, {
+                  prior: lapsed.prior,
+                  expiry_version: lapsed.expiryVersion,
+                  action: "release",
+                  recovery_note: releaseNote ?? SESSION_END_RECOVERY_NOTE,
+                  blocker: null,
+                  now
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId2, via: "recovery" });
+              } else {
+                this.clearSessionClaim(task, row, "task.released", {
+                  summary: releaseNote,
+                  released_by_session_end: true
+                });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId2, via: "release" });
+              }
+            }
+          } finally {
+            this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
+          }
+        }
       }
+      const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, now);
+      if (refusal)
+        throw refusal;
       const incomingHandoffs = this.db.query(`
         SELECT * FROM handoffs
         WHERE workspace_id = ? AND to_session_id = ? AND status = 'pending'
@@ -31098,7 +31171,10 @@ class CollabStore {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
       this.appendEvent(row.workspace_id, "session.ended", row.id, row.actor, { reason }, row.id);
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return {
+        session: this.sessionProjection(this.requireCoordinationSessionRow(row.id)),
+        released_leases: releasedLeases
+      };
     }).immediate();
     this.tightenFileModes();
     return ended;
@@ -31114,7 +31190,20 @@ class CollabStore {
           WHERE workspace_id = ?
           ORDER BY joined_at, id
         `).all(workspace.id);
-    return rows.map(coordinationSessionFromRow);
+    const observedAt = this.timestamp();
+    return rows.map((row) => this.sessionProjection(row, observedAt));
+  }
+  getCoordinationSession(sessionId2) {
+    const id = validateId(sessionId2, "session_id");
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
+    return row ? this.sessionProjection(row) : null;
+  }
+  preflightSessionEnd(credential) {
+    const sessionId2 = validateId(credential.session_id, "session_id");
+    const row = this.authenticateResumeToken(sessionId2, credential.session_token);
+    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp());
+    if (refusal)
+      throw refusal;
   }
   acknowledgeSessionCursor(input) {
     const acknowledged = this.db.transaction(() => {
@@ -31132,7 +31221,8 @@ class CollabStore {
         if (anchor.hash !== row.cursor_hash) {
           throw new CollabError("cursor_fork_detected", "The cursor sequence now resolves to a different journal hash");
         }
-        return coordinationSessionFromRow(row);
+        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), row.id);
+        return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
       }
       if (row.cursor_version !== input.expected_cursor_version) {
         throw new CollabError("cursor_version_conflict", "The session cursor changed", {
@@ -31150,7 +31240,7 @@ class CollabStore {
       if (changed.changes !== 1) {
         throw new CollabError("cursor_version_conflict", "The session cursor changed");
       }
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
     }).immediate();
     this.tightenFileModes();
     return acknowledged;
@@ -31195,7 +31285,7 @@ class CollabStore {
         reason,
         reset_generation: resetGeneration
       }, row.id);
-      return coordinationSessionFromRow(this.requireCoordinationSessionRow(row.id));
+      return this.sessionProjection(this.requireCoordinationSessionRow(row.id));
     }, { allow_cursor_recovery: true });
     const current = this.authenticateSession(input, {
       allow_cursor_recovery: true
@@ -31210,7 +31300,7 @@ class CollabStore {
         expected_cursor_version: current.cursor_version
       });
     }
-    return coordinationSessionFromRow(current);
+    return this.sessionProjection(current);
   }
   workspaceStatus(workspaceId2) {
     const workspace = this.requireWorkspace(workspaceId2);
@@ -31458,52 +31548,17 @@ class CollabStore {
       if (!this.isExpired(row) || !row.lease_id || !row.assignee_session_id) {
         throw new CollabError("recovery_not_required", "Only an expired session-owned lease can be explicitly recovered");
       }
-      const prior = {
-        assignee: row.assignee,
-        session_id: row.assignee_session_id,
-        lease_id: row.lease_id,
-        lease_expires_at: row.lease_expires_at,
-        checkpoint: parseCheckpoint(row.base_checkpoint_json)
-      };
       const now = this.timestamp();
-      const expiryVersion = row.version + 1;
-      this.db.query(`
-        UPDATE tasks
-        SET status = 'open', assignee = NULL, assignee_session_id = NULL,
-          claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
-          version = ?, updated_at = ?
-        WHERE workspace_id = ? AND id = ?
-      `).run(expiryVersion, now, row.workspace_id, row.id);
-      this.expirePendingHandoffs(row.workspace_id, row.id, now, "system:clock", "source_lease_expired");
-      this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
-        ...prior,
-        effective_at: prior.lease_expires_at,
-        observed_by_session_id: session.id,
-        version: expiryVersion
-      });
+      const { prior, expiryVersion } = this.expireSessionLeaseForRecovery(row, session, now);
       if (action !== "takeover") {
-        const version3 = expiryVersion + 1;
-        this.db.query(`
-          UPDATE tasks
-          SET status = ?, blocker = ?, version = ?, updated_at = ?
-          WHERE workspace_id = ? AND id = ?
-        `).run(action === "block" ? "blocked" : "open", action === "block" ? blocker : null, version3, now, row.workspace_id, row.id);
-        const event2 = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
-          prior_lease: prior,
+        return this.recordRecoveryWithoutTakeover(row, session, {
+          prior,
+          expiry_version: expiryVersion,
           action,
           recovery_note: recoveryNote,
-          recovery_checkpoint: null,
-          version: version3,
-          note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
-        }, session.id);
-        this.db.query(`
-          INSERT INTO task_recoveries (
-            id, workspace_id, task_id, prior_lease_id, prior_session_id,
-            recovered_by_session_id, action, note, prior_checkpoint_json,
-            new_lease_id, recovered_at, event_sequence
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-        `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, action, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, now, event2.sequence);
-        return this.requireTask(row.workspace_id, row.id);
+          blocker,
+          now
+        });
       }
       const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
       const checkpoint = preparedCheckpoint.checkpoint;
@@ -31682,14 +31737,16 @@ class CollabStore {
     const confidence = validateReportConfidence(input.confidence ?? "unknown");
     const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
     const limits = optionalText(input.limits, "limits", 2000);
-    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const evidenceRefs2 = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const reviewRequestedSessionId = input.review_requested_session_id === undefined ? null : validateId(input.review_requested_session_id, "review_requested_session_id");
     const request = {
       ...normalized.request,
       summary,
       confidence,
       confidence_basis: confidenceBasis,
       limits,
-      evidence_refs: evidenceRefs
+      evidence_refs: evidenceRefs2,
+      ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
     };
     const replay = this.readSessionMutationReceipt(input, normalized.idempotency_key, "task.complete.v2", request);
     if (replay.found)
@@ -31699,8 +31756,11 @@ class CollabStore {
       const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
-      for (const reference of evidenceRefs) {
+      for (const reference of evidenceRefs2) {
         this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (reviewRequestedSessionId) {
+        this.requireRequestedReviewer(row, session, reviewRequestedSessionId);
       }
       this.requirePreparedWorktree(session, preparedCheckpoint);
       const checkpoint = preparedCheckpoint.checkpoint;
@@ -31709,7 +31769,7 @@ class CollabStore {
         to_session_id: null,
         kind: "observation",
         body: summary,
-        evidence_refs: evidenceRefs,
+        evidence_refs: evidenceRefs2,
         confidence,
         confidence_basis: confidenceBasis,
         limits,
@@ -31742,8 +31802,25 @@ class CollabStore {
         result_checkpoint: checkpoint,
         summary,
         version: version2,
-        note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance."
+        note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance.",
+        ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
       }, session.id);
+      if (reviewRequestedSessionId) {
+        this.appendReportInternal(session, {
+          task_id: row.id,
+          to_session_id: reviewRequestedSessionId,
+          kind: "proposal",
+          body: `Review requested: please review the reported completion of task ${row.id} ` + `(${row.title}) with collab_task_review. This is a request, not a reservation; ` + "any distinct session may still review.",
+          evidence_refs: [`report:${report.id}`],
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          relation: "informs",
+          target_report_id: null,
+          authority_scope: null,
+          authority_basis: null
+        });
+      }
       return this.requireTask(row.workspace_id, row.id);
     });
   }
@@ -32028,13 +32105,19 @@ class CollabStore {
       throw new CollabError("invalid_review_outcome", "Review outcome is invalid");
     }
     const summary = cleanText(input.summary, "summary", 4000);
-    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const evidenceRefs2 = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const confidence = validateReportConfidence(input.confidence ?? "unknown");
+    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
+    const limits = optionalText(input.limits, "limits", 2000);
     const request = {
       task_id: taskId2,
       expected_version: expectedVersion2,
       outcome: input.outcome,
       summary,
-      evidence_refs: evidenceRefs
+      evidence_refs: evidenceRefs2,
+      ...confidence === "unknown" ? {} : { confidence },
+      ...confidenceBasis === null ? {} : { confidence_basis: confidenceBasis },
+      ...limits === null ? {} : { limits }
     };
     const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.review.v2", request);
     if (replay.found)
@@ -32042,17 +32125,17 @@ class CollabStore {
     const preparedCheckpoint = input.outcome === "accept" ? this.captureReviewCheckpoint(input, taskId2) : null;
     return this.mutateAsSession(input, input.idempotency_key, "task.review.v2", request, (session) => {
       const row = this.requireTaskRow(session.workspace_id, taskId2);
-      this.requireVersion(row, expectedVersion2);
       if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
-        throw new CollabError("task_not_pending_review", "Task does not have a pending acceptance review", { review_status: row.review_status });
+        throw this.taskNotPendingReviewError(row, session.id);
       }
+      this.requireVersion(row, expectedVersion2);
       if (!row.reported_by_session_id || !row.completion_report_id) {
         throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
       }
       if (row.reported_by_session_id === session.id) {
         throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
       }
-      for (const reference of evidenceRefs)
+      for (const reference of evidenceRefs2)
         this.requireEvidenceRef(row.workspace_id, reference);
       if (input.outcome === "accept" && this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
         throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
@@ -32086,11 +32169,11 @@ class CollabStore {
         body: summary,
         evidence_refs: [
           `report:${row.completion_report_id}`,
-          ...evidenceRefs.filter((reference) => reference !== `report:${row.completion_report_id}`)
+          ...evidenceRefs2.filter((reference) => reference !== `report:${row.completion_report_id}`)
         ],
-        confidence: "unknown",
-        confidence_basis: null,
-        limits: null,
+        confidence,
+        confidence_basis: confidenceBasis,
+        limits,
         relation: input.outcome === "accept" ? "supports" : "challenges",
         target_report_id: row.completion_report_id,
         authority_scope: "local_task_coordination_review",
@@ -32391,6 +32474,7 @@ class CollabStore {
           handoff: handoffFromRow(row),
           task: this.requireTask(workspaceId2, row.task_id)
         })),
+        recovery_required: recoveryRequiredFirst(tasks, () => false),
         reports: reportRows.map(reportFromRow),
         events,
         projection_scope: "snapshot_head",
@@ -32426,6 +32510,9 @@ class CollabStore {
           throw error51;
         }
       }
+      if (input.after_sequence !== undefined) {
+        requireBoundAfterSequence(input.after_sequence, authenticated);
+      }
       const eventLimit2 = validateNextEventLimit(input.event_limit);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), authenticated.id);
       return {
@@ -32453,7 +32540,7 @@ class CollabStore {
       `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence, current.id);
       return {
         actor: current.actor,
-        session: coordinationSessionFromRow(current),
+        session: this.sessionProjection(current),
         own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee_session_id === current.id),
         ready_tasks: claimable,
         claimable_tasks: claimable,
@@ -32462,6 +32549,7 @@ class CollabStore {
           handoff: handoffFromRow(handoff),
           task: this.requireTask(current.workspace_id, handoff.task_id)
         })),
+        recovery_required: recoveryRequiredFirst(tasks, (task) => task.assignee_session_id === current.id),
         reports: reportRows.map(reportFromRow),
         events,
         projection_scope: "snapshot_head",
@@ -32741,6 +32829,7 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID2()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
       try {
@@ -32751,7 +32840,6 @@ class CollabStore {
             request_hash, response_json, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(session.workspace_id, mutationActor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
-        this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return response2;
       } finally {
         this.db.query(`DELETE FROM v2_write_guard WHERE nonce = ?`).run(guardNonce);
@@ -32805,6 +32893,8 @@ class CollabStore {
   captureReviewCheckpoint(input, taskId2) {
     const session = this.authenticateSession(input);
     const task = this.requireTaskRow(session.workspace_id, taskId2);
+    if (task.completion_policy !== "accepted" || task.review_status !== "pending")
+      return null;
     const resultCheckpoint = parseCheckpoint(task.result_checkpoint_json);
     if (resultCheckpoint?.source !== "server_observed")
       return null;
@@ -32869,7 +32959,7 @@ class CollabStore {
     return {
       workspace,
       worktree: worktreeFromRow(worktreeRow),
-      session: coordinationSessionFromRow(row),
+      session: this.sessionProjection(row),
       credential: {
         session_id: row.id,
         session_token: token,
@@ -33039,6 +33129,75 @@ class CollabStore {
     }, session.id);
     return this.requireTask(row.workspace_id, row.id);
   }
+  liveLeaseRefusal(workspaceId2, sessionId2, now) {
+    const live = this.db.query(`
+      SELECT id, lease_id, lease_expires_at FROM tasks
+      WHERE workspace_id = ? AND assignee_session_id = ?
+        AND status = 'claimed' AND lease_expires_at > ?
+      ORDER BY id
+    `).all(workspaceId2, sessionId2, now);
+    if (live.length === 0)
+      return null;
+    return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true", {
+      task_ids: live.map((task) => task.id),
+      leases: live.map((task) => ({
+        task_id: task.id,
+        lease_id: task.lease_id,
+        expires_at: task.lease_expires_at
+      })),
+      required_action: "resolve_active_task_leases",
+      remedy: "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first."
+    });
+  }
+  expireSessionLeaseForRecovery(row, session, now) {
+    const prior = {
+      assignee: row.assignee,
+      session_id: row.assignee_session_id,
+      lease_id: row.lease_id,
+      lease_expires_at: row.lease_expires_at,
+      checkpoint: parseCheckpoint(row.base_checkpoint_json)
+    };
+    const expiryVersion = row.version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = 'open', assignee = NULL, assignee_session_id = NULL,
+        claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
+        version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(expiryVersion, now, row.workspace_id, row.id);
+    this.expirePendingHandoffs(row.workspace_id, row.id, now, "system:clock", "source_lease_expired");
+    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
+      ...prior,
+      effective_at: prior.lease_expires_at,
+      observed_by_session_id: session.id,
+      version: expiryVersion
+    });
+    return { prior, expiryVersion };
+  }
+  recordRecoveryWithoutTakeover(row, session, input) {
+    const version2 = input.expiry_version + 1;
+    this.db.query(`
+      UPDATE tasks
+      SET status = ?, blocker = ?, version = ?, updated_at = ?
+      WHERE workspace_id = ? AND id = ?
+    `).run(input.action === "block" ? "blocked" : "open", input.action === "block" ? input.blocker : null, version2, input.now, row.workspace_id, row.id);
+    const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
+      prior_lease: input.prior,
+      action: input.action,
+      recovery_note: input.recovery_note,
+      recovery_checkpoint: null,
+      version: version2,
+      note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
+    }, session.id);
+    this.db.query(`
+      INSERT INTO task_recoveries (
+        id, workspace_id, task_id, prior_lease_id, prior_session_id,
+        recovered_by_session_id, action, note, prior_checkpoint_json,
+        new_lease_id, recovered_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
+    return this.requireTask(row.workspace_id, row.id);
+  }
   recoveryBundle(row) {
     return {
       task_id: row.id,
@@ -33127,6 +33286,64 @@ class CollabStore {
       throw new CollabError("review_not_found", `Review '${id}' was not found`);
     return reviewFromRow(row);
   }
+  taskNotPendingReviewError(row, callerSessionId) {
+    const plain = new CollabError("task_not_pending_review", "Task does not have a pending acceptance review", { review_status: row.review_status });
+    if (row.completion_policy !== "accepted" || row.review_status !== "accepted" || !row.accepted_by_session_id || row.reported_by_session_id === callerSessionId || row.accepted_by_session_id === callerSessionId) {
+      return plain;
+    }
+    const acceptance = this.db.query(`
+      SELECT e.type AS type, e.payload_json AS payload_json
+      FROM task_reviews r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.task_id = ? AND r.review_generation = ?
+        AND r.outcome = 'accepted'
+    `).get(row.workspace_id, row.id, row.review_generation);
+    if (!acceptance || acceptance.type !== "task.accepted")
+      return plain;
+    const payload = JSON.parse(acceptance.payload_json);
+    if (typeof payload.review_report_id !== "string")
+      return plain;
+    const reviewReportId = payload.review_report_id;
+    const remedy = `Record a late concurring or dissenting review with collab_report_append: task_id "${row.id}", ` + `relation "supports" or "challenges", target_report_id "${reviewReportId}". ` + "A challenge records disagreement; it does not reopen the accepted task.";
+    return new CollabError("task_not_pending_review", `Task was already accepted by session '${row.accepted_by_session_id}'. ${remedy}`, {
+      review_status: row.review_status,
+      review_report_id: reviewReportId,
+      accepted_by_session_id: row.accepted_by_session_id,
+      remedy
+    });
+  }
+  requireRequestedReviewer(row, session, requestedSessionId) {
+    if (row.completion_policy !== "accepted") {
+      throw new CollabError("review_request_not_applicable", 'Only tasks with completion_policy "accepted" wait for review; omit review_requested_session_id', { completion_policy: row.completion_policy });
+    }
+    if (requestedSessionId === session.id) {
+      throw new CollabError("review_request_self", "A requested reviewer must be a session distinct from the reporter");
+    }
+    const requested = this.db.query(`
+      SELECT workspace_id, status FROM coordination_sessions WHERE id = ?
+    `).get(requestedSessionId);
+    if (!requested || requested.workspace_id !== session.workspace_id || requested.status !== "active") {
+      throw new CollabError("review_requested_session_unavailable", "The requested reviewer must be an active session in this workspace; collab_workspace_status lists active_sessions", { review_requested_session_id: requestedSessionId });
+    }
+  }
+  reviewRequestedSessionId(row) {
+    if (row.status !== "completed" || row.completion_policy !== "accepted" || !row.completion_report_id) {
+      return null;
+    }
+    const completion = this.db.query(`SELECT event_sequence FROM reports WHERE id = ?`).get(row.completion_report_id);
+    if (!completion)
+      return null;
+    const event = this.db.query(`
+      SELECT payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ? AND entity_id = ? AND type = 'task.reported_complete'
+      ORDER BY sequence
+      LIMIT 1
+    `).get(row.workspace_id, completion.event_sequence, row.id);
+    if (!event)
+      return null;
+    const payload = JSON.parse(event.payload_json);
+    return payload.completion_report_id === row.completion_report_id && typeof payload.review_requested_session_id === "string" ? payload.review_requested_session_id : null;
+  }
   hasUnresolvedChallenges(workspaceId2, reportId) {
     const challenges = this.db.query(`
       SELECT id FROM reports
@@ -33169,13 +33386,12 @@ class CollabStore {
   }
   requireEvidenceRef(workspaceId2, reference) {
     const separator = reference.indexOf(":");
-    if (separator < 1) {
-      throw new CollabError("invalid_evidence_ref", "Evidence references use artifact:, event:, report:, or checkpoint: prefixes");
-    }
+    if (separator < 1)
+      throw invalidEvidenceRef("Evidence reference needs a kind prefix");
     const kind = reference.slice(0, separator);
     const id = reference.slice(separator + 1);
     if (!id)
-      throw new CollabError("invalid_evidence_ref", "Evidence reference ID is empty");
+      throw invalidEvidenceRef("Evidence reference ID is empty");
     let exists = false;
     if (kind === "artifact") {
       exists = this.db.query(`
@@ -33202,12 +33418,10 @@ class CollabStore {
         return checkpoints.some((checkpoint) => checkpoint !== null && checkpointDigest(checkpoint) === id);
       });
     } else {
-      throw new CollabError("invalid_evidence_ref", "Unsupported evidence reference kind");
+      throw invalidEvidenceRef("Unsupported evidence reference kind");
     }
     if (!exists) {
-      throw new CollabError("evidence_not_found", "Evidence reference was not found", {
-        reference
-      });
+      throw new CollabError("evidence_not_found", `Evidence reference was not found in this workspace. ${EVIDENCE_REFS_DESCRIPTION}`, { reference, allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
     }
   }
   appendEvent(workspaceId2, type, entityId, actor, payload, sessionId2 = null) {
@@ -33350,6 +33564,8 @@ class CollabStore {
     } else if (row.status === "completed" && row.review_status === "accepted") {
       effectiveStatus = "accepted";
     }
+    const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
+    const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
     return {
       id: row.id,
       workspace_id: row.workspace_id,
@@ -33363,11 +33579,14 @@ class CollabStore {
       completion_policy: row.completion_policy,
       review_status: row.review_status,
       expected_base_sha: row.expected_base_sha,
-      base_checkpoint: parseCheckpoint(row.base_checkpoint_json),
-      result_checkpoint: parseCheckpoint(row.result_checkpoint_json),
+      base_checkpoint: baseCheckpoint,
+      base_checkpoint_digest: baseCheckpoint ? checkpointDigest(baseCheckpoint) : null,
+      result_checkpoint: resultCheckpoint,
+      result_checkpoint_digest: resultCheckpoint ? checkpointDigest(resultCheckpoint) : null,
       completion_report_id: row.completion_report_id,
       assignee: row.assignee,
       assignee_session_id: row.assignee_session_id,
+      assignee_liveness: this.assigneeLiveness(row.assignee_session_id),
       claim_worktree_id: row.claim_worktree_id,
       lease_id: row.lease_id,
       lease_expires_at: row.lease_expires_at,
@@ -33379,11 +33598,23 @@ class CollabStore {
       accepted_by: row.accepted_by,
       accepted_by_session_id: row.accepted_by_session_id,
       accepted_at: row.accepted_at,
+      review_requested_session_id: this.reviewRequestedSessionId(row),
       version: row.version,
       created_at: row.created_at,
       updated_at: row.updated_at,
       completed_at: row.completed_at
     };
+  }
+  sessionProjection(row, observedAt = this.timestamp()) {
+    return coordinationSessionFromRow(row, observedAt);
+  }
+  assigneeLiveness(sessionId2) {
+    if (!sessionId2)
+      return null;
+    const holder = this.db.query(`
+      SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
+    `).get(sessionId2);
+    return holder ? sessionLiveness(holder, this.timestamp()) : null;
   }
   requireWorkspace(workspaceId2, db = this.db) {
     const workspace = this.getWorkspace(workspaceId2, db);
@@ -33523,6 +33754,24 @@ function validateNextEventLimit(value) {
   }
   return limit;
 }
+var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
+function requireBoundAfterSequence(afterSequence, session) {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+  }
+  if (afterSequence === session.cursor_sequence)
+    return;
+  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
+    after_sequence: afterSequence,
+    cursor: {
+      epoch_id: session.cursor_epoch_id,
+      sequence: session.cursor_sequence,
+      hash: session.cursor_hash
+    },
+    cursor_version: session.cursor_version,
+    remedy: BOUND_AFTER_SEQUENCE_REMEDY
+  });
+}
 function normalizeSessionLeaseInput(input) {
   const normalized = {
     idempotency_key: validateIdempotencyKey(input.idempotency_key),
@@ -33626,10 +33875,19 @@ function normalizeEvidenceRefs(references) {
   }
   return uniqueSorted(references.map((reference) => {
     if (typeof reference !== "string") {
-      throw new CollabError("invalid_evidence_ref", "Evidence references must be strings");
+      throw invalidEvidenceRef("Evidence references must be strings");
     }
-    return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    try {
+      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    } catch (error51) {
+      if (error51 instanceof CollabError)
+        throw invalidEvidenceRef(error51.message);
+      throw error51;
+    }
   }));
+}
+function invalidEvidenceRef(reason) {
+  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
 }
 function normalizePathScopes(scopes) {
   if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
@@ -33637,7 +33895,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute2(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -33767,7 +34025,21 @@ function requireMatchingPresenceSessionJoin(row, input) {
     throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
   }
 }
-function coordinationSessionFromRow(row) {
+function sessionLiveness(row, observedAt) {
+  if (row.status !== "active")
+    return "stale";
+  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
+  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+function recoveryRequiredFirst(tasks, isOwn) {
+  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
+  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
+  return [
+    ...pending.filter(isOwn).sort(byExpiry),
+    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
+  ];
+}
+function coordinationSessionFromRow(row, observedAt) {
   return {
     id: row.id,
     workspace_id: row.workspace_id,
@@ -33787,7 +34059,8 @@ function coordinationSessionFromRow(row) {
     },
     cursor_version: row.cursor_version,
     reset_generation: row.reset_generation,
-    cursor_recovery_required: row.cursor_recovery_required !== 0
+    cursor_recovery_required: row.cursor_recovery_required !== 0,
+    liveness: sessionLiveness(row, observedAt)
   };
 }
 function worktreeFromRow(row) {
@@ -33875,17 +34148,26 @@ function hydrateLegacyMutationResponse(value, now) {
     review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
     expected_base_sha: hydrated.expected_base_sha ?? null,
     base_checkpoint: hydrated.base_checkpoint ?? null,
+    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
     result_checkpoint: hydrated.result_checkpoint ?? null,
+    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
     completion_report_id: hydrated.completion_report_id ?? null,
     assignee_session_id: hydrated.assignee_session_id ?? null,
+    assignee_liveness: hydrated.assignee_liveness ?? null,
     claim_worktree_id: hydrated.claim_worktree_id ?? null,
     reported_by: hydrated.reported_by ?? null,
     reported_by_session_id: hydrated.reported_by_session_id ?? null,
     reported_at: hydrated.reported_at ?? null,
     accepted_by: hydrated.accepted_by ?? null,
     accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
-    accepted_at: hydrated.accepted_at ?? null
+    accepted_at: hydrated.accepted_at ?? null,
+    review_requested_session_id: hydrated.review_requested_session_id ?? null
   };
+}
+function hydratedCheckpointDigest(stored, checkpoint) {
+  if (typeof stored === "string")
+    return stored;
+  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
 }
 function isRecordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -33999,7 +34281,7 @@ function safeRepositoryIdentity(rootPath) {
   try {
     return inspectRepository(rootPath);
   } catch {
-    const root = resolve3(rootPath);
+    const root = resolve4(rootPath);
     const repositoryKey = `local-path:${sha2562(root)}`;
     const worktreeId2 = `wt_${sha2562(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
@@ -34026,13 +34308,8 @@ function addSeconds(iso, seconds) {
 }
 
 // bin/agenttool-collab-mcp.ts
-function defaultDatabasePath() {
-  const dataHome = process.env.XDG_DATA_HOME;
-  const base = dataHome ? isAbsolute2(dataHome) ? dataHome : resolve4(dataHome) : join2(homedir(), ".local", "share");
-  return join2(base, "agenttool", "collab.sqlite");
-}
 async function main() {
-  const databasePath = process.env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath();
+  const databasePath = resolveDatabasePath(process.env);
   const store = new CollabStore(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile ? (() => {

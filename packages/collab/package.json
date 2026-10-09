@@ -16,7 +16,8 @@
   "main": "src/index.ts",
   "module": "src/index.ts",
   "bin": {
-    "agenttool-collab-mcp": "./dist/agenttool-collab-mcp.js"
+    "agenttool-collab-mcp": "./dist/agenttool-collab-mcp.js",
+    "agenttool-collab-host": "./dist/agenttool-collab-host.js"
   },
   "exports": {
     ".": "./src/index.ts",

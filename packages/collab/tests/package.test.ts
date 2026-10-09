@@ -49,9 +49,11 @@ describe("cross-host package", () => {
     expect(files).toContain("dist");
     expect(files).toContain("THIRD_PARTY_LICENSES");
     expect(packageManifest.bin["agenttool-collab-mcp"]).toBe("./dist/agenttool-collab-mcp.js");
+    expect(packageManifest.bin["agenttool-collab-host"]).toBe("./dist/agenttool-collab-host.js");
     expect(packageManifest.keywords).toContain("hermes-agent");
     expect(packageManifest.keywords).toContain("zerone");
     expect(statSync(join(packageRoot, "dist", "agenttool-collab-mcp.js")).mode & 0o111).not.toBe(0);
+    expect(statSync(join(packageRoot, "dist", "agenttool-collab-host.js")).mode & 0o111).not.toBe(0);
   });
 
   test("pins the bundler Bun to the version CI builds with", async () => {
