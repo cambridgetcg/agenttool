@@ -4607,11 +4607,24 @@ export class CollabStore {
       return { refusal: `Commit ${commit} changes no path` };
     }
     const scopes = parseStringArray(row.path_scopes_json);
+    // A completion that was sent back with request_changes no longer speaks for
+    // later bytes: only artifacts attached after the latest one may vouch.
+    const rejectedThrough = (this.db.query(`
+      SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events
+      WHERE workspace_id = ? AND entity_id = ? AND type = 'task.changes_requested'
+    `).get(row.workspace_id, row.id) as { sequence: number }).sequence;
     const artifacts = this.db.query(`
-      SELECT id, uri, sha256 FROM artifacts
-      WHERE workspace_id = ? AND task_id = ? AND kind = 'file'
-      ORDER BY attached_at, rowid
-    `).all(row.workspace_id, row.id) as Array<{ id: string; uri: string; sha256: string | null }>;
+      SELECT a.id, a.uri, a.sha256 FROM artifacts a
+      JOIN events e
+        ON e.workspace_id = a.workspace_id AND e.entity_id = a.task_id
+        AND e.type = 'artifact.attached' AND json_extract(e.payload_json, '$.artifact.id') = a.id
+      WHERE a.workspace_id = ? AND a.task_id = ? AND a.kind = 'file' AND e.sequence > ?
+      ORDER BY e.sequence
+    `).all(row.workspace_id, row.id, rejectedThrough) as Array<{
+      id: string;
+      uri: string;
+      sha256: string | null;
+    }>;
     // Later rows replace earlier ones: the newest attachment of a path wins.
     const newest = new Map<string, { id: string; sha256: string | null }>();
     for (const artifact of artifacts) {
@@ -4631,7 +4644,8 @@ export class CollabStore {
       }
       const artifact = newest.get(change.path);
       if (!artifact) {
-        return { refusal: `No file artifact attached to this task names ${change.path}` };
+        const since = rejectedThrough > 0 ? " since its latest request_changes" : "";
+        return { refusal: `No file artifact attached to this task${since} names ${change.path}` };
       }
       if (!artifact.sha256) {
         return {
@@ -5020,7 +5034,8 @@ export class CollabStore {
     if (live.length === 0) return null;
     return new CollabError(
       "session_has_active_leases",
-      "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true",
+      "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. "
+        + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers",
       {
         task_ids: live.map((task) => task.id),
         leases: live.map((task) => ({
@@ -5030,7 +5045,7 @@ export class CollabStore {
         })),
         required_action: "resolve_active_task_leases",
         remedy:
-          "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first.",
+          "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first. A handoff counts once it is accepted: ending with release_leases expires any offer still pending.",
       },
     );
   }
@@ -5170,7 +5185,9 @@ export class CollabStore {
     if (input.relation === "informs" && input.target_report_id) {
       throw new CollabError(
         "invalid_report_relation",
-        "An informing report does not target another report",
+        "An informing report does not target another report. To agree with or answer a report, use "
+          + 'relation "supports" (or "challenges" to disagree) with target_report_id; '
+          + "to address a session, use to_session_id",
       );
     }
     if (input.relation !== "informs" && !input.target_report_id) {
@@ -5203,7 +5220,8 @@ export class CollabStore {
       if (input.relation === "resolves" && target.relation !== "challenges") {
         throw new CollabError(
           "invalid_report_relation",
-          "A resolving report must target a challenge",
+          "A resolving report must target a challenge. To agree with or confirm a proposal, use "
+            + 'relation "supports" with target_report_id',
         );
       }
     }
@@ -6526,10 +6544,12 @@ function gitCheckpointStaleError(
   const remedy =
     `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent `
     + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's `
-    + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri, "
-    + "with the worktree left clean; then review again. "
+    + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri "
+    + "(since its latest request_changes), with the worktree left clean; then review again. "
     + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is `
-    + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review.";
+    + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. "
+    + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit "
+    + "on it, use (2).";
   return new CollabError(
     "git_checkpoint_stale",
     `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`,

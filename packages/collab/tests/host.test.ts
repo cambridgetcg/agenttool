@@ -198,13 +198,27 @@ describe("agenttool-collab-host end", () => {
       leases: [{ task_id: claim.id, lease_id: claim.lease_id, expires_at: claim.lease_expires_at }],
       required_action: "resolve_active_task_leases",
     });
-    expect(run.receipt.message).toContain("release_leases");
-    expect(run.receipt.remedy).toContain("release_leases");
+    // The host CLI names its own flag, not the MCP tool's parameter.
+    expect(run.receipt.message).toContain("--release-leases");
+    expect(run.receipt.remedy).toContain("--release-leases");
+    expect(run.receipt.remedy).not.toContain("collab_session_end");
     expect(run.stdout).not.toContain(handle.credential.session_token);
     expect(existsSync(file)).toBe(true);
     expect(sessionRow(handle.session.id)).toEqual(before);
     expect(before.cursor_recovery_required).toBe(0);
     expect(store.getWorkspace(handle.workspace.id)!.event_head_sequence).toBe(headBefore);
+  });
+
+  test("prints its usage for --help or -h, exit 0, touching no journal", () => {
+    for (const argv of [["--help"], ["-h"], ["end", "--help"]]) {
+      const run = runCollabHostCli(argv, {});
+      expect(run.exit_code).toBe(0);
+      expect(JSON.parse(run.line)).toEqual({
+        protocol: "agenttool.collab-host/1",
+        status: "help",
+        usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]",
+      });
+    }
   });
 
   test("refuses a reason endSession would refuse before any store call, with or without --release-leases", () => {
