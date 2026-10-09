@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildCollabMcpServer } from "../src/mcp.js";
+import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
 import { CollabStore } from "../src/store.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
@@ -754,6 +755,60 @@ describe("MCP surface", () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.error).toBe("task_not_found");
+  });
+
+  test("describes every evidence_refs input with the allowed prefixes", () => {
+    const { server } = node();
+    const tools = (server as any)._registeredTools;
+    const withEvidence = Object.keys(tools)
+      .filter((name) => tools[name].inputSchema?.shape?.evidence_refs !== undefined)
+      .sort();
+    expect(withEvidence).toEqual([
+      "collab_report_append",
+      "collab_task_complete",
+      "collab_task_review",
+    ]);
+    for (const name of withEvidence) {
+      expect(tools[name].inputSchema.shape.evidence_refs.description).toBe(
+        EVIDENCE_REFS_DESCRIPTION,
+      );
+    }
+    for (const prefix of EVIDENCE_REF_PREFIXES) {
+      expect(EVIDENCE_REFS_DESCRIPTION).toContain(prefix);
+    }
+    expect(EVIDENCE_REFS_DESCRIPTION).toContain("artifact:artifact_<id>");
+  });
+
+  test("flattens allowed evidence prefixes into MCP evidence errors", async () => {
+    const { root, server } = node();
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "evidence-reporter",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    const unsupported = await callTool(server, "collab_report_append", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-unsupported-evidence",
+      kind: "observation",
+      body: "Cites an unsupported evidence kind.",
+      evidence_refs: ["commit:abc123"],
+    });
+    expect(unsupported.isError).toBe(true);
+    expect(unsupported.structuredContent.error).toBe("invalid_evidence_ref");
+    expect(unsupported.structuredContent.allowed_prefixes).toEqual([...EVIDENCE_REF_PREFIXES]);
+    expect(unsupported.structuredContent.message).toContain(EVIDENCE_REFS_DESCRIPTION);
+
+    const missing = await callTool(server, "collab_report_append", {
+      workspace_id: workspaceId,
+      idempotency_key: "mcp-missing-evidence",
+      kind: "observation",
+      body: "Cites an artifact that does not exist.",
+      evidence_refs: ["artifact:artifact_missing"],
+    });
+    expect(missing.isError).toBe(true);
+    expect(missing.structuredContent.error).toBe("evidence_not_found");
+    expect(missing.structuredContent.reference).toBe("artifact:artifact_missing");
+    expect(missing.structuredContent.allowed_prefixes).toEqual([...EVIDENCE_REF_PREFIXES]);
   });
 
   test("verifies the full journal and labels the verification scope", async () => {

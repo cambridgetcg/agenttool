@@ -196,7 +196,11 @@ export interface Task {
   review_status: ReviewStatus;
   expected_base_sha: string | null;
   base_checkpoint: RepoCheckpoint | null;
+  /** SHA-256 of the canonical base checkpoint; cite it as `checkpoint:<digest>`. */
+  base_checkpoint_digest: string | null;
   result_checkpoint: RepoCheckpoint | null;
+  /** SHA-256 of the canonical result checkpoint; cite it as `checkpoint:<digest>`. */
+  result_checkpoint_digest: string | null;
   completion_report_id: string | null;
   assignee: string | null;
   assignee_session_id: string | null;
@@ -244,6 +248,13 @@ export type ReportRelation =
   | "resolves";
 
 export type ReportConfidence = "high" | "medium" | "low" | "unknown";
+
+/** Evidence references always point inside one workspace's journal. */
+export const EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"] as const;
+export const EVIDENCE_REFS_DESCRIPTION =
+  "Evidence references point inside this workspace's journal and start with artifact:, event:, " +
+  "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " +
+  "for example \"artifact:artifact_<id>\".";
 
 export interface CollabReport {
   id: string;

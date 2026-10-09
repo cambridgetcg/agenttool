@@ -746,7 +746,9 @@ describe("agenttool.collab/0.2 session coordination", () => {
       review_status: "legacy_unreviewed",
       expected_base_sha: null,
       base_checkpoint: null,
+      base_checkpoint_digest: null,
       result_checkpoint: null,
+      result_checkpoint_digest: null,
       assignee_session_id: null,
       accepted_by_session_id: null,
     });
@@ -1351,6 +1353,153 @@ describe("agenttool.collab/0.2 session coordination", () => {
           && event.payload.reason === "target_session_ended",
       ),
     ).toBe(true);
+  });
+});
+
+describe("evidence references name their allowed prefixes", () => {
+  const allowedPrefixes = ["artifact:", "event:", "report:", "checkpoint:"];
+
+  function expectEvidenceGuidance(error: CollabError, code: string): void {
+    expect(error.code).toBe(code);
+    for (const prefix of allowedPrefixes) expect(error.message).toContain(prefix);
+    expect(error.message).toContain("artifact:artifact_<id>");
+    expect(error.details.allowed_prefixes).toEqual(allowedPrefixes);
+  }
+
+  test("explains every invalid evidence reference site and evidence_not_found", () => {
+    const author = session("evidence-author");
+    const invalid: Array<[unknown, string]> = [
+      ["artifact_without_prefix", "needs a kind prefix"],
+      [":leading-separator", "needs a kind prefix"],
+      ["report:", "ID is empty"],
+      ["commit:abc123", "Unsupported evidence reference kind"],
+      [42, "must be strings"],
+      ["   ", "must not be empty"],
+      [`report:${"x".repeat(2_001)}`, "exceeds 2000 characters"],
+      ["report:with\0nul", "must not contain NUL bytes"],
+    ];
+    for (const [index, [reference, reason]] of invalid.entries()) {
+      const error = errorFrom(() =>
+        store.appendReportForSession({
+          ...author.credential,
+          idempotency_key: `invalid-evidence-${index}`,
+          kind: "observation",
+          body: "Evidence reference fixture.",
+          evidence_refs: [reference as string],
+        }),
+      );
+      expectEvidenceGuidance(error, "invalid_evidence_ref");
+      expect(error.message).toContain(reason);
+    }
+
+    const missing = errorFrom(() =>
+      store.appendReportForSession({
+        ...author.credential,
+        idempotency_key: "missing-evidence",
+        kind: "observation",
+        body: "Cites a report that does not exist.",
+        evidence_refs: ["report:report_missing"],
+      }),
+    );
+    expectEvidenceGuidance(missing, "evidence_not_found");
+    expect(missing.details.reference).toBe("report:report_missing");
+  });
+
+  test("projects checkpoint digests that resolve as checkpoint: evidence", () => {
+    initializeGitRepository();
+    const implementer = session("digest-implementer");
+    const observer = session("digest-observer");
+    const task = createAcceptedEditTask(implementer, "digest-task", "src/digest.ts");
+    expect(task.base_checkpoint_digest).toBeNull();
+    expect(task.result_checkpoint_digest).toBeNull();
+
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "digest-claim",
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const baseDigest = createHash("sha256")
+      .update(canonicalJson(claim.base_checkpoint))
+      .digest("hex");
+    expect(claim.base_checkpoint_digest).toBe(baseDigest);
+    expect(claim.result_checkpoint_digest).toBeNull();
+
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src", "digest.ts"), "export const digest = true;\n");
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "digest-complete",
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Digest fixture written.",
+    });
+    const resultDigest = createHash("sha256")
+      .update(canonicalJson(reported.result_checkpoint))
+      .digest("hex");
+    expect(resultDigest).not.toBe(baseDigest);
+    expect(reported.base_checkpoint_digest).toBe(baseDigest);
+    expect(reported.result_checkpoint_digest).toBe(resultDigest);
+    expect(store.getTask(task.workspace_id, task.id)).toMatchObject({
+      base_checkpoint_digest: baseDigest,
+      result_checkpoint_digest: resultDigest,
+    });
+
+    const cited = store.appendReportForSession({
+      ...observer.credential,
+      idempotency_key: "cite-both-checkpoints",
+      task_id: task.id,
+      kind: "observation",
+      body: "Both server-observed checkpoints are cited by digest.",
+      evidence_refs: [`checkpoint:${baseDigest}`, `checkpoint:${resultDigest}`],
+    });
+    expect(cited.evidence_refs).toEqual(
+      [`checkpoint:${baseDigest}`, `checkpoint:${resultDigest}`].sort(),
+    );
+  });
+
+  test("hydrates checkpoint digests into stored replies that predate them", () => {
+    const owner = session("digest-hydration-owner");
+    const request = {
+      workspace_id: owner.workspace.id,
+      actor: "legacy-digest-actor",
+      idempotency_key: "legacy-digest-create",
+      title: "Legacy digest receipt",
+    };
+    store.createTask(request);
+    const checkpoint = {
+      worktree_id: owner.worktree.id,
+      head_sha: null,
+      branch: null,
+      dirty: null,
+      captured_at: "2026-07-23T10:00:00.000Z",
+    };
+    const stored = store.db.query(`
+      SELECT response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(request.workspace_id, request.actor, request.idempotency_key) as {
+      response_json: string;
+    };
+    const preUpgrade = JSON.parse(stored.response_json) as Record<string, unknown>;
+    delete preUpgrade.base_checkpoint_digest;
+    delete preUpgrade.result_checkpoint_digest;
+    preUpgrade.base_checkpoint = checkpoint;
+    store.db.query(`
+      UPDATE mutations SET response_json = ?
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).run(
+      JSON.stringify(preUpgrade),
+      request.workspace_id,
+      request.actor,
+      request.idempotency_key,
+    );
+
+    const replay = store.createTask(request);
+    expect(replay.base_checkpoint_digest).toBe(
+      createHash("sha256").update(canonicalJson(checkpoint)).digest("hex"),
+    );
+    expect(replay.result_checkpoint_digest).toBeNull();
   });
 });
 

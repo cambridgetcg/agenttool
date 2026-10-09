@@ -4,6 +4,7 @@ import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import {
   DEFAULT_WAIT_EVENT_LIMIT,
+  EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -39,6 +40,8 @@ const eventAnchor = z.object({
   sequence: z.number().int().nonnegative(),
   hash: z.string().length(64),
 });
+const evidenceRefs = z.array(z.string().min(1).max(2000)).max(128).optional()
+  .describe(EVIDENCE_REFS_DESCRIPTION);
 const nextEventLimit = z.number().int().min(1).max(50).optional()
   .describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 
@@ -703,7 +706,7 @@ export function buildCollabMcpServer(
         confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
         confidence_basis: z.string().max(2000).optional(),
         limits: z.string().max(2000).optional(),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
       }),
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
@@ -737,7 +740,7 @@ export function buildCollabMcpServer(
         expected_version: expectedVersion,
         outcome: z.enum(["accept", "request_changes"]),
         summary: z.string().min(1).max(4000),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -760,7 +763,7 @@ export function buildCollabMcpServer(
         to_session_id: z.string().min(1).optional(),
         kind: z.enum(["observation", "inference", "proposal", "decision"]),
         body: z.string().min(1).max(8000),
-        evidence_refs: z.array(z.string().min(1).max(2000)).max(128).optional(),
+        evidence_refs: evidenceRefs,
         confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
         confidence_basis: z.string().max(2000).optional(),
         limits: z.string().max(2000).optional(),

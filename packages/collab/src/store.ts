@@ -16,6 +16,8 @@ import {
   COLLAB_SESSION_PROTOCOL,
   LEGACY_COLLAB_PROTOCOL,
   DEFAULT_WAIT_EVENT_LIMIT,
+  EVIDENCE_REF_PREFIXES,
+  EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_ANCHOR_BYTES,
   MAX_WAIT_PAGE_BYTES,
   type SessionEventPageInput,
@@ -5026,15 +5028,10 @@ export class CollabStore {
 
   private requireEvidenceRef(workspaceId: string, reference: string): void {
     const separator = reference.indexOf(":");
-    if (separator < 1) {
-      throw new CollabError(
-        "invalid_evidence_ref",
-        "Evidence references use artifact:, event:, report:, or checkpoint: prefixes",
-      );
-    }
+    if (separator < 1) throw invalidEvidenceRef("Evidence reference needs a kind prefix");
     const kind = reference.slice(0, separator);
     const id = reference.slice(separator + 1);
-    if (!id) throw new CollabError("invalid_evidence_ref", "Evidence reference ID is empty");
+    if (!id) throw invalidEvidenceRef("Evidence reference ID is empty");
     let exists = false;
     if (kind === "artifact") {
       exists = this.db.query(`
@@ -5067,12 +5064,14 @@ export class CollabStore {
         );
       });
     } else {
-      throw new CollabError("invalid_evidence_ref", "Unsupported evidence reference kind");
+      throw invalidEvidenceRef("Unsupported evidence reference kind");
     }
     if (!exists) {
-      throw new CollabError("evidence_not_found", "Evidence reference was not found", {
-        reference,
-      });
+      throw new CollabError(
+        "evidence_not_found",
+        `Evidence reference was not found in this workspace. ${EVIDENCE_REFS_DESCRIPTION}`,
+        { reference, allowed_prefixes: [...EVIDENCE_REF_PREFIXES] },
+      );
     }
   }
 
@@ -5265,6 +5264,8 @@ export class CollabStore {
     } else if (row.status === "completed" && row.review_status === "accepted") {
       effectiveStatus = "accepted";
     }
+    const baseCheckpoint = parseCheckpoint(row.base_checkpoint_json);
+    const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
     return {
       id: row.id,
       workspace_id: row.workspace_id,
@@ -5278,8 +5279,10 @@ export class CollabStore {
       completion_policy: row.completion_policy,
       review_status: row.review_status,
       expected_base_sha: row.expected_base_sha,
-      base_checkpoint: parseCheckpoint(row.base_checkpoint_json),
-      result_checkpoint: parseCheckpoint(row.result_checkpoint_json),
+      base_checkpoint: baseCheckpoint,
+      base_checkpoint_digest: baseCheckpoint ? checkpointDigest(baseCheckpoint) : null,
+      result_checkpoint: resultCheckpoint,
+      result_checkpoint_digest: resultCheckpoint ? checkpointDigest(resultCheckpoint) : null,
       completion_report_id: row.completion_report_id,
       assignee: row.assignee,
       assignee_session_id: row.assignee_session_id,
@@ -5622,10 +5625,23 @@ function normalizeEvidenceRefs(references: string[]): string[] {
   }
   return uniqueSorted(references.map((reference) => {
     if (typeof reference !== "string") {
-      throw new CollabError("invalid_evidence_ref", "Evidence references must be strings");
+      throw invalidEvidenceRef("Evidence references must be strings");
     }
-    return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    try {
+      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    } catch (error) {
+      if (error instanceof CollabError) throw invalidEvidenceRef(error.message);
+      throw error;
+    }
   }));
+}
+
+function invalidEvidenceRef(reason: string): CollabError {
+  return new CollabError(
+    "invalid_evidence_ref",
+    `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`,
+    { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] },
+  );
 }
 
 export function normalizePathScopes(scopes: string[]): string[] {
@@ -5983,7 +5999,15 @@ function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
       : "legacy_unreviewed",
     expected_base_sha: hydrated.expected_base_sha ?? null,
     base_checkpoint: hydrated.base_checkpoint ?? null,
+    base_checkpoint_digest: hydratedCheckpointDigest(
+      hydrated.base_checkpoint_digest,
+      hydrated.base_checkpoint,
+    ),
     result_checkpoint: hydrated.result_checkpoint ?? null,
+    result_checkpoint_digest: hydratedCheckpointDigest(
+      hydrated.result_checkpoint_digest,
+      hydrated.result_checkpoint,
+    ),
     completion_report_id: hydrated.completion_report_id ?? null,
     assignee_session_id: hydrated.assignee_session_id ?? null,
     claim_worktree_id: hydrated.claim_worktree_id ?? null,
@@ -5994,6 +6018,13 @@ function hydrateLegacyMutationResponse(value: unknown, now: string): unknown {
     accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
     accepted_at: hydrated.accepted_at ?? null,
   };
+}
+
+function hydratedCheckpointDigest(stored: unknown, checkpoint: unknown): string | null {
+  if (typeof stored === "string") return stored;
+  return isRecordValue(checkpoint)
+    ? checkpointDigest(checkpoint as unknown as RepoCheckpoint)
+    : null;
 }
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
