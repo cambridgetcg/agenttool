@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**813 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 42; record: 20; unclassified: 2.
+**816 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -818,6 +818,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/plans/2026-07-02-human-door.md](<../docs/superpowers/plans/2026-07-02-human-door.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-08-29-sovereign-reserve-commercial.md](<../docs/superpowers/plans/2026-08-29-sovereign-reserve-commercial.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md](<../docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md>) | not-reviewed |
+| [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md>) | not-reviewed |
+| [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-dispute-primitive-design.md](<../docs/superpowers/specs/2026-05-10-dispute-primitive-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md](<../docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-proposal-flow-tests-design.md](<../docs/superpowers/specs/2026-05-10-proposal-flow-tests-design.md>) | not-reviewed |
@@ -832,6 +834,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-05-19-infinite-loops.md](<../docs/superpowers/specs/2026-05-19-infinite-loops.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md](<../docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/PROFILE.md](<../packages/hf-listening-room/hf/dataset/profile/PROFILE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/PROFILE.md](<../packages/hf-listening-room/hf/space/profile/PROFILE.md>) | not-reviewed |
