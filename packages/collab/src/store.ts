@@ -3297,6 +3297,9 @@ export class CollabStore {
     outcome: "accept" | "request_changes";
     summary: string;
     evidence_refs?: string[];
+    confidence?: ReportConfidence;
+    confidence_basis?: string;
+    limits?: string;
   }): { task: Task; review: TaskReview; report: CollabReport } {
     const taskId = validateId(input.task_id, "task_id");
     const expectedVersion = validateExpectedVersion(input.expected_version);
@@ -3305,12 +3308,21 @@ export class CollabStore {
     }
     const summary = cleanText(input.summary, "summary", 4_000);
     const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const confidence = validateReportConfidence(input.confidence ?? "unknown");
+    const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2_000);
+    const limits = optionalText(input.limits, "limits", 2_000);
+    // A review field enters the idempotency request only when it carries
+    // information. Absent, blank and default ("unknown") values hash exactly as
+    // a review from a 0.3.1 copy, which has no such fields.
     const request = {
       task_id: taskId,
       expected_version: expectedVersion,
       outcome: input.outcome,
       summary,
       evidence_refs: evidenceRefs,
+      ...(confidence === "unknown" ? {} : { confidence }),
+      ...(confidenceBasis === null ? {} : { confidence_basis: confidenceBasis }),
+      ...(limits === null ? {} : { limits }),
     };
     const replay = this.readSessionMutationReceipt<{
       task: Task;
@@ -3406,9 +3418,9 @@ export class CollabStore {
           `report:${row.completion_report_id}`,
           ...evidenceRefs.filter((reference) => reference !== `report:${row.completion_report_id}`),
         ],
-        confidence: "unknown",
-        confidence_basis: null,
-        limits: null,
+        confidence,
+        confidence_basis: confidenceBasis,
+        limits,
         relation: input.outcome === "accept" ? "supports" : "challenges",
         target_report_id: row.completion_report_id,
         authority_scope: "local_task_coordination_review",

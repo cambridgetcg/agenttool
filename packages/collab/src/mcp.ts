@@ -741,6 +741,9 @@ export function buildCollabMcpServer(
         outcome: z.enum(["accept", "request_changes"]),
         summary: z.string().min(1).max(4000),
         evidence_refs: evidenceRefs,
+        confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
+        confidence_basis: z.string().max(2000).optional(),
+        limits: z.string().max(2000).optional(),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {

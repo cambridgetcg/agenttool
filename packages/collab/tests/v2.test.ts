@@ -1503,6 +1503,212 @@ describe("evidence references name their allowed prefixes", () => {
   });
 });
 
+describe("collab_task_review confidence", () => {
+  function reportedForReview(prefix: string) {
+    const implementer = session(`${prefix}-implementer`);
+    const reviewer = session(`${prefix}-reviewer`);
+    const task = createAcceptedEditTask(implementer, `${prefix}-task`, `src/${prefix}.ts`);
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: `${prefix}-claim`,
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: `${prefix}-complete`,
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Ready for review.",
+    });
+    return { reviewer, reported };
+  }
+
+  function reviewRequestHash(
+    reviewer: SessionHandle,
+    workspaceId: string,
+    idempotencyKey: string,
+  ): string {
+    return (
+      store.db.query(`
+        SELECT request_hash FROM mutations
+        WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+      `).get(workspaceId, `session:${reviewer.session.id}`, idempotencyKey) as {
+        request_hash: string;
+      }
+    ).request_hash;
+  }
+
+  function expectedHash(request: Record<string, unknown>): string {
+    return createHash("sha256")
+      .update(canonicalJson({ operation: "task.review.v2", request }))
+      .digest("hex");
+  }
+
+  test("stores reviewer confidence, basis and limits on the review report", () => {
+    const { reviewer, reported } = reportedForReview("confident");
+    const reviewed = store.reviewTaskForSession({
+      ...reviewer.credential,
+      idempotency_key: "confident-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept",
+      summary: "Read the change and reran the targeted tests.",
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+    expect(reviewed.report).toMatchObject({
+      relation: "supports",
+      target_report_id: reported.completion_report_id,
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+    const posted = store.eventsSince(reported.workspace_id, 0, 500).events.find(
+      (event) => event.type === "report.posted" && event.entity_id === reviewed.report.id,
+    );
+    expect(posted?.payload).toMatchObject({
+      confidence: "high",
+      confidence_basis: "Targeted tests pass locally.",
+      limits: "Did not run the full suite.",
+    });
+  });
+
+  test("hashes absent, blank and default review fields exactly as before", () => {
+    const plain = reportedForReview("plain");
+    const defaults = reportedForReview("defaults");
+    const request = (reported: typeof plain.reported) => ({
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "request_changes" as const,
+      summary: "The result needs one more check.",
+    });
+    const plainReview = store.reviewTaskForSession({
+      ...plain.reviewer.credential,
+      idempotency_key: "plain-review",
+      ...request(plain.reported),
+    });
+    const defaultReview = store.reviewTaskForSession({
+      ...defaults.reviewer.credential,
+      idempotency_key: "defaults-review",
+      ...request(defaults.reported),
+      confidence: "unknown",
+      confidence_basis: "",
+      limits: "   ",
+    });
+    for (const [handle, reviewed, idempotencyKey] of [
+      [plain, plainReview, "plain-review"],
+      [defaults, defaultReview, "defaults-review"],
+    ] as const) {
+      expect(reviewed.report).toMatchObject({
+        relation: "challenges",
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+      });
+      expect(
+        reviewRequestHash(handle.reviewer, handle.reported.workspace_id, idempotencyKey),
+      ).toBe(expectedHash({ ...request(handle.reported), evidence_refs: [] }));
+    }
+    // A retry that omits the default-valued fields (as a 0.3.1 copy would) replays.
+    expect(
+      store.reviewTaskForSession({
+        ...defaults.reviewer.credential,
+        idempotency_key: "defaults-review",
+        ...request(defaults.reported),
+      }).report.id,
+    ).toBe(defaultReview.report.id);
+  });
+
+  test("binds supplied confidence fields into the idempotency request", () => {
+    const { reviewer, reported } = reportedForReview("bound");
+    const review = {
+      ...reviewer.credential,
+      idempotency_key: "bound-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept" as const,
+      summary: "Spot-checked the change.",
+      confidence: "medium" as const,
+      confidence_basis: "Two of three paths were read.",
+    };
+    const first = store.reviewTaskForSession(review);
+    expect(store.reviewTaskForSession(review).report.id).toBe(first.report.id);
+    expect(reviewRequestHash(reviewer, reported.workspace_id, "bound-review")).toBe(
+      expectedHash({
+        task_id: reported.id,
+        expected_version: reported.version,
+        outcome: "accept",
+        summary: "Spot-checked the change.",
+        evidence_refs: [],
+        confidence: "medium",
+        confidence_basis: "Two of three paths were read.",
+      }),
+    );
+    expect(
+      errorCode(() => store.reviewTaskForSession({ ...review, confidence: "low" })),
+    ).toBe("idempotency_conflict");
+  });
+
+  test("treats blank basis or limits as absent and trims supplied text", () => {
+    const { reviewer, reported } = reportedForReview("blank");
+    const review = {
+      ...reviewer.credential,
+      idempotency_key: "blank-review",
+      task_id: reported.id,
+      expected_version: reported.version,
+      outcome: "accept" as const,
+      summary: "Checked the one changed path.",
+      confidence: "low" as const,
+      confidence_basis: " \n ",
+      limits: "  Only one path was read.  ",
+    };
+    const first = store.reviewTaskForSession(review);
+    expect(first.report).toMatchObject({
+      confidence: "low",
+      confidence_basis: null,
+      limits: "Only one path was read.",
+    });
+    expect(reviewRequestHash(reviewer, reported.workspace_id, "blank-review")).toBe(
+      expectedHash({
+        task_id: reported.id,
+        expected_version: reported.version,
+        outcome: "accept",
+        summary: "Checked the one changed path.",
+        evidence_refs: [],
+        confidence: "low",
+        limits: "Only one path was read.",
+      }),
+    );
+    const { confidence_basis: _blankBasis, ...withoutBasis } = review;
+    expect(store.reviewTaskForSession(withoutBasis).report.id).toBe(first.report.id);
+    expect(
+      store.reviewTaskForSession({ ...review, confidence_basis: "", limits: "Only one path was read." })
+        .report.id,
+    ).toBe(first.report.id);
+  });
+
+  test("rejects an unsupported review confidence before any write", () => {
+    const { reviewer, reported } = reportedForReview("unsupported");
+    expect(
+      errorCode(() =>
+        store.reviewTaskForSession({
+          ...reviewer.credential,
+          idempotency_key: "unsupported-confidence-review",
+          task_id: reported.id,
+          expected_version: reported.version,
+          outcome: "accept",
+          summary: "Claims an unsupported confidence.",
+          confidence: "certain" as any,
+        }),
+      ),
+    ).toBe("invalid_report_confidence");
+    expect(store.getTask(reported.workspace_id, reported.id).review_status).toBe("pending");
+  });
+});
+
 function createLegacyFixture(
   path: string,
   rootPath: string,

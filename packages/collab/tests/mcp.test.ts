@@ -811,6 +811,67 @@ describe("MCP surface", () => {
     expect(missing.structuredContent.allowed_prefixes).toEqual([...EVIDENCE_REF_PREFIXES]);
   });
 
+  test("carries review confidence, basis and limits through collab_task_review", async () => {
+    const { root, store, server } = node();
+    const implementer = store.startSession({
+      root_path: root,
+      actor: "mcp-confidence-implementer",
+    });
+    const task = store.createTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-create",
+      title: "Confidence review",
+      work_mode: "edit",
+      completion_policy: "accepted",
+      path_scopes: ["src/confidence.ts"],
+    });
+    const claim = store.claimTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-claim",
+      task_id: task.id,
+      expected_version: task.version,
+    });
+    const reported = store.completeTaskForSession({
+      ...implementer.credential,
+      idempotency_key: "mcp-confidence-complete",
+      task_id: task.id,
+      lease_id: claim.lease_id!,
+      expected_version: claim.version,
+      summary: "Ready for an MCP review.",
+    });
+    await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "mcp-confidence-reviewer",
+    });
+
+    const review = {
+      workspace_id: reported.workspace_id,
+      task_id: reported.id,
+      idempotency_key: "mcp-confidence-review",
+      expected_version: reported.version,
+      outcome: "accept",
+      summary: "Reviewed through MCP.",
+      confidence: "medium",
+      confidence_basis: "Read the change; did not rerun tests.",
+      limits: "No full-suite run.",
+    };
+    const inputSchema = (server as any)._registeredTools.collab_task_review.inputSchema;
+    expect(inputSchema.safeParse(review).success).toBe(true);
+    expect(inputSchema.safeParse({ ...review, confidence_basis: "" }).success).toBe(true);
+    expect(inputSchema.safeParse({ ...review, confidence: "certain" }).success).toBe(false);
+    expect(inputSchema.safeParse({ ...review, confidence_basis: "b".repeat(2_001) }).success)
+      .toBe(false);
+    expect(inputSchema.safeParse({ ...review, limits: "l".repeat(2_001) }).success).toBe(false);
+
+    const reviewed = await callTool(server, "collab_task_review", review);
+    expect(reviewed.isError).toBeUndefined();
+    expect(reviewed.structuredContent.report).toMatchObject({
+      confidence: "medium",
+      confidence_basis: "Read the change; did not rerun tests.",
+      limits: "No full-suite run.",
+    });
+  });
+
   test("verifies the full journal and labels the verification scope", async () => {
     const { root, store, server } = node();
     const opened = await callTool(server, "collab_workspace_open", { root_path: root, actor: "root" });
