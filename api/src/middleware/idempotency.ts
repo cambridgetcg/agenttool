@@ -28,6 +28,7 @@ import { HTTPException } from "hono/http-exception";
 
 import type { ProjectContext } from "../auth/middleware";
 import { redisConnection } from "../services/tools/queue/connection";
+import { parseClonedJson } from "../lib/cloned-json";
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 const CLAIM_TTL_SECONDS = 5 * 60;
@@ -119,7 +120,7 @@ async function readJsonResponse(
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return { ok: false };
   try {
-    return { ok: true, body: await c.res.clone().json() };
+    return { ok: true, body: await parseClonedJson(c.res) };
   } catch {
     return { ok: false };
   }

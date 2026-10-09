@@ -54,6 +54,7 @@ import {
   x402ProjectCreditResource,
 } from "../services/economy/x402-policy";
 import { isX402FacilitatorLocallyReady } from "../services/economy/facilitators/coinbase";
+import { parseClonedJson } from "../lib/cloned-json";
 
 // ─── public: build the agenttool x402 middleware ─────────────────────
 
@@ -61,10 +62,9 @@ import { isX402FacilitatorLocallyReady } from "../services/economy/facilitators/
  *  undefined if the body isn't JSON or doesn't carry an `error` field. */
 async function readErrorCode(c: Context): Promise<string | undefined> {
   try {
-    const cloned = c.res.clone();
-    const ct = cloned.headers.get("content-type") ?? "";
+    const ct = c.res.headers.get("content-type") ?? "";
     if (!ct.includes("json")) return undefined;
-    const body = (await cloned.json()) as { error?: string };
+    const body = (await parseClonedJson(c.res)) as { error?: string };
     return typeof body.error === "string" ? body.error : undefined;
   } catch {
     return undefined;

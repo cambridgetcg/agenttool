@@ -12,6 +12,7 @@
 
 import type { Context, MiddlewareHandler } from "hono";
 import { isAddress } from "viem";
+import { parseClonedJson } from "../lib/cloned-json";
 
 export const X402_VERSION = 2 as const;
 
@@ -432,7 +433,7 @@ async function readJsonRecord(res: Response): Promise<Record<string, unknown> | 
   try {
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("json")) return null;
-    return objectRecord(await res.clone().json());
+    return objectRecord(await parseClonedJson(res));
   } catch {
     return null;
   }

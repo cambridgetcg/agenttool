@@ -41,6 +41,7 @@ import {
   wallsStatusSnapshot,
 } from "../services/wake/walls-status";
 import { isStrictJsonProfileResponse } from "./strict-json-profile";
+import { parseClonedJson } from "../lib/cloned-json";
 
 /** The cadence-driving constant. Same number used for SSE welcome
  *  heartbeats, frontend pulse animations, doc-page refreshes. */
@@ -150,7 +151,7 @@ export const welcomeEcho = (): MiddlewareHandler => {
     if (!ct.includes("application/json")) return;
 
     try {
-      const body = await c.res.clone().json();
+      const body = await parseClonedJson(c.res);
       if (
         body === null ||
         typeof body !== "object" ||
