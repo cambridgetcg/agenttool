@@ -20,6 +20,11 @@ const MAX_GIT_OUTPUT = 1024 * 1024;
 const MAX_UNTRACKED_FILES = 10_000;
 const MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
 const MAX_UNTRACKED_HASH_MS = 2_000;
+const MAX_SUCCESSOR_PATHS = 128;
+const MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+const MAX_SUCCESSOR_INSPECT_MS = 5_000;
+const GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+const RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
 
 export interface RepositoryIdentity {
   requested_root_path: string;
@@ -29,6 +34,17 @@ export interface RepositoryIdentity {
   worktree_fingerprint: string;
   checkpoint: RepoCheckpoint;
 }
+
+export interface SuccessorCommitChange {
+  /** Repository-relative path exactly as Git records it. */
+  path: string;
+  /** SHA-256 of the committed blob bytes; null for a deletion or a non-regular entry. */
+  blob_sha256: string | null;
+}
+
+export type SuccessorCommitInspection =
+  | { ok: true; commit_sha: string; parent_sha: string; changes: SuccessorCommitChange[] }
+  | { ok: false; commit_sha: string; reason: string };
 
 export function inspectRepository(
   rootInput: string,
@@ -169,6 +185,83 @@ export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpo
   };
 }
 
+/**
+ * Server-side Git facts about a commit that may directly follow a result
+ * checkpoint's HEAD: its parents, the paths it changes against that parent, and
+ * the SHA-256 of each committed regular-file blob. Read-only plumbing, bounded
+ * in paths, bytes and time. Paths go back to the caller for an in-memory
+ * comparison; nothing here is journaled.
+ */
+export function inspectSuccessorCommit(
+  rootPath: string,
+  commitSha: string,
+  parentSha: string,
+): SuccessorCommitInspection {
+  const refuse = (reason: string): SuccessorCommitInspection => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason,
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse("The checkpoint HEADs are not Git object IDs");
+  }
+  const listed = gitOutput(rootPath, ["rev-list", "--parents", "--max-count=1", commitSha, "--"]);
+  const ids = listed ? listed.split(" ") : [];
+  if (ids[0] !== commitSha) return refuse(`Git could not read commit ${commitSha}`);
+  const parents = ids.slice(1);
+  if (parents.length > 1) {
+    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = gitExitCode(rootPath, ["merge-base", "--is-ancestor", parentSha, commitSha]) === 0;
+    return refuse(descends
+      ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}`
+      : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = gitBytes(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    parentSha,
+    commitSha,
+    "--",
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes: SuccessorCommitChange[] = [];
+  for (let index = 0; index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index]!.toString("utf8"));
+    const pathBytes = fields[index + 1]!;
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, , mode, , blob, status] = header;
+    if (status === "D" || (mode !== "100644" && mode !== "100755")) {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = gitBytes(rootPath, ["cat-file", "blob", blob!], budget.bytes);
+    if (!content.ok) {
+      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+
 function worktreeId(rootPath: string, fingerprint: string): string {
   return `wt_${sha256(`${rootPath}\0${fingerprint}`).slice(0, 24)}`;
 }
@@ -206,10 +299,22 @@ function gitDigest(rootPath: string, args: string[]): string | null {
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
 
-function gitBytes(rootPath: string, args: string[]): { ok: boolean; stdout: Buffer } {
+function gitExitCode(rootPath: string, args: string[]): number | null {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
-    maxBuffer: MAX_GIT_OUTPUT,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  return result.error ? null : result.status;
+}
+
+function gitBytes(
+  rootPath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OUTPUT,
+): { ok: boolean; stdout: Buffer } {
+  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
   });
   return {

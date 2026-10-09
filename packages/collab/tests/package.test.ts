@@ -52,6 +52,8 @@ const HOUSEHOLD_TERMS = [
   "collab_events_since",
   "delivers by artifact",
   "agenttool-collab-host",
+  "host_commit_successor",
+  "git_checkpoint_stale",
 ];
 
 function expectInOrder(text: string, heading: string, names: string[]): void {

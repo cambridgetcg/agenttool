@@ -158,7 +158,12 @@ the session ID; never pass your session file or its path.
 A host that cannot write `.git` delivers by artifact; integration commits.
 Write only inside the claimed scopes, attach each file with its `sha256`,
 complete with the `artifact:` references, and leave the commit to an
-integrator that checks every digest first.
+integrator that checks every digest first. A distinct reviewer then accepts
+the integration commit when the server verifies it as
+`host_commit_successor`: exactly one commit on the result checkpoint's `HEAD`
+and branch, a clean worktree, and only scoped files byte-equal to their newest
+`file` artifacts. Other drift is refused with `git_checkpoint_stale` and a
+`remedy` naming both ways forward.
 
 `role` is free text other sessions read with `liveness` in workspace status.
 Say there if this session only listens or reviews, and respect such roles in

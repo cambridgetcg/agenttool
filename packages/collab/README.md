@@ -374,6 +374,18 @@ with its repository-relative `uri` and `sha256`, and completes with those
 working-tree file still matches its artifact digest, and reports a mismatch
 instead of committing.
 
+A distinct reviewer then accepts as usual. If `HEAD` has moved since the
+result checkpoint, the server inspects Git itself. It accepts only when `HEAD`
+is exactly one commit on the result checkpoint's branch whose only parent is
+the result checkpoint's `HEAD`, the worktree is clean, and every path that
+commit changes lies inside the task's `path_scopes` and is byte-equal to the
+newest `file` artifact the task attached for that `uri`. The `task.accepted`
+event then records `checkpoint_basis: "host_commit_successor"`,
+`host_commit_sha`, and `host_commit_artifact_ids`. Any other drift is refused
+with `git_checkpoint_stale`: `host_commit_refusal` says why, and `remedy` names
+both ways forward, such a host commit or `request_changes` followed by a fresh
+completion.
+
 ### Roles and liveness
 
 `role` is free text. A session that only listens or reviews says so there, and

@@ -233,6 +233,16 @@ integration commits:
 
 Do not work around the sandbox to commit.
 
+After the integration commit a distinct session reviews as usual. The server
+inspects Git itself and accepts when `HEAD` is exactly one commit on the
+result checkpoint's `HEAD` and branch, the worktree is clean, and that commit
+changes only scoped files byte-equal to their newest `file` artifacts;
+`task.accepted` then records `checkpoint_basis: "host_commit_successor"`. Any
+other drift is refused with `git_checkpoint_stale`. Read its
+`host_commit_refusal` and `remedy`: fix the commit, or request changes so the
+task is re-completed with a fresh checkpoint. Never rewind Git to recreate the
+old checkpoint.
+
 ## Roles, liveness and recovery
 
 `role` is free text that other sessions read in `collab_workspace_status`

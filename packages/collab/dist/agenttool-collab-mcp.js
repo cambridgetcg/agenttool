@@ -29524,6 +29524,11 @@ var MAX_GIT_OUTPUT = 1024 * 1024;
 var MAX_UNTRACKED_FILES = 1e4;
 var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
 var MAX_UNTRACKED_HASH_MS = 2000;
+var MAX_SUCCESSOR_PATHS = 128;
+var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
+var MAX_SUCCESSOR_INSPECT_MS = 5000;
+var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
+var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
 function inspectRepository(rootInput, explicitRepositoryKey) {
   const requested = resolve3(rootInput);
   if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
@@ -29628,6 +29633,70 @@ function captureRepoCheckpoint(rootPath, id) {
     captured_at: new Date().toISOString()
   };
 }
+function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
+  const refuse = (reason) => ({
+    ok: false,
+    commit_sha: commitSha,
+    reason
+  });
+  if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
+    return refuse("The checkpoint HEADs are not Git object IDs");
+  }
+  const listed = gitOutput(rootPath, ["rev-list", "--parents", "--max-count=1", commitSha, "--"]);
+  const ids = listed ? listed.split(" ") : [];
+  if (ids[0] !== commitSha)
+    return refuse(`Git could not read commit ${commitSha}`);
+  const parents = ids.slice(1);
+  if (parents.length > 1) {
+    return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
+  }
+  if (parents[0] !== parentSha) {
+    const descends = gitExitCode(rootPath, ["merge-base", "--is-ancestor", parentSha, commitSha]) === 0;
+    return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
+  }
+  const diff = gitBytes(rootPath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--raw",
+    "--no-renames",
+    parentSha,
+    commitSha,
+    "--"
+  ]);
+  const fields = diff.ok ? splitNul(diff.stdout) : null;
+  if (!fields || fields.length % 2 !== 0) {
+    return refuse(`Git could not list the paths commit ${commitSha} changes`);
+  }
+  if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
+    return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
+  }
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const changes = [];
+  for (let index = 0;index < fields.length; index += 2) {
+    const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
+    const pathBytes = fields[index + 1];
+    if (!header || !safeGitRelativePath(pathBytes)) {
+      return refuse(`Git reported a change in commit ${commitSha} that cannot be read safely`);
+    }
+    const path = pathBytes.toString("utf8");
+    const [, , mode, , blob, status] = header;
+    if (status === "D" || mode !== "100644" && mode !== "100755") {
+      changes.push({ path, blob_sha256: null });
+      continue;
+    }
+    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+      return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
+    }
+    const content = gitBytes(rootPath, ["cat-file", "blob", blob], budget.bytes);
+    if (!content.ok) {
+      return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
+    }
+    budget.bytes -= content.stdout.length;
+    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+  }
+  return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
@@ -29660,10 +29729,17 @@ function gitDigest(rootPath, args) {
   const result = gitBytes(rootPath, args);
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
-function gitBytes(rootPath, args) {
+function gitExitCode(rootPath, args) {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
-    maxBuffer: MAX_GIT_OUTPUT,
+    stdio: ["ignore", "ignore", "ignore"]
+  });
+  return result.error ? null : result.status;
+}
+function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
+  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
     stdio: ["ignore", "pipe", "ignore"]
   });
   return {
@@ -32143,6 +32219,7 @@ class CollabStore {
       if (input.outcome === "accept" && this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
         throw new CollabError("completion_challenged", "Reported completion has an unresolved challenge", { completion_report_id: row.completion_report_id });
       }
+      let hostCommit = null;
       if (input.outcome === "accept") {
         const resultCheckpoint = parseCheckpoint(row.result_checkpoint_json);
         if (resultCheckpoint?.source === "server_observed") {
@@ -32154,11 +32231,11 @@ class CollabStore {
           requireCompleteGitCheckpoint(resultCheckpoint);
           requireCompleteGitCheckpoint(observed);
           if (!checkpointStateMatches(resultCheckpoint, observed)) {
-            throw new CollabError("git_checkpoint_stale", "The completion worktree changed after its result checkpoint was captured", {
-              result_checkpoint: resultCheckpoint,
-              observed_checkpoint: observed,
-              boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock"
-            });
+            const basis = this.hostCommitSuccessorBasis(row, preparedCheckpoint);
+            if ("refusal" in basis) {
+              throw gitCheckpointStaleError(row.id, resultCheckpoint, observed, basis.refusal);
+            }
+            hostCommit = basis;
           }
         }
       }
@@ -32207,7 +32284,13 @@ class CollabStore {
         outcome,
         summary,
         version: version2,
-        authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority"
+        authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority",
+        ...hostCommit ? {
+          checkpoint_basis: "host_commit_successor",
+          host_commit_sha: hostCommit.commit_sha,
+          host_commit_artifact_ids: hostCommit.artifact_ids,
+          checkpoint_boundary: "server_observed_successor_commit_is_local_evidence_not_a_commit_signature_attribution_or_an_atomic_git_sqlite_lock"
+        } : {}
       }, session.id);
       this.db.query(`
         INSERT INTO task_reviews (
@@ -32902,12 +32985,94 @@ class CollabStore {
     if (worktree.workspace_id !== session.workspace_id) {
       throw new CollabError("checkpoint_workspace_mismatch", "The completion checkpoint belongs to another workspace");
     }
+    const observedWorktree = this.captureRegisteredWorktree(session, worktree);
+    const resultHead = resultCheckpoint.head_sha;
+    const observedHead = observedWorktree.checkpoint.head_sha;
     return {
       workspace_id: session.workspace_id,
       task_id: taskId2,
       result_checkpoint: resultCheckpoint,
-      observed_worktree: this.captureRegisteredWorktree(session, worktree)
+      observed_worktree: observedWorktree,
+      host_commit: resultHead && observedHead && observedHead !== resultHead ? inspectSuccessorCommit(worktree.root_path, observedHead, resultHead) : null
     };
+  }
+  hostCommitSuccessorBasis(row, prepared) {
+    const result = prepared.result_checkpoint;
+    const observed = prepared.observed_worktree.checkpoint;
+    const inspected = prepared.host_commit;
+    if (observed.head_sha === result.head_sha) {
+      return {
+        refusal: "HEAD has not moved since the result checkpoint, so only an exact checkpoint match is accepted"
+      };
+    }
+    if (observed.worktree_id !== result.worktree_id) {
+      return { refusal: "The observed worktree is not the result checkpoint's worktree" };
+    }
+    if (!result.branch) {
+      return {
+        refusal: "The result checkpoint was captured on a detached HEAD, so no branch can carry a host commit"
+      };
+    }
+    if (observed.branch !== result.branch) {
+      const where = observed.branch ? `branch "${observed.branch}"` : "a detached HEAD";
+      return {
+        refusal: `HEAD is on ${where}, not the result checkpoint's branch "${result.branch}"`
+      };
+    }
+    if (observed.dirty !== false) {
+      return { refusal: "The observed worktree is not clean" };
+    }
+    if (!inspected || inspected.commit_sha !== observed.head_sha) {
+      return { refusal: "The server did not inspect the observed HEAD commit" };
+    }
+    if (!inspected.ok)
+      return { refusal: inspected.reason };
+    const commit = inspected.commit_sha;
+    if (inspected.parent_sha !== result.head_sha) {
+      return { refusal: `Commit ${commit} does not follow the result checkpoint HEAD` };
+    }
+    if (inspected.changes.length === 0) {
+      return { refusal: `Commit ${commit} changes no path` };
+    }
+    const scopes = parseStringArray(row.path_scopes_json);
+    const artifacts = this.db.query(`
+      SELECT id, uri, sha256 FROM artifacts
+      WHERE workspace_id = ? AND task_id = ? AND kind = 'file'
+      ORDER BY attached_at, rowid
+    `).all(row.workspace_id, row.id);
+    const newest = new Map;
+    for (const artifact of artifacts) {
+      const path = artifactRepositoryPath(artifact.uri, prepared.observed_worktree.root_path);
+      if (path !== null)
+        newest.set(path, artifact);
+    }
+    const artifactIds = [];
+    for (const change of inspected.changes) {
+      if (!pathWithinScopes(change.path, scopes)) {
+        return { refusal: `Commit ${commit} changes ${change.path}, outside the task's path_scopes` };
+      }
+      if (change.blob_sha256 === null) {
+        return {
+          refusal: `Commit ${commit} deletes ${change.path} or commits it as something other than a regular file`
+        };
+      }
+      const artifact = newest.get(change.path);
+      if (!artifact) {
+        return { refusal: `No file artifact attached to this task names ${change.path}` };
+      }
+      if (!artifact.sha256) {
+        return {
+          refusal: `The newest file artifact for ${change.path} (${artifact.id}) has no sha256`
+        };
+      }
+      if (artifact.sha256 !== change.blob_sha256) {
+        return {
+          refusal: `The committed bytes of ${change.path} differ from its newest file artifact ${artifact.id}`
+        };
+      }
+      artifactIds.push(artifact.id);
+    }
+    return { commit_sha: commit, artifact_ids: artifactIds };
   }
   captureRegisteredWorktree(session, worktree) {
     let identity;
@@ -34124,6 +34289,48 @@ function requireCompleteGitCheckpoint(checkpoint) {
   if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
     throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
   }
+}
+function artifactRepositoryPath(uri, rootPath) {
+  let value = uri;
+  if (value.startsWith("file:")) {
+    try {
+      const url2 = new URL(value);
+      if (url2.protocol !== "file:" || url2.hostname !== "" && url2.hostname !== "localhost") {
+        return null;
+      }
+      value = decodeURIComponent(url2.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || value.includes("\x00") || value.includes("\\"))
+    return null;
+  let relative;
+  if (isAbsolute2(value)) {
+    const absolute = posix.normalize(value);
+    if (!absolute.startsWith(`${rootPath}/`))
+      return null;
+    relative = absolute.slice(rootPath.length + 1);
+  } else {
+    relative = posix.normalize(value);
+  }
+  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || relative.endsWith("/") || relative === ".git" || relative.startsWith(".git/"))
+    return null;
+  return relative;
+}
+function pathWithinScopes(path, scopes) {
+  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+}
+function gitCheckpointStaleError(taskId2, result, observed, refusal) {
+  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri, " + "with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId2}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review.";
+  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
+    result_checkpoint: result,
+    observed_checkpoint: observed,
+    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+    host_commit_refusal: refusal,
+    remedy
+  });
 }
 function hydrateLegacyMutationResponse(value, now) {
   if (Array.isArray(value)) {
