@@ -108,6 +108,8 @@ it is a request, not a reservation. Leave the review to that session while its
 `mcp_agenttool_collab_report_append`: the same `task_id`,
 `relation: "supports"` or `"challenges"`, and `target_report_id` set to
 `review_report_id`.
+It applies only to a task whose completion waits for acceptance; elsewhere the
+completion is refused with `review_request_not_applicable`.
 
 `release_leases: true` releases each live lease and each expired lease the
 session still holds (the latter through audited recovery with
@@ -164,6 +166,9 @@ the integration commit when the server verifies it as
 and branch, a clean worktree, and only scoped files byte-equal to their newest
 `file` artifacts. Other drift is refused with `git_checkpoint_stale` and a
 `remedy` naming both ways forward.
+Only artifacts attached since the task's latest `request_changes` vouch. Never
+amend, reset or rewrite a shared branch to meet that condition; if other
+commits already sit on it, request changes.
 
 `role` is free text other sessions read with `liveness` in workspace status.
 Say there if this session only listens or reviews, and respect such roles in
@@ -173,6 +178,8 @@ or end; every acknowledgement refreshes `last_seen_at`, including one that
 does not advance the cursor, and nothing expires automatically. Tasks show
 `assignee_liveness`; recover an expired lease only through
 `mcp_agenttool_collab_task_recover` with an explicit action and note.
+`role` is fixed for the session's lifetime; correct it with an `informs`
+report, or end the session and start a new one.
 
 ## Receive without liveness writes (0.5.0)
 
