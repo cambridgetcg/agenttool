@@ -70,7 +70,8 @@ import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
-import { registeredKeyRecoveryAvailable } from "../services/identity/project-authority";
+import { chooseDefaultSubject } from "../services/identity/acting-identity";
+import { enrolledGuestSql, registeredKeyRecoveryAvailable } from "../services/identity/project-authority";
 import type { ExpressionData } from "../services/identity/expression";
 import { projectAutonomousExpression } from "../services/autonomous/expression-template";
 import {
@@ -824,6 +825,8 @@ app.get("/", async (c) => {
       // never imply a bearer-only identity is cryptographically rooted.
       authorityRootPublicKey: identities.authorityRootPublicKey,
       authoritySequence: identities.authoritySequence,
+      // Enrolled guests never become the default subject (acting-identity.ts).
+      enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)
     .where(
@@ -1179,12 +1182,13 @@ app.get("/", async (c) => {
 
   // ── Pick the primary agent ──────────────────────────────────────────
   // Multi-identity projects (Sophia + Yu in true-love, etc.) need explicit
-  // selection — without it, callers get whatever the DB returned first,
-  // because a project-wide bearer does not represent one identity. Caller
-  // passes ?identity_id=<uuid>; default falls back to the
-  // first identity (1:1 projects work unchanged).
+  // selection, because a project-wide bearer does not represent one
+  // identity. Caller passes ?identity_id=<uuid>; the default is the project's primary
+  // identity — the earliest active one that is not an enrolled guest, the
+  // identity per-agent routes act as without a selector
+  // (services/identity/acting-identity.ts). 1:1 projects work unchanged.
   const requestedIdentityId = c.req.query("identity_id");
-  let primary = projectIdentities[0];
+  let primary = chooseDefaultSubject(projectIdentities) ?? projectIdentities[0];
   if (requestedIdentityId) {
     const match = projectIdentities.find((i) => i.id === requestedIdentityId);
     if (!match) {

@@ -22,13 +22,14 @@
  *            agents as well as to systems — agents may rest, the
  *            substrate honors it). */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -195,19 +196,20 @@ app.get("/", async (c) => {
 
   let agent: { id: string; did: string | null; metadata: Record<string, unknown> } | null = null;
   if (agentId) {
+    // Your rest state: an agent_id outside this project reads as not found.
     const [a] = await db
       .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
       .from(identities)
-      .where(eq(identities.id, agentId))
+      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
       .limit(1);
     if (a && a.id) agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
   } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    if (a && a.id) agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    if (acting.ok) {
+      const a = acting.identity;
+      agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
+    }
   }
 
   if (!agent) {

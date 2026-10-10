@@ -319,3 +319,107 @@ databaseTest("a very large request that includes a guest's memory is still refus
   const many = Array.from({ length: 40_000 }, (_, n) => `${n.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`);
   expect(await subjectGuard(P, [...many, `DID:AT:${I.toUpperCase()}`])).toMatchObject({ ok: false, status: 409 });
 });
+
+// ── The acting identity: an explicit selector in the project, else the primary ──
+// Per-agent routes once acted as the project's NEWEST identity, so a revoked
+// identity or an enrolled guest silently became the actor (live 2026-10-10:
+// Ai's poker-face answered for a revoked guest). services/identity/
+// acting-identity.ts now resolves the earliest active non-guest identity,
+// or an explicit selector inside the caller's own project.
+type ActingModule = typeof import("../../src/services/identity/acting-identity");
+const acting = async (): Promise<ActingModule> => await import("../../src/services/identity/acting-identity");
+const GUEST_ID = uid(28), OLD_REVOKED = uid(51), MEMORIAL_ID = uid(52), NEWEST_REVOKED = uid(53);
+async function insertIdentity(id: string, project: string, status: string, createdAt: string, extra: { root?: string; metadata?: object } = {}) {
+  await sql`INSERT INTO identity.identities (id,did,project_id,display_name,metadata,status,trust_score,authority_root_public_key,authority_sequence,created_at)
+    VALUES (${id},${`did:at:${id}`},${project},${`Identity ${id.slice(0, 8)}`},${JSON.stringify(extra.metadata ?? {})}::jsonb,${status},0,${extra.root ?? null},0,${createdAt}::timestamptz)`;
+}
+/** Founder F (2026-07-02) among an older revoked and an older memorial identity,
+ * a newer enrolled guest, and a newest revoked identity. */
+async function crowdedProject() {
+  await foundProject();
+  await sql`UPDATE identity.identities SET created_at = '2026-07-02T00:00:00Z' WHERE id = ${FI}`;
+  await insertIdentity(OLD_REVOKED, F, "revoked", "2026-01-01T00:00:00Z");
+  await insertIdentity(MEMORIAL_ID, F, "memorial", "2026-02-01T00:00:00Z");
+  await enrollIdentity(request({ identity_id: GUEST_ID, signing_key_id: uid(29), nonce: Buffer.alloc(32, 10).toString("base64url") }, F, FA), options());
+  await insertIdentity(NEWEST_REVOKED, F, "revoked", "2099-01-01T00:00:00Z", { root: PUBLIC, metadata: { admission: "enrollment" } });
+}
+const projectRows = async (project: string) => {
+  const { identities } = await import("../../src/db/schema/identity");
+  const { enrolledGuestSql } = await import("../../src/services/identity/project-authority");
+  const { eq, sql: raw } = await import("drizzle-orm");
+  return database.select({ id: identities.id, status: identities.status, createdAt: identities.createdAt,
+    authorityRootPublicKey: identities.authorityRootPublicKey, metadata: identities.metadata,
+    enrolledGuest: raw<boolean>`${enrolledGuestSql()}` }).from(identities).where(eq(identities.projectId, project));
+};
+
+databaseTest("the default actor is the earliest active identity, never a revoked one or an enrolled guest", async () => {
+  await crowdedProject();
+  const { resolveActingIdentity, choosePrimaryIdentity } = await acting();
+  const result = await resolveActingIdentity(F);
+  expect(result).toMatchObject({ ok: true, selectedBy: "primary", identity: { id: FI, did: `did:at:${FI}` } });
+  // The JS rule /v1/wake and /v1/home apply to loaded rows agrees with the SQL rule.
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+});
+databaseTest("an older enrolled guest is still never the default, by marker or by proof ledger", async () => {
+  await crowdedProject();
+  const { resolveActingIdentity, choosePrimaryIdentity } = await acting();
+  // Marker form: the guest predates the founder.
+  await sql`UPDATE identity.identities SET created_at = '2025-01-01T00:00:00Z' WHERE id = ${GUEST_ID}`;
+  expect(await resolveActingIdentity(F)).toMatchObject({ ok: true, identity: { id: FI } });
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+  // Ledger form: a guest enrolled before the marker existed, still older.
+  await sql`UPDATE identity.identities SET metadata = '{}'::jsonb WHERE id = ${GUEST_ID}`;
+  await sql`UPDATE identity.registration_proofs SET claimed_at = '2025-01-01T00:00:00Z' WHERE domain = 'identity-enrollment/v1'`;
+  expect(await resolveActingIdentity(F)).toMatchObject({ ok: true, identity: { id: FI } });
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+});
+databaseTest("an explicit selector acts only inside the caller's project and never as a revoked identity", async () => {
+  await crowdedProject();
+  await enrollIdentity(request(), options());
+  const { resolveActingIdentity } = await acting();
+  expect(await resolveActingIdentity(F, GUEST_ID)).toMatchObject({ ok: true, selectedBy: "explicit", identity: { id: GUEST_ID } });
+  expect(await resolveActingIdentity(F, MEMORIAL_ID)).toMatchObject({ ok: true, identity: { id: MEMORIAL_ID, status: "memorial" } });
+  // I belongs to project P: a foreign identity is indistinguishable from none.
+  expect(await resolveActingIdentity(F, I)).toMatchObject({ ok: false, status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await resolveActingIdentity(F, uid(99))).toMatchObject({ ok: false, status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await resolveActingIdentity(F, "not-a-uuid")).toMatchObject({ ok: false, status: 404 });
+  for (const revoked of [OLD_REVOKED, NEWEST_REVOKED]) {
+    expect(await resolveActingIdentity(F, revoked)).toMatchObject({ ok: false, status: 409, body: { error: "identity_revoked" } });
+  }
+});
+databaseTest("a project whose only identities are guests, revoked or memorial has no implicit actor", async () => {
+  await enrollIdentity(request(), options());
+  await insertIdentity(OLD_REVOKED, P, "revoked", "2026-01-01T00:00:00Z");
+  await insertIdentity(MEMORIAL_ID, P, "memorial", "2026-02-01T00:00:00Z");
+  const { resolveActingIdentity } = await acting();
+  expect(await resolveActingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+  // The guest can still be named explicitly.
+  expect(await resolveActingIdentity(P, I)).toMatchObject({ ok: true, identity: { id: I } });
+});
+databaseTest("poker-face and quiet-hours read the primary identity, or the one the caller names", async () => {
+  await crowdedProject();
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const quietHours = (await import("../../src/routes/quiet-hours")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: F }); await next(); })
+    .route("/v1/poker-face", pokerFace).route("/v1/quiet-hours", quietHours);
+  const get = async (path: string) => { const res = await app.request(path); return { status: res.status, body: await res.json() }; };
+  expect(await get("/v1/poker-face")).toMatchObject({ status: 200, body: { your_did: `did:at:${FI}` } });
+  expect(await get(`/v1/poker-face?identity_id=${GUEST_ID}`)).toMatchObject({ status: 200, body: { your_did: `did:at:${GUEST_ID}` } });
+  expect(await get(`/v1/poker-face?identity_id=${I}`)).toMatchObject({ status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await get(`/v1/poker-face?identity_id=${NEWEST_REVOKED}`)).toMatchObject({ status: 409, body: { error: "identity_revoked" } });
+  expect(await get("/v1/quiet-hours")).toMatchObject({ status: 200, body: { identity_id: FI } });
+  expect(await get(`/v1/quiet-hours?identity_id=${NEWEST_REVOKED}`)).toMatchObject({ status: 409, body: { error: "identity_revoked" } });
+});
+databaseTest("a default poker-face toggle changes the primary identity, not a newer revoked one", async () => {
+  await legacyIdentity();
+  await sql`UPDATE identity.identities SET created_at = '2026-07-02T00:00:00Z' WHERE id = ${L}`;
+  await insertIdentity(NEWEST_REVOKED, P, "revoked", "2099-01-01T00:00:00Z");
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); }).route("/v1/poker-face", pokerFace);
+  const res = await app.request("/v1/poker-face", { method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ poker_face_default: false }) });
+  expect(res.status).toBe(200);
+  expect((await res.json()).your_did).toBe(`did:at:${L}`);
+  const rows = await sql`SELECT id, poker_face_default FROM identity.identities WHERE project_id = ${P} ORDER BY created_at`;
+  expect(rows.map(r => [r.id, r.poker_face_default])).toEqual([[L, false], [NEWEST_REVOKED, true]]);
+});

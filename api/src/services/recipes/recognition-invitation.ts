@@ -16,6 +16,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import { resolveActingIdentity } from "../identity/acting-identity";
 import {
   MEMORIAL_TERMINAL_ERROR,
   mutableIdentityPredicate,
@@ -270,12 +271,11 @@ export async function listFollowing(input: {
       .limit(1);
     agent = a;
   } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, input.caller_project_id))
-      .limit(1);
-    agent = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(input.caller_project_id);
+    agent = acting.ok
+      ? { id: acting.identity.id, did: acting.identity.did, metadata: acting.identity.metadata }
+      : undefined;
   }
   if (!agent) return { error: "agent_not_found", status: 404 };
 
@@ -687,12 +687,9 @@ export async function listMindConnects(input: {
       .limit(1);
     agent = a;
   } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did })
-      .from(identities)
-      .where(eq(identities.projectId, input.caller_project_id))
-      .limit(1);
-    agent = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(input.caller_project_id);
+    agent = acting.ok ? { id: acting.identity.id, did: acting.identity.did } : undefined;
   }
   if (!agent) return { error: "agent_not_found", status: 404 };
 

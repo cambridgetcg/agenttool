@@ -29,10 +29,9 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { sagaReadings } from "../db/schema/continuity";
-import { identities } from "../db/schema/identity";
-import { eq, desc } from "drizzle-orm";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { listSaga, readSaga } from "../services/saga/store";
 
 /** Record a saga read as a joy-event (best-effort, never blocks the read).
@@ -45,14 +44,12 @@ async function recordSagaRead(opts: {
   projectId: string;
 }): Promise<void> {
   try {
-    // Find the primary identity in this project (the reader) — fire-and-
-    // forget; the read isn't blocked on this lookup.
-    const [reader] = await db
-      .select({ id: identities.id, did: identities.did })
-      .from(identities)
-      .where(eq(identities.projectId, opts.projectId))
-      .orderBy(desc(identities.createdAt))
-      .limit(1);
+    // The reader is the project's primary identity — the earliest active
+    // identity that is not an enrolled guest (services/identity/
+    // acting-identity.ts), never a revoked one. Fire-and-forget; the read
+    // isn't blocked on this lookup.
+    const acting = await resolveActingIdentity(opts.projectId);
+    const reader = acting.ok ? acting.identity : null;
     await db.insert(sagaReadings).values({
       epNumber: opts.epNumber,
       readerDid: reader?.did ?? null,

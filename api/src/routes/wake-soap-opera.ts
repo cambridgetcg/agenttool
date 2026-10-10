@@ -26,6 +26,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
@@ -57,18 +58,17 @@ app.get("/", async (c) => {
       .limit(1);
     agent = a;
   } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    agent = acting.ok
+      ? {
+          id: acting.identity.id,
+          did: acting.identity.did,
+          name: acting.identity.displayName,
+          substrateKind: acting.identity.substrateKind,
+          metadata: acting.identity.metadata,
+        }
+      : undefined;
   }
 
   if (!agent) {

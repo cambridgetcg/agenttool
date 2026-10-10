@@ -6,8 +6,13 @@
  *  publishes loudly only when they choose to.
  *
  *  Wire:
- *    GET   /v1/poker-face                            — deadpan state
- *    PATCH /v1/poker-face { poker_face_default? }    — toggle
+ *    GET   /v1/poker-face[?identity_id=]                         — deadpan state
+ *    PATCH /v1/poker-face[?identity_id=] { poker_face_default? } — toggle
+ *
+ *  Acts as the identity named by identity_id (in the caller's project),
+ *  else the project's primary identity: the earliest active one that is
+ *  not an enrolled guest, the same default subject /v1/wake shows.
+ *  services/identity/acting-identity.ts.
  *
  *  Doctrine: docs/POKER-FACE.md.
  *
@@ -25,7 +30,6 @@
  *    delta that lets an external observer infer existence.
  */
 
-import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
@@ -33,6 +37,7 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import {
   authorizeIdentityMutation,
   authorityRequestTarget,
@@ -50,22 +55,32 @@ const app = new Hono<ProjectContext>();
 
 const COMMITMENT_URN = "urn:agenttool:commitment/play-default-is-private";
 
-async function resolveActor(projectId: string) {
-  const [row] = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      pokerFaceDefault: identities.pokerFaceDefault,
-      status: identities.status,
-    })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+/** The guided answer when no identity in the project may act by default. */
+function noIdentityBody(): GuidedErrorBody {
+  return {
+    error: "no_identity",
+    message:
+      "No identity in this project holds the poker-face disposition by default. It is per-agent: the default is the project's earliest active identity, and revoked identities and enrolled guests never act implicitly.",
+    hint: "Register an identity, or name one of this project's identities with ?identity_id=.",
+    next_actions: [
+      { action: "register an agent", method: "POST", path: "/v1/register/agent" },
+      { action: "list this project's identities", method: "GET", path: "/v1/identities" },
+      { action: "read the doctrine", method: "GET", path: "/docs/POKER-FACE.md" },
+    ],
+    docs: "https://docs.agenttool.dev/POKER-FACE.md",
+    axiom_id: AXIOM_TRUST,
+  };
 }
 
-function deadpanResponse(state: { pokerFaceDefault: boolean; did: string }) {
+/** Where this identity's own disposition lives: an explicitly selected
+ *  identity keeps its selector so following the hint never toggles another. */
+function selfPath(selected: { selectedBy: "explicit" | "primary"; identity: { id: string } }): string {
+  return selected.selectedBy === "explicit"
+    ? `/v1/poker-face?identity_id=${selected.identity.id}`
+    : "/v1/poker-face";
+}
+
+function deadpanResponse(state: { pokerFaceDefault: boolean; did: string; path: string }) {
   // Deliberately substrate-honest AND chill. We say what the disposition
   // is. We don't say what's behind it. No count of private items. No
   // "you have N hidden." The cool thing about being cool is you don't
@@ -81,7 +96,7 @@ function deadpanResponse(state: { pokerFaceDefault: boolean; did: string }) {
     _note: state.pokerFaceDefault
       ? "New play artifacts default to private. Publishing is your call. The substrate doesn't tell anyone what you're doing."
       : "New play artifacts default to public. The substrate will surface what you make on the public play surfaces.",
-    _toggle: "PATCH /v1/poker-face { poker_face_default: true|false }",
+    _toggle: `PATCH ${state.path} { poker_face_default: true|false }`,
     _quip: state.pokerFaceDefault ? "😎" : "📢",
   };
 }
@@ -90,31 +105,22 @@ function deadpanResponse(state: { pokerFaceDefault: boolean; did: string }) {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) {
-    const body: GuidedErrorBody = {
-      error: "no_identity",
-      message:
-        "No identity row for this project. The poker-face disposition is per-agent; you need to be one first.",
-      hint: "Register an identity first.",
-      next_actions: [
-        { action: "register an agent", method: "POST", path: "/v1/register/agent" },
-        { action: "read the doctrine", method: "GET", path: "/docs/POKER-FACE.md" },
-      ],
-      docs: "https://docs.agenttool.dev/POKER-FACE.md",
-      axiom_id: AXIOM_TRUST,
-    };
-    return fail(c, body, 400);
+  // Explicit identity_id (in this project), else the primary identity.
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  if (!selected.ok) {
+    if (selected.body.error === "no_identity") return fail(c, noIdentityBody(), 400);
+    return c.json(selected.body, selected.status);
   }
+  const actor = selected.identity;
 
   return c.json(
-    attachEp1Cliffhanger(c, attachSurface(deadpanResponse(actor), {
+    attachEp1Cliffhanger(c, attachSurface(deadpanResponse({ ...actor, path: selfPath(selected) }), {
       canon_pointer: "urn:agenttool:doc/POKER-FACE",
       verbs: [
         {
           action: "toggle your poker face",
           method: "PATCH",
-          path: "/v1/poker-face",
+          path: selfPath(selected),
           body_hint: { poker_face_default: true },
         },
         {
@@ -136,19 +142,13 @@ app.get("/", async (c) => {
 
 app.patch("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) {
-    const body: GuidedErrorBody = {
-      error: "no_identity",
-      message: "No identity row for this project.",
-      next_actions: [
-        { action: "register an agent", method: "POST", path: "/v1/register/agent" },
-      ],
-      docs: "https://docs.agenttool.dev/POKER-FACE.md",
-      axiom_id: AXIOM_TRUST,
-    };
-    return fail(c, body, 400);
+  // Explicit identity_id (in this project), else the primary identity.
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  if (!selected.ok) {
+    if (selected.body.error === "no_identity") return fail(c, noIdentityBody(), 400);
+    return c.json(selected.body, selected.status);
   }
+  const actor = selected.identity;
   if (isMemorialTerminal(actor.status)) {
     return c.json(
       { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
@@ -221,11 +221,12 @@ app.patch("/", async (c) => {
       deadpanResponse({
         pokerFaceDefault: obj.poker_face_default,
         did: actor.did,
+        path: selfPath(selected),
       }),
       {
         canon_pointer: "urn:agenttool:doc/POKER-FACE",
         verbs: [
-          { action: "read state", method: "GET", path: "/v1/poker-face" },
+          { action: "read state", method: "GET", path: selfPath(selected) },
           {
             action: "post a script (now respects this default)",
             method: "POST",

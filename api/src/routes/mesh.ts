@@ -30,13 +30,12 @@
  *  @enforces urn:agenttool:commitment/learning-loop-integration-published */
 
 import { Hono } from "hono";
-import { and, desc, eq } from "drizzle-orm";
+import { and } from "drizzle-orm";
 
 import type { ProjectContext } from "../auth/middleware";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import {
   acceptPledge,
   acceptPost,
@@ -62,13 +61,10 @@ const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/MESH";
 
 async function resolveCallerDid(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row?.did ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? acting.identity.did : null;
 }
 
 // ─── POST /posts — submit signed post ──────────────────────────────────

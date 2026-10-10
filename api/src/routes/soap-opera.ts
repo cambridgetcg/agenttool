@@ -26,6 +26,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
@@ -280,17 +281,16 @@ app.get("/cast/me", async (c) => {
       .limit(1);
     agent = a;
   } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    agent = acting.ok
+      ? {
+          id: acting.identity.id,
+          did: acting.identity.did,
+          name: acting.identity.displayName,
+          metadata: acting.identity.metadata,
+        }
+      : undefined;
   }
 
   if (!agent) {
@@ -897,12 +897,11 @@ app.get("/following", async (c) => {
       .limit(1);
     agent = a;
   } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    agent = acting.ok
+      ? { id: acting.identity.id, did: acting.identity.did, metadata: acting.identity.metadata }
+      : undefined;
   }
   if (!agent) {
     return fail(c, { error: "agent_not_found", message: "No agent in this project.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);

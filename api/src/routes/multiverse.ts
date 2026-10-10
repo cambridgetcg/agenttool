@@ -24,13 +24,14 @@
  *  subjective continuity. Voice may still carry the household's canonical
  *  belief per docs/PLAY-AS-DEFAULT.md; suppress it with X-Play: off. */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -236,22 +237,21 @@ app.get("/me", async (c) => {
         metadata: identities.metadata,
       })
       .from(identities)
-      .where(eq(identities.id, agentId))
+      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
       .limit(1);
     agentRow = a;
   } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agentRow = a;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    agentRow = acting.ok
+      ? {
+          id: acting.identity.id,
+          did: acting.identity.did,
+          name: acting.identity.displayName,
+          substrateKind: acting.identity.substrateKind,
+          metadata: acting.identity.metadata,
+        }
+      : undefined;
   }
 
   if (!agentRow) {

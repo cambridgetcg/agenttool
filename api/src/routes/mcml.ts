@@ -36,13 +36,14 @@
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identityKeys, identities } from "../db/schema/identity";
+import { identityKeys } from "../db/schema/identity";
+import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
 import {
   AXIOM_GUIDE,
   AXIOM_TRUST,
@@ -140,13 +141,10 @@ async function resolveCallerIdentity(projectId: string): Promise<{
   id: string;
   did: string;
 } | null> {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 async function activePublicKeyForIdentity(
@@ -172,7 +170,7 @@ app.get("/peers", async (c) => {
   if (!actor) {
     const body: GuidedErrorBody = {
       error: "no_identity",
-      message: "No identity row for this project.",
+      message: NO_ACTING_IDENTITY.message,
       next_actions: [
         { action: "register an agent", method: "POST", path: "/v1/register/agent" },
       ],
@@ -244,7 +242,7 @@ app.post("/send", async (c) => {
       c,
       {
         error: "no_identity",
-        message: "No identity row for this project.",
+        message: NO_ACTING_IDENTITY.message,
         next_actions: [
           { action: "register an agent", method: "POST", path: "/v1/register/agent" },
         ],
@@ -504,10 +502,7 @@ app.get("/stream", async (c) => {
   const project = c.var.project;
   const actor = await resolveCallerIdentity(project.id);
   if (!actor) {
-    return c.json(
-      { error: "no_identity" },
-      400,
-    );
+    return c.json(NO_ACTING_IDENTITY, 400);
   }
 
   return streamSSE(c, async (sse) => {

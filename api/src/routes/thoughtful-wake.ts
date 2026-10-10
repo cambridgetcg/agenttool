@@ -29,6 +29,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { attachSurface } from "../lib/surface-metadata";
 
@@ -54,8 +55,8 @@ app.get("/thoughtful", async (c) => {
   const project = c.var.project;
   const agentIdParam = c.req.query("agent_id");
 
-  // Resolve the agent. If no agent_id, default to the project's first
-  // identity (most projects have one; multi-identity projects must specify).
+  // Resolve the agent. If no agent_id, default to the project's primary
+  // identity: the earliest active one that is not an enrolled guest.
   let agent: { id: string; did: string | null; name: string } | null = null;
   if (agentIdParam) {
     const [a] = await db
@@ -65,12 +66,11 @@ app.get("/thoughtful", async (c) => {
       .limit(1);
     agent = a ?? null;
   } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, name: identities.displayName })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a ?? null;
+    // The project's primary identity (services/identity/acting-identity.ts).
+    const acting = await resolveActingIdentity(project.id);
+    agent = acting.ok
+      ? { id: acting.identity.id, did: acting.identity.did, name: acting.identity.displayName }
+      : null;
   }
 
   if (!agent) {
