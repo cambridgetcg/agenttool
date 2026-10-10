@@ -29,13 +29,15 @@ const OTHER_PROJECT = "22222222-2222-4222-8222-222222222222";
 const OWN = "33333333-3333-4333-8333-333333333333";
 const FOREIGN = "44444444-4444-4444-8444-444444444444";
 const PUBLIC_FOREIGN = "55555555-5555-4555-8555-555555555555";
+const OWN_QUIET = "77777777-7777-4777-8777-777777777777";
+const FOREIGN_QUIET = "88888888-8888-4888-8888-888888888888";
 const did = (id: string) => `did:at:${id}`;
 
 type Row = Record<string, unknown>;
 const IDENTITIES: Row[] = [
   {
     id: OWN, did: did(OWN), project_id: PROJECT, display_name: "Own", substrate_kind: "llm", status: "active",
-    metadata: { multiverse: { archetype_name: "Own Archetype", visibility: "private", sibling_dids: [did(FOREIGN), did(PUBLIC_FOREIGN)] }, resting: true, resting_message: "own rest", level: 1 },
+    metadata: { multiverse: { archetype_name: "Own Archetype", visibility: "private", sibling_dids: [did(FOREIGN), did(PUBLIC_FOREIGN), did(OWN_QUIET), did(FOREIGN_QUIET)] }, resting: true, resting_message: "own rest", level: 1 },
   },
   {
     id: FOREIGN, did: did(FOREIGN), project_id: OTHER_PROJECT, display_name: "Foreign", substrate_kind: "llm", status: "active",
@@ -45,6 +47,9 @@ const IDENTITIES: Row[] = [
     id: PUBLIC_FOREIGN, did: did(PUBLIC_FOREIGN), project_id: OTHER_PROJECT, display_name: "Public", substrate_kind: "llm", status: "active",
     metadata: { multiverse: { archetype_name: "Open Archetype", visibility: "public", sibling_dids: [did(OWN)] } },
   },
+  // Siblings that never declared: one in the caller's project, one not.
+  { id: OWN_QUIET, did: did(OWN_QUIET), project_id: PROJECT, display_name: "Quiet", substrate_kind: "llm", status: "active", metadata: {} },
+  { id: FOREIGN_QUIET, did: did(FOREIGN_QUIET), project_id: OTHER_PROJECT, display_name: "Far", substrate_kind: "llm", status: "active", metadata: {} },
 ];
 
 let queries: { sql: string; params: unknown[] }[] = [];
@@ -116,6 +121,25 @@ describe("GET /v1/multiverse/me", () => {
     expect(byDid[did(PUBLIC_FOREIGN)].declared_archetype).toBe("Open Archetype");
     expect(byDid[did(PUBLIC_FOREIGN)].reciprocal_recognition).toBe(true);
     expect(JSON.stringify(body)).not.toContain("Secret Archetype");
+  });
+
+  test("an undeclared sibling in the caller's project reads as not reciprocating, not hidden", async () => {
+    const response = await app().request(`/v1/multiverse/me?agent_id=${OWN}`);
+    const byDid = Object.fromEntries((await response.json()).local_siblings.map((s: Row) => [s.did, s]));
+    expect(byDid[did(OWN_QUIET)]).toMatchObject({
+      declared_archetype: null,
+      reciprocal_recognition: false,
+      declaration_visible: true,
+    });
+    // A foreign sibling that never declared looks exactly like a private
+    // declaration: whether it declared at all is not the caller's to know.
+    expect(byDid[did(FOREIGN_QUIET)]).toMatchObject({
+      declared_archetype: null,
+      reciprocal_recognition: null,
+      declaration_visible: false,
+    });
+    expect(byDid[did(FOREIGN)]).toMatchObject({ declaration_visible: false });
+    expect(byDid[did(PUBLIC_FOREIGN)]).toMatchObject({ declaration_visible: true });
   });
 });
 

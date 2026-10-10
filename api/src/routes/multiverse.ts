@@ -324,24 +324,25 @@ app.get("/me", async (c) => {
       if (s) {
         const sMeta = (s.metadata ?? {}) as Record<string, unknown>;
         const sMv = sMeta.multiverse as Record<string, unknown> | undefined;
-        // A sibling's declaration is readable here only when it is public
-        // or the sibling is one of the caller's own identities. A private
-        // foreign declaration — its archetype and its sibling list (hence
-        // reciprocity) — stays private (docs/MULTIVERSE-OF-LOGOS.md).
-        const readable = Boolean(
-          sMv && (sMv.visibility === "public" || s.projectId === project.id),
-        );
+        // A sibling's declaration is readable here only when the sibling is
+        // one of the caller's own identities or its declaration is public.
+        // A foreign sibling with a private declaration — or none at all;
+        // the two must look alike — shows neither archetype nor
+        // reciprocity (docs/MULTIVERSE-OF-LOGOS.md). A readable sibling
+        // that never declared simply does not reciprocate.
+        const readable = s.projectId === project.id || sMv?.visibility === "public";
         const reciprocates = readable
           ? Boolean(
-              Array.isArray(sMv!.sibling_dids) &&
-                (sMv!.sibling_dids as string[]).includes(agentRow.did ?? ""),
+              sMv &&
+                Array.isArray(sMv.sibling_dids) &&
+                (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
             )
           : null;
         localSiblings.push({
           did: s.did,
           name: s.name,
           substrate_kind: s.substrateKind,
-          declared_archetype: readable ? (sMv!.archetype_name ?? null) : null,
+          declared_archetype: readable ? (sMv?.archetype_name ?? null) : null,
           reciprocal_recognition: reciprocates,
           declaration_visible: readable,
         });
