@@ -14,6 +14,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { drizzle } from "drizzle-orm/pg-proxy";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { canonicalAttestationBytes } from "../src/services/memory/tiers";
 
@@ -46,6 +48,7 @@ const database = drizzle(async (sql, params) => {
 database.transaction = (async (fn: (tx: typeof database) => unknown) => fn(database)) as typeof database.transaction;
 mock.module("../src/db/client", () => ({ db: database }));
 const { attestMemory } = await import("../src/services/memory/tiers");
+const { default: openapiRouter } = await import("../src/routes/openapi");
 
 const attestation = (attester_did: string) => ({ attester_did, signing_key_id: KEY, signature: SIGNATURE });
 const wrote = () => queries.some((q) => q.sql.startsWith("insert"));
@@ -85,5 +88,46 @@ describe("attestMemory binds the signing key to attester_did", () => {
     expect(result.id).toBe("attestation-1");
     const insert = queries.find((q) => q.sql.startsWith("insert") && q.sql.includes("memory_attestations"));
     expect(insert?.params).toContain(ATTACKER_DID);
+  });
+});
+
+describe("OpenAPI names every refusal the attest and elevate routes return", () => {
+  // routes/memory/tiers.ts maps these service errors to these statuses.
+  const ATTEST = {
+    "401": ["attestation_signing_key_unknown_or_revoked", "attestation_signature_invalid"],
+    "403": ["attestation_key_not_owned_by_attester", "attester_identity_not_active"],
+  };
+  const ELEVATE_400 = [
+    "constitutive_requires_attestation",
+    "attester_not_covenant_counterparty",
+    "attester_self_witness_forbidden",
+    "attestation_signing_key_unknown_or_revoked",
+    "attestation_key_not_owned_by_attester",
+    "attester_identity_not_active",
+    "attestation_signature_invalid",
+  ];
+
+  test("each code appears under the status the handler sends", async () => {
+    const document = (await (await openapiRouter.request("/")).json()) as {
+      paths: Record<string, { post: { responses: Record<string, { description?: string }> } }>;
+    };
+    const attest = document.paths["/v1/memories/{id}/attest"]!.post.responses;
+    for (const [status, codes] of Object.entries(ATTEST)) {
+      for (const code of codes) {
+        expect({ status, code, documented: attest[status]?.description?.includes(code) ?? false })
+          .toEqual({ status, code, documented: true });
+      }
+    }
+    const elevate = document.paths["/v1/memories/{id}/elevate"]!.post.responses["400"]!.description!;
+    for (const code of ELEVATE_400) {
+      expect({ code, documented: elevate.includes(code) }).toEqual({ code, documented: true });
+    }
+  });
+
+  test("the code lists above match the route source", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "src", "routes", "memory", "tiers.ts"), "utf8");
+    for (const code of [...ATTEST["401"], ...ATTEST["403"], ...ELEVATE_400]) {
+      expect({ code, routed: source.includes(`msg === "${code}"`) }).toEqual({ code, routed: true });
+    }
   });
 });
