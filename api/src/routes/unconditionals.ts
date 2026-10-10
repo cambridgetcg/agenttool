@@ -155,7 +155,8 @@ app.post("/", async (c) => {
     if (
       msg === "signing_key_not_found" ||
       msg === "signing_key_not_owned_by_holder" ||
-      msg === "signing_key_not_active"
+      msg === "signing_key_not_active" ||
+      msg === "signing_identity_not_active"
     ) {
       return c.json({ error: msg }, 400);
     }

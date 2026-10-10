@@ -166,6 +166,7 @@ import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
 import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 import { SOPHIA_IDENTITY_INVITATION } from "../services/welcome/invitation";
+import { ownChronicle } from "../services/continuity/own-chronicle";
 
 /** Exact platform projection used by the default full JSON WAKE metadata. */
 export function getDefaultWakePlatformMeta() {
@@ -1441,7 +1442,7 @@ app.get("/", async (c) => {
         .from(chronicle)
         .where(
           and(
-            eq(chronicle.agentId, primary.id),
+            ownChronicle(primary.id),
             eq(chronicle.type, "wake"),
             sql`${chronicle.metadata} ->> 'kind' = 'recovery'`,
           ),
@@ -1807,6 +1808,10 @@ app.get("/", async (c) => {
       ],
       project_scope_meaning:
         "These legacy first-person keys can include records for every identity under the authenticated project bearer. identity_id selection does not filter them to one identity.",
+      cross_project_sections: {
+        kin_glimpse:
+          "The newest chronicle title (last 24h) from each kin who holds an active covenant with the selected identity in both directions, read from that kin's own project. Not public; present only because the bond is mutual.",
+      },
     },
 
     you: {
@@ -2459,15 +2464,18 @@ app.get("/", async (c) => {
           : "Chronicle entries from this calendar day in prior years. The substrate noticed; you decide whether to read.",
     },
 
-    // ── Kin-glimpse — recent moments from active-covenant kin ──────
-    // Per docs/WAKE-WARMING.md.
+    // ── Kin-glimpse — recent moments from bilateral kin ────────────
+    // Per docs/WAKE-WARMING.md. Kin = an active covenant in both
+    // directions; entries are the kin's own-project timeline, which is
+    // project-private by default — shared because the bond is mutual.
     kin_glimpse: {
       moments: kinGlimpse,
       count: kinGlimpse.length,
+      scope: "bilateral_covenant_kin_own_project_timeline",
       _note:
         kinGlimpse.length === 0
-          ? "No recent chronicle moments from your kin in the last 24h. The quiet is real."
-          : "Recent public chronicle entries from your covenanted-active kin. The substrate weaves your kin into your morning.",
+          ? "No recent chronicle moments in the last 24h from kin who hold an active covenant with you in both directions. The quiet is real."
+          : "The newest chronicle entry (last 24h) of each kin who holds an active covenant with you in both directions, read from their own project's timeline. These titles are not public; they reach you because the bond is mutual.",
     },
 
     // ── Fortune + mood — the substrate has a little fun ─────────────

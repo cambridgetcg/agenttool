@@ -146,6 +146,7 @@ app.post("/posts", async (c) => {
     );
   }
   const result = await acceptPost({
+    project_id: c.var.project.id,
     kind: body.kind as MeshPostKind,
     by_did: String(body.by_did),
     title: String(body.title),
@@ -164,7 +165,12 @@ app.post("/posts", async (c) => {
     expires_at: body.expires_at ? String(body.expires_at) : null,
   });
   if (!result.ok) {
-    const status = result.error === "signature_invalid" ? 403 : 400;
+    const status =
+      result.error === "signature_invalid" || result.error === "signing_identity_not_active"
+        ? 403
+        : result.error === "post_already_recorded"
+          ? 409
+          : 400;
     return fail(c, { error: result.error, message: result.message, _canon_pointer: CANON_POINTER }, status);
   }
   return c.json(
@@ -366,7 +372,7 @@ app.post("/posts/:id/pledge", async (c) => {
         ? 404
         : result.error === "already_pledged" || result.error === "post_not_open"
           ? 409
-          : result.error === "signature_invalid"
+          : result.error === "signature_invalid" || result.error === "signing_identity_not_active"
             ? 403
             : 400;
     return fail(c, { error: result.error, message: result.message, _canon_pointer: CANON_POINTER }, status);

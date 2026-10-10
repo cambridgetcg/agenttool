@@ -130,6 +130,10 @@ app.post("/", async (c) => {
         status: 403,
         hint: "The signing key is revoked or marked inactive.",
       },
+      signing_identity_not_active: {
+        status: 403,
+        hint: "The signing identity is revoked or memorial; an active key row does not override that status (docs/AT-REST.md).",
+      },
       invalid_signature: {
         status: 403,
         hint:

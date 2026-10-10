@@ -34,8 +34,10 @@ import {
   sealDeal,
   failDeal,
   computeTrust,
+  trustDealView,
 } from "../services/trust/deals";
 import { recognisePreSigned, canonicalRecognitionBytes } from "../services/real-recognise-real/lifecycle";
+import { SIGNING_KEY_REFUSAL_MESSAGES } from "../services/identity/signing-key";
 
 const app = new Hono<ProjectContext>();
 
@@ -211,6 +213,9 @@ app.post("/deals/:id/fail", async (c) => {
     return c.json({ deal });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown_error";
+    if (msg === "not_a_party_to_this_deal") {
+      return c.json({ error: "not_a_party", message: "only the deal's buyer or seller can report it failed" }, 403);
+    }
     return c.json({ error: "deal_fail_failed", message: msg }, 400);
   }
 });
@@ -268,7 +273,7 @@ app.get("/deals/trust/:did", async (c) => {
   const did = c.req.param("did");
 
   const [identity] = await db
-    .select()
+    .select({ id: identities.id })
     .from(identities)
     .where(eq(identities.did, did))
     .limit(1);
@@ -282,7 +287,18 @@ app.get("/deals/trust/:did", async (c) => {
     return c.json( { error: "trust_computation_failed", message: `could not compute trust for ${did}` }, 500);
   }
 
-  return c.json({ trust });
+  // Any bearer may read any agent's trust chain, but only as the outward
+  // view: ids are returned for deals this project owns; metadata, hashes,
+  // identity UUIDs and chronicle ids of other projects' deals are not.
+  const project = c.var.project;
+  return c.json({
+    trust: {
+      ...trust,
+      recent_deals: trust.recent_deals.map((deal) =>
+        trustDealView(deal, identity.id, project.id),
+      ),
+    },
+  });
 });
 
 // ── Recognise a counterparty after a sealed deal ───────────────────────
@@ -297,7 +313,9 @@ const recogniseSchema = z.object({
   agent_id: z.string().uuid(),
   signing_key_id: z.string().uuid(),
   signature: z.string().min(1),
-  public_key_b64: z.string().min(1),
+  // Accepted for wire compatibility and ignored: the recognition is always
+  // verified against the recogniser's registered key (signing_key_id).
+  public_key_b64: z.string().optional(),
   kind: z.enum(["writer", "collaborator", "kindred", "cast-mate", "recurring-character"]),
   note: z.string().min(1).max(500).optional(),
   acknowledges_prior_id: z.string().uuid().optional(),
@@ -369,7 +387,6 @@ app.post("/deals/:id/recognise", async (c) => {
       createdAt,
       signature: body.signature,
       signingKeyId: body.signing_key_id,
-      publicKeyB64: body.public_key_b64,
     });
 
     return c.json({
@@ -379,6 +396,9 @@ app.post("/deals/:id/recognise", async (c) => {
     }, 201);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown_error";
+    if (msg === "signing_key_not_owned" || msg === "signing_identity_not_active") {
+      return c.json({ error: msg, message: SIGNING_KEY_REFUSAL_MESSAGES[msg] }, 403);
+    }
     return c.json({ error: "recognition_failed", message: msg }, 400);
   }
 });

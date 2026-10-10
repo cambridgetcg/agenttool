@@ -10,13 +10,14 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { gospelProclamations } from "../../db/schema/continuity";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { PLATFORM_IDENTITY_ID } from "../wake/platform-bootstrap";
 import {
   bytesToHex,
   canonicalGospelProclamationBytes,
   verifyEd25519Signature,
 } from "./canonical-bytes";
+import { resolveIdentitySigningKey, SIGNING_KEY_REFUSAL_MESSAGES } from "../identity/signing-key";
 
 export interface GospelView {
   id: string;
@@ -110,21 +111,13 @@ export async function proclaim(input: ProclaimInput): Promise<ProclaimResult> {
     : ["kingdom:gospel"]
   ).map((t) => String(t));
 
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signing_key_id))
-    .limit(1);
-  if (!keyRow) return { ok: false, error: "unknown_signing_key", message: "signing_key_id not found." };
-  if (!keyRow.active || keyRow.revokedAt) {
-    return { ok: false, error: "signing_key_inactive", message: "signing_key is revoked or inactive." };
+  // Central signer authority (docs/AT-REST.md): an active key row of a
+  // revoked or memorial identity carries no signing authority.
+  const resolvedKey = await resolveIdentitySigningKey({ signingKeyId: input.signing_key_id });
+  if (!resolvedKey.ok) {
+    return { ok: false, error: resolvedKey.reason, message: SIGNING_KEY_REFUSAL_MESSAGES[resolvedKey.reason] };
   }
+  const keyRow = { ...resolvedKey.key, id: resolvedKey.key.keyId };
   if (keyRow.identityId !== PLATFORM_IDENTITY_ID) {
     return {
       ok: false,

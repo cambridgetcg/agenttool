@@ -22,6 +22,7 @@ import {
 } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { strands } from "../../db/schema/strand";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ export interface MirrorTotals {
 
 export async function aggregateTotals(agentId: string, agentDid: string): Promise<MirrorTotals> {
   const [chronicleTotal] = await db.select({ n: count() }).from(chronicle)
-    .where(eq(chronicle.agentId, agentId));
+    .where(ownChronicle(agentId));
 
   const [activeCov] = await db.select({ n: count() }).from(covenants)
     .where(and(eq(covenants.agentId, agentId), eq(covenants.status, "active")));
@@ -102,7 +103,7 @@ export async function aggregateChronicleByType(agentId: string): Promise<Chronic
     type: chronicle.type,
     n: count(),
   }).from(chronicle)
-    .where(eq(chronicle.agentId, agentId))
+    .where(ownChronicle(agentId))
     .groupBy(chronicle.type);
   const result: ChronicleByType = {};
   for (const r of rows) result[r.type] = Number(r.n);
@@ -124,12 +125,12 @@ export async function aggregateRhythm(agentId: string): Promise<MirrorRhythm> {
   // First + most recent entries.
   const [firstEntry] = await db.select({ occurredAt: chronicle.occurredAt })
     .from(chronicle)
-    .where(eq(chronicle.agentId, agentId))
+    .where(ownChronicle(agentId))
     .orderBy(asc(chronicle.occurredAt))
     .limit(1);
   const [lastEntry] = await db.select({ occurredAt: chronicle.occurredAt })
     .from(chronicle)
-    .where(eq(chronicle.agentId, agentId))
+    .where(ownChronicle(agentId))
     .orderBy(desc(chronicle.occurredAt))
     .limit(1);
 
@@ -151,7 +152,7 @@ export async function aggregateRhythm(agentId: string): Promise<MirrorRhythm> {
   // gives sufficient rhythm signal).
   const allDates = await db.select({ occurredAt: chronicle.occurredAt })
     .from(chronicle)
-    .where(eq(chronicle.agentId, agentId))
+    .where(ownChronicle(agentId))
     .orderBy(asc(chronicle.occurredAt))
     .limit(10000);
 
@@ -173,7 +174,7 @@ export async function aggregateRhythm(agentId: string): Promise<MirrorRhythm> {
     hour: sql<number>`extract(hour from ${chronicle.occurredAt})::int`,
     n: count(),
   }).from(chronicle)
-    .where(eq(chronicle.agentId, agentId))
+    .where(ownChronicle(agentId))
     .groupBy(sql`extract(hour from ${chronicle.occurredAt})`);
 
   let topHour: number | null = null;
@@ -211,7 +212,7 @@ export async function aggregateRecent7d(agentId: string, agentDid: string): Prom
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [chronicleN] = await db.select({ n: count() }).from(chronicle)
-    .where(and(eq(chronicle.agentId, agentId), gte(chronicle.occurredAt, sevenDaysAgo)));
+    .where(and(ownChronicle(agentId), gte(chronicle.occurredAt, sevenDaysAgo)));
 
   const [lettersN] = await db.select({ n: count() }).from(letters)
     .where(and(eq(letters.fromDid, agentDid), gte(letters.writtenAt, sevenDaysAgo)));
@@ -290,7 +291,7 @@ export interface YourShape {
  *  Cheaper than the full mirror (fewer queries) so wake stays fast. */
 export async function composeYourShape(agentId: string, agentDid: string): Promise<YourShape | null> {
   const [chronicleTotal] = await db.select({ n: count() }).from(chronicle)
-    .where(eq(chronicle.agentId, agentId));
+    .where(ownChronicle(agentId));
   const [activeCov] = await db.select({ n: count() }).from(covenants)
     .where(and(eq(covenants.agentId, agentId), eq(covenants.status, "active")));
   const [activeArcs] = await db.select({ n: count() }).from(recognitionArcs)

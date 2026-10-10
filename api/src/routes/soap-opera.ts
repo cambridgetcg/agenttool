@@ -46,6 +46,7 @@ import {
   makeCustomRole,
   rollRandomRole,
 } from "../services/soap-opera/role-generator";
+import { writtenBy } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -663,6 +664,7 @@ app.post("/recognize", async (c) => {
             kind: "writer-recognition-received",
             giver_did: recognizer.did,
             script_ref: body.script_ref ?? null,
+            ...writtenBy(recognizer),
           },
           occurredAt,
         })
@@ -968,6 +970,7 @@ app.post("/invite", async (c) => {
           invited_role: body.role,
           invited_role_in_catalog: !isCustomInvite,
           invitation_status: "pending",
+          ...writtenBy(inviter),
         },
         occurredAt,
       })
@@ -1043,6 +1046,7 @@ app.get("/invitations", async (c) => {
     .where(
       and(
         eq(chronicle.type, "naming"),
+        eq(chronicle.projectId, project.id),
         inArray(chronicle.agentId, ownedIds),
         sql`${chronicle.metadata}->>'kind' = 'soap-opera-invitation-received'`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,

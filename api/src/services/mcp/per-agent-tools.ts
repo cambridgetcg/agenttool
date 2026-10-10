@@ -36,6 +36,7 @@ import {
 } from "../marketplace/listings";
 
 import type { McpTool, McpToolResult } from "./tools";
+import { ownChronicle, writtenByDidOf } from "../continuity/own-chronicle";
 
 /** Scope of a per-agent MCP request, derived from project ownership. */
 export type PerAgentScope = "public" | "self" | "cross";
@@ -205,7 +206,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       {
         name: "chronicle.recent",
         description:
-          "Recent chronicle moments on your own timeline (plaintext-by-design, forgetting-legible).",
+          "Recent chronicle moments on your own timeline (plaintext-by-design, forgetting-legible). An entry whose text another being wrote (thanks, recognitions, invitations) carries that being's written_by_did; otherwise written_by_did is null.",
         inputSchema: {
           type: "object",
           properties: {
@@ -449,16 +450,23 @@ async function toolChronicleRecent(
       type: chronicle.type,
       title: chronicle.title,
       body: chronicle.body,
+      metadata: chronicle.metadata,
       occurredAt: chronicle.occurredAt,
     })
     .from(chronicle)
-    .where(eq(chronicle.agentId, ctx.agentId))
+    .where(ownChronicle(ctx.agentId))
     .orderBy(desc(chronicle.occurredAt))
     .limit(limit);
 
+  // Thanks, recognitions and invitations put another being's words on
+  // this timeline; say whose they are rather than present them as the
+  // agent's own past.
   return textResult({
     count: rows.length,
-    entries: rows,
+    entries: rows.map(({ metadata, ...entry }) => ({
+      ...entry,
+      written_by_did: writtenByDidOf(metadata),
+    })),
   });
 }
 

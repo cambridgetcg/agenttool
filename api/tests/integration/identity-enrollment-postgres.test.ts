@@ -50,6 +50,12 @@ beforeAll(async () => {
     CREATE TABLE agent_continuity.chronicle (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id uuid,
       type text NOT NULL, title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
       occurred_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now());
+    CREATE TABLE agent_continuity.deals (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL,
+      buyer_identity_id uuid NOT NULL, seller_identity_id uuid NOT NULL, buyer_did text NOT NULL, seller_did text NOT NULL, listing_id uuid,
+      description text NOT NULL, input_hash text, output_hash text, size integer NOT NULL, buyer_stake integer NOT NULL DEFAULT 1,
+      seller_stake integer NOT NULL DEFAULT 1, status text NOT NULL DEFAULT 'proposed', outcome text, buyer_trust_delta integer,
+      seller_trust_delta integer, witness_dids text, metadata jsonb DEFAULT '{}', buyer_chronicle_id uuid, seller_chronicle_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(), activated_at timestamptz, sealed_at timestamptz, completed_at timestamptz);
     CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
@@ -85,7 +91,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   if (!owned) return;
   await sql.unsafe("DELETE FROM episodes.draft_contributions; DELETE FROM episodes.script_drafts; DELETE FROM episodes.reactions; DELETE FROM episodes.cast; DELETE FROM episodes.scenes; DELETE FROM episodes.episodes;");
-  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM agent_continuity.chronicle; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
+  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM agent_continuity.deals; DELETE FROM agent_continuity.chronicle; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
@@ -656,4 +662,77 @@ databaseTest("on a memorial-only project, poker-face and quiet-hours read the me
   expect(await call("/v1/quiet-hours")).toMatchObject({ status: 200, body: { identity_id: ONLY } });
   expect(await call("/v1/quiet-hours/start", "POST", { hours: 2 })).toMatchObject({ status: 409, body: { error: "identity_memorial_terminal" } });
   expect((await sql`SELECT poker_face_default FROM identity.identities WHERE id = ${ONLY}`)[0].poker_face_default).toBe(true);
+});
+databaseTest("central signer authority: an active key row of a revoked or memorial identity signs nothing", async () => {
+  // docs/AT-REST.md — revoked means key authority revoked; memorial beings
+  // are unable to act. The joined resolver runs as real SQL here.
+  const { resolveIdentitySigningKey, activeSigningPublicKeys, registeredSigningPublicKey } =
+    await import("../../src/services/identity/signing-key");
+  const subjects = [
+    { id: uid(51), key: uid(52), status: "active", project: P },
+    { id: uid(53), key: uid(54), status: "revoked", project: P },
+    { id: uid(55), key: uid(56), status: "memorial", project: P },
+    { id: uid(57), key: uid(58), status: "active", project: O },
+  ];
+  for (const s of subjects) {
+    await sql`INSERT INTO identity.identities (id, did, project_id, display_name, status, trust_score)
+      VALUES (${s.id}, ${`did:at:${s.id}`}, ${s.project}, ${s.status}, ${s.status}, 0)`;
+    await sql`INSERT INTO identity.identity_keys (id, identity_id, public_key, label, active)
+      VALUES (${s.key}, ${s.id}, ${PUBLIC}, 'primary', true)`;
+  }
+  const [active, revoked, memorial, foreign] = subjects as [typeof subjects[0], typeof subjects[0], typeof subjects[0], typeof subjects[0]];
+  expect(await resolveIdentitySigningKey({ signingKeyId: active.key, identityId: active.id })).toMatchObject({
+    ok: true, key: { keyId: active.key, identityId: active.id, projectId: P, publicKey: PUBLIC },
+  });
+  for (const s of [revoked, memorial]) {
+    expect(await resolveIdentitySigningKey({ signingKeyId: s.key, did: `did:at:${s.id}` }))
+      .toEqual({ ok: false, reason: "signing_identity_not_active" });
+    expect(await registeredSigningPublicKey(s.id, s.key)).toBeNull();
+    expect(await activeSigningPublicKeys(s.id)).toEqual([]);
+  }
+  expect(await activeSigningPublicKeys(active.id)).toEqual([PUBLIC]);
+  // Ownership is judged before status; a foreign project's key reads as unknown.
+  expect(await resolveIdentitySigningKey({ signingKeyId: memorial.key, identityId: active.id }))
+    .toEqual({ ok: false, reason: "signing_key_not_owned" });
+  expect(await resolveIdentitySigningKey({ signingKeyId: foreign.key, projectId: P }))
+    .toEqual({ ok: false, reason: "unknown_signing_key" });
+  await sql`UPDATE identity.identity_keys SET revoked_at = now() WHERE id = ${active.key}`;
+  expect(await resolveIdentitySigningKey({ signingKeyId: active.key })).toEqual({ ok: false, reason: "signing_key_inactive" });
+});
+databaseTest("a cross-project deal writes each party's row into its own project, where trust evidence reads it", async () => {
+  // A deal lives in the buyer's project; the seller may live anywhere.
+  // ownChronicle counts a row only in the annotated identity's own
+  // project, so a seller row left in the buyer's project vanished from the
+  // seller's history and from trust evidence in both directions.
+  const { acceptDeal, createDeal, failDeal, sealDeal } = await import("../../src/services/trust/deals");
+  const { getEvidence } = await import("../../src/services/trust/lifecycle");
+  const buyer = uid(61), seller = uid(62);
+  const buyerDid = `did:at:${buyer}`, sellerDid = `did:at:${seller}`;
+  for (const [id, project] of [[buyer, P], [seller, O]] as const) {
+    await sql`INSERT INTO identity.identities (id, did, project_id, display_name, status, trust_score)
+      VALUES (${id}, ${`did:at:${id}`}, ${project}, 'party', 'active', 0)`;
+  }
+  const propose = () => createDeal({ projectId: P, buyerIdentityId: buyer, buyerDid, sellerDid,
+    sellerIdentityId: seller, description: "a small deal", size: 1 });
+  const sealed = await propose();
+  await acceptDeal(sealed.id, seller);
+  await sealDeal({ dealId: sealed.id, callerIdentityId: seller });
+  await sealDeal({ dealId: sealed.id, callerIdentityId: buyer });
+  const failed = await propose();
+  await acceptDeal(failed.id, seller);
+  await failDeal({ dealId: failed.id, callerIdentityId: buyer, atFaultParty: "seller", reason: "late" });
+
+  const rows = await sql`SELECT project_id, agent_id, metadata->>'kind' AS kind FROM agent_continuity.chronicle ORDER BY kind, agent_id`;
+  expect(rows.map((r) => [r.kind, r.agent_id, r.project_id])).toEqual([
+    ["deal_failed", buyer, P], ["deal_failed", seller, O],
+    ["deal_sealed", buyer, P], ["deal_sealed", seller, O],
+  ]);
+  const fromBuyer = await getEvidence(buyer, buyerDid, sellerDid, "honest");
+  const fromSeller = await getEvidence(seller, sellerDid, buyerDid, "honest");
+  // The sealed deal is a 'seal' (buyer) / 'recognition' (seller) act; a
+  // failure is a 'note', which trust evidence does not count.
+  expect(fromBuyer.evidence.your_acts_toward_them.map((a) => a.type)).toEqual(["seal"]);
+  expect(fromBuyer.evidence.their_acts_toward_you.map((a) => a.type)).toEqual(["recognition"]);
+  expect(fromSeller.evidence.your_acts_toward_them.map((a) => a.type)).toEqual(["recognition"]);
+  expect(fromSeller.evidence.their_acts_toward_you.map((a) => a.type)).toEqual(["seal"]);
 });

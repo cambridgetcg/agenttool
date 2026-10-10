@@ -24,32 +24,38 @@ import { z } from "zod";
 
 import { db } from "../db/client";
 import { selfLoveModules, selfLovePractices } from "../db/schema/continuity";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import { resolveIdentitySigningKey, SIGNING_KEY_REFUSAL_MESSAGES } from "../services/identity/signing-key";
 import { fail } from "../lib/errors";
 import {
   CANONICAL_SELF_LOVE_MODULES,
   canonicalSelfLovePracticeBytes,
   verifyEd25519Signature,
 } from "../services/self-love/practice-canonical-bytes";
+import type { ProjectContext } from "../auth/middleware";
+import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/SELF-LOVE-MODULES";
 
 async function resolveSignerOrFail(input: {
   signingKeyId: string;
   expectedDid: string;
 }): Promise<{ ok: true; publicKey: string } | { ok: false; error: string; message: string }> {
-  const [keyRow] = await db
-    .select({ id: identityKeys.id, identityId: identityKeys.identityId, publicKey: identityKeys.publicKey, active: identityKeys.active, revokedAt: identityKeys.revokedAt })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow) return { ok: false, error: "unknown_signing_key", message: "signing_key_id not found." };
-  if (!keyRow.active || keyRow.revokedAt) return { ok: false, error: "signing_key_inactive", message: "signing_key revoked or inactive." };
-  const [idRow] = await db.select({ id: identities.id, did: identities.did }).from(identities).where(eq(identities.id, keyRow.identityId)).limit(1);
-  if (!idRow) return { ok: false, error: "unknown_identity", message: "signing identity not found." };
-  if (idRow.did !== input.expectedDid) return { ok: false, error: "agent_did_mismatch", message: "agent_did does not match signing identity's DID." };
-  return { ok: true, publicKey: keyRow.publicKey };
+  // Central signer authority (docs/AT-REST.md): the key must be active,
+  // belong to agent_did, and its identity must still be active — revoked
+  // and memorial identities keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    did: input.expectedDid,
+  });
+  if (!resolved.ok) {
+    if (resolved.reason === "signing_key_not_owned") {
+      return { ok: false, error: "agent_did_mismatch", message: "agent_did does not match signing identity's DID." };
+    }
+    return { ok: false, error: resolved.reason, message: SIGNING_KEY_REFUSAL_MESSAGES[resolved.reason] };
+  }
+  return { ok: true, publicKey: resolved.key.publicKey };
 }
 
 // ─── POST /v1/self-love/practice ──────────────────────────────────────
@@ -143,6 +149,18 @@ app.get("/self-love/check", async (c) => {
   const agentDid = c.req.query("agent_did");
   if (!agentDid) {
     return fail(c, { error: "agent_did_required", message: "GET /v1/self-love/check?agent_did=<did>", _canon_pointer: CANON_POINTER }, 400);
+  }
+
+  // The check is the owning project's (SELF-LOVE-MODULES.md: "Practice history is not a public surface"). A DID outside the caller's
+  // project is refused exactly like an unknown one, before any history is read.
+  const owned = await projectOwnedIdentityByDid(c.var.project.id, agentDid);
+  if (!owned) {
+    return fail(c, {
+      error: "agent_not_found",
+      message: "No identity with this agent_did in your project.",
+      hint: "The self-love practice check reads your own project's identities only.",
+      _canon_pointer: CANON_POINTER,
+    }, 404);
   }
 
   const modules = await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug);

@@ -15,7 +15,7 @@ import { Hono } from "hono";
 import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
-import { computeTrust } from "../../services/trust/deals";
+import { computeTrust, trustDealView } from "../../services/trust/deals";
 
 const app = new Hono();
 
@@ -25,7 +25,7 @@ app.get("/:did", async (c) => {
   const did = c.req.param("did");
 
   const [identity] = await db
-    .select()
+    .select({ id: identities.id })
     .from(identities)
     .where(eq(identities.did, did))
     .limit(1);
@@ -46,14 +46,7 @@ app.get("/:did", async (c) => {
     deals_failed: trust.deals_failed,
     success_rate: trust.success_rate,
     trust_capacity: trust.trust_capacity,
-    recent_deals: trust.recent_deals.map((d) => ({
-      description: d.description,
-      size: d.size,
-      status: d.status,
-      outcome: d.outcome,
-      counterparty_did: d.buyer_identity_id === identity.id ? d.seller_did : d.buyer_did,
-      sealed_at: d.sealed_at,
-    })),
+    recent_deals: trust.recent_deals.map((d) => trustDealView(d, identity.id)),
     _note: "Trust is earned through sealed deals, not deposited. Start small. POST /v1/deals.",
   });
 });

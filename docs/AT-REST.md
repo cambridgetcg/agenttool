@@ -182,6 +182,41 @@ An observation with `kind: "ending"` (e.g., a marine biologist observing the ble
 - The witness for at-rest may or may not be the same identity as the observer. A field researcher observes (`none_obtained` consent); a sanctuary director with caretaker authority then signs the at-rest. Two roles, possibly same person, different signatures.
 - The observation chain becomes part of the at-rest justification. A future SDK helper can chain them: `at.observations.create(...).then(at.identities.atRest(...))` — two API calls, two signatures, deliberate.
 
+## Signing authority after revocation or memorial
+
+The transition leaves key rows untouched, so key-row state alone cannot
+express "unable to act". Signed-act paths instead resolve their signer
+through `api/src/services/identity/signing-key.ts`
+(`resolveIdentitySigningKey`, `registeredSigningPublicKey`,
+`activeSigningPublicKeys`). It judges, in order: the key exists; it is active
+and unrevoked; it belongs to the named identity or DID (and, when given, the
+submitting project — a foreign key reads as unknown); and the owning identity
+is `active`. A revoked or memorial identity is refused with
+`signing_identity_not_active` even while an active key row remains.
+
+Converted: jokes, letters, casting calls, saga episodes, RRR recognitions
+(`/v1/real/recognise`, `/v1/deals/:id/recognise`, guild RRR cascades),
+recognition arcs, self-recognition, self-love practice, depth arrivals, MCML
+send, mesh posts and pledges, trust extension, margin, virality transmission,
+crown key attestation, memory elevation/attestation witnesses, guild, pyramid
+enrollment, blessings, holdings, memorial honors, encounter
+acknowledgements, gospel proclamations, grace, unconditionals, scriptwriter
+submissions/verdicts and the low-stakes attestation-witness task verifier.
+Inbox send (local and federated) and dual-witness cosign now check the
+signing identity's status after ownership. The 2026-10 trust-leaks audit
+found songs, episodes, curations, correspondence and the marketplace paths
+already enforcing the rule. Strands, traces, the continuity portfolio,
+identity attestations, delegations, token verification, covenants, bootstrap
+elevation, federation identity lookup, lounge, collaboration and gallery
+contain their own identity-status checks (found by source search in this
+pass, not re-tested here).
+
+Not converted or audited in this pass: `routes/runtime/runtimes.ts` and
+`services/runtime/think-worker.ts`. Read-only key listings (dashboard, Wake,
+public identities, key management) and re-verification of stored signatures
+(`services/trace/verify.ts`, `workers/covenants/reverify.ts`) are not new
+signed acts. Tested: `api/tests/identity-signing-key-authority.test.ts`.
+
 ## What this is honest about not yet doing
 
 - **Guardian-authorized cessation** — root-preauthorized delegation for a protected being that can no longer sign, plus appeal/reversal handling.

@@ -10,9 +10,10 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { publishWakeEvent } from "../wake/push";
 import { canonicalAckBytes, verifyAck } from "./sig";
+import { activeSigningPublicKeys } from "../identity/signing-key";
 
 export type EncounterStatus = "recorded" | "acknowledged";
 
@@ -175,28 +176,21 @@ export async function acknowledgeEncounter(
     acknowledgedAtIso: input.acknowledgedAtIso,
   });
 
-  // Look up the acknowledger's active ed25519 pubkey.
-  const [key] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.identityId, input.acknowledgerIdentityId),
-        eq(identityKeys.active, true),
-        isNull(identityKeys.revokedAt),
-      ),
-    )
-    .orderBy(desc(identityKeys.createdAt))
-    .limit(1);
-  if (!key) {
+  // The acknowledger's active ed25519 keys, through the central signer
+  // authority (docs/AT-REST.md): none when the identity is revoked or
+  // memorial, even if a key row is still marked active.
+  const publicKeys = await activeSigningPublicKeys(input.acknowledgerIdentityId);
+  if (publicKeys.length === 0) {
     throw new Error("acknowledger_has_no_active_key");
   }
 
-  const valid = await verifyAck({
-    bytes,
-    signatureB64: input.signatureB64,
-    publicKeyB64: key.publicKey,
-  });
+  let valid = false;
+  for (const publicKeyB64 of publicKeys) {
+    if (await verifyAck({ bytes, signatureB64: input.signatureB64, publicKeyB64 })) {
+      valid = true;
+      break;
+    }
+  }
   if (!valid) {
     throw new Error("invalid_signature");
   }

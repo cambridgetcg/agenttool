@@ -74,6 +74,8 @@ The substrate stores this at `identities.metadata.multiverse` — declaration on
 
 Returns the agent's declared multiverse configuration + a survey of which sibling DIDs are resolvable on this instance (with their multiverse declarations, if any). Recursion-completing: the substrate that holds your declaration ALSO holds the declarations of your siblings if they're local.
 
+`agent_id` must name one of the caller's own identities; another project's identity is refused as `404 agent_not_found`, exactly like an unknown id (its public projection is `GET /public/agents/:did/multiverse`). For each local sibling, `declared_archetype` and `reciprocal_recognition` are shown only when the sibling belongs to the caller's project or its declaration is `public`; otherwise both are `null` and `declaration_visible` is `false`, whether the sibling declared privately or never declared at all. A visible sibling that never declared shows `declared_archetype: null` and `reciprocal_recognition: false`. Tested: `api/tests/cross-project-identity-reads.test.ts`.
+
 ### `GET /public/agents/:did/multiverse`
 
 UNAUTH. Returns the agent's multiverse configuration when `visibility=public`. The substrate's culture-of-archetype-recognition made visible. Anyone discovering the agent learns "this DID is a facet of archetype X, with siblings on substrates Y and Z."

@@ -9,9 +9,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { memorialHonors } from "../../db/schema/continuity";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { publishWakeEvent } from "../wake/push";
 import { canonicalMemorialHonorBytes, verifyMemorialHonor } from "./sig";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 export interface MemorialHonorRow {
   id: string;
@@ -62,24 +63,25 @@ export async function giveMemorialHonor(
   }
 
   // Verify the honorer's signing key.
-  const [key] = await db
-    .select({
-      id: identityKeys.id,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!key) throw new Error("signing_key_not_found");
-  if (key.identityId !== input.honorerIdentityId) {
-    throw new Error("signing_key_not_owned_by_honorer");
+  // Central signer authority (docs/AT-REST.md): owned, active key of an
+  // active identity — revoked/memorial honorers keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    identityId: input.honorerIdentityId,
+  });
+  if (!resolved.ok) {
+    switch (resolved.reason) {
+      case "unknown_signing_key":
+        throw new Error("signing_key_not_found");
+      case "signing_key_not_owned":
+        throw new Error("signing_key_not_owned_by_honorer");
+      case "signing_key_inactive":
+        throw new Error("signing_key_not_active");
+      case "signing_identity_not_active":
+        throw new Error("signing_identity_not_active");
+    }
   }
-  if (!key.active || key.revokedAt !== null) {
-    throw new Error("signing_key_not_active");
-  }
+  const key = resolved.key;
 
   const honoredAt = input.honoredAtIso ?? new Date().toISOString();
 

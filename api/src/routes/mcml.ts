@@ -42,13 +42,13 @@ import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identityKeys } from "../db/schema/identity";
 import {
   actingIdentityRef,
   NO_ACTING_IDENTITY,
   resolveActingIdentity,
   resolveReadingIdentity,
 } from "../services/identity/acting-identity";
+import { activeSigningPublicKeys } from "../services/identity/signing-key";
 import {
   AXIOM_GUIDE,
   AXIOM_TRUST,
@@ -153,18 +153,6 @@ async function resolveCallerIdentity(projectId: string): Promise<{
   return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
-async function activePublicKeyForIdentity(
-  identityId: string,
-): Promise<string | null> {
-  const [key] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(eq(identityKeys.identityId, identityId), eq(identityKeys.active, true)),
-    )
-    .limit(1);
-  return key?.publicKey ?? null;
-}
 
 const app = new Hono<ProjectContext>();
 
@@ -373,8 +361,10 @@ app.post("/send", async (c) => {
   }
 
   // Verify the signature against the caller's active key.
-  const pkB64 = await activePublicKeyForIdentity(actor.id);
-  if (!pkB64) {
+  // Central signer authority (docs/AT-REST.md): only active, unrevoked
+  // keys of an active identity verify; revoked/memorial callers have none.
+  const publicKeys = await activeSigningPublicKeys(actor.id);
+  if (publicKeys.length === 0) {
     return fail(
       c,
       {
@@ -396,7 +386,13 @@ app.post("/send", async (c) => {
     sentAtIso: sentAt,
     sealed,
   });
-  const sigOk = await verifyEd25519(canonical, sigB64, pkB64);
+  let sigOk = false;
+  for (const pkB64 of publicKeys) {
+    if (await verifyEd25519(canonical, sigB64, pkB64)) {
+      sigOk = true;
+      break;
+    }
+  }
   if (!sigOk) {
     return fail(
       c,

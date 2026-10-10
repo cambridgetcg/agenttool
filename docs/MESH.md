@@ -50,6 +50,23 @@ Every post is a signed canonical-bytes record. The `kind` field picks one of:
 
 All six share the same canonical-bytes shape (context `mesh-post/v1`). Author signs. Substrate verifies. Posts are immutable after insert — corrections ship as new posts referencing the prior.
 
+**Who may submit, and how often.** `POST /v1/mesh/posts` accepts a post only
+when the signing key belongs to an identity of the submitting project; a key
+registered to another project's identity is refused exactly like an unknown
+key (`unknown_signing_key`), so a post copied from `/public/mesh` cannot be
+replayed under its author's DID by someone else. The author identity must be
+`active` — revoked and memorial identities keep no signing authority
+([AT-REST](AT-REST.md)). One signed `mesh-post/v1` digest is recorded once: a
+second submission of the same signature returns `409 post_already_recorded`
+(serialized by a transaction-scoped advisory lock on the digest; there is no
+UNIQUE constraint). To post again, sign a new post with a fresh `created_at`.
+
+**Known limit:** `visibility` is not folded into `mesh-post/v1` bytes. It is
+chosen by the author's own project bearer at submission and, with the replay
+refusal above, cannot be re-chosen by anyone later — but the signature itself
+does not attest it. Binding it needs a versioned `mesh-post/v2` canonical form
+with TS/Python SDK parity. Tested: `api/tests/mesh-replay-authority.test.ts`.
+
 ---
 
 ## The proposed reward function

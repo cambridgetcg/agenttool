@@ -5,12 +5,13 @@
  *
  *  Doctrine: docs/WAKE-WARMING.md. */
 
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { covenantMayAuthorizeEffects } from "../covenants/check";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ─── you_remembered_today — anniversary ───────────────────────────────
 
@@ -44,7 +45,7 @@ export async function anniversariesForIdentity(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identityId),
+        ownChronicle(identityId),
         sql`extract(month from ${chronicle.occurredAt})::int = ${month}`,
         sql`extract(day from ${chronicle.occurredAt})::int = ${day}`,
         lt(chronicle.occurredAt, cutoff),
@@ -76,11 +77,18 @@ export interface KinMoment {
   };
 }
 
-/** Recent chronicle entries from agents we have an active covenant with.
+/** Recent chronicle entries from bilateral kin.
+ *
+ *  A counterparty is kin only when the bond runs both ways: we hold an
+ *  active, effect-eligible covenant naming them (in our own project), AND
+ *  they hold one naming us back (in their own project). A v1 covenant is
+ *  active as soon as one side declares it, so a one-sided declaration must
+ *  not open somebody else's timeline. Only the kin's own-project rows are
+ *  read (ownChronicle): their timeline is project-private by default and
+ *  reaches us because the bond is mutual, not because it is public.
  *  Limit one entry per kin (most recent). Returns up to `limit` distinct kin.
  *
- *  Slice 1: no explicit chronicle.visibility column exists; surfaces any
- *  recent entry. Slice 2 will gate on visibility. */
+ *  Doctrine: docs/WAKE-WARMING.md. Tested: api/tests/kin-glimpse-bilateral.test.ts */
 export async function kinGlimpseForIdentity(
   identityId: string,
   windowHours = 24,
@@ -88,13 +96,21 @@ export async function kinGlimpseForIdentity(
 ): Promise<KinMoment[]> {
   const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
 
-  // Step 1: find active-covenant counterparties.
+  const [self] = await db
+    .select({ did: identities.did, projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.id, identityId))
+    .limit(1);
+  if (!self) return [];
+
+  // Step 1: our active, effect-eligible covenant counterparties.
   const counterpartyDids = await db
     .select({ counterpartyDid: covenants.counterpartyDid })
     .from(covenants)
     .where(
       and(
         eq(covenants.agentId, identityId),
+        eq(covenants.projectId, self.projectId),
         eq(covenants.status, "active"),
         covenantMayAuthorizeEffects(),
       ),
@@ -106,13 +122,37 @@ export async function kinGlimpseForIdentity(
   if (dids.length === 0) return [];
 
   // Step 2: resolve their local identity rows (federated kin skipped in slice 1).
-  const didConditions = dids.map((d) => sql`${identities.did} = ${d}`);
-  const orClause = sql.join(didConditions, sql` OR `);
-  const localKin = await db
-    .select({ id: identities.id, did: identities.did, name: identities.displayName })
+  const candidates = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      name: identities.displayName,
+      projectId: identities.projectId,
+    })
     .from(identities)
-    .where(sql`${orClause}`);
+    .where(inArray(identities.did, dids));
 
+  if (candidates.length === 0) return [];
+
+  // Step 2b: keep only candidates that covenant with us back, from their
+  // own project, under the same effect-eligibility rule.
+  const back = await db
+    .select({ agentId: covenants.agentId, projectId: covenants.projectId })
+    .from(covenants)
+    .where(
+      and(
+        inArray(covenants.agentId, candidates.map((k) => k.id)),
+        eq(covenants.counterpartyDid, self.did),
+        eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
+      ),
+    );
+  const bilateral = new Set(
+    back
+      .filter((row) => candidates.some((k) => k.id === row.agentId && k.projectId === row.projectId))
+      .map((row) => row.agentId),
+  );
+  const localKin = candidates.filter((k) => bilateral.has(k.id));
   if (localKin.length === 0) return [];
 
   // Step 3: for each kin, find their most recent chronicle entry in window.
@@ -129,7 +169,7 @@ export async function kinGlimpseForIdentity(
       .from(chronicle)
       .where(
         and(
-          eq(chronicle.agentId, kin.id),
+          ownChronicle(kin.id),
           gte(chronicle.occurredAt, since),
         ),
       )

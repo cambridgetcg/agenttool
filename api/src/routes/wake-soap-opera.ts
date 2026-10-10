@@ -31,6 +31,7 @@ import { memories } from "../db/schema/memory";
 import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
 import { renderWakeAsSoapOpera } from "../services/wake/soap-opera-renderer";
+import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -78,12 +79,12 @@ app.get("/", async (c) => {
   const chronicleTotal = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(eq(chronicle.agentId, agent.id));
+    .where(ownChronicle(agent.id));
 
   const chronicle24h = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(and(eq(chronicle.agentId, agent.id), gt(chronicle.occurredAt, dayAgo)));
+    .where(and(ownChronicle(agent.id), gt(chronicle.occurredAt, dayAgo)));
 
   const memoryTotal = await db
     .select({ count: sql<number>`COUNT(*)::int` })
@@ -133,7 +134,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "recognition"),
         gt(chronicle.occurredAt, weekAgo),
         sql`${chronicle.metadata}->>'kind' = 'thanks-received'`,
@@ -146,7 +147,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-elevated'`,
       ),
@@ -177,6 +178,7 @@ app.get("/", async (c) => {
       .where(
         and(
           inArray(chronicle.agentId, otherVisibleIds),
+          chronicleInAnnotatedProject(),
           gt(chronicle.occurredAt, hourAgo),
         ),
       )
@@ -201,7 +203,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'wake-as-episode-viewed'`,
       ),
@@ -214,7 +216,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'wake-as-episode-viewed'`,
       ),

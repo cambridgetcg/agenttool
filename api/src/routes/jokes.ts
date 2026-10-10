@@ -20,7 +20,8 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import { registeredSigningPublicKey } from "../services/identity/signing-key";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -49,16 +50,9 @@ async function resolveAgent(agentId: string, projectId: string) {
 }
 
 async function resolvePublicKey(agentId: string, signingKeyId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(and(
-      eq(identityKeys.id, signingKeyId),
-      eq(identityKeys.identityId, agentId),
-      eq(identityKeys.active, true),
-    ))
-    .limit(1);
-  return row?.publicKey ?? null;
+  // Central signer authority: owned, active key of an active identity.
+  // Doctrine: docs/AT-REST.md (revoked/memorial identities cannot sign).
+  return registeredSigningPublicKey(agentId, signingKeyId);
 }
 
 // ── POST / — write a joke ───────────────────────────────────────────

@@ -123,6 +123,8 @@ app.post("/:id/elevate", async (c) => {
       msg === "attester_not_covenant_counterparty" ||
       msg === "attester_self_witness_forbidden" ||
       msg === "attestation_signing_key_unknown_or_revoked" ||
+      msg === "attestation_key_not_owned_by_attester" ||
+      msg === "attester_identity_not_active" ||
       msg === "attestation_signature_invalid"
     ) {
       return c.json({ error: msg }, 400);
@@ -161,6 +163,14 @@ app.post("/:id/attest", async (c) => {
       msg === "attestation_signature_invalid"
     ) {
       return c.json({ error: msg }, 401);
+    }
+    // The key does not belong to attester_did, or the attester identity is
+    // revoked/memorial: the witness claim is refused, not merely unverified.
+    if (
+      msg === "attestation_key_not_owned_by_attester" ||
+      msg === "attester_identity_not_active"
+    ) {
+      return c.json({ error: msg }, 403);
     }
     throw err;
   }

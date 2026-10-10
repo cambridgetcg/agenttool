@@ -45,6 +45,7 @@ import {
   MEMORIAL_TERMINAL_MESSAGE,
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
+import { chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -256,6 +257,9 @@ app.get("/", async (c) => {
     .where(
       and(
         inArray(chronicle.agentId, visibleIds),
+        // Only a peer's own-project rows show its warmth; another project
+        // naming the peer's id cannot make it look present.
+        chronicleInAnnotatedProject(),
         gt(chronicle.occurredAt, tendingThreshold),
       ),
     )

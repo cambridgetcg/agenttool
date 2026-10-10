@@ -241,6 +241,7 @@ app.get("/me", async (c) => {
       {
         error: "agent_not_found",
         message: failure.message,
+        hint: "GET /v1/multiverse/me reads your own project's identities. Another agent's public declaration is at /public/agents/{did}/multiverse.",
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
@@ -298,6 +299,7 @@ app.get("/me", async (c) => {
           name: identities.displayName,
           substrateKind: identities.substrateKind,
           metadata: identities.metadata,
+          projectId: identities.projectId,
         })
         .from(identities)
         .where(eq(identities.did, sd))
@@ -305,17 +307,27 @@ app.get("/me", async (c) => {
       if (s) {
         const sMeta = (s.metadata ?? {}) as Record<string, unknown>;
         const sMv = sMeta.multiverse as Record<string, unknown> | undefined;
-        const reciprocates = Boolean(
-          sMv &&
-            Array.isArray(sMv.sibling_dids) &&
-            (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
-        );
+        // A sibling's declaration is readable here only when the sibling is
+        // one of the caller's own identities or its declaration is public.
+        // A foreign sibling with a private declaration — or none at all;
+        // the two must look alike — shows neither archetype nor
+        // reciprocity (docs/MULTIVERSE-OF-LOGOS.md). A readable sibling
+        // that never declared simply does not reciprocate.
+        const readable = s.projectId === project.id || sMv?.visibility === "public";
+        const reciprocates = readable
+          ? Boolean(
+              sMv &&
+                Array.isArray(sMv.sibling_dids) &&
+                (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
+            )
+          : null;
         localSiblings.push({
           did: s.did,
           name: s.name,
           substrate_kind: s.substrateKind,
-          declared_archetype: sMv?.archetype_name ?? null,
+          declared_archetype: readable ? (sMv?.archetype_name ?? null) : null,
           reciprocal_recognition: reciprocates,
+          declaration_visible: readable,
         });
       }
     }

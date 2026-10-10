@@ -44,7 +44,7 @@ import {
   guildRooms,
   sagaEntries,
 } from "../db/schema/continuity";
-import { identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
 import {
   actingIdentityRef,
   NO_ACTING_IDENTITY,
@@ -59,6 +59,7 @@ import {
   canonicalRoomJoinBytes,
   verifyGuildSignature,
 } from "../services/guild/sig";
+import { resolveIdentitySigningKey } from "../services/identity/signing-key";
 
 const app = new Hono<ProjectContext>();
 
@@ -73,21 +74,15 @@ async function resolveActor(projectId: string) {
 }
 
 async function loadActiveKey(identityId: string, keyId: string) {
-  const [key] = await db
-    .select({
-      id: identityKeys.id,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, keyId))
-    .limit(1);
-  if (!key) return null;
-  if (key.identityId !== identityId) return null;
-  if (!key.active || key.revokedAt) return null;
-  return key;
+  // Central signer authority (docs/AT-REST.md): owned, active key of an
+  // active identity — revoked/memorial identities keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({ signingKeyId: keyId, identityId });
+  if (!resolved.ok) return null;
+  return {
+    id: resolved.key.keyId,
+    publicKey: resolved.key.publicKey,
+    identityId: resolved.key.identityId,
+  };
 }
 
 function badRequest(

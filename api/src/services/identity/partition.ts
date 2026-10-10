@@ -83,3 +83,22 @@ export async function resolveProjectSubject(
   const identity = await requireActiveProjectIdentity(projectId, selected, options);
   return { identityId: identity.id, agentId: data.agent_id ?? null };
 }
+
+/** Read-side ownership for "my own …" surfaces keyed by DID: the identity
+ *  must belong to the authenticated project. Unknown and foreign DIDs are
+ *  the same answer (null) so a read never reveals that a foreign identity
+ *  exists. Status is not required — an owning project may still read a
+ *  revoked or memorial identity's own record.
+ *  Tested: api/tests/cross-project-identity-reads.test.ts */
+export async function projectOwnedIdentityByDid(
+  projectId: string,
+  did: string,
+  options: PartitionOptions = {},
+): Promise<{ id: string; did: string } | null> {
+  const [row] = await (options.database ?? db)
+    .select({ id: identities.id, did: identities.did })
+    .from(identities)
+    .where(and(eq(identities.did, did), eq(identities.projectId, projectId)))
+    .limit(1);
+  return row ?? null;
+}
