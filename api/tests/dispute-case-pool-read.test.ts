@@ -63,7 +63,9 @@ const database = drizzle(async (sql, params) => {
   if (sql.includes('"dispute_pool_votes"')) {
     return { rows: [] };
   }
-  throw new Error(`unexpected query: ${sql}`);
+  // Anything else (another file sharing this process's module mock) sees
+  // an empty result rather than this file's fixtures.
+  return { rows: [] };
 });
 mock.module("../src/db/client", () => ({ db: database }));
 
