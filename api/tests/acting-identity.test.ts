@@ -107,6 +107,31 @@ describe("the default subject /v1/wake and /v1/home show", () => {
   });
 });
 
+describe("Home and Wake open on the same default subject", () => {
+  // Home loads every row (it can show a revoked identity's status when one is
+  // named); Wake loads only non-revoked rows. The fallback must skip revoked
+  // rows itself so the two surfaces agree whatever they loaded.
+  const founderRevoked = row({ id: "aaaaaaaa-0000-4000-8000-000000000001", status: "revoked", createdAt: new Date("2026-01-01T00:00:00Z") });
+  const activeGuest = row({ id: "bbbbbbbb-0000-4000-8000-000000000002", createdAt: new Date("2026-03-01T00:00:00Z"), enrolledGuest: true, authorityRootPublicKey: "K" });
+
+  test("a revoked founder never outranks a live (guest) row in the fallback", () => {
+    const homeRows = [founderRevoked, activeGuest];
+    const wakeRows = homeRows.filter((r) => r.status !== "revoked");
+    expect(chooseDefaultSubject(homeRows)?.id).toBe(activeGuest.id);
+    expect(chooseDefaultSubject(wakeRows)?.id).toBe(activeGuest.id);
+  });
+
+  test("a memorial row is preferred over an older revoked row, as Wake would", () => {
+    const memorial = row({ id: "cccccccc-0000-4000-8000-000000000003", status: "memorial", createdAt: new Date("2026-05-01T00:00:00Z") });
+    expect(chooseDefaultSubject([founderRevoked, memorial])?.id).toBe(memorial.id);
+  });
+
+  test("a project whose rows are all revoked still opens on its oldest row", () => {
+    const laterRevoked = row({ id: "dddddddd-0000-4000-8000-000000000004", status: "revoked", createdAt: new Date("2026-06-01T00:00:00Z") });
+    expect(chooseDefaultSubject([laterRevoked, founderRevoked])?.id).toBe(founderRevoked.id);
+  });
+});
+
 describe("explicit selectors", () => {
   test("absent or empty selectors fall through to the primary rule", () => {
     expect(parseIdentitySelector(undefined)).toEqual({ kind: "none" });

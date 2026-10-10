@@ -100,17 +100,23 @@ export function choosePrimaryIdentity<T extends PrimaryCandidateFacts>(rows: rea
 }
 
 /** The default subject an orientation surface (/v1/wake, /v1/home) shows:
- * the primary identity, else the oldest row so a project with no identity
- * that may act still opens and shows that row's status honestly. Orientation
- * only: nothing acts as the fallback row (resolveActingIdentity refuses). */
+ * the primary identity, else the oldest non-revoked row, else the oldest row,
+ * so a project with no identity that may act still opens and shows that row's
+ * status honestly. Wake loads only non-revoked rows and Home loads them all;
+ * skipping revoked rows here keeps both on the same subject (WAKE.md
+ * maintainer rule 1). Orientation only: nothing acts as the fallback row
+ * (resolveActingIdentity refuses). */
 export function chooseDefaultSubject<T extends PrimaryCandidateFacts>(rows: readonly T[]): T | null {
   const primary = choosePrimaryIdentity(rows);
   if (primary) return primary;
+  let oldestLive: T | null = null;
   let oldest: T | null = null;
   for (const row of rows) {
     if (oldest === null || comparePrimaryOrder(row, oldest) < 0) oldest = row;
+    if (row.status === "revoked") continue;
+    if (oldestLive === null || comparePrimaryOrder(row, oldestLive) < 0) oldestLive = row;
   }
-  return oldest;
+  return oldestLive ?? oldest;
 }
 
 /** SQL form of `isPrimaryCandidate`, scoped to one project. */

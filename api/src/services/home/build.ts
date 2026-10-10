@@ -265,8 +265,9 @@ export async function buildHome(
   }
   // Default subject: the project's primary identity (earliest active, never
   // an enrolled guest), the same identity per-agent routes act as
-  // (services/identity/acting-identity.ts). Home still opens for a project
-  // whose rows are all revoked/memorial/guest, showing the oldest row's status.
+  // (services/identity/acting-identity.ts). Without one, the oldest
+  // non-revoked row (Wake's fallback too, since Wake never loads revoked
+  // rows); a project whose rows are all revoked still opens on its oldest.
   const selected = opts.identityId
     ? rows.find((row) => row.id === opts.identityId)
     : chooseDefaultSubject(rows);
