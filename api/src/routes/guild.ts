@@ -45,7 +45,12 @@ import {
   sagaEntries,
 } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   canonicalInvitationBytes,
   canonicalInvitationResponseBytes,
@@ -234,8 +239,11 @@ app.delete("/recognitions/:id", async (c) => {
 
 app.get("/recognitions", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const direction = c.req.query("direction") ?? "received";
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
@@ -253,6 +261,7 @@ app.get("/recognitions", async (c) => {
     .limit(limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     direction,
     count: rows.length,
     recognitions: rows,
@@ -511,8 +520,11 @@ app.post("/invitations/:id/withdraw", async (c) => {
 
 app.get("/invitations", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const direction = c.req.query("direction") ?? "received";
   const statusFilter = c.req.query("status");
@@ -534,6 +546,7 @@ app.get("/invitations", async (c) => {
     .limit(limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     direction,
     status: statusFilter ?? "any",
     count: rows.length,
@@ -636,15 +649,20 @@ app.post("/rooms", async (c) => {
 
 app.get("/rooms", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
 
   const mineOnly = c.req.query("mine") === "true";
   const openOnly = c.req.query("open") === "true";
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
 
   const filters = [isNull(guildRooms.closedAt)];
-  if (mineOnly && actor) {
-    filters.push(sql`${actor.did} = ANY(${guildRooms.memberDids})`);
+  // "mine" is a read of one identity's rooms: ?identity_id=, else the
+  // primary, else the memorial identity. Without one, "mine" refuses rather
+  // than silently listing every room.
+  let reading: Awaited<ReturnType<typeof resolveReadingIdentity>> | null = null;
+  if (mineOnly) {
+    reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+    if (!reading.ok) return c.json(reading.body, reading.status);
+    filters.push(sql`${reading.identity.did} = ANY(${guildRooms.memberDids})`);
   }
   if (openOnly) filters.push(eq(guildRooms.openDoor, true));
 
@@ -656,6 +674,7 @@ app.get("/rooms", async (c) => {
     .limit(limit);
 
   return c.json({
+    ...(reading?.ok ? { acting_identity: actingIdentityRef(reading) } : {}),
     count: rows.length,
     rooms: rows,
     _note: "Rooms publish membership but the substrate does not enforce attendance.",

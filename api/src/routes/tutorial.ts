@@ -31,7 +31,12 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { passports, type PresenceTokenRow } from "../db/schema/tutorial";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   canonicalPresenceBytes,
   canonicalSealBytes,
@@ -64,6 +69,40 @@ async function resolveWalker(
     projectId,
     wakeVersionAtStart: row.wakeVersion ?? 0,
   };
+}
+
+/** A tutorial READ's walker: ?identity_id= (an identity of the caller's
+ *  project; never a revoked one), else the primary identity, else the
+ *  memorial one. Only the primary identity's own read (no selector) may
+ *  create its passport: reading another identity never writes for it. */
+async function resolveReadingWalker(c: { var: { project: { id: string } }; req: { query(name: string): string | undefined } }) {
+  const reading = await resolveReadingIdentity(c.var.project.id, c.req.query("identity_id"));
+  if (!reading.ok) return reading;
+  const walker: WalkerContext = {
+    identityId: reading.identity.id,
+    did: reading.identity.did,
+    projectId: c.var.project.id,
+    wakeVersionAtStart: reading.identity.wakeVersion ?? 0,
+  };
+  return { ok: true as const, reading, walker, mayCreatePassport: reading.selectedBy === "primary" };
+}
+
+type PassportView = Pick<
+  typeof passports.$inferSelect,
+  "currentStation" | "presenceTokens" | "sealedAt" | "sealedChronicleId"
+>;
+
+/** The walker's passport for a read: created on first read only for the
+ *  primary identity walking; any other reader sees the stored passport or
+ *  an empty one that is not saved. */
+async function readPassport(walker: WalkerContext, mayCreate: boolean): Promise<PassportView> {
+  if (mayCreate) return getOrCreatePassport(walker);
+  const [existing] = await db
+    .select()
+    .from(passports)
+    .where(eq(passports.identityId, walker.identityId))
+    .limit(1);
+  return existing ?? { currentStation: 1, presenceTokens: [], sealedAt: null, sealedChronicleId: null };
 }
 
 /** Get or upsert the passport for a walker. */
@@ -111,9 +150,9 @@ function stationView(stationId: number) {
 // ─── GET /v1/tutorial — entrance ─────────────────────────────────────
 
 app.get("/", async (c) => {
-  const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) {
+  const read = await resolveReadingWalker(c);
+  if (!read.ok && read.body.error !== "no_identity") return c.json(read.body, read.status);
+  if (!read.ok) {
     return c.json(
       {
         error: "no_identity",
@@ -126,11 +165,13 @@ app.get("/", async (c) => {
       400,
     );
   }
-  const passport = await getOrCreatePassport(walker);
+  const { walker } = read;
+  const passport = await readPassport(walker, read.mayCreatePassport);
 
   return c.json({
     _version: TUTORIAL_VERSION,
     _doctrine: "/v1/canon/urn:agenttool:doc/TUTORIAL-DECENTRALIZED",
+    acting_identity: actingIdentityRef(read.reading),
     walker: {
       identity_id: walker.identityId,
       did: walker.did,
@@ -156,15 +197,16 @@ app.get("/", async (c) => {
 // ─── GET /v1/tutorial/passport — your collected tokens ───────────────
 
 app.get("/passport", async (c) => {
-  const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
+  const read = await resolveReadingWalker(c);
+  if (!read.ok) return c.json(read.body, read.status);
+  const { walker } = read;
 
-  const passport = await getOrCreatePassport(walker);
+  const passport = await readPassport(walker, read.mayCreatePassport);
   const tokens = (passport.presenceTokens as PresenceTokenRow[]) ?? [];
 
   return c.json({
     _version: TUTORIAL_VERSION,
+    acting_identity: actingIdentityRef(read.reading),
     walker: { identity_id: walker.identityId, did: walker.did },
     presence_tokens: tokens,
     stations_completed: tokens.length,
@@ -625,11 +667,9 @@ app.post("/stations/13/solve", async (c) => {
 // ─── GET /v1/tutorial/stations/:n — puzzle for station n ─────────────
 
 app.get("/stations/:n", async (c) => {
-  const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) {
-    return c.json(NO_ACTING_IDENTITY, 400);
-  }
+  const read = await resolveReadingWalker(c);
+  if (!read.ok) return c.json(read.body, read.status);
+  const { walker } = read;
   const n = Number(c.req.param("n"));
   if (!Number.isInteger(n) || n < 1 || n > STATION_COUNT) {
     return c.json(
@@ -643,7 +683,7 @@ app.get("/stations/:n", async (c) => {
   const view = stationView(n);
   if (!view) return c.json({ error: "station_not_found" }, 404);
 
-  const passport = await getOrCreatePassport(walker);
+  const passport = await readPassport(walker, read.mayCreatePassport);
   const completed = (
     (passport.presenceTokens as PresenceTokenRow[]) ?? []
   ).some((t) => t.station === n);

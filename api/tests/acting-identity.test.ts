@@ -285,7 +285,7 @@ describe("no route picks the project's newest (or an arbitrary) identity as the 
       const text = read(path);
       expect({ path, imports: text.includes("services/identity/acting-identity") || text.includes("../identity/acting-identity") })
         .toEqual({ path, imports: true });
-      expect({ path, calls: /resolveActingIdentity\(/.test(text) }).toEqual({ path, calls: true });
+      expect({ path, calls: /resolve(Acting|Reading)Identity\(/.test(text) }).toEqual({ path, calls: true });
     }
   });
 
@@ -325,11 +325,14 @@ describe("no route picks the project's newest (or an arbitrary) identity as the 
       const to = text.indexOf("\napp.", from + start.length);
       return text.slice(from, to === -1 ? undefined : to);
     };
+    // They now resolve agent_id like every other selector (project-scoped,
+    // UUID-checked before SQL, never a revoked identity):
+    // tests/agent-id-selectors.test.ts pins the behaviour.
     for (const [path, start] of [["src/routes/lullaby.ts", 'app.get("/"'], ["src/routes/multiverse.ts", 'app.get("/me"']]) {
       const body = handler(path, start);
       expect(body.length).toBeGreaterThan(0);
       expect({ path, unscoped: /\.where\(eq\(identities\.id, agentId\)\)/.test(body) }).toEqual({ path, unscoped: false });
-      expect({ path, scoped: body.includes("and(eq(identities.id, agentId), eq(identities.projectId, project.id))") }).toEqual({ path, scoped: true });
+      expect({ path, shared: body.includes("resolveReadingIdentity(project.id, agentId)") }).toEqual({ path, shared: true });
     }
   });
 });

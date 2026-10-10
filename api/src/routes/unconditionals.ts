@@ -25,7 +25,12 @@
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   declareUnconditional,
   getUnconditional,
@@ -172,8 +177,11 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const directionRaw = (c.req.query("direction") ?? "all").toLowerCase();
   const direction: "given" | "received" | "all" =
@@ -193,15 +201,18 @@ app.get("/", async (c) => {
     limit,
     includeRevoked,
   });
-  return c.json({ unconditionals: rows, count: rows.length, direction });
+  return c.json({ acting_identity: actingIdentityRef(reading), unconditionals: rows, count: rows.length, direction });
 });
 
 // ─── GET /v1/unconditionals/:id ──────────────────────────────────────
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const id = c.req.param("id");
   const row = await getUnconditional(actor.id, actor.did, id);

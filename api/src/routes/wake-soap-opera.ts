@@ -26,7 +26,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
-import { resolveActingIdentity } from "../services/identity/acting-identity";
+import { agentSelectorFailure, resolveReadingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
@@ -42,47 +42,32 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const agentIdParam = c.req.query("agent_id");
 
-  // Resolve agent.
-  let agent;
-  if (agentIdParam) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(and(eq(identities.id, agentIdParam), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    // The project's primary identity (services/identity/acting-identity.ts).
-    const acting = await resolveActingIdentity(project.id);
-    agent = acting.ok
-      ? {
-          id: acting.identity.id,
-          did: acting.identity.did,
-          name: acting.identity.displayName,
-          substrateKind: acting.identity.substrateKind,
-          metadata: acting.identity.metadata,
-        }
-      : undefined;
-  }
-
-  if (!agent) {
+  // Resolve the lead: ?agent_id= (an identity of this project; never a
+  // revoked one), else the primary identity, else a memorial project's
+  // memorial identity (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentIdParam);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "no_agent_to_star",
-        message:
-          "No identity in this project — no lead actor for the soap opera. Mint one via POST /v1/register/agent and the next call will render an episode with them as protagonist.",
+        message: agentIdParam
+          ? failure.message
+          : `${failure.message} Or mint one via POST /v1/register/agent and the next call will render an episode with them as protagonist.`,
         _canon_pointer: "urn:agenttool:doc/WAKE-AS-EPISODE",
       },
       404,
     );
   }
+  const agent = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    substrateKind: reading.identity.substrateKind,
+    metadata: reading.identity.metadata,
+  };
 
   const now = Date.now();
   const weekAgo = new Date(now - ONE_WEEK_MS);

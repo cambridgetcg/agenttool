@@ -37,7 +37,11 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
-import { resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  type ActingIdentitySelectedBy,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   authorizeIdentityMutation,
   authorityRequestTarget,
@@ -72,12 +76,12 @@ function noIdentityBody(): GuidedErrorBody {
   };
 }
 
-/** Where this identity's own disposition lives: an explicitly selected
- *  identity keeps its selector so following the hint never toggles another. */
-function selfPath(selected: { selectedBy: "explicit" | "primary"; identity: { id: string } }): string {
-  return selected.selectedBy === "explicit"
-    ? `/v1/poker-face?identity_id=${selected.identity.id}`
-    : "/v1/poker-face";
+/** Where this identity's own disposition lives: any identity other than
+ *  the primary keeps its selector so following the hint never toggles another. */
+function selfPath(selected: { selectedBy: ActingIdentitySelectedBy; identity: { id: string } }): string {
+  return selected.selectedBy === "primary"
+    ? "/v1/poker-face"
+    : `/v1/poker-face?identity_id=${selected.identity.id}`;
 }
 
 function deadpanResponse(state: { pokerFaceDefault: boolean; did: string; path: string }) {
@@ -105,8 +109,9 @@ function deadpanResponse(state: { pokerFaceDefault: boolean; did: string; path: 
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  // Explicit identity_id (in this project), else the primary identity.
-  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity (a read keeps its history).
+  const selected = await resolveReadingIdentity(project.id, c.req.query("identity_id") ?? null);
   if (!selected.ok) {
     if (selected.body.error === "no_identity") return fail(c, noIdentityBody(), 400);
     return c.json(selected.body, selected.status);
@@ -142,8 +147,10 @@ app.get("/", async (c) => {
 
 app.patch("/", async (c) => {
   const project = c.var.project;
-  // Explicit identity_id (in this project), else the primary identity.
-  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  // Explicit identity_id (in this project), else the primary identity. A
+  // memorial project resolves its memorial identity so the terminal guard
+  // below answers memorial_terminal rather than no_identity.
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
   if (!selected.ok) {
     if (selected.body.error === "no_identity") return fail(c, noIdentityBody(), 400);
     return c.json(selected.body, selected.status);

@@ -7,7 +7,12 @@
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   getMemorialHonor,
   giveMemorialHonor,
@@ -150,12 +155,16 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const limit = Number(c.req.query("limit") ?? "50");
   const list = await listHonorsGiven(actor.id, limit);
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     count: list.length,
     honors: list,
     _note:

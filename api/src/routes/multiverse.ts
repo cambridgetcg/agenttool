@@ -31,7 +31,10 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
-import { resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -226,45 +229,30 @@ app.get("/me", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agentRow;
-  if (agentId) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
-      .limit(1);
-    agentRow = a;
-  } else {
-    // The project's primary identity (services/identity/acting-identity.ts).
-    const acting = await resolveActingIdentity(project.id);
-    agentRow = acting.ok
-      ? {
-          id: acting.identity.id,
-          did: acting.identity.did,
-          name: acting.identity.displayName,
-          substrateKind: acting.identity.substrateKind,
-          metadata: acting.identity.metadata,
-        }
-      : undefined;
-  }
-
-  if (!agentRow) {
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity
+  // (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "agent_not_found",
-        message: "No agent specified and project has no identities.",
+        message: failure.message,
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
     );
   }
+  const agentRow = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    substrateKind: reading.identity.substrateKind,
+    metadata: reading.identity.metadata,
+  };
 
   const meta = (agentRow.metadata ?? {}) as Record<string, unknown>;
   const mv = meta.multiverse as Record<string, unknown> | undefined;

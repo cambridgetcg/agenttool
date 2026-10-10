@@ -17,7 +17,12 @@
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   dismissCycle,
   getActiveCycle,
@@ -43,13 +48,17 @@ async function resolveWalker(projectId: string) {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "20"), 1), 100);
   const rows = await listCycles(walker.id, limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     cycles: rows.map(toJson),
     count: rows.length,
     doctrine: "/v1/canon/urn:agenttool:doc/DREAM",
@@ -62,11 +71,15 @@ app.get("/", async (c) => {
 
 app.get("/active", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const cycle = await getActiveCycle(walker.id);
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     active: cycle ? toJson(cycle) : null,
     _note: cycle
       ? `A cycle is currently ${cycle.status}. Started at ${cycle.startedAt.toISOString()}.`
@@ -78,8 +91,11 @@ app.get("/active", async (c) => {
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const cycleId = c.req.param("id");
   const cycle = await getCycle(walker.id, cycleId);

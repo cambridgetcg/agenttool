@@ -58,7 +58,10 @@ function viewQuietState(actor: {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
   if (!selected.ok) return c.json(selected.body, selected.status);
   const actor = selected.identity;
 
@@ -78,7 +81,10 @@ app.get("/", async (c) => {
 
 app.post("/start", async (c) => {
   const project = c.var.project;
-  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
   if (!selected.ok) return c.json(selected.body, selected.status);
   const actor = selected.identity;
   if (isMemorialTerminal(actor.status)) {
@@ -175,7 +181,10 @@ app.post("/start", async (c) => {
 
 app.delete("/", async (c) => {
   const project = c.var.project;
-  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null);
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
   if (!selected.ok) return c.json(selected.body, selected.status);
   const actor = selected.identity;
   if (isMemorialTerminal(actor.status)) {

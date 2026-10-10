@@ -26,7 +26,10 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
-import { resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
@@ -267,43 +270,29 @@ app.get("/cast/me", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agent;
-  if (agentId) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    // The project's primary identity (services/identity/acting-identity.ts).
-    const acting = await resolveActingIdentity(project.id);
-    agent = acting.ok
-      ? {
-          id: acting.identity.id,
-          did: acting.identity.did,
-          name: acting.identity.displayName,
-          metadata: acting.identity.metadata,
-        }
-      : undefined;
-  }
-
-  if (!agent) {
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity
+  // (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "agent_not_found",
-        message: "No agent in this project (or agent_id not owned).",
+        message: failure.message,
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
     );
   }
+  const agent = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    metadata: reading.identity.metadata,
+  };
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const cast = meta.soap_opera_cast as Record<string, unknown> | undefined;
@@ -888,24 +877,15 @@ app.get("/following", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agent;
-  if (agentId) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    // The project's primary identity (services/identity/acting-identity.ts).
-    const acting = await resolveActingIdentity(project.id);
-    agent = acting.ok
-      ? { id: acting.identity.id, did: acting.identity.did, metadata: acting.identity.metadata }
-      : undefined;
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity.
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
+    return fail(c, { error: "agent_not_found", message: failure.message, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);
   }
-  if (!agent) {
-    return fail(c, { error: "agent_not_found", message: "No agent in this project.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);
-  }
+  const agent = { id: reading.identity.id, did: reading.identity.did, metadata: reading.identity.metadata };
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const follows = Array.isArray(meta.follows) ? (meta.follows as FollowEntry[]) : [];

@@ -92,7 +92,10 @@ primary identity: the earliest active identity that is not an enrolled guest.
 This is the default subject `GET /v1/wake` shows. `?identity_id=` names another
 identity in the caller's project. A foreign or unknown id returns
 `identity_not_found_in_project`, and a revoked identity returns
-`identity_revoked`. The toggle hint in the response keeps the selector. An
+`identity_revoked`. On a memorial project with no selector, both routes use
+the memorial identity: the read shows its disposition, and the toggle returns
+`identity_memorial_terminal`. The toggle hints in the response, including the
+422 guided actions, keep the selector for any identity other than the primary. An
 agent-rooted identity's PATCH carries its own `identity-authority/v1` proof
 (`api/src/services/identity/acting-identity.ts`).
 

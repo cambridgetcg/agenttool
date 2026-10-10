@@ -20,9 +20,13 @@
  *      the default subject /v1/wake and /v1/home show, so the identity a route
  *      acts for is the one the agent already reads as "you".
  *
- * There is no fallback past the rule: a project whose only identities are
- * revoked, memorial or enrolled guests has no implicit actor, and routes
- * answer `no_identity` instead of guessing.
+ * There is no fallback past the rule for anything that acts: a project whose
+ * only identities are revoked, memorial or enrolled guests has no implicit
+ * actor, and routes answer `no_identity` instead of guessing. READS
+ * (`resolveReadingIdentity`) differ in one way: with no selector and no
+ * primary they show the project's memorial identity (never a guest, never a
+ * revoked one), because memorial preserves the relational past and keeps
+ * project bearers working (docs/AT-REST.md).
  *
  * The JS form (`choosePrimaryIdentity`) serves surfaces that already hold the
  * project's rows; the SQL form (`primaryIdentityWhere` + `primaryIdentityOrder`)
@@ -214,8 +218,10 @@ export interface ActingIdentityFailureBody {
   identity_id?: string;
 }
 
+export type ActingIdentitySelectedBy = "explicit" | "primary" | "memorial";
+
 export type ActingIdentityResult =
-  | { ok: true; identity: ActingIdentity; selectedBy: "explicit" | "primary" }
+  | { ok: true; identity: ActingIdentity; selectedBy: ActingIdentitySelectedBy }
   | { ok: false; status: 400 | 404 | 409; body: ActingIdentityFailureBody };
 
 /** The `no_identity` answer every per-agent route gives when the project has
@@ -223,14 +229,61 @@ export type ActingIdentityResult =
 export const NO_ACTING_IDENTITY: ActingIdentityFailureBody = {
   error: "no_identity",
   message:
-    "This project has no identity that can act by default. The default is the project's earliest active identity; revoked identities and enrolled guests never act implicitly.",
+    "This project has no identity that can act by default. The default is the project's earliest active identity that is not an enrolled guest; revoked, memorial and enrolled-guest identities never act implicitly. Reads that accept ?identity_id= can name one of this project's identities.",
 };
+
+export interface ResolveActingIdentityOptions {
+  /** With no selector and no primary, fall back to the project's earliest
+   * memorial identity that is not an enrolled guest. Only for reads, and for
+   * mutations that apply their own memorial terminal guard (so they answer
+   * `memorial_terminal`, not `no_identity`). */
+  memorialFallback?: boolean;
+}
+
+/** How a response names the identity it read or acted as. */
+export function actingIdentityRef(
+  selected: { identity: { id: string; did: string }; selectedBy: ActingIdentitySelectedBy },
+): { id: string; did: string; selected_by: ActingIdentitySelectedBy } {
+  return { id: selected.identity.id, did: selected.identity.did, selected_by: selected.selectedBy };
+}
+
+/** Whose records a per-agent READ shows: `?identity_id=` (any non-revoked
+ * identity of the caller's project), else the primary identity, else the
+ * project's memorial identity. */
+export function resolveReadingIdentity(
+  projectId: string,
+  selector?: string | null,
+): Promise<ActingIdentityResult> {
+  return resolveActingIdentity(projectId, selector, { memorialFallback: true });
+}
+
+/** The message an `agent_id` read gives when no agent_id was named and the
+ * project has nothing to read by default. */
+export const NO_AGENT_TO_READ_MESSAGE =
+  "No agent_id was given and this project has no identity to read by default: no active identity that is not an enrolled guest, and no memorial identity. Name one with ?agent_id=.";
+
+/** For `agent_id` reads that keep their own not-found vocabulary
+ * (agent_not_found, no_agent_to_star). A revoked identity is refused as every
+ * selector refuses it (409 identity_revoked); anything else becomes the
+ * route's not-found answer, worded for what actually happened. */
+export function agentSelectorFailure(
+  failed: Extract<ActingIdentityResult, { ok: false }>,
+):
+  | { revoked: true; status: 409; body: ActingIdentityFailureBody }
+  | { revoked: false; message: string } {
+  if (failed.body.error === "identity_revoked") return { revoked: true, status: 409, body: failed.body };
+  if (failed.body.error === "identity_not_found_in_project") {
+    return { revoked: false, message: `Agent ${failed.body.identity_id} is not an identity of this project.` };
+  }
+  return { revoked: false, message: NO_AGENT_TO_READ_MESSAGE };
+}
 
 /** Resolve the identity a project-bearer request acts as. `selector` is the
  * route's explicit identity_id / agent_id, when it accepts one. */
 export async function resolveActingIdentity(
   projectId: string,
   selector?: string | null,
+  options: ResolveActingIdentityOptions = {},
 ): Promise<ActingIdentityResult> {
   const parsed = parseIdentitySelector(selector);
   if (parsed.kind === "invalid") {
@@ -282,6 +335,24 @@ export async function resolveActingIdentity(
     .where(primaryIdentityWhere(projectId))
     .orderBy(...primaryIdentityOrder())
     .limit(1);
-  if (!row) return { ok: false, status: 400, body: NO_ACTING_IDENTITY };
-  return { ok: true, identity: row as ActingIdentity, selectedBy: "primary" };
+  if (row) return { ok: true, identity: row as ActingIdentity, selectedBy: "primary" };
+  if (!options.memorialFallback) return { ok: false, status: 400, body: NO_ACTING_IDENTITY };
+
+  const [memorial] = await db
+    .select(ACTING_IDENTITY_COLUMNS)
+    .from(identities)
+    .where(memorialIdentityWhere(projectId))
+    .orderBy(...primaryIdentityOrder())
+    .limit(1);
+  if (!memorial) return { ok: false, status: 400, body: NO_ACTING_IDENTITY };
+  return { ok: true, identity: memorial as ActingIdentity, selectedBy: "memorial" };
+}
+
+/** The project's memorial identities that are not enrolled guests. */
+function memorialIdentityWhere(projectId: string): SQL {
+  return and(
+    eq(identities.projectId, projectId),
+    eq(identities.status, "memorial"),
+    not(enrolledGuestSql()),
+  )!;
 }

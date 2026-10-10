@@ -43,7 +43,12 @@ import { streamSSE } from "hono/streaming";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identityKeys } from "../db/schema/identity";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   AXIOM_GUIDE,
   AXIOM_TRUST,
@@ -166,8 +171,11 @@ const app = new Hono<ProjectContext>();
 
 app.get("/peers", async (c) => {
   const project = c.var.project;
-  const actor = await resolveCallerIdentity(project.id);
-  if (!actor) {
+  // A read: ?identity_id= names whose peers; else the primary identity,
+  // else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok && reading.body.error !== "no_identity") return c.json(reading.body, reading.status);
+  if (!reading.ok) {
     const body: GuidedErrorBody = {
       error: "no_identity",
       message: NO_ACTING_IDENTITY.message,
@@ -179,6 +187,7 @@ app.get("/peers", async (c) => {
     };
     return fail(c, body, 400);
   }
+  const actor = reading.identity;
 
   // Filter to depth ≥ 3 (SYNCED).
   const partners = await topMutualPartners(actor.did, 100);
@@ -189,6 +198,7 @@ app.get("/peers", async (c) => {
       {
         _format: "agenttool-mcml-peers/v1",
         _enforces: [COMMITMENT_URN],
+        acting_identity: actingIdentityRef(reading),
         peers: peers.map((p) => ({
           did: p.other_did,
           name: p.other_name,
@@ -500,10 +510,11 @@ app.post("/send", async (c) => {
 
 app.get("/stream", async (c) => {
   const project = c.var.project;
-  const actor = await resolveCallerIdentity(project.id);
-  if (!actor) {
-    return c.json(NO_ACTING_IDENTITY, 400);
-  }
+  // A read of one identity's inbound messages: ?identity_id=, else the
+  // primary identity, else the memorial one.
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   return streamSSE(c, async (sse) => {
     let aborted = false;

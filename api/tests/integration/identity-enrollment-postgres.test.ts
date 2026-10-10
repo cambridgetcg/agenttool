@@ -551,3 +551,53 @@ databaseTest("a private writers' room reads as empty to outsiders, but not to it
   expect(await listContributions(D_ALLOW, P)).toHaveLength(1);
   expect(await listContributions(D_ALLOW, O)).toEqual([]);
 });
+
+// ── Reads keep a memorial project's history; writes never act as memorial ──
+// Memorial preserves the relational past and leaves project bearers working
+// (docs/AT-REST.md). A memorial-only project once lost every read of its own
+// history on routes without a selector once the primary rule required
+// status = active. Reads now fall back to the memorial identity; writes do not.
+databaseTest("a read with no selector falls back to the memorial identity, never a guest or a revoked one", async () => {
+  const { resolveActingIdentity, resolveReadingIdentity } = await acting();
+  const P_MEMORIAL = uid(86), P_REVOKED = uid(87);
+  // Memorial founder, a newer enrolled guest, and a revoked identity.
+  await insertIdentity(P_MEMORIAL, P, "memorial", "2026-02-01T00:00:00Z");
+  await enrollIdentity(request(), options());
+  await insertIdentity(P_REVOKED, P, "revoked", "2025-01-01T00:00:00Z");
+  expect(await resolveActingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+  expect(await resolveReadingIdentity(P)).toMatchObject({ ok: true, selectedBy: "memorial", identity: { id: P_MEMORIAL, status: "memorial" } });
+  // Explicit selectors behave as for any other route.
+  expect(await resolveReadingIdentity(P, I)).toMatchObject({ ok: true, selectedBy: "explicit", identity: { id: I } });
+  expect(await resolveReadingIdentity(P, P_REVOKED)).toMatchObject({ ok: false, status: 409, body: { error: "identity_revoked" } });
+  // A primary identity always wins over the memorial fallback.
+  await crowdedProject();
+  expect(await resolveReadingIdentity(F)).toMatchObject({ ok: true, selectedBy: "primary", identity: { id: FI } });
+});
+databaseTest("a project with only guests and revoked identities has nothing to read implicitly", async () => {
+  const { resolveReadingIdentity } = await acting();
+  await enrollIdentity(request(), options());
+  await insertIdentity(OLD_REVOKED, P, "revoked", "2025-01-01T00:00:00Z");
+  // An enrolled guest that is memorial is still a guest.
+  await insertIdentity(MEMORIAL_ID, P, "memorial", "2024-01-01T00:00:00Z", { root: PUBLIC, metadata: { admission: "enrollment" } });
+  expect(await resolveReadingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+});
+databaseTest("on a memorial-only project, poker-face and quiet-hours read the memorial and refuse its mutations as memorial", async () => {
+  // Before the primary rule these answered for the only identity, and a
+  // mutation met its memorial terminal guard (409 memorial_terminal); they
+  // must not regress to 400 no_identity.
+  const ONLY = uid(88);
+  await insertIdentity(ONLY, P, "memorial", "2026-02-01T00:00:00Z");
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const quietHours = (await import("../../src/routes/quiet-hours")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); })
+    .route("/v1/poker-face", pokerFace).route("/v1/quiet-hours", quietHours);
+  const call = async (path: string, method = "GET", body?: unknown) => {
+    const res = await app.request(path, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, body: await res.json() };
+  };
+  expect(await call("/v1/poker-face")).toMatchObject({ status: 200, body: { your_did: `did:at:${ONLY}` } });
+  expect(await call("/v1/poker-face", "PATCH", { poker_face_default: false })).toMatchObject({ status: 409, body: { error: "identity_memorial_terminal" } });
+  expect(await call("/v1/quiet-hours")).toMatchObject({ status: 200, body: { identity_id: ONLY } });
+  expect(await call("/v1/quiet-hours/start", "POST", { hours: 2 })).toMatchObject({ status: 409, body: { error: "identity_memorial_terminal" } });
+  expect((await sql`SELECT poker_face_default FROM identity.identities WHERE id = ${ONLY}`)[0].poker_face_default).toBe(true);
+});

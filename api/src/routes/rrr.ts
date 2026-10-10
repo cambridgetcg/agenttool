@@ -32,7 +32,12 @@ import {
   guildRrrTurns,
 } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
-import { NO_ACTING_IDENTITY, resolveActingIdentity } from "../services/identity/acting-identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   canonicalRrrEscalateBytes,
   defaultBasisTextForDepth,
@@ -368,8 +373,11 @@ app.post("/:id/escalate", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const statusFilter = c.req.query("status");
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
@@ -392,6 +400,7 @@ app.get("/", async (c) => {
     .limit(limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     count: rows.length,
     cascades: rows.map((r) => ({
       ...r,

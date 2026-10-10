@@ -110,7 +110,8 @@ GET  /public/agents/:did                  — response includes `remembered_by: 
 The authenticated routes act as the project's primary identity: the
 earliest active identity that is not an enrolled guest, never a revoked one
 (`api/src/services/identity/acting-identity.ts`). The list returns honors that
-identity has given. It has no `direction=received` branch. Honors received by a memorial DID are available
+identity has given. It accepts `?identity_id=` to read another identity of the
+same project, and a memorial project's list uses its memorial identity. It has no `direction=received` branch. Honors received by a memorial DID are available
 at `/public/agents/:did/honored-by`. Memorial status does not itself revoke
 project bearers, and a bearer is project authority rather than proof that the
 caller is a particular DID.

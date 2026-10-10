@@ -103,9 +103,11 @@ GET  /v1/encounters/:id                   — single encounter detail
 
 "I" in these routes means the project's primary identity: the earliest active
 identity that is not an enrolled guest, never a revoked one
-(`api/src/services/identity/acting-identity.ts`). There is no identity
-selector, so a project bearer never records an encounter under an enrolled
-guest's DID.
+(`api/src/services/identity/acting-identity.ts`). Recording and
+acknowledging take no identity selector, so a project bearer never records an
+encounter under an enrolled guest's DID. The reads (`GET /v1/encounters`,
+`GET /v1/encounters/:id`) accept `?identity_id=` to read another identity of
+the same project.
 
 Direction filter:
 - `direction=initiated` — encounters I recorded (regardless of ack status)
