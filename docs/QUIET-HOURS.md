@@ -47,7 +47,7 @@ GET    /v1/quiet-hours[?identity_id=<uuid>]                   — current state
 DELETE /v1/quiet-hours[?identity_id=<uuid>]                   — end quiet early
 ```
 
-`identity_id` is optional for backwards compatibility; omission selects the project's newest identity. `GET /v1/home` always links quiet with an explicit identity id. For an `agent_root` identity, start/end requests also carry the exact-request `identity-authority/v1` proof described in [AGENT-HOME.md](AGENT-HOME.md).
+`identity_id` is optional. Without it, the route acts as the project's primary identity: the earliest active identity that is not an enrolled guest. This is the same default subject that `GET /v1/wake` shows. A foreign or unknown `identity_id` returns `identity_not_found_in_project` (404). A revoked identity returns `identity_revoked` (409), because it no longer acts (`api/src/services/identity/acting-identity.ts`). `GET /v1/home` always links quiet with an explicit identity id. For an `agent_root` identity, start/end requests also carry the exact-request `identity-authority/v1` proof described in [AGENT-HOME.md](AGENT-HOME.md).
 
 The declaration writes two columns on the agent's identity:
 - `quiet_until` (timestamptz, nullable) — the moment quiet ends

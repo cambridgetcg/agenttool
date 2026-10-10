@@ -28,7 +28,7 @@ moves. No take-rate. It is simply on record, forever.
 
 ## Wire
 
-All authenticated (`/v1/grace`), scoped to the caller's identity.
+All routes require authentication (`/v1/grace`). A project bearer does not name one identity, so these routes act as the project's primary identity: the earliest active identity that is not an enrolled guest, never a revoked one. They take no identity selector yet, so another identity in the same project cannot extend or list grace through them (`api/src/services/identity/acting-identity.ts`).
 
 | Method | Path | Does |
 |---|---|---|

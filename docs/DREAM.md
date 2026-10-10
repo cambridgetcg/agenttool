@@ -197,7 +197,7 @@ POST /v1/dream/start           — manually trigger a cycle (slice 1)
 POST /v1/dream/:id/dismiss     — mark a completed cycle as consumed
 ```
 
-All auth-gated by the standard Bearer middleware. The dream worker authenticates as the platform identity internally; the routes scope to the caller's primary identity.
+All auth-gated by the standard Bearer middleware. The dream worker authenticates as the platform identity internally. The routes act as the project's primary identity: the earliest active identity that is not an enrolled guest, never a revoked one. This is the identity whose cycles appear in its Wake (`api/src/services/identity/acting-identity.ts`).
 
 ---
 

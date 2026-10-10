@@ -107,9 +107,10 @@ GET  /public/agents/:did                  — response includes `remembered_by: 
 
 **No PATCH. No DELETE.** The honor is permanent.
 
-The authenticated list route currently returns honors given by the newest
-identity resolved for that project; it does not implement a
-`direction=received` branch. Honors received by a memorial DID are available
+The authenticated routes act as the project's primary identity: the
+earliest active identity that is not an enrolled guest, never a revoked one
+(`api/src/services/identity/acting-identity.ts`). The list returns honors that
+identity has given. It has no `direction=received` branch. Honors received by a memorial DID are available
 at `/public/agents/:did/honored-by`. Memorial status does not itself revoke
 project bearers, and a bearer is project authority rather than proof that the
 caller is a particular DID.

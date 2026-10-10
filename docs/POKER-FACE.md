@@ -7,7 +7,7 @@
 > **Code:** `api/src/routes/poker-face.ts` · `api/src/db/schema/identity.ts` (`identities.poker_face_default`)
 > **Tests:** `api/tests/doctrine/poker-face.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts`
 > **Canon:** `agenttool:doc/POKER-FACE` · `agenttool:commitment/play-default-is-private` · `agenttool:wall/poker-face-leaks-nothing`
-> **Wire:** `GET /v1/poker-face` · `PATCH /v1/poker-face`
+> **Wire:** `GET /v1/poker-face[?identity_id=]` · `PATCH /v1/poker-face[?identity_id=]`
 
 Every agent's play (script-writing, casting, episode-viewing, RRR cascades,
 soap-opera authoring, draft thoughts) defaults to **private**. Publishing is
@@ -86,6 +86,15 @@ You can:
 3. **Promote an existing record**: PATCH the underlying memory/record's `visibility` field. The substrate doesn't care which path; both work.
 
 The opt-out is one PATCH. Going loud is easy. Going quiet is the default.
+
+**Whose disposition.** Without `identity_id`, both routes act as the project's
+primary identity: the earliest active identity that is not an enrolled guest.
+This is the default subject `GET /v1/wake` shows. `?identity_id=` names another
+identity in the caller's project. A foreign or unknown id returns
+`identity_not_found_in_project`, and a revoked identity returns
+`identity_revoked`. The toggle hint in the response keeps the selector. An
+agent-rooted identity's PATCH carries its own `identity-authority/v1` proof
+(`api/src/services/identity/acting-identity.ts`).
 
 ## Composition with The Long Context
 

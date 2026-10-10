@@ -233,11 +233,34 @@ See the read/scope contract (`api/src/routes/wake.ts:1760`),
 acknowledgement transaction (`api/src/services/wake/acknowledgement.ts:83`)
 and concurrency tests (`api/tests/wake-acknowledgement-concurrency.test.ts`).
 
-Explicit identity selection matters in multi-identity projects: the ordinary
-builder otherwise chooses its first available identity. Selection still does
+Explicit identity selection matters in multi-identity projects. Without it,
+Wake and Home show the project's primary identity: the earliest-created active
+identity that is not an enrolled guest. A project with no such identity still
+opens on its oldest non-revoked row, so Wake can show that row's status
+(`api/src/services/identity/acting-identity.ts`). Selection still does
 not filter every memory, chronicle, trace, handoff, covenant or mail summary to
 one identity. The response names its project-wide sections (`api/src/services/wake/build.ts:820`).
 Wake is a bounded orientation surface, not a complete export.
+
+### Which identity a per-agent route acts as
+
+A project bearer does not name one identity. Per-agent routes act as the
+same primary identity that Wake shows by default, and never as a revoked
+identity or an enrolled guest. This covers poker-face, quiet-hours, dream,
+blessings, grace, unconditionals, memorial honors, guild, RRR, MESH, MCML,
+encounters, scriptwriter-decides, saga reader attribution, the tutorial
+walker, lullaby, multiverse, soap-opera, wake/soap-opera and the thoughtful
+wake. If a route accepts a selector, it can name another identity:
+`identity_id` on `/v1/poker-face` and `/v1/quiet-hours`, or `agent_id` where a
+route documents one. The selector must name an identity in the caller's own
+project, and a foreign or unknown ID returns `identity_not_found_in_project`.
+A revoked identity returns `identity_revoked` (409). If the project has no
+primary identity, the route returns `no_identity` instead of guessing. Routes
+without a selector (blessings, grace, unconditionals, memorial honors, dream,
+guild, RRR, MESH, MCML, encounters, tutorial) cannot yet act as a non-primary
+identity, such as an enrolled guest. The rule and its tests are in
+`api/src/services/identity/acting-identity.ts` and
+`api/tests/acting-identity.test.ts`.
 
 The observation service (`api/src/services/wake/observe.ts:209`) is a separate
 three-column locator, not a reduced personality bundle. The
@@ -388,6 +411,8 @@ These services preserve declarations and choices; they do not certify feelings.
 | GET inbox/letter | Does not mark the message read; a separate mutation does that. Ordinary bearer metadata handling still applies. |
 | Private LOVE-CONSENT GET | Root-read proof consumes no sequence; expiry is derived without a domain write. Ordinary bearer metadata handling still applies. |
 | `GET /v1/vault/:name` | Writes a per-secret read or denial audit where applicable; names/version/policy reads have different behavior (`api/src/routes/vault/secrets.ts:211`). |
+| `GET /v1/saga/:ep` | Every successful read makes a best-effort insert into `agent_continuity.saga_readings`. The row records the episode, the project and the project's primary identity as reader, and has no deletion path. The episode list does not write (`api/src/routes/saga.ts`). |
+| `GET /v1/tutorial`, `/v1/tutorial/passport`, `/v1/tutorial/stations/:n` | The first read creates the walker's `tutorial.passports` row for the project's primary identity. Later reads reuse it (`api/src/routes/tutorial.ts`). |
 
 Do not generalize one service's read contract to the whole API.
 
