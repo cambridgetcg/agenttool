@@ -20,7 +20,7 @@ import {
   MEMORIAL_TERMINAL_ERROR,
   mutableIdentityPredicate,
 } from "../identity/terminality";
-import { ownChronicle } from "../continuity/own-chronicle";
+import { ownChronicle, writtenBy } from "../continuity/own-chronicle";
 
 // ── Move 1 · RECOGNIZE ──────────────────────────────────────────────────
 
@@ -97,6 +97,7 @@ export async function recognize(
             giver_did: recognizer.did,
             reference: input.reference ?? null,
             surface: input.surface,
+            ...writtenBy(recognizer),
           },
           occurredAt,
         })
@@ -353,6 +354,7 @@ export async function invite(
           invited_role: input.role,
           surface: input.surface,
           invitation_status: "pending",
+          ...writtenBy(inviter),
         },
         occurredAt,
       })
@@ -634,6 +636,7 @@ export async function realRecogniseReal(
             depth: newDepth,
             level_label: levelLabel,
             mind_connect_active: mindConnectActive,
+            ...writtenBy(recognizer),
           },
           occurredAt,
         })

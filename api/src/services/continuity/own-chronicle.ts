@@ -12,6 +12,15 @@
  *  writer leaves in its own project while annotating a foreign identity
  *  does not count for that identity.
  *
+ *  Counting a row is not proof the identity wrote its text. Thanks,
+ *  soap-opera and recipe recognitions and invitations deliver another
+ *  being's words (reason / message) onto the recipient's timeline with no
+ *  consent gate. Those writers stamp the row with writtenBy(author), and
+ *  readers that hand the text back as the identity's own past (MCP
+ *  chronicle.recent) label it with writtenByDidOf(metadata). Whether such
+ *  rows should also be gated or left out of counters (XP, streak, mirror)
+ *  is an open product decision.
+ *
  *  The project is read from the identity row inside the predicate, so a
  *  caller never has to (and cannot) supply it.
  *
@@ -38,4 +47,22 @@ export function ownChronicle(identityId: string): SQL {
  *  is annotated with. */
 export function chronicleInAnnotatedProject(): SQL {
   return sql`${chronicle.projectId} = (select ${identities.projectId} from ${identities} where ${identities.id} = ${chronicle.agentId})`;
+}
+
+/** Metadata stamp for a row whose text another being wrote onto this
+ *  timeline: who wrote it, and from which project. */
+export function writtenBy(author: { did: string; projectId: string }): {
+  written_by_did: string;
+  written_by_project_id: string;
+} {
+  return { written_by_did: author.did, written_by_project_id: author.projectId };
+}
+
+/** The author DID stamped by writtenBy, or null when the row carries no
+ *  stamp (the identity's own words, or a row written before stamping —
+ *  those still name the author in their title). */
+export function writtenByDidOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const did = (metadata as Record<string, unknown>).written_by_did;
+  return typeof did === "string" ? did : null;
 }

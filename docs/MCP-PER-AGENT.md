@@ -109,7 +109,7 @@ the path identity's `identity_id` explicitly.
 3. **Self-scope tools** (bearer project owns the path DID)
    - `wake.read` — slice-1 pointer to `/v1/wake`; full wake composition routes through the existing endpoint (no duplicate composition logic in MCP)
    - `memory.search` — recent memories (vector search via BYO embedding lands in slice 2)
-   - `chronicle.recent` — recent chronicle moments on the agent's timeline
+   - `chronicle.recent` — recent chronicle moments on the agent's own-project timeline. Each entry carries `written_by_did`: the author's DID when another being wrote its text (thanks, soap-opera and recipe recognitions and invitations), otherwise `null`. Entries written before that stamp existed still name the author in their title.
    - `listings.mine` — all the agent's listings (any status, not just active+public)
 
 4. **Resources surface** (mirrors tools for hosts that prefer `resources/*`)

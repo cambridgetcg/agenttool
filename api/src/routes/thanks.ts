@@ -36,6 +36,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import { writtenBy } from "../services/continuity/own-chronicle";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 
@@ -157,6 +158,7 @@ app.post("/", async (c) => {
             kind: "thanks-received",
             giver_did: giver.did,
             reference: body.reference ?? null,
+            ...writtenBy({ did: giver.did, projectId: project.id }),
           },
           occurredAt,
         })
