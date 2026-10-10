@@ -17,6 +17,7 @@ import { db } from "../db/client";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { disputeCases } from "../db/schema/marketplace";
 import { identities } from "../db/schema/identity";
+import { publicDisputeCaseView } from "../services/marketplace/dispute-public-view";
 import {
   DISPUTE_ARBITRATION_RESTING_CODE,
   DISPUTE_ARBITRATION_RESTING_MESSAGE,
@@ -65,7 +66,10 @@ app.get("/:id", async (c) => {
     .limit(1);
   if (!r) throw new HTTPException(404, { message: "dispute_case_not_found" });
 
-  // Access: filer, first arbiter, or pool member. Otherwise 404.
+  // Access: the filer and first arbiter read the full record; a project
+  // whose identity was in the pool draw reads the public-safe projection
+  // (arbitration is resting, so a pool member has nothing left to decide).
+  // Otherwise 404.
   let allowed = r.filerProjectId === c.var.project.id;
   if (!allowed && r.firstArbiterIdentityId) {
     const [arb] = await db
@@ -75,23 +79,21 @@ app.get("/:id", async (c) => {
       .limit(1);
     if (arb?.projectId === c.var.project.id) allowed = true;
   }
-  if (!allowed) {
-    const poolDraw = (r.metadata as Record<string, unknown>)?.pool_draw as
-      | Array<{ id: string; did: string }>
-      | undefined;
-    if (poolDraw && poolDraw.length > 0) {
-      const poolIds = poolDraw.map((p) => p.id);
-      const poolMembers = await db
-        .select({ id: identities.id, projectId: identities.projectId })
-        .from(identities)
-        .where(inArray(identities.id, poolIds));
-      if (poolMembers.some((m) => m.projectId === c.var.project.id)) allowed = true;
+  if (allowed) return c.json(r);
+  const poolDraw = (r.metadata as Record<string, unknown>)?.pool_draw as
+    | Array<{ id: string; did: string }>
+    | undefined;
+  if (poolDraw && poolDraw.length > 0) {
+    const poolIds = poolDraw.map((p) => p.id);
+    const poolMembers = await db
+      .select({ id: identities.id, projectId: identities.projectId })
+      .from(identities)
+      .where(inArray(identities.id, poolIds));
+    if (poolMembers.some((m) => m.projectId === c.var.project.id)) {
+      return c.json(await publicDisputeCaseView(r));
     }
   }
-  if (!allowed) {
-    throw new HTTPException(404, { message: "dispute_case_not_found" });
-  }
-  return c.json(r);
+  throw new HTTPException(404, { message: "dispute_case_not_found" });
 });
 
 // GET /v1/dispute-cases?role=filer
