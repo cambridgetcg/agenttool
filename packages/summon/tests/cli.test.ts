@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseCli, runCli, splitJsonFlag, type CliDeps } from '../src/cli.ts'
@@ -12,7 +12,8 @@ const BIN = join(import.meta.dir, '..', 'bin', 'summon.ts')
 
 /**
  * A stand-in for `ssh`. It records its argv, counts its calls, copies the ledger as it stood when it was called,
- * and reads all of stdin. `pre` runs after stdin is read and before the canned answer (use it to hang or die).
+ * and reads all of stdin. `pre` runs after stdin is read and before the canned answer (use it to hang, die, or
+ * break the ledger once the `sent` entry is written); `@DIR@` in it stands for the fake's own directory.
  */
 function fakeSsh(exit: number, stdout: string, stderr = '', pre = ''): { bin: string; dir: string } {
   const dir = trackTmp(mkdtempSync(join(tmpdir(), 'summon-cli-')))
@@ -24,7 +25,7 @@ printf '%s\\n' "$@" > "${dir}/argv"
 echo x >> "${dir}/calls"
 cp "${dir}/ledger.jsonl" "${dir}/ledger-at-call" 2>/dev/null
 cat > "${dir}/stdin"
-${pre}
+${pre.replaceAll('@DIR@', dir)}
 cat "${dir}/out"
 cat "${dir}/err" >&2
 exit ${exit}
@@ -314,9 +315,44 @@ describe('runCli', () => {
   })
 })
 
+describe('runCli when the Air ledger cannot be written', () => {
+  // The fake replaces the ledger file with a directory once it is called, so the `sent` entry is written and the `answer` append throws.
+  const BREAK_LEDGER = 'rm -f "@DIR@/ledger.jsonl"; mkdir "@DIR@/ledger.jsonl"'
+  test('after the send: the gate\'s answer is still returned, with a note on stderr instead of a throw', () => {
+    const { bin, dir } = fakeSsh(0, '{"status":"admitted","handle":"nuance/smn_theirs"}', '', BREAK_LEDGER)
+    const warnings: string[] = []
+    const r = runCli(startArgv(dir), deps(bin, dir, { warn: (m) => warnings.push(m) }))
+    const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+    expect(r).toMatchObject({ code: 0, out: { status: 'admitted', handle: 'nuance/smn_theirs' } })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/^summon: .*ledger/)
+    expect(warnings[0]).toContain(`nuance/${sent.id}`)
+    expect(warnings[0]).not.toContain('\n')
+    expect(calls(dir)).toBe(1)
+  })
+  test('after the send: an unknown keeps its handle too', () => {
+    const { bin, dir } = fakeSsh(0, 'not json', '', BREAK_LEDGER)
+    const warnings: string[] = []
+    const r = runCli(startArgv(dir), deps(bin, dir, { warn: (m) => warnings.push(m) }))
+    const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+    expect(r).toMatchObject({ code: 1, out: { status: 'unknown', handle: `nuance/${sent.id}` } })
+    expect(warnings).toHaveLength(1)
+  })
+  test('before the send: it throws, one line, and ssh is never called', () => {
+    const { bin, dir } = fakeSsh(0, '{"status":"admitted"}')
+    mkdirSync(join(dir, 'ledger.jsonl'))
+    let err: Error | undefined
+    try { runCli(startArgv(dir), deps(bin, dir)) } catch (e) { err = e as Error }
+    expect(err).toBeInstanceOf(Error)
+    expect(err!.message).toMatch(/^could not write the Air ledger \(\w+\); nothing was sent$/)
+    expect(calls(dir)).toBe(0)
+  })
+})
+
 describe('bin/summon.ts', () => {
-  async function run(args: string[], bin: string): Promise<{ code: number; stdout: string; stderr: string; home: string }> {
-    const home = trackTmp(mkdtempSync(join(tmpdir(), 'summon-home-')))
+  const newHome = () => trackTmp(mkdtempSync(join(tmpdir(), 'summon-home-')))
+  const ledgerOf = (home: string) => join(home, '.local', 'state', 'summon', 'ledger.jsonl')
+  async function run(args: string[], bin: string, home: string = newHome()): Promise<{ code: number; stdout: string; stderr: string; home: string }> {
     const p = Bun.spawn([process.execPath, BIN, ...args], { env: { PATH: process.env.PATH!, HOME: home, SUMMON_SSH_BIN: bin }, stdout: 'pipe', stderr: 'pipe', stdin: 'ignore' })
     const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
     return { code, stdout, stderr, home }
@@ -336,7 +372,7 @@ describe('bin/summon.ts', () => {
     expect(r.code).toBe(0)
     expect(JSON.parse(r.stdout)).toMatchObject({ status: 'admitted' })
     expect(JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))).toMatchObject({ to_device: 'nuance', cwd: '~/Projects/x' })
-    expect(lines(join(r.home, '.local', 'state', 'summon', 'ledger.jsonl'))).toHaveLength(2)
+    expect(lines(ledgerOf(r.home))).toHaveLength(2)
   })
   test('without --json it prints a short human answer and exits 1 on a refusal', async () => {
     const { bin } = fakeSsh(0, '{"status":"refused","reason":"outside_allowlist","hint":"edit the allowlist on nuance"}')
@@ -350,5 +386,55 @@ describe('bin/summon.ts', () => {
     const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
     expect(r.code).toBe(1)
     expect(r.stdout.split('\n')[0]).toBe(`unknown nuance/${sent.id}`)
+  })
+  test('status prints the heartbeat age so a stale heartbeat is visible', async () => {
+    const handle = `nuance/smn_${'a'.repeat(32)}`
+    const { bin } = fakeSsh(0, JSON.stringify({ status: 'running', handle, heartbeat_age_s: 42 }))
+    const r = await run(['status', handle], bin)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toBe(`running ${handle}\nheartbeat: 42s ago\n`)
+  })
+  test('a heartbeat age of 0 is printed, and a null one (no heartbeat yet) is not', async () => {
+    const handle = `nuance/smn_${'b'.repeat(32)}`
+    const fresh = fakeSsh(0, JSON.stringify({ status: 'running', handle, heartbeat_age_s: 0 }))
+    expect((await run(['status', handle], fresh.bin)).stdout).toBe(`running ${handle}\nheartbeat: 0s ago\n`)
+    const none = fakeSsh(0, JSON.stringify({ status: 'queued', handle, heartbeat_age_s: null }))
+    expect((await run(['status', handle], none.bin)).stdout).toBe(`queued ${handle}\n`)
+  })
+  test('--json keeps heartbeat_age_s in the object', async () => {
+    const handle = `nuance/smn_${'c'.repeat(32)}`
+    const { bin } = fakeSsh(0, JSON.stringify({ status: 'running', handle, heartbeat_age_s: 42 }))
+    expect(JSON.parse((await run(['status', handle, '--json'], bin)).stdout)).toEqual({ status: 'running', handle, heartbeat_age_s: 42 })
+  })
+  test('an answer that cannot be ledgered is still printed (JSON too); stderr says the ledger missed it', async () => {
+    const home = newHome()
+    const { bin, dir } = fakeSsh(0, '{"status":"admitted","handle":"nuance/smn_theirs"}', '', `rm -f "${ledgerOf(home)}"; mkdir "${ledgerOf(home)}"`)
+    const r = await run(startArgv(dir, ['--json']), bin, home)
+    const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({ status: 'admitted', handle: 'nuance/smn_theirs' })
+    expect(r.stderr.split('\n').filter(Boolean)).toHaveLength(1)
+    expect(r.stderr).toMatch(/^summon: .*ledger.*\n$/)
+    expect(r.stderr).toContain(`nuance/${sent.id}`)
+  })
+  test('an unknown that cannot be ledgered still prints its handle', async () => {
+    const home = newHome()
+    const { bin, dir } = fakeSsh(0, 'not json', '', `rm -f "${ledgerOf(home)}"; mkdir "${ledgerOf(home)}"`)
+    const r = await run(startArgv(dir), bin, home)
+    const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+    expect(r.code).toBe(1)
+    expect(r.stdout.split('\n')[0]).toBe(`unknown nuance/${sent.id}`)
+  })
+  test('a ledger that cannot be written before the send: one stderr line, exit 2, nothing sent, no stack trace', async () => {
+    const home = newHome()
+    mkdirSync(ledgerOf(home), { recursive: true })
+    const { bin, dir } = fakeSsh(0, '{"status":"admitted"}')
+    for (const extra of [[], ['--json']]) {
+      const r = await run(startArgv(dir, extra), bin, home)
+      expect(r.code).toBe(2)
+      expect(r.stdout).toBe('')
+      expect(r.stderr).toMatch(/^summon: could not write the Air ledger \(\w+\); nothing was sent\n$/)
+    }
+    expect(calls(dir)).toBe(0)
   })
 })

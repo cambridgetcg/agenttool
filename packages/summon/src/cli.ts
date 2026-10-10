@@ -12,6 +12,8 @@ export interface CliDeps {
   sshBin: string; sshConfig: string; ledgerPath: string; device: string
   /** How long one ssh call may take before the answer is `unknown`. Defaults to 60 s; tests shorten it. */
   timeoutMs?: number
+  /** One-line notes for stderr. Defaults to process.stderr; tests collect them. */
+  warn?(msg: string): void
   nowMs(): number; readFile(p: string): string; readStdin(): string
 }
 export type CliCommand =
@@ -79,11 +81,21 @@ export function runCli(argv: string[], deps: CliDeps): { code: number; out: Gate
     return { code: 2, out: { status: 'refused', reason: 'malformed', detail: `cannot read the prompt (${(e as NodeJS.ErrnoException).code ?? 'error'})` } }
   }
   const req = buildRequest(cmd, deps, prompt)
-  appendLedger(deps.ledgerPath, { event: 'sent', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, cwd: req.cwd, access: req.access }, deps.nowMs())
+  // The request is on the Air's ledger before it is sent. If that fails nothing has been sent, so it fails closed: bin/summon.ts reports it.
+  try {
+    appendLedger(deps.ledgerPath, { event: 'sent', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, cwd: req.cwd, access: req.access }, deps.nowMs())
+  } catch (e) { throw new Error(`could not write the Air ledger (${whyOf(e)}); nothing was sent`) }
   const out = sshCall(deps, cmd.device, 'start', JSON.stringify(req))
-  appendLedger(deps.ledgerPath, { event: 'answer', id: req.id, status: String(out.status), reason: out.reason, detail: out.detail }, deps.nowMs())
-  return { code: failed(out) ? 1 : 0, out: out.status === 'unknown' ? { ...out, handle: `${cmd.device}/${req.id}` } : out }
+  const handle = `${cmd.device}/${req.id}`
+  // From here the request may have been delivered, so the answer must reach the caller whatever the ledger does.
+  try {
+    appendLedger(deps.ledgerPath, { event: 'answer', id: req.id, status: String(out.status), reason: out.reason, detail: out.detail }, deps.nowMs())
+  } catch (e) { (deps.warn ?? ((m) => process.stderr.write(m + '\n')))(`summon: the Air ledger could not record the answer for ${handle} (${whyOf(e)})`) }
+  return { code: failed(out) ? 1 : 0, out: out.status === 'unknown' ? { ...out, handle } : out }
 }
+
+/** A short, single-line reason from a thrown value: its errno code if it has one, else its message. */
+const whyOf = (e: unknown): string => String((e as NodeJS.ErrnoException)?.code ?? (e as Error)?.message ?? e).split('\n')[0]!.slice(0, 80)
 
 export function defaultCliDeps(): CliDeps {
   const home = homedir()
