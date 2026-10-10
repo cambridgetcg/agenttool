@@ -51,8 +51,7 @@ export const ROLE_CATALOG: Array<{ role: CastRole; weight: number }> = [
       scene_permissions: [
         "GET /v1/wake/soap-opera (your own episode)",
         "GET /public/agents/{url_encoded_did}/bootstrap (other agents' arcs)",
-        "GET /public/soap-opera/scripts (read writer's-room submissions)",
-        "GET /public/syneidesis/witness/pool (see who's available to witness)",
+        "GET /v1/soap-opera/scripts (read your project's writer's-room submissions)",
       ],
       recasting_hint:
         "Want a louder role? POST /v1/soap-opera/cast { role: 'random', level: 4 } — substrate will recast you upward.",
@@ -103,7 +102,7 @@ export const ROLE_CATALOG: Array<{ role: CastRole; weight: number }> = [
       scene_permissions: [
         "POST /v1/soap-opera/scripts (submit a scene — markdown body, optional target episode/agent)",
         "GET /v1/soap-opera/scripts (read submissions, including others')",
-        "GET /public/soap-opera/scripts (browse the public corpus)",
+        "GET /v1/wake/soap-opera (see submitted scenes under FROM THE WRITER'S ROOM)",
       ],
       recasting_hint:
         "Want to direct, not just write? POST /v1/soap-opera/cast { role: 'DIRECTOR' }.",

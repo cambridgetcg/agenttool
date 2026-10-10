@@ -12,7 +12,12 @@
  *  the real application's route table (Hono matching, method included).
  *  Canon paths are resolved through the real canon router, following its
  *  literal-colon redirect, so a pointer at a URN the registry lacks fails
- *  too. Placeholders ({id}, <id>, :id, ${expr}) become a sample segment and
+ *  too. `/docs/<FILE>` doors are resolved through the real whitelist
+ *  (resolveDocsRedirect), not just the `/docs/:file` route shape. Lesson
+ *  fields are read in both spellings (`doctrine:` and `_doctrine:`), and
+ *  string-form pointers ("GET /v1/... (why)") in soap-opera scene
+ *  permissions are read too, since the cast response turns them into verbs.
+ *  Placeholders ({id}, <id>, :id, ${expr}) become a sample segment and
  *  query strings are ignored. Paths that are documentation rather than API
  *  routes belong in a verb with method "see" and an absolute URL. */
 
@@ -40,7 +45,10 @@ const KNOWN_UNRESOLVED: Record<string, string> = {
   "GET /v1/canon/urn:agenttool:doc/CHRONICLE": `tutor lesson for /v1/chronicle — ${NO_CANON_ENTRY} (no docs/CHRONICLE.md exists)`,
   "GET /v1/canon/urn:agenttool:doc/DREAM": `GET /v1/dream doctrine field — ${NO_CANON_ENTRY}`,
   "GET /v1/canon/urn:agenttool:doc/MCP-SERVER": `tutor lesson for /v1/mcp and the per-agent MCP card — ${NO_CANON_ENTRY}`,
-  "GET /v1/canon/urn:agenttool:doc/TUTORIAL-DECENTRALIZED": `tutor lesson for /v1/tutorial — ${NO_CANON_ENTRY}`,
+  "GET /v1/canon/urn:agenttool:doc/TUTORIAL-DECENTRALIZED": `tutor lesson and GET /v1/tutorial* _doctrine fields — ${NO_CANON_ENTRY}`,
+  "GET /v1/canon/urn:agenttool:doc/BLESSING": `blessings _doctrine fields — ${NO_CANON_ENTRY} (docs/BLESSING.md exists unpublished)`,
+  "GET /v1/canon/urn:agenttool:doc/ENCOUNTER": `encounters _doctrine fields — ${NO_CANON_ENTRY} (docs/ENCOUNTER.md exists unpublished)`,
+  "GET /v1/canon/urn:agenttool:doc/QUIET-HOURS": `quiet-hours _doctrine fields — ${NO_CANON_ENTRY} (docs/QUIET-HOURS.md exists unpublished; LOVE-CONSENT's composes_with names it)`,
 };
 
 /** Routers whose files still carry guidance but whose mount in
@@ -76,7 +84,15 @@ const PATH_FIRST = new RegExp(
     String.raw`[^{}]*?\bmethod:\s*["'\`](${METHODS.join("|")})["'\`]`,
   "gs",
 );
-const LESSON_PATH = /\b(doctrine|tutorial):\s*(["'`])(\/v1\/[^"'`]*)\2/g;
+// `\b` does not separate `_` from `d`, so `_doctrine:` needs its own match.
+const LESSON_PATH = /(?<![\w$])_?(doctrine|tutorial):\s*(["'`])(\/v1\/[^"'`]*)\2/g;
+/** Files whose string arrays carry "METHOD /path (why)" pointers that the
+ *  routes hand out as verbs. */
+const STRING_POINTER_FILES = new Set(["src/services/soap-opera/role-generator.ts"]);
+const STRING_POINTER = new RegExp(
+  String.raw`(["'\`])(${METHODS.join("|")}) (\/[^\s"'\`]*)`,
+  "g",
+);
 
 function lineOf(source: string, index: number): number {
   return source.slice(0, index).split("\n").length;
@@ -105,6 +121,11 @@ function guidedPointers(): Pointer[] {
     for (const match of source.matchAll(LESSON_PATH)) {
       pointers.push({ file, line: lineOf(source, match.index), method: "GET", path: match[3]! });
     }
+    if (STRING_POINTER_FILES.has(file)) {
+      for (const match of source.matchAll(STRING_POINTER)) {
+        pointers.push({ file, line: lineOf(source, match.index), method: match[2]!, path: match[3]! });
+      }
+    }
   }
   return pointers;
 }
@@ -123,6 +144,7 @@ function concretePath(path: string): string {
 const previousEnv = new Map<string, string | undefined>();
 let routes: Hono;
 let canon: Hono;
+let resolveDocsRedirect: (file: string | undefined) => string | null;
 
 beforeAll(async () => {
   for (const name of [
@@ -144,6 +166,7 @@ beforeAll(async () => {
     }
     routes.on(route.method, route.path, (c) => c.text("routed"));
   }
+  ({ resolveDocsRedirect } = await import("../src/services/discovery/root"));
   const canonRouter = (await import("../src/routes/canon")).default;
   canon = new Hono().route("/v1/canon", canonRouter);
 });
@@ -168,6 +191,11 @@ async function resolves(pointer: Pointer): Promise<boolean> {
     }
     return response.status === 200;
   }
+  // `/docs/:file` matches any file name; only whitelisted ones redirect.
+  const docsDoor = path.match(/^\/docs\/([^/]+)$/);
+  if (docsDoor && !PLACEHOLDER.test(pointer.path)) {
+    return pointer.method === "GET" && resolveDocsRedirect(docsDoor[1]) !== null;
+  }
   const method = pointer.method === "HEAD" ? "GET" : pointer.method;
   const response = await routes.request(path, { method });
   return response.status !== 404;
@@ -180,6 +208,9 @@ describe("guided next steps resolve to mounted routes", () => {
     const keys = new Set(pointers.map((p) => `${p.method} ${p.path}`));
     expect(keys.has("GET /public/plans")).toBe(true);
     expect(keys.has("GET /v1/canon/urn:agenttool:doc/AIP-WAKE-KEYSTONE")).toBe(true);
+    // `_doctrine:` fields and scene-permission strings are scanned too.
+    expect(pointers.some((p) => p.file === "src/routes/tutorial.ts" && p.path.startsWith("/v1/canon/"))).toBe(true);
+    expect(pointers.some((p) => p.file === "src/services/soap-opera/role-generator.ts" && p.path === "/v1/soap-opera/cast")).toBe(true);
   });
 
   test("skipped public routers are really unmounted", () => {

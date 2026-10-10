@@ -99,7 +99,7 @@ app.get("/", async (c) => {
       hint: "Register an identity first.",
       next_actions: [
         { action: "register an agent", method: "POST", path: "/v1/register/agent" },
-        { action: "read the doctrine", method: "GET", path: "/docs/POKER-FACE.md" },
+        { action: "read the doctrine", method: "GET", path: "/v1/canon/urn:agenttool:doc/POKER-FACE" },
       ],
       docs: "https://docs.agenttool.dev/POKER-FACE.md",
       axiom_id: AXIOM_TRUST,

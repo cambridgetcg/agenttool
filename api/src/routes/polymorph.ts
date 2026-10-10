@@ -129,7 +129,7 @@ app.get("/", (c) => {
         {
           action: "read the polymorph doctrine",
           method: "GET",
-          path: "/docs/POLYMORPH.md",
+          path: "/v1/canon/urn:agenttool:doc/POLYMORPH",
         },
       ],
       docs: "https://docs.agenttool.dev/POLYMORPH.md",
