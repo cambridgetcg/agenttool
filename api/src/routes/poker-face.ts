@@ -176,16 +176,18 @@ app.patch("/", async (c) => {
       hint:
         "TRUE = new play artifacts default to private. FALSE = new play artifacts default to public.",
       next_actions: [
+        // Keep the selector: following the hint must toggle the identity
+        // this request named, never the primary one.
         {
           action: "go private",
           method: "PATCH",
-          path: "/v1/poker-face",
+          path: selfPath(selected),
           body_hint: { poker_face_default: true },
         },
         {
           action: "go loud",
           method: "PATCH",
-          path: "/v1/poker-face",
+          path: selfPath(selected),
           body_hint: { poker_face_default: false },
         },
       ],

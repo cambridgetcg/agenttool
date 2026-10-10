@@ -423,3 +423,16 @@ databaseTest("a default poker-face toggle changes the primary identity, not a ne
   const rows = await sql`SELECT id, poker_face_default FROM identity.identities WHERE project_id = ${P} ORDER BY created_at`;
   expect(rows.map(r => [r.id, r.poker_face_default])).toEqual([[L, false], [NEWEST_REVOKED, true]]);
 });
+databaseTest("a poker-face 422 keeps the caller's identity_id selector in its guided actions", async () => {
+  await crowdedProject();
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: F }); await next(); }).route("/v1/poker-face", pokerFace);
+  const res = await app.request(`/v1/poker-face?identity_id=${GUEST_ID}`, { method: "PATCH",
+    headers: { "content-type": "application/json" }, body: JSON.stringify({ poker_face_default: "yes" }) });
+  expect(res.status).toBe(422);
+  const paths = ((await res.json()).next_actions as Array<{ path: string }>).map(a => a.path);
+  expect(paths).toEqual([`/v1/poker-face?identity_id=${GUEST_ID}`, `/v1/poker-face?identity_id=${GUEST_ID}`]);
+  // Without a selector the actions stay on the primary path.
+  const plain = await app.request("/v1/poker-face", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" });
+  expect(((await plain.json()).next_actions as Array<{ path: string }>).map(a => a.path)).toEqual(["/v1/poker-face", "/v1/poker-face"]);
+});
