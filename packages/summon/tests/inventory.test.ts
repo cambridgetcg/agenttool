@@ -48,23 +48,25 @@ function withEnv(vars: Record<string, string>, fn: () => void): void {
 }
 
 /** collectInventory with claude pointed at /usr/bin/true through the test override. */
-function inventoryWithClaude(run: Run, exists: (p: string) => boolean): Record<string, unknown> {
+function inventoryWithClaude(run: Run, exists: (p: string) => boolean, executable: (p: string) => boolean): Record<string, unknown> {
   let inv: Record<string, unknown> = {}
   withEnv({ SUMMON_HOME_OVERRIDE: '/h', SUMMON_CLAUDE_BIN: '/usr/bin/true' }, () => {
-    inv = collectInventory('/h', 'yu', run, exists, 501)
+    inv = collectInventory('/h', 'yu', run, exists, 501, executable)
   })
   return inv
 }
 
 const H = '/h'
-const installed = new Set([
-  '/Applications/iTerm.app',
-  join(H, '.local/bin/codex'),
-  join(H, '.hermes/hermes-agent/venv/bin/hermes'),
-  join(H, '.hermes/auth.json'),
-  join(H, '.config/sol/bin/sol'),
-])
+const codexPath = join(H, '.local/bin/codex')
+const tmuxPath = join(H, '.local/bin/tmux')
+const hermesPath = join(H, '.hermes/hermes-agent/venv/bin/hermes')
+const solPath = join(H, '.config/sol/bin/sol')
+// Existing paths: codex and tmux exist here, but only the executable ones count as installed.
+const installed = new Set(['/Applications/iTerm.app', codexPath, tmuxPath, hermesPath, join(H, '.hermes/auth.json'), solPath])
 const present = (p: string) => installed.has(p)
+const runnable = new Set([codexPath, tmuxPath])
+const executable = (p: string) => runnable.has(p)
+const nothing = () => false
 
 /** Every string anywhere in a value, for bounding checks. */
 function allStrings(v: unknown): string[] {
@@ -76,35 +78,40 @@ function allStrings(v: unknown): string[] {
 
 describe('collectInventory', () => {
   test('reports the facts Phase 0 needs without leaking account details', () => {
-    const inv = inventoryWithClaude(fakeRun(), (p) => p === '/Applications/iTerm.app')
+    const inv = inventoryWithClaude(fakeRun(), (p) => p === '/Applications/iTerm.app', nothing)
     expect(inv).toMatchObject({ macos: '26.0', user: 'yu', filevault: 'true', iterm2: true, fleet_users: ['yu'],
       harnesses: { claude: { version: '2.1.296 (Claude Code)', logged_in: true } } })
     expect(JSON.stringify(inv)).not.toContain('x@y')
     expect(String(inv.keychain)).toContain('no-timeout')
   })
 
-  test('codex, hermes, sol and the console user report path, version and login state', () => {
-    const inv = inventoryWithClaude(fakeRun(), present)
+  test('codex, hermes, sol, tmux and the console user report path, version and login state', () => {
+    const inv = inventoryWithClaude(fakeRun(), present, executable)
     expect(inv).toMatchObject({
       console_user: 'yu',
       gui_session_is_mine: expect.any(Boolean),
-      sol: { path: join(H, '.config/sol/bin/sol'), version: 'sol 1.4.0' },
-      tmux: null,
+      sol: { path: solPath, version: 'sol 1.4.0' },
+      tmux: tmuxPath,
       harnesses: {
-        codex: { path: join(H, '.local/bin/codex'), version: 'codex-cli 0.9.1', logged_in: true },
-        hermes: { path: join(H, '.hermes/hermes-agent/venv/bin/hermes'), version: 'Hermes 2.0.0', logged_in: true },
+        codex: { path: codexPath, version: 'codex-cli 0.9.1', logged_in: true },
+        hermes: { path: hermesPath, version: 'Hermes 2.0.0', logged_in: true },
       },
     })
   })
 
   test('harnesses, sol and the console user report null when they are not installed or cannot be read', () => {
-    const inv = inventoryWithClaude(fakeRun({ 'stat -f %Su /dev/console': { code: 1 } }), () => false)
+    const inv = inventoryWithClaude(fakeRun({ 'stat -f %Su /dev/console': { code: 1 } }), () => false, nothing)
     expect(inv).toMatchObject({ console_user: null, sol: null, tmux: null, iterm2: false,
       harnesses: { codex: null, hermes: null } })
   })
 
+  test('a file that exists but is not executable is not reported as codex or tmux', () => {
+    const inv = inventoryWithClaude(fakeRun(), present, nothing)
+    expect(inv).toMatchObject({ tmux: null, harnesses: { codex: null, hermes: { path: hermesPath } } })
+  })
+
   test('codex login status exit 0 is logged in, a non-zero exit is logged out, and a run that cannot start is unknown', () => {
-    const out = (code: number | null) => inventoryWithClaude(fakeRun({ 'codex login status': { code } }), present)
+    const out = (code: number | null) => inventoryWithClaude(fakeRun({ 'codex login status': { code } }), present, executable)
     expect(out(0)).toMatchObject({ harnesses: { codex: { logged_in: true } } })
     expect(out(1)).toMatchObject({ harnesses: { codex: { logged_in: false } } })
     expect(out(null)).toMatchObject({ harnesses: { codex: { logged_in: null } } })
@@ -113,27 +120,36 @@ describe('collectInventory', () => {
   test('codex login status output never reaches the inventory', () => {
     const inv = inventoryWithClaude(fakeRun({
       'codex login status': { code: 0, stdout: 'Logged in as zq7@example.test', stderr: 'account zq7' },
-    }), present)
+    }), present, executable)
     expect(inv).toMatchObject({ harnesses: { codex: { logged_in: true } } })
     expect(JSON.stringify(inv)).not.toContain('zq7')
   })
 
   test('hermes is logged in only when its auth file exists', () => {
     const noAuth = new Set([...installed].filter((p) => !p.endsWith('auth.json')))
-    expect(inventoryWithClaude(fakeRun(), (p) => noAuth.has(p))).toMatchObject({ harnesses: { hermes: { logged_in: false } } })
+    expect(inventoryWithClaude(fakeRun(), (p) => noAuth.has(p), executable))
+      .toMatchObject({ harnesses: { hermes: { logged_in: false } } })
   })
 
   test('sol keeps its path but reports version null when it exits non-zero', () => {
-    const inv = inventoryWithClaude(fakeRun({ 'sol --version': { code: 2, stdout: 'usage: sol' } }), present)
-    expect(inv).toMatchObject({ sol: { path: join(H, '.config/sol/bin/sol'), version: null } })
+    const inv = inventoryWithClaude(fakeRun({ 'sol --version': { code: 2, stdout: 'usage: sol' } }), present, executable)
+    expect(inv).toMatchObject({ sol: { path: solPath, version: null } })
   })
 
-  test('every reported string is trimmed and clipped to 200 characters', () => {
+  test('the pmset dump survives whole, past the 200-character bound for short facts', () => {
+    const dump = ['Battery Power:', ...Array.from({ length: 47 }, (_, i) => ` setting-${String(i).padStart(2, '0')}  ${i % 3}`)].join('\n')
+    expect(Buffer.byteLength(dump)).toBeGreaterThan(700)
+    const inv = inventoryWithClaude(fakeRun({ 'pmset -g custom': { stdout: `${dump}\n` } }), present, executable)
+    expect(inv).toMatchObject({ power: dump })
+  })
+
+  test('short facts are clipped to 200 characters; power is clipped to 2000', () => {
     const inv = inventoryWithClaude(fakeRun({
       'hermes --version': { stdout: 'h'.repeat(500) },
-      'pmset -g custom': { stdout: 'p'.repeat(500) },
-    }), present)
+      'pmset -g custom': { stdout: 'p'.repeat(2500) },
+    }), present, executable)
     expect(inv).toMatchObject({ harnesses: { hermes: { version: 'h'.repeat(200) } } })
-    expect(Math.max(...allStrings(inv).map((s) => s.length))).toBeLessThanOrEqual(200)
+    expect(String(inv.power).length).toBe(2000)
+    expect(Math.max(...allStrings({ ...inv, power: undefined }).map((s) => s.length))).toBeLessThanOrEqual(200)
   })
 })
