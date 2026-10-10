@@ -89,7 +89,7 @@ const rank = (a: Access) => (a === 'review' ? 0 : 1)
 export type Admission =
   | { ok: true; cwdReal: string }
   | { ok: false; reason: 'outside_allowlist'; detail: string; hint: string }
-  | { ok: false; reason: 'tcc_protected_folder'; detail: string }
+  | { ok: false; reason: 'tcc_protected_folder'; detail: string; hint?: string }
 
 /** Every outside_allowlist refusal carries a hint: the YAML the operator would need to add. */
 export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,

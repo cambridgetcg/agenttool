@@ -2,8 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkAdmission, parseAllowlist, parseDurationS, type Allowlist } from '../src/allowlist.ts'
+import { checkAdmission, parseAllowlist, parseDurationS, type Admission, type Allowlist } from '../src/allowlist.ts'
 import { cleanupTmps, sampleRequest, trackTmp } from './helpers.ts'
+
+// Mirrors the planned gate: narrows on !adm.ok, then reads adm.hint. Must type-check under tsc --strict.
+function refusalHint(adm: Admission): string | undefined {
+  if (!adm.ok) return adm.hint
+  return undefined
+}
 
 function home(): string {
   const h = trackTmp(realpathSync(mkdtempSync(join(tmpdir(), 'summon-al-'))))
@@ -108,6 +114,14 @@ describe('checkAdmission', () => {
     const h = home()
     expect(checkAdmission(sampleRequest({ cwd: '~/Projects/nope' }), al(), h)).toMatchObject({ ok: false, reason: 'outside_allowlist' })
     expect(checkAdmission(sampleRequest({ cwd: '/' }), al(), h)).toMatchObject({ ok: false, reason: 'outside_allowlist' })
+  })
+  test('a consumer can read hint after narrowing on !ok, for both refusal reasons', () => {
+    const h = home()
+    const outside = checkAdmission(sampleRequest({ cwd: '/' }), al(), h)
+    const tcc = checkAdmission(sampleRequest({ cwd: '~/Desktop' }), al(), h)
+    expect(tcc).toMatchObject({ ok: false, reason: 'tcc_protected_folder' })
+    expect(refusalHint(outside)).toEqual(expect.any(String))
+    expect(refusalHint(tcc)).toBeUndefined()
   })
   test('refuses TCC-protected folders even when allowlisted', () => {
     const h = home()
