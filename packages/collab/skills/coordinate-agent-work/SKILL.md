@@ -142,6 +142,8 @@ with `session_has_active_leases`, listing `task_ids`, `leases` (`task_id`,
 `lease_id`, `expires_at`) and a `remedy` that names `release_leases`. Ending
 also expires pending offers addressed to the session as an audited refusal,
 and remains available while cursor recovery is required.
+A handoff counts once it is accepted: `release_leases: true` expires any offer
+you made that is still pending, so let the recipient accept before you end.
 
 A host can end a session whose process is gone with
 `agenttool-collab-host end --session-file <path> --reason <text> --release-leases`.
@@ -215,6 +217,8 @@ related record; never silently rewrite attributable history.
 `to_session_id` routes a report into that session's `collab_next` instead of
 everyone's. Anyone can still read it with `collab_report_list`; addressing is
 routing, not access control.
+It narrows the `reports` list only: the `report.posted` event, body included,
+still appears in every session's event page.
 
 Use compact, checkable content:
 
@@ -316,6 +320,9 @@ other drift is refused with `git_checkpoint_stale`. Read its
 `host_commit_refusal` and `remedy`: fix the commit, or request changes so the
 task is re-completed with a fresh checkpoint. Never rewind Git to recreate the
 old checkpoint.
+Only artifacts attached since the task's latest `request_changes` vouch for a
+host commit. Never amend, reset or rewrite a shared branch to meet the
+host-commit condition: if other commits already sit on it, request changes.
 
 ## Roles, liveness and recovery
 
@@ -325,6 +332,8 @@ A session that only listens or reviews says so there, for example
 `role: "listener: reviews on request; does not claim"`. Do not offer handoffs
 or request reviews against a role that declines that work. A listener still
 polls, acknowledges and ends its session.
+`role` is fixed for the session's lifetime. To correct it, post an `informs`
+report that says so, or end the session and start a new one.
 
 `liveness` is a view, not a status. A session reads, in this order of
 precedence, `ended`, `resting`, `stale` or `live`: `ended` once it has ended;

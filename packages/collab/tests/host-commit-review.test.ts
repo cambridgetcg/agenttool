@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -601,6 +603,41 @@ describe("host-committed completions", () => {
     expect(acceptedPayload).not.toHaveProperty("checkpoint_basis");
   });
 
+  test("refuses bytes that only an artifact from before the latest request_changes vouches for", () => {
+    const scenario = reportedArtifactTask();
+    const changes = store.reviewTaskForSession({
+      ...scenario.reviewer.credential,
+      idempotency_key: "voice-b-request-changes-stale-artifact",
+      task_id: scenario.reported.id,
+      expected_version: scenario.reported.version,
+      outcome: "request_changes",
+      summary: "Please revise voice B.",
+    });
+    const reclaimed = store.claimTaskForSession({
+      ...scenario.implementer.credential,
+      idempotency_key: "voice-b-reclaim-stale-artifact",
+      task_id: scenario.reported.id,
+      expected_version: changes.task.version,
+    });
+    writeFileSync(join(root, "voice-b.md"), VOICE_B_REVISED);
+    const recompleted = store.completeTaskForSession({
+      ...scenario.implementer.credential,
+      idempotency_key: "voice-b-recomplete-without-attaching",
+      task_id: reclaimed.id,
+      lease_id: reclaimed.lease_id!,
+      expected_version: reclaimed.version,
+      summary: "Revised; nothing new attached.",
+    });
+    // The rejected generation's bytes come back and are committed by the host.
+    writeFileSync(join(root, "voice-b.md"), VOICE_B);
+    hostCommit(["voice-b.md"]);
+    expectRefused(
+      { ...scenario, reported: recompleted },
+      "accept-stale-generation-artifact",
+      "No file artifact attached to this task since its latest request_changes names voice-b.md",
+    );
+  });
+
   test("returns the refusal and both ways forward as top-level MCP fields", async () => {
     const scenario = reportedArtifactTask();
     writeFileSync(join(root, "README.md"), "# replay fixture, edited by the host\n");
@@ -722,4 +759,107 @@ describe("inspectSuccessorCommit", () => {
       expect(paths).toEqual(["README.md", "voice-b.md"]);
     }
   });
+
+  const gitmodules = (ignoreAll: boolean) =>
+    '[submodule "lib"]\n\tpath = vendor/lib\n\turl = https://example.invalid/lib.git\n'
+    + (ignoreAll ? "\tignore = all\n" : "");
+
+  for (const variant of ["git config", "tracked .gitmodules", "excluded .gitmodules"] as const) {
+    test(`reports a submodule pointer change even when ${variant} sets ignore = all`, () => {
+      initializeBareRepository();
+      runGit(root, "update-index", "--add", "--cacheinfo", `160000,${"1".repeat(40)},vendor/lib`);
+      if (variant !== "excluded .gitmodules") {
+        // The git config variant still needs .gitmodules to map vendor/lib to "lib".
+        writeFileSync(join(root, ".gitmodules"), gitmodules(variant === "tracked .gitmodules"));
+        runGit(root, "add", ".gitmodules");
+      }
+      runGit(root, "commit", "-m", "base: a submodule pointer");
+      const base = runGit(root, "rev-parse", "HEAD");
+      if (variant === "git config") runGit(root, "config", "submodule.lib.ignore", "all");
+      if (variant === "excluded .gitmodules") {
+        writeFileSync(join(root, ".gitmodules"), gitmodules(true));
+        appendFileSync(join(root, ".git", "info", "exclude"), ".gitmodules\n");
+      }
+      writeFileSync(join(root, "voice-b.md"), VOICE_B);
+      runGit(root, "add", "voice-b.md");
+      runGit(root, "update-index", "--cacheinfo", `160000,${"2".repeat(40)},vendor/lib`);
+      runGit(root, "commit", "-m", "voice-b, and quietly a new submodule pointer");
+      const head = runGit(root, "rev-parse", "HEAD");
+      const result = inspectSuccessorCommit(root, head, base);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.changes).toContainEqual({ path: "vendor/lib", blob_sha256: null });
+      }
+    });
+  }
+
+  /** Base X, then W adds secret.env, then Y removes it and adds voice-b.md. */
+  function twoCommitsAhead(): { base: string; middle: string; head: string } {
+    initializeBareRepository();
+    writeFileSync(join(root, "README.md"), "# replay fixture\n");
+    runGit(root, "add", "README.md");
+    runGit(root, "commit", "-m", "base");
+    const base = runGit(root, "rev-parse", "HEAD");
+    writeFileSync(join(root, "secret.env"), "TOKEN=unreviewed\n");
+    runGit(root, "add", "secret.env");
+    runGit(root, "commit", "-m", "W: unreviewed");
+    const middle = runGit(root, "rev-parse", "HEAD");
+    runGit(root, "rm", "-q", "secret.env");
+    writeFileSync(join(root, "voice-b.md"), VOICE_B);
+    runGit(root, "add", "voice-b.md");
+    runGit(root, "commit", "-m", "Y: voice-b");
+    return { base, middle, head: runGit(root, "rev-parse", "HEAD") };
+  }
+
+  test("reads a commit's real parents, not a graft that skips an unreviewed commit", () => {
+    const { base, head } = twoCommitsAhead();
+    writeFileSync(join(root, ".git", "info", "grafts"), `${head} ${base}\n`);
+    // Graft-honoring Git now believes Y follows X directly.
+    expect(runGit(root, "rev-parse", `${head}^`)).toBe(base);
+    const result = inspectSuccessorCommit(root, head, base);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("more than one commit ahead");
+  });
+
+  test("reads a commit's real parents, not a tampered commit-graph", () => {
+    const { base, head } = twoCommitsAhead();
+    runGit(root, "commit-graph", "write", "--reachable");
+    repointInCommitGraph(head, base);
+    // Commit-graph-reading Git now believes Y follows X directly.
+    expect(runGit(root, "rev-list", "--parents", "--max-count=1", head)).toBe(`${head} ${base}`);
+    const result = inspectSuccessorCommit(root, head, base);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("more than one commit ahead");
+  });
 });
+
+function initializeBareRepository(): void {
+  runGit(root, "init", "--initial-branch=main");
+  runGit(root, "config", "user.name", "Collab Test");
+  runGit(root, "config", "user.email", "collab-test@example.invalid");
+}
+
+/** Rewrite commitSha's first parent in .git/objects/info/commit-graph (format v1, SHA-1). */
+function repointInCommitGraph(commitSha: string, parentSha: string): void {
+  const path = join(root, ".git", "objects", "info", "commit-graph");
+  const graph = readFileSync(path);
+  expect(graph.toString("ascii", 0, 4)).toBe("CGPH");
+  const chunks = new Map<string, number>();
+  for (let index = 0; index <= graph[6]!; index += 1) {
+    const at = 8 + index * 12;
+    chunks.set(graph.toString("ascii", at, at + 4), Number(graph.readBigUInt64BE(at + 4)));
+  }
+  const fanout = chunks.get("OIDF")!;
+  const lookup = chunks.get("OIDL")!;
+  const data = chunks.get("CDAT")!;
+  const count = graph.readUInt32BE(fanout + 255 * 4);
+  const position = (sha: string): number => {
+    for (let index = 0; index < count; index += 1) {
+      if (graph.toString("hex", lookup + index * 20, lookup + index * 20 + 20) === sha) return index;
+    }
+    throw new Error(`${sha} is not in the commit-graph`);
+  };
+  graph.writeUInt32BE(position(parentSha), data + position(commitSha) * 36 + 20);
+  chmodSync(path, 0o644); // Git writes the commit-graph read-only.
+  writeFileSync(path, graph);
+}

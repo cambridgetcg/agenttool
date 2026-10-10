@@ -383,6 +383,11 @@ describe("agenttool-collab-host knocks", () => {
       ["doorbell-scan", "--host-ancestor", "auto"],
       ["doorbell-scan", "--mark-tapped"],
       ["doorbell-scan", "extra"],
+      // --help and -h belong to end's option set: a read verb never prints end's usage line.
+      ["knocks", "--host-ancestor", "4150", "--help"],
+      ["knocks", "--host-ancestor", "4150", "-h"],
+      ["doorbell-scan", "--help"],
+      ["doorbell-scan", "-h"],
     ]) {
       expect(runCollabHostCli(args, { AGENTOOL_COLLAB_DB: databasePath }, { process_table: () => seat() }))
         .toEqual({ exit_code: 0, line: null });

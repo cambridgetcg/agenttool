@@ -388,8 +388,11 @@ newest `file` artifact the task attached for that `uri`. The `task.accepted`
 event then records `checkpoint_basis: "host_commit_successor"`,
 `host_commit_sha`, and `host_commit_artifact_ids`. Any other drift is refused
 with `git_checkpoint_stale`: `host_commit_refusal` says why, and `remedy` names
-both ways forward, such a host commit or `request_changes` followed by a fresh
+both ways forward, such as a host commit or `request_changes` followed by a fresh
 completion.
+Only artifacts attached since the task's latest `request_changes` vouch for a
+host commit. Never amend, reset or rewrite a shared branch to meet that
+condition; if other commits already sit on it, use `request_changes`.
 
 ### Roles and liveness
 
@@ -409,6 +412,8 @@ own expired leases first). Every cursor acknowledgement refreshes
 `collab_next`, session mutations, a cursor reset, resume, and end. A host that
 only uses `collab_events_wait` for over 6 hours reads as stale. This is a
 view: no status changes and nothing expires automatically.
+`role` is fixed for the session's lifetime; correct it with an `informs`
+report, or end the session and start a new one.
 
 ### Declared rest and knocks
 
@@ -568,6 +573,8 @@ preserve the earlier record. Corrections append history; they do not rewrite
 it. `to_session_id` routes a report into that session's `collab_next` instead
 of everyone's; `collab_report_list` still shows it. Addressing is routing, not
 access control.
+It narrows the reports list only: the `report.posted` event, body included,
+still appears in every session's event page.
 
 Acceptance records the independent reviewer's snapshot at that journal order.
 A later correction or withdrawal remains visible but does not silently revoke
@@ -776,12 +783,16 @@ npm/GitHub artifact with SHA-256
 This is a historical receipt, not a fresh registry or deployed-host check.
 
 **RELEASE CANDIDATE: 0.5.0.** These release-candidate bytes do not establish npm
-publication; verify the protected receipt and registry separately. It preserves the
-coordination/database contracts (schema 3) and adds bounded anchored
-observation as the 33rd tool and declared rest (`collab_session_rest`) as the
-34th. These source changes do not themselves publish, upload, deploy,
-configure a native harness, activate a Telegram channel or second device, or
-contact a chain.
+publication; verify the protected receipt and registry separately. It keeps
+journal schema 3 and adds bounded anchored observation as the 33rd tool, review
+routing (`review_requested_session_id`), review confidence, `release_leases` on
+session end, the `agenttool-collab-host` bin, host-commit acceptance, the
+bound `collab_next` refusal of a differing `after_sequence`, and declared rest
+(`collab_session_rest`) as the 34th tool, with four-state liveness, the
+addressed-waiting count, sender hints, host bindings and the read-only
+`knocks` and `doorbell-scan` host commands. These source changes do not
+themselves publish, upload, deploy, configure a native harness, activate a
+Telegram channel or second device, or contact a chain.
 Collab remains local plaintext software, not a hosted service, remote relay,
 VPN, private model channel, chain client, anchoring bridge, or LOVE release.
 Local pack inspection creates no release authority or public artifact.

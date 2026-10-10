@@ -205,23 +205,22 @@ export function inspectSuccessorCommit(
   if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
     return refuse("The checkpoint HEADs are not Git object IDs");
   }
-  const listed = gitOutput(rootPath, [
-    "--no-replace-objects",
-    "rev-list",
-    "--parents",
-    "--max-count=1",
-    commitSha,
-    "--",
-  ]);
-  const ids = listed ? listed.split(" ") : [];
-  if (ids[0] !== commitSha) return refuse(`Git could not read commit ${commitSha}`);
-  const parents = ids.slice(1);
+  // Parents come from the commit object itself. Grafts, a commit-graph and
+  // replace refs can each make a later commit look like one fast-forward.
+  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
+  if (!commitObject.ok) return refuse(`Git could not read commit ${commitSha}`);
+  const headerEnd = commitObject.stdout.indexOf("\n\n");
+  const parents = commitObject.stdout
+    .subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd)
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("parent "))
+    .map((line) => line.slice("parent ".length));
   if (parents.length > 1) {
     return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
   }
   if (parents[0] !== parentSha) {
-    const descends = gitExitCode(rootPath, [
-      "--no-replace-objects",
+    const descends = successorGitExitCode(rootPath, [
       "merge-base",
       "--is-ancestor",
       parentSha,
@@ -231,13 +230,14 @@ export function inspectSuccessorCommit(
       ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}`
       : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
   }
-  const diff = gitBytes(rootPath, [
-    "--no-replace-objects",
+  const diff = successorGit(rootPath, [
     "diff-tree",
     "-r",
     "-z",
     "--raw",
     "--no-renames",
+    // A submodule ignore setting would otherwise hide a gitlink change.
+    "--ignore-submodules=none",
     parentSha,
     commitSha,
     "--",
@@ -270,7 +270,7 @@ export function inspectSuccessorCommit(
     if (Date.now() > budget.deadline || budget.bytes <= 0) {
       return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
-    const content = gitBytes(rootPath, ["--no-replace-objects", "cat-file", "blob", blob!], budget.bytes);
+    const content = successorGit(rootPath, ["cat-file", "blob", blob!], budget.bytes);
     if (!content.ok) {
       return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
     }
@@ -317,14 +317,6 @@ function gitDigest(rootPath: string, args: string[]): string | null {
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
 
-function gitExitCode(rootPath: string, args: string[]): number | null {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-  return result.error ? null : result.status;
-}
-
 function gitBytes(
   rootPath: string,
   args: string[],
@@ -339,6 +331,43 @@ function gitBytes(
     ok: result.status === 0 && !result.error,
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
+}
+
+/**
+ * Git for successor inspection: the real object graph only. Replace refs,
+ * grafts and the commit-graph are each switched off, because each can change
+ * what a commit's parents appear to be.
+ */
+const SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
+
+function successorGitEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
+}
+
+function successorGit(
+  rootPath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OUTPUT,
+): { ok: boolean; stdout: Buffer } {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: successorGitEnv(),
+  });
+  return {
+    ok: result.status === 0 && !result.error,
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
+  };
+}
+
+function successorGitExitCode(rootPath: string, args: string[]): number | null {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv(),
+  });
+  return result.error ? null : result.status;
 }
 
 function digestUntrackedContent(rootPath: string, paths: Buffer): string | null {

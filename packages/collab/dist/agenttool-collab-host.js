@@ -489,24 +489,19 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   if (!GIT_OBJECT_ID.test(commitSha) || !GIT_OBJECT_ID.test(parentSha)) {
     return refuse("The checkpoint HEADs are not Git object IDs");
   }
-  const listed = gitOutput(rootPath, [
-    "--no-replace-objects",
-    "rev-list",
-    "--parents",
-    "--max-count=1",
-    commitSha,
-    "--"
-  ]);
-  const ids = listed ? listed.split(" ") : [];
-  if (ids[0] !== commitSha)
+  const commitObject = successorGit(rootPath, ["cat-file", "commit", commitSha]);
+  if (!commitObject.ok)
     return refuse(`Git could not read commit ${commitSha}`);
-  const parents = ids.slice(1);
+  const headerEnd = commitObject.stdout.indexOf(`
+
+`);
+  const parents = commitObject.stdout.subarray(0, headerEnd === -1 ? commitObject.stdout.length : headerEnd).toString("utf8").split(`
+`).filter((line) => line.startsWith("parent ")).map((line) => line.slice("parent ".length));
   if (parents.length > 1) {
     return refuse(`HEAD ${commitSha} is a merge commit, not one fast-forward commit`);
   }
   if (parents[0] !== parentSha) {
-    const descends = gitExitCode(rootPath, [
-      "--no-replace-objects",
+    const descends = successorGitExitCode(rootPath, [
       "merge-base",
       "--is-ancestor",
       parentSha,
@@ -514,13 +509,13 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
     ]) === 0;
     return refuse(descends ? `HEAD ${commitSha} is more than one commit ahead of the result checkpoint HEAD ${parentSha}` : `HEAD ${commitSha} does not descend from the result checkpoint HEAD ${parentSha}`);
   }
-  const diff = gitBytes(rootPath, [
-    "--no-replace-objects",
+  const diff = successorGit(rootPath, [
     "diff-tree",
     "-r",
     "-z",
     "--raw",
     "--no-renames",
+    "--ignore-submodules=none",
     parentSha,
     commitSha,
     "--"
@@ -550,7 +545,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
     if (Date.now() > budget.deadline || budget.bytes <= 0) {
       return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
-    const content = gitBytes(rootPath, ["--no-replace-objects", "cat-file", "blob", blob], budget.bytes);
+    const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
     if (!content.ok) {
       return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
     }
@@ -591,13 +586,6 @@ function gitDigest(rootPath, args) {
   const result = gitBytes(rootPath, args);
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
-function gitExitCode(rootPath, args) {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
-    timeout: GIT_TIMEOUT_MS,
-    stdio: ["ignore", "ignore", "ignore"]
-  });
-  return result.error ? null : result.status;
-}
 function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
@@ -608,6 +596,30 @@ function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
     ok: result.status === 0 && !result.error,
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
+}
+var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"];
+function successorGitEnv() {
+  return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
+}
+function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: successorGitEnv()
+  });
+  return {
+    ok: result.status === 0 && !result.error,
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
+  };
+}
+function successorGitExitCode(rootPath, args) {
+  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  });
+  return result.error ? null : result.status;
 }
 function digestUntrackedContent(rootPath, paths) {
   const entries = splitNul(paths);
@@ -3951,11 +3963,18 @@ class CollabStore {
       return { refusal: `Commit ${commit} changes no path` };
     }
     const scopes = parseStringArray(row.path_scopes_json);
+    const rejectedThrough = this.db.query(`
+      SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events
+      WHERE workspace_id = ? AND entity_id = ? AND type = 'task.changes_requested'
+    `).get(row.workspace_id, row.id).sequence;
     const artifacts = this.db.query(`
-      SELECT id, uri, sha256 FROM artifacts
-      WHERE workspace_id = ? AND task_id = ? AND kind = 'file'
-      ORDER BY attached_at, rowid
-    `).all(row.workspace_id, row.id);
+      SELECT a.id, a.uri, a.sha256 FROM artifacts a
+      JOIN events e
+        ON e.workspace_id = a.workspace_id AND e.entity_id = a.task_id
+        AND e.type = 'artifact.attached' AND json_extract(e.payload_json, '$.artifact.id') = a.id
+      WHERE a.workspace_id = ? AND a.task_id = ? AND a.kind = 'file' AND e.sequence > ?
+      ORDER BY e.sequence
+    `).all(row.workspace_id, row.id, rejectedThrough);
     const newest = new Map;
     for (const artifact of artifacts) {
       const path = artifactRepositoryPath(artifact.uri, prepared.observed_worktree.root_path);
@@ -3974,7 +3993,8 @@ class CollabStore {
       }
       const artifact = newest.get(change.path);
       if (!artifact) {
-        return { refusal: `No file artifact attached to this task names ${change.path}` };
+        const since = rejectedThrough > 0 ? " since its latest request_changes" : "";
+        return { refusal: `No file artifact attached to this task${since} names ${change.path}` };
       }
       if (!artifact.sha256) {
         return {
@@ -4219,7 +4239,7 @@ class CollabStore {
     `).all(workspaceId, sessionId, now);
     if (live.length === 0)
       return null;
-    return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true", {
+    return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. " + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers", {
       task_ids: live.map((task) => task.id),
       leases: live.map((task) => ({
         task_id: task.id,
@@ -4227,7 +4247,7 @@ class CollabStore {
         expires_at: task.lease_expires_at
       })),
       required_action: "resolve_active_task_leases",
-      remedy: "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first."
+      remedy: "Call collab_session_end again with release_leases: true (optionally release_summary) to release every lease this session holds and end in one step, or release, complete, or hand off each lease first. A handoff counts once it is accepted: ending with release_leases expires any offer still pending."
     });
   }
   expireSessionLeaseForRecovery(row, session, now) {
@@ -4301,7 +4321,7 @@ class CollabStore {
       }
     }
     if (input.relation === "informs" && input.target_report_id) {
-      throw new CollabError("invalid_report_relation", "An informing report does not target another report");
+      throw new CollabError("invalid_report_relation", "An informing report does not target another report. To agree with or answer a report, use " + 'relation "supports" (or "challenges" to disagree) with target_report_id; ' + "to address a session, use to_session_id");
     }
     if (input.relation !== "informs" && !input.target_report_id) {
       throw new CollabError("report_target_required", "This report relation requires an earlier target report");
@@ -4318,7 +4338,7 @@ class CollabStore {
         throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
       }
       if (input.relation === "resolves" && target.relation !== "challenges") {
-        throw new CollabError("invalid_report_relation", "A resolving report must target a challenge");
+        throw new CollabError("invalid_report_relation", "A resolving report must target a challenge. To agree with or confirm a proposal, use " + 'relation "supports" with target_report_id');
       }
     }
     if (input.kind === "decision" && (!input.authority_scope || !input.authority_basis)) {
@@ -5357,7 +5377,7 @@ function pathWithinScopes(path, scopes) {
 }
 function gitCheckpointStaleError(taskId, result, observed, refusal) {
   const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
-  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri, " + "with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review.";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
   return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
     result_checkpoint: result,
     observed_checkpoint: observed,
@@ -5624,6 +5644,10 @@ function quietly(run) {
 }
 function runEnd(argv, env) {
   let secret = null;
+  if (argv.some((arg) => arg === "--help" || arg === "-h")) {
+    const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
+    return { exit_code: 0, line: JSON.stringify(help) };
+  }
   const emit = (payload, exitCode) => {
     const line = JSON.stringify(payload);
     if (secret !== null && line.includes(secret)) {
@@ -6034,14 +6058,18 @@ function isPrivateRegularFile(stat) {
 function isOwnedByCurrentUser3(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
+var HOST_ACTIVE_LEASES_MESSAGE = "Release, complete, or hand off active task leases before ending the session, or rerun with --release-leases";
+var HOST_ACTIVE_LEASES_REMEDY = "Rerun with --release-leases to release every lease this session holds and end it in one step, " + "or release, complete, or hand off each lease first (a handoff counts once it is accepted).";
 function errorReceipt(error) {
   if (error instanceof CollabError) {
+    const activeLeases = error.code === "session_has_active_leases";
     return {
       ...error.details,
+      ...activeLeases ? { remedy: HOST_ACTIVE_LEASES_REMEDY } : {},
       protocol: COLLAB_HOST_PROTOCOL,
       status: "error",
       error: error.code,
-      message: error.message
+      message: activeLeases ? HOST_ACTIVE_LEASES_MESSAGE : error.message
     };
   }
   return {

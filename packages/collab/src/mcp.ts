@@ -803,7 +803,7 @@ export function buildCollabMcpServer(
         evidence_refs: evidenceRefs,
         review_requested_session_id: z.string().min(1).max(200).optional()
           .describe(
-            "Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation.",
+            "Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation. Only on a task whose completion waits for acceptance.",
           ),
       }),
     },
@@ -886,8 +886,14 @@ export function buildCollabMcpServer(
           "withdraws",
           "supersedes",
           "resolves",
-        ]).optional(),
-        target_report_id: z.string().min(1).optional(),
+        ]).optional().describe(
+          "informs (the default) targets no report. supports / challenges answer any report; "
+          + "corrects / withdraws / supersedes only your own; resolves only a challenge. "
+          + "To say yes to a proposal, use supports with its target_report_id.",
+        ),
+        target_report_id: z.string().min(1).optional().describe(
+          "The earlier report this one answers. Required for every relation except informs.",
+        ),
         authority_scope: z.string().max(1000).optional(),
         authority_basis: z.string().max(2000).optional(),
       },

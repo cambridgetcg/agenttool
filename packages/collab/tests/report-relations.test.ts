@@ -43,6 +43,16 @@ function errorCode(operation: () => unknown): string {
   throw new Error("expected operation to fail");
 }
 
+function errorMessage(operation: () => unknown): string {
+  try {
+    operation();
+  } catch (error) {
+    if (error instanceof CollabError) return error.message;
+    throw error;
+  }
+  throw new Error("expected operation to fail");
+}
+
 describe("report relations as documented", () => {
   test("answers a proposal with supports and challenges from other sessions", () => {
     const proposer = session("proposer");
@@ -142,6 +152,9 @@ describe("report relations as documented", () => {
 
     expect(errorCode(() => append(other, "informs-with-target", "informs", original.id)))
       .toBe("invalid_report_relation");
+    // The duet's dead end: both refusals now point to the relation that fits.
+    expect(errorMessage(() => append(other, "informs-with-target-hint", "informs", original.id)))
+      .toContain('relation "supports"');
     for (const relation of ["supports", "challenges", "resolves", "corrects", "withdraws", "supersedes"] as const) {
       expect(errorCode(() => append(author, `${relation}-without-target`, relation)))
         .toBe("report_target_required");
@@ -155,6 +168,8 @@ describe("report relations as documented", () => {
 
     expect(errorCode(() => append(other, "resolves-non-challenge", "resolves", original.id)))
       .toBe("invalid_report_relation");
+    expect(errorMessage(() => append(other, "resolves-non-challenge-hint", "resolves", original.id)))
+      .toContain('relation "supports"');
     const challenge = append(other, "challenge-original", "challenges", original.id);
     expect(append(third, "resolves-by-third", "resolves", challenge.id)).toMatchObject({
       relation: "resolves",

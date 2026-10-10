@@ -89,6 +89,12 @@ export interface HostErrorReceipt {
   message: string;
 }
 
+export interface HostHelpReceipt {
+  protocol: typeof COLLAB_HOST_PROTOCOL;
+  status: "help";
+  usage: string;
+}
+
 export interface HostEndOptions {
   session_file: string;
   reason: string;
@@ -228,6 +234,10 @@ function runEnd(
   env: Record<string, string | undefined>,
 ): { exit_code: 0 | 1; line: string } {
   let secret: string | null = null;
+  if (argv.some((arg) => arg === "--help" || arg === "-h")) {
+    const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
+    return { exit_code: 0, line: JSON.stringify(help) };
+  }
   const emit = (payload: HostEndReceipt | HostErrorReceipt, exitCode: 0 | 1) => {
     const line = JSON.stringify(payload);
     if (secret !== null && line.includes(secret)) {
@@ -778,14 +788,23 @@ function isOwnedByCurrentUser(uid: number): boolean {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
+/** The store's refusal names the MCP parameter; on the host path, name the CLI flag. */
+const HOST_ACTIVE_LEASES_MESSAGE =
+  "Release, complete, or hand off active task leases before ending the session, or rerun with --release-leases";
+const HOST_ACTIVE_LEASES_REMEDY =
+  "Rerun with --release-leases to release every lease this session holds and end it in one step, "
+  + "or release, complete, or hand off each lease first (a handoff counts once it is accepted).";
+
 function errorReceipt(error: unknown): HostErrorReceipt {
   if (error instanceof CollabError) {
+    const activeLeases = error.code === "session_has_active_leases";
     return {
       ...error.details,
+      ...(activeLeases ? { remedy: HOST_ACTIVE_LEASES_REMEDY } : {}),
       protocol: COLLAB_HOST_PROTOCOL,
       status: "error",
       error: error.code,
-      message: error.message,
+      message: activeLeases ? HOST_ACTIVE_LEASES_MESSAGE : error.message,
     };
   }
   return {
