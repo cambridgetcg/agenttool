@@ -2,8 +2,6 @@
  *
  *  Three-phase protocol:
  *
- *    : connected to strand <id>
- *
  *    event: catchup-start
  *    data: {"since_seq": N, "current_seq": M}
  *
@@ -15,7 +13,7 @@
  *    event: catchup-end
  *    data: {"caught_up_to": M}
  *
- *    : keepalive                ← every 15s
+ *    event: keepalive           ← every 15s (empty data)
  *
  *    event: thought             ← live; whenever a new thought lands
  *    data: {...}
@@ -167,7 +165,7 @@ app.get("/", async (c) => {
     // Disconnect on client abort.
     sse.onAbort(() => sink.abort());
 
-    // Keepalive — Hono's writeSSE with no event field sends a comment.
+    // Keepalive — a named, empty `keepalive` event every 15 s.
     const keepalive = setInterval(() => {
       if (sink.isAborted()) return;
       sink.enqueue({ event: "keepalive", data: "" });

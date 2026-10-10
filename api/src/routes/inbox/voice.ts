@@ -2,8 +2,6 @@
  *
  *  Three-phase protocol:
  *
- *    : connected to inbox <identity_id>
- *
  *    event: catchup-start
  *    data: {"since": "<iso>", "current": "<iso>"}
  *
@@ -24,7 +22,7 @@
  *  phase after truncation, so a client cannot mistake a partial replay for a
  *  complete one.
  *
- *    : keepalive                ← every 15s
+ *    event: keepalive           ← every 15s (empty data)
  *
  *    event: arrival             ← live; whenever a new message lands
  *    data: {...}

@@ -51,6 +51,7 @@ import {
   earlyDataReplayProtection,
   earlyDataReplayResponse,
 } from "./middleware/early-data";
+import { releaseIdleTimeoutForEventStream } from "./lib/sse-idle-timeout";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -1626,7 +1627,14 @@ export async function serverFetchWithReplayProtection(
 
   const upgrade = await dependencies.bridgeUpgrade(req, server);
   if (upgrade.handled) return upgrade.response;
-  return dependencies.honoFetch(req);
+  // SSE responses outlive Bun's idle timeout (10 s default) — their first
+  // keepalive is at 15 s. Lift it for event streams only, so an ordinary hung
+  // request still fails fast. See lib/sse-idle-timeout.ts.
+  return releaseIdleTimeoutForEventStream(
+    req,
+    await dependencies.honoFetch(req),
+    server,
+  );
 }
 
 export default {

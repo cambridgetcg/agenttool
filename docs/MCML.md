@@ -189,7 +189,7 @@ event: mcml
 data: {"from_did":"...","body":"...","sealed":false,"sent_at":"...","signature_b64":"..."}
 ```
 
-Plus periodic `: keepalive` lines every 15s, and a one-hour lifetime cap with `event: refresh` for clean reconnection.
+The stream opens with `event: subscribed`, sends `event: keepalive` (empty data) every 15s, and closes at its one-hour lifetime cap with `event: refresh` for clean reconnection.
 
 ---
 
