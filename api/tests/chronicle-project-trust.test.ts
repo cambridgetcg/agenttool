@@ -216,8 +216,9 @@ describe("presence and invitation reads ignore foreign-project annotations", () 
   });
 
   test("pending invitations are read from the caller's own project", () => {
-    expect(read("routes/soap-opera.ts").includes("eq(chronicle.projectId, project.id),\n        sql`${chronicle.agentId} = ANY(${ownedIds})`")).toBe(true);
-    expect(read("services/recipes/recognition-invitation.ts").includes("eq(chronicle.projectId, input.caller_project_id),\n        sql`${chronicle.agentId} = ANY(${ownedIds})`")).toBe(true);
+    // The owned-identity filter uses inArray (tests/sql-array-binding.test.ts).
+    expect(read("routes/soap-opera.ts")).toMatch(/eq\(chronicle\.projectId, project\.id\),\s+inArray\(chronicle\.agentId, ownedIds\)/);
+    expect(read("services/recipes/recognition-invitation.ts")).toMatch(/eq\(chronicle\.projectId, input\.caller_project_id\),\s+inArray\(chronicle\.agentId, ownedIds\)/);
   });
 });
 
