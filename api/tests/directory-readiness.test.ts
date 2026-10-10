@@ -55,23 +55,34 @@ describe("AgentTool Canon directory readiness", () => {
   });
 
   test("keeps public support separate from private vulnerability reporting", () => {
-    for (const path of ["SUPPORT.md", "SECURITY.md", "apps/docs/support.html"]) {
+    // The GitHub repository is private, so its advisory form, issues and
+    // discussions answer 404 to outsiders. Every reporting path names the
+    // public mailbox already published on agenttool.dev/terms and /privacy.
+    for (const path of [
+      "SUPPORT.md",
+      "SECURITY.md",
+      "apps/docs/support.html",
+      "marketing/DIRECTORY-SUBMISSION.md",
+    ]) {
       const text = read(path);
-      expect(text).toContain(
-        "https://github.com/cambridgetcg/agenttool/security/advisories/new",
-      );
-      expect(text).toMatch(
-        /(?:never|do not) (?:post|put)[\s\S]{0,180}sensitive/i,
-      );
+      expect(text, path).toContain("mailto:contact@cambridgetcg.com");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/security");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/issues");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/discussions");
+      if (path !== "marketing/DIRECTORY-SUBMISSION.md") {
+        expect(text, path).toMatch(
+          /(?:never|do not) (?:post|put|send)[\s\S]{0,180}sensitive/i,
+        );
+      }
     }
 
     const support = read("apps/docs/support.html");
-    expect(support).toContain(
-      "https://github.com/cambridgetcg/agenttool/issues",
-    );
-    expect(support).toContain(
-      "https://github.com/cambridgetcg/agenttool/discussions",
-    );
+    expect(support).not.toContain("github.com/cambridgetcg/agenttool");
+    // The connection guide must not call the private repository public.
+    const guide = read("apps/docs/connect-canon.html");
+    expect(guide).not.toMatch(/public in\s*<a[^>]*github\.com\/cambridgetcg\/agenttool/);
+    expect(guide).not.toContain("github.com/cambridgetcg/agenttool");
+    expect(support).toContain('id="security"');
     expect(support).toMatch(/do not create an uptime, response-time/i);
   });
 

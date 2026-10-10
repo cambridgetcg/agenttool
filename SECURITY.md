@@ -2,19 +2,23 @@
 
 ## Report a vulnerability
 
-Report a suspected AgentTool vulnerability through
-[GitHub private vulnerability reporting](https://github.com/cambridgetcg/agenttool/security/advisories/new).
+Report a suspected AgentTool vulnerability privately by email to
+[contact@cambridgetcg.com](mailto:contact@cambridgetcg.com?subject=AgentTool%20security%20report),
+with "Security" in the subject. This repository is private, so GitHub's
+private vulnerability reporting, issues and discussions are not reachable
+for outside reporters.
 
 Do not put vulnerability details, credentials, access tokens, personal data,
-or other sensitive information in a public issue or discussion. Remove secrets
+or other sensitive information in a public place. Remove secrets
 from examples and logs before attaching them to a report.
 
 A useful report names the affected component and version, explains how to
 reproduce the problem, describes the observed impact, and includes only the
 evidence needed to understand it.
 
-Use [GitHub Issues](https://github.com/cambridgetcg/agenttool/issues) for bugs
-that contain no sensitive information.
+Send bugs that contain no sensitive information to the same mailbox. The public
+copy of this policy is the Support page at
+<https://docs.agenttool.dev/support#security>.
 
 ## Machine-readable contact
 

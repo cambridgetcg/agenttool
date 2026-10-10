@@ -139,6 +139,17 @@ describe("agenttool-discovery/v1 document", () => {
     expect(serialized).not.toContain('"a2a"');
   });
 
+  test("does not present the private repository as public source or releases", () => {
+    // github.com/cambridgetcg/agenttool answers 404 without access.
+    const source = buildDiscoveryCompass(API, DOCS).channels.find(
+      (channel) => channel.id === "source",
+    )!;
+    expect(source.role).not.toMatch(/releases/i);
+    expect(source.role).toMatch(/private/i);
+    expect(source.boundary).toMatch(/access required/i);
+    expect(source.boundary).toContain("packages");
+  });
+
   test("stays inside the fixed first-contact byte budget", () => {
     const body = serializeDiscoveryCompass(API, DOCS);
     expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(

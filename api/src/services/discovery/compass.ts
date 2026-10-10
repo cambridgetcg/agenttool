@@ -178,8 +178,8 @@ export function buildDiscoveryCompass(
       {
         id: "source",
         href: "https://github.com/cambridgetcg/agenttool",
-        role: "source, history, and releases",
-        boundary: "source visibility grants no runtime authority",
+        role: "private development repository",
+        boundary: "access required (404 without it); exact package bytes are on the packages channel",
       },
       {
         id: "packages",

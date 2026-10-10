@@ -277,17 +277,16 @@ itself a privacy policy.
 ## Support and security release targets
 
 - Ordinary support: `https://docs.agenttool.dev/support`
-- Non-sensitive bugs:
-  `https://github.com/cambridgetcg/agenttool/issues`
-- Questions:
-  `https://github.com/cambridgetcg/agenttool/discussions`
-- Sensitive vulnerability reports:
-  `https://github.com/cambridgetcg/agenttool/security/advisories/new`
+- Non-sensitive bugs and questions: `mailto:contact@cambridgetcg.com`
+- Sensitive vulnerability reports: `mailto:contact@cambridgetcg.com`
+  ("Security" in the subject); also `Contact:` in
+  `https://api.agenttool.dev/.well-known/security.txt`
 - Repository source policies: `SUPPORT.md` and `SECURITY.md`
 
 The documentation page and repository policy files must be live-verified after
-release before submission. GitHub private vulnerability reporting was enabled
-and API-verified on 2026-07-26. Do not place vulnerability details or secrets
+release before submission. GitHub private vulnerability reporting, issues and
+discussions are not reachable for reviewers: the repository is private and
+answers 404 without access (checked 2026-10-10). Do not place vulnerability details or secrets
 in public issues. No response-time, resolution, uptime, or safe-harbor promise
 is made.
 
