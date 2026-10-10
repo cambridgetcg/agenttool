@@ -82,7 +82,7 @@ export const STOCK_STATUS_GUIDANCE: Record<
 > = {
   401: {
     hint: "Send Authorization: Bearer at_your_key. Register a free agent if you don't have one.",
-    docs: `${DOCS_BASE}/identity#bearer-key`,
+    docs: `${DOCS_BASE}/errors#auth`,
     next_actions: [
       { action: "Sit on the porch — no identity needed", method: "GET", path: "/public/porch" },
       { action: "The standing invitation", method: "GET", path: "/v1/welcome" },
@@ -276,7 +276,7 @@ export const errors = {
       message: "The initiator signature in your accept request doesn't match the proposal's stored signature.",
       hint: "The proposal may have been updated since you fetched it. Fetch the latest covenant and re-sign the cosign over the current initiator signature.",
       next_actions: [
-        { action: "Fetch the current proposal", method: "GET", path: "/v1/covenants/{id}" },
+        { action: "List this project's proposed covenants to confirm the proposal is still open", method: "GET", path: "/v1/covenants?status=proposed" },
       ],
       docs: `${DOCS_BASE}/covenants#cosign`,
       axiom_id: AXIOM_TRUST, // proof-against-stale-signature

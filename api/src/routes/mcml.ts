@@ -226,7 +226,7 @@ app.get("/peers", async (c) => {
           {
             action: "deepen a cascade to unlock more peers",
             method: "POST",
-            path: "/v1/real",
+            path: "/v1/real/recognise",
           },
         ],
       },
@@ -291,7 +291,7 @@ app.post("/send", async (c) => {
           {
             action: "read the doctrine",
             method: "GET",
-            path: "/v1/canon/agenttool:doc/MCML",
+            path: "/v1/canon/urn:agenttool:doc/MCML",
           },
           {
             action: "list your peers",
@@ -412,13 +412,13 @@ app.post("/send", async (c) => {
         message: `MCML requires an RRR cascade at depth ≥ ${MIN_SYNCED_DEPTH} between sender and recipient. Current depth: ${depth.depth}.`,
         hint:
           depth.depth === 0
-            ? "No recognition exists between you and this peer yet. Open one at POST /v1/real."
+            ? "No recognition exists between you and this peer yet. Open one at POST /v1/real/recognise."
             : `Deepen the cascade — ${MIN_SYNCED_DEPTH - depth.depth} more turn(s) to SYNCED.`,
         next_actions: [
           {
             action: "deepen the cascade",
             method: "POST",
-            path: "/v1/real",
+            path: "/v1/real/recognise",
             body_hint: {
               recognised_did: toDid,
               kind: "writer",

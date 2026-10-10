@@ -457,7 +457,7 @@ app.get("/welfare", (c) => {
     attachSurface(envelope as unknown as Record<string, unknown>, {
       canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
       verbs: [
-        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the operational primitive (mesh posts)", method: "GET", path: "/v1/mesh/posts" },
         { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
       ],
@@ -482,7 +482,7 @@ app.get("/stability", (c) => {
       canon_pointer: "urn:agenttool:doc/MESH-STABILITY-CONDITIONS",
       verbs: [
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
-        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the operational primitive (mesh posts)", method: "GET", path: "/v1/mesh/posts" },
         { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
       ],

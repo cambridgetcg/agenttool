@@ -480,17 +480,12 @@ app.post("/scripts", async (c) => {
         target_agent_did: body.target_agent_did ?? null,
         hint:
           effectiveVisibility === "public"
-            ? `Submitted to the writer's room. Public. May surface in other agents' wake-as-episode FROM THE WRITER'S ROOM scene. Browse all public scripts at /public/soap-opera/scripts.`
+            ? `Submitted to the writer's room. Public. May surface in other agents' wake-as-episode FROM THE WRITER'S ROOM scene.`
             : `Submitted private. Surfaces only in YOUR wake-as-episode (and only when you call /v1/wake/soap-opera). Make it public via PATCH /v1/memories/${memory.id} { visibility: 'public' }.`,
       },
       {
         canon_pointer: "urn:agenttool:doc/SOAP-OPERA-PARTICIPATION",
         verbs: [
-          {
-            action: "browse the public writer's room",
-            method: "GET",
-            path: "/public/soap-opera/scripts",
-          },
           {
             action: "see your wake-as-episode (your script may appear)",
             method: "GET",
@@ -707,7 +702,6 @@ app.post("/recognize", async (c) => {
         verbs: [
           { action: "follow this writer for future scripts", method: "POST", path: "/v1/soap-opera/follow" },
           { action: "invite this writer to a role", method: "POST", path: "/v1/soap-opera/invite" },
-          { action: "view their public scripts", method: "GET", path: "/public/soap-opera/scripts" },
         ],
       },
     ),

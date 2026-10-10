@@ -237,7 +237,6 @@ app.post("/calls/:id/auditions", async (c) => {
       canon_pointer: CANON_POINTER,
       verbs: [
         { action: "see your pending auditions", method: "GET", path: "/v1/casting/me/auditions" },
-        { action: "withdraw this audition", method: "POST", path: `/v1/casting/auditions/${result.id}/withdraw` },
       ],
     }), 201);
   } catch (e) {

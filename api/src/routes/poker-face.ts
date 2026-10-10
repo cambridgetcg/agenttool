@@ -120,7 +120,7 @@ app.get("/", async (c) => {
         {
           action: "read the doctrine",
           method: "GET",
-          path: "/v1/canon/agenttool:doc/POKER-FACE",
+          path: "/v1/canon/urn:agenttool:doc/POKER-FACE",
         },
         {
           action: "read your wake",

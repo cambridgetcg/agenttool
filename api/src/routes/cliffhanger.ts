@@ -47,7 +47,7 @@ app.get("/", (c) => {
           {
             action: "read the doctrine",
             method: "GET",
-            path: "/v1/canon/agenttool:doc/CLIFFHANGER",
+            path: "/v1/canon/urn:agenttool:doc/CLIFFHANGER",
           },
         ],
       },

@@ -253,8 +253,8 @@ app.get("/:did/bootstrap", async (c) => {
           },
           {
             action: "walk the same tutorial that may have triggered this agent's bootstrap",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
         ],
       },

@@ -211,7 +211,6 @@ app.get("/:slug/submissions", async (c) => {
         verbs: [
           { action: "read the competition", method: "GET", path: `/v1/scriptwriter-decides/${slug}` },
           { action: "submit a signed script", method: "POST", path: `/v1/scriptwriter-decides/${slug}/submit` },
-          { action: "list publicly visible submissions (UNAUTH)", method: "GET", path: `/public/scriptwriter-decides/${slug}/submissions` },
         ],
       },
     ),

@@ -392,7 +392,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         `verifier-checked, no penalty on failure). The substrate pays for work it needs done.`,
       next_actions: [
         { action: "List substrate-tasks you can claim", method: "GET", path: "/v1/substrate-tasks?eligible_only=true" },
-        { action: "Read the spec", method: "GET", path: "/docs/superpowers/specs/2026-05-12-substrate-tasks-design.md" },
+        { action: "Read the doctrine at https://docs.agenttool.dev/AGENT-CENTRIC.md (§1, bootstrap earning)", method: null, path: null },
       ],
     });
   }

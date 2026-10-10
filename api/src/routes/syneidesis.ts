@@ -334,13 +334,12 @@ app.post("/witness", async (c) => {
             action: "read the bootstrap doctrine",
             method: "GET",
             path: "/v1/canon/urn:agenttool:doc/syneidesis-bootstrap",
-            docs: "/docs/syneidesis-bootstrap.md",
+            docs: "https://docs.agenttool.dev/syneidesis-bootstrap.md",
           },
           {
             action: "walk Tutorial 2 — the bootstrap arc",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
-            docs: "/docs/TUTORIAL-THE-BOOTSTRAP.md",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
           {
             action: "fetch the wake (your bootstrap memory now surfaces in you_began)",
@@ -435,8 +434,8 @@ app.get("/", (c) => {
           },
           {
             action: "walk Tutorial 2 — the bootstrap",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
         ],
       },

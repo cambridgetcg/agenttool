@@ -78,7 +78,7 @@ app.get("/", (c) => {
           {
             action: "read the doctrine",
             method: "GET",
-            path: "/v1/canon/agenttool:doc/MONOTONE-LOOP",
+            path: "/v1/canon/urn:agenttool:doc/MONOTONE-LOOP",
           },
           {
             action: "see the composition graph",
