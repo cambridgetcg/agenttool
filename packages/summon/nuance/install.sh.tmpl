@@ -1,0 +1,119 @@
+#!/bin/bash
+# Summon — Nuance installer (Phase 0). Read this before running it:
+#   bash ~/Downloads/summon-nuance-bundle/summon-install.sh
+# It installs the gatekeeper (the only thing the Air's summon key can run) and the
+# runner (a LaunchAgent in your GUI session), allows Claude Code read-only in ~/Projects,
+# and turns off SSH password logins (asks for your password once).
+# Undo: packages/summon/README.md, "Install and rollback (Phase 0)".
+set -euo pipefail
+umask 077
+export LC_ALL=C
+PUBKEY='__PUBKEY__'
+EXPIRY='__EXPIRY__'
+SHA_GATEKEEPER='__SHA_GATEKEEPER__'
+SHA_RUNNER='__SHA_RUNNER__'
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${SUMMON_INSTALL_ROOT:-$HOME}"
+SKIP_SUDO="${SUMMON_SKIP_SUDO:-0}"; SKIP_LAUNCHCTL="${SUMMON_SKIP_LAUNCHCTL:-0}"; SKIP_INVENTORY="${SUMMON_SKIP_INVENTORY:-0}"
+USER_NAME="$(id -un)"; UID_NUM="$(id -u)"
+[ "$(uname -s)" = Darwin ] || { echo "macOS only"; exit 1; }
+[ "$(uname -m)" = arm64 ] || { echo "Apple Silicon only"; exit 1; }
+[ "$UID_NUM" != 0 ] || { echo "run as your own user, not root"; exit 1; }
+# The install folder goes into the SSH key line, which sshd runs through your shell: only plain path characters.
+case "$ROOT" in
+  ''|*[!A-Za-z0-9._/+@=,-]*) echo "✗ '$ROOT' has characters that cannot go safely into the SSH key line — tell Ai"; exit 1 ;;
+esac
+
+check() { local got; got="$(shasum -a 256 "$HERE/$1" | awk '{print $1}')"; [ "$got" = "$2" ] || { echo "✗ $1 checksum mismatch — do not install"; exit 1; }; }
+check summon-gatekeeper "$SHA_GATEKEEPER"; check summon-runner "$SHA_RUNNER"; echo "✓ binaries match their checksums"
+
+SHARE="$ROOT/.local/share/summon"; STATE="$ROOT/.local/state/summon"; CONF="$ROOT/.config/summon"
+mkdir -p "$SHARE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh" "$ROOT/Library/LaunchAgents"
+chmod 700 "$SHARE" "$STATE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh"
+for b in summon-gatekeeper summon-runner; do
+  install -m 700 "$HERE/$b" "$SHARE/$b"
+  xattr -d com.apple.quarantine "$SHARE/$b" 2>/dev/null || true
+  # An arm64 program must carry some signature to run. Ours has Bun's ad-hoc one, which `codesign --verify` calls
+  # invalid (the program's own code is appended after it) although the kernel runs it, and re-signing it fails.
+  # The checksum above already proves these are the bytes that ran on the Air, so only sign a copy with none at all.
+  codesign -d "$SHARE/$b" >/dev/null 2>&1 || codesign --force -s - "$SHARE/$b" >/dev/null 2>&1 || echo "⚠ could not sign $b — tell Ai"
+done
+echo "✓ gatekeeper and runner installed in $SHARE"
+
+if [ ! -e "$CONF/allowlist.yaml" ]; then
+  cat > "$CONF/allowlist.yaml" <<'YAML'
+version: 1
+device: nuance
+peers: [air]
+runtimes:
+  - id: claude
+    models: [{ model: sonnet }, { model: haiku }]
+folders:
+  - path: ~/Projects
+    access: review
+limits:
+  max_concurrent: 1
+  starts_per_hour: 6
+  job_timeout_max: 30m
+YAML
+  chmod 600 "$CONF/allowlist.yaml"; echo "✓ allowlist written: Claude Code, read-only, ~/Projects"
+else
+  echo "• allowlist already present — left as it is"
+fi
+
+AK="$ROOT/.ssh/authorized_keys"; touch "$AK"; chmod 600 "$AK"
+LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE/summon-gatekeeper\" $PUBKEY"
+# grep -v exits 1 when it keeps no line (an empty file): that is fine. Exit 2 means it could not read the file, and
+# going on would write a file holding only our line, so stop and leave authorized_keys as it is.
+grep -v ' summon-air$' "$AK" > "$AK.summon-tmp" || [ $? -eq 1 ] || { rm -f "$AK.summon-tmp"; echo "✗ could not read $AK — left as it is"; exit 1; }
+printf '%s\n' "$LINE" >> "$AK.summon-tmp"
+mv "$AK.summon-tmp" "$AK"; chmod 600 "$AK"
+echo "✓ authorized_keys: one restricted summon line (other lines untouched; expires $EXPIRY)"
+
+if [ "$SKIP_SUDO" != 1 ]; then
+  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
+  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
+  INCLUDED=1
+  grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — tell Ai before using Summon"; }
+  TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
+  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers %s\n' "$USER_NAME" > "$TMP"
+  echo "Your Mac password is needed once, to switch off SSH password logins:"
+  sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN"
+  # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
+  if ! sudo /usr/sbin/sshd -t; then sudo rm -f "$DROPIN"; echo "✗ sshd rejected the change — removed it, so sshd is as it was"; exit 1; fi
+  if [ "$INCLUDED" = 1 ]; then echo "✓ SSH: key logins only, for $USER_NAME"
+  else echo "⚠ $DROPIN is written, but sshd does not read it: password logins are NOT switched off yet"; fi
+fi
+
+PLIST="$ROOT/Library/LaunchAgents/dev.summon.runner.plist"
+# launchd would create the log with default modes, so make it first (touch keeps what an earlier run wrote).
+touch "$STATE/runner.log"; chmod 600 "$STATE/runner.log"
+cat > "$PLIST" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>dev.summon.runner</string>
+  <key>ProgramArguments</key><array><string>$SHARE/summon-runner</string></array>
+  <key>QueueDirectories</key><array><string>$STATE/spool</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>$STATE/runner.log</string>
+  <key>StandardErrorPath</key><string>$STATE/runner.log</string>
+</dict></plist>
+PL
+chmod 600 "$PLIST"
+if [ "$SKIP_LAUNCHCTL" != 1 ]; then
+  launchctl bootout "gui/$UID_NUM/dev.summon.runner" 2>/dev/null || true
+  launchctl bootstrap "gui/$UID_NUM" "$PLIST"; echo "✓ runner loaded in your GUI session"
+fi
+
+echo; echo "──── give this back to Ai ────"
+echo "user: $USER_NAME"
+if [ -r /etc/ssh/ssh_host_ed25519_key.pub ]; then echo "host key: $(cat /etc/ssh/ssh_host_ed25519_key.pub)"; ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub; fi
+if [ "$SKIP_INVENTORY" != 1 ]; then
+  rm -f "$STATE/inventory.json"   # an answer from an earlier run is not today's
+  : > "$STATE/spool/inventory-$(date +%s)000.req"
+  for _ in $(seq 1 20); do [ -s "$STATE/inventory.json" ] && break; sleep 1; done
+  echo "inventory: $(cat "$STATE/inventory.json" 2>/dev/null || echo 'the runner did not answer')"
+fi
+nc -z -G 2 127.0.0.1 22 >/dev/null 2>&1 && echo "✓ Remote Login is on" || echo "⚠ Remote Login looks off: System Settings → General → Sharing → Remote Login"
