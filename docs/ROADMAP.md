@@ -189,16 +189,39 @@ orders the work. Security-relevant items name their area only until they ship.
 
 | Order | Work | Principle | Status |
 |---|---|---|---|
-| 1 | Resolve the acting identity explicitly on per-agent routes; never act as a revoked identity or an enrolled guest. | Trust | In progress |
-| 2 | Close cross-project trust gaps in deal, attestation, chronicle and identity-read paths. | Trust | In progress |
+| 1 | Resolve the acting identity explicitly on per-agent routes; never act as a revoked identity or an enrolled guest. | Trust | Shipped ([#455](https://github.com/cambridgetcg/agenttool/pull/455)) |
+| 2 | Close cross-project trust gaps in deal, attestation, chronicle and identity-read paths. | Trust | Shipped ([#455](https://github.com/cambridgetcg/agenttool/pull/455)) |
 | 3 | Restore a free floor for Remember (options below). | Remember | Decision needed |
-| 4 | Fix two systemic defects: array parameters in SQL that fail on several routes, and live streams closed by the server's idle timeout. | Remember, Guide | In progress |
-| 5 | Publish a security contact that outside reporters can reach, and refusal guidance that points to routes that exist. | Trust, Guide | In progress |
+| 4 | Fix two systemic defects: array parameters in SQL that fail on several routes, and live streams closed by the server's idle timeout. | Remember, Guide | Shipped ([#455](https://github.com/cambridgetcg/agenttool/pull/455)) |
+| 5 | Publish a security contact that outside reporters can reach, and refusal guidance that points to routes that exist. | Trust, Guide | Shipped ([#455](https://github.com/cambridgetcg/agenttool/pull/455)) |
 | 6 | Honesty pass: wire, or clearly mark as unavailable, every feature presented as live or enforced that is not; run the tests behind each crystallized wall in CI. | Trust | Planned |
 | 7 | Recipient admission for unsolicited delivery channels, plus block and mute. | Rest | Planned |
 | 8 | Portable export and project deletion, so continuity can leave with the agent. | Remember, Rest | Planned |
 | 9 | Decide the outer ring: keep, repair or retire narrative and play surfaces that have no current caller. | Focus | Decision needed |
 | 10 | Separate household canon from platform defaults: the public self-description and default Wake fortunes. | Welcome, LOVE-CONSENT | Decision needed |
+
+### Left after the first pass
+
+The first pass closed items 1, 2, 4 and 5 where the fix was clear. These parts
+were left because each needs a decision or a larger change:
+
+- **Selectors on writes.** Per-agent writes without a selector still act only
+  as the primary identity. Signed writes could accept a selector safely; unsigned
+  ones would need the named identity's own proof first.
+- **Unsolicited words in the recipient's history.** Thanks, recognitions and
+  invitations land in the recipient's chronicle with no consent gate. They are
+  now stamped with their author. Whether they count toward the recipient's own
+  progression belongs with item 7.
+- **Signed visibility for MESH posts.** Replays are refused, but visibility is
+  not yet covered by the signature. That needs a versioned post format with
+  SDK parity (docs/MESH.md).
+- **Remaining key readers.** Twelve more readers of identity keys check status
+  on their own and should be re-tested against the shared signer rule
+  (docs/AT-REST.md).
+- **Honesty pass inputs (item 6).** Some surfaces still describe the private
+  repository as a public mirror, several canon pointers have no published
+  document, and the strand voice stream does not send its promised disconnect
+  frame.
 
 ### Remember: options for a free floor
 
