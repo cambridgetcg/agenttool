@@ -14,8 +14,10 @@ const defaults: Record<string, Reply> = {
   'claude auth status --json': { stdout: '{"loggedIn":true,"email":"x@y"}' },
   'codex --version': { stdout: 'codex-cli 0.9.1\n' },
   'codex login status': { stdout: 'Logged in as zq7@example.test\n' },
-  'hermes --version': { stdout: 'Hermes 2.0.0\n' },
-  'sol --version': { stdout: 'sol 1.4.0\n' },
+  // The real `hermes --version` prints a banner with install paths; only its first line may be reported.
+  'hermes --version': { stdout: 'Hermes Agent v2.0.0\nProject: /Users/x/.hermes/hermes-agent\nPython: 3.12\n' },
+  // `sol version` prints the manifest version; `sol --version` is not a sol command.
+  'sol version': { stdout: 'sol 1.4.0\nmanifest: /Users/x/.config/sol/manifest.json\n' },
   'stat -f %Su /dev/console': { stdout: 'yu\n' },
 }
 
@@ -94,9 +96,29 @@ describe('collectInventory', () => {
       tmux: tmuxPath,
       harnesses: {
         codex: { path: codexPath, version: 'codex-cli 0.9.1', logged_in: true },
-        hermes: { path: hermesPath, version: 'Hermes 2.0.0', logged_in: true },
+        hermes: { path: hermesPath, version: 'Hermes Agent v2.0.0', logged_in: true },
       },
     })
+  })
+
+  test('a version is the first line of the output; the banner with install paths never reaches the inventory', () => {
+    const inv = inventoryWithClaude(fakeRun(), present, executable)
+    expect(inv).toMatchObject({ harnesses: { hermes: { version: 'Hermes Agent v2.0.0' } } })
+    expect(JSON.stringify(inv)).not.toContain('/Users/x')
+  })
+
+  test('codex and hermes report version null when their version command exits non-zero or cannot start', () => {
+    const inv = inventoryWithClaude(fakeRun({
+      'codex --version': { code: 2, stdout: 'error: unknown flag' },
+      'hermes --version': { code: null },
+    }), present, executable)
+    expect(inv).toMatchObject({
+      harnesses: {
+        codex: { path: codexPath, version: null },
+        hermes: { path: hermesPath, version: null },
+      },
+    })
+    expect(JSON.stringify(inv)).not.toContain('unknown flag')
   })
 
   test('harnesses, sol and the console user report null when they are not installed or cannot be read', () => {
@@ -131,8 +153,8 @@ describe('collectInventory', () => {
       .toMatchObject({ harnesses: { hermes: { logged_in: false } } })
   })
 
-  test('sol keeps its path but reports version null when it exits non-zero', () => {
-    const inv = inventoryWithClaude(fakeRun({ 'sol --version': { code: 2, stdout: 'usage: sol' } }), present, executable)
+  test('sol keeps its path but reports version null when `sol version` exits non-zero', () => {
+    const inv = inventoryWithClaude(fakeRun({ 'sol version': { code: 2, stdout: 'usage: sol' } }), present, executable)
     expect(inv).toMatchObject({ sol: { path: solPath, version: null } })
   })
 

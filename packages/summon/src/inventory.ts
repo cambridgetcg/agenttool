@@ -34,27 +34,32 @@ function consoleOwner(run: Run): string | null {
   return r.code === 0 && r.stdout.trim() !== '' ? r.stdout.trim() : null
 }
 
+/** A version is the first line of a command that exited 0; null when it exits non-zero, cannot start, or prints nothing. */
+function firstLine(r: { code: number | null; stdout: string }): string | null {
+  if (r.code !== 0) return null
+  return (r.stdout.split('\n')[0] ?? '').trim() || null
+}
+
 /** `codex login status` is read for its exit code only: its output can name the account, so it never leaves this function. */
 function codexFacts(home: string, run: Run, executable: (p: string) => boolean): Record<string, unknown> | null {
   const path = which('codex', home, executable)
   if (!path) return null
   const login = run(path, ['login', 'status'], 15_000).code
-  return { path, version: run(path, ['--version']).stdout, logged_in: login === null ? null : login === 0 }
+  return { path, version: firstLine(run(path, ['--version'])), logged_in: login === null ? null : login === 0 }
 }
 
 /** Hermes keeps its login in auth.json; only that file's existence is read, never its contents. */
 function hermesFacts(home: string, run: Run, exists: (p: string) => boolean): Record<string, unknown> | null {
   const path = join(home, '.hermes/hermes-agent/venv/bin/hermes')
   if (!exists(path)) return null
-  return { path, version: run(path, ['--version']).stdout, logged_in: exists(join(home, '.hermes/auth.json')) }
+  return { path, version: firstLine(run(path, ['--version'])), logged_in: exists(join(home, '.hermes/auth.json')) }
 }
 
-/** sol counts as verified when it runs and prints a version. */
+/** sol counts as verified when `sol version` runs and prints a version. */
 function solFacts(home: string, run: Run, exists: (p: string) => boolean): Record<string, unknown> | null {
   const path = join(home, '.config/sol/bin/sol')
   if (!exists(path)) return null
-  const r = run(path, ['--version'])
-  return { path, version: r.code === 0 && r.stdout.trim() !== '' ? r.stdout : null }
+  return { path, version: firstLine(run(path, ['version'])) }
 }
 
 /** Read-only facts about this Mac (spec §5.3). Runs in the runner, i.e. Yu's GUI session. */
