@@ -16,9 +16,10 @@ then `summon status|result nuance/smn_<id>`. Nuance runs `summon-gatekeeper` (SS
    puts a fresh 90-day expiry in the new bundle; run that installer on Nuance to apply it.
 2. AirDrop `~/summon-nuance-bundle` to Nuance. Turn on Remote Login there (allow access for Yu's user only). Read
    `summon-install.sh`, then run `bash ~/Downloads/summon-nuance-bundle/summon-install.sh`. It asks for the Mac
-   password once, for the sshd drop-in. It is safe to run again: it replaces its one key line, keeps every other
-   `authorized_keys` line and an edited allowlist, and never empties `runner.log`. Run it again only when no job is
-   running: it replaces the program files.
+   password once, for the sshd drop-in, then asks `sshd -T` what sshd would really use for a LAN login by Yu's user.
+   Unless password logins are off there, it stops without writing the key line or loading the runner. It is safe to
+   run again: it replaces its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never
+   empties `runner.log`. Run it again only when no job is running: it replaces the program files.
 3. Back on the Air: `bun scripts/pin-nuance.ts --user <name> --host-key "<the ssh-ed25519 line the installer printed>"`.
    Check that `ssh-keygen -lf ~/.ssh/summon/known_hosts` shows the same fingerprint the installer printed.
 

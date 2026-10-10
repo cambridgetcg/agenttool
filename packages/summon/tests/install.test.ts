@@ -71,13 +71,28 @@ function stubs(scripts: Record<string, string>): { path: string; log: string; en
   }
   const log = join(dir, 'calls.log')
   writeFileSync(log, '')
-  return { path: `${dir}:${BASE_PATH}`, log, env: { STUB_LOG: log, STUB_FAIL_SSHD: join(dir, 'fail-sshd') } }
+  const env = { STUB_LOG: log, STUB_FAIL_SSHD: join(dir, 'fail-sshd'), STUB_FAIL_SSHD_T: join(dir, 'fail-sshd-T'), STUB_SSHD_T: join(dir, 'sshd-T.out') }
+  writeFileSync(env.STUB_SSHD_T, sshdT())
+  return { path: `${dir}:${BASE_PATH}`, log, env }
+}
+/** What `sshd -T` prints: lowercase keywords, one line each. `over` replaces a value, or drops the keyword with null. */
+function sshdT(over: Record<string, string | null> = {}): string {
+  const base: Record<string, string> = { port: '22', permitrootlogin: 'no', pubkeyauthentication: 'yes', passwordauthentication: 'no',
+    kbdinteractiveauthentication: 'no', allowusers: userInfo().username, x11forwarding: 'no' }
+  return Object.entries({ ...base, ...over }).filter(([, v]) => v !== null).map(([k, v]) => `${k} ${v}`).join('\n') + '\n'
 }
 const SUDO_STUB = `echo "sudo $*" >> "$STUB_LOG"
 if [ "$1" = install ]; then cat "$8" > "$STUB_LOG.dropin"; fi
-if [ "$1" = /usr/sbin/sshd ] && [ -e "$STUB_FAIL_SSHD" ]; then exit 1; fi
+if [ "$1" = /usr/sbin/sshd ] && [ "$2" = -t ] && [ -e "$STUB_FAIL_SSHD" ]; then exit 1; fi
+if [ "$1" = /usr/sbin/sshd ] && [ "$2" = -T ]; then
+  if [ -e "$STUB_FAIL_SSHD_T" ]; then exit 1; fi
+  cat "$STUB_SSHD_T"
+fi
 exit 0`
 const LAUNCHCTL_STUB = 'echo "launchctl $*" >> "$STUB_LOG"; exit 0'
+const WITH_SUDO = { SUMMON_SKIP_SUDO: '0', SUMMON_SKIP_LAUNCHCTL: '0' }
+const calls = (s: { log: string }) => readFileSync(s.log, 'utf8').trim().split('\n').filter(Boolean)
+const PLIST = (root: string) => join(root, 'Library/LaunchAgents/dev.summon.runner.plist')
 
 describe('installer', () => {
   test('installs with private modes and one restricted key line', () => {
@@ -158,30 +173,143 @@ describe('installer', () => {
     expect(existsSync(join(root, '.ssh/authorized_keys.summon-tmp'))).toBe(false)
   })
 
-  test('with sudo and launchctl stubbed: the drop-in is 010, mode 600, validated, never reloaded; the runner is bootstrapped', () => {
+  test('with sudo and launchctl stubbed: the drop-in is 010, mode 600, validated, checked with sshd -T, never reloaded; the runner is bootstrapped', () => {
     const { dir, root } = bundle()
     const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
-    const r = run(dir, root, { ...s.env, PATH: s.path, SUMMON_SKIP_SUDO: '0', SUMMON_SKIP_LAUNCHCTL: '0' })
+    const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
     expect(r.exitCode).toBe(0)
-    const calls = readFileSync(s.log, 'utf8').trim().split('\n')
-    expect(calls[0]).toMatch(/^sudo install -m 600 -o root -g wheel \S+ \/etc\/ssh\/sshd_config\.d\/010-summon\.conf$/)
-    expect(calls[1]).toBe('sudo /usr/sbin/sshd -t')
-    expect(calls[2]).toBe(`launchctl bootout gui/${userInfo().uid}/dev.summon.runner`)
-    expect(calls[3]).toBe(`launchctl bootstrap gui/${userInfo().uid} ${root}/Library/LaunchAgents/dev.summon.runner.plist`)
-    expect(calls.length).toBe(4)
+    expect(r.stdout.toString()).toContain('✓ SSH: key logins only')
+    const c = calls(s)
+    expect(c[0]).toMatch(/^sudo install -m 600 -o root -g wheel \S+ \/etc\/ssh\/sshd_config\.d\/010-summon\.conf$/)
+    expect(c[1]).toBe('sudo /usr/sbin/sshd -t')
+    expect(c[2]).toBe(`sudo /usr/sbin/sshd -T -C user=${userInfo().username},host=summon-lan,addr=192.168.50.2`)
+    expect(c[3]).toBe(`launchctl bootout gui/${userInfo().uid}/dev.summon.runner`)
+    expect(c[4]).toBe(`launchctl bootstrap gui/${userInfo().uid} ${PLIST(root)}`)
+    expect(c.length).toBe(5)
     expect(readFileSync(`${s.log}.dropin`, 'utf8')).toBe(
       `PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers ${userInfo().username}\n`)
+    expect(readFileSync(join(root, '.ssh/authorized_keys'), 'utf8')).toContain(PUB)
   })
 
-  test('when sshd -t rejects the drop-in the installer removes it and stops before loading the runner', () => {
+  test('matches the sshd -T keyword in any case but the value exactly', () => {
+    const { dir, root } = bundle()
+    const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+    writeFileSync(s.env.STUB_SSHD_T, sshdT().replace('passwordauthentication', 'PasswordAuthentication').replace('allowusers', 'AllowUsers'))
+    expect(run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO }).exitCode).toBe(0)
+  })
+
+  test('when sshd -t rejects the drop-in the installer removes it and stops before the key line and the runner', () => {
     const { dir, root } = bundle()
     const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
     writeFileSync(s.env.STUB_FAIL_SSHD!, '')
-    const r = run(dir, root, { ...s.env, PATH: s.path, SUMMON_SKIP_SUDO: '0', SUMMON_SKIP_LAUNCHCTL: '0' })
+    const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
     expect(r.exitCode).not.toBe(0)
     expect(r.stdout.toString()).toContain('sshd rejected the change')
-    const calls = readFileSync(s.log, 'utf8').trim().split('\n')
-    expect(calls.slice(1)).toEqual(['sudo /usr/sbin/sshd -t', 'sudo rm -f /etc/ssh/sshd_config.d/010-summon.conf'])
+    expect(calls(s).slice(1)).toEqual(['sudo /usr/sbin/sshd -t', 'sudo rm -f /etc/ssh/sshd_config.d/010-summon.conf'])
+    expect(existsSync(join(root, '.ssh/authorized_keys'))).toBe(false)
+    expect(existsSync(PLIST(root))).toBe(false)
+  })
+
+  describe('"key logins only" is what sshd -T says, not what the drop-in says', () => {
+    const user = userInfo().username
+    const notOff: Record<string, string> = {
+      'password logins still on': sshdT({ passwordauthentication: 'yes' }),
+      'keyboard-interactive still on': sshdT({ kbdinteractiveauthentication: 'yes' }),
+      'root login not off': sshdT({ permitrootlogin: 'prohibit-password' }),
+      'another user allowed': sshdT({ allowusers: `${user} other` }),
+      'a different user only': sshdT({ allowusers: 'other' }),
+      'allowusers missing': sshdT({ allowusers: null }),
+      'passwordauthentication missing': sshdT({ passwordauthentication: null }),
+      'value spelled differently': sshdT({ passwordauthentication: 'No' }),
+      'two conflicting lines': sshdT() + 'passwordauthentication yes\n',
+      'empty output': '',
+    }
+    for (const [name, out] of Object.entries(notOff)) {
+      test(`stops before the key line and the runner: ${name}`, () => {
+        const { dir, root } = bundle()
+        const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+        writeFileSync(s.env.STUB_SSHD_T, out)
+        const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
+        expect(r.exitCode).not.toBe(0)
+        const said = r.stdout.toString()
+        expect(said).toContain('NOT switched off')
+        expect(said).not.toContain('✓ SSH')
+        expect(calls(s).some((l) => l.startsWith('launchctl'))).toBe(false)
+        expect(existsSync(PLIST(root))).toBe(false)
+        expect(existsSync(join(root, '.ssh/authorized_keys'))).toBe(false)
+      })
+    }
+
+    test('names the setting that is wrong, with sshd -T asked for a LAN login by this user', () => {
+      const { dir, root } = bundle()
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+      writeFileSync(s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' }))
+      const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
+      expect(r.stdout.toString()).toContain("sshd would use 'passwordauthentication yes', Summon needs 'passwordauthentication no'")
+      expect(calls(s)).toEqual([expect.stringMatching(/^sudo install /), 'sudo /usr/sbin/sshd -t',
+        `sudo /usr/sbin/sshd -T -C user=${user},host=summon-lan,addr=192.168.50.2`])
+    })
+
+    test('stops when sshd -T itself fails: nothing is confirmed', () => {
+      const { dir, root } = bundle()
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+      writeFileSync(s.env.STUB_FAIL_SSHD_T!, '')
+      const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
+      expect(r.exitCode).not.toBe(0)
+      expect(r.stdout.toString()).toContain('NOT confirmed off')
+      expect(calls(s).some((l) => l.startsWith('launchctl'))).toBe(false)
+      expect(existsSync(join(root, '.ssh/authorized_keys'))).toBe(false)
+    })
+  })
+
+  describe('with the real /usr/sbin/sshd -T on temp configs (no sudo, no /etc)', () => {
+    // sudo is stubbed so that `install` drops the installer's real drop-in into a temp sshd_config.d, and `sshd -t/-T` run the
+    // real sshd against a temp config that Includes that folder. So the verdict is sshd's own, for the file the installer wrote.
+    const REAL_SSHD_SUDO = `echo "sudo $*" >> "$STUB_LOG"
+case "$1" in
+  install) cp "$8" "$STUB_CONFD/010-summon.conf" ;;
+  /usr/sbin/sshd) cmd="$2"; shift 2; exec /usr/sbin/sshd "$cmd" -f "$STUB_SSHD_CONFIG" -h "$STUB_HOSTKEY" "$@" ;;
+esac
+exit 0`
+    function realSshd(config: (confd: string) => string, earlier?: string) {
+      const base = temp('summon-sshd-')
+      const confd = join(base, 'sshd_config.d'); mkdirSync(confd)
+      if (earlier) writeFileSync(join(confd, '000-other.conf'), earlier)
+      const hostkey = join(base, 'host_key')
+      expect(Bun.spawnSync(['/usr/bin/ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', hostkey]).exitCode).toBe(0)
+      writeFileSync(join(base, 'sshd_config'), config(confd))
+      return { STUB_CONFD: confd, STUB_SSHD_CONFIG: join(base, 'sshd_config'), STUB_HOSTKEY: hostkey }
+    }
+    const attempt = (config: (confd: string) => string, earlier?: string) => {
+      const { dir, root } = bundle()
+      const s = stubs({ sudo: REAL_SSHD_SUDO, launchctl: LAUNCHCTL_STUB })
+      const r = run(dir, root, { ...s.env, ...realSshd(config, earlier), PATH: s.path, ...WITH_SUDO })
+      return { r, s, root, said: r.stdout.toString() }
+    }
+
+    test('an Include read first: accepted, the runner is loaded', () => {
+      const a = attempt((d) => `Include ${d}/*\n`)
+      expect(a.r.exitCode).toBe(0)
+      expect(a.said).toContain('✓ SSH: key logins only')
+      expect(existsSync(PLIST(a.root))).toBe(true)
+      expect(calls(a.s).filter((l) => l.startsWith('launchctl')).length).toBe(2)
+    })
+    for (const [name, config, earlier] of [
+      ['PasswordAuthentication yes before the Include (the first value wins)', (d: string) => `PasswordAuthentication yes\nInclude ${d}/*\n`, undefined],
+      ['an earlier-sorting drop-in with PasswordAuthentication yes', (d: string) => `Include ${d}/*\n`, 'PasswordAuthentication yes\n'],
+      ['a Match block for the LAN that turns passwords back on', (d: string) => `Include ${d}/*\nMatch Address 192.168.50.0/24\n  PasswordAuthentication yes\n`, undefined],
+      ['no Include at all', () => 'Port 22\n', undefined],
+    ] as const) {
+      test(`refused, with no key line and no runner: ${name}`, () => {
+        const a = attempt(config, earlier)
+        expect(a.r.exitCode).not.toBe(0)
+        expect(a.said).toContain('NOT switched off')
+        expect(a.said).not.toContain('✓ SSH')
+        expect(existsSync(PLIST(a.root))).toBe(false)
+        expect(existsSync(join(a.root, '.ssh/authorized_keys'))).toBe(false)
+        expect(calls(a.s).some((l) => l.startsWith('launchctl'))).toBe(false)
+      })
+    }
   })
 
   test('asks the runner for an inventory by spooling a request, and prints a fresh answer, not a stale one', async () => {

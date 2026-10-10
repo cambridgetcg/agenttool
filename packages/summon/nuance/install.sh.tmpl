@@ -61,6 +61,37 @@ else
   echo "• allowlist already present — left as it is"
 fi
 
+if [ "$SKIP_SUDO" != 1 ]; then
+  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
+  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
+  INCLUDED=1
+  grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — the drop-in below would not be read"; }
+  TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
+  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers %s\n' "$USER_NAME" > "$TMP"
+  echo "Your Mac password is needed once, to switch off SSH password logins:"
+  sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN"
+  # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
+  if ! sudo /usr/sbin/sshd -t; then sudo rm -f "$DROPIN"; echo "✗ sshd rejected the change — removed it, so sshd is as it was"; exit 1; fi
+  # A valid file is not an effective one: an earlier setting, an earlier-sorting drop-in or a Match block can still win.
+  # So ask sshd what it would use for a LAN login by this user, and require all four values.
+  if ! EFFECTIVE="$(sudo /usr/sbin/sshd -T -C "user=$USER_NAME,host=summon-lan,addr=192.168.50.2")"; then
+    echo "✗ password logins are NOT confirmed off: sshd would not show its effective settings."
+    echo "  No summon key line was written and the runner was not loaded. Tell Ai."; exit 1
+  fi
+  WRONG=0
+  for want in "passwordauthentication no" "kbdinteractiveauthentication no" "permitrootlogin no" "allowusers $USER_NAME"; do
+    key="${want%% *}"; val="${want#* }"
+    got="$(printf '%s\n' "$EFFECTIVE" | awk -v k="$key" 'tolower($1) == k { sub(/^[^ \t]+[ \t]+/, ""); print }')"
+    [ "$got" = "$val" ] || { WRONG=1; echo "  sshd would use '$key ${got:-(not set)}', Summon needs '$key $val'"; }
+  done
+  if [ "$WRONG" = 1 ]; then
+    [ "$INCLUDED" = 1 ] || echo "  (sshd_config does not include $CONFD, which would explain it)"
+    echo "✗ SSH password logins are NOT switched off. The drop-in is in place, but something sshd reads first wins."
+    echo "  No summon key line was written and the runner was not loaded. Tell Ai."; exit 1
+  fi
+  echo "✓ SSH: key logins only, for $USER_NAME (checked with sshd -T)"
+fi
+
 AK="$ROOT/.ssh/authorized_keys"; touch "$AK"; chmod 600 "$AK"
 LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE/summon-gatekeeper\" $PUBKEY"
 # grep -v exits 1 when it keeps no line (an empty file): that is fine. Exit 2 means it could not read the file, and
@@ -69,21 +100,6 @@ grep -v ' summon-air$' "$AK" > "$AK.summon-tmp" || [ $? -eq 1 ] || { rm -f "$AK.
 printf '%s\n' "$LINE" >> "$AK.summon-tmp"
 mv "$AK.summon-tmp" "$AK"; chmod 600 "$AK"
 echo "✓ authorized_keys: one restricted summon line (other lines untouched; expires $EXPIRY)"
-
-if [ "$SKIP_SUDO" != 1 ]; then
-  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
-  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
-  INCLUDED=1
-  grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — tell Ai before using Summon"; }
-  TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
-  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers %s\n' "$USER_NAME" > "$TMP"
-  echo "Your Mac password is needed once, to switch off SSH password logins:"
-  sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN"
-  # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
-  if ! sudo /usr/sbin/sshd -t; then sudo rm -f "$DROPIN"; echo "✗ sshd rejected the change — removed it, so sshd is as it was"; exit 1; fi
-  if [ "$INCLUDED" = 1 ]; then echo "✓ SSH: key logins only, for $USER_NAME"
-  else echo "⚠ $DROPIN is written, but sshd does not read it: password logins are NOT switched off yet"; fi
-fi
 
 PLIST="$ROOT/Library/LaunchAgents/dev.summon.runner.plist"
 # launchd would create the log with default modes, so make it first (touch keeps what an earlier run wrote).
