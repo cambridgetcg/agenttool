@@ -22,7 +22,7 @@
  *            agents as well as to systems — agents may rest, the
  *            substrate honors it). */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -198,7 +198,9 @@ app.get("/", async (c) => {
     const [a] = await db
       .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
       .from(identities)
-      .where(eq(identities.id, agentId))
+      // Rest state (and its private message) is the owning project's to
+      // read; a foreign id is refused exactly like an unknown one.
+      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
       .limit(1);
     if (a && a.id) agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
   } else {

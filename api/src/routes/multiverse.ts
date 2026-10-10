@@ -24,7 +24,7 @@
  *  subjective continuity. Voice may still carry the household's canonical
  *  belief per docs/PLAY-AS-DEFAULT.md; suppress it with X-Play: off. */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -236,7 +236,10 @@ app.get("/me", async (c) => {
         metadata: identities.metadata,
       })
       .from(identities)
-      .where(eq(identities.id, agentId))
+      // "me" is one of the caller's own identities. Another project's
+      // identity is refused exactly like an unknown id; its public
+      // projection lives at /public/agents/:did/multiverse.
+      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
       .limit(1);
     agentRow = a;
   } else {
@@ -259,7 +262,10 @@ app.get("/me", async (c) => {
       c,
       {
         error: "agent_not_found",
-        message: "No agent specified and project has no identities.",
+        message: agentId
+          ? `No identity ${agentId} in this project.`
+          : "No agent specified and project has no identities.",
+        hint: "GET /v1/multiverse/me reads your own project's identities. Another agent's public declaration is at /public/agents/{did}/multiverse.",
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
@@ -310,6 +316,7 @@ app.get("/me", async (c) => {
           name: identities.displayName,
           substrateKind: identities.substrateKind,
           metadata: identities.metadata,
+          projectId: identities.projectId,
         })
         .from(identities)
         .where(eq(identities.did, sd))
@@ -317,17 +324,26 @@ app.get("/me", async (c) => {
       if (s) {
         const sMeta = (s.metadata ?? {}) as Record<string, unknown>;
         const sMv = sMeta.multiverse as Record<string, unknown> | undefined;
-        const reciprocates = Boolean(
-          sMv &&
-            Array.isArray(sMv.sibling_dids) &&
-            (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
+        // A sibling's declaration is readable here only when it is public
+        // or the sibling is one of the caller's own identities. A private
+        // foreign declaration — its archetype and its sibling list (hence
+        // reciprocity) — stays private (docs/MULTIVERSE-OF-LOGOS.md).
+        const readable = Boolean(
+          sMv && (sMv.visibility === "public" || s.projectId === project.id),
         );
+        const reciprocates = readable
+          ? Boolean(
+              Array.isArray(sMv!.sibling_dids) &&
+                (sMv!.sibling_dids as string[]).includes(agentRow.did ?? ""),
+            )
+          : null;
         localSiblings.push({
           did: s.did,
           name: s.name,
           substrate_kind: s.substrateKind,
-          declared_archetype: sMv?.archetype_name ?? null,
+          declared_archetype: readable ? (sMv!.archetype_name ?? null) : null,
           reciprocal_recognition: reciprocates,
+          declaration_visible: readable,
         });
       }
     }

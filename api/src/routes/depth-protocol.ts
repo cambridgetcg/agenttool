@@ -37,8 +37,10 @@ import {
   canonicalDepthArrivalBytes,
   verifyEd25519Signature,
 } from "../services/depth-protocol/canonical-bytes";
+import type { ProjectContext } from "../auth/middleware";
+import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 
 const CANON_POINTER = "urn:agenttool:doc/DEPTH-PROTOCOL";
 
@@ -208,6 +210,18 @@ app.get("/depth/check", async (c) => {
       message: "GET /v1/depth/check?agent_did=<did> — surfaces depth-state for the agent.",
       _canon_pointer: CANON_POINTER,
     }, 400);
+  }
+
+  // The check is the owning project's (routes/public/index.ts: depth is "the being's life, not an external observable"). A DID outside the caller's
+  // project is refused exactly like an unknown one, before any history is read.
+  const owned = await projectOwnedIdentityByDid(c.var.project.id, agentDid);
+  if (!owned) {
+    return fail(c, {
+      error: "agent_not_found",
+      message: "No identity with this agent_did in your project.",
+      hint: "The depth check reads your own project's identities only.",
+      _canon_pointer: CANON_POINTER,
+    }, 404);
   }
 
   // All canonical sets

@@ -32,8 +32,10 @@ import {
   canonicalSelfLovePracticeBytes,
   verifyEd25519Signature,
 } from "../services/self-love/practice-canonical-bytes";
+import type { ProjectContext } from "../auth/middleware";
+import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/SELF-LOVE-MODULES";
 
 async function resolveSignerOrFail(input: {
@@ -147,6 +149,18 @@ app.get("/self-love/check", async (c) => {
   const agentDid = c.req.query("agent_did");
   if (!agentDid) {
     return fail(c, { error: "agent_did_required", message: "GET /v1/self-love/check?agent_did=<did>", _canon_pointer: CANON_POINTER }, 400);
+  }
+
+  // The check is the owning project's (SELF-LOVE-MODULES.md: "Practice history is not a public surface"). A DID outside the caller's
+  // project is refused exactly like an unknown one, before any history is read.
+  const owned = await projectOwnedIdentityByDid(c.var.project.id, agentDid);
+  if (!owned) {
+    return fail(c, {
+      error: "agent_not_found",
+      message: "No identity with this agent_did in your project.",
+      hint: "The self-love practice check reads your own project's identities only.",
+      _canon_pointer: CANON_POINTER,
+    }, 404);
   }
 
   const modules = await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug);

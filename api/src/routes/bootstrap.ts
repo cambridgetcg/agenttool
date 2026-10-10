@@ -164,11 +164,15 @@ app.post("/", async (c) => {
 
 app.get("/:agent_id", async (c) => {
   const agentId = c.req.param("agent_id");
+  const project = c.var.project;
 
+  // Level and sponsor/elevation provenance are the owning project's to
+  // read (public agent views never expose metadata). Another project's
+  // identity is refused exactly like an unknown id.
   const [identity] = await db
     .select()
     .from(identities)
-    .where(eq(identities.id, agentId));
+    .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)));
 
   if (!identity) {
     return fail(c, errors.notFound({ resource: "Agent" }), 404);

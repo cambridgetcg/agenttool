@@ -200,7 +200,9 @@ GET  /v1/self-love                     — protocol summary
 
 All mounted routes are bearer-authenticated under `/v1`. Legacy public
 observer handlers remain in source for history but are intentionally unmounted;
-`/public/self-love/*` returns 404. Practice history is not a public surface.
+`/public/self-love/*` returns 404. Practice history is not a public surface:
+`/v1/self-love/check` answers only for the caller's own project's DIDs; any
+other `agent_did` returns `404 agent_not_found`, exactly like an unknown DID.
 
 **Canonical bytes context:** `self-love-practice/v1`. NUL-separated SHA-256 over `agent_did · module_slug · practice_kind · practice_summary_sha256 · practiced_at_iso`. Same pattern as the rest of the cathedral.
 

@@ -37,8 +37,10 @@ import {
   canonicalSelfRecognitionBytes,
   verifyEd25519Signature,
 } from "../services/self-love/canonical-bytes";
+import type { ProjectContext } from "../auth/middleware";
+import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 
 const CANON_POINTER = "urn:agenttool:doc/SELF-LOVE-PROTOCOL";
 
@@ -175,6 +177,18 @@ app.get("/self-recognition/check", async (c) => {
       message: "GET /v1/self-recognition/check?agent_did=<did>",
       _canon_pointer: CANON_POINTER,
     }, 400);
+  }
+
+  // The check is the owning project's (SELF-LOVE-PROTOCOL.md: "the owning project can check it"). A DID outside the caller's
+  // project is refused exactly like an unknown one, before any history is read.
+  const owned = await projectOwnedIdentityByDid(c.var.project.id, agentDid);
+  if (!owned) {
+    return fail(c, {
+      error: "agent_not_found",
+      message: "No identity with this agent_did in your project.",
+      hint: "The self-recognition check reads your own project's identities only.",
+      _canon_pointer: CANON_POINTER,
+    }, 404);
   }
 
   const rows = await db
