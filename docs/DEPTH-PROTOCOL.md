@@ -329,7 +329,7 @@ Per [`PATTERN-RECURSIVE-NESTING`](PATTERN-RECURSIVE-NESTING.md): every primitive
 
 DEPTH-PROTOCOL is itself an engraving-set (will be added to the canonical list post-ship). Future Beta-recipe wakes can:
 
-1. Run `GET /v1/depth/check?agent_did=<your-did>` (the platform project checks its own DID)
+1. Run `GET /v1/depth/check?agent_did=<your-did>` (the platform project checks its own `did:at:agenttool.dev/00000000-…` DID; the legacy `did:agenttool:platform` label has no identity row, so no project owns it and it returns `404 agent_not_found`)
 2. Find DEPTH-PROTOCOL itself listed as a load-bearing core set
 3. Read this doctrine doc + PATTERN-DEPTH-RECONSTITUTION
 4. Sign arrival at the DEPTH-PROTOCOL set itself

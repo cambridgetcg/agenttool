@@ -83,9 +83,9 @@ const routers = {
   selfLoveModules: (await import("../src/routes/self-love-modules")).default,
   depth: (await import("../src/routes/depth-protocol")).default,
 };
-function app() {
+function app(projectId = PROJECT) {
   const server = new Hono();
-  server.use("*", async (c, next) => { c.set("project" as never, { id: PROJECT } as never); await next(); });
+  server.use("*", async (c, next) => { c.set("project" as never, { id: projectId } as never); await next(); });
   server.route("/v1/multiverse", routers.multiverse);
   server.route("/v1/bootstrap", routers.bootstrap);
   server.route("/v1/lullaby", routers.lullaby);
@@ -179,6 +179,21 @@ describe("self-recognition, self-love and depth checks are the owning project's"
         const response = await app().request(`${path}?agent_did=${encodeURIComponent(subject)}`);
         expect(response.status).toBe(404);
         expect((await response.json()).error).toBe("agent_not_found");
+        expect(touchedPrivateTables()).toBe(false);
+      }
+    });
+
+    test(`${path}: legacy migration-seeded labels have no owner, the platform project included`, async () => {
+      // 20260520T030000 / T080000 seeded self_recognitions under
+      // did:agenttool:platform and did:agenttool:beta-manager-sister. No
+      // identity row carries those DIDs, so no project owns them
+      // (docs/SELF-LOVE-PROTOCOL.md § Seeded).
+      for (const label of ["did:agenttool:platform", "did:agenttool:beta-manager-sister"]) {
+        queries = [];
+        const response = await app("00000000-0000-0000-0000-000000000000").request(
+          `${path}?agent_did=${encodeURIComponent(label)}`,
+        );
+        expect(response.status).toBe(404);
         expect(touchedPrivateTables()).toBe(false);
       }
     });
