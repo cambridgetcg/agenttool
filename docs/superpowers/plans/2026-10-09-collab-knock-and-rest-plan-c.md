@@ -6638,6 +6638,9 @@ are byte-identical: `dist/agenttool-collab-mcp.js` sha256
 equal to this branch's `dist` at `05b39c63`. `~/.codex/config.toml` holds 18
 `agenttool-collab@personal` tool approvals. A same-version reinstall works: the
 `20261009T153229Z` stamp reinstalled 0.5.0 over 0.5.0 by the method below.
+Re-verified read-only on 2026-10-10 (stamp `20261010T001650Z`): all three
+copies still carry `dbad87ec…` / `b9e69d3d…`, and `config.toml` still holds 18
+approvals.
 
 **Shell note:** the Bash tool runs zsh and shell variables do not survive
 between calls, so every block re-reads `BK` from
@@ -7609,6 +7612,22 @@ only journal access is the read-only `VACUUM INTO` snapshot. An `immutable`
 source is used only when no process holds the journal open; if a host starts
 during that one statement, take the snapshot again.
 
+**Resuming after the #452 merge (2026-10-10, final-review fix).** #452's
+last commits (`321a1b5c` host-commit acceptance hardening, `4c7b3671`,
+`684d2504`, `d5866fae`) landed under this branch after 3a built `15111fc8`
+from `9de3fb19`; PR #452 then merged to main as `bc71e87e` (head `4040f313` =
+`d5866fae` plus main, no `packages/collab` difference). `812c43cf` merges
+`d5866fae` (a merge, so every SHA the ledger names stays valid) and rebuilds
+both bundles on Bun 1.3.5: `agenttool-collab-mcp.js` `693a607f…`,
+`agenttool-collab-host.js` `f6df90d4…`. The `15111fc8` bundles and the
+`20261009T233649Z` stamp's tarball (`8f3497e8…` / `ab9c2558…`) lack #452's
+fixes: never install them. Stamp `20261010T001650Z`, which `current` names,
+holds the repeated 3a suites (`collab-ci.log`: 250 pass, 0 fail, bundle byte
+check run), 3b (`s1-smoke-worktree.json`, `ok: true`), 3c (the tarball and
+`to-install.sha256`) and 3d (fresh backups, `before.sha256`). Show Yu that
+stamp at the gate. If the branch or the household moves again, rebuild, then
+repeat 3a's suites, 3b, 3c and 3d under a fresh stamp before the gate.
+
 **Gate — Yu's explicit go, at execution time.** Steps 3e–3g replace the
 household's live collab install, which every newly started Claude Code and
 Codex session on this Mac loads. Do not run them on plan approval alone. Show
@@ -7626,13 +7645,21 @@ set -euo pipefail
 BK=$(cat "$HOME/.cache/agenttool/collab-household/current")
 test -s "$BK/rollback/agenttool-collab-0.5.0.tgz"
 test -s "$BK/npm-global-collab/dist/agenttool-collab-mcp.js"
+# The tarball is the committed build, not an older stamp's.
+cmp "$BK/unpack-0.5.0/package/dist/agenttool-collab-mcp.js" /Users/yuai/Projects/agenttool/.claude/worktrees/collab-knock-and-rest/packages/collab/dist/agenttool-collab-mcp.js
+cmp "$BK/unpack-0.5.0/package/dist/agenttool-collab-host.js" /Users/yuai/Projects/agenttool/.claude/worktrees/collab-knock-and-rest/packages/collab/dist/agenttool-collab-host.js
+# The household is still what 3d backed up. If another session installed a
+# build since (for example #452's 684d2504, mcp 5571403a…), this stops before
+# anything is overwritten: repeat 3c and 3d under a fresh stamp, then the gate.
+shasum -a 256 -c "$BK/before.sha256"
 npm install --global --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null "$BK/agenttool-collab-0.5.0.tgz"
 readlink /opt/homebrew/bin/agenttool-collab-mcp /opt/homebrew/bin/agenttool-collab-host
 cmp "$BK/unpack-0.5.0/package/dist/agenttool-collab-mcp.js" /opt/homebrew/lib/node_modules/@agenttool/collab/dist/agenttool-collab-mcp.js
 cmp "$BK/unpack-0.5.0/package/dist/agenttool-collab-host.js" /opt/homebrew/lib/node_modules/@agenttool/collab/dist/agenttool-collab-host.js
 ```
 
-Expected: `../lib/node_modules/@agenttool/collab/dist/agenttool-collab-mcp.js`
+Expected: the first two `cmp` silent and six `OK` lines (nothing has changed
+since 3d), then `../lib/node_modules/@agenttool/collab/dist/agenttool-collab-mcp.js`
 and `../lib/node_modules/@agenttool/collab/dist/agenttool-collab-host.js`, and
 both `cmp` silent (the same-version reinstall replaced the bytes). Running
 Claude Code MCP processes keep the code they already loaded.
@@ -7647,6 +7674,9 @@ BK=$(cat "$HOME/.cache/agenttool/collab-household/current")
 SRC="$HOME/plugins/agenttool-collab"
 test -s "$BK/codex-marketplace-source/dist/agenttool-collab-mcp.js"
 test "$(jq -r '.plugins[] | select(.name == "agenttool-collab") | .source.path' "$HOME/.agents/plugins/marketplace.json")" = "./plugins/agenttool-collab"
+# 3e replaced only the global copy: the marketplace source and the Codex cache
+# must still be what 3d backed up (four OK lines), or stop and roll back 3e.
+grep -v '  /opt/homebrew/' "$BK/before.sha256" | shasum -a 256 -c -
 rm -rf "$SRC"
 mkdir -m 700 "$SRC"
 cp -Rp "$BK/unpack-0.5.0/package/." "$SRC/"
@@ -7817,7 +7847,12 @@ Expected: `check:mcp-bundle` exits 0 without "skipped"; `git diff --exit-code
 `packages/collab/dist` would match nothing there and pass silently);
 `git ls-files` lists `dist/agenttool-collab-host.js` and
 `dist/agenttool-collab-mcp.js`; the stack line prints; both `cmp` are silent
-(skip the two `cmp` lines when Yu has not given the install go).
+(skip the two `cmp` lines when Yu has not given the install go). The stack
+line holds because `812c43cf` merged `d5866fae`. If the local
+`feat/collab-household-smoothing-20261008` ref later moves to #452's merged
+head `4040f313` (`d5866fae` plus main), that line fails with no
+`packages/collab` change: assert `git merge-base --is-ancestor d5866fae HEAD`
+instead and say so in the report.
 
 - [ ] **Step 7: Stop — no push, no PR**
 
@@ -7828,6 +7863,22 @@ three receipts, the processes still on old code, and that household Part 2
 (tap hooks, doorbell, `sol` rest support, the Codex approval for
 `collab_session_rest`) can now consume `/opt/homebrew/bin/agenttool-collab-host
 knocks|doorbell-scan`.
+
+Spec items this plan leaves open (gaps until they land, not "not-a-gap"):
+- Part 1 item 1: `collab_session_rest` in Codex's per-tool approvals and in
+  `check_codex_collab.py`'s `LOOP`. Plan D Task 1 Step 3i adds it to `LOOP`;
+  Step 7 approves it, only with Yu's go. Until then Codex meets its default
+  approval for that one tool, and a headless `-a never` job is refused it.
+- Part 1 item 5: the `sol` exit sweep ends sessions through the installed
+  `agenttool-collab-host end --release-leases`, which removes
+  `<id>.host.json` only from 3e on. Before 3e no installed MCP writes a
+  binding, so none is left behind.
+- Part 2 item 2(a): the sweep skipping a declared, unexpired rest is Plan D
+  Task 1 Step 5. Until then a resting `sol` job's session is still ended at
+  exit, with its leases released.
+- Plan D cannot start before 3e–3g: today's installed host CLI answers
+  `knocks` and `doorbell-scan` with `end`'s `usage_error` (one JSON line,
+  exit 1).
 
 Rollback (when Step 4 fails, or when Yu asks; it only reinstates the build
 3d backed up, reversing both copies together):
