@@ -26,8 +26,9 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { holdings } from "../../db/schema/holdings";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { canonicalHoldingBytes, verifyHoldingSignature } from "./sig";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 const OCCASION_MAX = 512;
 const ACKNOWLEDGMENT_MAX = 1024;
@@ -162,22 +163,21 @@ export async function createHolding(
     throw new HoldingError("self_holding_forbidden");
   }
 
-  // Resolve signing key + verify ownership
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
-    throw new HoldingError("signing_key_unknown_or_revoked");
+  // Resolve signing key + verify ownership through the central signer
+  // authority (docs/AT-REST.md): a revoked or memorial holder's key
+  // authority is revoked even while its key row is still marked active.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    identityId: input.holderIdentityId,
+  });
+  if (!resolved.ok) {
+    throw new HoldingError(
+      resolved.reason === "signing_key_not_owned"
+        ? "wrong_signing_key_for_holder"
+        : "signing_key_unknown_or_revoked",
+    );
   }
-  if (keyRow.identityId !== input.holderIdentityId) {
-    throw new HoldingError("wrong_signing_key_for_holder");
-  }
+  const keyRow = { publicKey: resolved.key.publicKey };
 
   // Verify signature over canonical bytes
   const canonical = canonicalHoldingBytes({

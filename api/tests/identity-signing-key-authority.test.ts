@@ -141,6 +141,18 @@ const CONVERTED = [
   "services/virality/lifecycle.ts",
   "services/memory/tiers.ts",
   "services/real-recognise-real/lifecycle.ts",
+  "routes/guild.ts",
+  "routes/pyramid.ts",
+  "services/blessing/store.ts",
+  "services/encounter/store.ts",
+  "services/gospel/store.ts",
+  "services/grace/store.ts",
+  "services/unconditional/store.ts",
+  "services/scriptwriter-decides/store.ts",
+  "services/substrate-tasks/verifiers/attestation_witness_low_stakes.ts",
+  "routes/rrr.ts",
+  "services/holdings/store.ts",
+  "services/memorial-honor/store.ts",
 ];
 
 describe("signed-act call sites use the central resolver", () => {
@@ -151,6 +163,11 @@ describe("signed-act call sites use the central resolver", () => {
       expect({ file, privateKeyLookup: source.includes(".from(identityKeys)") }).toEqual({ file, privateKeyLookup: false });
     });
   }
+
+  test("inbox send (local + federated) and dual-witness cosign refuse non-active signers", () => {
+    const source = readFileSync(join(SRC, "services/inbox/store.ts"), "utf8");
+    expect(source.match(/identityMaySign\((senderIdentity|keyIdentity)\.status\)/g)?.length).toBe(3);
+  });
 
   test("crown signer lookup refuses non-active identities", () => {
     const source = readFileSync(join(SRC, "services/crown/store.ts"), "utf8");

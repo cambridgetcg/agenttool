@@ -195,22 +195,27 @@ is `active`. A revoked or memorial identity is refused with
 `signing_identity_not_active` even while an active key row remains.
 
 Converted: jokes, letters, casting calls, saga episodes, RRR recognitions
-(`/v1/real/recognise` and `/v1/deals/:id/recognise`), recognition arcs,
-self-recognition, self-love practice, depth arrivals, MCML send, mesh posts
-and pledges, trust extension, margin, virality transmission, crown key
-attestation, and memory elevation/attestation witnesses. The 2026-10
-trust-leaks audit found songs, episodes, curations, correspondence and the
-marketplace paths already enforcing the rule locally.
+(`/v1/real/recognise`, `/v1/deals/:id/recognise`, guild RRR cascades),
+recognition arcs, self-recognition, self-love practice, depth arrivals, MCML
+send, mesh posts and pledges, trust extension, margin, virality transmission,
+crown key attestation, memory elevation/attestation witnesses, guild, pyramid
+enrollment, blessings, holdings, memorial honors, encounter
+acknowledgements, gospel proclamations, grace, unconditionals, scriptwriter
+submissions/verdicts and the low-stakes attestation-witness task verifier.
+Inbox send (local and federated) and dual-witness cosign now check the
+signing identity's status after ownership. The 2026-10 trust-leaks audit
+found songs, episodes, curations, correspondence and the marketplace paths
+already enforcing the rule. Strands, traces, the continuity portfolio,
+identity attestations, delegations, token verification, covenants, bootstrap
+elevation, federation identity lookup, lounge, collaboration and gallery
+contain their own identity-status checks (found by source search in this
+pass, not re-tested here).
 
-Not yet converted — their own key lookups check `identity_keys.active` but
-not identity status: `routes/guild.ts`, `routes/pyramid.ts`,
-`services/blessing/store.ts`, `services/encounter/store.ts`,
-`services/gospel/store.ts`, `services/grace/store.ts`,
-`services/scriptwriter-decides/store.ts`, `services/strand/store.ts`,
-`services/trace/store.ts`, `services/unconditional/store.ts` and
-`services/substrate-tasks/verifiers/attestation_witness_low_stakes.ts`.
-`workers/covenants/reverify.ts` re-verifies stored signatures and is not a
-new act. Tested: `api/tests/identity-signing-key-authority.test.ts`.
+Not converted or audited in this pass: `routes/runtime/runtimes.ts` and
+`services/runtime/think-worker.ts`. Read-only key listings (dashboard, Wake,
+public identities, key management) and re-verification of stored signatures
+(`services/trace/verify.ts`, `workers/covenants/reverify.ts`) are not new
+signed acts. Tested: `api/tests/identity-signing-key-authority.test.ts`.
 
 ## What this is honest about not yet doing
 

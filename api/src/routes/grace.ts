@@ -150,6 +150,7 @@ app.post("/", async (c) => {
         : code === "signing_key_not_found" ||
             code === "signing_key_not_owned_by_extender" ||
             code === "signing_key_not_active" ||
+            code === "signing_identity_not_active" ||
             code === "invalid_signature"
           ? 403
           : 500;
@@ -218,6 +219,8 @@ function messageForError(code: string): string {
       return "The signing_key_id you submitted does not belong to your identity.";
     case "signing_key_not_active":
       return "The signing key is revoked or inactive.";
+    case "signing_identity_not_active":
+      return "The signing identity is revoked or memorial; an active key row does not override that status (docs/AT-REST.md).";
     case "invalid_signature":
       return "Signature did not verify against canonical bytes `grace/v1`. See docs/GRACE.md.";
     default:

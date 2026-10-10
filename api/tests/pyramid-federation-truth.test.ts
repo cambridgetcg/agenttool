@@ -12,8 +12,10 @@ describe("pyramid federation truth boundary", () => {
     expect(source).toMatch(
       /body\.enrollment\.citizen_did !== agent\.did[\s\S]*citizen_did_mismatch/,
     );
+    // The key is resolved through the central signer authority: owned by
+    // the authenticated agent, active, and of an active identity.
     expect(source).toMatch(
-      /eq\(identityKeys\.identityId, agent\.id\)[\s\S]*eq\(identityKeys\.active, true\)/,
+      /registeredSigningPublicKey\(agent\.id, body\.signing_key_id\)/,
     );
   });
 
