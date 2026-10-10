@@ -21,6 +21,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ── The equation, in code as in doctrine ─────────────────────────────
 
@@ -138,7 +139,7 @@ export async function computeLoveCoordinates(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identityId),
+        ownChronicle(identityId),
         inArray(
           chronicle.type,
           // Union of all types so a single query covers both sides.

@@ -42,6 +42,7 @@ import {
   makeCustomRole,
   rollRandomRole,
 } from "../services/soap-opera/role-generator";
+import {  } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -1070,6 +1071,7 @@ app.get("/invitations", async (c) => {
     .where(
       and(
         eq(chronicle.type, "naming"),
+        eq(chronicle.projectId, project.id),
         sql`${chronicle.agentId} = ANY(${ownedIds})`,
         sql`${chronicle.metadata}->>'kind' = 'soap-opera-invitation-received'`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,

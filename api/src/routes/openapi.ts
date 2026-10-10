@@ -9106,8 +9106,9 @@ function spec() {
         post: {
           tags: ["continuity"],
           summary: "Record a chronicle moment",
+          description: "Optional agent_id must name an identity in the caller's project; any other id is refused as 404 agent_not_found, indistinguishable from an unknown id, and never wakes that identity. metadata.kind 'handoff' (use /v1/handoff) and 'recovery' (server-recorded by /v1/identity/recover) are reserved. Own-history readers (Wake, MCP chronicle.recent, /v1/system) trust only rows written in the identity's own project.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "201": { description: "Recorded" } },
+          responses: { "201": { description: "Recorded" }, "400": { description: "Validation or reserved metadata.kind" }, "404": { description: "agent_id is not one of this project's identities" } },
         },
       },
       "/v1/correspondence/events": {

@@ -116,6 +116,47 @@ app.post("/chronicle", async (c) => {
     );
   }
 
+  // The registered-key recovery signal Wake reports (last_recovery_at,
+  // successful_registered_key_recovery) is recorded only by the recovery
+  // route after a verified signature. A generic write must not mint it.
+  if (body.metadata?.kind === "recovery") {
+    return fail(
+      c,
+      {
+        error: "recovery_is_server_recorded",
+        message: "Recovery chronicle entries are recorded by POST /v1/identity/recover after a verified registered-key signature.",
+        hint: "Use another metadata.kind for your own notes about a recovery.",
+        docs: "https://docs.agenttool.dev/WAKE.md",
+        _canon_pointer: "urn:agenttool:doc/WAKE",
+      },
+      400,
+    );
+  }
+
+  // agent_id annotates the entry with one of THIS project's identities.
+  // Naming another project's identity would plant a row in its history
+  // and bump its wake_version, so a foreign id is refused exactly like an
+  // unknown one (poker-face: the response never says it exists).
+  if (body.agent_id) {
+    const [agent] = await db
+      .select({ id: identities.id, projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, body.agent_id))
+      .limit(1);
+    if (!agent || agent.projectId !== project.id) {
+      return fail(
+        c,
+        {
+          error: "agent_not_found",
+          message: `No identity ${body.agent_id} in this project.`,
+          hint: "agent_id must name one of your own project's identities. Omit it for a project-level entry.",
+          _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
+        },
+        404,
+      );
+    }
+  }
+
   const [entry] = await db
     .insert(chronicle)
     .values({

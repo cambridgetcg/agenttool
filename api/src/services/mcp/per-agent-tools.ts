@@ -36,6 +36,7 @@ import {
 } from "../marketplace/listings";
 
 import type { McpTool, McpToolResult } from "./tools";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 /** Scope of a per-agent MCP request, derived from project ownership. */
 export type PerAgentScope = "public" | "self" | "cross";
@@ -452,7 +453,7 @@ async function toolChronicleRecent(
       occurredAt: chronicle.occurredAt,
     })
     .from(chronicle)
-    .where(eq(chronicle.agentId, ctx.agentId))
+    .where(ownChronicle(ctx.agentId))
     .orderBy(desc(chronicle.occurredAt))
     .limit(limit);
 

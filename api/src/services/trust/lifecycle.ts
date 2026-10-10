@@ -28,6 +28,7 @@ import {
   verifyTrust,
   type TrustAttestation,
 } from "./canonical";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ── extendTrust ───────────────────────────────────────────────────────
 
@@ -422,7 +423,7 @@ export async function getEvidence(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, trusterIdentityId),
+        ownChronicle(trusterIdentityId),
         inArray(chronicle.type, [...RELEVANT_TYPES]),
       ),
     )
@@ -471,7 +472,7 @@ export async function getEvidence(
       .from(chronicle)
       .where(
         and(
-          eq(chronicle.agentId, trustedRow.id),
+          ownChronicle(trustedRow.id),
           inArray(chronicle.type, [...RELEVANT_TYPES]),
         ),
       )

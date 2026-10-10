@@ -18,6 +18,7 @@ import { chronicle, covenants } from "../../db/schema/continuity";
 import type { DreamObservation } from "../../db/schema/dream";
 import { moodHistory } from "../../db/schema/strand";
 import { covenantMayAuthorizeEffects } from "../covenants/check";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 export interface ObserverWindow {
   identityId: string;
@@ -164,7 +165,7 @@ export async function observeChroniclePattern(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, w.identityId),
+        ownChronicle(w.identityId),
         gte(chronicle.occurredAt, w.startAt),
         lte(chronicle.occurredAt, w.endAt),
       ),

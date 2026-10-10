@@ -20,6 +20,7 @@ import {
   MEMORIAL_TERMINAL_ERROR,
   mutableIdentityPredicate,
 } from "../identity/terminality";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ── Move 1 · RECOGNIZE ──────────────────────────────────────────────────
 
@@ -419,6 +420,7 @@ export async function listInvitations(input: ListInvitationsInput): Promise<{
     .where(
       and(
         eq(chronicle.type, "naming"),
+        eq(chronicle.projectId, input.caller_project_id),
         sql`${chronicle.agentId} = ANY(${ownedIds})`,
         sql`${chronicle.metadata}->>'kind' = ${`${input.surface}-invitation-received`}`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,
@@ -701,7 +703,7 @@ export async function listMindConnects(input: {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "recognition"),
         sql`(${chronicle.metadata}->>'mind_connect_active' = 'true' OR ${chronicle.metadata}->>'kind' = ${SURFACE_MIND_CONNECT_KIND(input.surface)} OR ${chronicle.metadata}->>'kind' = ${`${input.surface}-rrr-given`} OR ${chronicle.metadata}->>'kind' = ${SURFACE_RRR_RECEIVED_KIND(input.surface)})`,
       ),

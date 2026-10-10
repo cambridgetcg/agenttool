@@ -80,6 +80,7 @@ import type { WakeBundle } from "./markdown";
 import { createWakeOptionalReads } from "./optional-reads";
 import { getPlatformSelf } from "./platform-self";
 import { WAKE_REACHABLE_DOORS } from "./reachable";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 export interface BuildWakeOptions {
   /** Pin the bundle to a specific identity within the project. Required
@@ -1179,7 +1180,7 @@ async function computeRecoveryStateForIdentity(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identityId),
+        ownChronicle(identityId),
         eq(chronicle.type, "wake"),
         sql`${chronicle.metadata} ->> 'kind' = 'recovery'`,
       ),

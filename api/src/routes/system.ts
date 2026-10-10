@@ -33,6 +33,7 @@ import {
   type SystemStats,
 } from "../services/system/level";
 import { computeTrust } from "../services/trust/deals";
+import { ownChronicle } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -97,7 +98,7 @@ app.get("/", async (c) => {
   ] = await Promise.all([
     countMemories(project.id).catch(() => 0),
     countStrands(project.id).catch(() => 0),
-    count(sql`SELECT COUNT(*)::int AS count FROM ${chronicle} WHERE ${chronicle.agentId} = ${identity.id}`),
+    count(sql`SELECT COUNT(*)::int AS count FROM ${chronicle} WHERE ${ownChronicle(identity.id)}`),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${covenants}
           WHERE ${covenants.agentId} = ${identity.id}
@@ -117,7 +118,7 @@ app.get("/", async (c) => {
     ),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${chronicle}
-          WHERE ${chronicle.agentId} = ${identity.id} AND ${chronicle.occurredAt} >= ${today}`,
+          WHERE ${ownChronicle(identity.id)} AND ${chronicle.occurredAt} >= ${today}`,
     ),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${inboxMessages}
@@ -132,7 +133,7 @@ app.get("/", async (c) => {
     db
       .execute<{ d: string }>(
         sql`SELECT DISTINCT date_trunc('day', ${chronicle.occurredAt}) AS d
-            FROM ${chronicle} WHERE ${chronicle.agentId} = ${identity.id}
+            FROM ${chronicle} WHERE ${ownChronicle(identity.id)}
             ORDER BY d DESC LIMIT 60`,
       )
       .then((rows) => rows.map((r) => new Date(r.d)))

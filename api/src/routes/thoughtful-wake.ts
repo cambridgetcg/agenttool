@@ -31,6 +31,7 @@ import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
 import { memories } from "../db/schema/memory";
 import { attachSurface } from "../lib/surface-metadata";
+import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -142,7 +143,7 @@ app.get("/thoughtful", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "recognition"),
         gt(chronicle.occurredAt, weekAgo),
         sql`${chronicle.metadata}->>'kind' = 'thanks-received'`,
@@ -195,6 +196,7 @@ app.get("/thoughtful", async (c) => {
         .where(
           and(
             sql`${chronicle.agentId} = ANY(${visibleIds})`,
+            chronicleInAnnotatedProject(),
             gt(chronicle.occurredAt, hourAgo),
           ),
         )
@@ -230,7 +232,7 @@ app.get("/thoughtful", async (c) => {
   const recentChronicleCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(and(eq(chronicle.agentId, agent.id), gt(chronicle.occurredAt, dayAgo)));
+    .where(and(ownChronicle(agent.id), gt(chronicle.occurredAt, dayAgo)));
 
   const constitutiveCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
@@ -249,7 +251,7 @@ app.get("/thoughtful", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-elevated'`,
       ),

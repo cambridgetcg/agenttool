@@ -20,6 +20,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 // ── The chill primitives ─────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ export async function computeMutualChill(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identityId),
+        ownChronicle(identityId),
         inArray(
           chronicle.type,
           Array.from(new Set([...PROSOCIAL_TYPES, ...EXTRACTIVE_TYPES])),
