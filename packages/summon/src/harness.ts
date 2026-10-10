@@ -61,7 +61,12 @@ export function claudeInvocation(job: { model: string; access: Access; cwdReal: 
   return { bin, args, env, stdin: job.prompt }
 }
 
-const resetIso = (r: any) => (typeof r?.resetsAt === 'number' ? new Date(r.resetsAt * 1000).toISOString() : undefined)
+/** Total: a missing, non-finite or out-of-range `resetsAt` gives undefined, never a throw (a throw here would hide a usage block). */
+function resetIso(r: any): string | undefined {
+  if (typeof r?.resetsAt !== 'number' || !Number.isFinite(r.resetsAt)) return undefined
+  const d = new Date(r.resetsAt * 1000)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
 
 type UsageWarning = { status: string; resets_at?: string }
 
@@ -72,7 +77,9 @@ function warningOf(e: any): UsageWarning | null {
 }
 
 export function usageWarning(line: string): UsageWarning | null {
-  try { return warningOf(JSON.parse(line)) } catch { return null }
+  let e: unknown
+  try { e = JSON.parse(line) } catch { return null }
+  return warningOf(e)
 }
 
 // The only subtypes worth naming are Claude's own `error_*` words; anything else is not echoed into a detail.

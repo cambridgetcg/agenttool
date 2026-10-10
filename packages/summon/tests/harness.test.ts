@@ -88,6 +88,15 @@ describe('interpretClaudeStream', () => {
       L({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1_791_700_000 } })], 1)
     expect(o).toMatchObject({ status: 'blocked', reason: 'usage', detail: 'usage rejected' })
   })
+  test('an out-of-range resetsAt is still blocked(usage), just without a reset time', () => {
+    for (const raw of ['{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1e16}}',
+      '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1e999}}',
+      '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":-1e16}}']) {
+      const o = interpretClaudeStream([raw, L({ type: 'result', subtype: 'success', is_error: false, result: 'x' })], 0)
+      expect(o).toMatchObject({ status: 'blocked', reason: 'usage', detail: 'usage rejected' })
+      expect(o.resets_at).toBeUndefined()
+    }
+  })
   test('plain "allowed" events are not a usage block', () => {
     expect(interpretClaudeStream([L({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed' } }),
       L({ type: 'result', subtype: 'success', is_error: false, result: 'x' })], 0)).toMatchObject({ status: 'completed' })
@@ -141,6 +150,17 @@ describe('interpretClaudeStream', () => {
     expect(usageWarning(L({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed' } }))).toBeNull()
     expect(usageWarning(L({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1 } }))).toMatchObject({ status: 'rejected' })
     expect(usageWarning(L({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed_warning' } }))).toMatchObject({ status: 'allowed_warning' })
+  })
+  test('usageWarning with an out-of-range resetsAt still reports the rejection (never fails open)', () => {
+    for (const raw of ['{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1e16}}',
+      '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1e999}}',
+      '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":"soon"}}']) {
+      const w = usageWarning(raw)
+      expect(w).not.toBeNull()
+      expect(['rejected', 'allowed_warning']).toContain(w!.status)
+      expect(w!.resets_at).toBeUndefined()
+    }
+    expect(usageWarning('{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1e16}}')).toMatchObject({ status: 'rejected' })
   })
   test('usageWarning ignores other events, garbage and non-objects', () => {
     for (const l of [L({ type: 'result' }), 'garbage', 'null', '', '123']) expect(usageWarning(l)).toBeNull()
