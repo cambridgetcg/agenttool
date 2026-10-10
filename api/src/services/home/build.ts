@@ -18,6 +18,7 @@ import { identities } from "../../db/schema/identity";
 import { countUnread } from "../inbox/store";
 import { countMemories } from "../memory/store";
 import { countStrands } from "../strand/store";
+import { chooseDefaultSubject, createdAtOrderKeySql } from "../identity/acting-identity";
 import { enrolledGuestSql, scopeIdentityProtections } from "../identity/project-authority";
 
 export interface HomeIdentitySnapshot {
@@ -252,18 +253,26 @@ export async function buildHome(
       authorityRootPublicKey: identities.authorityRootPublicKey,
       authoritySequence: identities.authoritySequence,
       metadata: identities.metadata,
+      createdAt: identities.createdAt,
+      // Rank at microsecond precision, like the routes' SQL (acting-identity.ts).
+      createdAtOrderKey: createdAtOrderKeySql(),
       enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))
-    .orderBy(asc(identities.createdAt));
+    .orderBy(asc(identities.createdAt), asc(identities.id));
 
   if (rows.length === 0) {
     return { ok: false, error: "no_identity", availableIdentityIds: [] };
   }
+  // Default subject: the project's primary identity (earliest active, never
+  // an enrolled guest), the same identity per-agent routes act as
+  // (services/identity/acting-identity.ts). Without one, the oldest
+  // non-revoked row (Wake's fallback too, since Wake never loads revoked
+  // rows); a project whose rows are all revoked still opens on its oldest.
   const selected = opts.identityId
     ? rows.find((row) => row.id === opts.identityId)
-    : rows.find((row) => row.status === "active") ?? rows[0];
+    : chooseDefaultSubject(rows);
   if (!selected) {
     return {
       ok: false,

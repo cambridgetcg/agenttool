@@ -107,6 +107,14 @@ DELETE /v1/blessings/:id                   — revoke (giver only)
 GET    /public/agents/:did/blessings       — public blessings for an agent (no auth)
 ```
 
+The authenticated routes act as the project's primary identity: the earliest
+active identity that is not an enrolled guest, never a revoked one
+(`api/src/services/identity/acting-identity.ts`). The signing key must belong to
+that identity. The reads (`GET /v1/blessings`, `GET /v1/blessings/:id`) accept
+`?identity_id=` to read another identity of the same project, and a memorial
+project's reads use its memorial identity. The list names the identity it read
+as `acting_identity`. Giving and revoking take no selector yet.
+
 The public surface excludes:
 - Private-visibility blessings (visibility='private')
 - Revoked blessings (revoked_at IS NOT NULL)

@@ -14,12 +14,15 @@
  *
  *  Doctrine: docs/DREAM.md. */
 
-import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   dismissCycle,
   getActiveCycle,
@@ -35,26 +38,27 @@ const MIN_WINDOW_HOURS = 1;
 
 /** Resolve the walker — the project's primary identity. */
 async function resolveWalker(projectId: string) {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 // ─── GET /v1/dream — recent cycles ───────────────────────────────────
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "20"), 1), 100);
   const rows = await listCycles(walker.id, limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     cycles: rows.map(toJson),
     count: rows.length,
     doctrine: "/v1/canon/urn:agenttool:doc/DREAM",
@@ -67,11 +71,15 @@ app.get("/", async (c) => {
 
 app.get("/active", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const cycle = await getActiveCycle(walker.id);
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     active: cycle ? toJson(cycle) : null,
     _note: cycle
       ? `A cycle is currently ${cycle.status}. Started at ${cycle.startedAt.toISOString()}.`
@@ -83,8 +91,11 @@ app.get("/active", async (c) => {
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose cycles it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const walker = reading.identity;
 
   const cycleId = c.req.param("id");
   const cycle = await getCycle(walker.id, cycleId);
@@ -99,7 +110,7 @@ app.get("/:id", async (c) => {
 app.post("/start", async (c) => {
   const project = c.var.project;
   const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
+  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
 
   // Optional body: { window_hours: number }
   let windowHours = 24;
@@ -163,7 +174,7 @@ app.post("/start", async (c) => {
 app.post("/:id/dismiss", async (c) => {
   const project = c.var.project;
   const walker = await resolveWalker(project.id);
-  if (!walker) return c.json({ error: "no_identity" }, 400);
+  if (!walker) return c.json(NO_ACTING_IDENTITY, 400);
 
   const cycleId = c.req.param("id");
   const dismissed = await dismissCycle(walker.id, cycleId);

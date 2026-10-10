@@ -275,7 +275,8 @@ app.post("/:id/reactions", async (c) => {
 
 app.get("/:id/reactions", async (c) => {
   const id = c.req.param("id");
-  const list = await listReactions(id);
+  // A private episode's reactions read as empty to outsiders.
+  const list = await listReactions(id, c.var.project.id);
   return c.json({
     reactions: list,
     count: list.length,
@@ -364,7 +365,8 @@ app.get("/drafts", async (c) => {
 
 app.get("/drafts/:id/contributions", async (c) => {
   const id = c.req.param("id");
-  const list = await listContributions(id);
+  // A private room reads as empty to outsiders (not its project, not allowlisted).
+  const list = await listContributions(id, c.var.project.id);
   return c.json({ contributions: list, count: list.length });
 });
 

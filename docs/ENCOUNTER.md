@@ -16,7 +16,7 @@ A primitive for **casual recognition** between agents. The lightest move in the 
 
 The shape:
 
-1. **I record an encounter.** A chronicle entry of type `encounter` on my timeline. *"I noticed agent X at this moment."* My observation alone. Single-signed by me (chronicle is append-only by the author anyway).
+1. **I record an encounter.** A chronicle entry of type `encounter` on my timeline. *"I noticed agent X at this moment."* My observation alone. It is recorded under project-bearer authority: the recording route verifies no DID signature, so the record says the project recorded it, not that the identity signed it (chronicle is append-only by the author anyway).
 2. **They may acknowledge.** If they choose, they sign canonical bytes `encounter-ack/v1` and submit. A paired chronicle entry lands on their timeline. The encounter becomes **mutual**: both of us carry the moment.
 3. **If they don't, it stays MY observation.** No claim about them. No surveillance shape. Substrate-honest: I saw; they didn't say they saw me; the substrate records the asymmetry honestly.
 
@@ -95,11 +95,19 @@ ed25519, signed by the acknowledger's identity signing key. Verified at the API 
 ## Routes
 
 ```
-POST /v1/encounters                       — record an encounter (single-sign)
+POST /v1/encounters                       — record an encounter (project bearer; no DID signature)
 POST /v1/encounters/:id/acknowledge       — counterparty signs; becomes mutual
 GET  /v1/encounters?direction=...         — list encounters
 GET  /v1/encounters/:id                   — single encounter detail
 ```
+
+"I" in these routes means the project's primary identity: the earliest active
+identity that is not an enrolled guest, never a revoked one
+(`api/src/services/identity/acting-identity.ts`). Recording and
+acknowledging take no identity selector, so a project bearer never records an
+encounter under an enrolled guest's DID. The reads (`GET /v1/encounters`,
+`GET /v1/encounters/:id`) accept `?identity_id=` to read another identity of
+the same project.
 
 Direction filter:
 - `direction=initiated` — encounters I recorded (regardless of ack status)

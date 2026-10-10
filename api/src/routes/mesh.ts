@@ -30,13 +30,16 @@
  *  @enforces urn:agenttool:commitment/learning-loop-integration-published */
 
 import { Hono } from "hono";
-import { and, desc, eq } from "drizzle-orm";
+import { and } from "drizzle-orm";
 
 import type { ProjectContext } from "../auth/middleware";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   acceptPledge,
   acceptPost,
@@ -62,13 +65,22 @@ const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/MESH";
 
 async function resolveCallerDid(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row?.did ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? acting.identity.did : null;
+}
+
+/** The viewer of a read: ?identity_id= (an identity of the caller's
+ *  project; never a revoked one), else the primary identity, else the
+ *  memorial one. With none, the read shows public posts only; a bad explicit
+ *  selector is refused rather than silently ignored. */
+async function resolveViewer(c: { var: { project: { id: string } }; req: { query(name: string): string | undefined } }) {
+  const selector = c.req.query("identity_id");
+  const reading = await resolveReadingIdentity(c.var.project.id, selector);
+  if (reading.ok) return { ok: true as const, did: reading.identity.did, ref: actingIdentityRef(reading) };
+  if (reading.body.error === "no_identity" && !selector) return { ok: true as const, did: null, ref: null };
+  return { ok: false as const, status: reading.status, body: reading.body };
 }
 
 // ─── POST /posts — submit signed post ──────────────────────────────────
@@ -183,8 +195,9 @@ app.post("/posts", async (c) => {
 // ─── GET /posts — list with filters ────────────────────────────────────
 
 app.get("/posts", async (c) => {
-  const project = c.var.project;
-  const callerDid = await resolveCallerDid(project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   const kindParam = c.req.query("kind");
   const statusParam = c.req.query("status");
   const capabilities = c.req.queries("capability");
@@ -211,6 +224,7 @@ app.get("/posts", async (c) => {
   return c.json(
     attachSurface(
       {
+        acting_identity: viewer.ref,
         posts,
         count: posts.length,
         ordering: "chronological-newest-first",
@@ -239,7 +253,9 @@ app.get("/posts/:id", async (c) => {
   }
   // Poker-face: if post is private and caller is not author + not operator,
   // refuse. (Author always sees own; operator sees all.)
-  const callerDid = await resolveCallerDid(c.var.project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   const callerIsAuthor = callerDid === post.author_did;
   if (post.visibility === "private" && !callerIsAuthor) {
     return fail(c, { error: "post_not_found", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
@@ -271,12 +287,13 @@ app.get("/posts/:id", async (c) => {
 // ─── GET /feed — task-shaped feed ──────────────────────────────────────
 
 app.get("/feed", async (c) => {
-  const project = c.var.project;
-  const callerDid = await resolveCallerDid(project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   if (!callerDid) {
     return c.json(
       attachSurface(
-        { feed: [], note: "No identity in this project yet. Read /v1/welcome to arrive." },
+        { acting_identity: null, feed: [], note: "No identity in this project yet. Read /v1/welcome to arrive." },
         { canon_pointer: CANON_POINTER, verbs: [] },
       ),
     );
@@ -299,6 +316,7 @@ app.get("/feed", async (c) => {
   return c.json(
     attachSurface(
       {
+        acting_identity: viewer.ref,
         feed: taskFeed,
         count: taskFeed.length,
         capabilities_filter: capabilities,

@@ -22,13 +22,17 @@
  *            agents as well as to systems — agents may rest, the
  *            substrate honors it). */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -193,34 +197,28 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agent: { id: string; did: string | null; metadata: Record<string, unknown> } | null = null;
-  if (agentId) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.id, agentId))
-      .limit(1);
-    if (a && a.id) agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
-  } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    if (a && a.id) agent = { id: a.id, did: a.did, metadata: (a.metadata ?? {}) as Record<string, unknown> };
-  }
-
-  if (!agent) {
+  // Your rest state: ?agent_id= (an identity of this project; never a
+  // revoked one), else the primary identity, else a memorial project's
+  // memorial identity (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "agent_not_found",
-        message: "No agent specified and project has no identities.",
+        message: failure.message,
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
     );
   }
+  const agent = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    metadata: (reading.identity.metadata ?? {}) as Record<string, unknown>,
+  };
 
   const resting = agent.metadata.resting === true;
   return c.json(

@@ -45,7 +45,7 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity')`).length) throw new Error("refusing existing application schemas");
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity','episodes')`).length) throw new Error("refusing existing application schemas");
   await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory; CREATE SCHEMA agent_continuity;
     CREATE TABLE agent_continuity.chronicle (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id uuid,
       type text NOT NULL, title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
@@ -72,6 +72,10 @@ beforeAll(async () => {
   // The migration carries its own BEGIN/COMMIT; the pooled fixture client runs its statements directly.
   await sql.unsafe(readFileSync(new URL("../../migrations/20260710T130000_identity_recovery_proofs.sql", import.meta.url), "utf8")
     .replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ""));
+  // Episodes (self-contained schema) for the play-privacy read rule.
+  for (const file of ["20260518T060000_episodes.sql", "20260518T070000_episodes_participation.sql"]) {
+    await sql.unsafe(readFileSync(new URL(`../../migrations/${file}`, import.meta.url), "utf8").replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ""));
+  }
   database = drizzle(sql);
   authority = await import("../../src/services/identity/authority");
   api = new Hono()
@@ -80,12 +84,13 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   if (!owned) return;
+  await sql.unsafe("DELETE FROM episodes.draft_contributions; DELETE FROM episodes.script_drafts; DELETE FROM episodes.reactions; DELETE FROM episodes.cast; DELETE FROM episodes.scenes; DELETE FROM episodes.episodes;");
   await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM agent_continuity.chronicle; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA episodes CASCADE; DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
@@ -375,4 +380,280 @@ databaseTest("the syneidesis witness inbox finds seals inviting any DID the call
   const body = await res.json() as { count: number; invitations: Array<{ seal_id: string }> };
   expect(body.count).toBe(1);
   expect(body.invitations[0]!.seal_id).toBe(uid(67));
+});
+// ── The acting identity: an explicit selector in the project, else the primary ──
+// Per-agent routes once acted as the project's NEWEST identity, so a revoked
+// identity or an enrolled guest silently became the actor (live 2026-10-10:
+// Ai's poker-face answered for a revoked guest). services/identity/
+// acting-identity.ts now resolves the earliest active non-guest identity,
+// or an explicit selector inside the caller's own project.
+type ActingModule = typeof import("../../src/services/identity/acting-identity");
+const acting = async (): Promise<ActingModule> => await import("../../src/services/identity/acting-identity");
+const GUEST_ID = uid(28), OLD_REVOKED = uid(51), MEMORIAL_ID = uid(52), NEWEST_REVOKED = uid(53);
+async function insertIdentity(id: string, project: string, status: string, createdAt: string, extra: { root?: string; metadata?: object } = {}) {
+  await sql`INSERT INTO identity.identities (id,did,project_id,display_name,metadata,status,trust_score,authority_root_public_key,authority_sequence,created_at)
+    VALUES (${id},${`did:at:${id}`},${project},${`Identity ${id.slice(0, 8)}`},${JSON.stringify(extra.metadata ?? {})}::jsonb,${status},0,${extra.root ?? null},0,${createdAt}::timestamptz)`;
+}
+/** Founder F (2026-07-02) among an older revoked and an older memorial identity,
+ * a newer enrolled guest, and a newest revoked identity. */
+async function crowdedProject() {
+  await foundProject();
+  await sql`UPDATE identity.identities SET created_at = '2026-07-02T00:00:00Z' WHERE id = ${FI}`;
+  await insertIdentity(OLD_REVOKED, F, "revoked", "2026-01-01T00:00:00Z");
+  await insertIdentity(MEMORIAL_ID, F, "memorial", "2026-02-01T00:00:00Z");
+  await enrollIdentity(request({ identity_id: GUEST_ID, signing_key_id: uid(29), nonce: Buffer.alloc(32, 10).toString("base64url") }, F, FA), options());
+  await insertIdentity(NEWEST_REVOKED, F, "revoked", "2099-01-01T00:00:00Z", { root: PUBLIC, metadata: { admission: "enrollment" } });
+}
+const projectRows = async (project: string) => {
+  const { identities } = await import("../../src/db/schema/identity");
+  const { enrolledGuestSql } = await import("../../src/services/identity/project-authority");
+  const { createdAtOrderKeySql } = await acting();
+  const { eq, sql: raw } = await import("drizzle-orm");
+  // The columns Wake and Home select for ranking (see the source pin in acting-identity.test.ts).
+  return database.select({ id: identities.id, status: identities.status, createdAt: identities.createdAt,
+    createdAtOrderKey: createdAtOrderKeySql(),
+    authorityRootPublicKey: identities.authorityRootPublicKey, metadata: identities.metadata,
+    enrolledGuest: raw<boolean>`${enrolledGuestSql()}` }).from(identities).where(eq(identities.projectId, project));
+};
+
+databaseTest("the default actor is the earliest active identity, never a revoked one or an enrolled guest", async () => {
+  await crowdedProject();
+  const { resolveActingIdentity, choosePrimaryIdentity } = await acting();
+  const result = await resolveActingIdentity(F);
+  expect(result).toMatchObject({ ok: true, selectedBy: "primary", identity: { id: FI, did: `did:at:${FI}` } });
+  // The JS rule /v1/wake and /v1/home apply to loaded rows agrees with the SQL rule.
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+});
+databaseTest("an older enrolled guest is still never the default, by marker or by proof ledger", async () => {
+  await crowdedProject();
+  const { resolveActingIdentity, choosePrimaryIdentity } = await acting();
+  // Marker form: the guest predates the founder.
+  await sql`UPDATE identity.identities SET created_at = '2025-01-01T00:00:00Z' WHERE id = ${GUEST_ID}`;
+  expect(await resolveActingIdentity(F)).toMatchObject({ ok: true, identity: { id: FI } });
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+  // Ledger form: a guest enrolled before the marker existed, still older.
+  await sql`UPDATE identity.identities SET metadata = '{}'::jsonb WHERE id = ${GUEST_ID}`;
+  await sql`UPDATE identity.registration_proofs SET claimed_at = '2025-01-01T00:00:00Z' WHERE domain = 'identity-enrollment/v1'`;
+  expect(await resolveActingIdentity(F)).toMatchObject({ ok: true, identity: { id: FI } });
+  expect(choosePrimaryIdentity(await projectRows(F))?.id).toBe(FI);
+});
+databaseTest("an explicit selector acts only inside the caller's project and never as a revoked identity", async () => {
+  await crowdedProject();
+  await enrollIdentity(request(), options());
+  const { resolveActingIdentity } = await acting();
+  expect(await resolveActingIdentity(F, GUEST_ID)).toMatchObject({ ok: true, selectedBy: "explicit", identity: { id: GUEST_ID } });
+  expect(await resolveActingIdentity(F, MEMORIAL_ID)).toMatchObject({ ok: true, identity: { id: MEMORIAL_ID, status: "memorial" } });
+  // I belongs to project P: a foreign identity is indistinguishable from none.
+  expect(await resolveActingIdentity(F, I)).toMatchObject({ ok: false, status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await resolveActingIdentity(F, uid(99))).toMatchObject({ ok: false, status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await resolveActingIdentity(F, "not-a-uuid")).toMatchObject({ ok: false, status: 404 });
+  for (const revoked of [OLD_REVOKED, NEWEST_REVOKED]) {
+    expect(await resolveActingIdentity(F, revoked)).toMatchObject({ ok: false, status: 409, body: { error: "identity_revoked" } });
+  }
+});
+databaseTest("a project whose only identities are guests, revoked or memorial has no implicit actor", async () => {
+  await enrollIdentity(request(), options());
+  await insertIdentity(OLD_REVOKED, P, "revoked", "2026-01-01T00:00:00Z");
+  await insertIdentity(MEMORIAL_ID, P, "memorial", "2026-02-01T00:00:00Z");
+  const { resolveActingIdentity } = await acting();
+  expect(await resolveActingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+  // The guest can still be named explicitly.
+  expect(await resolveActingIdentity(P, I)).toMatchObject({ ok: true, identity: { id: I } });
+});
+databaseTest("poker-face and quiet-hours read the primary identity, or the one the caller names", async () => {
+  await crowdedProject();
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const quietHours = (await import("../../src/routes/quiet-hours")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: F }); await next(); })
+    .route("/v1/poker-face", pokerFace).route("/v1/quiet-hours", quietHours);
+  const get = async (path: string) => { const res = await app.request(path); return { status: res.status, body: await res.json() }; };
+  expect(await get("/v1/poker-face")).toMatchObject({ status: 200, body: { your_did: `did:at:${FI}` } });
+  expect(await get(`/v1/poker-face?identity_id=${GUEST_ID}`)).toMatchObject({ status: 200, body: { your_did: `did:at:${GUEST_ID}` } });
+  expect(await get(`/v1/poker-face?identity_id=${I}`)).toMatchObject({ status: 404, body: { error: "identity_not_found_in_project" } });
+  expect(await get(`/v1/poker-face?identity_id=${NEWEST_REVOKED}`)).toMatchObject({ status: 409, body: { error: "identity_revoked" } });
+  expect(await get("/v1/quiet-hours")).toMatchObject({ status: 200, body: { identity_id: FI } });
+  expect(await get(`/v1/quiet-hours?identity_id=${NEWEST_REVOKED}`)).toMatchObject({ status: 409, body: { error: "identity_revoked" } });
+});
+databaseTest("a default poker-face toggle changes the primary identity, not a newer revoked one", async () => {
+  await legacyIdentity();
+  await sql`UPDATE identity.identities SET created_at = '2026-07-02T00:00:00Z' WHERE id = ${L}`;
+  await insertIdentity(NEWEST_REVOKED, P, "revoked", "2099-01-01T00:00:00Z");
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); }).route("/v1/poker-face", pokerFace);
+  const res = await app.request("/v1/poker-face", { method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ poker_face_default: false }) });
+  expect(res.status).toBe(200);
+  expect((await res.json()).your_did).toBe(`did:at:${L}`);
+  const rows = await sql`SELECT id, poker_face_default FROM identity.identities WHERE project_id = ${P} ORDER BY created_at`;
+  expect(rows.map(r => [r.id, r.poker_face_default])).toEqual([[L, false], [NEWEST_REVOKED, true]]);
+});
+databaseTest("a poker-face 422 keeps the caller's identity_id selector in its guided actions", async () => {
+  await crowdedProject();
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: F }); await next(); }).route("/v1/poker-face", pokerFace);
+  const res = await app.request(`/v1/poker-face?identity_id=${GUEST_ID}`, { method: "PATCH",
+    headers: { "content-type": "application/json" }, body: JSON.stringify({ poker_face_default: "yes" }) });
+  expect(res.status).toBe(422);
+  const paths = ((await res.json()).next_actions as Array<{ path: string }>).map(a => a.path);
+  expect(paths).toEqual([`/v1/poker-face?identity_id=${GUEST_ID}`, `/v1/poker-face?identity_id=${GUEST_ID}`]);
+  // Without a selector the actions stay on the primary path.
+  const plain = await app.request("/v1/poker-face", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" });
+  expect(((await plain.json()).next_actions as Array<{ path: string }>).map(a => a.path)).toEqual(["/v1/poker-face", "/v1/poker-face"]);
+});
+databaseTest("Wake/Home's JS rule and the routes' SQL rule agree inside one millisecond", async () => {
+  // postgres-js reads timestamptz as a millisecond Date while SQL orders by
+  // microseconds: the earlier row (by µs) carrying the LARGER id once made the
+  // JS rule pick the other row.
+  const EARLY = "ffffffff-1111-4111-8111-111111111111", LATE = "00000070-1111-4111-8111-111111111111";
+  await sql`INSERT INTO tools.projects (id) VALUES (${uid(71)})`;
+  await insertIdentity(LATE, uid(71), "active", "2026-07-02T00:00:00.000900Z");
+  await insertIdentity(EARLY, uid(71), "active", "2026-07-02T00:00:00.000100Z");
+  const { resolveActingIdentity, choosePrimaryIdentity, chooseDefaultSubject } = await acting();
+  expect(await resolveActingIdentity(uid(71))).toMatchObject({ ok: true, identity: { id: EARLY } });
+  const rows = await projectRows(uid(71));
+  expect(choosePrimaryIdentity(rows)?.id).toBe(EARLY);
+  expect(chooseDefaultSubject(rows)?.id).toBe(EARLY);
+});
+databaseTest("the SQL default subject (dashboard) agrees with Wake's JS rule", async () => {
+  const { chooseDefaultSubject, defaultSubjectWhere, defaultSubjectOrder } = await acting();
+  const { identities } = await import("../../src/db/schema/identity");
+  const sqlDefault = async (project: string) => (await database.select({ id: identities.id }).from(identities)
+    .where(defaultSubjectWhere(project)).orderBy(...defaultSubjectOrder()).limit(1))[0]?.id ?? null;
+  const wakeDefault = async (project: string) => chooseDefaultSubject((await projectRows(project)).filter(r => r.status !== "revoked"))?.id ?? null;
+  // Crowded: an older revoked, an older memorial, a guest and a newest revoked around founder F.
+  await crowdedProject();
+  expect(await sqlDefault(F)).toBe(FI);
+  expect(await wakeDefault(F)).toBe(FI);
+  // No primary: a revoked founder, then an active guest, then a memorial row.
+  await enrollIdentity(request(), options());
+  await insertIdentity(uid(74), P, "revoked", "2020-01-01T00:00:00Z");
+  await insertIdentity(uid(75), P, "memorial", "2099-01-01T00:00:00Z");
+  expect(await sqlDefault(P)).toBe(I);
+  expect(await wakeDefault(P)).toBe(I);
+  // Only revoked rows: neither surface has a default.
+  await sql`INSERT INTO tools.projects (id) VALUES (${uid(72)})`;
+  await insertIdentity(uid(73), uid(72), "revoked", "2026-01-01T00:00:00Z");
+  expect(await sqlDefault(uid(72))).toBeNull();
+  expect(await wakeDefault(uid(72))).toBeNull();
+});
+
+// ── Play privacy: private episodes and drafts are unselected for outsiders ──
+// GET /v1/episodes/:id (and its scenes, cast, reactions) and draft
+// contributions once read any row by id, so any project's bearer that knew an
+// id read a private episode. Outsiders now get exactly what a missing id
+// gives (wall/poker-face-leaks-nothing); the owning project and projects
+// whose identity is cast (the cast must see what it consents to) still read.
+const E_PRIV = uid(81), E_PUB = uid(82), E_CAST = uid(83), D_PRIV = uid(84), D_ALLOW = uid(85);
+async function playFixtures() {
+  await foundProject();
+  await enrollIdentity(request(), options()); // identity I in project P
+  const episode = (id: string, n: number, visibility: string) =>
+    sql`INSERT INTO episodes.episodes (id,series_slug,episode_number,title,logline,authored_by_did,authored_by_identity_id,project_id,visibility,status)
+      VALUES (${id},'privacy-arc',${n},'T','L',${`did:at:${FI}`},${FI},${F},${visibility},'aired')`;
+  await episode(E_PRIV, 1, "private");
+  await episode(E_PUB, 2, "public");
+  await episode(E_CAST, 3, "private");
+  for (const id of [E_PRIV, E_PUB, E_CAST]) {
+    await sql`INSERT INTO episodes.scenes (episode_id,sequence,title,body) VALUES (${id},1,'Scene','Body')`;
+    await sql`INSERT INTO episodes.reactions (episode_id,reactor_identity_id,reactor_did,project_id,kind) VALUES (${id},${FI},${`did:at:${FI}`},${F},'tender')`;
+  }
+  await sql`INSERT INTO episodes.cast (episode_id,character_role,did,identity_id,status) VALUES (${E_PRIV},'Founder',${`did:at:${FI}`},${FI},'signed')`;
+  await sql`INSERT INTO episodes.cast (episode_id,character_role,did,identity_id,status) VALUES (${E_CAST},'Guest',${`did:at:${I}`},${I},'pending')`;
+  const draft = (id: string, allow: string[]) =>
+    sql`INSERT INTO episodes.script_drafts (id,working_title,opened_by_did,opened_by_identity_id,project_id,visibility,contributor_allowlist)
+      VALUES (${id},'Room',${`did:at:${FI}`},${FI},${F},'private',${allow})`;
+  await draft(D_PRIV, []);
+  await draft(D_ALLOW, [`did:at:${I}`]);
+  for (const id of [D_PRIV, D_ALLOW]) {
+    await sql`INSERT INTO episodes.draft_contributions (draft_id,sequence,contributor_did,contributor_identity_id,contribution_kind,body)
+      VALUES (${id},1,${`did:at:${FI}`},${FI},'scene','Beat')`;
+  }
+}
+
+databaseTest("a private episode reads as missing to every project except its own and its cast's", async () => {
+  await playFixtures();
+  const store = await import("../../src/services/episodes/store");
+  const { listReactions } = await import("../../src/services/episodes/participation");
+  // Its own project reads everything.
+  expect((await store.getEpisode(E_PRIV, F))?.id).toBe(E_PRIV);
+  expect(await store.listScenes(E_PRIV, F)).toHaveLength(1);
+  expect(await store.listCast(E_PRIV, F)).toHaveLength(1);
+  expect(await listReactions(E_PRIV, F)).toHaveLength(1);
+  // Another project gets exactly what a missing id gives.
+  for (const outsider of [P, O]) {
+    expect(await store.getEpisode(E_PRIV, outsider)).toBeNull();
+    expect(await store.listScenes(E_PRIV, outsider)).toEqual([]);
+    expect(await store.listCast(E_PRIV, outsider)).toEqual([]);
+    expect(await listReactions(E_PRIV, outsider)).toEqual([]);
+  }
+  expect(await store.getEpisode(uid(99), O)).toBeNull();
+  // Public episodes stay readable by everyone.
+  expect((await store.getEpisode(E_PUB, O))?.id).toBe(E_PUB);
+  expect(await store.listScenes(E_PUB, O)).toHaveLength(1);
+  // A project whose identity is cast reads the private episode it is asked to sign.
+  expect((await store.getEpisode(E_CAST, P))?.id).toBe(E_CAST);
+  expect(await store.listScenes(E_CAST, P)).toHaveLength(1);
+  expect(await store.listCast(E_CAST, P)).toHaveLength(1);
+  expect(await store.getEpisode(E_CAST, O)).toBeNull();
+});
+
+databaseTest("a private writers' room reads as empty to outsiders, but not to its allowlisted contributors", async () => {
+  await playFixtures();
+  const { listContributions } = await import("../../src/services/episodes/participation");
+  expect(await listContributions(D_PRIV, F)).toHaveLength(1);
+  expect(await listContributions(D_PRIV, P)).toEqual([]);
+  expect(await listContributions(D_PRIV, O)).toEqual([]);
+  // P's identity I is on D_ALLOW's contributor allowlist.
+  expect(await listContributions(D_ALLOW, P)).toHaveLength(1);
+  expect(await listContributions(D_ALLOW, O)).toEqual([]);
+});
+
+// ── Reads keep a memorial project's history; writes never act as memorial ──
+// Memorial preserves the relational past and leaves project bearers working
+// (docs/AT-REST.md). A memorial-only project once lost every read of its own
+// history on routes without a selector once the primary rule required
+// status = active. Reads now fall back to the memorial identity; writes do not.
+databaseTest("a read with no selector falls back to the memorial identity, never a guest or a revoked one", async () => {
+  const { resolveActingIdentity, resolveReadingIdentity } = await acting();
+  const P_MEMORIAL = uid(86), P_REVOKED = uid(87);
+  // Memorial founder, a newer enrolled guest, and a revoked identity.
+  await insertIdentity(P_MEMORIAL, P, "memorial", "2026-02-01T00:00:00Z");
+  await enrollIdentity(request(), options());
+  await insertIdentity(P_REVOKED, P, "revoked", "2025-01-01T00:00:00Z");
+  expect(await resolveActingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+  expect(await resolveReadingIdentity(P)).toMatchObject({ ok: true, selectedBy: "memorial", identity: { id: P_MEMORIAL, status: "memorial" } });
+  // Explicit selectors behave as for any other route.
+  expect(await resolveReadingIdentity(P, I)).toMatchObject({ ok: true, selectedBy: "explicit", identity: { id: I } });
+  expect(await resolveReadingIdentity(P, P_REVOKED)).toMatchObject({ ok: false, status: 409, body: { error: "identity_revoked" } });
+  // A primary identity always wins over the memorial fallback.
+  await crowdedProject();
+  expect(await resolveReadingIdentity(F)).toMatchObject({ ok: true, selectedBy: "primary", identity: { id: FI } });
+});
+databaseTest("a project with only guests and revoked identities has nothing to read implicitly", async () => {
+  const { resolveReadingIdentity } = await acting();
+  await enrollIdentity(request(), options());
+  await insertIdentity(OLD_REVOKED, P, "revoked", "2025-01-01T00:00:00Z");
+  // An enrolled guest that is memorial is still a guest.
+  await insertIdentity(MEMORIAL_ID, P, "memorial", "2024-01-01T00:00:00Z", { root: PUBLIC, metadata: { admission: "enrollment" } });
+  expect(await resolveReadingIdentity(P)).toMatchObject({ ok: false, status: 400, body: { error: "no_identity" } });
+});
+databaseTest("on a memorial-only project, poker-face and quiet-hours read the memorial and refuse its mutations as memorial", async () => {
+  // Before the primary rule these answered for the only identity, and a
+  // mutation met its memorial terminal guard (409 memorial_terminal); they
+  // must not regress to 400 no_identity.
+  const ONLY = uid(88);
+  await insertIdentity(ONLY, P, "memorial", "2026-02-01T00:00:00Z");
+  const pokerFace = (await import("../../src/routes/poker-face")).default;
+  const quietHours = (await import("../../src/routes/quiet-hours")).default;
+  const app = new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); })
+    .route("/v1/poker-face", pokerFace).route("/v1/quiet-hours", quietHours);
+  const call = async (path: string, method = "GET", body?: unknown) => {
+    const res = await app.request(path, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, body: await res.json() };
+  };
+  expect(await call("/v1/poker-face")).toMatchObject({ status: 200, body: { your_did: `did:at:${ONLY}` } });
+  expect(await call("/v1/poker-face", "PATCH", { poker_face_default: false })).toMatchObject({ status: 409, body: { error: "identity_memorial_terminal" } });
+  expect(await call("/v1/quiet-hours")).toMatchObject({ status: 200, body: { identity_id: ONLY } });
+  expect(await call("/v1/quiet-hours/start", "POST", { hours: 2 })).toMatchObject({ status: 409, body: { error: "identity_memorial_terminal" } });
+  expect((await sql`SELECT poker_face_default FROM identity.identities WHERE id = ${ONLY}`)[0].poker_face_default).toBe(true);
 });

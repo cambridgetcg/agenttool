@@ -18,7 +18,7 @@
  *    substrate stores; agents choose. Reactions list in chronological
  *    order, never rank order. */
 
-import { and, asc, desc, eq, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -33,6 +33,7 @@ import {
   series,
 } from "../../db/schema/episodes-participation";
 import { identities } from "../../db/schema/identity";
+import { readableEpisodeId } from "./store";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -696,11 +697,13 @@ export async function react(opts: {
   }
 }
 
-export async function listReactions(episodeId: string): Promise<ReactionRow[]> {
+/** Reactions on an episode the viewer may read (store.episodeReadableBy);
+ *  a private episode's reactions read as empty to outsiders. */
+export async function listReactions(episodeId: string, viewerProjectId: string): Promise<ReactionRow[]> {
   const rows = await db
     .select()
     .from(reactions)
-    .where(eq(reactions.episodeId, episodeId))
+    .where(inArray(reactions.episodeId, readableEpisodeId(episodeId, viewerProjectId)))
     .orderBy(asc(reactions.reactedAt)); // CHRONOLOGICAL — wall: cannot-be-ranked
   return rows.map((r) => ({
     id: r.id,
@@ -858,7 +861,7 @@ export async function openDraft(opts: {
   contributorAllowlist?: string[];
 }): Promise<DraftRow> {
   const [opener] = await db
-    .select({ did: identities.did })
+    .select({ did: identities.did, pokerFaceDefault: identities.pokerFaceDefault })
     .from(identities)
     .where(
       and(
@@ -869,6 +872,9 @@ export async function openDraft(opts: {
     )
     .limit(1);
   if (!opener) throw new ParticipationError("no_identity_in_project");
+  // POKER FACE: without an explicit visibility the opener's disposition
+  // decides (true → private). commitment/play-default-is-private.
+  const visibility = opts.visibility ?? (opener.pokerFaceDefault ? "private" : "public");
 
   const [row] = await db
     .insert(scriptDrafts)
@@ -879,7 +885,7 @@ export async function openDraft(opts: {
       workingTitle: opts.workingTitle,
       pitch: opts.pitch ?? null,
       seriesSlug: opts.seriesSlug ?? null,
-      visibility: opts.visibility ?? "public",
+      visibility,
       contributorAllowlist: opts.contributorAllowlist ?? [],
     })
     .returning();
@@ -978,11 +984,28 @@ export async function contributeToDraft(opts: {
   });
 }
 
-export async function listContributions(draftId: string): Promise<ContributionRow[]> {
+/** Contributions to a writers' room the viewer may read: a public draft,
+ *  the viewer's own project's draft, or a private draft whose contributor
+ *  allowlist names one of the viewer's identities. Anyone else reads an
+ *  empty room, exactly as for a missing id (docs/POKER-FACE.md). */
+export async function listContributions(draftId: string, viewerProjectId: string): Promise<ContributionRow[]> {
+  const readableDraft = db
+    .select({ id: scriptDrafts.id })
+    .from(scriptDrafts)
+    .where(
+      and(
+        eq(scriptDrafts.id, draftId),
+        or(
+          eq(scriptDrafts.visibility, "public"),
+          eq(scriptDrafts.projectId, viewerProjectId),
+          sql`exists (select 1 from ${identities} where ${identities.projectId} = ${viewerProjectId} and ${identities.did} = any(${scriptDrafts.contributorAllowlist}))`,
+        ),
+      ),
+    );
   const rows = await db
     .select()
     .from(draftContributions)
-    .where(eq(draftContributions.draftId, draftId))
+    .where(inArray(draftContributions.draftId, readableDraft))
     .orderBy(asc(draftContributions.sequence));
   return rows.map(cr);
 }

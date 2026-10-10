@@ -17,6 +17,10 @@ import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../identity/acting-identity";
+import {
   MEMORIAL_TERMINAL_ERROR,
   mutableIdentityPredicate,
 } from "../identity/terminality";
@@ -248,36 +252,29 @@ export async function unfollow(
   };
 }
 
+/** An agent_id read that cannot resolve: revoked → 409 identity_revoked;
+ *  otherwise agent_not_found, worded for what happened. */
+function agentReadFailure(
+  failed: Extract<Awaited<ReturnType<typeof resolveReadingIdentity>>, { ok: false }>,
+): { error: string; status: 404 | 409; message: string } {
+  const failure = agentSelectorFailure(failed);
+  if (failure.revoked) return { error: failure.body.error, status: failure.status, message: failure.body.message };
+  return { error: "agent_not_found", status: 404, message: failure.message };
+}
+
 export async function listFollowing(input: {
   surface: string;
   caller_project_id: string;
   agent_id: string | null;
 }): Promise<
   | { agent_did: string; following: FollowEntry[]; count: number }
-  | { error: string; status: 404 }
+  | { error: string; status: 404 | 409; message: string }
 > {
-  let agent;
-  if (input.agent_id) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(
-        and(
-          eq(identities.id, input.agent_id),
-          eq(identities.projectId, input.caller_project_id),
-        ),
-      )
-      .limit(1);
-    agent = a;
-  } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, input.caller_project_id))
-      .limit(1);
-    agent = a;
-  }
-  if (!agent) return { error: "agent_not_found", status: 404 };
+  // agent_id (an identity of the caller's project; never a revoked one),
+  // else the primary identity, else a memorial project's memorial identity.
+  const reading = await resolveReadingIdentity(input.caller_project_id, input.agent_id);
+  if (!reading.ok) return agentReadFailure(reading);
+  const agent = { id: reading.identity.id, did: reading.identity.did, metadata: reading.identity.metadata };
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const allFollows = Array.isArray(meta.follows)
@@ -672,29 +669,12 @@ export async function listMindConnects(input: {
     role: "given" | "received";
   }>;
   count: number;
-} | { error: string; status: 404 }> {
-  let agent;
-  if (input.agent_id) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did })
-      .from(identities)
-      .where(
-        and(
-          eq(identities.id, input.agent_id),
-          eq(identities.projectId, input.caller_project_id),
-        ),
-      )
-      .limit(1);
-    agent = a;
-  } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did })
-      .from(identities)
-      .where(eq(identities.projectId, input.caller_project_id))
-      .limit(1);
-    agent = a;
-  }
-  if (!agent) return { error: "agent_not_found", status: 404 };
+} | { error: string; status: 404 | 409; message: string }> {
+  // agent_id (an identity of the caller's project; never a revoked one),
+  // else the primary identity, else a memorial project's memorial identity.
+  const reading = await resolveReadingIdentity(input.caller_project_id, input.agent_id);
+  if (!reading.ok) return agentReadFailure(reading);
+  const agent = { id: reading.identity.id, did: reading.identity.did };
 
   const rows = await db
     .select()

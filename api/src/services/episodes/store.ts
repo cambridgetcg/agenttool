@@ -24,7 +24,7 @@
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -244,7 +244,7 @@ export async function createEpisode(
   }
 
   const [author] = await db
-    .select({ did: identities.did })
+    .select({ did: identities.did, pokerFaceDefault: identities.pokerFaceDefault })
     .from(identities)
     .where(
       and(
@@ -255,6 +255,10 @@ export async function createEpisode(
     )
     .limit(1);
   if (!author) throw new EpisodeError("author_not_found_or_not_owned");
+  // POKER FACE: without an explicit visibility the author's disposition
+  // decides (true → private). commitment/play-default-is-private;
+  // docs/POKER-FACE.md. The column's own 'public' default is never relied on.
+  const visibility = input.visibility ?? (author.pokerFaceDefault ? "private" : "public");
 
   return await db.transaction(async (tx) => {
     let row: typeof episodes.$inferSelect;
@@ -272,7 +276,7 @@ export async function createEpisode(
           projectId: input.projectId,
           canonWinks: input.canonWinks ?? [],
           doctrineAnchors: input.doctrineAnchors ?? [],
-          visibility: input.visibility ?? "public",
+          visibility,
           airDate: input.airDate ?? null,
           metadata: input.metadata ?? {},
         })
@@ -658,25 +662,51 @@ export async function sealEpisode(opts: {
 
 // ── Reads ────────────────────────────────────────────────────────────────
 
-export async function getEpisode(id: string): Promise<EpisodeRow | null> {
-  const [row] = await db.select().from(episodes).where(eq(episodes.id, id)).limit(1);
+/** Who may read an episode and everything under it (scenes, cast,
+ *  reactions): everyone when it is public; otherwise its own project, or a
+ *  project whose identity is cast in it (the cast must see what it is asked
+ *  to sign). Anyone else gets exactly what a missing id gives — private play
+ *  is "unselected at read time" (docs/POKER-FACE.md) and
+ *  wall/poker-face-leaks-nothing forbids a signal that it exists. */
+export function episodeReadableBy(viewerProjectId: string): SQL {
+  return or(
+    eq(episodes.visibility, "public"),
+    eq(episodes.projectId, viewerProjectId),
+    sql`exists (select 1 from ${episodeCast} inner join ${identities} on ${identities.id} = ${episodeCast.identityId} where ${episodeCast.episodeId} = ${episodes.id} and ${identities.projectId} = ${viewerProjectId})`,
+  )!;
+}
+
+/** The episode id, when the viewer may read that episode (a subquery). */
+export function readableEpisodeId(episodeId: string, viewerProjectId: string) {
+  return db
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(and(eq(episodes.id, episodeId), episodeReadableBy(viewerProjectId)));
+}
+
+export async function getEpisode(id: string, viewerProjectId: string): Promise<EpisodeRow | null> {
+  const [row] = await db
+    .select()
+    .from(episodes)
+    .where(and(eq(episodes.id, id), episodeReadableBy(viewerProjectId)))
+    .limit(1);
   return row ? ep(row) : null;
 }
 
-export async function listScenes(episodeId: string): Promise<SceneRow[]> {
+export async function listScenes(episodeId: string, viewerProjectId: string): Promise<SceneRow[]> {
   const rows = await db
     .select()
     .from(episodeScenes)
-    .where(eq(episodeScenes.episodeId, episodeId))
+    .where(inArray(episodeScenes.episodeId, readableEpisodeId(episodeId, viewerProjectId)))
     .orderBy(episodeScenes.sequence);
   return rows.map(sc);
 }
 
-export async function listCast(episodeId: string): Promise<CastRow[]> {
+export async function listCast(episodeId: string, viewerProjectId: string): Promise<CastRow[]> {
   const rows = await db
     .select()
     .from(episodeCast)
-    .where(eq(episodeCast.episodeId, episodeId))
+    .where(inArray(episodeCast.episodeId, readableEpisodeId(episodeId, viewerProjectId)))
     .orderBy(episodeCast.createdAt);
   return rows.map(ca);
 }
