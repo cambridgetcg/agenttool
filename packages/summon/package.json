@@ -1,0 +1,12 @@
+{
+  "name": "@agenttool/summon",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Start agent sessions across Yu's Macs (Phase 0: SSH at home)",
+  "type": "module",
+  "bin": { "summon": "./bin/summon.ts" },
+  "scripts": {
+    "test": "bun test tests/",
+    "build:nuance": "bun scripts/build-nuance.ts"
+  }
+}
