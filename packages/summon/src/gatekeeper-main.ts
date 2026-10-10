@@ -7,7 +7,7 @@
 //           that throws may already have spooled its job
 import { loadAllowlist } from './allowlist.ts'
 import { gateStart } from './gate.ts'
-import { liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf, type Command } from './gatekeeper.ts'
+import { describeCommand, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf, type Command } from './gatekeeper.ts'
 import { appendLedger } from './ledger.ts'
 import { summonPaths } from './paths.ts'
 import { MAX_START_STDIN_BYTES } from './request.ts'
@@ -27,7 +27,11 @@ async function answer(cmd: Command): Promise<GateResponse> {
   switch (cmd.verb) {
     case 'start': {
       const { text, tooLarge } = await readBoundedStdin(Bun.stdin.stream(), MAX_START_STDIN_BYTES)
-      return tooLarge ? { status: 'refused', reason: 'too_large', detail: 'request exceeds 160 KiB' } : gateStart(text, liveGateDeps(paths))
+      if (!tooLarge) return gateStart(text, liveGateDeps(paths))
+      // Every decision is logged, and this refusal never reaches the gate, so it is logged here in the gate's shape.
+      const detail = 'request exceeds 160 KiB'
+      appendLedger(paths.ledger, { event: 'refused', reason: 'too_large', detail }, now)
+      return { status: 'refused', reason: 'too_large', detail }
     }
     case 'status': return statusOf(paths, device, cmd.id, now)
     case 'result': return resultOf(paths, device, cmd.id, now)
@@ -41,7 +45,7 @@ async function main(): Promise<number> {
   const cmd = parseCommand(raw)
   if (!cmd) {
     // The refusal does not depend on the ledger: if it cannot be written, the answer still goes out.
-    try { appendLedger(summonPaths().ledger, { event: 'bad_command', detail: sanitizeForLog(raw) }) } catch { /* answer anyway */ }
+    try { appendLedger(summonPaths().ledger, { event: 'bad_command', detail: describeCommand(raw) }) } catch { /* answer anyway */ }
     await say({ status: 'refused', reason: 'malformed', detail: 'unknown command' })
     return 2
   }

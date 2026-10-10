@@ -23,6 +23,17 @@ export function sanitizeForLog(s: string | undefined): string {
   return (s ?? '<none>').slice(0, 60).replace(/[^\x20-\x7e]/g, '?')
 }
 
+/**
+ * What the ledger may say about a command that is not one of the five verbs. The ledger is hash-chained and
+ * cannot be redacted later, and a client can put anything in SSH_ORIGINAL_COMMAND, including a prompt, so this
+ * is content-free: the byte length, and the first token only when it looks like a program name.
+ */
+export function describeCommand(raw: string | undefined): string {
+  if (raw === undefined) return 'unset'
+  const first = raw.split(/\s/, 1)[0]!
+  return `len ${Buffer.byteLength(raw, 'utf8')}, first token ${/^[a-z][a-z-]{0,15}$/.test(first) ? `"${first}"` : 'not shown'}`
+}
+
 export async function readBoundedStdin(stream: ReadableStream<Uint8Array>, max: number): Promise<{ text: string; tooLarge: boolean }> {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []

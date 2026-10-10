@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFile
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import {
-  liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf,
+  describeCommand, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf,
 } from '../src/gatekeeper.ts'
 import { findClaude } from '../src/harness.ts'
 import { writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
@@ -46,6 +46,27 @@ describe('sanitizeForLog', () => {
     expect(sanitizeForLog('a\nb\x1b[31mc\u0000')).toBe('a?b?[31mc?')
     expect(sanitizeForLog('日本語')).toBe('???')
     expect(sanitizeForLog('x'.repeat(500))).toHaveLength(60)
+  })
+})
+
+describe('describeCommand', () => {
+  test('is content-free: byte length, and the first token only when it looks like a program name', () => {
+    expect(describeCommand(undefined)).toBe('unset')
+    expect(describeCommand('')).toBe('len 0, first token not shown')
+    expect(describeCommand('ls -la')).toBe('len 6, first token "ls"')
+    expect(describeCommand('scp -t /tmp')).toBe('len 11, first token "scp"')
+    expect(describeCommand('internal-sftp')).toBe('len 13, first token "internal-sftp"')
+    expect(describeCommand('claude -p "Summarise Yu\'s private notes in ~/Documents/x"')).toBe('len 57, first token "claude"')
+    expect(describeCommand('ls\n\u001b[31mred')).toBe('len 11, first token "ls"')
+  })
+  test('a first token that is not a plain program name is not shown', () => {
+    for (const raw of ['START', 'start;ls', ' start', '../../bin/sh', '$(id)', '1abc', 'Summarise this', 'x'.repeat(17)]) {
+      expect(describeCommand(raw)).toMatch(/first token not shown$/)
+    }
+    expect(describeCommand('x'.repeat(16))).toBe(`len 16, first token "${'x'.repeat(16)}"`)
+  })
+  test('the length is in UTF-8 bytes', () => {
+    expect(describeCommand('日本語')).toBe('len 9, first token not shown')
   })
 })
 
@@ -189,14 +210,25 @@ describe('gatekeeper-main', () => {
       expect(await runGatekeeper(h, cmd)).toMatchObject({ code: 2, out: { status: 'refused', reason: 'malformed' } })
     }
   })
-  test('a refused command is recorded in the ledger sanitised, and the ledger still verifies', async () => {
+  test('a refused command is recorded in the ledger as a content-free descriptor, and the ledger still verifies', async () => {
     const h = targetHome(); const paths = summonPaths(h)
     await runGatekeeper(h, 'ls\n\u001b[31mred ' + 'z'.repeat(200))
-    const ledger = readFileSync(paths.ledger, 'utf8')
-    expect(ledger).toContain('bad_command')
-    expect(ledger).not.toContain('\u001b')
-    expect(ledger).not.toContain('z'.repeat(61))
+    const [entry, ...rest] = readFileSync(paths.ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    expect(rest).toHaveLength(0)
+    expect(entry).toMatchObject({ event: 'bad_command', detail: `len ${Buffer.byteLength('ls\n\u001b[31mred ' + 'z'.repeat(200))}, first token "ls"` })
+    expect(readFileSync(paths.ledger, 'utf8')).not.toContain('\u001b')
     expect(verifyLedger(paths.ledger)).toMatchObject({ ok: true, entries: 1 })
+  })
+  test('a prompt-like command never reaches the ledger beyond its first token', async () => {
+    const h = targetHome(); const paths = summonPaths(h)
+    const cmd = `claude -p "Summarise Yu's private notes in ~/Documents/x"`
+    expect(await runGatekeeper(h, cmd)).toMatchObject({ code: 2, out: { status: 'refused', reason: 'malformed' } })
+    const ledger = readFileSync(paths.ledger, 'utf8')
+    expect(JSON.parse(ledger.trim())).toMatchObject({ event: 'bad_command', detail: 'len 57, first token "claude"' })
+    for (const word of ['Summarise', 'private', 'notes', 'Documents', 'Yu', '-p']) expect(ledger).not.toContain(word)
+    await runGatekeeper(h, undefined)
+    expect(readFileSync(paths.ledger, 'utf8')).toContain('"detail":"unset"')
+    expect(verifyLedger(paths.ledger)).toMatchObject({ ok: true, entries: 2 })
   })
   test('a refused command still gets its one-line answer when the ledger cannot be written', async () => {
     const h = targetHome()
@@ -215,11 +247,17 @@ describe('gatekeeper-main', () => {
     expect(await runGatekeeper(h, 'start', JSON.stringify(sampleRequest({ cwd: '~/Elsewhere' }))))
       .toMatchObject({ code: 0, out: { status: 'refused', reason: 'outside_allowlist' } })
   })
-  test('start refuses an oversized stdin as too_large without admitting anything', async () => {
-    const h = targetHome()
+  test('start refuses an oversized stdin as too_large, logs the refusal, and admits nothing', async () => {
+    const h = targetHome(); const paths = summonPaths(h)
     const r = await runGatekeeper(h, 'start', 'x'.repeat(MAX_START_STDIN_BYTES + 1))
     expect(r).toMatchObject({ code: 0, out: { status: 'refused', reason: 'too_large' } })
     expect(existsSync(join(h, '.local/state/summon/jobs'))).toBe(false)
+    expect(existsSync(join(h, '.local/state/summon/spool'))).toBe(false)
+    const entries = readFileSync(paths.ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ event: 'refused', reason: 'too_large', detail: 'request exceeds 160 KiB' })
+    expect(readFileSync(paths.ledger, 'utf8')).not.toContain('xxxx')
+    expect(verifyLedger(paths.ledger)).toMatchObject({ ok: true, entries: 1 })
   })
   test('start refuses a non-JSON body as malformed', async () => {
     expect((await runGatekeeper(targetHome(), 'start', 'not json')).out).toMatchObject({ status: 'refused', reason: 'malformed' })
