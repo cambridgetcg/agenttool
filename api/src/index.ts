@@ -1628,8 +1628,9 @@ export async function serverFetchWithReplayProtection(
   const upgrade = await dependencies.bridgeUpgrade(req, server);
   if (upgrade.handled) return upgrade.response;
   // SSE responses outlive Bun's idle timeout (10 s default) — their first
-  // keepalive is at 15 s. Lift it for event streams only, so an ordinary hung
-  // request still fails fast. See lib/sse-idle-timeout.ts.
+  // keepalive is at 15 s. Raise it to a finite value for event streams only,
+  // so an ordinary hung request still fails fast and a stalled subscriber is
+  // still cut. See lib/sse-idle-timeout.ts.
   return releaseIdleTimeoutForEventStream(
     req,
     await dependencies.honoFetch(req),

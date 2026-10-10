@@ -53,6 +53,7 @@ import { attachSurface } from "../lib/surface-metadata";
 import {
   forwardToPeer,
   listenerCount,
+  createBoundedPeerSink,
   subscribePeerSink,
   unsubscribePeerSink,
   type McmlMessageEvent,
@@ -513,22 +514,27 @@ app.get("/stream", async (c) => {
   return streamSSE(c, async (sse) => {
     let aborted = false;
 
-    const sink: McmlSink = {
+    // Writes are not awaited, so one slow subscriber never blocks the
+    // sender or other sinks. The bounded sink caps how many may wait for
+    // this subscriber to read; past MCML_PENDING_WRITE_CAP it stops taking
+    // messages (they count as undelivered) and the stream ends.
+    const sink: McmlSink = createBoundedPeerSink({
       did: actor.did,
-      push(event) {
+      write: async (event) => {
         if (aborted) return;
-        // Fire-and-forget — sse.writeSSE returns a promise; we don't
-        // block other sinks waiting for it. If the network is slow,
-        // the SSE backpressure will surface on the next push.
-        void sse.writeSSE({
+        await sse.writeSSE({
           event: "mcml",
           data: JSON.stringify(event),
         });
       },
+      onOverflow() {
+        aborted = true;
+        unsubscribePeerSink(sink);
+      },
       onAbort() {
         aborted = true;
       },
-    };
+    });
 
     const sub = subscribePeerSink(sink);
     if (!sub.ok) {

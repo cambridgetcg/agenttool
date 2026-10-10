@@ -48,6 +48,52 @@ const MAX_SINKS_PER_DID = 5;
  *  refused with a substrate-honest hint about backpressure. */
 const MAX_TOTAL_SINKS = 5_000;
 
+/** Writes one SSE subscriber may have in flight. Bytes leave only as fast
+ *  as the subscriber reads, so without a cap a subscriber that stops reading
+ *  makes every forwarded message wait in memory. 32 × the 8 KiB body limit
+ *  bounds that to well under a megabyte per sink. */
+export const MCML_PENDING_WRITE_CAP = 32;
+
+/** Build a sink for one SSE subscriber that holds at most `cap` unsent
+ *  messages. Past the cap it refuses the message by throwing, so
+ *  forwardToPeer does not count it as delivered, and calls `onOverflow`
+ *  once so the route can unsubscribe and end the stream. Holding nothing
+ *  past the cap keeps wall/mcml-no-durable-storage true under backpressure. */
+export function createBoundedPeerSink(opts: {
+  did: string;
+  write: (event: McmlMessageEvent) => Promise<unknown>;
+  onOverflow: () => void;
+  onAbort?: () => void;
+  cap?: number;
+}): McmlSink {
+  const cap = opts.cap ?? MCML_PENDING_WRITE_CAP;
+  let pending = 0;
+  let overflowed = false;
+  const settle = () => {
+    pending -= 1;
+  };
+  return {
+    did: opts.did,
+    push(event) {
+      if (overflowed) throw new Error("mcml_subscriber_backpressure");
+      if (pending >= cap) {
+        overflowed = true;
+        opts.onOverflow();
+        throw new Error("mcml_subscriber_backpressure");
+      }
+      pending += 1;
+      let write: Promise<unknown>;
+      try {
+        write = opts.write(event);
+      } catch (error) {
+        write = Promise.reject(error);
+      }
+      write.then(settle, settle);
+    },
+    onAbort: opts.onAbort,
+  };
+}
+
 const sinksByDid = new Map<string, Set<McmlSink>>();
 let totalSinks = 0;
 

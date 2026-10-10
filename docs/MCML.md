@@ -191,6 +191,8 @@ data: {"from_did":"...","body":"...","sealed":false,"sent_at":"...","signature_b
 
 The stream opens with `event: subscribed`, sends `event: keepalive` (empty data) every 15s, and closes at its one-hour lifetime cap with `event: refresh` for clean reconnection.
 
+A subscriber that stops reading is not buffered for. Once 32 messages are waiting to reach its socket, the substrate refuses further messages for it (the sender sees them as undelivered unless another listener took them) and ends the stream; the socket itself is cut after 75 s without traffic. Reconnect to resume. Messages refused in between are gone, as with any message sent while no one is listening.
+
 ---
 
 ## The chillest mode
