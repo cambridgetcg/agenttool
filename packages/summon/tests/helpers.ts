@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { newRequestId, type SummonRequest } from '../src/request.ts'
 
+const MAIN = join(import.meta.dir, '..', 'src', 'gatekeeper-main.ts')
+
 export function sampleRequest(over: Partial<SummonRequest> = {}): SummonRequest {
   const now = Date.now()
   return {
@@ -48,4 +50,22 @@ export function targetHome(allowlist: string = DEFAULT_ALLOWLIST): string {
   mkdirSync(join(h, '.config/summon'), { recursive: true })
   writeFileSync(join(h, '.config/summon/allowlist.yaml'), allowlist)
   return h
+}
+
+/**
+ * Runs the real gatekeeper entry point as sshd would: a fresh process, `command` as SSH_ORIGINAL_COMMAND
+ * (left unset when undefined), `stdin` piped in. The gatekeeper's contract is exactly one JSON line on
+ * stdout, so anything else throws here and fails the calling test.
+ */
+export async function runGatekeeper(home: string, command: string | undefined, stdin = ''): Promise<{ code: number; out: any }> {
+  const env: Record<string, string> = {
+    PATH: process.env.PATH!, HOME: home, SUMMON_HOME_OVERRIDE: home,
+    SUMMON_TEST_GUI: '1', SUMMON_TEST_RUNNER: '1', SUMMON_CLAUDE_BIN: '/bin/echo',
+  }
+  if (command !== undefined) env.SSH_ORIGINAL_COMMAND = command
+  const p = Bun.spawn(['bun', MAIN], { env, stdin: new Blob([stdin]), stdout: 'pipe', stderr: 'pipe' })
+  const [text, code] = await Promise.all([new Response(p.stdout).text(), p.exited])
+  const lines = text.split('\n').filter(Boolean)
+  if (lines.length !== 1 || !text.endsWith('\n')) throw new Error(`expected exactly one JSON line, got ${JSON.stringify(text)} (exit ${code})`)
+  return { code, out: JSON.parse(lines[0]!) }
 }
