@@ -27,7 +27,11 @@ function lastHash(path: string): string {
   return JSON.parse(text.slice(text.lastIndexOf('\n') + 1)).hash
 }
 
-function withLock<T>(path: string, fn: () => T): T {
+/**
+ * Runs fn while holding `path + '.lock'`, created O_EXCL. Waits up to 3 s, and breaks a lock older than 10 s.
+ * The ledger uses it per file; the gate uses it to make admission atomic across gatekeeper processes.
+ */
+export function withLock<T>(path: string, fn: () => T): T {
   const lock = path + '.lock'
   const deadline = Date.now() + 3000
   for (;;) {
