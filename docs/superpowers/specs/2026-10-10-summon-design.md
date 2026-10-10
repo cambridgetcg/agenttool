@@ -1,6 +1,6 @@
 # Summon — start agent sessions across Yu's Macs — design
 
-**Date:** 2026-10-10 · **Status:** reviewed draft, awaiting Yu's approval. Nothing is built.
+**Date:** 2026-10-10 · **Status:** approved by Yu 2026-10-10 ("All OK"); next: the Phase 0 implementation plan.
 **Decided with Yu** in brainstorming on 2026-10-10. A 64-agent adversarial review of the
 first draft (four lenses, a skeptic per finding) found 3 blockers and ~30 majors; this
 version folds every confirmed finding in. Facts about this Air were checked read-only on
@@ -206,7 +206,7 @@ runtimes:
   #   models: [{ model: gpt-6-astra, provider: openai-codex, effort: [high, ultra] }]
   #   reads_anywhere: true      # required: no path sandbox; review only
 folders:
-  - path: ~/Projects/agenttool
+  - path: ~/Projects
     access: review
 limits:
   max_concurrent: 1
@@ -368,10 +368,10 @@ Live view and the passed keyboard; cross-device Collab; more than two devices; p
 vendor relays; agenttool production for anything but the Phase 2 mailbox; moving the
 citizen fleet to its own macOS user (recommended, separate decision).
 
-## Open questions for Yu
+## Yu's answers (2026-10-10)
 
-1. Changes A–E above. OK?
-2. Which folders on Nuance start in the allowlist (outside Desktop, Documents and Downloads), and with `review` or `edit`?
-3. Codex or Hermes on Nuance with `reads_anywhere`, or Claude Code only for now?
-4. Retention (30 days for results, 1 year for ledgers): fine?
-5. Code home: agenttool `packages/summon` (private repo): fine?
+1. Changes A–E: **all OK**.
+2. First folder on Nuance: **`~/Projects`, `review`**. The installer's starter allowlist holds exactly that, plus Claude Code (sonnet, haiku); nothing else.
+3. Harnesses: **Claude Code only** for now; Codex and Hermes wait for the inventory and an explicit `reads_anywhere` choice.
+4. Retention: defaults kept (30 days for results, 1 year for ledgers).
+5. Code home: agenttool `packages/summon`.
