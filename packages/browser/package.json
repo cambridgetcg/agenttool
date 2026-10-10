@@ -79,6 +79,7 @@
   },
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/browser#readme",
   "bugs": {
-    "url": "https://github.com/cambridgetcg/agenttool/issues"
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
   }
 }
