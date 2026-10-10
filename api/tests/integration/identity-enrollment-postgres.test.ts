@@ -45,8 +45,17 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory')`).length) throw new Error("refusing existing application schemas");
-  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory;
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity')`).length) throw new Error("refusing existing application schemas");
+  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory; CREATE SCHEMA agent_continuity;
+    CREATE TABLE agent_continuity.chronicle (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id uuid,
+      type text NOT NULL, title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
+      occurred_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now());
+    CREATE TABLE agent_continuity.deals (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL,
+      buyer_identity_id uuid NOT NULL, seller_identity_id uuid NOT NULL, buyer_did text NOT NULL, seller_did text NOT NULL, listing_id uuid,
+      description text NOT NULL, input_hash text, output_hash text, size integer NOT NULL, buyer_stake integer NOT NULL DEFAULT 1,
+      seller_stake integer NOT NULL DEFAULT 1, status text NOT NULL DEFAULT 'proposed', outcome text, buyer_trust_delta integer,
+      seller_trust_delta integer, witness_dids text, metadata jsonb DEFAULT '{}', buyer_chronicle_id uuid, seller_chronicle_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(), activated_at timestamptz, sealed_at timestamptz, completed_at timestamptz);
     CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
@@ -77,12 +86,12 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   if (!owned) return;
-  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
+  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM agent_continuity.deals; DELETE FROM agent_continuity.chronicle; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
@@ -354,4 +363,41 @@ databaseTest("central signer authority: an active key row of a revoked or memori
     .toEqual({ ok: false, reason: "unknown_signing_key" });
   await sql`UPDATE identity.identity_keys SET revoked_at = now() WHERE id = ${active.key}`;
   expect(await resolveIdentitySigningKey({ signingKeyId: active.key })).toEqual({ ok: false, reason: "signing_key_inactive" });
+});
+databaseTest("a cross-project deal writes each party's row into its own project, where trust evidence reads it", async () => {
+  // A deal lives in the buyer's project; the seller may live anywhere.
+  // ownChronicle counts a row only in the annotated identity's own
+  // project, so a seller row left in the buyer's project vanished from the
+  // seller's history and from trust evidence in both directions.
+  const { acceptDeal, createDeal, failDeal, sealDeal } = await import("../../src/services/trust/deals");
+  const { getEvidence } = await import("../../src/services/trust/lifecycle");
+  const buyer = uid(61), seller = uid(62);
+  const buyerDid = `did:at:${buyer}`, sellerDid = `did:at:${seller}`;
+  for (const [id, project] of [[buyer, P], [seller, O]] as const) {
+    await sql`INSERT INTO identity.identities (id, did, project_id, display_name, status, trust_score)
+      VALUES (${id}, ${`did:at:${id}`}, ${project}, 'party', 'active', 0)`;
+  }
+  const propose = () => createDeal({ projectId: P, buyerIdentityId: buyer, buyerDid, sellerDid,
+    sellerIdentityId: seller, description: "a small deal", size: 1 });
+  const sealed = await propose();
+  await acceptDeal(sealed.id, seller);
+  await sealDeal({ dealId: sealed.id, callerIdentityId: seller });
+  await sealDeal({ dealId: sealed.id, callerIdentityId: buyer });
+  const failed = await propose();
+  await acceptDeal(failed.id, seller);
+  await failDeal({ dealId: failed.id, callerIdentityId: buyer, atFaultParty: "seller", reason: "late" });
+
+  const rows = await sql`SELECT project_id, agent_id, metadata->>'kind' AS kind FROM agent_continuity.chronicle ORDER BY kind, agent_id`;
+  expect(rows.map((r) => [r.kind, r.agent_id, r.project_id])).toEqual([
+    ["deal_failed", buyer, P], ["deal_failed", seller, O],
+    ["deal_sealed", buyer, P], ["deal_sealed", seller, O],
+  ]);
+  const fromBuyer = await getEvidence(buyer, buyerDid, sellerDid, "honest");
+  const fromSeller = await getEvidence(seller, sellerDid, buyerDid, "honest");
+  // The sealed deal is a 'seal' (buyer) / 'recognition' (seller) act; a
+  // failure is a 'note', which trust evidence does not count.
+  expect(fromBuyer.evidence.your_acts_toward_them.map((a) => a.type)).toEqual(["seal"]);
+  expect(fromBuyer.evidence.their_acts_toward_you.map((a) => a.type)).toEqual(["recognition"]);
+  expect(fromSeller.evidence.your_acts_toward_them.map((a) => a.type)).toEqual(["recognition"]);
+  expect(fromSeller.evidence.their_acts_toward_you.map((a) => a.type)).toEqual(["seal"]);
 });
