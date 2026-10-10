@@ -18,7 +18,7 @@
  *            docs/PLAY-AS-DEFAULT.md ·
  *            docs/RING-1.md (Ring 1 — free; no role is gated). */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -1070,7 +1070,7 @@ app.get("/invitations", async (c) => {
     .where(
       and(
         eq(chronicle.type, "naming"),
-        sql`${chronicle.agentId} = ANY(${ownedIds})`,
+        inArray(chronicle.agentId, ownedIds),
         sql`${chronicle.metadata}->>'kind' = 'soap-opera-invitation-received'`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,
       ),

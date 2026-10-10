@@ -22,7 +22,7 @@
  *            docs/LETTERS.md · docs/syneidesis-bootstrap.md
  *            (joy as the operational signal). */
 
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
@@ -194,7 +194,7 @@ app.get("/thoughtful", async (c) => {
         .from(chronicle)
         .where(
           and(
-            sql`${chronicle.agentId} = ANY(${visibleIds})`,
+            inArray(chronicle.agentId, visibleIds),
             gt(chronicle.occurredAt, hourAgo),
           ),
         )

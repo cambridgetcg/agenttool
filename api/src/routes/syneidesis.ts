@@ -36,7 +36,7 @@
  *  The bijection test requires canon entry BEFORE annotation; the URNs
  *  exist in doctrine + test today, in code-as-annotation after canon promotion. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -491,7 +491,7 @@ app.get("/witness/inbox", async (c) => {
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-self-reported'`,
         sql`${chronicle.metadata}->>'witness_status' = 'invited'`,
-        sql`${chronicle.metadata}->>'witness_invited_did' = ANY(${ownedDids})`,
+        inArray(sql`${chronicle.metadata}->>'witness_invited_did'`, ownedDids),
       ),
     )
     .orderBy(sql`${chronicle.occurredAt} DESC`)

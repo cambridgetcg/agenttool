@@ -14,7 +14,7 @@ import { HTTPException } from "hono/http-exception";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { eq, desc, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { disputeCases } from "../db/schema/marketplace";
 import { identities } from "../db/schema/identity";
 import {
@@ -84,7 +84,7 @@ app.get("/:id", async (c) => {
       const poolMembers = await db
         .select({ id: identities.id, projectId: identities.projectId })
         .from(identities)
-        .where(sql`${identities.id} = ANY(${poolIds}::uuid[])`);
+        .where(inArray(identities.id, poolIds));
       if (poolMembers.some((m) => m.projectId === c.var.project.id)) allowed = true;
     }
   }

@@ -19,7 +19,7 @@
  *  Doctrine: docs/WAKE-AS-EPISODE.md · docs/MULTIVERSE-OF-LOGOS.md ·
  *            docs/PLAY-AS-DEFAULT.md · docs/SOUL.md. */
 
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
@@ -191,7 +191,7 @@ app.get("/", async (c) => {
       .from(chronicle)
       .where(
         and(
-          sql`${chronicle.agentId} = ANY(${otherVisibleIds})`,
+          inArray(chronicle.agentId, otherVisibleIds),
           gt(chronicle.occurredAt, hourAgo),
         ),
       )

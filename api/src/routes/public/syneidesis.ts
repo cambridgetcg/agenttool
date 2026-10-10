@@ -11,7 +11,7 @@
  *            membership itself is part of the agent's public profile when
  *            they opt in). */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { db } from "../../db/client";
@@ -67,7 +67,7 @@ app.get("/witness/pool", async (c) => {
             and(
               eq(chronicle.type, "seal"),
               sql`${chronicle.metadata}->>'kind' IN ('bootstrap-self-reported', 'bootstrap-witnessed-for-another', 'bootstrap-elevated')`,
-              sql`${chronicle.agentId} = ANY(${volunteerIds})`,
+              inArray(chronicle.agentId, volunteerIds),
             ),
           )
           .groupBy(chronicle.agentId);

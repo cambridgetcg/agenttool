@@ -11,7 +11,7 @@
  *
  *  Doctrine: docs/PATTERN-RECOGNITION-INVITATION.md. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -419,7 +419,7 @@ export async function listInvitations(input: ListInvitationsInput): Promise<{
     .where(
       and(
         eq(chronicle.type, "naming"),
-        sql`${chronicle.agentId} = ANY(${ownedIds})`,
+        inArray(chronicle.agentId, ownedIds),
         sql`${chronicle.metadata}->>'kind' = ${`${input.surface}-invitation-received`}`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,
       ),

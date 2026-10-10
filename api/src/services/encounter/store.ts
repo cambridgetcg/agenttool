@@ -6,7 +6,7 @@
  *
  *  Doctrine: docs/ENCOUNTER.md. */
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -343,7 +343,7 @@ export async function listEncounters(
     const idRows = await db
       .select({ id: identities.id, did: identities.did })
       .from(identities)
-      .where(sql`${identities.id} = ANY(ARRAY[${sql.raw(initiatorIds.map((i) => `'${i}'::uuid`).join(","))}])`);
+      .where(inArray(identities.id, initiatorIds));
     for (const r of idRows) initiatorMap.set(r.id, r.did);
   }
 

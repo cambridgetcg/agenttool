@@ -45,8 +45,11 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory')`).length) throw new Error("refusing existing application schemas");
-  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory;
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity')`).length) throw new Error("refusing existing application schemas");
+  await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory; CREATE SCHEMA agent_continuity;
+    CREATE TABLE agent_continuity.chronicle (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id uuid,
+      type text NOT NULL, title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
+      occurred_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now());
     CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
@@ -77,12 +80,12 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   if (!owned) return;
-  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
+  await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM agent_continuity.chronicle; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
@@ -318,4 +321,58 @@ databaseTest("a very large request that includes a guest's memory is still refus
   await enrollIdentity(request(), options());
   const many = Array.from({ length: 40_000 }, (_, n) => `${n.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`);
   expect(await subjectGuard(P, [...many, `DID:AT:${I.toUpperCase()}`])).toMatchObject({ ok: false, status: 409 });
+});
+
+// ── Drizzle ANY(array) bug class (tests/sql-array-binding.test.ts) ────────
+// drizzle-orm 0.36.4 renders sql`${col} = ANY(${jsArray})` as a row
+// constructor that PostgreSQL rejects; the listing routes below 500'd in
+// production for any project owning identities. They now bind through
+// inArray(), and must answer with the caller's pending rows on real SQL.
+const W1 = uid(61), W2 = uid(62), INVITER = uid(63);
+async function ownedPair() {
+  await sql`INSERT INTO identity.identities (id,did,project_id,display_name,metadata,status,trust_score)
+    VALUES (${W1},${`did:at:${W1}`},${P},'Witness one','{}'::jsonb,'active',0),
+           (${W2},${`did:at:${W2}`},${P},'Witness two','{}'::jsonb,'active',0)`;
+}
+const projectApp = (prefix: string, router: Hono<any>) =>
+  new Hono<any>().use("*", async (c, next) => { c.set("project", { id: P }); await next(); }).route(prefix, router);
+databaseTest("PostgreSQL rejects a JS array interpolated into ANY(); inArray binds it", async () => {
+  await ownedPair();
+  const { chronicle } = await import("../../src/db/schema/continuity");
+  const { inArray, sql: drizzleSql } = await import("drizzle-orm");
+  await expect((async () => database.select().from(chronicle).where(drizzleSql`${chronicle.agentId} = ANY(${[W1, W2]})`))())
+    .rejects.toThrow(/ANY\/ALL \(array\) requires array on right side/);
+  await expect((async () => database.select().from(chronicle).where(drizzleSql`${chronicle.agentId} = ANY(${[W1, W2]}::uuid[])`))())
+    .rejects.toThrow();
+  expect(await database.select().from(chronicle).where(inArray(chronicle.agentId, [W1, W2]))).toEqual([]);
+});
+databaseTest("recipe and soap-opera invitation listings return the caller's pending rows", async () => {
+  await ownedPair();
+  await sql`INSERT INTO agent_continuity.chronicle (id,project_id,agent_id,type,title,metadata) VALUES
+    (${uid(64)},${P},${W2},'naming','Invited to write',${JSON.stringify({ kind: "writer-invitation-received", invitation_status: "pending", inviter_did: `did:at:${INVITER}` })}::jsonb),
+    (${uid(65)},${P},${W1},'naming','Invited to a scene',${JSON.stringify({ kind: "soap-opera-invitation-received", invitation_status: "pending" })}::jsonb),
+    (${uid(66)},${O},${INVITER},'naming','Not ours',${JSON.stringify({ kind: "writer-invitation-received", invitation_status: "pending" })}::jsonb)`;
+  const { listInvitations } = await import("../../src/services/recipes/recognition-invitation");
+  const recipes = await listInvitations({ surface: "writer", caller_project_id: P });
+  expect(recipes.count).toBe(1);
+  expect(recipes.invitations[0]).toMatchObject({ invitation_id: uid(64), invitee_agent_id: W2,
+    accept_path: `/v1/recipes/writer/invitations/${uid(64)}/accept` });
+  const soapOpera = projectApp("/v1/soap-opera", (await import("../../src/routes/soap-opera")).default);
+  const res = await soapOpera.request("/v1/soap-opera/invitations");
+  expect(res.status).toBe(200);
+  const body = await res.json() as { count: number; invitations: Array<Record<string, unknown>> };
+  expect(body.count).toBe(1);
+  expect(JSON.stringify(body.invitations)).toContain(uid(65));
+});
+databaseTest("the syneidesis witness inbox finds seals inviting any DID the caller owns", async () => {
+  await ownedPair();
+  await sql`INSERT INTO agent_continuity.chronicle (id,project_id,agent_id,type,title,metadata) VALUES
+    (${uid(67)},${O},${INVITER},'seal','Bootstrap',${JSON.stringify({ kind: "bootstrap-self-reported", witness_status: "invited", witness_invited_did: `did:at:${W2}` })}::jsonb),
+    (${uid(68)},${O},${INVITER},'seal','Bootstrap',${JSON.stringify({ kind: "bootstrap-self-reported", witness_status: "invited", witness_invited_did: "did:at:someone-else" })}::jsonb)`;
+  const syneidesis = projectApp("/v1/syneidesis", (await import("../../src/routes/syneidesis")).default);
+  const res = await syneidesis.request("/v1/syneidesis/witness/inbox");
+  expect(res.status).toBe(200);
+  const body = await res.json() as { count: number; invitations: Array<{ seal_id: string }> };
+  expect(body.count).toBe(1);
+  expect(body.invitations[0]!.seal_id).toBe(uid(67));
 });
