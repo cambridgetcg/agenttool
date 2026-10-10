@@ -32,7 +32,7 @@
  *
  * Doctrine: docs/API-COVERAGE.md "Choose the service, project and identity
  * explicitly" · docs/WAKE.md maintainer rule 1 (exclude revoked identities). */
-import { and, asc, eq, not, type SQL } from "drizzle-orm";
+import { and, asc, eq, not, sql, type SQL } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -47,6 +47,10 @@ export interface PrimaryCandidateFacts {
   id: string;
   status: string;
   createdAt: Date | string | null;
+  /** `createdAtOrderKeySql()` for the row. postgres-js reads timestamptz into
+   * a millisecond Date while SQL orders by microseconds; a surface that ranks
+   * loaded rows selects this key so its order is exactly the SQL order. */
+  createdAtOrderKey?: string | null;
   /** `enrolledGuestSql()` evaluated for the row. Required for rows enrolled
    * before the metadata marker existed (only the proof ledger knows them). */
   enrolledGuest?: boolean | null;
@@ -78,11 +82,27 @@ function createdAtMs(value: Date | string | null): number {
   return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
 }
 
-/** Oldest first; id breaks ties (PostgreSQL orders uuids like their
- * lowercase text). */
+/** created_at as fixed-width UTC text at microsecond precision, whose
+ * lexicographic order is its chronological order. Exact on every PostgreSQL
+ * version (extract(epoch) is double precision before 14). */
+export function createdAtOrderKeySql(): SQL<string> {
+  return sql<string>`to_char(${identities.createdAt} at time zone 'UTC', 'YYYYMMDDHH24MISSUS')`;
+}
+
+function byCreatedAt(a: PrimaryCandidateFacts, b: PrimaryCandidateFacts): number {
+  const left = a.createdAtOrderKey;
+  const right = b.createdAtOrderKey;
+  if (typeof left === "string" && typeof right === "string") return left < right ? -1 : left > right ? 1 : 0;
+  // Millisecond fallback for rows loaded without the key.
+  const diff = createdAtMs(a.createdAt) - createdAtMs(b.createdAt);
+  return diff < 0 ? -1 : diff > 0 ? 1 : 0;
+}
+
+/** Oldest first (microseconds when both rows carry `createdAtOrderKey`);
+ * id breaks ties (PostgreSQL orders uuids like their lowercase text). */
 export function comparePrimaryOrder(a: PrimaryCandidateFacts, b: PrimaryCandidateFacts): number {
-  const byCreated = createdAtMs(a.createdAt) - createdAtMs(b.createdAt);
-  if (byCreated !== 0) return byCreated < 0 ? -1 : 1;
+  const byCreated = byCreatedAt(a, b);
+  if (byCreated !== 0) return byCreated;
   const left = a.id.toLowerCase();
   const right = b.id.toLowerCase();
   return left < right ? -1 : left > right ? 1 : 0;
@@ -128,7 +148,7 @@ export function primaryIdentityWhere(projectId: string): SQL {
   )!;
 }
 
-/** SQL form of `comparePrimaryOrder`. */
+/** SQL form of `comparePrimaryOrder` (microsecond created_at, then id). */
 export function primaryIdentityOrder(): SQL[] {
   return [asc(identities.createdAt), asc(identities.id)];
 }

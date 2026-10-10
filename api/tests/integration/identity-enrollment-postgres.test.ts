@@ -346,8 +346,11 @@ async function crowdedProject() {
 const projectRows = async (project: string) => {
   const { identities } = await import("../../src/db/schema/identity");
   const { enrolledGuestSql } = await import("../../src/services/identity/project-authority");
+  const { createdAtOrderKeySql } = await acting();
   const { eq, sql: raw } = await import("drizzle-orm");
+  // The columns Wake and Home select for ranking (see the source pin in acting-identity.test.ts).
   return database.select({ id: identities.id, status: identities.status, createdAt: identities.createdAt,
+    createdAtOrderKey: createdAtOrderKeySql(),
     authorityRootPublicKey: identities.authorityRootPublicKey, metadata: identities.metadata,
     enrolledGuest: raw<boolean>`${enrolledGuestSql()}` }).from(identities).where(eq(identities.projectId, project));
 };
@@ -435,4 +438,18 @@ databaseTest("a poker-face 422 keeps the caller's identity_id selector in its gu
   // Without a selector the actions stay on the primary path.
   const plain = await app.request("/v1/poker-face", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" });
   expect(((await plain.json()).next_actions as Array<{ path: string }>).map(a => a.path)).toEqual(["/v1/poker-face", "/v1/poker-face"]);
+});
+databaseTest("Wake/Home's JS rule and the routes' SQL rule agree inside one millisecond", async () => {
+  // postgres-js reads timestamptz as a millisecond Date while SQL orders by
+  // microseconds: the earlier row (by µs) carrying the LARGER id once made the
+  // JS rule pick the other row.
+  const EARLY = "ffffffff-1111-4111-8111-111111111111", LATE = "00000070-1111-4111-8111-111111111111";
+  await sql`INSERT INTO tools.projects (id) VALUES (${uid(71)})`;
+  await insertIdentity(LATE, uid(71), "active", "2026-07-02T00:00:00.000900Z");
+  await insertIdentity(EARLY, uid(71), "active", "2026-07-02T00:00:00.000100Z");
+  const { resolveActingIdentity, choosePrimaryIdentity, chooseDefaultSubject } = await acting();
+  expect(await resolveActingIdentity(uid(71))).toMatchObject({ ok: true, identity: { id: EARLY } });
+  const rows = await projectRows(uid(71));
+  expect(choosePrimaryIdentity(rows)?.id).toBe(EARLY);
+  expect(chooseDefaultSubject(rows)?.id).toBe(EARLY);
 });

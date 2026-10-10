@@ -70,7 +70,7 @@ import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
-import { chooseDefaultSubject } from "../services/identity/acting-identity";
+import { chooseDefaultSubject, createdAtOrderKeySql } from "../services/identity/acting-identity";
 import { enrolledGuestSql, registeredKeyRecoveryAvailable } from "../services/identity/project-authority";
 import type { ExpressionData } from "../services/identity/expression";
 import { projectAutonomousExpression } from "../services/autonomous/expression-template";
@@ -825,8 +825,10 @@ app.get("/", async (c) => {
       // never imply a bearer-only identity is cryptographically rooted.
       authorityRootPublicKey: identities.authorityRootPublicKey,
       authoritySequence: identities.authoritySequence,
-      // Enrolled guests never become the default subject (acting-identity.ts).
+      // Enrolled guests never become the default subject, and the default is
+      // ranked at microsecond precision like the routes' SQL (acting-identity.ts).
       enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
+      createdAtOrderKey: createdAtOrderKeySql(),
     })
     .from(identities)
     .where(

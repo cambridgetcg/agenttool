@@ -19,7 +19,7 @@ import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
 import { composeExpression } from "../identity/composition";
-import { chooseDefaultSubject } from "../identity/acting-identity";
+import { chooseDefaultSubject, createdAtOrderKeySql } from "../identity/acting-identity";
 import { enrolledGuestSql, registeredKeyRecoveryAvailable } from "../identity/project-authority";
 import type { ExpressionData } from "../identity/expression";
 import { projectAutonomousExpression } from "../autonomous/expression-template";
@@ -134,6 +134,8 @@ export async function buildWakeBundle(
       proxyForIdentityId: identities.proxyForIdentityId,
       proxyKind: identities.proxyKind,
       enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
+      // Rank at microsecond precision, like the routes' SQL (acting-identity.ts).
+      createdAtOrderKey: createdAtOrderKeySql(),
     })
     .from(identities)
     .where(

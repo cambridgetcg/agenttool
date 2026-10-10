@@ -18,7 +18,7 @@ import { identities } from "../../db/schema/identity";
 import { countUnread } from "../inbox/store";
 import { countMemories } from "../memory/store";
 import { countStrands } from "../strand/store";
-import { chooseDefaultSubject } from "../identity/acting-identity";
+import { chooseDefaultSubject, createdAtOrderKeySql } from "../identity/acting-identity";
 import { enrolledGuestSql, scopeIdentityProtections } from "../identity/project-authority";
 
 export interface HomeIdentitySnapshot {
@@ -254,6 +254,8 @@ export async function buildHome(
       authoritySequence: identities.authoritySequence,
       metadata: identities.metadata,
       createdAt: identities.createdAt,
+      // Rank at microsecond precision, like the routes' SQL (acting-identity.ts).
+      createdAtOrderKey: createdAtOrderKeySql(),
       enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
     })
     .from(identities)

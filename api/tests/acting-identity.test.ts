@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 import {
   chooseDefaultSubject,
   choosePrimaryIdentity,
+  createdAtOrderKeySql,
   isEnrolledGuestRow,
   isPrimaryCandidate,
   parseIdentitySelector,
@@ -33,7 +34,7 @@ const SRC = join(API_ROOT, "src");
 
 const AI = "bb719cd4-0000-4000-8000-000000000001";
 const GUEST = "53bbae45-cbf1-4958-b310-810d4b33b0f1";
-const row = (over: Partial<{ id: string; status: string; createdAt: Date; enrolledGuest: boolean; authorityRootPublicKey: string | null; metadata: unknown }>) => ({
+const row = (over: Partial<{ id: string; status: string; createdAt: Date; createdAtOrderKey: string; enrolledGuest: boolean; authorityRootPublicKey: string | null; metadata: unknown }>) => ({
   id: AI,
   status: "active",
   createdAt: new Date("2026-07-02T00:00:00Z"),
@@ -63,6 +64,15 @@ describe("the primary identity rule (JS form)", () => {
     const b = row({ id: "bbbbbbbb-0000-4000-8000-000000000000", createdAt: at });
     const a = row({ id: "aaaaaaaa-0000-4000-8000-000000000000", createdAt: at });
     expect(choosePrimaryIdentity([b, a])?.id).toBe(a.id);
+  });
+
+  test("inside one millisecond the microsecond key decides, as the SQL order does", () => {
+    // postgres-js truncates timestamptz to ms; SQL orders by µs.
+    const at = new Date("2026-07-02T00:00:00.000Z");
+    const earlierLargerId = row({ id: "ffffffff-0000-4000-8000-000000000000", createdAt: at, createdAtOrderKey: "20260702000000000100" });
+    const laterSmallerId = row({ id: "00000000-0000-4000-8000-000000000001", createdAt: at, createdAtOrderKey: "20260702000000000900" });
+    expect(choosePrimaryIdentity([laterSmallerId, earlierLargerId])?.id).toBe(earlierLargerId.id);
+    expect(chooseDefaultSubject([earlierLargerId, laterSmallerId])?.id).toBe(earlierLargerId.id);
   });
 
   test("revoked, memorial and other non-active identities never become the default actor", () => {
@@ -164,6 +174,11 @@ describe("the primary identity rule (SQL form)", () => {
     expect(query.params).toContain("identity-enrollment/v1");
   });
 
+  test("the microsecond order key is fixed-width UTC text", () => {
+    const key = dialect.sqlToQuery(createdAtOrderKeySql()).sql;
+    expect(key).toBe(`to_char("identity"."identities"."created_at" at time zone 'UTC', 'YYYYMMDDHH24MISSUS')`);
+  });
+
   test("orders oldest first with an id tie-break, never newest first", () => {
     const order = dialect.sqlToQuery(sql.join(primaryIdentityOrder(), sql`, `)).sql;
     expect(order).toBe(`"identity"."identities"."created_at" asc, "identity"."identities"."id" asc`);
@@ -260,6 +275,8 @@ describe("no route picks the project's newest (or an arbitrary) identity as the 
       expect({ path, uses: text.includes("chooseDefaultSubject(") }).toEqual({ path, uses: true });
       expect({ path, firstRow: /let primary = projectIdentities\[0\]/.test(text) }).toEqual({ path, firstRow: false });
       expect({ path, guestFlag: text.includes("enrolledGuestSql()") }).toEqual({ path, guestFlag: true });
+      // Rank by microseconds, as primaryIdentityOrder() does in SQL.
+      expect({ path, orderKey: text.includes("createdAtOrderKey: createdAtOrderKeySql()") }).toEqual({ path, orderKey: true });
     }
   });
 
