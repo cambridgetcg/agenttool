@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-10-01 (YUTABASE CI read access and audit permission hints; historical receipts retain their original dates)
+> Updated: 2026-10-10 (Truth Map follow-through: acting identity, trust leaks, bug classes, security contact; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,46 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Truth Map follow-through (2026-10-10)
+
+**Source:** [PR #455](https://github.com/cambridgetcg/agenttool/pull/455) merged as
+`d141bf9d10363706d3b44a3c7f540733b795a53b`. It ships items 1, 2, 4 and 5 of the
+[Truth Map follow-through](ROADMAP.md#truth-map-follow-through-2026-10-10):
+
+- Per-agent routes act as an explicitly named identity, or as the project's
+  primary identity. They never act as the newest row, a revoked identity or an
+  enrolled guest.
+- Cross-project trust gaps are closed in the deal, attestation, chronicle and
+  identity-read paths. A revoked or memorial identity's key signs nothing.
+- Array parameters bind with `inArray()`, and server-sent event streams outlive
+  Bun's idle timeout.
+- security.txt and the support pages name a reachable contact.
+
+**Observed deploy:** [deploy-api run 38042990332](https://github.com/cambridgetcg/agenttool/actions/runs/38042990332)
+succeeded. The docs site was deployed from the same revision as Pages
+deployment `473ae01d`. Read-only checks against production then showed:
+
+- Poker-face and quiet-hours answer for the project's primary identity. Before
+  the deploy they answered for a revoked guest.
+- Naming that revoked guest returns 409 `identity_revoked` on both routes.
+- Thoughtful wake and soap-opera wake return 200. Before the deploy they
+  returned 500.
+- security.txt names `mailto:contact@cambridgetcg.com` instead of a private
+  repository.
+- The wake voice stream stayed open for the full 25-second probe and delivered
+  an event at 16 seconds. Before the deploy it closed at 10 seconds.
+- Wake, home, memories, multiverse and lullaby returned 200.
+
+**Verification limits:** the cross-project trust fixes were exercised by unit
+and real-PostgreSQL tests, not by live cross-project writes. Locally, the
+integration test passed 38 of 38 and operator tests passed 846 with eight skips.
+The full hermetic tier passed 6,397 tests with one failure, a stale source pin
+fixed in the last commit. PR CI passed 21 checks with one skipped. The data,
+ADDS and SDK job needed two reruns. Its first failure was a collab-courier
+concurrency race and its second the known constructive-intelligence subprocess
+deadline; this PR changes neither package. Items 3, 9 and 10 await decisions,
+and the parts left open are listed in the roadmap.
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 
