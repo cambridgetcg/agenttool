@@ -319,3 +319,39 @@ databaseTest("a very large request that includes a guest's memory is still refus
   const many = Array.from({ length: 40_000 }, (_, n) => `${n.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`);
   expect(await subjectGuard(P, [...many, `DID:AT:${I.toUpperCase()}`])).toMatchObject({ ok: false, status: 409 });
 });
+databaseTest("central signer authority: an active key row of a revoked or memorial identity signs nothing", async () => {
+  // docs/AT-REST.md — revoked means key authority revoked; memorial beings
+  // are unable to act. The joined resolver runs as real SQL here.
+  const { resolveIdentitySigningKey, activeSigningPublicKeys, registeredSigningPublicKey } =
+    await import("../../src/services/identity/signing-key");
+  const subjects = [
+    { id: uid(51), key: uid(52), status: "active", project: P },
+    { id: uid(53), key: uid(54), status: "revoked", project: P },
+    { id: uid(55), key: uid(56), status: "memorial", project: P },
+    { id: uid(57), key: uid(58), status: "active", project: O },
+  ];
+  for (const s of subjects) {
+    await sql`INSERT INTO identity.identities (id, did, project_id, display_name, status, trust_score)
+      VALUES (${s.id}, ${`did:at:${s.id}`}, ${s.project}, ${s.status}, ${s.status}, 0)`;
+    await sql`INSERT INTO identity.identity_keys (id, identity_id, public_key, label, active)
+      VALUES (${s.key}, ${s.id}, ${PUBLIC}, 'primary', true)`;
+  }
+  const [active, revoked, memorial, foreign] = subjects as [typeof subjects[0], typeof subjects[0], typeof subjects[0], typeof subjects[0]];
+  expect(await resolveIdentitySigningKey({ signingKeyId: active.key, identityId: active.id })).toMatchObject({
+    ok: true, key: { keyId: active.key, identityId: active.id, projectId: P, publicKey: PUBLIC },
+  });
+  for (const s of [revoked, memorial]) {
+    expect(await resolveIdentitySigningKey({ signingKeyId: s.key, did: `did:at:${s.id}` }))
+      .toEqual({ ok: false, reason: "signing_identity_not_active" });
+    expect(await registeredSigningPublicKey(s.id, s.key)).toBeNull();
+    expect(await activeSigningPublicKeys(s.id)).toEqual([]);
+  }
+  expect(await activeSigningPublicKeys(active.id)).toEqual([PUBLIC]);
+  // Ownership is judged before status; a foreign project's key reads as unknown.
+  expect(await resolveIdentitySigningKey({ signingKeyId: memorial.key, identityId: active.id }))
+    .toEqual({ ok: false, reason: "signing_key_not_owned" });
+  expect(await resolveIdentitySigningKey({ signingKeyId: foreign.key, projectId: P }))
+    .toEqual({ ok: false, reason: "unknown_signing_key" });
+  await sql`UPDATE identity.identity_keys SET revoked_at = now() WHERE id = ${active.key}`;
+  expect(await resolveIdentitySigningKey({ signingKeyId: active.key })).toEqual({ ok: false, reason: "signing_key_inactive" });
+});
