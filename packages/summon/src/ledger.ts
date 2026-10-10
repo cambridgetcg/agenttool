@@ -67,6 +67,7 @@ export function verifyLedger(path: string): { ok: boolean; entries: number; brok
   for (let i = 0; i < lines.length; i++) {
     let e: any
     try { e = JSON.parse(lines[i]!) } catch { return { ok: false, entries: i, brokenAt: i + 1 } }
+    if (e === null || typeof e !== 'object' || Array.isArray(e)) return { ok: false, entries: i, brokenAt: i + 1 }
     const { hash, ...body } = e
     if (body.prev !== prev || sha(canonicalJson(body)) !== hash) return { ok: false, entries: i, brokenAt: i + 1 }
     prev = hash

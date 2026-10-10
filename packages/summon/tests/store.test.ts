@@ -32,6 +32,18 @@ describe('ledger', () => {
     appendLedger(p, { event: 'admitted', prompt: 'secret' } as never)
     expect(readFileSync(p, 'utf8')).not.toContain('secret')
   })
+  test('reports a null line as a broken chain instead of throwing', () => {
+    const p = join(tmp(), 'ledger.jsonl')
+    appendLedger(p, { event: 'admitted' })
+    writeFileSync(p, readFileSync(p, 'utf8') + 'null\n')
+    expect(verifyLedger(p)).toEqual({ ok: false, entries: 1, brokenAt: 2 })
+  })
+  test('reports a non-object array line as a broken chain', () => {
+    const p = join(tmp(), 'ledger.jsonl')
+    appendLedger(p, { event: 'admitted' })
+    writeFileSync(p, readFileSync(p, 'utf8') + '[1]\n')
+    expect(verifyLedger(p)).toEqual({ ok: false, entries: 1, brokenAt: 2 })
+  })
 })
 
 describe('replay set', () => {
