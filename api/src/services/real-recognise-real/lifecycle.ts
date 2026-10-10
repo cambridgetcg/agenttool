@@ -19,6 +19,7 @@ import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { mutualRecognitions } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -117,8 +118,9 @@ export interface RecogniseOpts {
   note: string | null;
   createdAt: Date;
   signature: string;
+  /** Registered key of `byAgentId`. The public key is always resolved
+   *  server-side — a caller-supplied public key is never trusted. */
   signingKeyId: string;
-  publicKeyB64: string;
 }
 
 export interface RecognitionResult {
@@ -138,6 +140,21 @@ export async function recognisePreSigned(opts: RecogniseOpts): Promise<Recogniti
     throw new Error("self_recognition_refused");
   }
 
+  // Resolve the recogniser's own registered key (docs/AT-REST.md: active
+  // key, owned by byAgentId, identity active). Verifying against a
+  // caller-supplied public key let any throwaway keypair mint a "signed"
+  // recognition as the agent — bearer is not consent.
+  const signer = await resolveIdentitySigningKey({
+    signingKeyId: opts.signingKeyId,
+    identityId: opts.byAgentId,
+  });
+  if (!signer.ok) {
+    if (signer.reason === "signing_key_not_owned" || signer.reason === "signing_identity_not_active") {
+      throw new Error(signer.reason);
+    }
+    throw new Error("signing_key_not_found");
+  }
+
   // Verify signature.
   const createdAtIso = opts.createdAt.toISOString();
   const sigOk = await verifyEd25519(
@@ -151,7 +168,7 @@ export async function recognisePreSigned(opts: RecogniseOpts): Promise<Recogniti
       createdAtIso,
     }),
     opts.signature,
-    opts.publicKeyB64,
+    signer.key.publicKey,
   );
   if (!sigOk) throw new Error("invalid_signature");
 

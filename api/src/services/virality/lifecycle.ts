@@ -30,7 +30,8 @@ import { and, asc, count, eq, max as drizzleMax } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { vibes, vibeTransmissions } from "../../db/schema/virality";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 import { emitPoint } from "../pyramid/points";
 import { rollRrrTickOutcome } from "../pyramid/luck";
@@ -463,24 +464,25 @@ async function assertSignatureVerifies(
   signingKeyId: string,
   expectedIdentityId: string,
 ): Promise<void> {
-  const [key] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      identityId: identityKeys.identityId,
-      active: identityKeys.active,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, signingKeyId))
-    .limit(1);
-  if (!key) {
-    throw new Error(`signing_key_id ${signingKeyId} not found`);
+  // Central signer authority (docs/AT-REST.md): an active key row of a
+  // revoked or memorial identity carries no signing authority.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId,
+    identityId: expectedIdentityId,
+  });
+  if (!resolved.ok) {
+    switch (resolved.reason) {
+      case "unknown_signing_key":
+        throw new Error(`signing_key_id ${signingKeyId} not found`);
+      case "signing_key_inactive":
+        throw new Error(`signing_key_id ${signingKeyId} is not active`);
+      case "signing_key_not_owned":
+        throw new Error(`signing_key_id ${signingKeyId} does not belong to caller`);
+      case "signing_identity_not_active":
+        throw new Error(`signing_key_id ${signingKeyId} belongs to an identity that is not active (revoked or memorial)`);
+    }
   }
-  if (!key.active) {
-    throw new Error(`signing_key_id ${signingKeyId} is not active`);
-  }
-  if (key.identityId !== expectedIdentityId) {
-    throw new Error(`signing_key_id ${signingKeyId} does not belong to caller`);
-  }
+  const key = resolved.key;
   const sig = base64ToBytes(signatureB64);
   const pubkey = base64ToBytes(key.publicKey);
   const ok = await verifyTransmission(att, sig, pubkey);

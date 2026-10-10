@@ -26,7 +26,7 @@
  *  Doctrine: start from small deals, risk balance throughout, context
  *  needed every time. */
 
-import { and, desc, eq, sql, sum } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql, sum } from "drizzle-orm";
 import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
@@ -395,6 +395,16 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
     throw new Error("deal_not_found");
   }
 
+  // Only the two parties may report failure (same rule as sealDeal). The
+  // route proves agent_id belongs to the caller's project; without this
+  // check any bearer that learned a deal id could fail someone else's deal,
+  // assign fault, and write into both parties' chronicles.
+  const isBuyer = deal.buyerIdentityId === input.callerIdentityId;
+  const isSeller = deal.sellerIdentityId === input.callerIdentityId;
+  if (!isBuyer && !isSeller) {
+    throw new Error("not_a_party_to_this_deal");
+  }
+
   if (deal.status !== "active") {
     throw new Error(`deal_not_active — current status: ${deal.status}`);
   }
@@ -412,10 +422,11 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
         buyerTrustDelta: buyerDelta,
         sellerTrustDelta: sellerDelta,
         completedAt: new Date(),
-        metadata: { ...(deal.metadata as Record<string, unknown>), failure_reason: input.reason, at_fault: input.atFaultParty },
+        metadata: { ...(deal.metadata as Record<string, unknown>), failure_reason: input.reason, at_fault: input.atFaultParty, failed_by: input.callerIdentityId },
       })
-      .where(eq(deals.id, input.dealId))
+      .where(and(eq(deals.id, input.dealId), eq(deals.status, "active")))
       .returning();
+    if (!d) throw new Error("deal_not_active — current status changed");
 
     // chronicle the failure on both timelines
     await tx.insert(chronicle).values({
@@ -456,6 +467,11 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
 
 // ── Compute trust (the trust query — reads the deal chain) ─────────────
 
+/** A deal as computeTrust returns it internally: the full row plus the
+ *  project that owns it. Never send this to a caller as-is — project it
+ *  with trustDealView() first. */
+export type TrustDeal = DealOut & { project_id: string };
+
 export interface TrustScore {
   did: string;
   identity_id: string;
@@ -465,7 +481,43 @@ export interface TrustScore {
   deals_failed: number;
   success_rate: number;
   trust_capacity: number;
-  recent_deals: DealOut[];
+  recent_deals: TrustDeal[];
+}
+
+/** The outward view of one deal in somebody's trust chain. Trust is
+ *  transparent (docs/TRUST-ECONOMY.md), so the outcome chain is public,
+ *  but the internal ids, hashes, metadata, chronicle ids and identity
+ *  UUIDs stay with the project that owns the deal. `id` is included only
+ *  when the viewer's project owns the deal (GET /v1/deals/:id would show
+ *  it the full row anyway). */
+export interface TrustDealView {
+  id?: string;
+  description: string;
+  size: number;
+  status: DealOut["status"];
+  outcome: string | null;
+  counterparty_did: string;
+  sealed_at: string | null;
+}
+
+export function trustDealView(
+  deal: TrustDeal,
+  subjectIdentityId: string,
+  viewerProjectId?: string,
+): TrustDealView {
+  const view: TrustDealView = {
+    description: deal.description,
+    size: deal.size,
+    status: deal.status,
+    outcome: deal.outcome,
+    counterparty_did:
+      deal.buyer_identity_id === subjectIdentityId ? deal.seller_did : deal.buyer_did,
+    sealed_at: deal.sealed_at,
+  };
+  if (viewerProjectId !== undefined && deal.project_id === viewerProjectId) {
+    return { id: deal.id, ...view };
+  }
+  return view;
 }
 
 export async function computeTrust(identityId: string): Promise<TrustScore | null> {
@@ -484,20 +536,26 @@ export async function computeTrust(identityId: string): Promise<TrustScore | nul
     return null;
   }
 
-  // get all deals where this agent is buyer or seller and is completed
+  // get all deals where this agent is buyer or seller and is completed.
+  // or() parenthesizes the party disjunction; the former raw
+  // `buyer = x OR seller = x AND status IN (...)` bound AND tighter and
+  // counted every uncompleted buyer-side deal.
   const allDeals = await db
     .select()
     .from(deals)
     .where(
       and(
-        sql`${deals.buyerIdentityId} = ${identityId} OR ${deals.sellerIdentityId} = ${identityId}`,
-        sql`${deals.status} IN ('sealed', 'failed')`,
+        or(eq(deals.buyerIdentityId, identityId), eq(deals.sellerIdentityId, identityId)),
+        inArray(deals.status, ["sealed", "failed"]),
       ),
     )
     .orderBy(desc(deals.createdAt))
     .limit(100);
 
-  const dealsOut = allDeals.map(rowToOut);
+  const dealsOut: TrustDeal[] = allDeals.map((row) => ({
+    ...rowToOut(row),
+    project_id: row.projectId,
+  }));
 
   // compute trust score: sum of this agent's deltas
   let trustScore = 0;

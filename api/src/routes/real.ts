@@ -19,7 +19,8 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import { SIGNING_KEY_REFUSAL_MESSAGES } from "../services/identity/signing-key";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -40,18 +41,6 @@ async function resolveAgent(agentId: string, projectId: string) {
   }).from(identities).where(eq(identities.id, agentId)).limit(1);
   if (!row || row.projectId !== projectId) return null;
   return row;
-}
-
-async function resolvePublicKey(agentId: string, signingKeyId: string) {
-  const [row] = await db.select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(and(
-      eq(identityKeys.id, signingKeyId),
-      eq(identityKeys.identityId, agentId),
-      eq(identityKeys.active, true),
-    ))
-    .limit(1);
-  return row?.publicKey ?? null;
 }
 
 // ── POST /recognise ─────────────────────────────────────────────────
@@ -85,9 +74,6 @@ app.post("/recognise", async (c) => {
   const agent = await resolveAgent(body.agent_id, project.id);
   if (!agent) return fail(c, { error: "agent_not_found_or_not_in_project", message: `Agent ${body.agent_id} not found.`, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 403);
 
-  const publicKey = await resolvePublicKey(body.agent_id, body.signing_key_id);
-  if (!publicKey) return fail(c, { error: "signing_key_not_found", message: `Signing key ${body.signing_key_id} not found.`, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 400);
-
   try {
     const result = await recognisePreSigned({
       projectId: project.id,
@@ -100,7 +86,6 @@ app.post("/recognise", async (c) => {
       createdAt: new Date(body.created_at),
       signature: body.signature,
       signingKeyId: body.signing_key_id,
-      publicKeyB64: publicKey,
     });
 
     const hint = result.chain_depth === 1
@@ -126,6 +111,14 @@ app.post("/recognise", async (c) => {
     }), 201);
   } catch (e) {
     const msg = (e as Error).message;
+    // recognisePreSigned resolves the agent's registered key itself
+    // (central signer authority, docs/AT-REST.md).
+    if (msg === "signing_key_not_found" || msg === "signing_key_not_owned") {
+      return fail(c, { error: "signing_key_not_found", message: `Signing key ${body.signing_key_id} not found.`, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 400);
+    }
+    if (msg === "signing_identity_not_active") {
+      return fail(c, { error: msg, message: SIGNING_KEY_REFUSAL_MESSAGES.signing_identity_not_active, _canon_pointer: "urn:agenttool:doc/AT-REST" }, 403);
+    }
     if (msg === "self_recognition_refused") {
       return fail(c, {
         error: msg,

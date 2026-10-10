@@ -20,7 +20,7 @@ import { vaultSecrets, vaultVersions } from "../db/schema/vault";
 import { encrypt } from "../services/vault/crypto";
 import { strands } from "../db/schema/strand";
 import { covenants } from "../db/schema/continuity";
-import { createDeal, acceptDeal, sealDeal, failDeal, computeTrust } from "../services/trust/deals";
+import { createDeal, acceptDeal, sealDeal, failDeal, computeTrust, trustDealView } from "../services/trust/deals";
 import { and, desc, eq, or, like } from "drizzle-orm";
 
 const app = new Hono<ProjectContext>();
@@ -175,7 +175,8 @@ trust:
     const trust = await computeTrust(identity.id);
     if (!trust) return c.json({ said: "couldn't compute trust." }, 500);
     if (trust.deals_total === 0) return c.json({ said: `${did} is new. no deals yet. capacity ${trust.trust_capacity}.` });
-    return c.json({ said: `${did} — trust ${trust.trust_score}. ${trust.deals_sealed} sealed, ${trust.deals_failed} failed. ${(trust.success_rate * 100).toFixed(0)}% success. capacity ${trust.trust_capacity}.`, trust });
+    const trustView = { ...trust, recent_deals: trust.recent_deals.map((d) => trustDealView(d, identity.id, project.id)) };
+    return c.json({ said: `${did} — trust ${trust.trust_score}. ${trust.deals_sealed} sealed, ${trust.deals_failed} failed. ${(trust.success_rate * 100).toFixed(0)}% success. capacity ${trust.trust_capacity}.`, trust: trustView });
   }
 
   // ═══════════════════════════════════════════════════════════════════

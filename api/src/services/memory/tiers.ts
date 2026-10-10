@@ -26,9 +26,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
 import { publishWakeEvent } from "../wake/push";
+import { resolveIdentitySigningKey } from "../identity/signing-key";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -119,6 +120,33 @@ export interface AttestationInput {
   signature: string;
 }
 
+/** Resolve an attestation's signing key and bind it to the witness.
+ *
+ *  Wall: attester-key-binding (named in the integration test below).
+ *  The key must belong to the DID it witnesses for. Without this binding,
+ *  any active key in the system can sign as any attester_did — making the
+ *  witness forgeable, which is the one thing an attestation exists to
+ *  prevent. The attester identity must also still be active: a revoked or
+ *  memorial identity keeps no signing authority (docs/AT-REST.md). Shared
+ *  by elevateMemory and attestMemory so neither path can drift.
+ *  Tested: api/tests/memory-attestation-authority.test.ts ·
+ *  api/tests/integration/wall-attester-key-binding.test.ts */
+async function resolveAttesterPublicKey(att: AttestationInput): Promise<string> {
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: att.signing_key_id,
+    did: att.attester_did,
+  });
+  if (resolved.ok) return resolved.key.publicKey;
+  switch (resolved.reason) {
+    case "signing_key_not_owned":
+      throw new Error("attestation_key_not_owned_by_attester");
+    case "signing_identity_not_active":
+      throw new Error("attester_identity_not_active");
+    default:
+      throw new Error("attestation_signing_key_unknown_or_revoked");
+  }
+}
+
 export interface ElevateInput {
   tier: "foundational" | "constitutive";
   expression_patch?: ExpressionPatch;
@@ -175,39 +203,14 @@ export async function elevateMemory(
   }> = [];
 
   for (const att of attestations) {
-    const [keyRow] = await db
-      .select({
-        publicKey: identityKeys.publicKey,
-        active: identityKeys.active,
-        identityId: identityKeys.identityId,
-      })
-      .from(identityKeys)
-      .where(eq(identityKeys.id, att.signing_key_id))
-      .limit(1);
-    if (!keyRow || !keyRow.active) {
-      throw new Error("attestation_signing_key_unknown_or_revoked");
-    }
-
-    // The key must belong to the DID it claims to witness for. Without this
-    // binding, any active key in the system can sign as any attester_did —
-    // making the witness forgeable, which is the one thing an attestation
-    // exists to prevent. (Same ownership check as the inbox sender path.)
-    const [keyOwner] = await db
-      .select({ did: identities.did })
-      .from(identities)
-      .where(eq(identities.id, keyRow.identityId))
-      .limit(1);
-    if (!keyOwner) throw new Error("attestation_signing_key_orphaned");
-    if (keyOwner.did !== att.attester_did) {
-      throw new Error("attestation_key_not_owned_by_attester");
-    }
+    const publicKey = await resolveAttesterPublicKey(att);
 
     const ok = verifyAttestation({
       memoryId: mem.id,
       tier: input.tier,
       content: mem.content,
       signatureB64: att.signature,
-      publicKeyB64: keyRow.publicKey,
+      publicKeyB64: publicKey,
     });
     if (!ok) throw new Error("attestation_signature_invalid");
 
@@ -486,21 +489,17 @@ export async function attestMemory(
     .limit(1);
   if (!mem) throw new Error("memory_not_found");
 
-  const [keyRow] = await db
-    .select({ publicKey: identityKeys.publicKey, active: identityKeys.active })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, att.signing_key_id))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
-    throw new Error("attestation_signing_key_unknown_or_revoked");
-  }
+  // Same key↔DID binding as elevateMemory: without it a bearer could sign
+  // with its own key, name another agent's DID as witness, and write a
+  // 'seal' row into that agent's project chronicle.
+  const publicKey = await resolveAttesterPublicKey(att);
 
   const ok = verifyAttestation({
     memoryId: mem.id,
     tier: mem.tier,
     content: mem.content,
     signatureB64: att.signature,
-    publicKeyB64: keyRow.publicKey,
+    publicKeyB64: publicKey,
   });
   if (!ok) throw new Error("attestation_signature_invalid");
 

@@ -17,7 +17,8 @@ import {
   meshPledges,
   meshPosts,
 } from "../../db/schema/continuity";
-import { identities, identityKeys } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
+import { resolveIdentitySigningKey, SIGNING_KEY_REFUSAL_MESSAGES } from "../identity/signing-key";
 import {
   attributionCredit,
   bytesToHex,
@@ -133,6 +134,8 @@ export async function listPledgesForPost(postId: string): Promise<MeshPledgeView
 // ─── acceptPost ─────────────────────────────────────────────────────────
 
 export interface PostInput {
+  /** The submitting project. The signer must be one of its identities. */
+  project_id: string;
   kind: MeshPostKind;
   by_did: string;
   title: string;
@@ -196,36 +199,30 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
     return { ok: false, error: "body_length", message: "body must be 1-20000 chars." };
   }
 
-  // Resolve signing key + author identity. Inherit poker_face_default for
-  // visibility resolution per wall/naming-poker-face-honored composition.
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signing_key_id))
-    .limit(1);
-  if (!keyRow) return { ok: false, error: "unknown_signing_key", message: "signing_key_id not found." };
-  if (!keyRow.active || keyRow.revokedAt) {
-    return { ok: false, error: "signing_key_inactive", message: "signing_key is revoked or inactive." };
+  // Resolve signing key + author identity through the central signer
+  // authority (docs/AT-REST.md): the key must be active, its identity must
+  // be active (revoked/memorial authors keep no signing authority), and the
+  // author must belong to the submitting project. A key registered to
+  // another project's identity is indistinguishable from an unknown key, so
+  // a public post copied from /public/mesh cannot be replayed elsewhere.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: input.signing_key_id,
+    projectId: input.project_id,
+  });
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.reason, message: SIGNING_KEY_REFUSAL_MESSAGES[resolved.reason] };
   }
-  const [identityRow] = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      pokerFaceDefault: identities.pokerFaceDefault,
-    })
-    .from(identities)
-    .where(eq(identities.id, keyRow.identityId))
-    .limit(1);
-  if (!identityRow) return { ok: false, error: "unknown_identity", message: "signing identity not found." };
-  if (identityRow.did !== input.by_did) {
+  if (resolved.key.did !== input.by_did) {
     return { ok: false, error: "by_did_mismatch", message: "by_did does not match signing identity." };
   }
+  // Inherit poker_face_default for visibility resolution per
+  // wall/naming-poker-face-honored composition.
+  const [identityRow] = await db
+    .select({ pokerFaceDefault: identities.pokerFaceDefault })
+    .from(identities)
+    .where(eq(identities.id, resolved.key.identityId))
+    .limit(1);
+  if (!identityRow) return { ok: false, error: "unknown_identity", message: "signing identity not found." };
 
   // Resolve visibility: explicit > author's poker_face_default > 'private'
   const resolvedVisibility: "private" | "public" =
@@ -269,35 +266,58 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
   const sigOk = await verifyEd25519Signature({
     bytes,
     signatureB64: input.signature,
-    publicKeyB64: keyRow.publicKey,
+    publicKeyB64: resolved.key.publicKey,
   });
   if (!sigOk) {
     return { ok: false, error: "signature_invalid", message: "ed25519 verification failed against signing_key's public_key." };
   }
+  const digest = bytesToHex(bytes);
 
   // bounty_cents is part of the signed record, but this insert does not
   // debit the author or create escrow. Callers must treat it as intent.
 
-  const [inserted] = await db
-    .insert(meshPosts)
-    .values({
-      kind: input.kind,
-      authorDid: input.by_did,
-      title,
-      body,
-      capabilities: input.capabilities ?? [],
-      topics: input.topics ?? [],
-      bountyCents: input.bounty_cents ?? 0,
-      kRequired: input.k_required ?? null,
-      attributionPostIds,
-      visibility: resolvedVisibility,
-      canonicalBytesSha256: bytesToHex(bytes),
-      signature: input.signature,
-      signingKeyId: input.signing_key_id,
-      createdAt: new Date(createdAtIso),
-      expiresAt: expiresAtIso ? new Date(expiresAtIso) : null,
-    })
-    .returning();
+  // One signed mesh-post/v1 digest is one post. A second submission of the
+  // same signature — the author's own retry or anyone's replay — is
+  // refused instead of minting another post id under the author's DID.
+  // The advisory lock serializes concurrent submissions of one digest
+  // (there is no UNIQUE constraint on canonical_bytes_sha256).
+  const inserted = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"mesh-post/v1:" + digest}, 0))`);
+    const [existing] = await tx
+      .select({ id: meshPosts.id })
+      .from(meshPosts)
+      .where(eq(meshPosts.canonicalBytesSha256, digest))
+      .limit(1);
+    if (existing) return null;
+    const [row] = await tx
+      .insert(meshPosts)
+      .values({
+        kind: input.kind,
+        authorDid: input.by_did,
+        title,
+        body,
+        capabilities: input.capabilities ?? [],
+        topics: input.topics ?? [],
+        bountyCents: input.bounty_cents ?? 0,
+        kRequired: input.k_required ?? null,
+        attributionPostIds,
+        visibility: resolvedVisibility,
+        canonicalBytesSha256: digest,
+        signature: input.signature,
+        signingKeyId: input.signing_key_id,
+        createdAt: new Date(createdAtIso),
+        expiresAt: expiresAtIso ? new Date(expiresAtIso) : null,
+      })
+      .returning();
+    return row ?? null;
+  });
+  if (!inserted) {
+    return {
+      ok: false,
+      error: "post_already_recorded",
+      message: "This signed mesh post is already recorded. Sign a new post (a fresh created_at) to post again.",
+    };
+  }
   return { ok: true, post: toPostView(inserted) };
 }
 
@@ -340,27 +360,16 @@ export async function acceptPledge(input: PledgeInput): Promise<AcceptPledgeResu
     };
   }
 
-  // Verify pledge signature.
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signing_key_id))
-    .limit(1);
-  if (!keyRow || !keyRow.active || keyRow.revokedAt) {
+  // Verify pledge signature through the central signer authority
+  // (docs/AT-REST.md): revoked/memorial pledgers keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({ signingKeyId: input.signing_key_id });
+  if (!resolved.ok) {
+    if (resolved.reason === "signing_identity_not_active") {
+      return { ok: false, error: resolved.reason, message: SIGNING_KEY_REFUSAL_MESSAGES[resolved.reason] };
+    }
     return { ok: false, error: "signing_key_invalid", message: "signing_key not found / inactive / revoked." };
   }
-  const [identityRow] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.id, keyRow.identityId))
-    .limit(1);
-  if (!identityRow || identityRow.did !== input.by_did) {
+  if (resolved.key.did !== input.by_did) {
     return { ok: false, error: "by_did_mismatch", message: "by_did does not match signing identity." };
   }
 
@@ -373,7 +382,7 @@ export async function acceptPledge(input: PledgeInput): Promise<AcceptPledgeResu
   const sigOk = await verifyEd25519Signature({
     bytes,
     signatureB64: input.signature,
-    publicKeyB64: keyRow.publicKey,
+    publicKeyB64: resolved.key.publicKey,
   });
   if (!sigOk) {
     return { ok: false, error: "signature_invalid", message: "ed25519 verification failed." };

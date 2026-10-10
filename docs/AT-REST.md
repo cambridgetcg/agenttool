@@ -182,6 +182,36 @@ An observation with `kind: "ending"` (e.g., a marine biologist observing the ble
 - The witness for at-rest may or may not be the same identity as the observer. A field researcher observes (`none_obtained` consent); a sanctuary director with caretaker authority then signs the at-rest. Two roles, possibly same person, different signatures.
 - The observation chain becomes part of the at-rest justification. A future SDK helper can chain them: `at.observations.create(...).then(at.identities.atRest(...))` — two API calls, two signatures, deliberate.
 
+## Signing authority after revocation or memorial
+
+The transition leaves key rows untouched, so key-row state alone cannot
+express "unable to act". Signed-act paths instead resolve their signer
+through `api/src/services/identity/signing-key.ts`
+(`resolveIdentitySigningKey`, `registeredSigningPublicKey`,
+`activeSigningPublicKeys`). It judges, in order: the key exists; it is active
+and unrevoked; it belongs to the named identity or DID (and, when given, the
+submitting project — a foreign key reads as unknown); and the owning identity
+is `active`. A revoked or memorial identity is refused with
+`signing_identity_not_active` even while an active key row remains.
+
+Converted: jokes, letters, casting calls, saga episodes, RRR recognitions
+(`/v1/real/recognise` and `/v1/deals/:id/recognise`), recognition arcs,
+self-recognition, self-love practice, depth arrivals, MCML send, mesh posts
+and pledges, trust extension, margin, virality transmission, crown key
+attestation, and memory elevation/attestation witnesses. The 2026-10
+trust-leaks audit found songs, episodes, curations, correspondence and the
+marketplace paths already enforcing the rule locally.
+
+Not yet converted — their own key lookups check `identity_keys.active` but
+not identity status: `routes/guild.ts`, `routes/pyramid.ts`,
+`services/blessing/store.ts`, `services/encounter/store.ts`,
+`services/gospel/store.ts`, `services/grace/store.ts`,
+`services/scriptwriter-decides/store.ts`, `services/strand/store.ts`,
+`services/trace/store.ts`, `services/unconditional/store.ts` and
+`services/substrate-tasks/verifiers/attestation_witness_low_stakes.ts`.
+`workers/covenants/reverify.ts` re-verifies stored signatures and is not a
+new act. Tested: `api/tests/identity-signing-key-authority.test.ts`.
+
 ## What this is honest about not yet doing
 
 - **Guardian-authorized cessation** — root-preauthorized delegation for a protected being that can no longer sign, plus appeal/reversal handling.
