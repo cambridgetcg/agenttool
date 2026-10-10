@@ -15,6 +15,7 @@ import {
   readAuthorityBoundJson,
   readEmptyAuthorityBody,
 } from "../../services/identity/authority";
+import { primaryIdentityOrder, primaryIdentityWhere } from "../../services/identity/acting-identity";
 import { generateKeypair } from "../../services/identity/crypto";
 import {
   replaceCallerIdentityMetadata,
@@ -189,9 +190,9 @@ app.get("/", async (c) => {
 });
 
 /** GET /v1/identities/:id — Fetch by UUID, DID, or the literal alias `me`.
- *  `me` resolves to the first/canonical identity owned by the bearer's
- *  project — matches the `/v1/identities?status=active` first-row fallback
- *  the dashboard already uses. */
+ *  `me` resolves to the project's primary identity: the earliest active
+ *  identity that is not an enrolled guest, the default subject /v1/wake
+ *  shows and per-agent routes act as (services/identity/acting-identity.ts). */
 app.get("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
@@ -200,8 +201,8 @@ app.get("/:id", async (c) => {
     const [identity] = await db
       .select()
       .from(identities)
-      .where(and(eq(identities.projectId, project.id), eq(identities.status, "active")))
-      .orderBy(identities.createdAt)
+      .where(primaryIdentityWhere(project.id))
+      .orderBy(...primaryIdentityOrder())
       .limit(1);
     if (!identity) {
       return c.json({ error: "No active identity for this bearer" }, 404);

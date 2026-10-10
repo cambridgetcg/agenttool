@@ -237,6 +237,26 @@ describe("no route picks the project's newest (or an arbitrary) identity as the 
     expect(offenders).toEqual([]);
   });
 
+  test("no project-scoped single-identity lookup ranks rows by its own rule", () => {
+    // "Oldest active" lookups written by hand miss the enrolled-guest
+    // exclusion (and the id tie-break): /v1/identities/me, /v1/system and
+    // substrate-task claims once resolved a guest that the wake never shows.
+    // Pick one identity by order only through primaryIdentityWhere/Order
+    // (or defaultSubjectWhere/Order for orientation surfaces).
+    const offenders: string[] = [];
+    for (const { path, text } of sources) {
+      const re = /\.from\(identities\)([\s\S]{0,400}?)\.limit\(1\)/g;
+      for (let m = re.exec(text); m; m = re.exec(text)) {
+        const body = m[1];
+        if (!/identities\.projectId/.test(body)) continue;
+        if (/eq\(identities\.(id|did),/.test(body)) continue;
+        if (!/\.orderBy\(/.test(body)) continue;
+        offenders.push(`${path}:${text.slice(0, m.index).split("\n").length}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   test("every per-agent route that acts for a project bearer resolves through the shared helper", () => {
     const routes = [
       "src/routes/poker-face.ts",

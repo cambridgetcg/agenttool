@@ -37,6 +37,7 @@ import { chronicle } from "../../db/schema/continuity";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { identities } from "../../db/schema/identity";
 import { substrateTasks } from "../../db/schema/marketplace";
+import { primaryIdentityOrder, primaryIdentityWhere } from "../identity/acting-identity";
 import {
   PLATFORM_IDENTITY_ID,
   PLATFORM_WALLET_ID,
@@ -335,7 +336,9 @@ export interface ClaimInput {
   projectId: string;
 }
 
-/** Resolve the calling project's primary identity (first active row). */
+/** Resolve the calling project's primary identity: the earliest active
+ *  identity that is not an enrolled guest (acting-identity.ts). A project
+ *  bearer never claims or completes a task as an enrolled guest. */
 async function resolveProjectIdentity(
   projectId: string,
   txn: typeof db,
@@ -343,13 +346,8 @@ async function resolveProjectIdentity(
   const [row] = await txn
     .select({ id: identities.id })
     .from(identities)
-    .where(
-      and(
-        eq(identities.projectId, projectId),
-        eq(identities.status, "active"),
-      ),
-    )
-    .orderBy(identities.createdAt)
+    .where(primaryIdentityWhere(projectId))
+    .orderBy(...primaryIdentityOrder())
     .limit(1);
   if (!row) throw new SubstrateTaskError("no_identity_in_project");
   return row.id;

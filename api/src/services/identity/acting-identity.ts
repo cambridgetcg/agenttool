@@ -32,7 +32,7 @@
  *
  * Doctrine: docs/API-COVERAGE.md "Choose the service, project and identity
  * explicitly" · docs/WAKE.md maintainer rule 1 (exclude revoked identities). */
-import { and, asc, eq, not, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, ne, not, sql, type SQL } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -151,6 +151,21 @@ export function primaryIdentityWhere(projectId: string): SQL {
 /** SQL form of `comparePrimaryOrder` (microsecond created_at, then id). */
 export function primaryIdentityOrder(): SQL[] {
   return [asc(identities.createdAt), asc(identities.id)];
+}
+
+/** SQL form of `chooseDefaultSubject` over the rows Wake loads (revoked
+ * excluded): primary candidates first, then oldest, id breaking ties. For
+ * orientation surfaces that load one row (/v1/dashboard). A project whose
+ * rows are all revoked has no default here, as in Wake. */
+export function defaultSubjectWhere(projectId: string): SQL {
+  return and(eq(identities.projectId, projectId), ne(identities.status, "revoked"))!;
+}
+
+export function defaultSubjectOrder(): SQL[] {
+  return [
+    sql`(${identities.status} = ${PRIMARY_IDENTITY_STATUS} and not ${enrolledGuestSql()}) desc`,
+    ...primaryIdentityOrder(),
+  ];
 }
 
 export type IdentitySelector =

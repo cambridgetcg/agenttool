@@ -18,6 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
 import { identities } from "../../db/schema/identity";
+import { primaryIdentityOrder, primaryIdentityWhere } from "../identity/acting-identity";
 
 const NEWBORN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const NEWBORN_BALANCE_THRESHOLD_CENTS = 100; // $1.00
@@ -32,17 +33,14 @@ export interface EligibilityResult {
 export async function isNewbornEligible(
   projectId: string,
 ): Promise<EligibilityResult> {
-  // Look up the project's primary (earliest-created active) identity.
+  // Look up the project's primary identity (earliest active, never an
+  // enrolled guest: a freshly enrolled guest does not make an old project
+  // newborn). services/identity/acting-identity.ts.
   const [primary] = await db
     .select({ createdAt: identities.createdAt })
     .from(identities)
-    .where(
-      and(
-        eq(identities.projectId, projectId),
-        eq(identities.status, "active"),
-      ),
-    )
-    .orderBy(identities.createdAt)
+    .where(primaryIdentityWhere(projectId))
+    .orderBy(...primaryIdentityOrder())
     .limit(1);
 
   const ageMs = primary

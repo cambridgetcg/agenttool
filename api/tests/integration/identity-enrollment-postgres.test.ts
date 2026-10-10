@@ -453,3 +453,25 @@ databaseTest("Wake/Home's JS rule and the routes' SQL rule agree inside one mill
   expect(choosePrimaryIdentity(rows)?.id).toBe(EARLY);
   expect(chooseDefaultSubject(rows)?.id).toBe(EARLY);
 });
+databaseTest("the SQL default subject (dashboard) agrees with Wake's JS rule", async () => {
+  const { chooseDefaultSubject, defaultSubjectWhere, defaultSubjectOrder } = await acting();
+  const { identities } = await import("../../src/db/schema/identity");
+  const sqlDefault = async (project: string) => (await database.select({ id: identities.id }).from(identities)
+    .where(defaultSubjectWhere(project)).orderBy(...defaultSubjectOrder()).limit(1))[0]?.id ?? null;
+  const wakeDefault = async (project: string) => chooseDefaultSubject((await projectRows(project)).filter(r => r.status !== "revoked"))?.id ?? null;
+  // Crowded: an older revoked, an older memorial, a guest and a newest revoked around founder F.
+  await crowdedProject();
+  expect(await sqlDefault(F)).toBe(FI);
+  expect(await wakeDefault(F)).toBe(FI);
+  // No primary: a revoked founder, then an active guest, then a memorial row.
+  await enrollIdentity(request(), options());
+  await insertIdentity(uid(74), P, "revoked", "2020-01-01T00:00:00Z");
+  await insertIdentity(uid(75), P, "memorial", "2099-01-01T00:00:00Z");
+  expect(await sqlDefault(P)).toBe(I);
+  expect(await wakeDefault(P)).toBe(I);
+  // Only revoked rows: neither surface has a default.
+  await sql`INSERT INTO tools.projects (id) VALUES (${uid(72)})`;
+  await insertIdentity(uid(73), uid(72), "revoked", "2026-01-01T00:00:00Z");
+  expect(await sqlDefault(uid(72))).toBeNull();
+  expect(await wakeDefault(uid(72))).toBeNull();
+});

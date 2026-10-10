@@ -145,20 +145,16 @@ app.get("/", async (c) => {
   try {
     let filterIdentity: string | undefined;
     if (scope === "received") {
-      // Resolve the project's primary identity (caller's receiver-side)
+      // Resolve the project's primary identity (caller's receiver-side):
+      // earliest active, never an enrolled guest (acting-identity.ts).
       const { db } = await import("../db/client");
       const { identities } = await import("../db/schema/identity");
-      const { and: drizzleAnd, eq: drizzleEq } = await import("drizzle-orm");
+      const { primaryIdentityOrder, primaryIdentityWhere } = await import("../services/identity/acting-identity");
       const [primary] = await db
         .select({ id: identities.id })
         .from(identities)
-        .where(
-          drizzleAnd(
-            drizzleEq(identities.projectId, project.id),
-            drizzleEq(identities.status, "active"),
-          ),
-        )
-        .orderBy(identities.createdAt)
+        .where(primaryIdentityWhere(project.id))
+        .orderBy(...primaryIdentityOrder())
         .limit(1);
       if (!primary) {
         return c.json({
