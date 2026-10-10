@@ -280,13 +280,16 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
   // same signature — the author's own retry or anyone's replay — is
   // refused instead of minting another post id under the author's DID.
   // The advisory lock serializes concurrent submissions of one digest
-  // (there is no UNIQUE constraint on canonical_bytes_sha256).
+  // (there is no UNIQUE constraint or index on canonical_bytes_sha256 —
+  // a later migration should add one). The author predicate rides
+  // idx_mesh_posts_author instead of scanning every post; the signed
+  // bytes include by_did, so it never changes which rows match.
   const inserted = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"mesh-post/v1:" + digest}, 0))`);
     const [existing] = await tx
       .select({ id: meshPosts.id })
       .from(meshPosts)
-      .where(eq(meshPosts.canonicalBytesSha256, digest))
+      .where(and(eq(meshPosts.authorDid, input.by_did), eq(meshPosts.canonicalBytesSha256, digest)))
       .limit(1);
     if (existing) return null;
     const [row] = await tx

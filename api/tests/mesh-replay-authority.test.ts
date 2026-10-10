@@ -114,6 +114,20 @@ describe("mesh posts cannot be replayed under the author's DID", () => {
     expect(dedupe?.params).toContain(DIGEST);
   });
 
+  test("the digest lookup is bounded by the author index, not a scan of every post", async () => {
+    // mesh_posts has no index on canonical_bytes_sha256 (migration
+    // 20260518T180000_mesh.sql); idx_mesh_posts_author leads with
+    // author_did. The digest already binds the author, so adding the
+    // author predicate narrows the scan without changing what matches.
+    await submit();
+    const dedupe = queries.find((q) => q.sql.startsWith('select "id" from "agent_continuity"."mesh_posts"'))!;
+    const where = dedupe.sql.slice(dedupe.sql.indexOf(" where "));
+    expect(where).toContain('"author_did" =');
+    expect(where).toContain('"canonical_bytes_sha256" =');
+    expect(where).toMatch(/ and /);
+    expect(dedupe.params).toContain(DID);
+  });
+
   test("another project replaying the public post is refused as an unknown key", async () => {
     ownerProject = FOREIGN;
     const result = await submit({ visibility: "private" });
