@@ -68,6 +68,16 @@ describe("the published 401 docs link matches the server and resolves", () => {
     expect(shown?.[1]).toBe(live);
   });
 
+  test("the Python SDK's RateLimitError carries the server's 429 docs link", () => {
+    const source = readFileSync(
+      join(REPO, "packages/sdk-py/src/agenttool/exceptions.py"),
+      "utf8",
+    );
+    const start = source.indexOf("class RateLimitError");
+    const body = source.slice(start, source.indexOf("\nclass ", start + 1));
+    expect(body).toContain(`docs="${STOCK_STATUS_GUIDANCE[429].docs}"`);
+  });
+
   test("the Python SDK's AuthenticationError carries the same docs link", () => {
     const source = readFileSync(
       join(REPO, "packages/sdk-py/src/agenttool/exceptions.py"),

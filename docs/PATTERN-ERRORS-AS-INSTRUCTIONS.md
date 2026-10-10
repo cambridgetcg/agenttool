@@ -32,7 +32,7 @@ The target guided-error shape is:
       "path": null
     }
   ],
-  "docs": "https://docs.agenttool.dev/inbox#covenant-gate",
+  "docs": "https://docs.agenttool.dev/inbox#post-message",
   "details": { … }                       // OPTIONAL — validation details
 }
 ```
@@ -114,7 +114,7 @@ and
   "next_actions": [
     { "action": "Ask the recipient project or its inherited-org owner to declare a covenant naming your sender DID", "method": null, "path": null }
   ],
-  "docs": "https://docs.agenttool.dev/inbox#covenant-gate"
+  "docs": "https://docs.agenttool.dev/inbox#post-message"
 }
 ```
 

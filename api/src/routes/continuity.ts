@@ -310,7 +310,7 @@ const covenantSchema = z.object({
 
 // Map a covenant row (Drizzle camelCase) to the snake_case shape the rest
 // of the API uses. Centralised so POST + GET + PATCH return identically.
-function covenantToOut(row: typeof covenants.$inferSelect) {
+export function covenantToOut(row: typeof covenants.$inferSelect) {
   return {
     id: row.id,
     project_id: row.projectId,
@@ -327,6 +327,11 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
     established_at: row.establishedAt,
     updated_at: row.updatedAt,
     dissolved_at: row.dissolvedAt,
+    // The initiator's declaration signature (null for unsigned legacy v1).
+    // A recipient cosigns over this exact value and sends it back as
+    // initiator_signature_b64 to POST /v1/covenants/:id/accept. Verification
+    // material the peer already sent over federation, not a secret.
+    initiator_signature_b64: row.signature,
     // Cross-instance covenants (Horizon B, Slice 2):
     received_from_instance: row.receivedFromInstance,
     propagation_status: row.propagationStatus,

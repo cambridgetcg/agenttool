@@ -248,7 +248,48 @@ describe("guided next steps resolve to mounted routes", () => {
   });
 });
 
+/** errors.ts docs links whose page the docs site does not serve, each with
+ *  why it was not repointed in place. Shrinks as pages are published. */
+const KNOWN_UNSERVED_ERROR_DOCS: Record<string, string> = {
+  "crypto-payment#webhooks": "no published page documents the crypto deposit webhooks",
+  idempotency: "no published page documents Idempotency-Key semantics",
+  "superpowers/specs/2026-05-12-substrate-tasks-design.md":
+    "internal design spec; apps/docs does not publish docs/superpowers",
+};
+
 describe("refusal docs links land on a real section", () => {
+  test("every docs link in errors.ts names a page apps/docs serves (and its anchor)", () => {
+    const source = readFileSync(join(SRC, "lib/errors.ts"), "utf8");
+    const docsRoot = join(API_ROOT, "..", "apps/docs");
+    const unserved: string[] = [];
+    for (const match of source.matchAll(/\$\{DOCS_BASE\}\/([A-Za-z0-9._\/-]+)(#[A-Za-z0-9_-]+)?/g)) {
+      const [, page, hash = ""] = match;
+      const link = `${page}${hash}`;
+      if (Object.hasOwn(KNOWN_UNSERVED_ERROR_DOCS, link)) continue;
+      const file = [page!, `${page}.html`, `${page}/index.html`]
+        .map((candidate) => join(docsRoot, candidate))
+        .find((candidate) => {
+          try {
+            return statSync(candidate).isFile();
+          } catch {
+            return false;
+          }
+        });
+      if (!file) {
+        unserved.push(`${link} (no page)`);
+        continue;
+      }
+      if (hash && file.endsWith(".html") && !readFileSync(file, "utf8").includes(`id="${hash.slice(1)}"`)) {
+        unserved.push(`${link} (no anchor)`);
+      }
+    }
+    expect(unserved).toEqual([]);
+    const known = Object.keys(KNOWN_UNSERVED_ERROR_DOCS).filter(
+      (link) => !source.includes(`\${DOCS_BASE}/${link}`),
+    );
+    expect(known, "no longer linked — remove from KNOWN_UNSERVED_ERROR_DOCS").toEqual([]);
+  });
+
   // The 401 and insufficient_credits bodies are the first guidance most
   // agents see; their anchors were missing from the docs pages.
   test("401 and insufficient_credits docs anchors exist in apps/docs", async () => {

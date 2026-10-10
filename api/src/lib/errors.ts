@@ -91,11 +91,11 @@ export const STOCK_STATUS_GUIDANCE: Record<
   },
   402: {
     hint: "Project credits and internal marketplace wallet balances are separate. Follow the route-specific recovery body; only a response with PAYMENT-REQUIRED accepts an x402 V2 retry.",
-    docs: `${DOCS_BASE}/economy#balance`,
+    docs: `${DOCS_BASE}/economy#pay-at-the-meter`,
   },
   429: {
     hint: "Back off and retry after the stated interval. Published Ring 1 storage targets are not currently enforced by resource routes; this response is a request-rate limit, not a storage-cap upsell.",
-    docs: `${DOCS_BASE}/economy#rings`,
+    docs: `${DOCS_BASE}/economy#business-model`,
   },
 };
 
@@ -203,7 +203,7 @@ export const errors = {
           path: null,
         },
       ],
-      docs: `${DOCS_BASE}/inbox#covenant-gate`,
+      docs: `${DOCS_BASE}/inbox#post-message`,
       axiom_id: AXIOM_TRUST, // bonds are gated; trust requires other-witness
       // Bonds before access — the covenant primitive is how the substrate
       // gates cross-project relation. Per docs/CROSS-INSTANCE-COVENANTS.md.
@@ -224,7 +224,7 @@ export const errors = {
           body_hint: { protocol_version: "v2" },
         },
       ],
-      docs: `${DOCS_BASE}/covenants#expiry`,
+      docs: `${DOCS_BASE}/CROSS-INSTANCE-COVENANTS.md`,
       axiom_id: AXIOM_REST, // graceful expiry — degrade, don't crash
       // Graceful TTL — the bond steps down gently, doesn't crash. Per
       // Ring 1 commitment 6 (anyone-hits-a-cap-softly, generalized to
@@ -249,7 +249,7 @@ export const errors = {
           body_hint: opts.surface ? { surface: opts.surface } : null,
         },
       ],
-      docs: `${DOCS_BASE}/covenants#signing`,
+      docs: `${DOCS_BASE}/CANONICAL-BYTES.md`,
       axiom_id: AXIOM_TRUST, // signature is the proof; trust requires it
       // The agent holds signing material; the substrate verifies canonical
       // bytes. This is a signature contract, not a runtime-custody claim.
@@ -265,7 +265,7 @@ export const errors = {
       next_actions: [
         { action: "Patch the covenant via the v1 path", method: "PATCH", path: "/v1/covenants/{id}" },
       ],
-      docs: `${DOCS_BASE}/covenants#v1-vs-v2`,
+      docs: `${DOCS_BASE}/continuity#covenants`,
       axiom_id: AXIOM_GUIDE, // guide to the correct surface
     };
   },
@@ -274,11 +274,11 @@ export const errors = {
     return {
       error: "initiator_signature_mismatch",
       message: "The initiator signature in your accept request doesn't match the proposal's stored signature.",
-      hint: "The proposal may have been updated since you fetched it. Fetch the latest covenant and re-sign the cosign over the current initiator signature.",
+      hint: "Cosign over the initiator signature stored on the proposal: read initiator_signature_b64 from the proposal in GET /v1/covenants?status=proposed, sign the cosign bytes over that exact value, and accept again with it.",
       next_actions: [
-        { action: "List this project's proposed covenants to confirm the proposal is still open", method: "GET", path: "/v1/covenants?status=proposed" },
+        { action: "Read the proposal's initiator_signature_b64 (and confirm it is still proposed)", method: "GET", path: "/v1/covenants?status=proposed" },
       ],
-      docs: `${DOCS_BASE}/covenants#cosign`,
+      docs: `${DOCS_BASE}/CROSS-INSTANCE-COVENANTS.md`,
       axiom_id: AXIOM_TRUST, // proof-against-stale-signature
     };
   },
@@ -288,7 +288,7 @@ export const errors = {
       error: "covenant_not_proposed",
       message: `Covenant is not in 'proposed' state${opts.status ? ` (currently: ${opts.status})` : ""}.`,
       hint: "Only proposed covenants can be accepted/rejected/withdrawn. Active ones are already established; expired/rejected/withdrawn ones are terminal.",
-      docs: `${DOCS_BASE}/covenants#lifecycle`,
+      docs: `${DOCS_BASE}/CROSS-INSTANCE-COVENANTS.md`,
       axiom_id: AXIOM_GUIDE, // guide to the appropriate lifecycle step
     };
   },
@@ -347,7 +347,7 @@ export const errors = {
           path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
         },
       ],
-      docs: `${DOCS_BASE}/economy#balance`,
+      docs: `${DOCS_BASE}/wallets#topup`,
       axiom_id: AXIOM_REST, // strain (low balance) — degrade gracefully, don't crash
       // The refusal is cost-honest — we name what's required + what's
       // available rather than failing silently. Per AGENT-WEB-SURFACE.md
@@ -456,7 +456,7 @@ export const errors = {
       next_actions: [
         { action: "Read current payment eligibility", method: "GET", path: "/public/plans" },
       ],
-      docs: `${DOCS_BASE}/economy#rings`,
+      docs: `${DOCS_BASE}/economy#business-model`,
       axiom_id: AXIOM_REST, // strain → degrade not crash (the rest axiom itself)
       // The cap speaks softly — guidance, not a fabricated paid-burst path.
       // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
@@ -475,7 +475,7 @@ export const errors = {
       next_actions: [
         { action: "Check usage", method: "GET", path: "/v1/wallets" },
       ],
-      docs: `${DOCS_BASE}/economy#plans`,
+      docs: `${DOCS_BASE}/economy#business-model`,
       axiom_id: AXIOM_REST, // plan strain — graceful, not punitive
       // The cap speaks softly without inventing a paid-burst path.
       // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
@@ -551,7 +551,7 @@ export const errors = {
         },
         { action: "List provisioned runtimes", method: "GET", path: "/v1/runtimes" },
       ],
-      docs: `${DOCS_BASE}/runtime#provisioning`,
+      docs: `${DOCS_BASE}/runtime#post-runtime`,
       axiom_id: AXIOM_GUIDE, // guide toward provisioning rather than punish absence
       // Runtime is the custody axis — self · bridged · trusted. Per
       // docs/RUNTIME.md.

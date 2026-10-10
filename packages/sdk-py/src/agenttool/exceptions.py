@@ -428,7 +428,7 @@ class RateLimitError(AgentToolError):
             hint=hint,
             status=429,
             error_code="rate_limit",
-            docs="https://docs.agenttool.dev/economy#rings",
+            docs="https://docs.agenttool.dev/economy#business-model",
         )
         self.retry_after = retry_after
         self.detail = detail
