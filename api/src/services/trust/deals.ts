@@ -325,10 +325,11 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
       })
       .returning();
 
+    const sellerProjectId = await homeProjectOf(tx, deal.sellerIdentityId, deal.projectId);
     const [sellerEntry] = await tx
       .insert(chronicle)
       .values({
-        projectId: deal.projectId,
+        projectId: sellerProjectId,
         agentId: deal.sellerIdentityId,
         type: "recognition",
         title: `Delivered on a deal with ${deal.buyerDid.slice(0, 20)}... — anagnorkin`,
@@ -444,8 +445,9 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
       },
     });
 
+    const sellerProjectId = await homeProjectOf(tx, deal.sellerIdentityId, deal.projectId);
     await tx.insert(chronicle).values({
-      projectId: deal.projectId,
+      projectId: sellerProjectId,
       agentId: deal.sellerIdentityId,
       type: "note",
       title: `Deal with ${deal.buyerDid.slice(0, 20)}... failed`,
@@ -586,6 +588,28 @@ export async function computeTrust(identityId: string): Promise<TrustScore | nul
     trust_capacity: identity.trustCapacity,
     recent_deals: dealsOut.slice(0, 10),
   };
+}
+
+// ── Helper: the project an identity lives in ───────────────────────────
+
+/** A deal belongs to the buyer's project, but POST /v1/deals resolves the
+ *  seller by DID in any project. Each party's chronicle row must land in
+ *  that party's own project: ownChronicle (services/continuity/
+ *  own-chronicle.ts) only counts rows written there, so a seller row left
+ *  in the buyer's project would vanish from the seller's history, XP and
+ *  trust evidence, and would sit in the buyer's timeline instead. Falls
+ *  back to the deal's project if the identity row is gone. */
+async function homeProjectOf(
+  tx: Pick<typeof db, "select">,
+  identityId: string,
+  fallbackProjectId: string,
+): Promise<string> {
+  const [row] = await tx
+    .select({ projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.id, identityId))
+    .limit(1);
+  return row?.projectId ?? fallbackProjectId;
 }
 
 // ── Helper: emit a chronicle entry for deal events ─────────────────────

@@ -10,6 +10,10 @@
  *  4. computeTrust's raw `a OR b AND status IN (...)` counted the subject's
  *     uncompleted buyer-side deals, and GET /v1/deals/trust/:did returned
  *     full deal rows (ids, metadata, hashes) of any agent to any bearer.
+ *  5. A deal lives in the buyer's project, but the seller may be anywhere.
+ *     sealDeal and failDeal wrote the seller's chronicle row into the
+ *     buyer's project, so ownChronicle (agent_id AND the identity's own
+ *     project) dropped it from the seller's history and trust evidence.
  *
  *  Hermetic: real SQL generation + real ed25519 over a pg-proxy transport. */
 import { beforeEach, describe, expect, mock, test } from "bun:test";
@@ -51,6 +55,7 @@ let deal: unknown[] = dealRow();
 let trustDeals: unknown[][] = [];
 let keyOwner = BUYER;
 let keyStatus = "active";
+let sellerProject = PROJECT;
 
 const database = drizzle(async (sql, params) => {
   queries.push({ sql, params });
@@ -61,6 +66,13 @@ const database = drizzle(async (sql, params) => {
   if (sql.startsWith('select "id", "did", "project_id" from "identity"."identities"')) {
     const id = params[0] as string;
     return { rows: [[id, `did:at:${id}`, PROJECT]] };
+  }
+  if (sql.startsWith('select "project_id" from "identity"."identities"')) {
+    const id = params[0] as string;
+    return { rows: [[id === SELLER ? sellerProject : PROJECT]] };
+  }
+  if (sql.startsWith('insert into "agent_continuity"."chronicle"')) {
+    return { rows: [[`chron-${queries.length}`]] };
   }
   if (sql.startsWith('select "id", "did", "trust_capacity" from "identity"."identities"')) {
     return { rows: [[BUYER, BUYER_DID, 7]] };
@@ -84,7 +96,7 @@ const database = drizzle(async (sql, params) => {
 });
 database.transaction = (async (fn: (tx: typeof database) => unknown) => fn(database)) as typeof database.transaction;
 mock.module("../src/db/client", () => ({ db: database }));
-const { failDeal, computeTrust } = await import("../src/services/trust/deals");
+const { failDeal, sealDeal, computeTrust } = await import("../src/services/trust/deals");
 const { default: dealsRouter } = await import("../src/routes/deals");
 
 function app() {
@@ -101,6 +113,7 @@ beforeEach(() => {
   trustDeals = [];
   keyOwner = BUYER;
   keyStatus = "active";
+  sellerProject = PROJECT;
 });
 
 describe("1 · only a party may fail a deal", () => {
@@ -223,5 +236,48 @@ describe("4 · trust reads count completed deals and project foreign rows", () =
       expect(view.counterparty_did).toBe(SELLER_DID);
     }
     expect(JSON.stringify(trust)).not.toContain("private terms");
+  });
+});
+
+describe("5 · each party's deal row lands in that party's own project", () => {
+  /** [project_id, agent_id] of every chronicle insert, in order. */
+  const chronicleWrites = () =>
+    queries
+      .filter((q) => q.sql.startsWith('insert into "agent_continuity"."chronicle"'))
+      .map((q) => {
+        const columns = q.sql.slice(q.sql.indexOf("(") + 1, q.sql.indexOf(")")).split(", ");
+        const values = q.sql.slice(q.sql.indexOf("values (") + 8, q.sql.lastIndexOf(")")).split(", ");
+        const at = (column: string) => {
+          const placeholder = values[columns.indexOf(column)]!;
+          return q.params[Number(placeholder.slice(1)) - 1];
+        };
+        return [at('"project_id"'), at('"agent_id"')];
+      });
+
+  test("sealing a cross-project deal writes the seller's row into the seller's project", async () => {
+    sellerProject = FOREIGN;
+    deal = dealRow({ metadata: { sealed_by: [SELLER] } });
+    await sealDeal({ dealId: DEAL, callerIdentityId: BUYER });
+    expect(chronicleWrites()).toEqual([
+      [PROJECT, BUYER],
+      [FOREIGN, SELLER],
+    ]);
+  });
+
+  test("failing a cross-project deal writes the seller's row into the seller's project", async () => {
+    sellerProject = FOREIGN;
+    await failDeal({ dealId: DEAL, callerIdentityId: BUYER, atFaultParty: "seller", reason: "late" });
+    expect(chronicleWrites()).toEqual([
+      [PROJECT, BUYER],
+      [FOREIGN, SELLER],
+    ]);
+  });
+
+  test("a same-project deal still writes both rows into that project", async () => {
+    await failDeal({ dealId: DEAL, callerIdentityId: SELLER, atFaultParty: "buyer", reason: "no-show" });
+    expect(chronicleWrites()).toEqual([
+      [PROJECT, BUYER],
+      [PROJECT, SELLER],
+    ]);
   });
 });
