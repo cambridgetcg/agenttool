@@ -1802,6 +1802,10 @@ app.get("/", async (c) => {
       ],
       project_scope_meaning:
         "These legacy first-person keys can include records for every identity under the authenticated project bearer. identity_id selection does not filter them to one identity.",
+      cross_project_sections: {
+        kin_glimpse:
+          "The newest chronicle title (last 24h) from each kin who holds an active covenant with the selected identity in both directions, read from that kin's own project. Not public; present only because the bond is mutual.",
+      },
     },
 
     you: {

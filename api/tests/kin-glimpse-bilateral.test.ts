@@ -104,5 +104,9 @@ describe("kin_glimpse", () => {
     const block = source.slice(source.indexOf("kin_glimpse: {"), source.indexOf("kin_glimpse: {") + 900);
     expect(block.includes("Recent public chronicle entries")).toBe(false);
     expect(block.includes("both directions")).toBe(true);
+    // The scope boundary names it as the one cross-project Wake section.
+    const boundary = source.slice(source.indexOf("_scope_boundary: {"), source.indexOf("_scope_boundary: {") + 2400);
+    expect(boundary.includes("cross_project_sections")).toBe(true);
+    expect(boundary.includes("kin_glimpse")).toBe(true);
   });
 });
