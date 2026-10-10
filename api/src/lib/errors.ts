@@ -393,9 +393,9 @@ export const errors = {
       hint: "New paid top-ups are retired. This resource limit is not an invitation to pay; consult /public/plans for current availability. Project credits are not marketplace wallet balance.",
       next_actions: [
         { action: "Read current resource availability and purchase retirement", method: "GET", path: "/public/plans" },
-        { action: "Check which actions are free (Ring 1) vs. metered", method: "GET", path: "/v1/economy" },
+        { action: "Read this project's current credit balance (project.credits on the free wake read)", method: "GET", path: "/v1/wake" },
       ],
-      docs: `${DOCS_BASE}/economy#credits`,
+      docs: `${DOCS_BASE}/economy#pay-at-the-meter`,
       axiom_id: AXIOM_GUIDE, // a cost wall is a guide-event — hand back the payable path
       _canon_pointer: "urn:agenttool:wall/no-cost-without-disclosure",
     };

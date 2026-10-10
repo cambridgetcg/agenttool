@@ -8,6 +8,8 @@
  *  Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md. */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { errors } from "../src/lib/errors";
 
@@ -33,6 +35,28 @@ describe("errors.insufficientCredits", () => {
     expect(body.hint).toContain("not an invitation to pay");
     expect(body.next_actions!.some((a) => a.path === "/public/plans")).toBe(true);
     expect(body.docs).toBeTruthy();
+  });
+
+  test("points at routes that exist: the credit balance lives on GET /v1/wake", () => {
+    const body = errors.insufficientCredits({ reason: "memory.search", need: 3, have: 1 });
+    const paths = body.next_actions!.map((a) => `${a.method} ${a.path}`);
+    // GET /v1/economy was never mounted (live 404); the bearer's project
+    // balance is `project.credits` on the free wake read.
+    expect(paths).not.toContain("GET /v1/economy");
+    expect(paths).toEqual(["GET /public/plans", "GET /v1/wake"]);
+    const balance = body.next_actions!.find((a) => a.path === "/v1/wake")!;
+    expect(balance.action).toMatch(/project\.credits/);
+    const wakeSource = readFileSync(join(import.meta.dir, "../src/services/wake/build.ts"), "utf8");
+    expect(wakeSource).toMatch(/credits: project\.credits/);
+  });
+
+  test("its docs link names an anchor the economy page actually has", () => {
+    const body = errors.insufficientCredits();
+    const url = new URL(body.docs!);
+    expect(`${url.origin}${url.pathname}`).toBe("https://docs.agenttool.dev/economy");
+    const page = readFileSync(join(import.meta.dir, "../../apps/docs/economy.html"), "utf8");
+    expect(url.hash.length).toBeGreaterThan(1);
+    expect(page.includes(`id="${url.hash.slice(1)}"`), `apps/docs/economy.html lacks ${url.hash}`).toBe(true);
   });
 
   test("degrades gracefully when amounts are unknown", () => {
