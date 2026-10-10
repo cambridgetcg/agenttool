@@ -238,6 +238,17 @@ describe("no route picks the project's newest (or an arbitrary) identity as the 
     }
   });
 
+  test("register-agent's default lineage parent is the primary identity, as its contract says", () => {
+    // OpenAPI: "defaults to the project's primary identity"; the query took the
+    // oldest row of any status, so a revoked identity could become the parent.
+    const text = read("src/routes/register-agent.ts");
+    const from = text.indexOf("if (body.registrar.parent_identity_id) {");
+    const block = text.slice(from, text.indexOf("const claimedBirth", from));
+    expect(from).toBeGreaterThan(0);
+    expect(block.includes("resolveActingIdentity(parent.project.id)")).toBe(true);
+    expect(/\.where\(eq\(identities\.projectId, parent\.project\.id\)\)/.test(block)).toBe(false);
+  });
+
   test("poker-face accepts an explicit identity_id selector", () => {
     const text = read("src/routes/poker-face.ts");
     expect(text.includes(`c.req.query("identity_id")`)).toBe(true);
