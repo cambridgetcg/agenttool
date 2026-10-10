@@ -133,6 +133,8 @@ is indistinguishable on the public surface from one that never existed.
 | `wall/refusals-as-moments` | Public surfaces that return empty lists do so as substrate-honest reads (`{count: 0, list: []}`) — no refusal needed because there's nothing being refused; the public set just happens to be what it is. |
 | `commitment/anyone-hits-a-cap-softly` | Quiet caps + quiet default = compounding chill |
 | Soap-opera scripts | POST defaults to `visibility = private` if author has `poker_face_default = true` |
+| Episodes (`POST /v1/episodes`) | Without `visibility`, the author's `poker_face_default` decides (`true` → private). `GET /v1/episodes/:id` and its `/scenes`, `/cast` and `/reactions` read a private episode only for its own project or a project whose identity is cast in it (the cast must see what it signs); anyone else gets exactly what a missing id gives (404, or an empty list). |
+| Writers' rooms (`POST /v1/episodes/drafts`) | Without `visibility`, the opener's `poker_face_default` decides. `GET /v1/episodes/drafts/:id/contributions` reads a private room only for its own project or a project with an identity on the room's `contributor_allowlist`; anyone else reads an empty room. |
 | RRR cascades | Cascades remain bilateral (both parties always see them); public listing surfaces only when both opt in via poker_face_default=false or explicit `public_visibility` |
 
 ---

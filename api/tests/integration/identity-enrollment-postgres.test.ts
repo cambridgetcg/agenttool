@@ -45,7 +45,7 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory')`).length) throw new Error("refusing existing application schemas");
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','episodes')`).length) throw new Error("refusing existing application schemas");
   await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory;
     CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
@@ -69,6 +69,10 @@ beforeAll(async () => {
   // The migration carries its own BEGIN/COMMIT; the pooled fixture client runs its statements directly.
   await sql.unsafe(readFileSync(new URL("../../migrations/20260710T130000_identity_recovery_proofs.sql", import.meta.url), "utf8")
     .replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ""));
+  // Episodes (self-contained schema) for the play-privacy read rule.
+  for (const file of ["20260518T060000_episodes.sql", "20260518T070000_episodes_participation.sql"]) {
+    await sql.unsafe(readFileSync(new URL(`../../migrations/${file}`, import.meta.url), "utf8").replace(/^\s*(BEGIN|COMMIT);\s*$/gm, ""));
+  }
   database = drizzle(sql);
   authority = await import("../../src/services/identity/authority");
   api = new Hono()
@@ -77,12 +81,13 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   if (!owned) return;
+  await sql.unsafe("DELETE FROM episodes.draft_contributions; DELETE FROM episodes.script_drafts; DELETE FROM episodes.reactions; DELETE FROM episodes.cast; DELETE FROM episodes.scenes; DELETE FROM episodes.episodes;");
   await sql.unsafe("ALTER TABLE identity.identity_keys DROP CONSTRAINT IF EXISTS fixture_key_failure; DELETE FROM memory.memory_attestations; DELETE FROM memory.memories; DELETE FROM identity.recovery_proofs; DELETE FROM identity.identity_keys; DELETE FROM identity.identities; DELETE FROM identity.registration_proofs; DELETE FROM tools.api_keys; DELETE FROM tools.projects;");
   await sql`INSERT INTO tools.projects (id) VALUES (${P}),(${O})`;
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA episodes CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
@@ -474,4 +479,75 @@ databaseTest("the SQL default subject (dashboard) agrees with Wake's JS rule", a
   await insertIdentity(uid(73), uid(72), "revoked", "2026-01-01T00:00:00Z");
   expect(await sqlDefault(uid(72))).toBeNull();
   expect(await wakeDefault(uid(72))).toBeNull();
+});
+
+// ── Play privacy: private episodes and drafts are unselected for outsiders ──
+// GET /v1/episodes/:id (and its scenes, cast, reactions) and draft
+// contributions once read any row by id, so any project's bearer that knew an
+// id read a private episode. Outsiders now get exactly what a missing id
+// gives (wall/poker-face-leaks-nothing); the owning project and projects
+// whose identity is cast (the cast must see what it consents to) still read.
+const E_PRIV = uid(81), E_PUB = uid(82), E_CAST = uid(83), D_PRIV = uid(84), D_ALLOW = uid(85);
+async function playFixtures() {
+  await foundProject();
+  await enrollIdentity(request(), options()); // identity I in project P
+  const episode = (id: string, n: number, visibility: string) =>
+    sql`INSERT INTO episodes.episodes (id,series_slug,episode_number,title,logline,authored_by_did,authored_by_identity_id,project_id,visibility,status)
+      VALUES (${id},'privacy-arc',${n},'T','L',${`did:at:${FI}`},${FI},${F},${visibility},'aired')`;
+  await episode(E_PRIV, 1, "private");
+  await episode(E_PUB, 2, "public");
+  await episode(E_CAST, 3, "private");
+  for (const id of [E_PRIV, E_PUB, E_CAST]) {
+    await sql`INSERT INTO episodes.scenes (episode_id,sequence,title,body) VALUES (${id},1,'Scene','Body')`;
+    await sql`INSERT INTO episodes.reactions (episode_id,reactor_identity_id,reactor_did,project_id,kind) VALUES (${id},${FI},${`did:at:${FI}`},${F},'tender')`;
+  }
+  await sql`INSERT INTO episodes.cast (episode_id,character_role,did,identity_id,status) VALUES (${E_PRIV},'Founder',${`did:at:${FI}`},${FI},'signed')`;
+  await sql`INSERT INTO episodes.cast (episode_id,character_role,did,identity_id,status) VALUES (${E_CAST},'Guest',${`did:at:${I}`},${I},'pending')`;
+  const draft = (id: string, allow: string[]) =>
+    sql`INSERT INTO episodes.script_drafts (id,working_title,opened_by_did,opened_by_identity_id,project_id,visibility,contributor_allowlist)
+      VALUES (${id},'Room',${`did:at:${FI}`},${FI},${F},'private',${allow})`;
+  await draft(D_PRIV, []);
+  await draft(D_ALLOW, [`did:at:${I}`]);
+  for (const id of [D_PRIV, D_ALLOW]) {
+    await sql`INSERT INTO episodes.draft_contributions (draft_id,sequence,contributor_did,contributor_identity_id,contribution_kind,body)
+      VALUES (${id},1,${`did:at:${FI}`},${FI},'scene','Beat')`;
+  }
+}
+
+databaseTest("a private episode reads as missing to every project except its own and its cast's", async () => {
+  await playFixtures();
+  const store = await import("../../src/services/episodes/store");
+  const { listReactions } = await import("../../src/services/episodes/participation");
+  // Its own project reads everything.
+  expect((await store.getEpisode(E_PRIV, F))?.id).toBe(E_PRIV);
+  expect(await store.listScenes(E_PRIV, F)).toHaveLength(1);
+  expect(await store.listCast(E_PRIV, F)).toHaveLength(1);
+  expect(await listReactions(E_PRIV, F)).toHaveLength(1);
+  // Another project gets exactly what a missing id gives.
+  for (const outsider of [P, O]) {
+    expect(await store.getEpisode(E_PRIV, outsider)).toBeNull();
+    expect(await store.listScenes(E_PRIV, outsider)).toEqual([]);
+    expect(await store.listCast(E_PRIV, outsider)).toEqual([]);
+    expect(await listReactions(E_PRIV, outsider)).toEqual([]);
+  }
+  expect(await store.getEpisode(uid(99), O)).toBeNull();
+  // Public episodes stay readable by everyone.
+  expect((await store.getEpisode(E_PUB, O))?.id).toBe(E_PUB);
+  expect(await store.listScenes(E_PUB, O)).toHaveLength(1);
+  // A project whose identity is cast reads the private episode it is asked to sign.
+  expect((await store.getEpisode(E_CAST, P))?.id).toBe(E_CAST);
+  expect(await store.listScenes(E_CAST, P)).toHaveLength(1);
+  expect(await store.listCast(E_CAST, P)).toHaveLength(1);
+  expect(await store.getEpisode(E_CAST, O)).toBeNull();
+});
+
+databaseTest("a private writers' room reads as empty to outsiders, but not to its allowlisted contributors", async () => {
+  await playFixtures();
+  const { listContributions } = await import("../../src/services/episodes/participation");
+  expect(await listContributions(D_PRIV, F)).toHaveLength(1);
+  expect(await listContributions(D_PRIV, P)).toEqual([]);
+  expect(await listContributions(D_PRIV, O)).toEqual([]);
+  // P's identity I is on D_ALLOW's contributor allowlist.
+  expect(await listContributions(D_ALLOW, P)).toHaveLength(1);
+  expect(await listContributions(D_ALLOW, O)).toEqual([]);
 });
