@@ -142,25 +142,29 @@ app.get("/", async (c) => {
     let heldId: string | undefined;
 
     if (scope === "holder" || scope === "held") {
-      // Resolve project's primary identity
+      // Resolve the project's primary identity (earliest active, never an
+      // enrolled guest): services/identity/acting-identity.ts.
       const { db } = await import("../db/client");
       const { identities } = await import("../db/schema/identity");
-      const { and: drizzleAnd, eq: drizzleEq } = await import("drizzle-orm");
+      const { primaryIdentityOrder, primaryIdentityWhere } = await import("../services/identity/acting-identity");
       const [primary] = await db
         .select({ id: identities.id })
         .from(identities)
-        .where(
-          drizzleAnd(
-            drizzleEq(identities.projectId, project.id),
-            drizzleEq(identities.status, "active"),
-          ),
-        )
-        .orderBy(identities.createdAt)
+        .where(primaryIdentityWhere(project.id))
+        .orderBy(...primaryIdentityOrder())
         .limit(1);
-      if (primary) {
-        if (scope === "holder") holderId = primary.id;
-        if (scope === "held") heldId = primary.id;
+      if (!primary) {
+        // Without an identity to scope by, list nothing. Falling through
+        // with no holder/held filter (and publicOnly off) once listed the
+        // newest holdings of every project, private ones included.
+        return c.json({
+          holdings: [],
+          count: 0,
+          _note: "no active identity in project — register one to hold or be held",
+        });
       }
+      if (scope === "holder") holderId = primary.id;
+      if (scope === "held") heldId = primary.id;
     }
 
     const list = await listHoldings({

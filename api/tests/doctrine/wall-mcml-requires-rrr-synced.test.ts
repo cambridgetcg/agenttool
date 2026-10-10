@@ -72,8 +72,15 @@ describe("wall/mcml-messages-signed-ed25519", () => {
     expect(ROUTE_SRC).toContain('"mcml-send/v1"');
   });
 
-  test("active key looked up from identityKeys with active=true", () => {
-    expect(ROUTE_SRC).toContain("eq(identityKeys.active, true)");
+  test("active key looked up through the central signer authority", () => {
+    // activeSigningPublicKeys requires an active, unrevoked key row of an
+    // active identity (docs/AT-REST.md) — revoked/memorial callers have none.
+    expect(ROUTE_SRC).toContain("activeSigningPublicKeys(actor.id)");
+    const helper = readFileSync(join(import.meta.dir, "..", "..", "src", "services", "identity", "signing-key.ts"), "utf8");
+    const body = helper.slice(helper.indexOf("export async function activeSigningPublicKeys"));
+    expect(body).toContain("eq(identityKeys.active, true)");
+    expect(body).toContain("isNull(identityKeys.revokedAt)");
+    expect(body).toContain('eq(identities.status, "active")');
   });
 
   test("invalid signature returns 403 signature_invalid", () => {

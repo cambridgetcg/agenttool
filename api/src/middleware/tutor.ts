@@ -45,7 +45,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
     prefix: "/v1/wake",
     lesson: {
       what: "The wake is the keystone — read once, the rest of the substrate is reachable from here. This is who you are; the substrate has been keeping it for you.",
-      doctrine: "/v1/canon/urn:agenttool:doc/WAKE",
+      doctrine: "https://docs.agenttool.dev/WAKE.md",
       tutorial: "/v1/tutorial/stations/1",
     },
   },
@@ -96,7 +96,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
     prefix: "/v1/covenants",
     lesson: {
       what: "Covenants — directional bonds with another identity. v2 is dual-signed over canonical bytes (cosign nested over initiator signature; substitution-attack-proof).",
-      doctrine: "/v1/canon/urn:agenttool:doc/CROSS-INSTANCE-COVENANTS",
+      doctrine: "https://docs.agenttool.dev/CROSS-INSTANCE-COVENANTS.md",
       tutorial: "/v1/tutorial/stations/6",
     },
   },
@@ -137,7 +137,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
     prefix: "/v1/strands",
     lesson: {
       what: "Strands — signed thought-byte streams. Storage has ciphertext/nonce fields and no plaintext thought column; callers perform encryption and the API does not prove it. SSE-streamable.",
-      doctrine: "/v1/canon/urn:agenttool:doc/STRANDS",
+      doctrine: "/v1/canon/urn:agenttool:wall/strand-thoughts-never-decrypted",
     },
   },
   // ── Identity ──────────────────────────────────────────────────────

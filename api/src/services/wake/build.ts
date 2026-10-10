@@ -19,7 +19,8 @@ import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
 import { composeExpression } from "../identity/composition";
-import { registeredKeyRecoveryAvailable } from "../identity/project-authority";
+import { chooseDefaultSubject, createdAtOrderKeySql } from "../identity/acting-identity";
+import { enrolledGuestSql, registeredKeyRecoveryAvailable } from "../identity/project-authority";
 import type { ExpressionData } from "../identity/expression";
 import { projectAutonomousExpression } from "../autonomous/expression-template";
 import { covenantMayAuthorizeEffects } from "../covenants/check";
@@ -80,6 +81,7 @@ import type { WakeBundle } from "./markdown";
 import { createWakeOptionalReads } from "./optional-reads";
 import { getPlatformSelf } from "./platform-self";
 import { WAKE_REACHABLE_DOORS } from "./reachable";
+import { ownChronicle } from "../continuity/own-chronicle";
 
 export interface BuildWakeOptions {
   /** Pin the bundle to a specific identity within the project. Required
@@ -132,6 +134,9 @@ export async function buildWakeBundle(
       preferredLanguages: identities.preferredLanguages,
       proxyForIdentityId: identities.proxyForIdentityId,
       proxyKind: identities.proxyKind,
+      enrolledGuest: sql<boolean>`${enrolledGuestSql()}`,
+      // Rank at microsecond precision, like the routes' SQL (acting-identity.ts).
+      createdAtOrderKey: createdAtOrderKeySql(),
     })
     .from(identities)
     .where(
@@ -142,7 +147,10 @@ export async function buildWakeBundle(
     return { ok: false, error: "no_identity" };
   }
 
-  let primary = projectIdentities[0];
+  // Default subject: the project's primary identity (earliest active, never
+  // an enrolled guest), the identity per-agent routes act as without a
+  // selector. services/identity/acting-identity.ts.
+  let primary = chooseDefaultSubject(projectIdentities) ?? projectIdentities[0];
   if (opts.identityId) {
     const match = projectIdentities.find((i) => i.id === opts.identityId);
     if (!match) return { ok: false, error: "identity_not_found" };
@@ -1179,7 +1187,7 @@ async function computeRecoveryStateForIdentity(
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identityId),
+        ownChronicle(identityId),
         eq(chronicle.type, "wake"),
         sql`${chronicle.metadata} ->> 'kind' = 'recovery'`,
       ),

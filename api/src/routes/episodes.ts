@@ -166,19 +166,22 @@ app.get("/", async (c) => {
   return c.json({ episodes: list, count: list.length });
 });
 
+// Reads of one episode: public, the caller's own project, or a project whose
+// identity is cast in it. A private episode reads exactly as a missing one
+// to anyone else (store.episodeReadableBy; docs/POKER-FACE.md).
 app.get("/:id", async (c) => {
-  const ep = await getEpisode(c.req.param("id"));
+  const ep = await getEpisode(c.req.param("id"), c.var.project.id);
   if (!ep) return fail(c, errors.notFound({ resource: "episode" }), 404);
   return c.json({ episode: ep });
 });
 
 app.get("/:id/scenes", async (c) => {
-  const scenes = await listScenes(c.req.param("id"));
+  const scenes = await listScenes(c.req.param("id"), c.var.project.id);
   return c.json({ scenes, count: scenes.length });
 });
 
 app.get("/:id/cast", async (c) => {
-  const cast = await listCast(c.req.param("id"));
+  const cast = await listCast(c.req.param("id"), c.var.project.id);
   return c.json({ cast, count: cast.length });
 });
 

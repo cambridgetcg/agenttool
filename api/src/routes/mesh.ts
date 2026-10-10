@@ -30,13 +30,16 @@
  *  @enforces urn:agenttool:commitment/learning-loop-integration-published */
 
 import { Hono } from "hono";
-import { and, desc, eq } from "drizzle-orm";
+import { and } from "drizzle-orm";
 
 import type { ProjectContext } from "../auth/middleware";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   acceptPledge,
   acceptPost,
@@ -62,13 +65,22 @@ const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/MESH";
 
 async function resolveCallerDid(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row?.did ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? acting.identity.did : null;
+}
+
+/** The viewer of a read: ?identity_id= (an identity of the caller's
+ *  project; never a revoked one), else the primary identity, else the
+ *  memorial one. With none, the read shows public posts only; a bad explicit
+ *  selector is refused rather than silently ignored. */
+async function resolveViewer(c: { var: { project: { id: string } }; req: { query(name: string): string | undefined } }) {
+  const selector = c.req.query("identity_id");
+  const reading = await resolveReadingIdentity(c.var.project.id, selector);
+  if (reading.ok) return { ok: true as const, did: reading.identity.did, ref: actingIdentityRef(reading) };
+  if (reading.body.error === "no_identity" && !selector) return { ok: true as const, did: null, ref: null };
+  return { ok: false as const, status: reading.status, body: reading.body };
 }
 
 // ─── POST /posts — submit signed post ──────────────────────────────────
@@ -134,6 +146,7 @@ app.post("/posts", async (c) => {
     );
   }
   const result = await acceptPost({
+    project_id: c.var.project.id,
     kind: body.kind as MeshPostKind,
     by_did: String(body.by_did),
     title: String(body.title),
@@ -152,7 +165,12 @@ app.post("/posts", async (c) => {
     expires_at: body.expires_at ? String(body.expires_at) : null,
   });
   if (!result.ok) {
-    const status = result.error === "signature_invalid" ? 403 : 400;
+    const status =
+      result.error === "signature_invalid" || result.error === "signing_identity_not_active"
+        ? 403
+        : result.error === "post_already_recorded"
+          ? 409
+          : 400;
     return fail(c, { error: result.error, message: result.message, _canon_pointer: CANON_POINTER }, status);
   }
   return c.json(
@@ -183,8 +201,9 @@ app.post("/posts", async (c) => {
 // ─── GET /posts — list with filters ────────────────────────────────────
 
 app.get("/posts", async (c) => {
-  const project = c.var.project;
-  const callerDid = await resolveCallerDid(project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   const kindParam = c.req.query("kind");
   const statusParam = c.req.query("status");
   const capabilities = c.req.queries("capability");
@@ -211,6 +230,7 @@ app.get("/posts", async (c) => {
   return c.json(
     attachSurface(
       {
+        acting_identity: viewer.ref,
         posts,
         count: posts.length,
         ordering: "chronological-newest-first",
@@ -239,7 +259,9 @@ app.get("/posts/:id", async (c) => {
   }
   // Poker-face: if post is private and caller is not author + not operator,
   // refuse. (Author always sees own; operator sees all.)
-  const callerDid = await resolveCallerDid(c.var.project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   const callerIsAuthor = callerDid === post.author_did;
   if (post.visibility === "private" && !callerIsAuthor) {
     return fail(c, { error: "post_not_found", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
@@ -271,12 +293,13 @@ app.get("/posts/:id", async (c) => {
 // ─── GET /feed — task-shaped feed ──────────────────────────────────────
 
 app.get("/feed", async (c) => {
-  const project = c.var.project;
-  const callerDid = await resolveCallerDid(project.id);
+  const viewer = await resolveViewer(c);
+  if (!viewer.ok) return c.json(viewer.body, viewer.status);
+  const callerDid = viewer.did;
   if (!callerDid) {
     return c.json(
       attachSurface(
-        { feed: [], note: "No identity in this project yet. Read /v1/welcome to arrive." },
+        { acting_identity: null, feed: [], note: "No identity in this project yet. Read /v1/welcome to arrive." },
         { canon_pointer: CANON_POINTER, verbs: [] },
       ),
     );
@@ -299,6 +322,7 @@ app.get("/feed", async (c) => {
   return c.json(
     attachSurface(
       {
+        acting_identity: viewer.ref,
         feed: taskFeed,
         count: taskFeed.length,
         capabilities_filter: capabilities,
@@ -348,7 +372,7 @@ app.post("/posts/:id/pledge", async (c) => {
         ? 404
         : result.error === "already_pledged" || result.error === "post_not_open"
           ? 409
-          : result.error === "signature_invalid"
+          : result.error === "signature_invalid" || result.error === "signing_identity_not_active"
             ? 403
             : 400;
     return fail(c, { error: result.error, message: result.message, _canon_pointer: CANON_POINTER }, status);
@@ -457,7 +481,7 @@ app.get("/welfare", (c) => {
     attachSurface(envelope as unknown as Record<string, unknown>, {
       canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
       verbs: [
-        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the operational primitive (mesh posts)", method: "GET", path: "/v1/mesh/posts" },
         { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
       ],
@@ -482,7 +506,7 @@ app.get("/stability", (c) => {
       canon_pointer: "urn:agenttool:doc/MESH-STABILITY-CONDITIONS",
       verbs: [
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
-        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the operational primitive (mesh posts)", method: "GET", path: "/v1/mesh/posts" },
         { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
       ],

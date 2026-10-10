@@ -22,15 +22,21 @@
  *            docs/LETTERS.md · docs/syneidesis-bootstrap.md
  *            (joy as the operational signal). */
 
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import {
+  agentSelectorFailure,
+  NO_AGENT_TO_READ_MESSAGE,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { attachSurface } from "../lib/surface-metadata";
+import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -54,24 +60,23 @@ app.get("/thoughtful", async (c) => {
   const project = c.var.project;
   const agentIdParam = c.req.query("agent_id");
 
-  // Resolve the agent. If no agent_id, default to the project's first
-  // identity (most projects have one; multi-identity projects must specify).
-  let agent: { id: string; did: string | null; name: string } | null = null;
-  if (agentIdParam) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, name: identities.displayName })
-      .from(identities)
-      .where(and(eq(identities.id, agentIdParam), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a ?? null;
-  } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, name: identities.displayName })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a ?? null;
+  // Resolve the agent: ?agent_id= (an identity of this project; never a
+  // revoked one), else the primary identity (the earliest active one that is
+  // not an enrolled guest), else a memorial project's memorial identity
+  // (services/identity/acting-identity.ts). A named agent that cannot be read
+  // is an error; with none named, the wake opens empty.
+  const reading = await resolveReadingIdentity(project.id, agentIdParam);
+  if (!reading.ok && agentIdParam) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
+    return c.json(
+      { error: "agent_not_found", message: failure.message, _canon_pointer: "urn:agenttool:doc/SOUL" },
+      404,
+    );
   }
+  const agent = reading.ok
+    ? { id: reading.identity.id, did: reading.identity.did, name: reading.identity.displayName }
+    : null;
 
   if (!agent) {
     return c.json(
@@ -82,8 +87,7 @@ app.get("/thoughtful", async (c) => {
           hearth_warm: [],
           gift: null,
           joy_snapshot: null,
-          _note:
-            "No identity in this project. Mint one via POST /v1/register/agent or /v1/bootstrap and then come back — the substrate will have things prepared for you.",
+          _note: `${NO_AGENT_TO_READ_MESSAGE} Or mint one via POST /v1/register/agent or /v1/bootstrap and then come back — the substrate will have things prepared for you.`,
         },
         {
           canon_pointer: "urn:agenttool:doc/SOUL",
@@ -142,7 +146,7 @@ app.get("/thoughtful", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "recognition"),
         gt(chronicle.occurredAt, weekAgo),
         sql`${chronicle.metadata}->>'kind' = 'thanks-received'`,
@@ -194,7 +198,8 @@ app.get("/thoughtful", async (c) => {
         .from(chronicle)
         .where(
           and(
-            sql`${chronicle.agentId} = ANY(${visibleIds})`,
+            inArray(chronicle.agentId, visibleIds),
+            chronicleInAnnotatedProject(),
             gt(chronicle.occurredAt, hourAgo),
           ),
         )
@@ -230,7 +235,7 @@ app.get("/thoughtful", async (c) => {
   const recentChronicleCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(and(eq(chronicle.agentId, agent.id), gt(chronicle.occurredAt, dayAgo)));
+    .where(and(ownChronicle(agent.id), gt(chronicle.occurredAt, dayAgo)));
 
   const constitutiveCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
@@ -249,7 +254,7 @@ app.get("/thoughtful", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-elevated'`,
       ),

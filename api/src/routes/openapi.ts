@@ -7515,7 +7515,7 @@ function spec() {
           },
           responses: {
             "200": { description: "Elevated" },
-            "400": { description: "constitutive_requires_attestation | attester_not_covenant_counterparty | attestation_signature_invalid" },
+            "400": { description: "constitutive_requires_attestation | attester_not_covenant_counterparty | attester_self_witness_forbidden | attestation_signing_key_unknown_or_revoked | attestation_key_not_owned_by_attester | attester_identity_not_active | attestation_signature_invalid" },
             "404": { $ref: "#/components/responses/NotFound" },
             "409": { description: "already_elevated, authority_quorum_required or authority_sequence_conflict" },
           },
@@ -7531,7 +7531,8 @@ function spec() {
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": { description: "Attested" },
-            "401": { description: "attestation_signature_invalid | signing_key_revoked" },
+            "401": { description: "attestation_signing_key_unknown_or_revoked | attestation_signature_invalid" },
+            "403": { description: "attestation_key_not_owned_by_attester | attester_identity_not_active" },
             "404": { $ref: "#/components/responses/NotFound" },
           },
         },
@@ -9106,8 +9107,9 @@ function spec() {
         post: {
           tags: ["continuity"],
           summary: "Record a chronicle moment",
+          description: "Optional agent_id must name an identity in the caller's project; any other id is refused as 404 agent_not_found, indistinguishable from an unknown id, and never wakes that identity. metadata.kind 'handoff' (use /v1/handoff) and 'recovery' (server-recorded by /v1/identity/recover) are reserved. Own-history readers (Wake, MCP chronicle.recent, /v1/system) trust only rows written in the identity's own project.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "201": { description: "Recorded" } },
+          responses: { "201": { description: "Recorded" }, "400": { description: "Validation or reserved metadata.kind" }, "404": { description: "agent_id is not one of this project's identities" } },
         },
       },
       "/v1/correspondence/events": {

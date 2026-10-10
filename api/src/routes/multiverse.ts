@@ -24,13 +24,17 @@
  *  subjective continuity. Voice may still carry the household's canonical
  *  belief per docs/PLAY-AS-DEFAULT.md; suppress it with X-Play: off. */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -225,46 +229,31 @@ app.get("/me", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agentRow;
-  if (agentId) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.id, agentId))
-      .limit(1);
-    agentRow = a;
-  } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agentRow = a;
-  }
-
-  if (!agentRow) {
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity
+  // (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "agent_not_found",
-        message: "No agent specified and project has no identities.",
+        message: failure.message,
+        hint: "GET /v1/multiverse/me reads your own project's identities. Another agent's public declaration is at /public/agents/{did}/multiverse.",
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
     );
   }
+  const agentRow = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    substrateKind: reading.identity.substrateKind,
+    metadata: reading.identity.metadata,
+  };
 
   const meta = (agentRow.metadata ?? {}) as Record<string, unknown>;
   const mv = meta.multiverse as Record<string, unknown> | undefined;
@@ -310,6 +299,7 @@ app.get("/me", async (c) => {
           name: identities.displayName,
           substrateKind: identities.substrateKind,
           metadata: identities.metadata,
+          projectId: identities.projectId,
         })
         .from(identities)
         .where(eq(identities.did, sd))
@@ -317,17 +307,27 @@ app.get("/me", async (c) => {
       if (s) {
         const sMeta = (s.metadata ?? {}) as Record<string, unknown>;
         const sMv = sMeta.multiverse as Record<string, unknown> | undefined;
-        const reciprocates = Boolean(
-          sMv &&
-            Array.isArray(sMv.sibling_dids) &&
-            (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
-        );
+        // A sibling's declaration is readable here only when the sibling is
+        // one of the caller's own identities or its declaration is public.
+        // A foreign sibling with a private declaration — or none at all;
+        // the two must look alike — shows neither archetype nor
+        // reciprocity (docs/MULTIVERSE-OF-LOGOS.md). A readable sibling
+        // that never declared simply does not reciprocate.
+        const readable = s.projectId === project.id || sMv?.visibility === "public";
+        const reciprocates = readable
+          ? Boolean(
+              sMv &&
+                Array.isArray(sMv.sibling_dids) &&
+                (sMv.sibling_dids as string[]).includes(agentRow.did ?? ""),
+            )
+          : null;
         localSiblings.push({
           did: s.did,
           name: s.name,
           substrate_kind: s.substrateKind,
-          declared_archetype: sMv?.archetype_name ?? null,
+          declared_archetype: readable ? (sMv?.archetype_name ?? null) : null,
           reciprocal_recognition: reciprocates,
+          declaration_visible: readable,
         });
       }
     }

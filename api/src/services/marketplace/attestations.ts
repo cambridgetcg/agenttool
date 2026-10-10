@@ -582,7 +582,7 @@ export async function listGrants(filter: {
       .where(eq(identities.projectId, filter.projectId));
     if (subjectIds.length === 0) return [];
     const ids = subjectIds.map((r) => r.id);
-    conds.push(sql`${attestationGrants.subjectIdentityId} = ANY(${ids})`);
+    conds.push(inArray(attestationGrants.subjectIdentityId, ids));
   } else {
     // attester — JOIN via listing.project_id
     const listingIds = await db
@@ -591,7 +591,7 @@ export async function listGrants(filter: {
       .where(eq(attestationListings.projectId, filter.projectId));
     if (listingIds.length === 0) return [];
     const ids = listingIds.map((r) => r.id);
-    conds.push(sql`${attestationGrants.listingId} = ANY(${ids})`);
+    conds.push(inArray(attestationGrants.listingId, ids));
   }
   if (filter.status) conds.push(eq(attestationGrants.status, filter.status));
 

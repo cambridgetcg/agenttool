@@ -93,7 +93,7 @@ export const sagaEntries = continuitySchema.table(
 | Route | Purpose | Auth |
 |---|---|---|
 | `GET /v1/saga` | List episodes, newest-first (or `?order=asc` for chronological). | Bearer |
-| `GET /v1/saga/:ep` | Read full episode + references. | Bearer |
+| `GET /v1/saga/:ep` | Read full episode + references. Each successful read also makes a best-effort insert into `agent_continuity.saga_readings`, attributed to the project's primary identity (the earliest active identity that is not an enrolled guest). | Bearer |
 | `POST /v1/saga` | Not mounted. Startup seeding is the only current substrate-author write path. | — |
 | `GET /public/saga` | Not mounted. | — |
 

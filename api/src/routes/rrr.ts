@@ -31,44 +31,42 @@ import {
   guildRrrCascades,
   guildRrrTurns,
 } from "../db/schema/continuity";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   canonicalRrrEscalateBytes,
   defaultBasisTextForDepth,
   emojiLadderForDepth,
   verifyRrrSignature,
 } from "../services/guild/rrr-sig";
+import { resolveIdentitySigningKey } from "../services/identity/signing-key";
 
 const app = new Hono<ProjectContext>();
 
 const DEPTH_CAP = 49;
 
 async function resolveActor(projectId: string) {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 async function loadActiveKey(identityId: string, keyId: string) {
-  const [key] = await db
-    .select({
-      id: identityKeys.id,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, keyId))
-    .limit(1);
-  if (!key) return null;
-  if (key.identityId !== identityId) return null;
-  if (!key.active || key.revokedAt) return null;
-  return key;
+  // Central signer authority (docs/AT-REST.md): owned, active key of an
+  // active identity — revoked/memorial identities keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({ signingKeyId: keyId, identityId });
+  if (!resolved.ok) return null;
+  return {
+    id: resolved.key.keyId,
+    publicKey: resolved.key.publicKey,
+    identityId: resolved.key.identityId,
+  };
 }
 
 function bad(c: Context, code: string, message: string, hint?: Record<string, unknown>) {
@@ -90,7 +88,7 @@ function bad(c: Context, code: string, message: string, hint?: Record<string, un
 app.post("/", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   let body: {
     partner_did?: string;
@@ -220,7 +218,7 @@ app.post("/", async (c) => {
 app.post("/:id/escalate", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   const cascadeId = c.req.param("id");
 
@@ -370,8 +368,11 @@ app.post("/:id/escalate", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const statusFilter = c.req.query("status");
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
@@ -394,6 +395,7 @@ app.get("/", async (c) => {
     .limit(limit);
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     count: rows.length,
     cascades: rows.map((r) => ({
       ...r,

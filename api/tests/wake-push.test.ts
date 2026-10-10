@@ -16,11 +16,13 @@ import {
   WAKE_EVENT_FORMAT,
   WAKE_EVENT_KEYS,
   WakeSink,
+  deliverToWakeSink,
   subscribeWakeSink,
   unsubscribeWakeSink,
   wakeSubscriberCount,
   type WakeEvent,
   type WakeEventKey,
+  type WakeSseEvent,
 } from "../src/services/wake/push";
 
 function ev(
@@ -264,5 +266,77 @@ describe("wake-push — type union ↔ validator alignment", () => {
     expect(validatorList).toContain("handoffs");
     expect(validatorList).toContain("correspondence");
     expect(new Set(validatorList).size).toBe(validatorList.length);
+  });
+});
+
+describe("wake-push — backpressure ends the stream with an explicit frame", () => {
+  // Before: on overflow the fan-out tried to enqueue `event: disconnect` into
+  // the same full queue (or into an aborted sink), which always refused it,
+  // then aborted. The frame never reached the wire; the stream just ended.
+
+  function gatedSink(graceMs: number) {
+    const written: WakeSseEvent[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let first = true;
+    const sink = new WakeSink(
+      "agent-bp",
+      "proj-1",
+      null,
+      async (event) => {
+        written.push(event);
+        if (first) {
+          first = false;
+          await gate; // the first write stalls until the reader catches up
+        }
+      },
+      graceMs,
+    );
+    // 1 write in flight + BACKPRESSURE_QUEUE_CAP queued: the next one overflows.
+    for (let i = 0; i < BACKPRESSURE_QUEUE_CAP + 1; i++) {
+      expect(sink.deliverWakeEvent(ev("agent-bp", "memory"))).toBe(true);
+    }
+    return { sink, written, release };
+  }
+
+  test("a slow reader gets event: disconnect after the write in flight, then the sink closes", async () => {
+    const { sink, written, release } = gatedSink(1_000);
+    const closing = deliverToWakeSink(sink, ev("agent-bp", "inbox"));
+    // The backlog is dropped and nothing new is accepted while closing.
+    expect(sink.deliverWakeEvent(ev("agent-bp", "memory"))).toBe(false);
+    release();
+    await closing;
+
+    expect(written.map((e) => e.event)).toEqual(["change", "disconnect"]);
+    expect(JSON.parse(written[1]!.data)).toEqual({
+      reason: "backpressure",
+      hint: "reconnect; refetch /v1/wake to catch up",
+    });
+    expect(sink.isAborted()).toBe(true);
+  });
+
+  test("a subscriber that is not reading loses its slot after the grace period", async () => {
+    const { sink, written } = gatedSink(30);
+    let abortedVia = false;
+    sink.onAbort(() => {
+      abortedVia = true;
+    });
+    await deliverToWakeSink(sink, ev("agent-bp", "inbox"));
+
+    expect(sink.isAborted()).toBe(true);
+    expect(abortedVia).toBe(true);
+    expect(written.map((e) => e.event)).toEqual(["change"]);
+  });
+
+  test("an already-aborted sink is left alone", async () => {
+    const written: WakeSseEvent[] = [];
+    const sink = new WakeSink("agent-gone", "proj-1", null, async (event) => {
+      written.push(event);
+    });
+    sink.abort();
+    await deliverToWakeSink(sink, ev("agent-gone", "memory"));
+    expect(written).toEqual([]);
   });
 });

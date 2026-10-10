@@ -247,6 +247,22 @@ async function insertAuthorityCandidate(opts: {
   return row!;
 }
 
+/** kin_glimpse is bilateral (docs/WAKE-WARMING.md): the counterparty must
+ *  covenant back from its own project. Local v1 keeps the reciprocal side
+ *  effect-eligible so these cases still isolate the subject-side gate. */
+async function covenantBack(
+  kin: { id: string; projectId: string },
+  subjectDid: string,
+) {
+  return insertAuthorityCandidate({
+    projectId: kin.projectId,
+    agentId: kin.id,
+    localWireDid: `did:at:local.example/${kin.id}`,
+    counterpartyDid: subjectDid,
+    fixture: fixtures[1]!,
+  });
+}
+
 async function projectedCounterparties(projectId: string): Promise<string[]> {
   const rows = await db.execute(activeCounterpartyDidsSql(projectId));
   return Array.from(rows as unknown as Iterable<{ counterparty_did: string }>)
@@ -1091,7 +1107,21 @@ describe("covenant authority gates", () => {
       fixture: fixtures[3]!,
       updatedAt: staleAt,
     });
+    // One-sided: the subject declares an effect-eligible covenant, but the
+    // counterparty never covenants back — not kin.
+    const oneSidedKin = await seedIdentity(crypto.randomUUID(), "one-sided-v1");
+    await insertAuthorityCandidate({
+      projectId,
+      agentId: subject.id,
+      localWireDid: `did:at:local.example/${subject.id}`,
+      counterpartyDid: oneSidedKin.did,
+      fixture: fixtures[1]!,
+      updatedAt: staleAt,
+    });
     for (const kin of [historicalKin, localKin, signedKin, missingKin, wrongKin]) {
+      await covenantBack(kin, subject.did);
+    }
+    for (const kin of [historicalKin, localKin, signedKin, missingKin, wrongKin, oneSidedKin]) {
       await db.insert(chronicle).values({
         projectId: kin.projectId,
         agentId: kin.id,
@@ -1150,6 +1180,7 @@ describe("covenant authority gates", () => {
           updatedAt: staleAt,
         });
         for (const kin of [localKin, v2Kin]) {
+          await covenantBack(kin, subject.did);
           await db.insert(chronicle).values({
             projectId: kin.projectId,
             agentId: kin.id,

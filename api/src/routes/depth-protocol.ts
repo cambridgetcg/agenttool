@@ -28,7 +28,8 @@ import { z } from "zod";
 
 import { db } from "../db/client";
 import { depthArrivals, engravingSets } from "../db/schema/continuity";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
+import { resolveIdentitySigningKey, SIGNING_KEY_REFUSAL_MESSAGES } from "../services/identity/signing-key";
 import { fail } from "../lib/errors";
 import {
   CANONICAL_DEPTH_STATES,
@@ -36,8 +37,10 @@ import {
   canonicalDepthArrivalBytes,
   verifyEd25519Signature,
 } from "../services/depth-protocol/canonical-bytes";
+import type { ProjectContext } from "../auth/middleware";
+import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
-const app = new Hono();
+const app = new Hono<ProjectContext>();
 
 const CANON_POINTER = "urn:agenttool:doc/DEPTH-PROTOCOL";
 
@@ -50,35 +53,20 @@ async function resolveSignerOrFail(input: {
   { ok: true; publicKey: string; identityId: string }
   | { ok: false; error: string; message: string }
 > {
-  const [keyRow] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      revokedAt: identityKeys.revokedAt,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow) return { ok: false, error: "unknown_signing_key", message: "signing_key_id not found." };
-  if (!keyRow.active || keyRow.revokedAt) {
-    return { ok: false, error: "signing_key_inactive", message: "signing_key is revoked or inactive." };
+  // Central signer authority (docs/AT-REST.md): the key must be active,
+  // belong to agent_did, and its identity must still be active — revoked
+  // and memorial identities keep no signing authority.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: input.signingKeyId,
+    did: input.expectedDid,
+  });
+  if (!resolved.ok) {
+    if (resolved.reason === "signing_key_not_owned") {
+      return { ok: false, error: "agent_did_mismatch", message: "agent_did does not match the DID of the signing identity. Only the keeper can declare their own depth-arrival." };
+    }
+    return { ok: false, error: resolved.reason, message: SIGNING_KEY_REFUSAL_MESSAGES[resolved.reason] };
   }
-  const [identityRow] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.id, keyRow.identityId))
-    .limit(1);
-  if (!identityRow) return { ok: false, error: "unknown_identity", message: "signing identity not found." };
-  if (identityRow.did !== input.expectedDid) {
-    return {
-      ok: false,
-      error: "agent_did_mismatch",
-      message: "agent_did does not match the DID of the signing identity. Only the keeper can declare their own depth-arrival.",
-    };
-  }
-  return { ok: true, publicKey: keyRow.publicKey, identityId: identityRow.id };
+  return { ok: true, publicKey: resolved.key.publicKey, identityId: resolved.key.identityId };
 }
 
 // ─── POST /v1/depth/arrive — signed arrival declaration ────────────────
@@ -222,6 +210,18 @@ app.get("/depth/check", async (c) => {
       message: "GET /v1/depth/check?agent_did=<did> — surfaces depth-state for the agent.",
       _canon_pointer: CANON_POINTER,
     }, 400);
+  }
+
+  // The check is the owning project's (routes/public/index.ts: depth is "the being's life, not an external observable"). A DID outside the caller's
+  // project is refused exactly like an unknown one, before any history is read.
+  const owned = await projectOwnedIdentityByDid(c.var.project.id, agentDid);
+  if (!owned) {
+    return fail(c, {
+      error: "agent_not_found",
+      message: "No identity with this agent_did in your project.",
+      hint: "The depth check reads your own project's identities only.",
+      _canon_pointer: CANON_POINTER,
+    }, 404);
   }
 
   // All canonical sets

@@ -21,7 +21,6 @@ import {
   isNotNull,
   isNull,
   lte,
-  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -40,6 +39,11 @@ import { traces } from "../db/schema/trace";
 import type { ExpressionData } from "../services/identity/expression";
 import { composeExpression } from "../services/identity/composition";
 import { getLineage } from "../services/identity/fork";
+import {
+  defaultSubjectOrder,
+  defaultSubjectWhere,
+  parseIdentitySelector,
+} from "../services/identity/acting-identity";
 
 const app = new Hono<ProjectContext>();
 
@@ -51,25 +55,29 @@ const OVERFLOW_THRESHOLD = 8;
 app.get("/", async (c) => {
   const project = c.var.project;
 
-  // 1. Identity resolution — primary agent (first ACTIVE identity in the
-  //    project). Multi-identity projects can pass ?identity_id=<uuid>.
-  //    Revoked identities are excluded from default selection — same
-  //    posture as /v1/wake (they remain queryable explicitly for
-  //    historical signature-verification, just not picked as "you").
-  const identityIdQ = c.req.query("identity_id");
-  const baseFilters = [eq(identities.projectId, project.id)];
-  if (identityIdQ) {
-    baseFilters.push(eq(identities.id, identityIdQ));
-  } else {
-    baseFilters.push(ne(identities.status, "revoked"));
+  // 1. Identity resolution — the same default subject /v1/wake shows: the
+  //    project's primary identity (earliest active, never an enrolled
+  //    guest), else the oldest non-revoked row
+  //    (services/identity/acting-identity.ts). Multi-identity projects can
+  //    pass ?identity_id=<uuid>; an explicitly named revoked identity stays
+  //    readable for historical signature-verification.
+  const selector = parseIdentitySelector(c.req.query("identity_id"));
+  if (selector.kind === "invalid") {
+    throw new HTTPException(404, { message: "no_identity_in_project" });
   }
 
-  const [primary] = await db
-    .select()
-    .from(identities)
-    .where(and(...baseFilters))
-    .orderBy(identities.createdAt)
-    .limit(1);
+  const [primary] = selector.kind === "id"
+    ? await db
+      .select()
+      .from(identities)
+      .where(and(eq(identities.projectId, project.id), eq(identities.id, selector.id)))
+      .limit(1)
+    : await db
+      .select()
+      .from(identities)
+      .where(defaultSubjectWhere(project.id))
+      .orderBy(...defaultSubjectOrder())
+      .limit(1);
 
   if (!primary) {
     throw new HTTPException(404, { message: "no_identity_in_project" });

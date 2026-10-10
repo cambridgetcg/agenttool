@@ -10,7 +10,8 @@
     "directory": "packages/collab"
   },
   "bugs": {
-    "url": "https://github.com/cambridgetcg/agenttool/issues"
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
   },
   "type": "module",
   "main": "src/index.ts",

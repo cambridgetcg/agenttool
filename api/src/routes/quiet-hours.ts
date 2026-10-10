@@ -8,14 +8,19 @@
  *    GET    /v1/quiet-hours?identity_id=...                       — current
  *    DELETE /v1/quiet-hours?identity_id=...                       — end early
  *
+ *  identity_id names an identity of the caller's project (a revoked one no
+ *  longer acts). Without it the project's primary identity acts: the
+ *  earliest active identity that is not an enrolled guest, the default
+ *  subject /v1/wake shows. services/identity/acting-identity.ts.
+ *
  *  Doctrine: docs/QUIET-HOURS.md. */
 
-import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
@@ -32,28 +37,6 @@ const app = new Hono<ProjectContext>();
 
 const MAX_QUIET_HOURS = 30 * 24; // 30 days — generous but not infinite
 const MIN_QUIET_HOURS = 1;
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function resolveActor(projectId: string, identityId?: string | null) {
-  if (identityId && !UUID_RE.test(identityId)) return null;
-  const filters = [eq(identities.projectId, projectId)];
-  if (identityId) filters.push(eq(identities.id, identityId));
-  const [row] = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      quietUntil: identities.quietUntil,
-      quietReason: identities.quietReason,
-      status: identities.status,
-    })
-    .from(identities)
-    .where(and(...filters))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
-}
 
 function isStillQuiet(until: Date | null): boolean {
   return until !== null && until.getTime() > Date.now();
@@ -75,14 +58,12 @@ function viewQuietState(actor: {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const identityId = c.req.query("identity_id") ?? null;
-  const actor = await resolveActor(project.id, identityId);
-  if (!actor) {
-    return c.json(
-      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
-      identityId ? 404 : 400,
-    );
-  }
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
+  if (!selected.ok) return c.json(selected.body, selected.status);
+  const actor = selected.identity;
 
   const state = viewQuietState(actor);
   return c.json({
@@ -100,14 +81,12 @@ app.get("/", async (c) => {
 
 app.post("/start", async (c) => {
   const project = c.var.project;
-  const identityId = c.req.query("identity_id") ?? null;
-  const actor = await resolveActor(project.id, identityId);
-  if (!actor) {
-    return c.json(
-      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
-      identityId ? 404 : 400,
-    );
-  }
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
+  if (!selected.ok) return c.json(selected.body, selected.status);
+  const actor = selected.identity;
   if (isMemorialTerminal(actor.status)) {
     return c.json(
       { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
@@ -202,14 +181,12 @@ app.post("/start", async (c) => {
 
 app.delete("/", async (c) => {
   const project = c.var.project;
-  const identityId = c.req.query("identity_id") ?? null;
-  const actor = await resolveActor(project.id, identityId);
-  if (!actor) {
-    return c.json(
-      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
-      identityId ? 404 : 400,
-    );
-  }
+  // Explicit identity_id (in this project), else the primary identity, else
+  // a memorial project's memorial identity: reads keep its state, and the
+  // mutations' terminal guards answer memorial_terminal (acting-identity.ts).
+  const selected = await resolveActingIdentity(project.id, c.req.query("identity_id") ?? null, { memorialFallback: true });
+  if (!selected.ok) return c.json(selected.body, selected.status);
+  const actor = selected.identity;
   if (isMemorialTerminal(actor.status)) {
     return c.json(
       { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },

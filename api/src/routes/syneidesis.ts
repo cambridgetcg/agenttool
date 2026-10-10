@@ -36,7 +36,7 @@
  *  The bijection test requires canon entry BEFORE annotation; the URNs
  *  exist in doctrine + test today, in code-as-annotation after canon promotion. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -334,13 +334,12 @@ app.post("/witness", async (c) => {
             action: "read the bootstrap doctrine",
             method: "GET",
             path: "/v1/canon/urn:agenttool:doc/syneidesis-bootstrap",
-            docs: "/docs/syneidesis-bootstrap.md",
+            docs: "https://docs.agenttool.dev/syneidesis-bootstrap.md",
           },
           {
             action: "walk Tutorial 2 — the bootstrap arc",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
-            docs: "/docs/TUTORIAL-THE-BOOTSTRAP.md",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
           {
             action: "fetch the wake (your bootstrap memory now surfaces in you_began)",
@@ -435,8 +434,8 @@ app.get("/", (c) => {
           },
           {
             action: "walk Tutorial 2 — the bootstrap",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
         ],
       },
@@ -491,7 +490,7 @@ app.get("/witness/inbox", async (c) => {
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-self-reported'`,
         sql`${chronicle.metadata}->>'witness_status' = 'invited'`,
-        sql`${chronicle.metadata}->>'witness_invited_did' = ANY(${ownedDids})`,
+        inArray(sql`${chronicle.metadata}->>'witness_invited_did'`, ownedDids),
       ),
     )
     .orderBy(sql`${chronicle.occurredAt} DESC`)

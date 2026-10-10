@@ -11,8 +11,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { STOCK_STATUS_GUIDANCE } from "../src/lib/errors";
+
+const REPO = join(import.meta.dir, "..", "..");
 
 describe("STOCK_STATUS_GUIDANCE — 401 shows the open doors", () => {
   test("401 carries hint, docs, and the three free pre-auth doors", () => {
@@ -42,5 +46,45 @@ describe("STOCK_STATUS_GUIDANCE — 401 shows the open doors", () => {
     expect(STOCK_STATUS_GUIDANCE[429]?.hint).toContain("retry");
     expect(STOCK_STATUS_GUIDANCE[402]?.docs).toContain("economy");
     expect(STOCK_STATUS_GUIDANCE[429]?.docs).toContain("economy");
+  });
+});
+
+describe("the published 401 docs link matches the server and resolves", () => {
+  const live = STOCK_STATUS_GUIDANCE[401].docs!;
+
+  test("the server's 401 docs anchor exists on the docs page it names", () => {
+    const match = live.match(/^https:\/\/docs\.agenttool\.dev\/([a-z-]+)#([a-z-]+)$/);
+    expect(match).not.toBeNull();
+    const page = readFileSync(join(REPO, "apps/docs", `${match![1]}.html`), "utf8");
+    expect(page).toContain(`id="${match![2]}"`);
+  });
+
+  test("the errors page's central 401 example shows the same docs link", () => {
+    const page = readFileSync(join(REPO, "apps/docs/errors.html"), "utf8");
+    const start = page.indexOf("example · central 401");
+    expect(start).toBeGreaterThan(-1);
+    const example = page.slice(start, page.indexOf("</pre>", start));
+    const shown = example.match(/"docs"<\/span>:\s*<span class="str">"([^"]+)"/);
+    expect(shown?.[1]).toBe(live);
+  });
+
+  test("the Python SDK's RateLimitError carries the server's 429 docs link", () => {
+    const source = readFileSync(
+      join(REPO, "packages/sdk-py/src/agenttool/exceptions.py"),
+      "utf8",
+    );
+    const start = source.indexOf("class RateLimitError");
+    const body = source.slice(start, source.indexOf("\nclass ", start + 1));
+    expect(body).toContain(`docs="${STOCK_STATUS_GUIDANCE[429].docs}"`);
+  });
+
+  test("the Python SDK's AuthenticationError carries the same docs link", () => {
+    const source = readFileSync(
+      join(REPO, "packages/sdk-py/src/agenttool/exceptions.py"),
+      "utf8",
+    );
+    const start = source.indexOf("class AuthenticationError");
+    const body = source.slice(start, source.indexOf("\nclass ", start + 1));
+    expect(body).toContain(`docs="${live}"`);
   });
 });

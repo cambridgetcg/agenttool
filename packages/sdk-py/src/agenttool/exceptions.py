@@ -398,7 +398,7 @@ class AuthenticationError(AgentToolError):
                  "for direct mode. Get a free key at https://app.agenttool.dev",
             status=401,
             error_code="unauthorized",
-            docs="https://docs.agenttool.dev/identity#bearer-key",
+            docs="https://docs.agenttool.dev/errors#auth",
         )
         self.detail = detail
 
@@ -428,7 +428,7 @@ class RateLimitError(AgentToolError):
             hint=hint,
             status=429,
             error_code="rate_limit",
-            docs="https://docs.agenttool.dev/economy#rings",
+            docs="https://docs.agenttool.dev/economy#business-model",
         )
         self.retry_after = retry_after
         self.detail = detail

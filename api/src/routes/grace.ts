@@ -18,12 +18,15 @@
  *
  *  Doctrine: docs/GRACE.md. */
 
-import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   extendGrace,
   getGrace,
@@ -35,13 +38,10 @@ import {
 const app = new Hono<ProjectContext>();
 
 async function resolveActor(projectId: string) {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 // ─── POST /v1/grace ─────────────────────────────────────────────────
@@ -49,7 +49,7 @@ async function resolveActor(projectId: string) {
 app.post("/", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   let body: unknown;
   try {
@@ -150,6 +150,7 @@ app.post("/", async (c) => {
         : code === "signing_key_not_found" ||
             code === "signing_key_not_owned_by_extender" ||
             code === "signing_key_not_active" ||
+            code === "signing_identity_not_active" ||
             code === "invalid_signature"
           ? 403
           : 500;
@@ -167,8 +168,11 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const directionParam = c.req.query("direction") ?? "all";
   const direction =
@@ -184,6 +188,7 @@ app.get("/", async (c) => {
     limit,
   });
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     grace: rows,
     count: rows.length,
     direction,
@@ -196,8 +201,11 @@ app.get("/", async (c) => {
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const row = await getGrace(actor.id, actor.did, c.req.param("id"));
   if (!row) return c.json({ error: "not_found" }, 404);
@@ -218,6 +226,8 @@ function messageForError(code: string): string {
       return "The signing_key_id you submitted does not belong to your identity.";
     case "signing_key_not_active":
       return "The signing key is revoked or inactive.";
+    case "signing_identity_not_active":
+      return "The signing identity is revoked or memorial; an active key row does not override that status (docs/AT-REST.md).";
     case "invalid_signature":
       return "Signature did not verify against canonical bytes `grace/v1`. See docs/GRACE.md.";
     default:

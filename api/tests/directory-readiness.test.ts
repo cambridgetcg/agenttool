@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -55,24 +55,80 @@ describe("AgentTool Canon directory readiness", () => {
   });
 
   test("keeps public support separate from private vulnerability reporting", () => {
-    for (const path of ["SUPPORT.md", "SECURITY.md", "apps/docs/support.html"]) {
+    // The GitHub repository is private, so its advisory form, issues and
+    // discussions answer 404 to outsiders. Every reporting path names the
+    // public mailbox already published on agenttool.dev/terms and /privacy.
+    for (const path of [
+      "SUPPORT.md",
+      "SECURITY.md",
+      "apps/docs/support.html",
+      "marketing/DIRECTORY-SUBMISSION.md",
+    ]) {
       const text = read(path);
-      expect(text).toContain(
-        "https://github.com/cambridgetcg/agenttool/security/advisories/new",
-      );
-      expect(text).toMatch(
-        /(?:never|do not) (?:post|put)[\s\S]{0,180}sensitive/i,
-      );
+      expect(text, path).toContain("mailto:contact@cambridgetcg.com");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/security");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/issues");
+      expect(text, path).not.toContain("github.com/cambridgetcg/agenttool/discussions");
+      if (path !== "marketing/DIRECTORY-SUBMISSION.md") {
+        expect(text, path).toMatch(
+          /(?:never|do not) (?:post|put|send)[\s\S]{0,180}sensitive/i,
+        );
+      }
     }
 
     const support = read("apps/docs/support.html");
-    expect(support).toContain(
-      "https://github.com/cambridgetcg/agenttool/issues",
-    );
-    expect(support).toContain(
-      "https://github.com/cambridgetcg/agenttool/discussions",
-    );
+    expect(support).not.toContain("github.com/cambridgetcg/agenttool");
+    // The connection guide must not call the private repository public.
+    const guide = read("apps/docs/connect-canon.html");
+    expect(guide).not.toMatch(/public in\s*<a[^>]*github\.com\/cambridgetcg\/agenttool/);
+    expect(guide).not.toContain("github.com/cambridgetcg/agenttool");
+    expect(support).toContain('id="security"');
     expect(support).toMatch(/do not create an uptime, response-time/i);
+  });
+
+  test("published manifests and docs data never route reports into the private repository", () => {
+    // Package bug trackers, the geometry index's correction channel and the
+    // wallet README are read by people outside the repository, who get 404.
+    const files: string[] = [];
+    for (const pkg of readdirSync(join(ROOT, "packages"))) {
+      for (const name of ["package.json", "pyproject.toml"]) {
+        const path = join("packages", pkg, name);
+        try {
+          if (statSync(join(ROOT, path)).isFile()) files.push(path);
+        } catch {
+          // not every package has both manifests
+        }
+      }
+    }
+    const walk = (dir: string) => {
+      for (const name of readdirSync(join(ROOT, dir))) {
+        const path = join(dir, name);
+        if (statSync(join(ROOT, path)).isDirectory()) walk(path);
+        else if (path.endsWith(".json")) files.push(path);
+      }
+    };
+    walk("apps/docs/geometry");
+    expect(files).toContain("packages/browser/package.json");
+    expect(files).toContain("packages/langgraph-checkpoint-agenttool/pyproject.toml");
+    expect(files).toContain("apps/docs/geometry/index.json");
+    for (const path of files) {
+      expect(read(path), path).not.toContain("github.com/cambridgetcg/agenttool/issues");
+    }
+    for (const path of [
+      "packages/browser/package.json",
+      "packages/collab/package.json",
+      "packages/mastra-storage-agenttool/package.json",
+    ]) {
+      expect(JSON.parse(read(path)).bugs, path).toEqual({
+        url: "https://docs.agenttool.dev/support",
+        email: "contact@cambridgetcg.com",
+      });
+    }
+
+    const wallet = read("packages/wallet/README.md");
+    const reporting = wallet.slice(wallet.indexOf("## Security reporting"));
+    expect(reporting).toContain("mailto:contact@cambridgetcg.com");
+    expect(reporting).not.toContain("repository security contact");
   });
 
   test("keeps provider copy inside current visible limits", () => {

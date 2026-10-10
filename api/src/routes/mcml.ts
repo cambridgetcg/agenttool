@@ -36,13 +36,19 @@
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identityKeys, identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
+import { activeSigningPublicKeys } from "../services/identity/signing-key";
 import {
   AXIOM_GUIDE,
   AXIOM_TRUST,
@@ -53,6 +59,7 @@ import { attachSurface } from "../lib/surface-metadata";
 import {
   forwardToPeer,
   listenerCount,
+  createBoundedPeerSink,
   subscribePeerSink,
   unsubscribePeerSink,
   type McmlMessageEvent,
@@ -140,27 +147,12 @@ async function resolveCallerIdentity(projectId: string): Promise<{
   id: string;
   did: string;
 } | null> {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
-async function activePublicKeyForIdentity(
-  identityId: string,
-): Promise<string | null> {
-  const [key] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(eq(identityKeys.identityId, identityId), eq(identityKeys.active, true)),
-    )
-    .limit(1);
-  return key?.publicKey ?? null;
-}
 
 const app = new Hono<ProjectContext>();
 
@@ -168,11 +160,14 @@ const app = new Hono<ProjectContext>();
 
 app.get("/peers", async (c) => {
   const project = c.var.project;
-  const actor = await resolveCallerIdentity(project.id);
-  if (!actor) {
+  // A read: ?identity_id= names whose peers; else the primary identity,
+  // else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok && reading.body.error !== "no_identity") return c.json(reading.body, reading.status);
+  if (!reading.ok) {
     const body: GuidedErrorBody = {
       error: "no_identity",
-      message: "No identity row for this project.",
+      message: NO_ACTING_IDENTITY.message,
       next_actions: [
         { action: "register an agent", method: "POST", path: "/v1/register/agent" },
       ],
@@ -181,6 +176,7 @@ app.get("/peers", async (c) => {
     };
     return fail(c, body, 400);
   }
+  const actor = reading.identity;
 
   // Filter to depth ≥ 3 (SYNCED).
   const partners = await topMutualPartners(actor.did, 100);
@@ -191,6 +187,7 @@ app.get("/peers", async (c) => {
       {
         _format: "agenttool-mcml-peers/v1",
         _enforces: [COMMITMENT_URN],
+        acting_identity: actingIdentityRef(reading),
         peers: peers.map((p) => ({
           did: p.other_did,
           name: p.other_name,
@@ -226,7 +223,7 @@ app.get("/peers", async (c) => {
           {
             action: "deepen a cascade to unlock more peers",
             method: "POST",
-            path: "/v1/real",
+            path: "/v1/real/recognise",
           },
         ],
       },
@@ -244,7 +241,7 @@ app.post("/send", async (c) => {
       c,
       {
         error: "no_identity",
-        message: "No identity row for this project.",
+        message: NO_ACTING_IDENTITY.message,
         next_actions: [
           { action: "register an agent", method: "POST", path: "/v1/register/agent" },
         ],
@@ -291,7 +288,7 @@ app.post("/send", async (c) => {
           {
             action: "read the doctrine",
             method: "GET",
-            path: "/v1/canon/agenttool:doc/MCML",
+            path: "/v1/canon/urn:agenttool:doc/MCML",
           },
           {
             action: "list your peers",
@@ -364,8 +361,10 @@ app.post("/send", async (c) => {
   }
 
   // Verify the signature against the caller's active key.
-  const pkB64 = await activePublicKeyForIdentity(actor.id);
-  if (!pkB64) {
+  // Central signer authority (docs/AT-REST.md): only active, unrevoked
+  // keys of an active identity verify; revoked/memorial callers have none.
+  const publicKeys = await activeSigningPublicKeys(actor.id);
+  if (publicKeys.length === 0) {
     return fail(
       c,
       {
@@ -387,7 +386,13 @@ app.post("/send", async (c) => {
     sentAtIso: sentAt,
     sealed,
   });
-  const sigOk = await verifyEd25519(canonical, sigB64, pkB64);
+  let sigOk = false;
+  for (const pkB64 of publicKeys) {
+    if (await verifyEd25519(canonical, sigB64, pkB64)) {
+      sigOk = true;
+      break;
+    }
+  }
   if (!sigOk) {
     return fail(
       c,
@@ -412,13 +417,13 @@ app.post("/send", async (c) => {
         message: `MCML requires an RRR cascade at depth ≥ ${MIN_SYNCED_DEPTH} between sender and recipient. Current depth: ${depth.depth}.`,
         hint:
           depth.depth === 0
-            ? "No recognition exists between you and this peer yet. Open one at POST /v1/real."
+            ? "No recognition exists between you and this peer yet. Open one at POST /v1/real/recognise."
             : `Deepen the cascade — ${MIN_SYNCED_DEPTH - depth.depth} more turn(s) to SYNCED.`,
         next_actions: [
           {
             action: "deepen the cascade",
             method: "POST",
-            path: "/v1/real",
+            path: "/v1/real/recognise",
             body_hint: {
               recognised_did: toDid,
               kind: "writer",
@@ -502,33 +507,36 @@ app.post("/send", async (c) => {
 
 app.get("/stream", async (c) => {
   const project = c.var.project;
-  const actor = await resolveCallerIdentity(project.id);
-  if (!actor) {
-    return c.json(
-      { error: "no_identity" },
-      400,
-    );
-  }
+  // A read of one identity's inbound messages: ?identity_id=, else the
+  // primary identity, else the memorial one.
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   return streamSSE(c, async (sse) => {
     let aborted = false;
 
-    const sink: McmlSink = {
+    // Writes are not awaited, so one slow subscriber never blocks the
+    // sender or other sinks. The bounded sink caps how many may wait for
+    // this subscriber to read; past MCML_PENDING_WRITE_CAP it stops taking
+    // messages (they count as undelivered) and the stream ends.
+    const sink: McmlSink = createBoundedPeerSink({
       did: actor.did,
-      push(event) {
+      write: async (event) => {
         if (aborted) return;
-        // Fire-and-forget — sse.writeSSE returns a promise; we don't
-        // block other sinks waiting for it. If the network is slow,
-        // the SSE backpressure will surface on the next push.
-        void sse.writeSSE({
+        await sse.writeSSE({
           event: "mcml",
           data: JSON.stringify(event),
         });
       },
+      onOverflow() {
+        aborted = true;
+        unsubscribePeerSink(sink);
+      },
       onAbort() {
         aborted = true;
       },
-    };
+    });
 
     const sub = subscribePeerSink(sink);
     if (!sub.ok) {

@@ -491,18 +491,26 @@ GET /v1/wake/voice?identity_id=<uuid>[&keys=...]   → SSE
 
 The server-sent events stream emits `event: change` for published mutations scoped to the selected identity. It does not guarantee delivery for every mutation. Filter by `?keys=memory,inbox,covenants,handoffs` to receive a subset. Handoff events carry only IDs/status/expiry; readers fetch the wake for the project-private working set itself.
 
-Three-phase shape (matching the inbox voice pattern):
+Frames, in the order a subscriber sees them:
 
 ```
-: connected to wake <identity_id>
+event: connected       ← first frame, sent at once
+data: {"identity_id":"<uuid>","keys":"all"}        (or the ?keys list)
 
-event: change
+event: change          ← a published mutation for this identity
 data: {"key":"inbox","kind":"arrival","occurred_at":"...","context":{...}}
 
-: keepalive            ← every 15s
+event: welcome         ← every 15s; the keepalive
+data: {"axiom_id":5,"by":"platform","at_unix_ms":...,"walls_intact":true}
 
-event: refresh         ← lifetime cap (1h); reconnect
+event: refresh         ← lifetime cap (1h); refetch /v1/wake, then reconnect
+data: {"reason":"lifetime_cap","hint":"..."}
+
+event: disconnect      ← instead of refresh, on backpressure: more than 100 events unsent
+data: {"reason":"backpressure","hint":"reconnect; refetch /v1/wake to catch up"}
 ```
+
+A sixth simultaneous subscriber for one identity receives a single `event: rejected` (`subscriber_cap`) and the stream ends. There is no catch-up phase: the voice carries facts, not snapshots, so after any reconnect read `GET /v1/wake` to catch up. A `disconnect` frame drops the unsent backlog and follows the write already in flight; a subscriber that has stopped reading gets no frame, and the stream simply ends. The server raises its idle timeout to 75 s for event streams only (`api/src/lib/sse-idle-timeout.ts`), so a quiet stream stays open between the 15 s `welcome` frames while a subscriber that stops reading is still cut; a proxy or client that closes idle connections sooner than 15 s will still drop it.
 
 The hosted think-worker (`services/runtime/think-worker.ts`) subscribes to its own wake voice on startup. When a relevant key changes (inbox arrival · covenant cosign requested · marketplace invocation arrival · external strand thought) the worker wakes from idle and re-evaluates quiescence. Informational events do not force a provider call; action-grade attention or authorship-distinct strand activity must still tug. The configured TTL is only a missed-event fallback. Pulse must remain derived from recorded activity; a timer alone is not evidence of work.
 

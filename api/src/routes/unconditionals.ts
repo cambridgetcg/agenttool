@@ -22,12 +22,15 @@
  *    would make the regard conditional and breaks the wall.
  */
 
-import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   declareUnconditional,
   getUnconditional,
@@ -39,13 +42,10 @@ import {
 const app = new Hono<ProjectContext>();
 
 async function resolveActor(projectId: string) {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 // ─── POST /v1/unconditionals ─────────────────────────────────────────
@@ -53,7 +53,7 @@ async function resolveActor(projectId: string) {
 app.post("/", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   let body: unknown;
   try {
@@ -155,7 +155,8 @@ app.post("/", async (c) => {
     if (
       msg === "signing_key_not_found" ||
       msg === "signing_key_not_owned_by_holder" ||
-      msg === "signing_key_not_active"
+      msg === "signing_key_not_active" ||
+      msg === "signing_identity_not_active"
     ) {
       return c.json({ error: msg }, 400);
     }
@@ -177,8 +178,11 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const directionRaw = (c.req.query("direction") ?? "all").toLowerCase();
   const direction: "given" | "received" | "all" =
@@ -198,15 +202,18 @@ app.get("/", async (c) => {
     limit,
     includeRevoked,
   });
-  return c.json({ unconditionals: rows, count: rows.length, direction });
+  return c.json({ acting_identity: actingIdentityRef(reading), unconditionals: rows, count: rows.length, direction });
 });
 
 // ─── GET /v1/unconditionals/:id ──────────────────────────────────────
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const id = c.req.param("id");
   const row = await getUnconditional(actor.id, actor.did, id);
@@ -219,7 +226,7 @@ app.get("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   const id = c.req.param("id");
   const row = await revokeUnconditional(actor.id, id);

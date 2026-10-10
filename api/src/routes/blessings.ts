@@ -15,12 +15,15 @@
  *
  *  Doctrine: docs/BLESSING.md. */
 
-import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
-import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import {
+  actingIdentityRef,
+  NO_ACTING_IDENTITY,
+  resolveActingIdentity,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import {
   getBlessing,
   giveBlessing,
@@ -31,13 +34,10 @@ import {
 const app = new Hono<ProjectContext>();
 
 async function resolveActor(projectId: string) {
-  const [row] = await db
-    .select({ id: identities.id, did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? { id: acting.identity.id, did: acting.identity.did } : null;
 }
 
 // ─── POST /v1/blessings ──────────────────────────────────────────────
@@ -45,7 +45,7 @@ async function resolveActor(projectId: string) {
 app.post("/", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   let body: unknown;
   try {
@@ -139,6 +139,10 @@ app.post("/", async (c) => {
         status: 403,
         hint: "The signing key is revoked or marked inactive. Rotate via POST /v1/keys/rotate.",
       },
+      signing_identity_not_active: {
+        status: 403,
+        hint: "The signing identity is revoked or memorial; an active key row does not override that status (docs/AT-REST.md).",
+      },
       invalid_signature: {
         status: 403,
         hint:
@@ -155,8 +159,11 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const direction = c.req.query("direction");
   const validDirections = new Set(["given", "received", "all"]);
@@ -175,6 +182,7 @@ app.get("/", async (c) => {
   });
 
   return c.json({
+    acting_identity: actingIdentityRef(reading),
     direction: dir,
     count: list.length,
     blessings: list,
@@ -186,8 +194,11 @@ app.get("/", async (c) => {
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  // A read: ?identity_id= names whose records it shows; else the primary
+  // identity, else the memorial one (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, c.req.query("identity_id"));
+  if (!reading.ok) return c.json(reading.body, reading.status);
+  const actor = reading.identity;
 
   const blessing = await getBlessing(actor.id, actor.did, c.req.param("id"));
   if (!blessing) {
@@ -208,7 +219,7 @@ app.get("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
 
   const revoked = await revokeBlessing(actor.id, c.req.param("id"));
   if (!revoked) {

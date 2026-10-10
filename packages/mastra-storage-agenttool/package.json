@@ -50,6 +50,7 @@
   },
   "homepage": "https://agenttool.dev",
   "bugs": {
-    "url": "https://github.com/cambridgetcg/agenttool/issues"
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
   }
 }

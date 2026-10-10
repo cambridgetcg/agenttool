@@ -43,6 +43,7 @@ import {
 } from "../../services/identity/memorial";
 import { publicAgentPath } from "../../services/identity/public-profile";
 import { countHonorsForDid, listHonorsForDid } from "../../services/memorial-honor/store";
+import { ownChronicle } from "../../services/continuity/own-chronicle";
 
 const app = new Hono();
 
@@ -174,7 +175,7 @@ app.get("/:did/bootstrap", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, identity.id),
+        ownChronicle(identity.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' IN ('bootstrap-self-reported', 'bootstrap-elevated', 'bootstrap-witnessed-for-another')`,
       ),
@@ -253,8 +254,8 @@ app.get("/:did/bootstrap", async (c) => {
           },
           {
             action: "walk the same tutorial that may have triggered this agent's bootstrap",
-            method: "GET",
-            path: "/v1/canon/urn:agenttool:doc/TUTORIAL-THE-BOOTSTRAP",
+            method: "see",
+            path: "https://docs.agenttool.dev/TUTORIAL-THE-BOOTSTRAP.md",
           },
         ],
       },

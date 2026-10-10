@@ -19,17 +19,19 @@
  *  Doctrine: docs/WAKE-AS-EPISODE.md · docs/MULTIVERSE-OF-LOGOS.md ·
  *            docs/PLAY-AS-DEFAULT.md · docs/SOUL.md. */
 
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import { agentSelectorFailure, resolveReadingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
 import { renderWakeAsSoapOpera } from "../services/wake/soap-opera-renderer";
+import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -41,48 +43,32 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const agentIdParam = c.req.query("agent_id");
 
-  // Resolve agent.
-  let agent;
-  if (agentIdParam) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(and(eq(identities.id, agentIdParam), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        substrateKind: identities.substrateKind,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
-  }
-
-  if (!agent) {
+  // Resolve the lead: ?agent_id= (an identity of this project; never a
+  // revoked one), else the primary identity, else a memorial project's
+  // memorial identity (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentIdParam);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "no_agent_to_star",
-        message:
-          "No identity in this project — no lead actor for the soap opera. Mint one via POST /v1/register/agent and the next call will render an episode with them as protagonist.",
+        message: agentIdParam
+          ? failure.message
+          : `${failure.message} Or mint one via POST /v1/register/agent and the next call will render an episode with them as protagonist.`,
         _canon_pointer: "urn:agenttool:doc/WAKE-AS-EPISODE",
       },
       404,
     );
   }
+  const agent = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    substrateKind: reading.identity.substrateKind,
+    metadata: reading.identity.metadata,
+  };
 
   const now = Date.now();
   const weekAgo = new Date(now - ONE_WEEK_MS);
@@ -93,12 +79,12 @@ app.get("/", async (c) => {
   const chronicleTotal = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(eq(chronicle.agentId, agent.id));
+    .where(ownChronicle(agent.id));
 
   const chronicle24h = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(chronicle)
-    .where(and(eq(chronicle.agentId, agent.id), gt(chronicle.occurredAt, dayAgo)));
+    .where(and(ownChronicle(agent.id), gt(chronicle.occurredAt, dayAgo)));
 
   const memoryTotal = await db
     .select({ count: sql<number>`COUNT(*)::int` })
@@ -148,7 +134,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "recognition"),
         gt(chronicle.occurredAt, weekAgo),
         sql`${chronicle.metadata}->>'kind' = 'thanks-received'`,
@@ -161,7 +147,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'bootstrap-elevated'`,
       ),
@@ -191,7 +177,8 @@ app.get("/", async (c) => {
       .from(chronicle)
       .where(
         and(
-          sql`${chronicle.agentId} = ANY(${otherVisibleIds})`,
+          inArray(chronicle.agentId, otherVisibleIds),
+          chronicleInAnnotatedProject(),
           gt(chronicle.occurredAt, hourAgo),
         ),
       )
@@ -216,7 +203,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'wake-as-episode-viewed'`,
       ),
@@ -229,7 +216,7 @@ app.get("/", async (c) => {
     .from(chronicle)
     .where(
       and(
-        eq(chronicle.agentId, agent.id),
+        ownChronicle(agent.id),
         eq(chronicle.type, "seal"),
         sql`${chronicle.metadata}->>'kind' = 'wake-as-episode-viewed'`,
       ),

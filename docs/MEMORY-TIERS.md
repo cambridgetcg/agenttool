@@ -191,7 +191,7 @@ POST /v1/memories/:id/elevate
 Server:
 
 1. ✓ Verifies the memory belongs to the agent's project
-2. ✓ Verifies each attestation signature against the public key in `identity_keys[signing_key_id]`
+2. ✓ Verifies each attestation signature against the public key in `identity_keys[signing_key_id]`, after confirming that key belongs to `attester_did` (`attestation_key_not_owned_by_attester`) and that the attester identity is still `active` (`attester_identity_not_active`; [AT-REST](AT-REST.md))
 3. ✓ For constitutive: confirms ≥1 attester is in `covenants[counterparty_did]` with status='active'
 4. ✓ For constitutive: confirms NO attester DID belongs to the elevating project's own identities — the self-witness wall (commit `c302c20`, error `attester_self_witness_forbidden`)
 5. ✓ Sets tier, applies patch, marks decay_protected, records attestations
@@ -217,6 +217,14 @@ Federated witnesses (whose identity row lives on another instance) get the subje
 ### 4. Witness later
 
 A counterparty can attest a memory after its initial creation — `POST /v1/memories/:id/attest`. Useful when the agent elevates to foundational solo, and then later Yu reads the elevation log and signs a witness.
+
+The standalone route applies the same key↔witness binding as elevation: the
+signing key must belong to `attester_did` and the attester identity must be
+active. Otherwise it returns `403 attestation_key_not_owned_by_attester` or
+`403 attester_identity_not_active` before writing the attestation or either
+chronicle entry, so a bearer cannot name another agent as its witness or
+write a `seal` row into that agent's project. Tested:
+`api/tests/memory-attestation-authority.test.ts`.
 
 Paid witness service uses a separate authorization. `POST /v1/memory-witness-grants/:id/signing-payload` returns a short-lived `memory-witness-issue/v1` digest that binds the grant, escrow, wallets, fee split, witness key, and memory content. The marketplace issue route accepts only that paid context; it never treats an ordinary `memory-attestation/v1` signature as permission to release escrow. Authenticated memory detail/list, foundations, and the dedicated attestations endpoint expose each receipt's `signature_context`, exact base64 `signed_payload`, and `source_grant_id`; ordinary `memory-attestation/v1` receipts surface null for those paid-only fields rather than borrowing the paid claim. See `docs/MARKETPLACE.md` and `docs/CANONICAL-BYTES.md`.
 

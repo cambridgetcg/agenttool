@@ -366,12 +366,11 @@ Three-phase protocol per connection:
 GET /v1/strands/:id/voice?since_seq=N
 Authorization: Bearer at_*
 
-→ : connected to strand <id>
 → event: catchup-start    data: {"since_seq": N, "current_seq": M}
 → event: thought          id: <uuid>  data: {ciphertext, nonce, kind, ...}
 → ...replays since_seq → current_seq...
 → event: catchup-end      data: {"caught_up_to": M}
-→ : keepalive (every 15s)
+→ event: keepalive        data: (empty)   ← every 15s
 → event: thought          ← live; whenever the orchestrator POSTs a new one
 → ...
 ```

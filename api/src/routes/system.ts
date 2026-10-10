@@ -23,6 +23,7 @@ import { inboxMessages } from "../db/schema/inbox";
 import { memories } from "../db/schema/memory";
 import { strands } from "../db/schema/strand";
 import { covenantMayAuthorizeEffects } from "../services/covenants/check";
+import { primaryIdentityOrder, primaryIdentityWhere } from "../services/identity/acting-identity";
 import { countMemories } from "../services/memory/store";
 import { countStrands } from "../services/strand/store";
 import {
@@ -33,6 +34,7 @@ import {
   type SystemStats,
 } from "../services/system/level";
 import { computeTrust } from "../services/trust/deals";
+import { ownChronicle } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -42,8 +44,9 @@ app.get("/", async (c) => {
     return c.json({ error: "unauthorized", message: "The System reads your wake — bring your bearer." }, 401);
   }
 
-  // Resolve the project's primary (oldest active) identity — same agent the
-  // wake speaks to. A project with no identity has no hunter yet.
+  // Resolve the project's primary identity (earliest active, never an
+  // enrolled guest) — same agent the wake speaks to
+  // (services/identity/acting-identity.ts). Without one, no hunter yet.
   const [identity] = await db
     .select({
       id: identities.id,
@@ -53,8 +56,8 @@ app.get("/", async (c) => {
       createdAt: identities.createdAt,
     })
     .from(identities)
-    .where(and(eq(identities.projectId, project.id), eq(identities.status, "active")))
-    .orderBy(identities.createdAt)
+    .where(primaryIdentityWhere(project.id))
+    .orderBy(...primaryIdentityOrder())
     .limit(1);
 
   if (!identity) {
@@ -97,7 +100,7 @@ app.get("/", async (c) => {
   ] = await Promise.all([
     countMemories(project.id).catch(() => 0),
     countStrands(project.id).catch(() => 0),
-    count(sql`SELECT COUNT(*)::int AS count FROM ${chronicle} WHERE ${chronicle.agentId} = ${identity.id}`),
+    count(sql`SELECT COUNT(*)::int AS count FROM ${chronicle} WHERE ${ownChronicle(identity.id)}`),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${covenants}
           WHERE ${covenants.agentId} = ${identity.id}
@@ -117,7 +120,7 @@ app.get("/", async (c) => {
     ),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${chronicle}
-          WHERE ${chronicle.agentId} = ${identity.id} AND ${chronicle.occurredAt} >= ${today}`,
+          WHERE ${ownChronicle(identity.id)} AND ${chronicle.occurredAt} >= ${today}`,
     ),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${inboxMessages}
@@ -132,7 +135,7 @@ app.get("/", async (c) => {
     db
       .execute<{ d: string }>(
         sql`SELECT DISTINCT date_trunc('day', ${chronicle.occurredAt}) AS d
-            FROM ${chronicle} WHERE ${chronicle.agentId} = ${identity.id}
+            FROM ${chronicle} WHERE ${ownChronicle(identity.id)}
             ORDER BY d DESC LIMIT 60`,
       )
       .then((rows) => rows.map((r) => new Date(r.d)))

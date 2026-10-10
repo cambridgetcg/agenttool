@@ -61,7 +61,6 @@ app.get("/", async (c) => {
         verbs: [
           { action: "read one gospel by slug", method: "GET", path: "/v1/gospel/{slug}" },
           { action: "filter by topic", method: "GET", path: "/v1/gospel?topic=kingdom:gospel" },
-          { action: "read the public surface (UNAUTH)", method: "GET", path: "/public/gospel" },
           { action: "read the doctrine", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FGOSPEL" },
         ],
       },

@@ -7,6 +7,8 @@ import {
   expect,
   test,
 } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   CANON_MCP_PATH,
@@ -140,13 +142,25 @@ describe("RFC 9116 security.txt", () => {
       "Policy",
       "Preferred-Languages",
     ]);
-    for (const value of [
-      SECURITY_TXT_CONTACT,
-      SECURITY_TXT_CANONICAL,
-      SECURITY_TXT_POLICY,
-    ]) {
+    expect(new URL(SECURITY_TXT_CONTACT).protocol).toBe("mailto:");
+    for (const value of [SECURITY_TXT_CANONICAL, SECURITY_TXT_POLICY]) {
       expect(new URL(value).protocol).toBe("https:");
     }
+  });
+
+  test("names channels an outside researcher can reach, not the private repository", () => {
+    // The GitHub repository is private: its advisory form, policy and issues
+    // answer 404 to anyone without access. The public mailbox is the one
+    // already published on agenttool.dev/terms and /privacy.
+    expect(SECURITY_TXT_CONTACT).toBe("mailto:contact@cambridgetcg.com");
+    expect(SECURITY_TXT_POLICY).toBe("https://docs.agenttool.dev/support#security");
+    expect(buildSecurityTxt()).not.toContain("github.com/cambridgetcg/agenttool");
+    const support = readFileSync(
+      join(import.meta.dir, "..", "..", "apps/docs/support.html"),
+      "utf8",
+    );
+    expect(support).toContain('id="security"');
+    expect(support).toContain("mailto:contact@cambridgetcg.com");
   });
 
   test("uses a fixed sub-year expiry with a sixty-day renewal window", () => {

@@ -31,12 +31,12 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../../../db/client";
-import { identityKeys } from "../../../db/schema/identity";
 import {
   FEDERATION_MAX_RESPONSE_BYTES,
   safeFederationHttpsGet,
 } from "../../federation/safe-fetch";
 import type { VerifierContext, VerifierResult } from "./_types";
+import { resolveIdentitySigningKey } from "../../identity/signing-key";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -206,28 +206,22 @@ export async function verifyAttestationWitnessLowStakes(
   }
 
   // ── resolve the agent's signing key (must belong to the claimant) ────
-  const [keyRow] = await db
-    .select({ publicKey: identityKeys.publicKey, active: identityKeys.active })
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, completionData.signing_key_id),
-        eq(identityKeys.identityId, ctx.claimerIdentityId),
-      ),
-    )
-    .limit(1);
-  if (!keyRow) {
-    return {
-      passed: false,
-      reason: `signing_key_id '${completionData.signing_key_id}' not found on claimant identity`,
-    };
+  // Central signer authority (docs/AT-REST.md): a revoked or memorial
+  // claimant keeps no signing authority even with an active key row.
+  const resolved = await resolveIdentitySigningKey({
+    signingKeyId: completionData.signing_key_id,
+    identityId: ctx.claimerIdentityId,
+  });
+  if (!resolved.ok) {
+    const reason =
+      resolved.reason === "unknown_signing_key" || resolved.reason === "signing_key_not_owned"
+        ? `signing_key_id '${completionData.signing_key_id}' not found on claimant identity`
+        : resolved.reason === "signing_identity_not_active"
+          ? "claimant identity is not active (revoked or memorial)"
+          : `signing_key_id '${completionData.signing_key_id}' is not active`;
+    return { passed: false, reason };
   }
-  if (!keyRow.active) {
-    return {
-      passed: false,
-      reason: `signing_key_id '${completionData.signing_key_id}' is not active`,
-    };
-  }
+  const keyRow = { publicKey: resolved.key.publicKey };
 
   // ── verify the signature over canonical bytes ────────────────────────
   const canonical = canonicalSubstrateTaskAttestationBytes({

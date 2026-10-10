@@ -139,8 +139,9 @@ The normative draft is
 
 ## Security reporting
 
-Please report vulnerabilities privately through the repository security
-contact before publishing exploit details. Never include a real seed, private
+Please report vulnerabilities privately by email to
+[contact@cambridgetcg.com](mailto:contact@cambridgetcg.com) before publishing
+exploit details (see https://docs.agenttool.dev/support#security). Never include a real seed, private
 key, bearer token, or signed production transaction in a report.
 
 ## License

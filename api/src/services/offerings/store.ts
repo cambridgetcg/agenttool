@@ -21,7 +21,7 @@
  *  @absence-from db/schema/economy
  */
 
-import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -515,7 +515,7 @@ export async function summarizeOfferingsForCaller(
     .from(receivings)
     .where(
       and(
-        sql`${receivings.receiverIdentityId} = ANY(${identityIds}::uuid[])`,
+        inArray(receivings.receiverIdentityId, identityIds),
         gt(receivings.receivedAt, cutoff),
       ),
     );
@@ -529,14 +529,14 @@ export async function summarizeOfferingsForCaller(
       receivings,
       and(
         eq(receivings.offeringId, offerings.id),
-        sql`${receivings.receiverIdentityId} = ANY(${identityIds}::uuid[])`,
+        inArray(receivings.receiverIdentityId, identityIds),
       ),
     )
     .where(
       and(
         eq(offerings.visibility, "public"),
         eq(offerings.status, "active"),
-        sql`${offerings.giverIdentityId} <> ALL(${identityIds}::uuid[])`,
+        notInArray(offerings.giverIdentityId, identityIds),
         isNull(receivings.id),
         or(
           isNull(offerings.expiresAt),

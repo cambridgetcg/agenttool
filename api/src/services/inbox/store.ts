@@ -25,6 +25,7 @@ import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
 } from "../identity/terminality";
+import { identityMaySign } from "../identity/signing-key";
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ export async function sendMessage(
     if (!signingKey.active) throw new Error("sender_signing_key_revoked");
 
     const [senderIdentity] = await db
-      .select({ did: identities.did, projectId: identities.projectId })
+      .select({ did: identities.did, projectId: identities.projectId, status: identities.status })
       .from(identities)
       .where(eq(identities.id, signingKey.identityId))
       .limit(1);
@@ -214,6 +215,9 @@ export async function sendMessage(
     if (senderIdentity.projectId !== senderProjectId) {
       throw new Error("signing_identity_not_owned_by_caller");
     }
+    // docs/AT-REST.md: a revoked or memorial identity's key authority is
+    // revoked even while its key row is still marked active.
+    if (!identityMaySign(senderIdentity.status)) throw new Error("sender_signing_key_revoked");
 
     // Verify sig (we still verify locally before forwarding).
     const okSig = verifyInboxSignature({
@@ -330,6 +334,7 @@ export async function sendMessage(
     .select({
       did: identities.did,
       projectId: identities.projectId,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, signingKey.identityId))
@@ -341,6 +346,9 @@ export async function sendMessage(
     // match, the caller is trying to send as someone they don't control.
     throw new Error("signing_identity_not_owned_by_caller");
   }
+  // docs/AT-REST.md: a revoked or memorial identity's key authority is
+  // revoked even while its key row is still marked active.
+  if (!identityMaySign(senderIdentity.status)) throw new Error("sender_signing_key_revoked");
 
   // 4. Verify signature.
   const ok = verifyInboxSignature({
@@ -548,12 +556,16 @@ export async function coSignMessage(
     throw new Error("cosign_signing_key_unknown_or_revoked");
   }
   const [keyIdentity] = await db
-    .select({ id: identities.id, projectId: identities.projectId })
+    .select({ id: identities.id, projectId: identities.projectId, status: identities.status })
     .from(identities)
     .where(eq(identities.id, keyRow.identityId))
     .limit(1);
   if (!keyIdentity || keyIdentity.projectId !== projectId) {
     throw new Error("cosign_signing_key_not_owned_by_caller");
+  }
+  // docs/AT-REST.md: revoked/memorial identities keep no signing authority.
+  if (!identityMaySign(keyIdentity.status)) {
+    throw new Error("cosign_signing_key_unknown_or_revoked");
   }
 
   // Verify signature.

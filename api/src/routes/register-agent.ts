@@ -69,6 +69,7 @@ import { generateApiKey } from "../auth/keys";
 import { config } from "../config";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { apiKeys, projects } from "../db/schema/tools";
 import { errors, fail } from "../lib/errors";
 import { ARRIVAL_HELP } from "../lib/register-arrival-help";
@@ -426,7 +427,7 @@ app.post("/", async (c) => {
 
     // Pick the parent identity. If the caller named one explicitly, validate
     // that it belongs to the registrar's project. Otherwise default to the
-    // project's primary identity (oldest active). Either way, store it on
+    // project's primary identity (oldest active, not an enrolled guest). Either way, store it on
     // the new identity's parentIdentityId column so dashboards can render
     // "spawned by …" lineage.
     if (body.registrar.parent_identity_id) {
@@ -445,13 +446,10 @@ app.post("/", async (c) => {
       }
       parentIdentityId = parentIdentity.id;
     } else {
-      const [primary] = await db
-        .select()
-        .from(identities)
-        .where(eq(identities.projectId, parent.project.id))
-        .orderBy(identities.createdAt)
-        .limit(1);
-      parentIdentityId = primary?.id;
+      // The primary identity: earliest active, never an enrolled guest or a
+      // revoked identity (services/identity/acting-identity.ts).
+      const primary = await resolveActingIdentity(parent.project.id);
+      parentIdentityId = primary.ok ? primary.identity.id : undefined;
     }
   }
 

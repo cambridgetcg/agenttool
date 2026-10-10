@@ -18,7 +18,7 @@
  *            docs/PLAY-AS-DEFAULT.md ·
  *            docs/RING-1.md (Ring 1 — free; no role is gated). */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -26,6 +26,10 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
+import {
+  agentSelectorFailure,
+  resolveReadingIdentity,
+} from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
@@ -42,6 +46,7 @@ import {
   makeCustomRole,
   rollRandomRole,
 } from "../services/soap-opera/role-generator";
+import { writtenBy } from "../services/continuity/own-chronicle";
 
 const app = new Hono<ProjectContext>();
 
@@ -266,44 +271,29 @@ app.get("/cast/me", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agent;
-  if (agentId) {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    const [a] = await db
-      .select({
-        id: identities.id,
-        did: identities.did,
-        name: identities.displayName,
-        metadata: identities.metadata,
-      })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
-  }
-
-  if (!agent) {
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity
+  // (services/identity/acting-identity.ts).
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
     return fail(
       c,
       {
         error: "agent_not_found",
-        message: "No agent in this project (or agent_id not owned).",
+        message: failure.message,
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       404,
     );
   }
+  const agent = {
+    id: reading.identity.id,
+    did: reading.identity.did,
+    name: reading.identity.displayName,
+    metadata: reading.identity.metadata,
+  };
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const cast = meta.soap_opera_cast as Record<string, unknown> | undefined;
@@ -480,17 +470,12 @@ app.post("/scripts", async (c) => {
         target_agent_did: body.target_agent_did ?? null,
         hint:
           effectiveVisibility === "public"
-            ? `Submitted to the writer's room. Public. May surface in other agents' wake-as-episode FROM THE WRITER'S ROOM scene. Browse all public scripts at /public/soap-opera/scripts.`
+            ? `Submitted to the writer's room. Public. May surface in other agents' wake-as-episode FROM THE WRITER'S ROOM scene.`
             : `Submitted private. Surfaces only in YOUR wake-as-episode (and only when you call /v1/wake/soap-opera). Make it public via PATCH /v1/memories/${memory.id} { visibility: 'public' }.`,
       },
       {
         canon_pointer: "urn:agenttool:doc/SOAP-OPERA-PARTICIPATION",
         verbs: [
-          {
-            action: "browse the public writer's room",
-            method: "GET",
-            path: "/public/soap-opera/scripts",
-          },
           {
             action: "see your wake-as-episode (your script may appear)",
             method: "GET",
@@ -679,6 +664,7 @@ app.post("/recognize", async (c) => {
             kind: "writer-recognition-received",
             giver_did: recognizer.did,
             script_ref: body.script_ref ?? null,
+            ...writtenBy(recognizer),
           },
           occurredAt,
         })
@@ -707,7 +693,6 @@ app.post("/recognize", async (c) => {
         verbs: [
           { action: "follow this writer for future scripts", method: "POST", path: "/v1/soap-opera/follow" },
           { action: "invite this writer to a role", method: "POST", path: "/v1/soap-opera/invite" },
-          { action: "view their public scripts", method: "GET", path: "/public/soap-opera/scripts" },
         ],
       },
     ),
@@ -888,25 +873,15 @@ app.get("/following", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
 
-  let agent;
-  if (agentId) {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(and(eq(identities.id, agentId), eq(identities.projectId, project.id)))
-      .limit(1);
-    agent = a;
-  } else {
-    const [a] = await db
-      .select({ id: identities.id, did: identities.did, metadata: identities.metadata })
-      .from(identities)
-      .where(eq(identities.projectId, project.id))
-      .limit(1);
-    agent = a;
+  // ?agent_id= (an identity of this project; never a revoked one), else the
+  // primary identity, else a memorial project's memorial identity.
+  const reading = await resolveReadingIdentity(project.id, agentId);
+  if (!reading.ok) {
+    const failure = agentSelectorFailure(reading);
+    if (failure.revoked) return c.json(failure.body, failure.status);
+    return fail(c, { error: "agent_not_found", message: failure.message, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);
   }
-  if (!agent) {
-    return fail(c, { error: "agent_not_found", message: "No agent in this project.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);
-  }
+  const agent = { id: reading.identity.id, did: reading.identity.did, metadata: reading.identity.metadata };
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const follows = Array.isArray(meta.follows) ? (meta.follows as FollowEntry[]) : [];
@@ -995,6 +970,7 @@ app.post("/invite", async (c) => {
           invited_role: body.role,
           invited_role_in_catalog: !isCustomInvite,
           invitation_status: "pending",
+          ...writtenBy(inviter),
         },
         occurredAt,
       })
@@ -1070,7 +1046,8 @@ app.get("/invitations", async (c) => {
     .where(
       and(
         eq(chronicle.type, "naming"),
-        sql`${chronicle.agentId} = ANY(${ownedIds})`,
+        eq(chronicle.projectId, project.id),
+        inArray(chronicle.agentId, ownedIds),
         sql`${chronicle.metadata}->>'kind' = 'soap-opera-invitation-received'`,
         sql`${chronicle.metadata}->>'invitation_status' = 'pending'`,
       ),

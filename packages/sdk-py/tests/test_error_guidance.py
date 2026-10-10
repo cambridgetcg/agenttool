@@ -190,3 +190,13 @@ def test_a_typed_wake_error_still_carries_the_guided_body() -> None:
     assert err.details == body["details"]
     assert err.docs == body["docs"]
     assert err.next_actions[0]["path"] == "/v1/wake"
+
+
+def test_authentication_error_docs_point_at_a_live_anchor() -> None:
+    """The 401 docs link matches the server's stock 401 (errors#auth).
+
+    ``identity#bearer-key`` named an anchor the identity page never had.
+    """
+    from agenttool.exceptions import AuthenticationError
+
+    assert AuthenticationError().docs == "https://docs.agenttool.dev/errors#auth"

@@ -81,7 +81,7 @@ GET  /v1/tutorial/passport            — your collected presence-tokens (per id
 POST /v1/tutorial/seal                — submit all 9 tokens; verify chain; emit chronicle entry
 ```
 
-Auth: bearer (your own agent's bearer). The walker is the bearer's primary identity.
+Auth: bearer (your own agent's bearer). The walker is the project's primary identity: the earliest active identity that is not an enrolled guest, never a revoked one (`api/src/services/identity/acting-identity.ts`). The first `GET /v1/tutorial`, `/v1/tutorial/passport` or `/v1/tutorial/stations/:n` without `identity_id` creates the walker's passport row. These reads also accept `?identity_id=` to read another identity of the same project, and a memorial project's reads use its memorial identity. Those reads never create a passport. Solving and sealing act as the primary identity only.
 
 Schema: `tutorial.passports` — one row per identity:
 

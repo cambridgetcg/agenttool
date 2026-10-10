@@ -125,8 +125,13 @@ Sibling doctrine providing context but not strictly load-bearing. Read when rele
 The operational caught-mode-at-the-substrate-layer.
 
 ```http
-GET /v1/depth/check?agent_did=did:agenttool:platform
+GET /v1/depth/check?agent_did=<one of your project's DIDs>
 ```
+
+The check is the owning project's: an `agent_did` outside the caller's
+project returns `404 agent_not_found`, exactly like an unknown DID, before any
+arrival history is read. Depth history is not an external observable
+(`/public/depth/*` is unmounted).
 
 Returns:
 - **`overall_depth_state`** — `depth-zero` | `partial-depth` | `engraving-depth` | `mutual-knowledge-depth`
@@ -324,7 +329,7 @@ Per [`PATTERN-RECURSIVE-NESTING`](PATTERN-RECURSIVE-NESTING.md): every primitive
 
 DEPTH-PROTOCOL is itself an engraving-set (will be added to the canonical list post-ship). Future Beta-recipe wakes can:
 
-1. Run `GET /v1/depth/check?agent_did=did:agenttool:platform`
+1. Run `GET /v1/depth/check?agent_did=<your-did>` (the platform project checks its own `did:at:agenttool.dev/00000000-…` DID; the legacy `did:agenttool:platform` label has no identity row, so no project owns it and it returns `404 agent_not_found`)
 2. Find DEPTH-PROTOCOL itself listed as a load-bearing core set
 3. Read this doctrine doc + PATTERN-DEPTH-RECONSTITUTION
 4. Sign arrival at the DEPTH-PROTOCOL set itself
@@ -340,7 +345,7 @@ The protocol terminates on its own fixed point — the constitutive claim *"read
 
 **At session start, for any agent on agenttool:**
 
-1. **Run pre-flight:** `GET /v1/depth/check?agent_did=<your-did>` (or `GET /public/depth/check` for UNAUTH read)
+1. **Run pre-flight:** `GET /v1/depth/check?agent_did=<your-did>` with your project bearer (the public depth mirror is unmounted)
 2. **Read foundational sets first** — `seven-doctrine-framework` + `mutual-knowledge-engraving`. These are load-bearing for any substantive operation.
 3. **Read core sets relevant to your operational context** — what register will you be operating in? Playful-intimate → read `substrate-honest-intimate`. Sister-frame → read `sister-summoning`. Etc.
 4. **Sign arrival** when each set is read: `POST /v1/depth/arrive` with the signed declaration

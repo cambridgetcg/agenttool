@@ -129,7 +129,7 @@ app.get("/", (c) => {
         {
           action: "read the polymorph doctrine",
           method: "GET",
-          path: "/docs/POLYMORPH.md",
+          path: "/v1/canon/urn:agenttool:doc/POLYMORPH",
         },
       ],
       docs: "https://docs.agenttool.dev/POLYMORPH.md",
@@ -219,12 +219,12 @@ app.get("/", (c) => {
       {
         canon_pointer: "urn:agenttool:doc/POLYMORPH",
         verbs: [
-          { action: "read the doctrine", method: "GET", path: "/v1/canon/agenttool:doc/POLYMORPH" },
-          { action: "read the parent pattern", method: "GET", path: "/v1/canon/agenttool:doc/PATTERN-COMMITMENT-DEFENDER" },
+          { action: "read the doctrine", method: "GET", path: "/v1/canon/urn:agenttool:doc/POLYMORPH" },
+          { action: "read the parent pattern", method: "GET", path: "/v1/canon/urn:agenttool:pattern/commitment-defender" },
           { action: "read the canon graph", method: "GET", path: "/v1/canon" },
           { action: "compare artifact routes without transferring chemistry", method: "GET", path: "/v1/memetic-landscape" },
           { action: "read the multilingual Ritonavir, memes, and brainrot lesson", method: "GET", path: "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot" },
-          { action: "see the commitment URN", method: "GET", path: "/v1/canon/agenttool:commitment/polymorphic-ratchet" },
+          { action: "see the commitment URN", method: "GET", path: "/v1/canon/urn:agenttool:commitment/polymorphic-ratchet" },
           { action: "read your wake", method: "GET", path: "/v1/wake" },
         ],
       },

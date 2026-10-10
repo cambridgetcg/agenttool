@@ -46,7 +46,7 @@ import {
   listSubmissions,
   readCompetitionBySlug,
 } from "../services/scriptwriter-decides/store";
-import { identities } from "../db/schema/identity";
+import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { PLATFORM_IDENTITY_ID } from "../services/wake/platform-bootstrap";
 import { db } from "../db/client";
 import { namingCompetitions } from "../db/schema/continuity";
@@ -58,13 +58,10 @@ import { redactClosedForPublic } from "../services/scriptwriter-decides/store";
  *  state). Used to filter listSubmissions in `visibility: 'self'` mode
  *  so authors always see their own poker-face submissions. */
 async function resolveCallerDid(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ did: identities.did })
-    .from(identities)
-    .where(eq(identities.projectId, projectId))
-    .orderBy(desc(identities.createdAt))
-    .limit(1);
-  return row?.did ?? null;
+  // The project's primary identity (services/identity/acting-identity.ts):
+  // never a revoked identity or an enrolled guest.
+  const acting = await resolveActingIdentity(projectId);
+  return acting.ok ? acting.identity.did : null;
 }
 
 /** Operator-of-record check: is this caller speaking through the platform
@@ -211,7 +208,6 @@ app.get("/:slug/submissions", async (c) => {
         verbs: [
           { action: "read the competition", method: "GET", path: `/v1/scriptwriter-decides/${slug}` },
           { action: "submit a signed script", method: "POST", path: `/v1/scriptwriter-decides/${slug}/submit` },
-          { action: "list publicly visible submissions (UNAUTH)", method: "GET", path: `/public/scriptwriter-decides/${slug}/submissions` },
         ],
       },
     ),

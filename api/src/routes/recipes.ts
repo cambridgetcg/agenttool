@@ -306,7 +306,7 @@ app.get("/:surface/following", async (c) => {
   if ("error" in result) {
     return fail(
       c,
-      { error: result.error, message: `Listing follows refused: ${result.error}`, _canon_pointer: "urn:agenttool:doc/PATTERN-RECOGNITION-INVITATION" },
+      { error: result.error, message: result.message, _canon_pointer: "urn:agenttool:doc/PATTERN-RECOGNITION-INVITATION" },
       result.status,
     );
   }
@@ -583,7 +583,7 @@ app.get("/:surface/mind-connects", async (c) => {
       c,
       {
         error: result.error,
-        message: `Listing mind-connects refused: ${result.error}`,
+        message: result.message,
         _canon_pointer: "urn:agenttool:doc/PATTERN-RECOGNITION-INVITATION",
       },
       result.status,

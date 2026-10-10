@@ -35,6 +35,9 @@ import { db } from "../../db/client.ts";
 const CHANNEL = "agenttool_wake_event";
 export const SUBS_PER_IDENTITY_CAP = 5;
 export const BACKPRESSURE_QUEUE_CAP = 100;
+/** How long a closing sink waits for the write in flight, and then for its
+ *  terminal frame, before it gives up the subscriber slot regardless. */
+export const TERMINAL_WRITE_GRACE_MS = 1_000;
 
 /** The canonical set of keys for events that are actually published. New
  *  keys require a doctrine doc + a producer test; this list does not claim
@@ -113,7 +116,9 @@ export class WakeSink {
   private queue: WakeSseEvent[] = [];
   private draining = false;
   private aborted = false;
+  private closing = false;
   private onAbortCallbacks: Array<() => void> = [];
+  private idleResolvers: Array<() => void> = [];
 
   constructor(
     public readonly identityId: string,
@@ -122,10 +127,11 @@ export class WakeSink {
      *  Empty/undefined means deliver all. */
     public readonly keyFilter: Set<WakeEventKey> | null,
     private readonly write: (event: WakeSseEvent) => Promise<void>,
+    private readonly terminalWriteGraceMs = TERMINAL_WRITE_GRACE_MS,
   ) {}
 
   enqueue(event: WakeSseEvent): boolean {
-    if (this.aborted) return false;
+    if (this.aborted || this.closing) return false;
     if (this.queue.length >= BACKPRESSURE_QUEUE_CAP) return false;
     this.queue.push(event);
     if (!this.draining) {
@@ -145,6 +151,30 @@ export class WakeSink {
     });
   }
 
+  /** End the stream with one explicit terminal frame. The backlog is
+   *  dropped — the frame tells the subscriber to refetch GET /v1/wake, which
+   *  supersedes it. The frame follows the write already in flight; a
+   *  subscriber that is not reading gets no frame and still loses its slot
+   *  once the grace period passes. */
+  async closeWith(event: WakeSseEvent): Promise<void> {
+    if (this.aborted || this.closing) return;
+    this.closing = true;
+    this.queue.length = 0;
+    const idle = await settlesWithin(this.whenIdle(), this.terminalWriteGraceMs);
+    if (idle && !this.aborted) {
+      await settlesWithin(this.write(event), this.terminalWriteGraceMs);
+    }
+    this.abort();
+  }
+
+  /** Resolve once every currently queued event has been written. */
+  private whenIdle(): Promise<void> {
+    if (this.aborted || (!this.draining && this.queue.length === 0)) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => this.idleResolvers.push(resolve));
+  }
+
   private async drain(): Promise<void> {
     this.draining = true;
     while (!this.aborted && this.queue.length > 0) {
@@ -157,6 +187,9 @@ export class WakeSink {
       }
     }
     this.draining = false;
+    const resolvers = this.idleResolvers;
+    this.idleResolvers = [];
+    for (const resolve of resolvers) resolve();
   }
 
   abort(): void {
@@ -254,6 +287,43 @@ export async function ensureWakeListening(): Promise<void> {
   return listenInitPromise;
 }
 
+/** Deliver one published event to one SSE subscriber. A subscriber more
+ *  than BACKPRESSURE_QUEUE_CAP events behind is closed with a terminal
+ *  `event: disconnect` frame (docs/WAKE.md, Voice). */
+export async function deliverToWakeSink(
+  sink: WakeSink,
+  ev: WakeEvent,
+): Promise<void> {
+  if (sink.deliverWakeEvent(ev) || sink.isAborted()) return;
+  await sink.closeWith({
+    event: "disconnect",
+    data: JSON.stringify({
+      reason: "backpressure",
+      hint: "reconnect; refetch /v1/wake to catch up",
+    }),
+  });
+}
+
+async function settlesWithin(
+  promise: Promise<unknown>,
+  timeoutMs: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function handleNotify(rawPayload: string): Promise<void> {
   let ev: WakeEvent;
   try {
@@ -267,22 +337,7 @@ async function handleNotify(rawPayload: string): Promise<void> {
   const sinks = sinksByIdentity.get(ev.identity_id);
   if (sinks && sinks.size > 0) {
     for (const sink of [...sinks]) {
-      const accepted = sink.deliverWakeEvent(ev);
-      if (!accepted) {
-        try {
-          const reason = sink.isAborted() ? "aborted" : "backpressure";
-          sink.enqueue({
-            event: "disconnect",
-            data: JSON.stringify({
-              reason,
-              hint: "reconnect; refetch /v1/wake to catch up",
-            }),
-          });
-        } catch {
-          /* ignore */
-        }
-        sink.abort();
-      }
+      void deliverToWakeSink(sink, ev);
     }
   }
 

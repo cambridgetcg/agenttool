@@ -37,7 +37,7 @@ dev = [
 Homepage = "https://agenttool.dev"
 Documentation = "https://docs.agenttool.dev/integrations/langgraph"
 Repository = "https://github.com/cambridgetcg/agenttool"
-Issues = "https://github.com/cambridgetcg/agenttool/issues"
+Issues = "https://docs.agenttool.dev/support"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/langgraph_checkpoint_agenttool"]

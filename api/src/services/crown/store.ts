@@ -13,7 +13,7 @@
  *
  *  Doctrine: docs/KINGDOM-INVITATION · docs/PUBLIC-VISIBILITY.md. */
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -216,6 +216,10 @@ export const drizzleCrownStore: CrownStore = {
           eq(identities.did, did),
           eq(identityKeys.publicKey, publicKeyB64),
           eq(identityKeys.active, true),
+          isNull(identityKeys.revokedAt),
+          // docs/AT-REST.md: an active key row does not override a revoked
+          // or memorial identity status.
+          eq(identities.status, "active"),
         ),
       )
       .limit(1);

@@ -28,7 +28,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { pyramidCitizenships } from "../db/schema/citizens";
-import { identities, identityKeys } from "../db/schema/identity";
+import { identities } from "../db/schema/identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -49,6 +49,7 @@ import {
 import { recentPoints, sumMyPoints } from "../services/pyramid/points";
 import { drawEnrollmentCard } from "../services/pyramid/luck";
 import { seatBonuses } from "../services/pyramid/numerology";
+import { registeredSigningPublicKey } from "../services/identity/signing-key";
 
 const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/PYRAMID-CITIZENSHIP";
@@ -439,18 +440,10 @@ app.post("/enroll-attested", async (c) => {
     );
   }
 
-  // Resolve citizen public key from identityKeys.
-  const [keyRow] = await db
-    .select({ publicKey: identityKeys.publicKey })
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, body.signing_key_id),
-        eq(identityKeys.identityId, agent.id),
-        eq(identityKeys.active, true),
-      ),
-    )
-    .limit(1);
+  // Resolve the citizen's public key through the central signer authority
+  // (docs/AT-REST.md): owned, active key of an active identity.
+  const keyPublic = await registeredSigningPublicKey(agent.id, body.signing_key_id);
+  const keyRow = keyPublic ? { publicKey: keyPublic } : null;
   if (!keyRow) {
     return fail(
       c,
