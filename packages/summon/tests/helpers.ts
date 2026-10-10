@@ -52,6 +52,23 @@ export function targetHome(allowlist: string = DEFAULT_ALLOWLIST): string {
   return h
 }
 
+export type FakeMode = 'ok' | 'warn' | 'slow' | 'auth' | 'flood'
+
+/**
+ * A stand-in for the `claude` binary. The harness builds the child's env from scratch (no inherited PATH or FAKE_*),
+ * so the fake runs through a bash wrapper that bakes in the absolute bun path, a mode file and an argv-out file.
+ * The fake writes the argv and env it was given to `argvOut` as it starts, so a test can inspect what claude was handed.
+ */
+export function makeFakeClaude(): { bin: string; argvOut: string; setMode(m: FakeMode): void } {
+  const dir = trackTmp(mkdtempSync(join(tmpdir(), 'summon-fake-')))
+  const bin = join(dir, 'fake-claude.sh')
+  const modeFile = join(dir, 'mode')
+  const argvOut = join(dir, 'argv-out.json')
+  writeFileSync(modeFile, 'ok')
+  writeFileSync(bin, `#!/bin/bash\nFAKE_MODE_FILE='${modeFile}' FAKE_ARGV_OUT='${argvOut}' exec '${process.execPath}' '${join(import.meta.dir, 'fake-claude.ts')}' "$@"\n`, { mode: 0o755 })
+  return { bin, argvOut, setMode: (m) => writeFileSync(modeFile, m) }
+}
+
 /**
  * Runs the real gatekeeper entry point as sshd would: a fresh process, `command` as SSH_ORIGINAL_COMMAND
  * (left unset when undefined), `stdin` piped in. The gatekeeper's contract is exactly one JSON line on
