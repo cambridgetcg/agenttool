@@ -586,6 +586,7 @@ describe("determinism and the parent rule", () => {
 
   test("CLI arguments require exactly one output and refuse unknown flags", () => {
     expect(parseArgs(["--source", "HEAD", "--out-ref", "refs/public/main"]).target).toEqual({ kind: "ref", ref: "refs/public/main" });
+    expect(parseArgs(["--source", "HEAD", "--no-write"])).toMatchObject({ noWrite: true });
     expect(parseArgs(["--source", "HEAD", "--no-write"]).target).toBeUndefined();
   });
 });
@@ -713,6 +714,28 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
       "--out-ref must start with",
     );
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/x" }, gitleaks: GITLEAKS_BIN })).toThrow("is not contained in");
+  });
+
+  test("--no-write with a target previews the exact commit a write would create, and writes nothing", () => {
+    const repo = makeFixture();
+    const bare = join(scratch, `preview-${fixtureCount}.git`);
+    const base = { repo, source: "HEAD", target: { kind: "repo" as const, path: bare }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN };
+    const rootPreview = projectPublic({ ...base, noWrite: true });
+    expect(rootPreview).toMatchObject({ status: "built", parent: null });
+    expect(existsSync(bare)).toBe(false);
+    const first = projectPublic(base);
+    expect(first.commit).toBe(rootPreview.commit);
+
+    write(repo, "docs/spec.md", "# Spec v2\n");
+    commitAll(repo, "second");
+    const preview = projectPublic({ ...base, noWrite: true });
+    expect(preview).toMatchObject({ status: "built", parent: first.commit });
+    expect(git(bare, "rev-parse", "refs/heads/main")).toBe(first.commit);
+    expect(projectPublic({ ...base, target: { kind: "ref", ref: "refs/public/never" }, noWrite: true }).parent).toBeNull();
+    expect(spawnSync("git", ["rev-parse", "--verify", "-q", "refs/public/never"], { cwd: repo }).status).not.toBe(0);
+    expect(projectPublic(base).commit).toBe(preview.commit);
+
+    expect(parseArgs(["--source", "HEAD", "--out-repo", bare, "--no-write"])).toMatchObject({ noWrite: true, target: { kind: "repo", path: bare } });
   });
 
   test("refuses to rewind the public source unless asked, and records a deliberate rewind", () => {

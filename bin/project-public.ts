@@ -15,7 +15,11 @@
  *                             public head's source (a deliberate rollback);
  *                             the result records it as rewound_from
  *   --no-write                build, guard, and create the commit object, but
- *                             update no ref
+ *                             update no ref. With --out-ref or --out-repo it
+ *                             builds on that target's head, with the history,
+ *                             rewind, and parent/diff checks, so it previews
+ *                             the exact commit a write would create; alone it
+ *                             previews a root projection only
  *
  * Everything is read from the source commit's objects: public/allowlist.json,
  * public/overlay/**, and the private relational denylist. Nothing is checked
@@ -549,6 +553,8 @@ export interface ProjectOptions {
   allowUnmergedSource?: boolean;
   /** Allow a source that does not descend from the public head's source. */
   allowRewind?: boolean;
+  /** Build, guard, and create the commit against the target's head, but write nothing. */
+  noWrite?: boolean;
 }
 
 export interface ProjectResult {
@@ -613,8 +619,8 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
     return { status: "unchanged", source_commit: source, parent, commit: parent, tree: build.tree, target: targetName, rewound_from: rewound };
   }
   const commit = createProjectionCommit(repo, build, parent);
-  if (options.target === undefined) {
-    return { status: "built", source_commit: source, parent: null, commit, tree: build.tree, target: null, rewound_from: null };
+  if (options.target === undefined || options.noWrite) {
+    return { status: "built", source_commit: source, parent: parent ?? null, commit, tree: build.tree, target: targetName, rewound_from: rewound };
   }
   writeOutput(repo, options.target, commit, parent);
   return { status: "updated", source_commit: source, parent: parent ?? null, commit, tree: build.tree, target: targetName, rewound_from: rewound };
@@ -625,7 +631,8 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
 
 function usage(): never {
   console.error(
-    "usage: bun bin/project-public.ts --source <commit> (--out-ref refs/public/<name> | --out-repo <bare.git> | --no-write)\n" +
+    "usage: bun bin/project-public.ts --source <commit> (--out-ref refs/public/<name> | --out-repo <bare.git>) [--no-write]\n" +
+      "       bun bin/project-public.ts --source <commit> --no-write\n" +
       "       [--repo <path>] [--gitleaks <binary>] [--require-ancestor <ref>] [--allow-unmerged-source] [--allow-rewind]",
   );
   process.exit(2);
@@ -633,7 +640,6 @@ function usage(): never {
 
 export function parseArgs(argv: readonly string[]): ProjectOptions {
   const options: Partial<ProjectOptions> = {};
-  let noWrite = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => {
@@ -653,11 +659,11 @@ export function parseArgs(argv: readonly string[]): ProjectOptions {
     } else if (arg === "--out-repo") {
       if (options.target !== undefined) usage();
       options.target = { kind: "repo", path: resolve(value()) };
-    } else if (arg === "--no-write") noWrite = true;
+    } else if (arg === "--no-write") options.noWrite = true;
     else usage();
   }
   if (options.source === undefined) usage();
-  if (noWrite === (options.target !== undefined)) usage();
+  if (options.target === undefined && !options.noWrite) usage();
   return options as ProjectOptions;
 }
 

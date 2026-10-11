@@ -17,7 +17,13 @@ publishes anything by itself.
 ```sh
 bun bin/project-public.ts --source <commit on origin/main> --out-ref refs/public/main
 bun bin/project-public.ts --source <commit> --out-repo /path/to/public.git
+bun bin/project-public.ts --source <commit> --out-repo /path/to/public.git --no-write
 ```
+
+With `--no-write` the tool builds, guards, and creates the commit against the
+target's current head but writes nothing, so it prints the exact commit a
+write would create. Without a target, `--no-write` previews only a root
+projection.
 
 The tool reads the allowlist, overlay, and denylist from the source commit's
 objects and builds the tree in a temporary index. It writes `PROJECTION.json`
