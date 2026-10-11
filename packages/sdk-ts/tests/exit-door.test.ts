@@ -344,14 +344,16 @@ describe("exit door: thoughts walk", () => {
       returned: 1001,
       exhausted: true,
     }]);
-  });
+    // 1,001 thoughts mean 1,001 collect requests to a real node; a shared CI
+    // runner needs well over bun's 5 s default for that.
+  }, 60_000);
 
   test("a short page is not the end: a host that caps thoughts below 500 is still walked fully", async () => {
     const { entry, sinceSeq } = await walkThoughts(450, { last_thought_seq: 450 }, 200);
     expect(entry.status).toBe("complete");
     expect(entry.current.record_count).toBe(450);
     expect(sinceSeq).toEqual([null, "200", "400"]);
-  });
+  }, 30_000);
 
   test("without last_thought_seq the walk ends on an empty page", async () => {
     const { entry, sinceSeq } = await walkThoughts(3, {});
