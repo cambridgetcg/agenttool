@@ -1,5 +1,5 @@
-// On the Air, after the installer ran on Nuance: record Nuance's user and host key.
-//   bun scripts/pin-nuance.ts --user <name> --host-key "ssh-ed25519 AAAA… root@Nuance"
+// On the Air, after the installer ran on Nuance: record Nuance's user, its host key and the summon key's expiry.
+//   bun scripts/pin-nuance.ts --user <name> --host-key "ssh-ed25519 AAAA… root@Nuance" --expires <YYYYMMDD>
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -11,11 +11,23 @@ export function pinnedText(pkg: string): string {
     'then try: summon nuance inventory', ''].join('\n')
 }
 
-/** Writes (or rewrites) the pinned known_hosts line and the `summon-nuance` ssh config in `dir`, all private. */
-export function writeSshConfig(dir: string, user: string, hostKeyLine: string): void {
+/** A real calendar date written YYYYMMDD. */
+function isYyyymmdd(s: string): boolean {
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(s)
+  if (!m) return false
+  const d = new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!))
+  return d.getUTCFullYear() === +m[1]! && d.getUTCMonth() === +m[2]! - 1 && d.getUTCDate() === +m[3]!
+}
+
+/**
+ * Writes (or rewrites) the pinned known_hosts line, the `summon-nuance` ssh config and the summon key's expiry (the
+ * "key expires:" line the installer printed, so it is what Nuance really has) in `dir`, all private.
+ */
+export function writeSshConfig(dir: string, user: string, hostKeyLine: string, expires: string): void {
   if (!/^[a-z_][a-z0-9._-]{0,31}$/i.test(user)) throw new Error('bad user name')
   const m = /^(ssh-ed25519) ([A-Za-z0-9+/=]+)(?: .*)?$/.exec(hostKeyLine.trim())
   if (!m) throw new Error('expected the ssh-ed25519 host key line the installer printed')
+  if (!isYyyymmdd(expires)) throw new Error('expected the YYYYMMDD key expiry the installer printed')
   mkdirSync(dir, { recursive: true, mode: 0o700 }); chmodSync(dir, 0o700)
   // The mode of writeFileSync only applies when the file is new, so a re-pin sets it again.
   const put = (name: string, text: string) => { const p = join(dir, name); writeFileSync(p, text, { mode: 0o600 }); chmodSync(p, 0o600) }
@@ -26,13 +38,17 @@ export function writeSshConfig(dir: string, user: string, hostKeyLine: string): 
     `  UserKnownHostsFile ${join(dir, 'known_hosts')}`, '  StrictHostKeyChecking yes', '  BatchMode yes', '  ConnectTimeout 8',
     '  ServerAliveInterval 15', '  ServerAliveCountMax 2', '  RequestTTY no', '  ForwardAgent no', '  ClearAllForwardings yes', '',
   ].join('\n'))
+  put('expiry', `${expires}\n`)
 }
 
 if (import.meta.main) {
   const args = process.argv.slice(2)
   const get = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined }
-  const user = get('--user'); const hostKey = get('--host-key')
-  if (!user || !hostKey) { console.error('usage: bun scripts/pin-nuance.ts --user <name> --host-key "<line>"'); process.exit(2) }
-  writeSshConfig(join(homedir(), '.ssh', 'summon'), user, hostKey)
+  const user = get('--user'); const hostKey = get('--host-key'); const expires = get('--expires')
+  if (!user || !hostKey || !expires) {
+    console.error('usage: bun scripts/pin-nuance.ts --user <name> --host-key "<line>" --expires <YYYYMMDD>  (the pin line the installer printed)')
+    process.exit(2)
+  }
+  writeSshConfig(join(homedir(), '.ssh', 'summon'), user, hostKey, expires)
   process.stdout.write(pinnedText(join(import.meta.dir, '..')))
 }

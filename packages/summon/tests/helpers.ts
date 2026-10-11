@@ -1,7 +1,9 @@
 import { expect } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
+import { renderInstaller } from '../scripts/prepare-pairing.ts'
 import type { NuanceBuild } from '../scripts/build-nuance.ts'
 import { runCli, type CliDeps } from '../src/cli.ts'
 import { verifyLedger } from '../src/ledger.ts'
@@ -212,3 +214,69 @@ export const END_TO_END: Record<string, (w: World) => void | Promise<void>> = {
     expect(JSON.parse(p.stdout.toString())).toMatchObject({ status: 'refused', reason: 'malformed' })
   },
 }
+
+// ── Fixtures for the installer, the build and the Air-side scripts (install, build and pairing tests). ──
+
+export const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex')
+export const mode = (p: string) => statSync(p).mode & 0o777
+/** A fresh temp dir, removed by cleanupTmps() after the test. */
+export const temp = (prefix: string) => trackTmp(mkdtempSync(join(tmpdir(), prefix)))
+export const keygen = (path: string) => Bun.spawnSync(['/usr/bin/ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'root@stub', '-f', path]).exitCode
+export const PKG = join(import.meta.dir, '..')
+export const PUB = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey summon-air'
+export const TMPL = readFileSync(join(PKG, 'nuance', 'install.sh.tmpl'), 'utf8')
+export const BASE_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+export const USER = userInfo().username
+export const DAY = 86_400_000
+/** YYYYMMDD in this Mac's local time: how the installer's `date +%Y%m%d` and sshd's expiry-time read a date. */
+export const ymd = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}` }
+export const dashed = (e: string) => `${e.slice(0, 4)}-${e.slice(4, 6)}-${e.slice(6)}`
+export const EXPIRY = ymd(Date.now() + 90 * DAY)
+export const LATER = ymd(Date.now() + 180 * DAY)
+export const AK = (root: string) => join(root, '.ssh/authorized_keys')
+export const INSTALLED = (root: string) => join(root, '.local/share/summon/INSTALLED')
+/** When a bundle was prepared, as the installer carries it: UTC, YYYYMMDDHHMMSS. */
+export const stampOf = (ms: number) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14)
+/** The build id, worked out here on its own: the first 8 hex of sha256(runner sha256 ‖ gatekeeper sha256). */
+export const buildIdOf = (s: { runner: string; gatekeeper: string }) => createHash('sha256').update(s.runner + s.gatekeeper).digest('hex').slice(0, 8)
+
+let hostKeyDir = ''
+/**
+ * One real host key for every installer run that does not bring its own (never this Mac's /etc/ssh). It outlives a
+ * single test, so a file that runs the installer removes it with `afterAll(cleanupFixtureHostKey)`.
+ */
+export function fixtureHostKey(): string {
+  if (!hostKeyDir) {
+    hostKeyDir = mkdtempSync(join(tmpdir(), 'summon-hostkey-'))
+    expect(keygen(join(hostKeyDir, 'ssh_host_ed25519_key'))).toBe(0)
+  }
+  return join(hostKeyDir, 'ssh_host_ed25519_key')
+}
+export function cleanupFixtureHostKey(): void {
+  if (hostKeyDir) rmSync(hostKeyDir, { recursive: true, force: true })
+  hostKeyDir = ''
+}
+
+export function bundle(root: string = temp('summon-root-'), o: { expiry?: string; build?: string; prepared?: string } = {}): { dir: string; root: string } {
+  const dir = temp('summon-bundle-')
+  for (const b of ['summon-gatekeeper', 'summon-runner']) { writeFileSync(join(dir, b), `#!/bin/sh\necho ${b} ${o.build ?? 'v1'}\n`); chmodSync(join(dir, b), 0o755) }
+  writeFileSync(join(dir, 'summon-install.sh'), renderInstaller(TMPL, { pubkey: PUB, expiry: o.expiry ?? EXPIRY, preparedAt: o.prepared ?? stampOf(Date.now()),
+    shaGatekeeper: sha(join(dir, 'summon-gatekeeper')), shaRunner: sha(join(dir, 'summon-runner')) }))
+  return { dir, root }
+}
+export const envFor = (root: string, extra: Record<string, string> = {}): Record<string, string> => ({
+  PATH: BASE_PATH, HOME: root, SUMMON_INSTALL_ROOT: root, SUMMON_SKIP_SUDO: '1', SUMMON_SKIP_LAUNCHCTL: '1', SUMMON_SKIP_INVENTORY: '1',
+  SUMMON_HOST_KEY: fixtureHostKey(), ...extra,
+})
+export const run = (dir: string, root: string, extra: Record<string, string> = {}) =>
+  Bun.spawnSync(['bash', join(dir, 'summon-install.sh')], { env: envFor(root, extra) })
+
+
+/** Stands in for the compile: two small files and their real digests. */
+export function fakeBuild(outDir: string, tag = '', runnerTag = tag) {
+  mkdirSync(outDir, { recursive: true })
+  const gatekeeper = join(outDir, 'summon-gatekeeper'); const runner = join(outDir, 'summon-runner')
+  writeFileSync(gatekeeper, `#!/bin/sh\necho gatekeeper${tag}\n`); writeFileSync(runner, `#!/bin/sh\necho runner${runnerTag}\n`)
+  return { gatekeeper, runner, sha: { gatekeeper: sha(gatekeeper), runner: sha(runner) } }
+}
+

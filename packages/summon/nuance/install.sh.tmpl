@@ -12,6 +12,7 @@ umask 077
 export LC_ALL=C
 PUBKEY='__PUBKEY__'
 EXPIRY='__EXPIRY__'
+PREPARED_AT='__PREPARED_AT__'
 SHA_GATEKEEPER='__SHA_GATEKEEPER__'
 SHA_RUNNER='__SHA_RUNNER__'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,63 +20,95 @@ ROOT="${SUMMON_INSTALL_ROOT:-$HOME}"
 SKIP_SUDO="${SUMMON_SKIP_SUDO:-0}"; SKIP_LAUNCHCTL="${SUMMON_SKIP_LAUNCHCTL:-0}"; SKIP_INVENTORY="${SUMMON_SKIP_INVENTORY:-0}"
 # The host key sshd uses, which the Air pins (tests point this at a temp file).
 HOST_KEY="${SUMMON_HOST_KEY:-/etc/ssh/ssh_host_ed25519_key}"
-USER_NAME="$(id -un)"; UID_NUM="$(id -u)"
-[ "$(uname -s)" = Darwin ] || { echo "macOS only"; exit 1; }
-[ "$(uname -m)" = arm64 ] || { echo "Apple Silicon only"; exit 1; }
-[ "$UID_NUM" != 0 ] || { echo "run as your own user, not root"; exit 1; }
-# The install folder goes into the SSH key line, which sshd runs through your shell: only plain path characters.
-case "$ROOT" in
-  ''|*[!A-Za-z0-9._/+@=,-]*) echo "✗ '$ROOT' has characters that cannot go safely into the SSH key line — tell Ai"; exit 1 ;;
-esac
 SHARE="$ROOT/.local/share/summon"; STATE="$ROOT/.local/state/summon"; CONF="$ROOT/.config/summon"; AK="$ROOT/.ssh/authorized_keys"
-dashed() { echo "${1:0:4}-${1:4:2}-${1:6:2}"; }
-# A stop once Remote Login is on and sshd may still take passwords: say so, and how to close that until it is fixed.
-refuse() {
-  printf '%s\n' "$@"
-  echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."
-  exit 1
-}
 NOTHING_DONE="  No summon key line was written and the runner was not loaded. Tell Ai."
 
+# Remote Login is on before this runs, and until sshd is confirmed to take keys only, it lets passwords in from the LAN.
+# So every stop before that says, once, to turn it off; a stop with no message of its own is named as one.
+TMP=""; EXPLAINED=0; KEYS_ONLY=0; REMOTE_LOGIN_ADVICE=1
+finish() {
+  local code=$?
+  [ -z "$TMP" ] || rm -f "$TMP"
+  [ "$code" != 0 ] || return 0
+  [ "$EXPLAINED" = 1 ] || echo "✗ the installer stopped unexpectedly (exit $code); nothing after the last ✓ line was done. Tell Ai."
+  if [ "$KEYS_ONLY" != 1 ] && [ "$REMOTE_LOGIN_ADVICE" = 1 ]; then
+    echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."
+  fi
+}
+trap finish EXIT
+stop() { printf '%s\n' "$@"; EXPLAINED=1; exit 1; }
+dashed() { echo "${1:0:4}-${1:4:2}-${1:6:2}"; }
+stamp() { echo "$(dashed "$1") ${1:8:2}:${1:10:2}:${1:12:2} UTC"; }
+
+USER_NAME="$(id -un)"; UID_NUM="$(id -u)"
+[ "$(uname -s)" = Darwin ] || stop "macOS only"
+[ "$(uname -m)" = arm64 ] || stop "Apple Silicon only"
+[ "$UID_NUM" != 0 ] || stop "run as your own user, not root"
+# The install folder goes into the SSH key line, which sshd runs through your shell: only plain path characters.
+case "$ROOT" in
+  ''|*[!A-Za-z0-9._/+@=,-]*) stop "✗ '$ROOT' has characters that cannot go safely into the SSH key line — tell Ai" ;;
+esac
+
 # ── Checks first: nothing is written until every one of them passes. ──
-check() { local got; got="$(shasum -a 256 "$HERE/$1" | awk '{print $1}')"; [ "$got" = "$2" ] || { echo "✗ $1 checksum mismatch — do not install"; exit 1; }; }
+check() { local got; got="$(shasum -a 256 "$HERE/$1" | awk '{print $1}')"; [ "$got" = "$2" ] || stop "✗ $1 checksum mismatch — do not install"; }
 check summon-gatekeeper "$SHA_GATEKEEPER"; check summon-runner "$SHA_RUNNER"; echo "✓ binaries match their checksums"
+BUILD_ID="$(printf '%s%s' "$SHA_RUNNER" "$SHA_GATEKEEPER" | shasum -a 256 | cut -c1-8)"
 
 # sshd stops taking a key on its expiry-time date (YYYYMMDD means from 00:00 that day, this Mac's time).
 if [ "$EXPIRY" -le "$(date +%Y%m%d)" ]; then
-  echo "✗ this bundle's summon key expired on $(dashed "$EXPIRY") — ask Ai for a fresh bundle"
-  echo "  Nothing was changed."; exit 1
+  stop "✗ this bundle's summon key expired on $(dashed "$EXPIRY") — ask Ai for a fresh bundle" "  Nothing was changed."
 fi
 
-# A bundle older than what is installed must not put back its older programs and an earlier key expiry.
+# A bundle older than what is installed must not put back older programs or an earlier key expiry. INSTALLED says
+# when the installed bundle was prepared; for an install made before INSTALLED existed, its key line's expiry says it.
+older() { # older <this bundle> <what is installed>
+  if [ "${SUMMON_ALLOW_OLDER:-0}" = 1 ]; then echo "• SUMMON_ALLOW_OLDER=1: going back on purpose ($1; $2)"; return 0; fi
+  stop "✗ this installer is older than what is installed ($1; $2)." \
+    "  Nothing was changed. Run the newest bundle (the one prepared last), or ask Ai." \
+    "  To go back to this one on purpose: SUMMON_ALLOW_OLDER=1 bash \"$HERE/summon-install.sh\""
+}
+INSTALLED_AT=""
+if [ -e "$SHARE/INSTALLED" ]; then
+  INSTALLED_AT="$(sed -n 's/^prepared \([0-9]\{14\}\)$/\1/p' "$SHARE/INSTALLED" | tail -n 1)" ||
+    stop "✗ could not read $SHARE/INSTALLED — nothing was changed. Tell Ai."
+fi
+if [ -n "$INSTALLED_AT" ] && [ "$PREPARED_AT" -lt "$INSTALLED_AT" ]; then
+  older "this bundle was prepared $(stamp "$PREPARED_AT")" "the installed one $(stamp "$INSTALLED_AT")"
+fi
 INSTALLED_EXPIRY=""
 if [ -e "$AK" ]; then
   INSTALLED_EXPIRY="$(sed -n 's/.*expiry-time="\([0-9]\{8\}\)".* summon-air$/\1/p' "$AK" | sort | tail -n 1)" ||
-    { echo "✗ could not read $AK — nothing was changed. Tell Ai."; exit 1; }
+    stop "✗ could not read $AK — nothing was changed. Tell Ai."
 fi
 if [ -n "$INSTALLED_EXPIRY" ] && [ "$EXPIRY" -lt "$INSTALLED_EXPIRY" ]; then
-  if [ "${SUMMON_ALLOW_OLDER:-0}" != 1 ]; then
-    echo "✗ this installer is older than what is installed (this bundle's key expires $(dashed "$EXPIRY"); the installed one expires $(dashed "$INSTALLED_EXPIRY"))."
-    echo "  Nothing was changed. Run the newest bundle (the folder whose name has the latest date), or ask Ai."
-    echo "  To go back to this one on purpose: SUMMON_ALLOW_OLDER=1 bash \"$HERE/summon-install.sh\""
-    exit 1
-  fi
-  echo "• SUMMON_ALLOW_OLDER=1: going back to a key that expires $(dashed "$EXPIRY") (the installed one expires $(dashed "$INSTALLED_EXPIRY"))"
+  older "this bundle's key expires $(dashed "$EXPIRY")" "the installed one expires $(dashed "$INSTALLED_EXPIRY")"
 fi
 
 # Installing restarts the runner, and launchd ends a running job with it: the job would read `unknown`, with no result.
+# A running job whose process is gone, and a queued one the runner never claimed that is past its expiry plus the
+# 5-minute clock-skew grace, are not running (the runner settles them as it starts), so they do not count.
+NOW_S="$(date +%s)"
 BUSY=""
 for f in "$STATE"/jobs/*/state.json; do
   [ -e "$f" ] || continue
   st="$(sed -nE 's/.*"status":"(queued|running)".*/\1/p' "$f")" || st=unreadable
-  [ -z "$st" ] || BUSY="$BUSY  $(basename "$(dirname "$f")") ($st)"$'\n'
+  [ -n "$st" ] || continue
+  job="$(dirname "$f")"
+  if [ "$st" = running ]; then
+    pid="$(sed -nE 's/.*"pid":([0-9]+).*/\1/p' "$f")"
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then continue; fi
+  elif [ "$st" = queued ] && [ ! -e "$job/claimed" ]; then
+    exp="$(sed -nE 's/.*"expires_at":"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\.[0-9]+)?Z".*/\1/p' "$f")"
+    exp_s=""
+    [ -z "$exp" ] || exp_s="$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "$exp" +%s 2>/dev/null)" || exp_s=""
+    if [ -n "$exp_s" ] && [ "$NOW_S" -gt $((exp_s + 300)) ]; then continue; fi
+  fi
+  BUSY="$BUSY  $(basename "$job") ($st)"$'\n'
 done
 if [ -n "$BUSY" ]; then
   if [ "${SUMMON_INSTALL_ANYWAY:-0}" != 1 ]; then
-    echo "✗ a summon is running: wait for it, or re-run with SUMMON_INSTALL_ANYWAY=1"
-    printf '%s' "$BUSY"
-    echo "  Nothing was changed. (Installing restarts the runner, which would end that job as unknown, with no result.)"
-    exit 1
+    echo "✗ a summon is running: wait for it, or re-run with SUMMON_INSTALL_ANYWAY=1"; printf '%s' "$BUSY"
+    stop "  Nothing was changed. (Installing restarts the runner, which would end that job as unknown, with no result.)"
   fi
   echo "• SUMMON_INSTALL_ANYWAY=1: going ahead, which ends these as unknown:"; printf '%s' "$BUSY"
 fi
@@ -83,17 +116,79 @@ fi
 if [ "$SKIP_SUDO" != 1 ]; then
   # Remote Login is what makes sshd answer on port 22, and the Air reaches Nuance through it.
   if ! nc -z -G 2 127.0.0.1 22 >/dev/null 2>&1; then
-    echo "✗ Remote Login is off (nothing answers on port 22). Nothing was changed."
-    echo "  Turn on Remote Login (System Settings → General → Sharing → Remote Login, only your user), then run this again."
-    exit 1
+    REMOTE_LOGIN_ADVICE=0   # it is off: there is nothing to turn off
+    stop "✗ Remote Login is off (nothing answers on port 22). Nothing was changed." \
+      "  Turn on Remote Login (System Settings → General → Sharing → Remote Login, only your user), then run this again."
   fi
   echo "✓ Remote Login is on"
+
+  # ── sshd: key logins only. Nothing of Summon's is written until this passes. ──
+  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
+  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
+  INCLUDED=1
+  grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — the drop-in below would not be read"; }
+  TMP="$(mktemp)"
+  printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin no' "AllowUsers $USER_NAME" \
+    'AuthenticationMethods publickey' 'GSSAPIAuthentication no' 'HostbasedAuthentication no' > "$TMP"
+  echo "Your Mac password is needed once, to switch off SSH password logins:"
+  sudo -v || stop "✗ sudo did not accept the password, so sshd was not changed." "$NOTHING_DONE"
+  # sshd cannot run without a host key, and macOS makes them only at the first SSH connection (sshd-keygen-wrapper).
+  # The port-22 check above was one: let a wrapper still at work finish, then make any key still missing, as it would.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -e "$HOST_KEY" ] || ! pgrep -qf sshd-keygen-wrapper; then break; fi
+    sleep 0.5
+  done
+  if [ ! -e "$HOST_KEY" ]; then
+    sudo /usr/bin/ssh-keygen -A ||
+      stop "✗ this Mac has no SSH host keys yet, and ssh-keygen -A could not make them, so sshd was not changed." "$NOTHING_DONE"
+    [ -e "$HOST_KEY" ] ||
+      stop "✗ ssh-keygen -A ran, but the ed25519 one of this Mac's SSH host keys ($HOST_KEY) is still missing, so sshd was not changed." "$NOTHING_DONE"
+    echo "✓ made this Mac's SSH host keys (ssh-keygen -A, as macOS does at the first SSH connection)"
+  fi
+  sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN" || stop "✗ could not write $DROPIN, so sshd was not changed." "$NOTHING_DONE"
+  # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
+  if ! sudo /usr/sbin/sshd -t; then
+    sudo rm -f "$DROPIN"
+    stop "✗ sshd rejected the change — removed it, so sshd is as it was (password logins on)." "$NOTHING_DONE"
+  fi
+  # A valid file is not an effective one: an earlier line, an earlier-sorting drop-in or a Match block can still win.
+  # So ask sshd what it would use for a login from the LAN, by this user and then by root. It is asked by address,
+  # which is what a Match Host sees while UseDNS is off (required below).
+  ASK="host=192.168.50.2,addr=192.168.50.2"
+  if ! EFFECTIVE="$(sudo /usr/sbin/sshd -T -C "user=$USER_NAME,$ASK")" || ! ROOT_EFFECTIVE="$(sudo /usr/sbin/sshd -T -C "user=root,$ASK")"; then
+    stop "✗ password logins are NOT confirmed off: sshd would not show its effective settings." "$NOTHING_DONE"
+  fi
+  value() { printf '%s\n' "$1" | awk -v k="$2" 'tolower($1) == k { sub(/^[^ \t]+[ \t]+/, ""); print }'; }
+  WRONG=0
+  need() { # need <who> <sshd -T output> <keyword> <value>
+    local got; got="$(value "$2" "$3")"
+    [ "$got" = "$4" ] || { WRONG=1; echo "  ${1}sshd would use '$3 ${got:-(not set)}', Summon needs '$3 $4'"; }
+  }
+  for want in "passwordauthentication no" "kbdinteractiveauthentication no" "permitrootlogin no" "allowusers $USER_NAME" \
+    "authenticationmethods publickey" "gssapiauthentication no" "hostbasedauthentication no"; do
+    need "" "$EFFECTIVE" "${want%% *}" "${want#* }"
+  done
+  for want in "permitrootlogin no" "passwordauthentication no"; do need "for root logins, " "$ROOT_EFFECTIVE" "${want%% *}" "${want#* }"; done
+  if [ "$(value "$EFFECTIVE" usedns)" = yes ]; then
+    WRONG=1; echo "  sshd would use 'usedns yes', Summon needs it off: a Match Host could then see a name this check did not ask about"
+  fi
+  if [ "$WRONG" = 1 ]; then
+    [ "$INCLUDED" = 1 ] || echo "  (sshd_config does not include $CONFD, which would explain it)"
+    stop "✗ SSH logins by password (or any way but a key) are NOT switched off. The drop-in is in place, but another setting wins over it (an earlier line, an earlier drop-in, or a Match block)." "$NOTHING_DONE"
+  fi
+  # Not a stop, but these decide which keys can log in, so a value that is not macOS's own is worth a look.
+  for usual in "trustedusercakeys none" "authorizedkeyscommand none" "authorizedprincipalsfile none" "authorizedkeysfile .ssh/authorized_keys"; do
+    key="${usual%% *}"; dflt="${usual#* }"; got="$(value "$EFFECTIVE" "$key")"
+    [ "$got" = "$dflt" ] || echo "⚠ sshd uses '$key ${got:-(not set)}' (the macOS default is '$key $dflt'). Not a stop, but it decides which keys can log in: tell Ai."
+  done
+  KEYS_ONLY=1
+  echo "✓ SSH: key logins only, for $USER_NAME (checked with sshd -T)"
 fi
 
 # ── Install. ──
 mkdir -p "$SHARE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh" "$ROOT/Library/LaunchAgents"
 chmod 700 "$SHARE" "$STATE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh"
-rm -f "$SHARE/INSTALLED"   # written again once the programs and the key line are both in place
+rm -f "$SHARE/INSTALLED"   # the programs change now: written again only at the end of a successful install
 for b in summon-gatekeeper summon-runner; do
   install -m 700 "$HERE/$b" "$SHARE/$b"
   xattr -d com.apple.quarantine "$SHARE/$b" 2>/dev/null || true
@@ -124,78 +219,14 @@ else
   echo "• allowlist already present — left as it is"
 fi
 
-if [ "$SKIP_SUDO" != 1 ]; then
-  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
-  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
-  INCLUDED=1
-  grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — the drop-in below would not be read"; }
-  TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
-  printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin no' "AllowUsers $USER_NAME" \
-    'AuthenticationMethods publickey' 'GSSAPIAuthentication no' 'HostbasedAuthentication no' > "$TMP"
-  echo "Your Mac password is needed once, to switch off SSH password logins:"
-  sudo -v || refuse "✗ sudo did not accept the password, so sshd was not changed." "$NOTHING_DONE"
-  # sshd cannot run without a host key, and macOS makes them only at the first SSH connection (sshd-keygen-wrapper).
-  # The port-22 check above was one: let a wrapper still at work finish, then make any key still missing, as it would.
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if [ -e "$HOST_KEY" ] || ! pgrep -qf sshd-keygen-wrapper; then break; fi
-    sleep 0.5
-  done
-  if [ ! -e "$HOST_KEY" ]; then
-    sudo /usr/bin/ssh-keygen -A ||
-      refuse "✗ this Mac has no SSH host keys yet, and ssh-keygen -A could not make them, so sshd was not changed." "$NOTHING_DONE"
-    [ -e "$HOST_KEY" ] ||
-      refuse "✗ ssh-keygen -A ran, but the ed25519 one of this Mac's SSH host keys ($HOST_KEY) is still missing, so sshd was not changed." "$NOTHING_DONE"
-    echo "✓ made this Mac's SSH host keys (ssh-keygen -A, as macOS does at the first SSH connection)"
-  fi
-  sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN" || refuse "✗ could not write $DROPIN, so sshd was not changed." "$NOTHING_DONE"
-  # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
-  if ! sudo /usr/sbin/sshd -t; then
-    sudo rm -f "$DROPIN"
-    refuse "✗ sshd rejected the change — removed it, so sshd is as it was (password logins on)." "$NOTHING_DONE"
-  fi
-  # A valid file is not an effective one: an earlier line, an earlier-sorting drop-in or a Match block can still win.
-  # So ask sshd what it would use for a login from the LAN, by this user and then by root. It is asked by address,
-  # which is what a Match Host sees while UseDNS is off (required below).
-  ASK="host=192.168.50.2,addr=192.168.50.2"
-  if ! EFFECTIVE="$(sudo /usr/sbin/sshd -T -C "user=$USER_NAME,$ASK")" || ! ROOT_EFFECTIVE="$(sudo /usr/sbin/sshd -T -C "user=root,$ASK")"; then
-    refuse "✗ password logins are NOT confirmed off: sshd would not show its effective settings." "$NOTHING_DONE"
-  fi
-  value() { printf '%s\n' "$1" | awk -v k="$2" 'tolower($1) == k { sub(/^[^ \t]+[ \t]+/, ""); print }'; }
-  WRONG=0
-  need() { # need <who> <sshd -T output> <keyword> <value>
-    local got; got="$(value "$2" "$3")"
-    [ "$got" = "$4" ] || { WRONG=1; echo "  ${1}sshd would use '$3 ${got:-(not set)}', Summon needs '$3 $4'"; }
-  }
-  for want in "passwordauthentication no" "kbdinteractiveauthentication no" "permitrootlogin no" "allowusers $USER_NAME" \
-    "authenticationmethods publickey" "gssapiauthentication no" "hostbasedauthentication no"; do
-    need "" "$EFFECTIVE" "${want%% *}" "${want#* }"
-  done
-  for want in "permitrootlogin no" "passwordauthentication no"; do need "for root logins, " "$ROOT_EFFECTIVE" "${want%% *}" "${want#* }"; done
-  if [ "$(value "$EFFECTIVE" usedns)" = yes ]; then
-    WRONG=1; echo "  sshd would use 'usedns yes', Summon needs it off: a Match Host could then see a name this check did not ask about"
-  fi
-  if [ "$WRONG" = 1 ]; then
-    [ "$INCLUDED" = 1 ] || echo "  (sshd_config does not include $CONFD, which would explain it)"
-    refuse "✗ SSH logins by password (or any way but a key) are NOT switched off. The drop-in is in place, but another setting wins over it (an earlier line, an earlier drop-in, or a Match block)." "$NOTHING_DONE"
-  fi
-  # Not a stop, but these decide which keys can log in, so a value that is not macOS's own is worth a look.
-  for usual in "trustedusercakeys none" "authorizedkeyscommand none" "authorizedprincipalsfile none" "authorizedkeysfile .ssh/authorized_keys"; do
-    key="${usual%% *}"; dflt="${usual#* }"; got="$(value "$EFFECTIVE" "$key")"
-    [ "$got" = "$dflt" ] || echo "⚠ sshd uses '$key ${got:-(not set)}' (the macOS default is '$key $dflt'). Not a stop, but it decides which keys can log in: tell Ai."
-  done
-  echo "✓ SSH: key logins only, for $USER_NAME (checked with sshd -T)"
-fi
-
 touch "$AK"; chmod 600 "$AK"
 LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE/summon-gatekeeper\" $PUBKEY"
 # grep -v exits 1 when it keeps no line (an empty file): that is fine. Exit 2 means it could not read the file, and
 # going on would write a file holding only our line, so stop and leave authorized_keys as it is.
-grep -v ' summon-air$' "$AK" > "$AK.summon-tmp" || [ $? -eq 1 ] || { rm -f "$AK.summon-tmp"; echo "✗ could not read $AK — left as it is"; exit 1; }
+grep -v ' summon-air$' "$AK" > "$AK.summon-tmp" || [ $? -eq 1 ] || { rm -f "$AK.summon-tmp"; stop "✗ could not read $AK — left as it is. Tell Ai."; }
 printf '%s\n' "$LINE" >> "$AK.summon-tmp"
 mv "$AK.summon-tmp" "$AK"; chmod 600 "$AK"
 echo "✓ authorized_keys: one restricted summon line (other lines untouched; expires $EXPIRY)"
-printf 'summon-gatekeeper %s\nsummon-runner %s\nkey summon-air expires %s\n' "$SHA_GATEKEEPER" "$SHA_RUNNER" "$EXPIRY" > "$SHARE/INSTALLED"
-chmod 600 "$SHARE/INSTALLED"
 
 PLIST="$ROOT/Library/LaunchAgents/dev.summon.runner.plist"
 # launchd would create the log with default modes, so make it first (touch keeps what an earlier run wrote).
@@ -214,41 +245,75 @@ cat > "$PLIST" <<PL
 </dict></plist>
 PL
 chmod 600 "$PLIST"
-RUNNER_LOADED=1
+RUNNER_LOADED=1; RUNNER_PROBLEM=""
 if [ "$SKIP_LAUNCHCTL" != 1 ]; then
   SERVICE="gui/$UID_NUM/dev.summon.runner"
   launchctl bootout "$SERVICE" 2>/dev/null || true
   # bootout can return before launchd has let go of the old runner, and a bootstrap then fails: wait until it is gone.
-  for _ in 1 2 3 4 5 6 7 8 9 10; do launchctl print "$SERVICE" >/dev/null 2>&1 || break; sleep 0.5; done
-  if ! SAID="$(launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>&1)"; then
+  OLD_GONE=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ! launchctl print "$SERVICE" >/dev/null 2>&1; then OLD_GONE=1; break; fi
+    sleep 0.5
+  done
+  if ! LAUNCHCTL_SAID="$(launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>&1)"; then
     sleep 1
-    SAID="$(launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>&1)" || RUNNER_LOADED=0
+    LAUNCHCTL_SAID="$(launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>&1)" || RUNNER_LOADED=0
   fi
   if [ "$RUNNER_LOADED" = 1 ]; then
     echo "✓ runner loaded in your GUI session"
   else
     # launchctl also says to try again as root, which this installer refuses, so that line is left out.
-    echo "✗ the runner is NOT loaded (launchctl bootstrap said: $(printf '%s\n' "$SAID" | sed '/as root/d' | tr '\n' ' ' | sed 's/ *$//'))"
+    WHY="$(printf '%s\n' "$LAUNCHCTL_SAID" | sed '/as root/d' | tr '\n' ' ' | sed 's/ *$//')"
+    if [ "$OLD_GONE" = 1 ]; then
+      RUNNER_PROBLEM="the runner is NOT loaded"
+      echo "✗ the runner is NOT loaded (launchctl bootstrap said: $WHY)"
+    else
+      RUNNER_PROBLEM="the runner's state is not confirmed"
+      echo "✗ the runner's state is not confirmed: the old registration may still be loaded, and the new one could not be (launchctl bootstrap said: $WHY)"
+    fi
     echo "  The key line was already updated (expires $EXPIRY). Run this installer again, or log out and in. Tell Ai."
   fi
 fi
+if [ "$RUNNER_LOADED" = 1 ]; then
+  # The same lines as the bundle's MANIFEST.txt, so the two can be compared, and a later bundle can tell it is newer.
+  printf 'build %s\nprepared %s\nsummon-gatekeeper %s\nsummon-runner %s\nkey summon-air expires %s\n' \
+    "$BUILD_ID" "$PREPARED_AT" "$SHA_GATEKEEPER" "$SHA_RUNNER" "$EXPIRY" > "$SHARE/INSTALLED"
+  chmod 600 "$SHARE/INSTALLED"
+fi
 
+PROBLEMS=""
+problem() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
 echo; echo "──── give this back to Ai ────"
 echo "user: $USER_NAME"
-echo "build: ${SHA_RUNNER:0:8} (gatekeeper ${SHA_GATEKEEPER:0:8})"
+echo "build: $BUILD_ID"
+echo "prepared: $PREPARED_AT (UTC)"
 echo "key expires: $EXPIRY"
-if [ -r "$HOST_KEY.pub" ]; then echo "host key: $(cat "$HOST_KEY.pub")"; ssh-keygen -lf "$HOST_KEY.pub"; else echo "host key: none at $HOST_KEY.pub — tell Ai"; fi
+if [ -r "$HOST_KEY.pub" ]; then
+  HOST_LINE="$(cat "$HOST_KEY.pub")"
+  echo "host key: $HOST_LINE"
+  ssh-keygen -lf "$HOST_KEY.pub" || problem "ssh-keygen could not read the host key"
+  echo "pin it on the Air: bun scripts/pin-nuance.ts --user $USER_NAME --host-key \"$HOST_LINE\" --expires $EXPIRY"
+else
+  echo "host key: none at $HOST_KEY.pub"
+  problem "no host key was found to hand back"
+fi
 if [ "$SKIP_INVENTORY" != 1 ]; then
   if [ "$RUNNER_LOADED" = 1 ]; then
     rm -f "$STATE/inventory.json"   # an answer from an earlier run is not today's
     : > "$STATE/spool/inventory-$(date +%s)000.req"
     for _ in $(seq 1 20); do [ -s "$STATE/inventory.json" ] && break; sleep 1; done
-    echo "inventory: $(cat "$STATE/inventory.json" 2>/dev/null || echo 'the runner did not answer')"
+    if [ -s "$STATE/inventory.json" ]; then
+      echo "inventory: $(cat "$STATE/inventory.json")"
+    else
+      echo "inventory: the runner did not answer within 20 s"
+      problem "the runner did not answer the inventory request"
+    fi
   else
     echo "inventory: not asked (the runner is not loaded)"
   fi
 fi
-if [ "$RUNNER_LOADED" != 1 ]; then
-  echo; echo "✗ Not finished: the runner is NOT loaded (see above). Keep this bundle folder, and tell Ai."; exit 1
+[ "$RUNNER_LOADED" = 1 ] || problem "$RUNNER_PROBLEM (see above)"
+if [ -n "$PROBLEMS" ]; then
+  echo; stop "✗ Not confirmed: $PROBLEMS — keep this bundle and tell Ai."
 fi
 echo; echo "Done. Once Ai has the lines above, delete this bundle folder: $HERE"

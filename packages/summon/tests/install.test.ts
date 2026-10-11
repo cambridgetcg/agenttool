@@ -1,40 +1,26 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir, userInfo } from 'node:os'
-import { dirname, join } from 'node:path'
-import { createHash } from 'node:crypto'
-import { buildNuance, linkeditEnd, type NuanceBuild } from '../scripts/build-nuance.ts'
-import { pinnedText, writeSshConfig } from '../scripts/pin-nuance.ts'
-import { bundleReadyText, prepareBundle, renderInstaller } from '../scripts/prepare-pairing.ts'
-import { cleanupTmps, END_TO_END, trackTmp, world } from './helpers.ts'
+import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
+import { join } from 'node:path'
+import { renderInstaller } from '../scripts/prepare-pairing.ts'
+import { AK, BASE_PATH, buildIdOf, bundle, cleanupFixtureHostKey, cleanupTmps, dashed, envFor, EXPIRY, INSTALLED, keygen, LATER, mode, PUB, run, sha, stampOf, temp, TMPL, USER, ymd } from './helpers.ts'
 
 afterEach(cleanupTmps)
+afterAll(cleanupFixtureHostKey)
 
-const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex')
-const mode = (p: string) => statSync(p).mode & 0o777
-const temp = (prefix: string) => trackTmp(mkdtempSync(join(tmpdir(), prefix)))
-const keygen = (path: string) => Bun.spawnSync(['/usr/bin/ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'root@stub', '-f', path]).exitCode
-const PKG = join(import.meta.dir, '..')
-const PUB = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey summon-air'
-const TMPL = readFileSync(join(PKG, 'nuance', 'install.sh.tmpl'), 'utf8')
-const BASE_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
 const SHA_A = 'a'.repeat(64)
 const SHA_B = 'b'.repeat(64)
-const USER = userInfo().username
-const DAY = 86_400_000
-/** YYYYMMDD in this Mac's local time: how the installer's `date +%Y%m%d` and sshd's expiry-time read a date. */
-const ymd = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}` }
-const dashed = (e: string) => `${e.slice(0, 4)}-${e.slice(4, 6)}-${e.slice(6)}`
-const EXPIRY = ymd(Date.now() + 90 * DAY)
-const LATER = ymd(Date.now() + 180 * DAY)
 const RL_OFF = 'Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login.'
+const timesIn = (text: string, part: string) => text.split(part).length - 1
+const shasOf = (dir: string) => ({ gatekeeper: sha(join(dir, 'summon-gatekeeper')), runner: sha(join(dir, 'summon-runner')) })
 
 describe('renderInstaller', () => {
-  const good = { pubkey: PUB, expiry: '20270110', shaGatekeeper: SHA_A, shaRunner: SHA_B }
+  const good = { pubkey: PUB, expiry: '20270110', preparedAt: '20261011023000', shaGatekeeper: SHA_A, shaRunner: SHA_B }
   test('fills every placeholder', () => {
     const s = renderInstaller(TMPL, good)
     expect(s).toContain(`PUBKEY='${PUB}'`)
     expect(s).toContain("EXPIRY='20270110'")
+    expect(s).toContain("PREPARED_AT='20261011023000'")
     expect(s).toContain(`SHA_GATEKEEPER='${SHA_A}'`)
     expect(s).toContain(`SHA_RUNNER='${SHA_B}'`)
     expect(s).not.toMatch(/__[A-Z_]+__/)
@@ -44,6 +30,9 @@ describe('renderInstaller', () => {
     expect(() => renderInstaller(TMPL, { ...good, pubkey: 'ssh-rsa AAAA summon-air' })).toThrow('unexpected public key format')
     expect(() => renderInstaller(TMPL, { ...good, pubkey: 'ssh-ed25519 AAAA yu@laptop' })).toThrow('unexpected public key format')
     expect(() => renderInstaller(TMPL, { ...good, expiry: '2027-01-10' })).toThrow('bad template values')
+    for (const preparedAt of ['20261011', '2026-10-11T02:30:00', "20261011023000'; rm -rf ~; '"]) {
+      expect(() => renderInstaller(TMPL, { ...good, preparedAt })).toThrow('bad template values')
+    }
     expect(() => renderInstaller(TMPL, { ...good, shaGatekeeper: 'abc' })).toThrow('bad template values')
     expect(() => renderInstaller(TMPL, { ...good, shaRunner: SHA_B.toUpperCase() })).toThrow('bad template values')
   })
@@ -69,21 +58,6 @@ describe('renderInstaller', () => {
     expect([r.exitCode, r.stdout.toString()]).toEqual([0, ''])
   })
 })
-
-function bundle(root: string = temp('summon-root-'), o: { expiry?: string; build?: string } = {}): { dir: string; root: string } {
-  const dir = temp('summon-bundle-')
-  for (const b of ['summon-gatekeeper', 'summon-runner']) { writeFileSync(join(dir, b), `#!/bin/sh\necho ${b} ${o.build ?? 'v1'}\n`); chmodSync(join(dir, b), 0o755) }
-  writeFileSync(join(dir, 'summon-install.sh'), renderInstaller(TMPL, { pubkey: PUB, expiry: o.expiry ?? EXPIRY,
-    shaGatekeeper: sha(join(dir, 'summon-gatekeeper')), shaRunner: sha(join(dir, 'summon-runner')) }))
-  return { dir, root }
-}
-const envFor = (root: string, extra: Record<string, string> = {}): Record<string, string> => ({
-  PATH: BASE_PATH, HOME: root, SUMMON_INSTALL_ROOT: root, SUMMON_SKIP_SUDO: '1', SUMMON_SKIP_LAUNCHCTL: '1', SUMMON_SKIP_INVENTORY: '1',
-  // Never this Mac's /etc/ssh: a host key that is not there, unless a test makes one.
-  SUMMON_HOST_KEY: join(root, '..', 'no-such-host-key'), ...extra,
-})
-const run = (dir: string, root: string, extra: Record<string, string> = {}) =>
-  Bun.spawnSync(['bash', join(dir, 'summon-install.sh')], { env: envFor(root, extra) })
 
 /** Stand-ins for the commands that would touch this Mac: they record their arguments and run nothing. */
 function stubs(scripts: Record<string, string>): { path: string; log: string; env: Record<string, string>; missingHostKey: string } {
@@ -142,8 +116,6 @@ exit 0`
 const WITH_SUDO = { SUMMON_SKIP_SUDO: '0', SUMMON_SKIP_LAUNCHCTL: '0' }
 const calls = (s: { log: string }) => readFileSync(s.log, 'utf8').trim().split('\n').filter(Boolean)
 const PLIST = (root: string) => join(root, 'Library/LaunchAgents/dev.summon.runner.plist')
-const AK = (root: string) => join(root, '.ssh/authorized_keys')
-const INSTALLED = (root: string) => join(root, '.local/share/summon/INSTALLED')
 const SERVICE = `gui/${userInfo().uid}/dev.summon.runner`
 const SSHD_T_USER = `sudo /usr/sbin/sshd -T -C user=${USER},host=192.168.50.2,addr=192.168.50.2`
 const SSHD_T_ROOT = 'sudo /usr/sbin/sshd -T -C user=root,host=192.168.50.2,addr=192.168.50.2'
@@ -239,48 +211,170 @@ describe('installer', () => {
     }
   })
 
-  test('F03: an older bundle never re-pairs backwards; SUMMON_ALLOW_OLDER=1 goes back on purpose', () => {
+  test('B0: a bundle prepared before the installed one never re-pairs backwards, even with the same key expiry; SUMMON_ALLOW_OLDER=1 goes back on purpose', () => {
     const root = temp('summon-root-')
     const gatekeeper = join(root, '.local/share/summon/summon-gatekeeper')
-    const newer = bundle(root, { expiry: LATER, build: 'v2' })
+    const now = Date.now()
+    const newer = bundle(root, { build: 'v2', prepared: stampOf(now) })
     expect(run(newer.dir, root).exitCode).toBe(0)
     const installed = readFileSync(INSTALLED(root), 'utf8')
-    const older = bundle(root, { expiry: EXPIRY, build: 'v1' })
+    const older = bundle(root, { build: 'v1', prepared: stampOf(now - 3_600_000) })
     const r = run(older.dir, root)
     expect(r.exitCode).toBe(1)
     const said = r.stdout.toString()
-    expect(said).toContain(`✗ this installer is older than what is installed (this bundle's key expires ${dashed(EXPIRY)}; the installed one expires ${dashed(LATER)})`)
+    const at = (t: string) => `${dashed(t.slice(0, 8))} ${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12)} UTC`
+    expect(said).toContain(`✗ this installer is older than what is installed (this bundle was prepared ${at(stampOf(now - 3_600_000))}; the installed one ${at(stampOf(now))})`)
     expect(said).toContain('SUMMON_ALLOW_OLDER=1')
     expect(said).not.toContain('installed in')
-    // Nothing moved: the key line, the programs and the record of them are the newer bundle's.
-    expect(readFileSync(AK(root), 'utf8')).toContain(`expiry-time="${LATER}"`)
+    // Nothing moved: the programs and the record of them are the newer bundle's.
     expect(readFileSync(gatekeeper, 'utf8')).toContain('v2')
     expect(readFileSync(INSTALLED(root), 'utf8')).toBe(installed)
     const back = run(older.dir, root, { SUMMON_ALLOW_OLDER: '1' })
     expect(back.exitCode).toBe(0)
-    expect(readFileSync(AK(root), 'utf8')).toContain(`expiry-time="${EXPIRY}"`)
     expect(readFileSync(gatekeeper, 'utf8')).toContain('v1')
+    expect(readFileSync(INSTALLED(root), 'utf8')).toContain(`prepared ${stampOf(now - 3_600_000)}\n`)
   })
 
-  test('F03: records what it installed, and the hand-back block names the build and the key expiry', () => {
-    const { dir, root } = bundle()
+  test('F03: for an install from before INSTALLED existed, an earlier key expiry than the installed line is refused', () => {
+    const root = temp('summon-root-')
+    const newer = bundle(root, { expiry: LATER, build: 'v2', prepared: stampOf(Date.now() - 3_600_000) })
+    expect(run(newer.dir, root).exitCode).toBe(0)
+    rmSync(INSTALLED(root))
+    const older = bundle(root, { expiry: EXPIRY, build: 'v1' })
+    const r = run(older.dir, root)
+    expect(r.exitCode).toBe(1)
+    expect(r.stdout.toString()).toContain(`✗ this installer is older than what is installed (this bundle's key expires ${dashed(EXPIRY)}; the installed one expires ${dashed(LATER)})`)
+    expect(readFileSync(AK(root), 'utf8')).toContain(`expiry-time="${LATER}"`)
+    expect(readFileSync(join(root, '.local/share/summon/summon-gatekeeper'), 'utf8')).toContain('v2')
+    expect(run(older.dir, root, { SUMMON_ALLOW_OLDER: '1' }).exitCode).toBe(0)
+    expect(readFileSync(AK(root), 'utf8')).toContain(`expiry-time="${EXPIRY}"`)
+  })
+
+  test('F03/B0: records what it installed, and the hand-back block names the build, when it was prepared, the key expiry and the pin line', () => {
+    const prepared = stampOf(Date.now())
+    const { dir, root } = bundle(undefined, { prepared })
     const r = run(dir, root)
     expect(r.exitCode).toBe(0)
-    const g = sha(join(dir, 'summon-gatekeeper')); const rn = sha(join(dir, 'summon-runner'))
-    expect(readFileSync(INSTALLED(root), 'utf8')).toBe(`summon-gatekeeper ${g}\nsummon-runner ${rn}\nkey summon-air expires ${EXPIRY}\n`)
+    const s2 = shasOf(dir)
+    expect(readFileSync(INSTALLED(root), 'utf8')).toBe(
+      `build ${buildIdOf(s2)}\nprepared ${prepared}\nsummon-gatekeeper ${s2.gatekeeper}\nsummon-runner ${s2.runner}\nkey summon-air expires ${EXPIRY}\n`)
     const handBack = r.stdout.toString().split('──── give this back to Ai ────')[1]!
-    expect(handBack).toContain(`build: ${rn.slice(0, 8)} (gatekeeper ${g.slice(0, 8)})`)
-    expect(handBack).toContain(`key expires: ${EXPIRY}`)
-    expect(handBack).toContain(`delete this bundle folder: ${dir}`)
+    expect(handBack).toContain(`build: ${buildIdOf(s2)}\n`)
+    expect(handBack).toContain(`prepared: ${prepared} (UTC)\n`)
+    expect(handBack).toContain(`key expires: ${EXPIRY}\n`)
+    const hostLine = readFileSync(`${envFor(root).SUMMON_HOST_KEY}.pub`, 'utf8').trim()
+    expect(handBack).toContain(`bun scripts/pin-nuance.ts --user ${USER} --host-key "${hostLine}" --expires ${EXPIRY}`)
+    expect(handBack).toContain(`Done. Once Ai has the lines above, delete this bundle folder: ${dir}`)
+  })
+
+  test('B1: never says Done when no host key could be handed back', () => {
+    const { dir, root } = bundle()
+    const r = run(dir, root, { SUMMON_HOST_KEY: join(root, '..', 'no-such-host-key') })
+    expect(r.exitCode).toBe(1)
+    const said = r.stdout.toString()
+    expect(said).toContain('✗ Not confirmed: no host key was found to hand back — keep this bundle and tell Ai.')
+    expect(said).not.toContain('Done')
+  })
+
+  test('B1: never says Done when the runner did not answer the inventory request', () => {
+    const { dir, root } = bundle()
+    const r = run(dir, root, { SUMMON_SKIP_INVENTORY: '0' })
+    expect(r.exitCode).toBe(1)
+    const said = r.stdout.toString()
+    expect(said).toContain('✗ Not confirmed: the runner did not answer the inventory request — keep this bundle and tell Ai.')
+    expect(said).not.toContain('Done')
+  }, 40_000)
+
+  describe('B2: before sshd takes keys only, every stop says once to turn Remote Login off', () => {
+    const withStubs = (extra: Record<string, string> = {}) => {
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB, ...extra })
+      return { s, env: { ...s.env, PATH: s.path, ...WITH_SUDO } }
+    }
+    const cases: Record<string, () => { r: ReturnType<typeof run>; s: ReturnType<typeof stubs> }> = {
+      'a checksum mismatch': () => { const b = bundle(); writeFileSync(join(b.dir, 'summon-runner'), 'tampered'); const w = withStubs(); return { r: run(b.dir, b.root, w.env), s: w.s } },
+      'an unsafe install folder': () => { const b = bundle(temp('summon root ')); const w = withStubs(); return { r: run(b.dir, b.root, w.env), s: w.s } },
+      'an expired bundle': () => { const b = bundle(undefined, { expiry: '20200101' }); const w = withStubs(); return { r: run(b.dir, b.root, w.env), s: w.s } },
+      'an older bundle': () => {
+        const root = temp('summon-root-')
+        expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root).exitCode).toBe(0)
+        const w = withStubs(); return { r: run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, w.env), s: w.s }
+      },
+      'a running job': () => {
+        const b = bundle(); const job = join(b.root, '.local/state/summon/jobs', `smn_${'1'.repeat(32)}`); mkdirSync(job, { recursive: true })
+        writeFileSync(join(job, 'state.json'), JSON.stringify({ status: 'running', pid: process.pid }))
+        const w = withStubs(); return { r: run(b.dir, b.root, w.env), s: w.s }
+      },
+      'a silent stop (shasum fails)': () => { const b = bundle(); const w = withStubs({ shasum: 'exit 1' }); return { r: run(b.dir, b.root, w.env), s: w.s } },
+      'sshd -t rejecting the drop-in (refused in the sudo block)': () => {
+        const b = bundle(); const w = withStubs(); writeFileSync(w.s.env.STUB_FAIL_SSHD!, ''); return { r: run(b.dir, b.root, w.env), s: w.s }
+      },
+    }
+    for (const [name, make] of Object.entries(cases)) {
+      test(name, () => {
+        const { r } = make()
+        expect(r.exitCode).not.toBe(0)
+        expect(timesIn(r.stdout.toString(), RL_OFF)).toBe(1)
+      })
+    }
+    test('a silent stop is named as one', () => {
+      const { r } = cases['a silent stop (shasum fails)']!()
+      expect(r.stdout.toString()).toContain('✗ the installer stopped unexpectedly (exit 1); nothing after the last ✓ line was done. Tell Ai.')
+    })
+    test('not when Remote Login is off: there is nothing to turn off', () => {
+      const b = bundle(); const w = withStubs(); writeFileSync(w.s.env.STUB_FAIL_NC, '')
+      const r = run(b.dir, b.root, w.env)
+      expect(r.exitCode).toBe(1)
+      expect(timesIn(r.stdout.toString(), RL_OFF)).toBe(0)
+    })
+    test('not once sshd takes keys only: a later stop (the runner not loading) leaves Remote Login alone', () => {
+      const b = bundle(); const w = withStubs(); writeFileSync(w.s.env.STUB_BOOTSTRAP_FAILS, '2')
+      const r = run(b.dir, b.root, w.env)
+      expect(r.exitCode).toBe(1)
+      expect(r.stdout.toString()).toContain('✓ SSH: key logins only')
+      expect(timesIn(r.stdout.toString(), RL_OFF)).toBe(0)
+    }, 15_000)
+  })
+
+  describe('B4: a run that stops before the key line changes nothing of Summon\'s', () => {
+    test('a first install refused by sshd writes nothing at all', () => {
+      const { dir, root } = bundle()
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+      writeFileSync(s.env.STUB_FAIL_SSHD!, '')
+      expect(run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO }).exitCode).toBe(1)
+      expect(readdirSync(root)).toEqual([])
+    })
+    test('a refused re-run keeps the earlier programs, INSTALLED and the key line', () => {
+      const root = temp('summon-root-')
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+      const env = { ...s.env, PATH: s.path, ...WITH_SUDO }
+      expect(run(bundle(root, { build: 'v1', prepared: stampOf(Date.now() - 60_000) }).dir, root, env).exitCode).toBe(0)
+      const before = { installed: readFileSync(INSTALLED(root), 'utf8'), ak: readFileSync(AK(root), 'utf8'),
+        gatekeeper: readFileSync(join(root, '.local/share/summon/summon-gatekeeper'), 'utf8') }
+      writeFileSync(s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' }))
+      const r = run(bundle(root, { build: 'v2', expiry: LATER }).dir, root, env)
+      expect(r.exitCode).toBe(1)
+      expect(r.stdout.toString()).toContain('No summon key line was written and the runner was not loaded.')
+      expect({ installed: readFileSync(INSTALLED(root), 'utf8'), ak: readFileSync(AK(root), 'utf8'),
+        gatekeeper: readFileSync(join(root, '.local/share/summon/summon-gatekeeper'), 'utf8') }).toEqual(before)
+    })
+    test('INSTALLED is written only once the install succeeded: not when the runner did not load', () => {
+      const { dir, root } = bundle()
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
+      writeFileSync(s.env.STUB_BOOTSTRAP_FAILS, '2')
+      expect(run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO }).exitCode).toBe(1)
+      expect(existsSync(INSTALLED(root))).toBe(false)
+      expect(existsSync(join(root, '.local/share/summon/summon-gatekeeper'))).toBe(true)
+    }, 15_000)
   })
 
   describe('F42: a re-run never ends a summon that is queued or running', () => {
-    const withJob = (status: string) => {
+    const withJob = (status: string, extra: Record<string, unknown> = {}, claimed = false) => {
       const { dir, root } = bundle()
       const id = `smn_${'0'.repeat(31)}${status.length}`
       const job = join(root, '.local/state/summon/jobs', id)
       mkdirSync(job, { recursive: true })
-      writeFileSync(join(job, 'state.json'), JSON.stringify({ id, status, runtime: 'claude', model: 'sonnet' }))
+      writeFileSync(join(job, 'state.json'), JSON.stringify({ id, status, runtime: 'claude', model: 'sonnet', ...extra }))
+      if (claimed) writeFileSync(join(job, 'claimed'), '')
       const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
       return { dir, root, id, s, env: { ...s.env, PATH: s.path, ...WITH_SUDO } }
     }
@@ -297,6 +391,28 @@ describe('installer', () => {
         expect(existsSync(AK(w.root))).toBe(false)
       })
     }
+    const iso = (ms: number) => new Date(ms).toISOString()
+    const deadPid = () => { const p = Bun.spawnSync(['/usr/bin/true']); return p.pid }
+    for (const [name, status, extra, claimed] of [
+      ['a running job whose process is alive', 'running', { pid: process.pid }, false],
+      ['a queued job just past its expiry, still inside the 5-minute grace', 'queued', { expires_at: iso(Date.now() - 60_000) }, false],
+      ['a queued job past expiry and grace that the runner has claimed', 'queued', { expires_at: iso(Date.now() - 10 * 60_000) }, true],
+    ] as const) {
+      test(`B3: still stops for ${name}`, () => {
+        const w = withJob(status, extra, claimed)
+        const r = run(w.dir, w.root, w.env)
+        expect(r.exitCode).toBe(1)
+        expect(r.stdout.toString()).toContain(`${w.id} (${status})`)
+      })
+    }
+    test('B3: a running job whose process is gone, and a queued one past expiry plus grace, do not stop it', () => {
+      for (const [status, extra] of [['running', { pid: deadPid() }], ['queued', { expires_at: iso(Date.now() - 10 * 60_000) }]] as const) {
+        const w = withJob(status, extra)
+        const r = run(w.dir, w.root, w.env)
+        expect([status, r.exitCode]).toEqual([status, 0])
+        expect(r.stdout.toString()).not.toContain('a summon is running')
+      }
+    })
     test('SUMMON_INSTALL_ANYWAY=1 goes ahead; a finished job never stops it', () => {
       const w = withJob('running')
       expect(run(w.dir, w.root, { ...w.env, SUMMON_INSTALL_ANYWAY: '1' }).exitCode).toBe(0)
@@ -596,6 +712,14 @@ exit 0`
       expect(a.said).toContain('✓ runner loaded in your GUI session')
       expect(a.launchctl.filter((l) => l.startsWith('launchctl bootstrap'))).toEqual([BOOTSTRAP(a.root), BOOTSTRAP(a.root)])
     }, 15_000)
+    test('B9: when the old registration outlasts the wait and bootstrap fails, the runner state is "not confirmed", not "NOT loaded"', () => {
+      const a = attempt({ printLoaded: 100, bootstrapFails: 2 })
+      expect(a.r.exitCode).toBe(1)
+      expect(a.said).toContain("✗ the runner's state is not confirmed: the old registration may still be loaded, and the new one could not be (launchctl bootstrap said: Bootstrap failed: 5: Input/output error)")
+      expect(a.said).toContain(`The key line was already updated (expires ${EXPIRY}). Run this installer again, or log out and in. Tell Ai.`)
+      expect(a.said).not.toContain('NOT loaded')
+      expect(a.said).toContain("✗ Not confirmed: the runner's state is not confirmed (see above) — keep this bundle and tell Ai.")
+    }, 20_000)
     test('a bootstrap that keeps failing: says the runner is NOT loaded and what to do, and still hands back the pairing lines', () => {
       const a = attempt({ bootstrapFails: 2, inventory: true })
       expect(a.r.exitCode).toBe(1)
@@ -607,6 +731,7 @@ exit 0`
       expect(handBack).toContain('host key: ssh-ed25519 ')
       expect(handBack).toContain('inventory: not asked (the runner is not loaded)')
       expect(handBack).not.toContain('delete this bundle folder')
+      expect(handBack).toContain('✗ Not confirmed: the runner is NOT loaded (see above) — keep this bundle and tell Ai.')
       expect(readdirSync(join(a.root, '.local/state/summon/spool'))).toEqual([])
       expect(readFileSync(AK(a.root), 'utf8')).toContain(`expiry-time="${EXPIRY}"`)
     }, 15_000)
@@ -631,258 +756,7 @@ exit 0`
     expect(out).toContain('user: ' + USER)
     expect(out).toContain('inventory: {"macos":"fresh"}')
     expect(out).not.toContain('stale')
+    expect(out).toContain('Done. Once Ai has the lines above')
   }, 30_000)
 })
 
-/** Stands in for the compile: two small files and their real digests. */
-function fakeBuild(outDir: string, tag = '') {
-  mkdirSync(outDir, { recursive: true })
-  const gatekeeper = join(outDir, 'summon-gatekeeper'); const runner = join(outDir, 'summon-runner')
-  writeFileSync(gatekeeper, `#!/bin/sh\necho gatekeeper${tag}\n`); writeFileSync(runner, `#!/bin/sh\necho runner${tag}\n`)
-  return { gatekeeper, runner, sha: { gatekeeper: sha(gatekeeper), runner: sha(runner) } }
-}
-
-describe('prepareBundle (the Air side)', () => {
-  const NOW = Date.UTC(2026, 9, 10)
-
-  test('names the bundle by its expiry and build, keeps it private, and records the expiry on the Air', () => {
-    const home = temp('summon-air-')
-    const fb = fakeBuild(temp('summon-fb-'))
-    const r = prepareBundle({ home, build: () => fb, now: NOW })
-    const folder = `summon-nuance-bundle-20270108-${fb.sha.runner.slice(0, 8)}`
-    expect(r.bundle).toBe(join(home, folder))
-    expect(r.expiry).toBe('20270108')
-    expect(r.command).toBe(`bash ~/Downloads/${folder}/summon-install.sh`)
-    expect(readdirSync(home).sort()).toEqual(['.ssh', folder])
-    expect(readdirSync(r.bundle).sort()).toEqual(['MANIFEST.txt', 'summon-gatekeeper', 'summon-install.sh', 'summon-runner'])
-    expect(mode(r.bundle)).toBe(0o700)
-    expect(mode(join(home, '.ssh/summon'))).toBe(0o700)
-    expect(readdirSync(join(home, '.ssh/summon')).sort()).toEqual(['expiry', 'summon_nuance_ed25519', 'summon_nuance_ed25519.pub'])
-    for (const f of ['summon_nuance_ed25519', 'summon_nuance_ed25519.pub', 'expiry']) expect([f, mode(join(home, '.ssh/summon', f)).toString(8)]).toEqual([f, '600'])
-    expect(readFileSync(join(home, '.ssh/summon/expiry'), 'utf8')).toBe('20270108\n')
-    for (const f of ['summon-install.sh', 'MANIFEST.txt']) expect([f, mode(join(r.bundle, f)).toString(8)]).toEqual([f, '600'])
-    for (const f of ['summon-gatekeeper', 'summon-runner']) expect([f, mode(join(r.bundle, f)).toString(8)]).toEqual([f, '700'])
-    expect(readFileSync(join(r.bundle, 'MANIFEST.txt'), 'utf8')).toBe(
-      `summon-gatekeeper ${fb.sha.gatekeeper}\nsummon-runner ${fb.sha.runner}\nkey summon-air expires 20270108\n`)
-    // What the script prints: the exact command for this bundle, and when its key expires.
-    const text = bundleReadyText(r)
-    expect(text).toContain(`bundle ready: ${r.bundle}`)
-    expect(text).toContain(`  ${r.command}\n`)
-    expect(text).toContain('the summon key expires 2027-01-08 (20270108)')
-  })
-
-  test('the bundle it makes installs on a stand-in Nuance, with the real key it generated', () => {
-    const home = temp('summon-air-')
-    const r = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-')) })
-    const root = temp('summon-root-')
-    expect(run(r.bundle, root).exitCode).toBe(0)
-    const pub = readFileSync(join(home, '.ssh/summon/summon_nuance_ed25519.pub'), 'utf8').trim()
-    expect(pub).toMatch(/^ssh-ed25519 \S+ summon-air$/)
-    expect(readFileSync(AK(root), 'utf8')).toBe(
-      `restrict,from="192.168.50.0/24",expiry-time="${r.expiry}",command="${root}/.local/share/summon/summon-gatekeeper" ${pub}\n`)
-  })
-
-  test('keeps an existing key, and tightens a bundle folder that already exists with looser modes', () => {
-    const home = temp('summon-air-')
-    const fb = fakeBuild(temp('summon-fb-'))
-    const first = prepareBundle({ home, build: () => fb, now: NOW })
-    chmodSync(first.bundle, 0o755); chmodSync(join(first.bundle, 'summon-install.sh'), 0o644); chmodSync(join(home, '.ssh/summon/expiry'), 0o644)
-    const again = prepareBundle({ home, build: () => fb, now: NOW })
-    expect(again.pubkey).toBe(first.pubkey)
-    expect(again.bundle).toBe(first.bundle)
-    expect(mode(first.bundle)).toBe(0o700)
-    expect(mode(join(first.bundle, 'summon-install.sh'))).toBe(0o600)
-    expect(mode(join(home, '.ssh/summon/expiry'))).toBe(0o600)
-  })
-
-  test('a new build or a later expiry gets a folder of its own, and the Air keeps the latest expiry', () => {
-    const home = temp('summon-air-')
-    const a = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-')), now: NOW })
-    const b = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-'), ' v2'), now: NOW })
-    const c = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-'), ' v2'), now: NOW + 7 * DAY })
-    expect(new Set([a.bundle, b.bundle, c.bundle]).size).toBe(3)
-    expect(c.bundle).toContain('summon-nuance-bundle-20270115-')
-    expect(readFileSync(join(home, '.ssh/summon/expiry'), 'utf8')).toBe('20270115\n')
-  })
-})
-
-describe('writeSshConfig (pinning Nuance on the Air)', () => {
-  const HK = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKeyExample root@Nuance'
-  const dirIn = () => join(temp('summon-ssh-'), 'summon')
-
-  test('writes the pinned known_hosts line and the exact config, privately', () => {
-    const dir = dirIn()
-    writeSshConfig(dir, 'yu', HK)
-    expect(readFileSync(join(dir, 'known_hosts'), 'utf8')).toBe('summon-nuance ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKeyExample\n')
-    expect(readFileSync(join(dir, 'config'), 'utf8')).toBe([
-      'Host summon-nuance', '  HostName nuance.local', '  AddressFamily inet', '  User yu',
-      `  IdentityFile ${dir}/summon_nuance_ed25519`, '  IdentitiesOnly yes', '  HostKeyAlias summon-nuance',
-      `  UserKnownHostsFile ${dir}/known_hosts`, '  StrictHostKeyChecking yes', '  BatchMode yes', '  ConnectTimeout 8',
-      '  ServerAliveInterval 15', '  ServerAliveCountMax 2', '  RequestTTY no', '  ForwardAgent no', '  ClearAllForwardings yes', '',
-    ].join('\n'))
-    expect(mode(dir)).toBe(0o700)
-    expect(mode(join(dir, 'known_hosts'))).toBe(0o600)
-    expect(mode(join(dir, 'config'))).toBe(0o600)
-  })
-
-  test('ssh itself reads it as intended', () => {
-    const dir = dirIn()
-    writeSshConfig(dir, 'yu', HK)
-    const r = Bun.spawnSync(['/usr/bin/ssh', '-G', '-F', join(dir, 'config'), 'summon-nuance'])
-    expect(r.exitCode).toBe(0)
-    const got = new Map(r.stdout.toString().split('\n').map((l) => [l.slice(0, l.indexOf(' ')), l.slice(l.indexOf(' ') + 1)] as const))
-    expect(got.get('hostname')).toBe('nuance.local')
-    expect(got.get('user')).toBe('yu')
-    expect(got.get('addressfamily')).toBe('inet')
-    expect(got.get('identitiesonly')).toBe('yes')
-    expect(got.get('batchmode')).toBe('yes')
-    expect(got.get('stricthostkeychecking')).toBe('true')
-    expect(got.get('hostkeyalias')).toBe('summon-nuance')
-    expect(got.get('userknownhostsfile')).toBe(`${dir}/known_hosts`)
-    expect(got.get('identityfile')).toBe(`${dir}/summon_nuance_ed25519`)
-    expect(got.get('connecttimeout')).toBe('8')
-    expect(got.get('serveraliveinterval')).toBe('15')
-  })
-
-  test('pinning again replaces the key and tightens looser modes', () => {
-    const dir = dirIn()
-    writeSshConfig(dir, 'yu', HK)
-    chmodSync(dir, 0o755); chmodSync(join(dir, 'known_hosts'), 0o644); chmodSync(join(dir, 'config'), 0o644)
-    writeSshConfig(dir, 'yu2', 'ssh-ed25519 AAAANEWKEY')
-    expect(readFileSync(join(dir, 'known_hosts'), 'utf8')).toBe('summon-nuance ssh-ed25519 AAAANEWKEY\n')
-    expect(readFileSync(join(dir, 'config'), 'utf8')).toContain('  User yu2\n')
-    expect([mode(dir), mode(join(dir, 'known_hosts')), mode(join(dir, 'config'))]).toEqual([0o700, 0o600, 0o600])
-  })
-
-  test('rejects a bad user name and writes nothing', () => {
-    for (const user of ['', 'yu name', 'yu;rm', '-oProxyCommand=x', 'yu\n', 'a'.repeat(33), 'yu\nProxyCommand evil']) {
-      const dir = dirIn()
-      expect(() => writeSshConfig(dir, user, HK)).toThrow('bad user name')
-      expect(existsSync(dir)).toBe(false)
-    }
-  })
-
-  test('rejects anything but a single ssh-ed25519 host key line and writes nothing', () => {
-    for (const key of ['', 'ssh-ed25519', 'ssh-rsa AAAAB3NzaC1yc2E root@Nuance', 'ecdsa-sha2-nistp256 AAAAE2VjZHNh', 'ssh-ed25519 AA$A',
-      'ssh-ed25519 AAAA\nProxyCommand evil', 'ssh-ed25519AAAA']) {
-      const dir = dirIn()
-      expect(() => writeSshConfig(dir, 'yu', key)).toThrow('ssh-ed25519 host key line')
-      expect(existsSync(dir)).toBe(false)
-    }
-  })
-
-  test('F14: the next step after pinning puts `summon` on PATH before trying it', () => {
-    const t = pinnedText('/pkg')
-    expect(t).toContain('mkdir -p ~/.local/bin && ln -sf "/pkg/bin/summon.ts" ~/.local/bin/summon')
-    expect(t).toContain('some other file')
-    expect(t.indexOf('ln -sf')).toBeLessThan(t.indexOf('summon nuance inventory'))
-  })
-})
-
-describe('the Air front door (bin/summon.ts)', () => {
-  const BIN = join(PKG, 'bin', 'summon.ts')
-  const PATH_WITH_BUN = `${dirname(process.execPath)}:${BASE_PATH}`
-
-  test("F06: its shebang ignores a .env in the caller's folder", () => {
-    const shebang = readFileSync(BIN, 'utf8').split('\n')[0]!
-    expect(shebang).toBe('#!/usr/bin/env -S bun --no-env-file')
-    // The same first line on a probe that prints what it sees, started from a folder whose .env sets a SUMMON_* value.
-    const caller = temp('summon-caller-')
-    writeFileSync(join(caller, '.env'), 'SUMMON_SSH_BIN=/tmp/not-ssh\n')
-    const probe = join(temp('summon-probe-'), 'probe.ts')
-    writeFileSync(probe, `${shebang}\nconsole.log(process.env.SUMMON_SSH_BIN ?? 'unset')\n`); chmodSync(probe, 0o755)
-    const r = Bun.spawnSync([probe], { cwd: caller, env: { PATH: PATH_WITH_BUN, HOME: caller } })
-    expect([r.exitCode, r.stdout.toString()]).toEqual([0, 'unset\n'])
-  })
-
-  test('F14: started through a link on PATH, it finds its sources and answers with the usage', () => {
-    const bin = temp('summon-bin-')
-    symlinkSync(BIN, join(bin, 'summon'))
-    const home = temp('summon-home-')
-    const r = Bun.spawnSync(['summon'], { cwd: home, env: { PATH: `${bin}:${PATH_WITH_BUN}`, HOME: home } })
-    expect(r.exitCode).toBe(2)
-    expect(r.stdout.toString()).toContain('usage:')
-  })
-})
-
-describe('the real build', () => {
-  // Compiled once for the tests below; kept out of the per-test temp tracking, which removes things after each test.
-  let buildDir = ''
-  let built: NuanceBuild
-  beforeAll(() => { buildDir = mkdtempSync(join(tmpdir(), 'summon-build-')); built = buildNuance(join(buildDir, 'nuance')) }, 120_000)
-  afterAll(() => { rmSync(buildDir, { recursive: true, force: true }) })
-  const strictlyValid = (bin: string) => {
-    const v = Bun.spawnSync(['/usr/bin/codesign', '--verify', '--strict', '-vvv', bin])
-    expect([bin, v.exitCode]).toEqual([bin, 0])
-    expect(v.stderr.toString()).toContain('valid on disk')
-  }
-
-  test('compiles two arm64 binaries; the gatekeeper refuses `ls`; the runner settles an empty home', () => {
-    expect(built.sha).toEqual({ gatekeeper: sha(built.gatekeeper), runner: sha(built.runner) })
-    for (const bin of [built.gatekeeper, built.runner]) {
-      expect(new TextDecoder().decode(Bun.spawnSync(['/usr/bin/file', bin]).stdout)).toContain('Mach-O 64-bit executable arm64')
-      expect(new TextDecoder().decode(Bun.spawnSync(['/usr/bin/codesign', '-dv', bin]).stderr)).toContain('Signature=adhoc')
-    }
-    const gkHome = temp('summon-gk-home-')
-    const gk = Bun.spawnSync([built.gatekeeper], { env: { PATH: BASE_PATH, HOME: gkHome, SUMMON_HOME_OVERRIDE: gkHome, SSH_ORIGINAL_COMMAND: 'ls' } })
-    expect(gk.exitCode).toBe(2)
-    expect(gk.stdout.toString()).toBe('{"status":"refused","reason":"malformed","detail":"unknown command"}\n')
-    const rnHome = temp('summon-rn-home-')
-    const rn = Bun.spawnSync([built.runner], { env: { PATH: BASE_PATH, HOME: rnHome, SUMMON_HOME_OVERRIDE: rnHome } })
-    expect(rn.exitCode).toBe(0)
-    const tree = (d: string, rel = ''): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
-      e.isDirectory() ? [`${rel}${e.name}/`, ...tree(join(d, e.name), `${rel}${e.name}/`)] : [`${rel}${e.name}`])
-    // Nothing but Summon's own spool (and the folders above it), all private, appears in the home.
-    expect(tree(rnHome).sort()).toEqual(['.local/', '.local/state/', '.local/state/summon/', '.local/state/summon/spool/'])
-    for (const d of tree(rnHome)) expect([d, mode(join(rnHome, d)).toString(8)]).toEqual([d, '700'])
-  })
-
-  test("F44: both carry a valid ad-hoc signature (codesign --verify --strict), with nothing after __LINKEDIT, not Bun's linker one", () => {
-    for (const bin of [built.gatekeeper, built.runner]) {
-      strictlyValid(bin)
-      expect(statSync(bin).size).toBe(linkeditEnd(readFileSync(bin)))
-      expect(Bun.spawnSync(['/usr/bin/codesign', '-dv', bin]).stderr.toString()).not.toContain('linker-signed')
-    }
-  })
-
-  test('F39: the bytes do not depend on the folder the build is started from, and carry no path of this Mac', () => {
-    const elsewhere = temp('summon-cwd-')
-    const before = process.cwd()
-    let again: NuanceBuild
-    try { process.chdir(elsewhere); again = buildNuance(join(temp('summon-build2-'), 'nuance')) } finally { process.chdir(before) }
-    expect(again.sha).toEqual(built.sha)
-    for (const bin of [built.gatekeeper, built.runner]) expect([bin, readFileSync(bin).includes(PKG)]).toEqual([bin, false])
-  }, 120_000)
-
-  test('F06: the compiled gatekeeper ignores a .env and a bunfig.toml in the home sshd starts it in', () => {
-    const home = temp('summon-gk-home-')
-    const elsewhere = temp('summon-elsewhere-')
-    writeFileSync(join(home, '.env'), `SUMMON_HOME_OVERRIDE=${elsewhere}\nSUMMON_TEST_GUI=1\n`)
-    writeFileSync(join(home, 'pre.ts'), `require('node:fs').writeFileSync(${JSON.stringify(join(elsewhere, 'preload-ran'))}, 'x'); console.log('PRELOAD RAN')\n`)
-    for (const bunfig of ['preload = ["./pre.ts"]\n', 'this is [ not toml\n']) {
-      writeFileSync(join(home, 'bunfig.toml'), bunfig)
-      const gk = Bun.spawnSync([built.gatekeeper], { cwd: home, env: { PATH: BASE_PATH, HOME: home, SSH_ORIGINAL_COMMAND: 'ls' } })
-      expect([bunfig, gk.exitCode, gk.stdout.toString()]).toEqual([bunfig, 2, '{"status":"refused","reason":"malformed","detail":"unknown command"}\n'])
-    }
-    expect(existsSync(join(home, '.local/state/summon/ledger.jsonl'))).toBe(true)
-    expect(readdirSync(elsewhere)).toEqual([])
-  })
-
-  test('the real binaries go through the bundle and the installer, keep their valid signature, and still run', () => {
-    const home = temp('summon-air-')
-    const r = prepareBundle({ home, build: () => built })
-    const root = temp('summon-root-')
-    const out = run(r.bundle, root)
-    expect(out.exitCode).toBe(0)
-    expect(out.stdout.toString()).not.toContain('could not sign')
-    const installed = join(root, '.local/share/summon/summon-gatekeeper')
-    expect(sha(installed)).toBe(built.sha.gatekeeper)
-    expect(sha(join(root, '.local/share/summon/summon-runner'))).toBe(built.sha.runner)
-    for (const bin of [installed, join(root, '.local/share/summon/summon-runner')]) strictlyValid(bin)
-    const gk = Bun.spawnSync([installed], { env: { PATH: BASE_PATH, HOME: root, SUMMON_HOME_OVERRIDE: root, SSH_ORIGINAL_COMMAND: 'ls' } })
-    expect([gk.exitCode, gk.stdout.toString()]).toEqual([2, '{"status":"refused","reason":"malformed","detail":"unknown command"}\n'])
-  })
-
-  // F40: the end-to-end checks of e2e.test.ts, through the compiled gatekeeper and the compiled runner.
-  for (const [name, check] of Object.entries(END_TO_END)) test(`through the compiled pair: ${name}`, () => check(world(built)), 30_000)
-})

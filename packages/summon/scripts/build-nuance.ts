@@ -1,6 +1,6 @@
 // Compile the two Nuance programs into standalone arm64 binaries (no runtime needed there), each validly signed ad hoc.
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, statSync, truncateSync } from 'node:fs'
+import { mkdirSync, readFileSync, truncateSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface NuanceBuild { gatekeeper: string; runner: string; sha: { gatekeeper: string; runner: string } }
@@ -30,15 +30,24 @@ export function linkeditEnd(macho: Uint8Array): number {
 }
 
 /**
+ * Cuts the zero bytes Bun leaves after __LINKEDIT. Anything else there would be part of the program, so it refuses rather
+ * than cut it, and leaves the file as it was. A file that already ends at __LINKEDIT is left alone.
+ */
+export function cutAfterLinkedit(file: string): void {
+  const bytes = readFileSync(file)
+  const end = linkeditEnd(bytes)
+  if (bytes.length < end) throw new Error(`${file} is shorter than its __LINKEDIT segment`)
+  if (bytes.subarray(end).some((b) => b !== 0)) throw new Error(`${file} has non-zero bytes after __LINKEDIT: not cutting it`)
+  if (bytes.length > end) truncateSync(file, end)
+}
+
+/**
  * Bun signs what it compiles, but Apple's `codesign --verify` calls that signature invalid: Bun hashes the short last code
  * page as if zero-padded, and leaves zero bytes after __LINKEDIT, which strict validation (and so re-signing) rejects.
  * So cut the file at the end of __LINKEDIT, sign it ad hoc again, and require the strict check to pass.
  */
 function resign(file: string): void {
-  const end = linkeditEnd(readFileSync(file))
-  const size = statSync(file).size
-  if (size < end) throw new Error(`${file} is shorter than its __LINKEDIT segment`)
-  if (size > end) truncateSync(file, end)
+  cutAfterLinkedit(file)
   for (const args of [['--force', '-s', '-'], ['--verify', '--strict']]) {
     const r = Bun.spawnSync(['/usr/bin/codesign', ...args, file])
     if (r.exitCode !== 0) throw new Error(`codesign ${args.join(' ')} ${file} failed: ${r.stderr.toString()}`)
