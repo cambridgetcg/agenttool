@@ -113,7 +113,9 @@ export async function expectReviewerGuardFailsClosed(
   script: string,
   environment: string,
 ): Promise<void> {
-  expect(Bun.which("jq")).not.toBeNull();
+  // The stand-in gh applies the workflow's own filter with jq, so these checks
+  // exercise that filter rather than a re-implementation of it.
+  if (Bun.which("jq") === null) throw new Error("jq must be on PATH to run the reviewer-guard checks");
   const branchPolicy = { id: 1, node_id: "GA_fixture_branch", type: "branch_policy" };
   const environmentBody = (rules: unknown) =>
     JSON.stringify({ name: environment, protection_rules: rules, can_admins_bypass: true });

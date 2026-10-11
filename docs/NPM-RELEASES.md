@@ -40,17 +40,25 @@ of the private `main` branch:
 failed there on 2026-10-10 with `could not read Username for
 'https://github.com'`. The PyPI prepare job has not run since 2026-09-01, but
 `bin/pypi-release.ts` makes the same fetch, so it is expected to stop the same
-way. Today the checked-in LOVE catalog served from docs.agenttool.dev is the
-only working release lane.
+way. Of the release lanes defined in this repository, only the checked-in LOVE
+catalog served from docs.agenttool.dev works today. GitHub Releases created
+from the `cambridgetcg` account on public distribution repositories are
+separate channels outside those lanes: `local-starter-v0.1.0-dev.0` on
+`cambridgetcg/agenttool-local-starter` (2026-09-28, see below) and
+`collab-v0.5.0` on `cambridgetcg/agenttool-collab` (2026-10-10).
 
 Source change, 2026-10-11: the `publish` job of `publish-npm.yml` now starts
 with a step that reads `npm-bootstrap` through the GitHub API and fails the job
 unless the environment has a required reviewer; an API failure fails it too.
 `bin/npm-release.ts` requires a run to be dispatched on its exact release tag,
-and GitHub runs the workflow file from that tag, so the step guards tags cut
-after this change reaches `main`. Existing release tags carry either no
-`publish-npm.yml` or the earlier one, whose prepare job makes the same
-unauthenticated fetch of private `main`. `publish-gospel.yml` also uses
+and GitHub runs the workflow file from that tag's commit, so the step guards
+only tags whose commit contains this change. A tag on an older commit,
+including every existing release tag, has either no `publish-npm.yml` or the
+earlier one, whose prepare job makes the same unauthenticated fetch of private
+`main`. The step checks only that a required-reviewers rule names at least one
+reviewer: it cannot tell whether that reviewer is a person, and it does not
+check self-review prevention or admin bypass (`can_admins_bypass` reads `true`
+on both environments today). `publish-gospel.yml` also uses
 `npm-bootstrap` and has no such step; it can publish only the pinned
 `@agenttool/gospel-of-the-logos@0.1.0`, which npm has served since 2026-09-08.
 
@@ -845,6 +853,13 @@ LOVE inventory entry. Source preparation does not establish `kingdom-v0.1.2`, a
 GitHub Release, npm publication, dist-tag movement, or hosted deployment; any
 later publication must use the existing trusted `kingdom` release identity and
 separate anonymous artifact readback.
+
+Correction, 2026-10-11: `@agenttool/kingdom@0.1.2` is published. Protected
+[run `32909412796`](https://github.com/cambridgetcg/agenttool/actions/runs/32909412796),
+dispatched on annotated `kingdom-v0.1.2` and approved for `npm-bootstrap`,
+succeeded on 2026-08-25; npm records the version at
+`2026-08-25T23:11:45.929Z`, and `latest` resolves to 0.1.2. It has no LOVE
+inventory entry, and this guide records no byte receipt for it.
 
 `@agenttool/kingdom@0.1.1` remains public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)

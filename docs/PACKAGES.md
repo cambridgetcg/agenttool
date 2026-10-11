@@ -6,7 +6,7 @@
 > **Implements:** a small, optional agent-toolkit shelf within KINGDOM; the full module inventory remains below.
 > **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.
 > **Tests:** `bin/tests/agent-toolkit-shelf.test.ts` · each selected package's own boundary tests.
-> **Repository access:** links here into the `cambridgetcg/agenttool` GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. The public source of package bytes is the LOVE catalog under [docs.agenttool.dev/packages/v1](https://docs.agenttool.dev/packages/v1/index.json), plus the exact npm versions of npm-only packages.
+> **Repository access:** links here into the `cambridgetcg/agenttool` GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. Public package bytes are served by the LOVE catalog under [docs.agenttool.dev/packages/v1](https://docs.agenttool.dev/packages/v1/index.json), by exact npm versions, and by PyPI for `agenttool-sdk`.
 
 ## Where these packages fit
 
@@ -155,7 +155,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `alchemy-agentcred/` | `@agenttool/alchemy-agentcred` · npm-allowlisted | Strict AgentCred transport for AgentTool's seven bounded Alchemy EVM reads | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/alchemy-agentcred/CLAUDE.md) |
 | `browser/` | `@agenttool/browser` · LOVE + npm-allowlisted | Local-first browser control shaped for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/browser/CLAUDE.md) |
 | `codex-usage/` | `@agenttool/codex-usage` · npm-allowlisted | Privacy-minimal live local Codex token usage inspection for agents and operators | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/codex-usage/CLAUDE.md) |
-| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 release candidate | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
+| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 release candidate | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab/README.md) · [public distribution](https://github.com/cambridgetcg/agenttool-collab) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-courier/` | `@agenttool/collab-courier` · private source candidate | Explicit own-fleet selected summaries/replies over signed Correspondence and single-receiver Telegram human feedback; no distributed task authority | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-courier/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-zerone/` | `@agenttool/collab-zerone` · private | Witness-only zerone anchoring for agenttool-collab journals — the local journal stays canonical, the chain witnesses its head hashes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-zerone/CLAUDE.md) |
 | `common-ground-atlas/` | `@agenttool/common-ground-atlas` · private | Private deterministic generator and exact verifier for the public Xenia–Helly Common Ground Atlas | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/common-ground-atlas/CLAUDE.md) |

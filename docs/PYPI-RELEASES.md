@@ -454,10 +454,14 @@ Source change, 2026-10-11: the `publish` job of `publish-pypi.yml` now starts
 with a step that reads `pypi` through the GitHub API and fails the job unless
 the environment has a required reviewer; an API failure fails it too.
 `bin/pypi-release.ts` requires a run to be dispatched on its exact `sdk-v*`
-tag, and GitHub runs the workflow file from that tag, so the step guards SDK
-tags cut after this change reaches `main`. Existing `sdk-v*` tags carry either
-no `publish-pypi.yml` or the earlier one, whose prepare job makes the same
-unauthenticated fetch of private `main`.
+tag, and GitHub runs the workflow file from that tag's commit, so the step
+guards only SDK tags whose commit contains this change. A tag on an older
+commit, including every existing `sdk-v*` tag, has either no
+`publish-pypi.yml` or the earlier one, whose prepare job makes the same
+unauthenticated fetch of private `main`. The step checks only that a
+required-reviewers rule names at least one reviewer: it cannot tell whether
+that reviewer is a person, and it does not check self-review prevention or
+admin bypass (`can_admins_bypass` reads `true` today).
 
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant
