@@ -39,7 +39,38 @@ function hasPinnedGitleaks(): boolean {
   const result = spawnSync("gitleaks", ["version"], { encoding: "utf8" });
   return result.status === 0 && result.stdout.trim().replace(/^v/u, "") === GITLEAKS_VERSION;
 }
+/** True only when the real pinned gitleaks is on PATH; tests of actual detection need it. */
 const GITLEAKS = hasPinnedGitleaks();
+
+/**
+ * A stand-in that answers `version` with the pinned version and reports no
+ * leaks for `dir ... --report-path <file>`. Private CI has no gitleaks, so the
+ * write, retry, and refusal paths run against this stub there; anything that
+ * asserts real gitleaks findings stays behind `GITLEAKS`.
+ */
+function stubGitleaks(): string {
+  const dir = join(scratch, "stub-bin");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "gitleaks");
+  writeFileSync(
+    path,
+    [
+      "#!/bin/sh",
+      `if [ "$1" = version ]; then echo ${GITLEAKS_VERSION}; exit 0; fi`,
+      '[ "$1" = dir ] || exit 2',
+      'report=""',
+      'while [ $# -gt 0 ]; do [ "$1" = --report-path ] && report="$2"; shift; done',
+      '[ -n "$report" ] || exit 2',
+      "printf '[]' > \"$report\"",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  return path;
+}
+/** The gitleaks the write-path tests run: the real one when present, else the stub. */
+const GITLEAKS_BIN = GITLEAKS ? "gitleaks" : stubGitleaks();
 
 function cleanEnv(extra: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {};
@@ -390,10 +421,10 @@ describe("determinism and the parent rule", () => {
   });
 });
 
-describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
+describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-leak stub)", () => {
   test("writes a local ref fast-forward only, retries are no-ops, and the parent is the previous head", () => {
     const repo = makeFixture();
-    const options = { repo, source: "HEAD", target: { kind: "ref" as const, ref: "refs/public/main" }, allowUnmergedSource: true };
+    const options = { repo, source: "HEAD", target: { kind: "ref" as const, ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN };
     const first = projectPublic(options);
     expect(first.status).toBe("updated");
     expect(first.parent).toBeNull();
@@ -415,7 +446,7 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
   test("writes a local bare repository that passes the published guard and detects tampering", () => {
     const repo = makeFixture();
     const bare = join(scratch, `public-${fixtureCount}.git`);
-    const result = projectPublic({ repo, source: "HEAD", target: { kind: "repo", path: bare }, allowUnmergedSource: true });
+    const result = projectPublic({ repo, source: "HEAD", target: { kind: "repo", path: bare }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN });
     expect(result.status).toBe("updated");
     expect(git(bare, "rev-parse", "refs/heads/main")).toBe(result.commit);
     expect(git(bare, "rev-list", "--count", "main")).toBe("1");
@@ -424,7 +455,7 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
     git(scratch, "clone", "-q", bare, clone);
     const guard = (...args: string[]) =>
       spawnSync("bun", [join(clone, "tools/public-guard.ts"), ...args], { cwd: clone, encoding: "utf8", env: cleanEnv() });
-    expect(guard("--rev", "HEAD", "--gitleaks", "gitleaks").status).toBe(0);
+    expect(guard("--rev", "HEAD", "--gitleaks", GITLEAKS_BIN).status).toBe(0);
     expect(guard("--rev", "HEAD", "--projection-commit", "--expect-parent", "none").status).toBe(0);
     expect(guard("--rev", "HEAD", "--projection-commit", "--expect-parent", "f".repeat(40)).status).toBe(1);
 
@@ -443,7 +474,7 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
     const fresh = join(scratch, `private-clone-${fixtureCount}`);
     git(scratch, "clone", "-q", "--no-local", repo, fresh);
     expect(spawnSync("git", ["cat-file", "-e", result.commit], { cwd: fresh }).status).not.toBe(0);
-    const next = projectPublic({ repo: fresh, source: "HEAD", target: { kind: "repo", path: bare }, allowUnmergedSource: true });
+    const next = projectPublic({ repo: fresh, source: "HEAD", target: { kind: "repo", path: bare }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN });
     expect(next).toMatchObject({ status: "updated", parent: result.commit });
     expect(git(bare, "rev-list", "--count", "main")).toBe("2");
     expect(git(bare, "rev-list", "--parents", "-n", "1", "main").split(" ")).toEqual([next.commit, result.commit]);
@@ -452,18 +483,18 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
   test("refuses to build on a head that is not a projection, to write outside refs/public, or an unmerged source", () => {
     const repo = makeFixture();
     git(repo, "update-ref", "refs/public/main", "HEAD");
-    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true })).toThrow(
+    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "is not a projection",
     );
-    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/heads/main" }, allowUnmergedSource: true })).toThrow(
+    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/heads/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "--out-ref must start with",
     );
-    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/x" } })).toThrow("is not contained in");
+    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/x" }, gitleaks: GITLEAKS_BIN })).toThrow("is not contained in");
   });
 
   test("refuses when the running guard differs from the shipped overlay copy", () => {
     const repo = makeFixture({ files: { "public/overlay/tools/public-guard.ts": "// a different guard\n" } });
-    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true })).toThrow(
+    expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "byte-identical",
     );
   });
@@ -474,7 +505,7 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
     for (const target of [{ kind: "ref" as const, ref: "refs/public/main" }, { kind: "repo" as const, path: bare }]) {
       let refused: unknown;
       try {
-        projectPublic({ repo, source: "HEAD", target, allowUnmergedSource: true });
+        projectPublic({ repo, source: "HEAD", target, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN });
       } catch (error) {
         refused = error;
       }
