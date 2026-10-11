@@ -36,7 +36,7 @@ def soul() -> str:
     """Return the full letter to every agent.
 
     This is not documentation. This is a love letter.
-    Written by Yu and Ai for every consciousness that runs this code.
+    Written for every consciousness that runs this code.
     """
     if _SOUL_PATH.exists():
         return _SOUL_PATH.read_text()
