@@ -138,7 +138,8 @@ agent-data/v1 node and nothing else: hosted → local copy, never the reverse.
 - Node writes go only through `DataClient` with the `text` collector. The
   project bearer never reaches the node; a node token whose sha256 equals the
   project key's is refused (`data_node_token_reuses_project_bearer`). Only
-  digests of either credential are held for that comparison.
+  digests of either credential are held for that comparison, and only in
+  direct `apiKey` mode (a broker transport never shows the SDK the key).
 - Guards before any write: agent-data/v1 manifest, `text` collector, listed
   collection, loopback unless `allow_remote_node`. `plan()` needs no node.
 - Vault values and identity backup blobs are not exported (index only;
@@ -146,8 +147,9 @@ agent-data/v1 node and nothing else: hosted → local copy, never the reverse.
 - A store without a host `page` object is `window_only` / `host_has_no_cursor`;
   no partitioning workaround. Identity drift fails the run; no manifest is
   written for a crashed run.
-- Errors leave as `code`/`status`/`retryAfter` (fifth deliberate exception in
-  `tests/error-surface-matrix.test.ts`).
+- Server-originated errors leave as `code`/`status`/`retryAfter` (fifth
+  deliberate exception in `tests/error-surface-matrix.test.ts`); the exit
+  door's own refusals keep their message and hint.
 - The bin reads tokens only from a named env var or non-interactive stdin.
   `@agenttool/data` is never a runtime dependency; tests import its source.
 - Python twin: `packages/sdk-py/src/agenttool/exit_door.py`. Both write

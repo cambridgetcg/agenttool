@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from urllib.parse import urlsplit
 
@@ -71,7 +72,7 @@ EXIT_STORES: Tuple[str, ...] = (
 
 #: Fields removed before an item is written: they change on read or on
 #: unrelated activity and would otherwise mint a new record every run.
-EXIT_VOLATILE_FIELDS: Mapping[str, Tuple[str, ...]] = {
+EXIT_VOLATILE_FIELDS: Mapping[str, Tuple[str, ...]] = MappingProxyType({
     "memories": ("accessed_at",),
     "chronicle": (),
     "strands": ("last_thought_at", "last_thought_seq", "updated_at"),
@@ -82,7 +83,7 @@ EXIT_VOLATILE_FIELDS: Mapping[str, Tuple[str, ...]] = {
     "identity_keys": (),
     "vault_index": (),
     "backup_index": (),
-}
+})
 
 #: What every exit manifest declares it is not.
 EXIT_NON_CLAIMS: Tuple[str, ...] = (
@@ -460,7 +461,7 @@ class ExitDoorClient:
         def sink(run: _StoreRun, item: Dict[str, Any], context: Dict[str, str]) -> None:
             try:
                 record = exit_item_record(origin=origin, store=run.store, item=item, context=context)
-            except AgentToolError as error:
+            except Exception as error:  # noqa: BLE001 — one bad item is a skip, as in TS
                 run.item_skips.append({"hosted_id": _hosted_id_of(run.store, item), "reason": _code_of(error)})
                 return
             if record["key"] in run.current:
@@ -522,7 +523,7 @@ class ExitDoorClient:
         def sink(run: _StoreRun, item: Dict[str, Any], context: Dict[str, str]) -> None:
             try:
                 record = exit_item_record(origin=origin, store=run.store, item=item, context=context)
-            except AgentToolError as error:
+            except Exception as error:  # noqa: BLE001 — one bad item is a skip, as in TS
                 run.item_skips.append({"hosted_id": _hosted_id_of(run.store, item), "reason": _code_of(error)})
                 return
             spec = _STORE_SPECS[run.store]
@@ -1426,8 +1427,10 @@ def _hosted_id_of(store: str, item: Dict[str, Any]) -> Optional[str]:
     return value if isinstance(value, str) else None
 
 
-def _code_of(error: AgentToolError) -> str:
-    return str(error.code) if error.code else "exit_item_invalid"
+def _code_of(error: Exception) -> str:
+    if isinstance(error, AgentToolError) and error.code:
+        return str(error.code)
+    return "exit_item_invalid"
 
 
 def _record_ids_digest(record_ids: Sequence[str]) -> str:

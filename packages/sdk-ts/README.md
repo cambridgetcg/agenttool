@@ -606,9 +606,16 @@ says so.
 Every guard runs before the first write. The node manifest must report
 `agent-data/v1` with the `text` collector, and the target collection must be
 listed. The node URL must be loopback unless you pass
-`allow_remote_node: true`. A node token equal to the project API key is
-refused with `data_node_token_reuses_project_bearer`. Errors leave the exit
-door as `code`, `status`, and `retryAfter` only.
+`allow_remote_node: true`. In direct `apiKey` mode, a node token equal to the
+project API key is refused with `data_node_token_reuses_project_bearer`; a
+broker `transport` keeps the key out of the SDK, so that comparison cannot run
+there. A failure that comes from either server leaves the exit door as `code`,
+`status`, and `retryAfter` only; the exit door's own refusals keep their hint.
+
+`identity_id` narrows memories, chronicle (`agent_id`), covenants, and backups
+through the host's own filters, and strands and identities on the client side.
+Correspondence and the vault index stay project-wide. Each walk's filter is
+recorded in the manifest, so the scope of a copy is never implied.
 
 Completeness is reported per store and comes from the host's own end-of-walk
 signal. A host that returns no cursor `page` gives `window_only` with reason
