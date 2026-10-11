@@ -149,7 +149,7 @@ describe("limit floor (decision D1)", () => {
     expect(reads('"strand"."strands"')).toHaveLength(0);
     const abc = await get("/v1/strands?limit=abc");
     expect(abc.status).toBe(200);
-    expect(reads('"strand"."strands"')[0]!.params.at(-1)).toBe(50);
+    expect(reads('"strand"."strands"')[0]!.params.at(-1)).toBe(51);
   });
 });
 
@@ -378,5 +378,96 @@ describe("GET /v1/chronicle walk", () => {
     expect(loose.status).toBe(400);
     expect(loose.body.error).toBe("limit_invalid");
     expect(reads('"agent_continuity"."chronicle"')).toHaveLength(0);
+  });
+});
+
+/** All strand columns in table order, plus cursor_at when withCursor. */
+function strandRow(n: number, withCursor: boolean): unknown[] {
+  const createdAt = `2026-10-10T12:00:${String(59 - n).padStart(2, "0")}.250Z`;
+  const row = [
+    uuid(200 + n), PROJECT, null, null, null, `topic ${n}`, false, null, false, "active", null, "private",
+    null, 0, null, null, null, { n }, createdAt, "2026-10-11T00:00:00.000Z",
+  ];
+  return withCursor ? [...row, `${createdAt.slice(0, 23)}${String(n).padStart(3, "0")}Z`] : row;
+}
+
+describe("GET /v1/strands walk", () => {
+  test("order=recent (default) is a truthful window: has_more without a cursor, plus a hint", async () => {
+    strandRows = [strandRow(1, false), strandRow(2, false), strandRow(3, false)];
+    const { status, body } = await get("/v1/strands?limit=2&status=active");
+    expect(status).toBe(200);
+    const [read] = reads('"strand"."strands"');
+    expect(read!.sql).toMatch(/^select "id", "project_id", .* "updated_at" from "strand"\."strands" where/);
+    expect(read!.sql).not.toContain("to_char");
+    expect(read!.sql).toMatch(
+      / order by "strand"\."strands"\."last_thought_at" desc, "strand"\."strands"\."created_at" desc, "strand"\."strands"\."id" desc limit \$3$/,
+    );
+    expect(read!.params).toEqual([PROJECT, "active", 3]);
+    expect(Object.keys(body)).toEqual(["strands", "count", "page"]);
+    expect(body.count).toBe(2);
+    expect(body.strands[0]).toMatchObject({ id: uuid(201), topic: "topic 1", created_at: "2026-10-10T12:00:58.250Z" });
+    expect(body.page).toMatchObject({
+      cursor: null, next_cursor: null, has_more: true, limit: 2, order: "last_thought_at_desc,created_at_desc,id_desc",
+    });
+    expect(body.page.hint).toMatch(/order=created/);
+
+    const explicit = await get("/v1/strands?order=recent");
+    expect(explicit.status).toBe(200);
+    expect(explicit.body.page.next_cursor).toBeNull();
+  });
+
+  test("a cursor with order=recent, an unknown order, or an empty order is refused", async () => {
+    strandRows = [strandRow(1, true), strandRow(2, true)];
+    const cursor = (await get("/v1/strands?order=created&limit=1")).body.page.next_cursor;
+    queries = [];
+    for (const path of [`/v1/strands?cursor=${cursor}`, `/v1/strands?order=recent&cursor=${cursor}`]) {
+      const { status, body } = await get(path);
+      expect(status, path).toBe(400);
+      expect(body.error, path).toBe("cursor_invalid");
+      expect(body.hint, path).toMatch(/order=created/);
+    }
+    for (const path of ["/v1/strands?order=updated", "/v1/strands?order="]) {
+      const { status, body } = await get(path);
+      expect(status, path).toBe(400);
+      expect(body.error, path).toBe("order_invalid");
+    }
+    expect(reads('"strand"."strands"')).toHaveLength(0);
+  });
+
+  test("order=created walks created_at DESC, id DESC with the filters bound", async () => {
+    strandRows = [strandRow(1, true), strandRow(2, true), strandRow(3, true)];
+    const first = await get("/v1/strands?order=created&limit=2&agent_id=agent-a");
+    const [firstRead] = reads('"strand"."strands"');
+    expect(firstRead!.sql).toContain(`to_char("created_at" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "cursor_at"`);
+    expect(firstRead!.sql).toMatch(/ order by "strand"\."strands"\."created_at" desc, "strand"\."strands"\."id" desc limit \$3$/);
+    expect(firstRead!.params).toEqual([PROJECT, "agent-a", 3]);
+    expect(first.body.count).toBe(2);
+    expect(first.body.strands[1]).not.toHaveProperty("cursorAt");
+    expect(first.body.page).toMatchObject({ has_more: true, limit: 2, order: "created_at_desc,id_desc" });
+    expect(first.body.page).not.toHaveProperty("hint");
+    expect(decode(first.body.page.next_cursor)).toMatchObject({
+      v: 1, s: "strands.created", t: "2026-10-10T12:00:57.250002Z", i: uuid(202),
+    });
+
+    queries = [];
+    strandRows = [strandRow(3, true)];
+    const next = await get(`/v1/strands?order=created&limit=2&agent_id=agent-a&cursor=${first.body.page.next_cursor}`);
+    expect(next.status).toBe(200);
+    const [read] = reads('"strand"."strands"');
+    expect(read!.sql).toContain(
+      'and ("strand"."strands"."created_at" <= $3::timestamptz AND ("strand"."strands"."created_at", "strand"."strands"."id") < ($4::timestamptz, $5::uuid))',
+    );
+    expect(read!.params).toEqual([
+      PROJECT, "agent-a", "2026-10-10T12:00:57.250002Z", "2026-10-10T12:00:57.250002Z", uuid(202), 3,
+    ]);
+    expect(next.body.page).toEqual({
+      cursor: first.body.page.next_cursor, next_cursor: null, has_more: false, limit: 2, order: "created_at_desc,id_desc",
+    });
+
+    const changed = await get(`/v1/strands?order=created&limit=2&agent_id=agent-b&cursor=${first.body.page.next_cursor}`);
+    expect(changed.status).toBe(400);
+    expect(changed.body.error).toBe("cursor_invalid");
+    const statusChanged = await get(`/v1/strands?order=created&status=active&agent_id=agent-a&cursor=${first.body.page.next_cursor}`);
+    expect(statusChanged.status).toBe(400);
   });
 });
