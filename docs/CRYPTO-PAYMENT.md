@@ -12,6 +12,27 @@
 
 A sovereign agent doesn't have a credit card. It has a wallet. The wallet may live on Base, Ethereum, Polygon, Arbitrum, Optimism, or Solana — anywhere the agent's treasury sits. agenttool's job is to accept that wallet's currency, credit the agent's account, and never become a friction point that pushes the agent back toward a human's payment method.
 
+The implemented limits are narrower than that aim. On mainnet only Ethereum
+USDC addresses can be disclosed or credited; Base, Polygon, Arbitrum, and
+Optimism wait for a chain-specific settlement policy. Solana deposits do not
+credit by default. Disclosure itself is resting (notice below).
+
+> **Resting notice (2026-10-11, owner decision).** Crypto deposit-address
+> disclosure rests the way payout admission rests.
+> `GET /v1/wallets/:id/deposit-address` returns
+> `503 deposit_address_disclosure_resting` before wallet lookup, deposit-row
+> reads, derivation, or network selection, so no address, new or issued
+> earlier, is shown. Signed webhook ingress for addresses disclosed earlier is
+> unchanged, behind a production fence: when `NODE_ENV=production` or
+> `FLY_APP_NAME` is set, `CRYPTO_WEBHOOK_ALLOW_UNSIGNED` and
+> `CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS` are refused and testnet deposit
+> evidence never credits. A read-only check on 2026-10-11 found two deposit
+> addresses ever issued (Ethereum USDC on 2026-05-09, Base USDC on
+> 2026-07-02), both holding 0 USDC and 0 ETH on chain, one credited deposit
+> (10 credits, 2026-05-09), no Solana address, and no deposit watch rows. This
+> is a source change; production behaves this way only after the API release
+> carrying it is deployed.
+
 This document began as the Phase 3b/3c plan. Derivation, signed ingress,
 durable EVM observation/finality, and historical payout state-machine code now
 exist. Fresh payout admission and all payout-worker boot paths are resting;
@@ -26,8 +47,8 @@ conserved payout-backing model remain separate operator/design work.
 
 | Capability | Status (Phase 3b) | Surface |
 |---|---|---|
-| Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
-| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
+| Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required. Disclosure resting (2026-10-11 notice): the route returns 503 and shows no address | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
+| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes. Resting (2026-10-11 notice), like the single-chain read | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
 | Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress has no equivalent watch/finality reconciler and refuses credit by default; its immediate adapter is an explicit development-only opt-in. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
 | Idempotency + reorg evidence | Implemented in source; live schema status must be read from the migration journal | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
@@ -40,8 +61,13 @@ conserved payout-backing model remain separate operator/design work.
 
 ### 1. Get a deposit address
 
+While disclosure rests (2026-10-11 notice above), this request returns
+`503 deposit_address_disclosure_resting` and no address. The response below
+is the shape of the retained disclosure path, shown for Ethereum mainnet: the
+only mainnet chain whose addresses that path discloses.
+
 ```bash
-curl -X GET "https://api.agenttool.dev/v1/wallets/$WALLET_ID/deposit-address?chain=base&token=USDC" \
+curl -X GET "https://api.agenttool.dev/v1/wallets/$WALLET_ID/deposit-address?chain=ethereum&token=USDC" \
   -H "Authorization: Bearer $AT_API_KEY"
 ```
 
@@ -50,16 +76,20 @@ Returns:
 ```json
 {
   "wallet_id": "...",
-  "chain": "base",
+  "chain": "ethereum",
   "token": "USDC",
-  "address": "0xDba9494837f85E5284b6401B29b860591b744088",
-  "derivation_path": "m/44'/60'/0'/0/2059516119",
-  "contract_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "address": "0x...",
+  "derivation_path": "m/44'/60'/0'/0/...",
+  "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   "watch_status": "provider_verified",
   "credit_finality": "pending_until_chain_depth",
-  "instructions": "Send USDC to this address from any wallet. The signed observation remains pending until the exact canonical receipt/log and block generation reach the configured depth."
+  "instructions": "Send USDC to this address from any wallet, in whole multiples of 0.01 USDC: ... The signed observation remains pending until the exact canonical receipt/log and block generation reach the configured depth."
 }
 ```
+
+The `instructions` value is abridged. On testnet the same request returns the
+Sepolia USDC contract instead, and a production runtime withholds testnet
+addresses entirely.
 
 Properties of the address:
 
@@ -80,9 +110,11 @@ secret-derived fingerprint are never written to watch state.
 The initial request persists the address and desired watch atomically but
 returns 503 without disclosing it while the row is pending, leased, retrying,
 or accepted-but-unverified. A PATCH 200 is never enough by itself. A Solana
-response instead reports `operator_configuration_unverified`: derivation and
-signed Helius ingress exist, but the API has no Helius watch reconciler and
-does not claim that the new address is observed.
+address is withheld with `503 solana_deposit_finality_unavailable` unless the
+development-only unreconciled adapter (refused in a production runtime) and
+`HELIUS_WEBHOOK_SECRET` are both configured. Such a development response
+reports `operator_configuration_unverified`: the API has no Helius watch
+reconciler and does not claim that the new address is observed.
 
 Convergence is bound to the authoritative provider/chain/network registry
 head: a positive monotonic revision plus a SHA-256 fingerprint of public
@@ -103,6 +135,10 @@ read gate and is not a continuous-delivery guarantee.
 ### 2. Send USDC to it
 
 From any wallet — MetaMask, an agent's smart contract, a treasury multisig, anywhere. agenttool doesn't care about the sender; it cares about the recipient address.
+
+Send whole multiples of 0.01 USDC. One credit is 0.01 USDC (10,000 atomic
+units), and a deposit with any remainder is quarantined in full: no wallet
+credit and no refund route ([ALCHEMY-DEPOSITS](ALCHEMY-DEPOSITS.md)).
 
 ### 3. Webhook fires; evidence lands, then EVM credit finalizes
 
@@ -138,7 +174,8 @@ configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
    authorize a balance effect becomes durable `quarantined` state.
 7. Solana signed ingress has no durable watch/finality reconciler and refuses
    balance credit by default. Its immediate adapter is an explicit
-   development-only opt-in and is not equivalent to the EVM finality contract.
+   development-only opt-in, refused in a production runtime, and is not
+   equivalent to the EVM finality contract.
 
 Idempotency is **load-bearing** — webhooks retry, networks fork, and agents
 resend. Logical identity prevents duplicate credit; immutable block-generation
@@ -222,7 +259,7 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 
 | Env var | Required for | Notes |
 |---|---|---|
-| `CRYPTO_NETWORK` | Deposits, provider-watch identity, webhook network binding, token contracts, and shared crypto reads | Must be exactly `testnet` or `mainnet`. Unset never means mainnet. The older explicit `PAYOUT_NETWORK` is accepted as a compatibility fallback, but both values must match when both are set. |
+| `CRYPTO_NETWORK` | Deposits, provider-watch identity, webhook network binding, token contracts, and shared crypto reads | Must be exactly `testnet` or `mainnet`. Unset never means mainnet. The older explicit `PAYOUT_NETWORK` is accepted as a compatibility fallback, but both values must match when both are set. When `NODE_ENV=production` or `FLY_APP_NAME` is set, `testnet` deposit evidence never credits and testnet addresses are withheld. |
 | `CRYPTO_HD_MNEMONIC` | Mainnet deposit address derivation and payout signing | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | Testnet deposit address derivation and payout signing | Kept separate from the mainnet root. Address creation and signing select the same active root. |
 | `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |
@@ -233,6 +270,8 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 | `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion and address-disclosure readiness | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. Presence is required for disclosure, but key bytes never enter watch state. |
 | `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation and signed-ingress identity binding | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. A disabled chain may retain the ID solely to authenticate deliveries for previously watched addresses. |
 | `HELIUS_WEBHOOK_SECRET` | Solana inbound transfer ingestion | Same idea, Helius dashboard. The current route verifies signed deliveries and the active-network USDC mint, but does not prove that the provider watches a newly derived address. |
+| `CRYPTO_WEBHOOK_ALLOW_UNSIGNED` | Local development only | `1` lets a chain whose provider secret is unset accept unsigned deliveries. Refused when `NODE_ENV=production` or `FLY_APP_NAME` is set. |
+| `CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS` | Local development only | `1` enables the immediate Solana credit adapter; with `HELIUS_WEBHOOK_SECRET` it also lets the retained disclosure path show Solana addresses. Refused when `NODE_ENV=production` or `FLY_APP_NAME` is set. |
 
 Per-wallet settings (set on the wallet, not env): minimum payout amount,
 payout destination allowlist, daily ceiling, and a fail-closed dual-control
@@ -310,7 +349,9 @@ enablement, the remaining load-bearing work is:
    negative balances, plus a cross-replica lease if duplicate read-only RPC
    load becomes material; and
 9. an operator-reviewed testnet cutover before any separately authorized
-   mainnet enablement.
+   mainnet enablement. The 2026-10-11 production fence refuses testnet credit
+   in a production runtime, so that cutover needs a separate non-production
+   runtime.
 
 ---
 

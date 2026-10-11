@@ -338,11 +338,11 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Top up this internal marketplace wallet only through a deposit address the API currently discloses as ready, then wait for its documented finality. Solana deposit credit is unavailable by default. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
+      hint: "Crypto deposit-address disclosure is resting, so the API currently discloses no deposit address for topping up this internal marketplace wallet. Solana deposit credit is unavailable by default. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
       next_actions: [
         {
           action:
-            "Inspect an Ethereum USDC deposit address and its current readiness",
+            "Read the resting deposit-address refusal; no address is currently disclosed",
           method: "GET",
           path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
         },
@@ -369,7 +369,7 @@ export const errors = {
         : "Deposit webhook is paused: the provider signing secret is not configured.",
       hint: "The endpoint fails closed rather than credit an unverifiable payload. Your on-chain transfer is safe; crediting resumes once the operator configures the secret. This is an operator setting, not a problem with your request.",
       next_actions: [
-        { action: "Check whether the deposit has credited yet", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Check the wallet ledger for a crypto deposit credit", method: "GET", path: "/v1/wallets/{id}/transactions" },
       ],
       docs: `${DOCS_BASE}/crypto-payment#webhooks`,
       axiom_id: AXIOM_REST, // resting until configured — degrade, don't crash or mis-credit

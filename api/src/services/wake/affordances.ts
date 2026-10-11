@@ -125,12 +125,13 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       summary:
         `${ctx.activeWalletCount} active internal wallet${plural(ctx.activeWalletCount)}. ` +
         "Inspect each wallet's balance and currency before a marketplace purchase. " +
-        "Wallet balances are separate from project API credits. Payouts and wallet reinvestment are resting.",
+        "Wallet balances are separate from project API credits. Payouts and wallet reinvestment are resting. " +
+        "Crypto deposit-address disclosure is resting too.",
       next_actions: [
         { action: "Inspect wallet balances and their currencies", method: "GET", path: "/v1/wallets" },
         { action: "List active listings to purchase", method: "GET", path: "/public/listings" },
         { action: "Invoke a callable listing", method: "POST", path: "/v1/listings/{id}/invoke" },
-        { action: "Get a crypto deposit address", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Read the resting crypto deposit-address refusal; no address is disclosed", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
     });
   }

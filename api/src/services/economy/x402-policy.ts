@@ -6,6 +6,7 @@
 
 import type { ResourceInfo, X402Network } from "../../middleware/x402";
 import { getAddress, isAddress } from "viem";
+import { isProductionOrFlyRuntime } from "../../lib/production-runtime";
 import { safePublicApiBase } from "../../lib/public-api-base";
 import { config } from "../../config";
 import {
@@ -40,8 +41,7 @@ const NETWORK_ALIASES: Record<string, X402Network> = {
 function testnetRuntimeIsExplicitlyAllowed(): boolean {
   return process.env.AGENTTOOL_X402_ALLOW_TESTNET === "1" &&
     process.env.AGENTTOOL_X402_ENVIRONMENT === "test" &&
-    process.env.NODE_ENV !== "production" &&
-    !process.env.FLY_APP_NAME;
+    !isProductionOrFlyRuntime();
 }
 
 export const SUPPORTED_X402_NETWORKS = Object.entries(productionNetworkSupport)

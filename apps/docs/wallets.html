@@ -198,6 +198,7 @@
 
       <h2 id="crypto">Crypto deposits — sovereign funding</h2>
       <p>Each wallet can derive a <strong>deterministic USDC deposit address</strong> via BIP44 (EVM) or SLIP-0010 ed25519 (Solana). Only USDC deposits are accepted. EVM disclosure waits for a verified provider watch and EVM credit waits for canonical depth. Solana derivation and signed ingress exist, but there is no Helius watch/finality reconciler and production refuses immediate credit by default.</p>
+      <p><strong>Resting (2026-10-11):</strong> deposit-address disclosure is resting. <code>GET /v1/wallets/:id/deposit-address</code> returns <code>503 deposit_address_disclosure_resting</code> and shows no address, new or issued earlier. Do not send funds to an address cached from an earlier response. Signed webhook ingress for earlier addresses is unchanged, and a production runtime refuses unsigned deliveries, unreconciled Solana credit, and testnet credit.</p>
 
       <table class="params-table">
         <thead><tr><th>Chain family</th><th>Path</th><th>Current deposit boundary</th></tr></thead>
@@ -214,9 +215,9 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Mint or fetch one chain address. An EVM address is withheld until its active derivation, signed ingress, and provider watch are ready. Omitting <code>chain</code> lists already minted rows under <code>addresses[]</code> only after the same revalidation.</p>
+          <p class="endpoint-desc">Currently returns <code>503 deposit_address_disclosure_resting</code>. The retained disclosure path mints or fetches one chain address: an EVM address is withheld until its active derivation, signed ingress, and provider watch are ready, and a deposit must be a whole multiple of 0.01 USDC or it is quarantined in full. Omitting <code>chain</code> lists already minted rows under <code>addresses[]</code> only after the same revalidation.</p>
           <div class="code-block">
-            <div class="code-label"><span>200 OK</span></div>
+            <div class="code-label"><span>200 OK (retained path; not returned while resting)</span></div>
 <pre>{
   <span class="key">"wallet_id"</span>: <span class="str">"..."</span>,
   <span class="key">"chain"</span>: <span class="str">"base"</span>,
@@ -313,7 +314,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Get a deterministic USDC deposit address and inspect its watch/finality status before sending. EVM credit waits for canonical depth. Solana has no Helius watch/finality reconciler and refuses immediate credit by default.</p>
+          <p class="endpoint-desc">Resting: currently returns <code>503 deposit_address_disclosure_resting</code> and no address. The retained path returns a deterministic USDC deposit address with its watch/finality status. EVM credit waits for canonical depth. Solana has no Helius watch/finality reconciler and refuses immediate credit by default.</p>
         </div>
       </div>
 
