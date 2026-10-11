@@ -47,6 +47,15 @@ describe('gateStart', () => {
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h2)).status).toBe('admitted')
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h2))).toMatchObject({ reason: 'rate_limited' })
   })
+  test('final review M4: busy says how to clear a job that looks stuck; rate_limited has no such hint', () => {
+    const h = targetHome()
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(h))).toEqual({ status: 'refused', reason: 'busy', detail: '1 summon(s) already queued or running',
+      hint: 'if a job looks stuck, run summon nuance inventory — it starts the runner, which settles jobs that can no longer run' })
+    const h2 = targetHome(DEFAULT_ALLOWLIST.replace('starts_per_hour: 6', 'starts_per_hour: 1'))
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(h2)).status).toBe('admitted')
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(h2))).toEqual({ status: 'refused', reason: 'rate_limited', detail: 'more than 1 starts in the last hour' })
+  })
   test('a missing allowlist refuses as outside_allowlist', () => {
     const h = targetHome(); rmSync(join(h, '.config/summon/allowlist.yaml'))
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h))).toMatchObject({ reason: 'outside_allowlist' })

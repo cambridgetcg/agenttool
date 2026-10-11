@@ -1,5 +1,5 @@
 import { readFileSync, realpathSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 import { CLAUDE_EFFORTS, DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
 
 export interface AllowlistModel { model: string; provider?: string; effort?: string[] }
@@ -89,6 +89,16 @@ export function safeRealpath(p: string): string | null {
 const within = (child: string, parent: string) => child === parent || child.startsWith(parent.endsWith('/') ? parent : parent + '/')
 const rank = (a: Access) => (a === 'review' ? 0 : 1)
 
+/**
+ * The TCC-protected folder a cwd is spelled inside, from its words alone (`..` and doubled slashes folded, case ignored as
+ * the Mac's volume ignores it). Asked before anything is resolved: realpath into such a folder can fail EPERM under sshd,
+ * and that must still read tcc_protected_folder, not "does not exist".
+ */
+function protectedBySpelling(expanded: string, home: string): string | null {
+  const spelled = normalize(expanded).toLowerCase()
+  return TCC_PROTECTED.find((p) => within(spelled, normalize(join(home, p)).toLowerCase())) ?? null
+}
+
 export type Admission =
   | { ok: true; cwdReal: string }
   | { ok: false; reason: 'outside_allowlist'; detail: string; hint: string }
@@ -112,11 +122,15 @@ export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
     return out(`model ${req.model}${req.provider ? '/' + req.provider : ''}${req.effort ? ' effort ' + req.effort : ''} is not allowed for ${rt.id}`,
       `add { ${triple} } to the ${rt.id} models`)
   }
+  const tcc = { ok: false, reason: 'tcc_protected_folder' } as const
+  const spelledIn = protectedBySpelling(expandHome(req.cwd, home), home)
+  if (spelledIn) return { ...tcc, detail: `${req.cwd} is inside ~/${spelledIn}` }
   const cwdReal = realpath(expandHome(req.cwd, home))
   if (!cwdReal) return out(`cwd ${req.cwd} does not exist on this Mac`, 'create the folder or correct cwd')
+  // And by what it resolves to: a symlink from an allowlisted folder into a protected one is refused by its target.
   for (const p of TCC_PROTECTED) {
     const pr = realpath(join(home, p)) ?? join(home, p)
-    if (within(cwdReal, pr)) return { ok: false, reason: 'tcc_protected_folder', detail: `${req.cwd} is inside ~/${p}` }
+    if (within(cwdReal, pr)) return { ...tcc, detail: `${req.cwd} is inside ~/${p}` }
   }
   // A claude edit job may run `git add` / `git commit`, and git's own file options (-F, --pathspec-from-file) read any
   // file Yu can, so edit is the same power reads_anywhere names. Review jobs stay inside the folder and need no flag.

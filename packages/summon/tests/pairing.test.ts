@@ -1,9 +1,9 @@
 import { afterAll, afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { pinnedText, writeSshConfig } from '../scripts/pin-nuance.ts'
+import { hostKeyFingerprint, pinnedText, writeSshConfig } from '../scripts/pin-nuance.ts'
 import { bundleReadyText, prepareBundle } from '../scripts/prepare-pairing.ts'
-import { AK, BASE_PATH, buildIdOf, cleanupFixtureHostKey, cleanupTmps, DAY, fakeBuild, mode, PKG, run, temp } from './helpers.ts'
+import { AK, BASE_PATH, buildIdOf, cleanupFixtureHostKey, cleanupTmps, DAY, fakeBuild, keygen, mode, PKG, run, temp } from './helpers.ts'
 
 afterEach(cleanupTmps)
 afterAll(cleanupFixtureHostKey)
@@ -179,10 +179,31 @@ describe('writeSshConfig (pinning Nuance on the Air)', () => {
   })
 
   test('F14: the next step after pinning puts `summon` on PATH before trying it', () => {
-    const t = pinnedText('/pkg')
+    const t = pinnedText('/pkg', 'SHA256:x')
     expect(t).toContain('mkdir -p ~/.local/bin && ln -sf "/pkg/bin/summon.ts" ~/.local/bin/summon')
     expect(t).toContain('some other file')
     expect(t.indexOf('ln -sf')).toBeLessThan(t.indexOf('summon nuance inventory'))
+  })
+
+  test('final review M7: the fingerprint of the pinned host key is the one ssh-keygen -lf prints for it', () => {
+    for (let i = 0; i < 3; i++) {
+      const key = join(temp('summon-fp-'), 'ssh_host_ed25519_key')
+      expect(keygen(key)).toBe(0)
+      const line = readFileSync(`${key}.pub`, 'utf8').trim()
+      const lf = Bun.spawnSync(['/usr/bin/ssh-keygen', '-lf', `${key}.pub`]).stdout.toString() // `256 SHA256:… root@stub (ED25519)`
+      const said = /^256 (SHA256:[A-Za-z0-9+/]{43}) root@stub \(ED25519\)\n$/.exec(lf)
+      expect(said).not.toBeNull()
+      expect(hostKeyFingerprint(line)).toBe(said![1]!)
+      expect(hostKeyFingerprint(line.replace(/ root@stub$/, ''))).toBe(said![1]!) // the comment is not part of the key
+    }
+    expect(() => hostKeyFingerprint('ssh-rsa AAAAB3NzaC1yc2E root@Nuance')).toThrow('ssh-ed25519 host key line')
+  })
+
+  test('final review M7: after pinning it prints that fingerprint first, to be compared with what the installer printed on Nuance', () => {
+    const t = pinnedText('/pkg', 'SHA256:abcDEF')
+    expect(t.split('\n').slice(0, 3)).toEqual(['pinned. The pinned host key of Nuance: SHA256:abcDEF',
+      'It must be the fingerprint the installer printed on Nuance (the ssh-keygen line under "host key:").',
+      'If it is not the same, stop here and tell Ai: do not use summon.'])
   })
 })
 

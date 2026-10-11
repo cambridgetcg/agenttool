@@ -7,7 +7,7 @@ import { summonPaths } from './paths.ts'
 import { DEVICE_RE, ID_RE, RUNTIMES, TOKEN_RE, newRequestId, originTag, type Access, type Runtime, type SummonRequest } from './request.ts'
 import { processStartTime } from './runner.ts'
 import { noRouteHint, sshCall, targetOf, type Env, type SshTarget } from './ssh.ts'
-import type { GateResponse } from './status.ts'
+import { HEARTBEAT_STATUSES, type GateResponse } from './status.ts'
 
 export interface CliDeps {
   sshBin: string; sshConfig: string; ledgerPath: string; device: string
@@ -29,7 +29,9 @@ export type CliCommand =
 
 const USAGE = `usage:
   summon <device> inventory
-  summon <device> claude --model M [--job] --cwd '<path on target>' [--review|--edit] --prompt-file F|- [--timeout 15m] [--expires 15m] [--label L]
+  summon <device> claude --model M [--effort E] [--provider P] [--job] --cwd '<path on target>' [--review|--edit] --prompt-file F|-
+         [--timeout 15m] [--expires 15m] [--label L]
+  (--effort must be one the target's allowlist lists for that model; Phase 0 refuses --provider for claude)
   summon status|result|cancel <device>/smn_<id>`
 
 export function parseCli(argv: string[]): CliCommand | { error: string } {
@@ -98,6 +100,24 @@ const failed = (o: GateResponse) => ['refused', 'unreachable', 'auth_refused', '
 /** `--json` only changes how bin/summon.ts prints; parseCli does not know it, so it is taken off argv first. */
 export function splitJsonFlag(argv: string[]): { argv: string[]; json: boolean } {
   return { argv: argv.filter((a) => a !== '--json'), json: argv.includes('--json') }
+}
+
+/**
+ * A field as the human answer prints it. Every C0 and C1 control character but \n and \t (and DEL) is shown as `\xNN`:
+ * the answer's text comes from Nuance and its harness, and must not move the cursor, retitle or clear the terminal.
+ */
+export function printable(v: unknown): string {
+  return String(v).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`)
+}
+
+/** The answer as printed without --json: status, reason and handle, then a line per field worth showing. */
+export function humanLines(out: GateResponse): string[] {
+  const lines = [[out.status, out.reason ? `(${out.reason})` : '', out.handle ?? ''].filter(Boolean).join(' ')]
+  if (HEARTBEAT_STATUSES.has(String(out.status)) && typeof out.heartbeat_age_s === 'number') lines.push(`heartbeat: ${out.heartbeat_age_s}s ago`)
+  if (typeof out.resets_at === 'string') lines.push(`resets: ${out.resets_at}`)
+  for (const k of ['detail', 'hint', 'result_text'] as const) if (out[k]) lines.push(`${k === 'result_text' ? '' : k + ': '}${out[k]}`)
+  if (out.inventory) lines.push(JSON.stringify(out.inventory, null, 2))
+  return lines.map(printable)
 }
 
 /** Thrown only before anything was sent: the Air ledger entry that must come first could not be written. */

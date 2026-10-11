@@ -82,6 +82,12 @@ describe('parseCli', () => {
     expect(parseCli(['nuance', 'inventory'])).toEqual({ kind: 'inventory', device: 'nuance' })
     expect(parseCli(['status', 'nuance/../x'])).toHaveProperty('error')
   })
+  test('final review M11: the usage names every flag a start parses, --effort and --provider included', () => {
+    const usage = (parseCli([]) as { error: string }).error
+    for (const f of ['--model', '--provider', '--effort', '--cwd', '--prompt-file', '--timeout', '--expires', '--label', '--job', '--review', '--edit']) {
+      expect([f, usage.includes(f)]).toEqual([f, true])
+    }
+  })
   test('--json is not a command flag: bin/summon.ts must split it off first', () => {
     expect(parseCli(['nuance', 'inventory', '--json'])).toHaveProperty('error')
   })
@@ -223,6 +229,17 @@ describe('sshCall', () => {
   test('a kill by signal is unknown', () => {
     const { bin } = fakeSsh(0, '', '', 'kill -9 $$')
     expect(sshCall({ sshBin: bin, sshConfig: 'c' }, 'nuance', 'start', '{}')).toMatchObject({ status: 'unknown', detail: expect.stringContaining('SIGKILL') })
+  })
+  test('final review I1: a result the runner capped (1,048,576 CJK units: 3 MiB of UTF-8) reads completed with the full text', () => {
+    const text = '愛'.repeat(1_048_576)
+    const { bin } = fakeSsh(0, JSON.stringify({ status: 'completed', result_text: text }) + '\n')
+    const r = sshCall({ sshBin: bin, sshConfig: 'c' }, 'nuance', `result smn_${'a'.repeat(32)}`)
+    expect(r.status).toBe('completed')
+    expect(r.result_text === text).toBe(true) // not toEqual: a 3 MiB diff would drown the report
+  })
+  test('final review I1: more than 1 MiB of remote stderr beside a valid answer does not lose the answer', () => {
+    const { bin } = fakeSsh(0, '{"status":"queued"}\n', `${'zshenv noise\n'.repeat(200_000)}`)
+    expect(sshCall({ sshBin: bin, sshConfig: 'c' }, 'nuance', `status smn_${'a'.repeat(32)}`)).toEqual({ status: 'queued' })
   })
 })
 
@@ -455,6 +472,33 @@ describe('bin/summon.ts', () => {
     const r = await run(['result', handle], bin)
     expect(r.code).toBe(1)
     expect(r.stdout).toBe(`blocked (usage) ${handle}\nresets: 2026-10-11T03:00:00.000Z\ndetail: usage allowed_warning\npartial\n`)
+  })
+  test('final review M9: the heartbeat age is printed for queued, running and unknown, not for a job that ended', async () => {
+    const handle = `nuance/smn_${'e'.repeat(32)}`
+    for (const status of ['queued', 'running', 'unknown']) {
+      const { bin } = fakeSsh(0, JSON.stringify({ status, handle, heartbeat_age_s: 42 }))
+      expect([status, (await run(['status', handle], bin)).stdout]).toEqual([status, `${status} ${handle}\nheartbeat: 42s ago\n`])
+    }
+    for (const status of ['completed', 'failed', 'cancelled', 'timed_out', 'expired']) {
+      const { bin } = fakeSsh(0, JSON.stringify({ status, handle, heartbeat_age_s: 42 }))
+      expect([status, (await run(['status', handle], bin)).stdout]).toEqual([status, `${status} ${handle}\n`])
+    }
+  })
+  test('final review L195: control characters in printed fields are shown as escapes, so the remote cannot drive the terminal; --json is unchanged', async () => {
+    const handle = `nuance/smn_${'f'.repeat(32)}`
+    const answer = { status: 'completed', handle: `${handle}\u001b[8m`, reason: 'x\u0007', resets_at: 'r\u001b[1A',
+      detail: '\u001b[31mred\u001b[0m', hint: 'over\rwrite\u0000', result_text: 'line 1\n\tindented\n\u001b]0;title\u0007\u001b[2J\u009b31m\u007f end' }
+    const { bin } = fakeSsh(0, JSON.stringify(answer))
+    const human = (await run(['result', handle], bin)).stdout
+    expect(human).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+    expect(human).toBe([`completed (x\\x07) ${handle}\\x1b[8m`, 'resets: r\\x1b[1A', 'detail: \\x1b[31mred\\x1b[0m', 'hint: over\\x0dwrite\\x00',
+      'line 1\n\tindented\n\\x1b]0;title\\x07\\x1b[2J\\x9b31m\\x7f end', ''].join('\n'))
+    const { bin: jsonBin } = fakeSsh(0, JSON.stringify(answer))
+    expect(JSON.parse((await run(['result', handle, '--json'], jsonBin)).stdout)).toEqual(answer)
+  })
+  test('final review L195: an inventory is printed with its control characters escaped too', async () => {
+    const { bin } = fakeSsh(0, JSON.stringify({ status: 'completed', inventory: { host: 'nu\u009bance' } }))
+    expect((await run(['nuance', 'inventory'], bin)).stdout).toBe('completed\n{\n  "host": "nu\\x9bance"\n}\n')
   })
   test('--json keeps heartbeat_age_s in the object', async () => {
     const handle = `nuance/smn_${'c'.repeat(32)}`

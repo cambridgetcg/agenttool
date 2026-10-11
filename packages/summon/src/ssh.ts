@@ -187,9 +187,17 @@ export function mapSshFailure(stderr: string, ctx: MapContext = {}): GateRespons
   return { status: 'unknown', detail: detailOf(lines.at(-1)) }
 }
 
+/**
+ * How much of ssh's stdout, and of its stderr, is read: past it the call fails ENOBUFS and reads `unknown`. The runner caps
+ * result_text at 1,048,576 UTF-16 units, which is up to 3 MiB of UTF-8 for CJK text and more once JSON escapes it, so
+ * spawnSync's 1 MiB default would lose a capped result. Remote stderr (a noisy ~/.zshenv) shares the same allowance.
+ */
+export const SSH_MAX_BUFFER = 16 * 1024 * 1024
+
 export function sshCall(deps: SshDeps, device: string, remote: string, stdin?: string): GateResponse {
   const timeoutMs = deps.timeoutMs ?? SSH_TIMEOUT_MS
-  const r = spawnSync(deps.sshBin, ['-F', deps.sshConfig, `summon-${device}`, remote], { input: stdin ?? '', encoding: 'utf8', timeout: timeoutMs })
+  const r = spawnSync(deps.sshBin, ['-F', deps.sshConfig, `summon-${device}`, remote],
+    { input: stdin ?? '', encoding: 'utf8', timeout: timeoutMs, maxBuffer: SSH_MAX_BUFFER })
   // r.error is checked on its own: after a timeout r.stderr is '' (not null), so `r.stderr ?? r.error` would never see the error.
   if (r.error) {
     const code = (r.error as NodeJS.ErrnoException).code

@@ -22,7 +22,10 @@ export interface Invocation { bin: string; args: string[]; env: Record<string, s
 export interface Outcome {
   status: JobStatus
   reason?: string
-  /** Always runner-authored (a fixed string or a number). The ledger holds it, so harness output never goes here. */
+  /**
+   * Runner-authored: a fixed string, a number, or one of Claude's own `error_*` subtype words (SAFE_SUBTYPE, the only
+   * harness words let through). The ledger holds it, so no other harness output goes here.
+   */
   detail?: string
   /** The harness's own text. Goes in the 0600 result file, never in a ledger. */
   result_text?: string

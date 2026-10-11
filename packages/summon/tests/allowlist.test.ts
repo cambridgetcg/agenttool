@@ -189,6 +189,34 @@ describe('checkAdmission', () => {
     symlinkSync(join(h, 'Documents/secret'), join(h, 'Projects/x/escape'))
     expect(checkAdmission(sampleRequest({ cwd: '~/Projects/x/escape' }), al(), h)).toMatchObject({ ok: false, reason: 'tcc_protected_folder' })
   })
+  test('final review M8: a cwd spelled inside a TCC-protected folder is refused by its spelling first, even when realpath fails EPERM', () => {
+    const h = home()
+    const docs = parseAllowlist(YAML.replace('path: ~/Projects', 'path: ~/Documents'))
+    if (!docs.ok) throw new Error(docs.detail)
+    const asked: string[] = []
+    // What the gatekeeper meets under sshd without a privacy grant: the folder cannot even be resolved.
+    const eperm = (p: string): string | null => {
+      asked.push(p)
+      throw Object.assign(new Error(`EPERM: operation not permitted, realpath '${p}'`), { code: 'EPERM' })
+    }
+    for (const cwd of ['~/Documents', '~/Documents/secret', '~/Desktop/x', '~/Downloads', '~/Library/Mobile Documents/com~apple~CloudDocs',
+      `${h}/Documents/secret`, '~/Projects/../Documents/secret', '~//Documents', '~/documents/secret']) {
+      expect([cwd, checkAdmission(sampleRequest({ cwd }), docs.allowlist, h, eperm)]).toMatchObject([cwd, { ok: false, reason: 'tcc_protected_folder' }])
+    }
+    expect(asked).toEqual([]) // decided before any realpath
+    // safeRealpath turns that EPERM into null: still the TCC refusal, not "does not exist".
+    expect(checkAdmission(sampleRequest({ cwd: '~/Documents/secret' }), docs.allowlist, h, () => null))
+      .toMatchObject({ ok: false, reason: 'tcc_protected_folder', detail: '~/Documents/secret is inside ~/Documents' })
+  })
+  test('final review M8: a name that only begins like a protected folder is not refused by spelling', () => {
+    const h = home()
+    mkdirSync(join(h, 'Projects/Documents-notes'), { recursive: true })
+    mkdirSync(join(h, 'DocumentsArchive'), { recursive: true })
+    expect(checkAdmission(sampleRequest({ cwd: '~/Projects/Documents-notes' }), al(), h)).toMatchObject({ ok: true })
+    const wide = parseAllowlist(YAML.replace('path: ~/Projects', 'path: "~"')) // quoted: a bare ~ is YAML's null
+    if (!wide.ok) throw new Error(wide.detail)
+    expect(checkAdmission(sampleRequest({ cwd: '~/DocumentsArchive' }), wide.allowlist, h)).toMatchObject({ ok: true })
+  })
   test('a symlink out of the allowlist is refused', () => {
     const h = home()
     mkdirSync(join(h, 'elsewhere'))

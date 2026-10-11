@@ -6,7 +6,8 @@
 # It installs the gatekeeper (the only thing the Air's summon key can run) and the
 # runner (a LaunchAgent in your GUI session), allows Claude Code read-only in ~/Projects,
 # and turns off SSH password logins (asks for your password once).
-# Undo: packages/summon/README.md, "Install and rollback (Phase 0)".
+# Undo: ask Ai for the rollback steps (they are in Summon's own notes on the Air, not in this bundle). MANIFEST.txt,
+# beside this file, lists what this bundle installs.
 set -euo pipefail
 umask 077
 export LC_ALL=C
@@ -18,6 +19,9 @@ SHA_RUNNER='__SHA_RUNNER__'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${SUMMON_INSTALL_ROOT:-$HOME}"
 SKIP_SUDO="${SUMMON_SKIP_SUDO:-0}"; SKIP_LAUNCHCTL="${SUMMON_SKIP_LAUNCHCTL:-0}"; SKIP_INVENTORY="${SUMMON_SKIP_INVENTORY:-0}"
+# How long the inventory answer is waited for: launchd starts the runner at most once every 10 s (ThrottleInterval), and
+# collecting the inventory can take up to ~30 s more (tests shorten it).
+INVENTORY_WAIT_S="${SUMMON_INVENTORY_WAIT_S:-45}"
 # The host key sshd uses, which the Air pins (tests point this at a temp file).
 HOST_KEY="${SUMMON_HOST_KEY:-/etc/ssh/ssh_host_ed25519_key}"
 # Summon's sshd drop-in (tests point this elsewhere). 010 sorts before macOS's own 100-macos.conf; sshd keeps the first
@@ -234,6 +238,10 @@ YAML
 else
   echo "• allowlist already present — left as it is"
 fi
+# Not a stop: the folder can be made later. Until then a summon there finds no folder to run in.
+if [ ! -d "$ROOT/Projects" ]; then
+  echo "⚠ $ROOT/Projects does not exist. It is the starter allowlist's folder, so a summon there is refused until you make it (mkdir ~/Projects) or edit $CONF/allowlist.yaml"
+fi
 
 touch "$AK"; chmod 600 "$AK"
 LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE/summon-gatekeeper\" $PUBKEY"
@@ -316,11 +324,11 @@ if [ "$SKIP_INVENTORY" != 1 ]; then
   if [ "$RUNNER_LOADED" = 1 ]; then
     rm -f "$STATE/inventory.json"   # an answer from an earlier run is not today's
     : > "$STATE/spool/inventory-$(date +%s)000.req"
-    for _ in $(seq 1 20); do [ -s "$STATE/inventory.json" ] && break; sleep 1; done
+    for _ in $(seq 1 "$INVENTORY_WAIT_S"); do [ -s "$STATE/inventory.json" ] && break; sleep 1; done
     if [ -s "$STATE/inventory.json" ]; then
       echo "inventory: $(cat "$STATE/inventory.json")"
     else
-      echo "inventory: the runner did not answer within 20 s"
+      echo "inventory: the runner did not answer within $INVENTORY_WAIT_S s"
       problem "the runner did not answer the inventory request"
     fi
   else

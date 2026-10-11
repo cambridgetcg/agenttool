@@ -7,7 +7,7 @@ import { errTag, heartbeatAgeS, jobDir, neverReached, notStartedOutcome, readJso
 import { appendLedger } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { seenRefusal } from './replay.ts'
-import { TERMINAL, type GateResponse } from './status.ts'
+import { HEARTBEAT_STATUSES, TERMINAL, type GateResponse } from './status.ts'
 
 export type Command = { verb: 'inventory' | 'start' } | { verb: 'status' | 'result' | 'cancel'; id: string }
 
@@ -64,13 +64,14 @@ function noJob(paths: SummonPaths, device: string, id: string): GateResponse {
 export function statusOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
   if (!s) return noJob(paths, device, id)
+  const beat = (status: string) => (HEARTBEAT_STATUSES.has(status) ? { heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) } : {})
   // The runner would only end it this way; the next start (gate or runner) settles it on disk under the admission lock.
   if (neverReached(paths, s, nowMs)) {
     const o = notStartedOutcome(paths, id)
-    return { status: o.status, handle: `${device}/${id}`, detail: o.detail, heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
+    return { status: o.status, handle: `${device}/${id}`, detail: o.detail, ...beat(o.status) }
   }
   return { status: s.status, handle: `${device}/${id}`, ...(s.reason ? { reason: s.reason } : {}), ...(s.detail ? { detail: s.detail } : {}),
-    ...(s.resets_at ? { resets_at: s.resets_at } : {}), heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
+    ...(s.resets_at ? { resets_at: s.resets_at } : {}), ...beat(s.status) }
 }
 
 export function resultOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
@@ -108,11 +109,18 @@ export async function requestInventory(paths: SummonPaths, nowMs: number, waitMs
     }
     await Bun.sleep(250)
   }
-  return { status: 'unknown', detail: 'the runner did not answer (is Yu logged in at this Mac?)' }
+  // Fixed text. The runner may not be gone: launchd throttles its relaunch (ThrottleInterval 10), and it is serial.
+  return { status: 'unknown', detail: 'the runner did not answer in time: launchd may be holding it back (it starts the runner at most once every 10 s), it may be busy with a job, or Yu may not be logged in at this Mac; ask again in a minute' }
 }
 
-/** Real dependencies on Nuance. Test overrides only when SUMMON_HOME_OVERRIDE is set. */
-export function liveGateDeps(paths: SummonPaths): GateDeps {
+/** Whether launchd has this service (`gui/<uid>/<label>`) loaded. */
+export type ServiceLoaded = (service: string) => boolean
+/** Asks launchd itself: `launchctl print` exits 0 only for a loaded service. */
+export const launchdHas: ServiceLoaded = (service) =>
+  spawnSync('/bin/launchctl', ['print', service], { stdio: 'ignore', timeout: 3000 }).status === 0
+
+/** Real dependencies on Nuance. Test overrides only when SUMMON_HOME_OVERRIDE is set; tests pass their own launchd check. */
+export function liveGateDeps(paths: SummonPaths, serviceLoaded: ServiceLoaded = launchdHas): GateDeps {
   const testing = !!process.env.SUMMON_HOME_OVERRIDE
   const uid = process.getuid!()
   return {
@@ -120,8 +128,7 @@ export function liveGateDeps(paths: SummonPaths): GateDeps {
     home: paths.home,
     paths,
     guiSessionIsMine: () => (testing && process.env.SUMMON_TEST_GUI === '1') || (() => { try { return statSync('/dev/console').uid === uid } catch { return false } })(),
-    runnerLoaded: () => (testing && process.env.SUMMON_TEST_RUNNER === '1')
-      || spawnSync('/bin/launchctl', ['print', `gui/${uid}/dev.summon.runner`], { stdio: 'ignore', timeout: 3000 }).status === 0,
+    runnerLoaded: () => (testing && process.env.SUMMON_TEST_RUNNER === '1') || serviceLoaded(`gui/${uid}/dev.summon.runner`),
     claudeAvailable: () => findClaude(paths.home) !== null,
   }
 }

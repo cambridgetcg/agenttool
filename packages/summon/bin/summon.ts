@@ -2,7 +2,7 @@
 // --no-env-file: a .env in the folder the caller runs `summon` from must not set SUMMON_* values.
 // Exit codes: 0 answered; 1 a refusal, failure or unknown; 2 refused here (a usage error, an unreadable prompt);
 // 3 the Air ledger could not be written, so nothing was sent.
-import { defaultCliDeps, NothingSentError, runCli, splitJsonFlag } from '../src/cli.ts'
+import { defaultCliDeps, humanLines, NothingSentError, runCli, splitJsonFlag } from '../src/cli.ts'
 import { sandboxOf } from '../src/ssh.ts'
 
 const { argv, json } = splitJsonFlag(process.argv.slice(2))
@@ -20,12 +20,5 @@ try { result = runCli(argv, defaultCliDeps()) } catch (e) {
 }
 const { code, out } = result
 if (json) console.log(JSON.stringify(out))
-else {
-  const head = [out.status, out.reason ? `(${out.reason})` : '', out.handle ?? ''].filter(Boolean).join(' ')
-  console.log(head)
-  if (typeof out.heartbeat_age_s === 'number') console.log(`heartbeat: ${out.heartbeat_age_s}s ago`)
-  if (typeof out.resets_at === 'string') console.log(`resets: ${out.resets_at}`)
-  for (const k of ['detail', 'hint', 'result_text'] as const) if (out[k]) console.log(`${k === 'result_text' ? '' : k + ': '}${out[k]}`)
-  if (out.inventory) console.log(JSON.stringify(out.inventory, null, 2))
-}
+else for (const line of humanLines(out)) console.log(line)
 process.exit(code)

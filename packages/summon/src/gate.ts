@@ -40,7 +40,9 @@ function runtimeUnavailable(req: SummonRequest, deps: GateDeps): string | null {
 }
 
 /**
- * Spec §2 order: schema, device, timing, replay, GUI session + runner, runtime, allowlist, rate, concurrency.
+ * The order: schema, then the allowlist is loaded (a missing or broken one refuses everything, and names this device),
+ * device, timing, replay, GUI session + runner, runtime, the allowlist's admission check, rate, concurrency (spec §2's
+ * order, with the allowlist read first because the device check needs it).
  * The rate and concurrency checks and the spooling that follows run under one lock, so two gatekeeper
  * processes cannot both pass the same limit.
  */
@@ -75,7 +77,10 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
   return withLock(join(deps.paths.state, 'admission'), () => {
     settleNeverReached(deps.paths, now)
     if (admittedSince(deps.paths, now - 3_600_000) >= limits.starts_per_hour) return refuseClaimed('rate_limited', `more than ${limits.starts_per_hour} starts in the last hour`)
-    if (countActive(deps.paths, now) >= limits.max_concurrent) return refuseClaimed('busy', `${limits.max_concurrent} summon(s) already queued or running`)
+    if (countActive(deps.paths, now) >= limits.max_concurrent) {
+      return refuseClaimed('busy', `${limits.max_concurrent} summon(s) already queued or running`,
+        `if a job looks stuck, run summon ${device} inventory — it starts the runner, which settles jobs that can no longer run`)
+    }
 
     // Logged before it is acted on, and fsync'd before the append returns: if it throws, nothing has been written, and
     // once it returns the entry reached the disk ahead of any job file.

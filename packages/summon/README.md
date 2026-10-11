@@ -44,16 +44,20 @@ and the `summon` link on the Air.
    Once the new drop-in is in and sshd refuses it, it always says to turn Remote Login off.
    It is safe to run again: it replaces
    its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never empties `runner.log`.
-   If the runner does not load, it says so (the key line is already updated): run it again, or log out and in. It
-   says `Done` only once the runner is loaded, the host key is handed back and the runner has answered an inventory
-   request; otherwise it ends `✗ Not confirmed: …` and you keep the bundle and tell Ai. After `Done`, once Ai has the
+   If the runner does not load, it says so (the key line is already updated): run it again, or log out and in.
+   macOS shows a "Background Items Added" notification for dev.summon.runner: leave it allowed in System Settings →
+   General → Login Items, or every start reads `runner_missing`. If `~/Projects`, the starter allowlist's folder, does
+   not exist, it warns (⚠) and goes on: make it, or edit the allowlist. It says `Done` only once the runner is loaded,
+   the host key is handed back and the runner has answered an inventory request (it waits up to 45 s); otherwise it
+   ends `✗ Not confirmed: …` and you keep the bundle and tell Ai. After `Done`, once Ai has the
    "give this back to Ai" lines (user, build, prepared, key expiry, host key, the pin line), delete the bundle folder
    from `~/Downloads` on Nuance, so a later re-pair can never run an old one by mistake. `~/.local/share/summon/INSTALLED`
    then holds the same lines as the bundle's `MANIFEST.txt`.
 3. Back on the Air, run the pin line the installer printed:
    `bun scripts/pin-nuance.ts --user <name> --host-key "<the ssh-ed25519 line>" --expires <YYYYMMDD>`. It pins the host
-   key and records the key's expiry (the installer's "key expires:" line) in `~/.ssh/summon/expiry`. Check that
-   `ssh-keygen -lf ~/.ssh/summon/known_hosts` shows the same fingerprint the installer printed.
+   key and records the key's expiry (the installer's "key expires:" line) in `~/.ssh/summon/expiry`. It prints the
+   pinned host key's SHA256 fingerprint: compare it with the one the installer printed on Nuance (the `ssh-keygen`
+   line under `host key:`). If they differ, stop and tell Ai.
 4. Once, on the Air, from `packages/summon`: put the front door on PATH,
    `mkdir -p ~/.local/bin && ln -sf "$PWD/bin/summon.ts" ~/.local/bin/summon`. First check `ls -l ~/.local/bin/summon`:
    if it exists and is not a link to this file, do not overwrite it; tell Ai. Then `summon nuance inventory`.
@@ -175,6 +179,10 @@ folders:
   clock-skew grace) has passed: `status` then says `expired` (or `cancelled`, if a cancel was asked for), and the next
   `start` or runner start settles it. A job whose claim keeps failing (a full disk) is retried by launchd until it
   runs or reaches that point.
+- **A symlink inside an allowlisted folder can stall a job.** A `cwd` that resolves into `~/Documents`, `~/Desktop`,
+  `~/Downloads` or iCloud Drive is refused `tcc_protected_folder`, but a link *inside* an allowlisted folder that points
+  into one of them is only met when the job reads it. macOS can then hold the job at a privacy prompt on Nuance's
+  screen, where it stalls until its timeout.
 - **Claude Code keeps some files of its own.** Claude Code may save large tool outputs of a summoned job under
   `~/.claude/projects/<cwd-slug>/<session>/tool-results/` on Nuance, even with `--no-session-persistence`. They follow
   Claude Code's own cleanup, not Summon's 30-day sweep. The inventory carries a short `retention` note per harness.

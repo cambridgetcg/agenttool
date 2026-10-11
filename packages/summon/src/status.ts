@@ -11,6 +11,12 @@ export type TransportStatus = 'unreachable' | 'auth_refused' | 'host_key_mismatc
 export const TERMINAL: ReadonlySet<JobStatus> = new Set([
   'completed', 'failed', 'blocked', 'cancelled', 'timed_out', 'expired', 'unknown',
 ])
+/**
+ * The statuses an answer carries the heartbeat age for: a job still queued or running (a stale age shows a stalled one),
+ * and an `unknown` one, whose last beat says when the runner was last seen with it (Review Focus 4). For a job that
+ * ended, the age says nothing, so it is neither sent nor printed.
+ */
+export const HEARTBEAT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'unknown'])
 
 /** What the gatekeeper prints: one JSON object per call. */
 export interface GateResponse {

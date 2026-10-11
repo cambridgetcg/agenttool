@@ -51,6 +51,12 @@ describe('renderInstaller', () => {
     expect(head).toContain('turn on Remote Login')
     expect(head).toContain('bash ~/Downloads/summon-nuance-bundle-<expiry>-<build>/summon-install.sh')
   })
+  test('final review M11: the header points only at what is in the bundle (MANIFEST.txt), and says to ask Ai for the undo', () => {
+    const head = TMPL.split('\nset -euo pipefail')[0]!
+    expect(head).not.toContain('README')
+    expect(head).toContain('# Undo: ask Ai')
+    expect(head).toContain('MANIFEST.txt')
+  })
   test('shellcheck finds nothing in the rendered installer', () => {
     const sc = Bun.which('shellcheck')
     if (!sc) return // not installed on every Mac; the report records a run
@@ -280,12 +286,46 @@ describe('installer', () => {
 
   test('B1: never says Done when the runner did not answer the inventory request', () => {
     const { dir, root } = bundle()
-    const r = run(dir, root, { SUMMON_SKIP_INVENTORY: '0' })
+    const r = run(dir, root, { SUMMON_SKIP_INVENTORY: '0', SUMMON_INVENTORY_WAIT_S: '1' })
     expect(r.exitCode).toBe(1)
     const said = r.stdout.toString()
+    expect(said).toContain('inventory: the runner did not answer within 1 s')
     expect(said).toContain('✗ Not confirmed: the runner did not answer the inventory request — keep this bundle and tell Ai.')
     expect(said).not.toContain('Done')
-  }, 40_000)
+  }, 20_000)
+
+  test('final review M1: the install-time inventory waits 45 s, so an answer that comes after launchd\'s relaunch throttle (10 s) and a slow collection is still read', async () => {
+    expect(TMPL).toContain('INVENTORY_WAIT_S="${SUMMON_INVENTORY_WAIT_S:-45}"')
+    const { dir, root } = bundle()
+    const state = join(root, '.local/state/summon')
+    const p = Bun.spawn(['bash', join(dir, 'summon-install.sh')], { env: envFor(root, { SUMMON_SKIP_INVENTORY: '0' }), stdout: 'pipe', stderr: 'pipe' })
+    const spool = join(state, 'spool')
+    let req: string | undefined
+    for (const deadline = Date.now() + 15_000; !req && Date.now() < deadline; await Bun.sleep(20)) {
+      req = existsSync(spool) ? readdirSync(spool).find((n) => /^inventory-\d+\.req$/.test(n)) : undefined
+    }
+    expect(req).toBeDefined()
+    await Bun.sleep(21_000) // past the old 20 s wait
+    writeFileSync(join(state, 'inventory.json'), '{"macos":"late"}')
+    const out = await new Response(p.stdout).text()
+    expect(await p.exited).toBe(0)
+    expect(out).toContain('inventory: {"macos":"late"}')
+    expect(out).toContain('Done. Once Ai has the lines above')
+  }, 60_000)
+
+  test('final review M5: a missing ~/Projects (the starter allowlist\'s folder) is named in a warning, and the install still completes', () => {
+    const { dir, root } = bundle()
+    const r = run(dir, root)
+    expect(r.exitCode).toBe(0)
+    const said = r.stdout.toString()
+    expect(said).toContain(`⚠ ${root}/Projects does not exist. It is the starter allowlist's folder, so a summon there is refused until you make it (mkdir ~/Projects) or edit ${root}/.config/summon/allowlist.yaml`)
+    expect(said).toContain('Done. Once Ai has the lines above')
+    const again = bundle(temp('summon-root-'))
+    mkdirSync(join(again.root, 'Projects'))
+    const r2 = run(again.dir, again.root)
+    expect(r2.exitCode).toBe(0)
+    expect(r2.stdout.toString()).not.toContain('Projects does not exist')
+  })
 
   describe('B2: before sshd takes keys only, every stop says once to turn Remote Login off', () => {
     const withStubs = (extra: Record<string, string> = {}) => {
@@ -537,6 +577,7 @@ describe('installer', () => {
 
   test('with sudo and launchctl stubbed: Remote Login checked, drop-in 010, validated, checked with sshd -T, never reloaded; the runner is bootstrapped', () => {
     const { dir, root } = bundle()
+    mkdirSync(join(root, 'Projects')) // as on Nuance: the starter folder is there, so any ⚠ below would be about sshd
     const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
     const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
     expect(r.exitCode).toBe(0)
@@ -735,6 +776,7 @@ exit 0`
     }
     const attempt = (config: (confd: string) => string, o: { confFiles?: Record<string, string>; hostKey?: boolean; keygenNoop?: boolean } = {}) => {
       const { dir, root } = bundle()
+      mkdirSync(join(root, 'Projects')) // as on Nuance: the starter folder is there, so any ⚠ is about sshd
       const s = stubs({ sudo: REAL_SSHD_SUDO, launchctl: LAUNCHCTL_STUB })
       if (o.keygenNoop) writeFileSync(s.env.STUB_KEYGEN_NOOP, '')
       const real = realSshd(config, o.confFiles ?? MACOS_CONFD, o.hostKey ?? true)

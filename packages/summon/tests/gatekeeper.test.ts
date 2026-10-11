@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import {
   describeCommand, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf,
 } from '../src/gatekeeper.ts'
@@ -141,6 +140,28 @@ describe('status, result and cancel', () => {
       status: 'unknown', handle: `nuance/${id}`, reason: 'runner_died', detail: 'runner restarted', heartbeat_age_s: 42,
     })
   })
+  test('final review M9: the heartbeat age is sent for a queued or running job (and an unknown one, Review Focus 4), never for one that ended', () => {
+    const h = targetHome(); const paths = summonPaths(h); const now = Date.now()
+    const withBeat = (status: JobState['status'], over: Partial<JobState> = {}) => {
+      const id = newRequestId()
+      writeState(paths, { ...stateOf(id, status), ...over })
+      const hb = join(paths.jobs, id, 'heartbeat')
+      writeFileSync(hb, '')
+      utimesSync(hb, (now - 30_000) / 1000, (now - 30_000) / 1000)
+      return statusOf(paths, 'nuance', id, now)
+    }
+    for (const st of ['queued', 'running', 'unknown'] as const) expect([st, withBeat(st).heartbeat_age_s]).toEqual([st, 30])
+    for (const st of ['completed', 'failed', 'blocked', 'cancelled', 'timed_out', 'expired'] as const) {
+      expect([st, 'heartbeat_age_s' in withBeat(st)]).toEqual([st, false])
+    }
+    // A queued job that never reached the runner reads expired: it ended too, so no age.
+    const never = withBeat('queued', { expires_at: new Date(now - 60 * 60_000).toISOString() })
+    expect(never).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+    expect('heartbeat_age_s' in never).toBe(false)
+    // A running job with no heartbeat yet still says so (null), as before.
+    const id = newRequestId(); writeState(paths, stateOf(id, 'running'))
+    expect(statusOf(paths, 'nuance', id, now)).toMatchObject({ status: 'running', heartbeat_age_s: null })
+  })
   test('result returns result.json with the handle; before it exists, falls back to status', () => {
     const h = targetHome(); const paths = summonPaths(h); const id = newRequestId(); const now = Date.now()
     writeState(paths, stateOf(id, 'running'))
@@ -200,6 +221,11 @@ describe('requestInventory', () => {
     expect(await requestInventory(paths, now, 800)).toMatchObject({ status: 'unknown' })
     await answer
   })
+  test('final review M1: a runner that does not answer in time is unknown, and the detail names launchd\'s throttle as well as a logged-out Yu', async () => {
+    const paths = summonPaths(targetHome())
+    expect(await requestInventory(paths, Date.now(), 300)).toEqual({ status: 'unknown',
+      detail: 'the runner did not answer in time: launchd may be holding it back (it starts the runner at most once every 10 s), it may be busy with a job, or Yu may not be logged in at this Mac; ask again in a minute' })
+  })
   test('a stale inventory is not an answer; the runner not answering is unknown, not a guess', async () => {
     const paths = summonPaths(targetHome()); const now = Date.now()
     mkdirSync(paths.state, { recursive: true })
@@ -220,32 +246,49 @@ describe('liveGateDeps', () => {
     }
   }
 
+  /** A stand-in for asking launchd: records each service it is asked about and answers `loaded`. Never this Mac's launchctl. */
+  const launchd = (loaded: boolean) => {
+    const asked: string[] = []
+    return { asked, has: (service: string) => { asked.push(service); return loaded } }
+  }
+
   test('the test overrides are honoured only when SUMMON_HOME_OVERRIDE is set', () => {
     const h = targetHome(); const paths = summonPaths(h)
+    const l = launchd(false)
     const on = withEnv({ SUMMON_HOME_OVERRIDE: h, SUMMON_TEST_GUI: '1', SUMMON_TEST_RUNNER: '1', SUMMON_CLAUDE_BIN: '/bin/echo' }, () => {
-      const d = liveGateDeps(paths)
+      const d = liveGateDeps(paths, l.has)
       return { gui: d.guiSessionIsMine(), runner: d.runnerLoaded(), claude: d.claudeAvailable(), bin: findClaude(h) }
     })
     expect(on).toEqual({ gui: true, runner: true, claude: true, bin: '/bin/echo' })
+    expect(l.asked).toEqual([]) // the override answered: launchd was not asked
 
     // Without SUMMON_HOME_OVERRIDE the same flags must change nothing: compare against the flags absent.
     const real = withEnv({}, () => {
-      const d = liveGateDeps(paths)
+      const d = liveGateDeps(paths, launchd(false).has)
       return { gui: d.guiSessionIsMine(), runner: d.runnerLoaded(), claude: d.claudeAvailable(), bin: findClaude(h) }
     })
     const flagged = withEnv({ SUMMON_TEST_GUI: '1', SUMMON_TEST_RUNNER: '1', SUMMON_CLAUDE_BIN: '/bin/echo' }, () => {
-      const d = liveGateDeps(paths)
+      const d = liveGateDeps(paths, launchd(false).has)
       return { gui: d.guiSessionIsMine(), runner: d.runnerLoaded(), claude: d.claudeAvailable(), bin: findClaude(h) }
     })
     expect(flagged).toEqual(real)
+    expect(flagged.runner).toBe(false) // launchd's answer, not SUMMON_TEST_RUNNER's
     expect(flagged.bin).not.toBe('/bin/echo')
   })
 
-  test('without overrides the runner is asked of launchd', () => {
-    const h = targetHome()
-    const uid = process.getuid!()
-    const asked = spawnSync('/bin/launchctl', ['print', `gui/${uid}/dev.summon.runner`], { stdio: 'ignore', timeout: 3000 }).status === 0
-    expect(withEnv({}, () => liveGateDeps(summonPaths(h)).runnerLoaded())).toBe(asked)
+  test('final review M3: without overrides the runner is asked of launchd, by its service in this user\'s GUI domain, and its answer is used', () => {
+    const paths = summonPaths(targetHome())
+    const service = `gui/${process.getuid!()}/dev.summon.runner`
+    for (const loaded of [true, false]) {
+      const l = launchd(loaded)
+      expect(withEnv({}, () => liveGateDeps(paths, l.has).runnerLoaded())).toBe(loaded)
+      expect(l.asked).toEqual([service])
+    }
+  })
+
+  test('final review M3: the real launchd check is launchctl print of that service, read by its exit status', () => {
+    const src = readFileSync(join(import.meta.dir, '..', 'src', 'gatekeeper.ts'), 'utf8')
+    expect(src).toContain("spawnSync('/bin/launchctl', ['print', service], { stdio: 'ignore', timeout: 3000 }).status === 0")
   })
 })
 
