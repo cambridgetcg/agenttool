@@ -25,7 +25,9 @@
  *   tree, or message can sit anywhere in the public parent chain.
  *
  * Content layers read UTF-8 text, BOM-marked UTF-16 text, and the printable
- * strings of binary files.
+ * strings of binary files. Each line is also read with JSON/JavaScript
+ * \u escapes, HTML entities, and percent-encoding decoded, and in NFC and
+ * NFKC form; a hit in any reading is reported on the original line.
  *
  * Allowed exceptions live in tools/public-guard-allow.json. Each entry names a
  * path, a rule, the SHA-256 of the whole line (never its text), a reason, and
@@ -432,12 +434,58 @@ export function lineSha256(line: string): string {
   return sha256Hex(line.replace(/\r$/u, ""));
 }
 
+const MAY_DECODE = /\\u|&#|&(?:amp|lt|gt|quot|apos|nbsp);|%[0-9A-Fa-f]{2}|[^\x00-\x7f]/u;
+const NAMED_ENTITIES: Readonly<Record<string, string>> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+
+function codePointOr(value: number, original: string): string {
+  return value > 0 && value <= 0x10ffff && (value < 0xd800 || value > 0xdfff) ? String.fromCodePoint(value) : original;
+}
+
+/**
+ * Other readings of one line that a rule must also see: JSON and JavaScript
+ * \uXXXX / \u{X} escapes (surrogate pairs included), HTML numeric and basic
+ * named entities, and percent-encoded UTF-8 decoded, each with NFC and NFKC
+ * forms. Returns only readings that differ from the line.
+ */
+export function decodedVariants(line: string): string[] {
+  if (!MAY_DECODE.test(line)) return [];
+  const decoded = line
+    .replace(/\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/gu, (match, point?: string, unit?: string) =>
+      point !== undefined ? codePointOr(Number.parseInt(point, 16), match) : String.fromCharCode(Number.parseInt(unit as string, 16)),
+    )
+    .replace(/&#(?:([0-9]{1,7})|[xX]([0-9a-fA-F]{1,6}));|&(amp|lt|gt|quot|apos|nbsp);/gu, (match, decimal?: string, hex?: string, name?: string) =>
+      name !== undefined
+        ? (NAMED_ENTITIES[name] ?? match)
+        : codePointOr(decimal !== undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex as string, 16), match),
+    )
+    .replace(/(?:%[0-9A-Fa-f]{2})+/gu, (match) =>
+      new TextDecoder("utf-8", { fatal: false }).decode(Uint8Array.from(match.slice(1).split("%"), (byte) => Number.parseInt(byte, 16))),
+    );
+  const variants = new Set<string>();
+  for (const base of [line, decoded]) {
+    variants.add(base);
+    variants.add(base.normalize("NFC"));
+    variants.add(base.normalize("NFKC"));
+  }
+  variants.delete(line);
+  return [...variants];
+}
+
+/**
+ * Applies `rules` to the raw text, then to the decoded and normalised
+ * readings of each line (decodedVariants). Every finding names the original
+ * line and that line's SHA-256, so allow entries work the same either way.
+ */
 export function scanText(path: string, text: string, rules: readonly ContentRule[]): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
   let starts: number[] | undefined;
-  for (const rule of rules) {
-    const pattern = new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`);
+  const compiled = rules.map((rule) => ({
+    rule,
+    pattern: new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`),
+  }));
+  for (const { rule, pattern } of compiled) {
+    pattern.lastIndex = 0;
     for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
       if (match[0].length === 0) {
         pattern.lastIndex += 1;
@@ -453,6 +501,36 @@ export function scanText(path: string, text: string, rules: readonly ContentRule
       if (seen.has(key)) continue;
       seen.add(key);
       findings.push({ layer: rule.layer, rule: rule.id, path, line: index + 1, lineSha256: lineSha256(line) });
+    }
+  }
+  if (!MAY_DECODE.test(text)) return findings;
+  starts ??= lineStarts(text);
+  for (let index = 0; index < starts.length; index += 1) {
+    const next = starts[index + 1];
+    const line = text.slice(starts[index] ?? 0, next === undefined ? text.length : next - 1);
+    const variants = decodedVariants(line);
+    if (variants.length === 0) continue;
+    for (const { rule, pattern } of compiled) {
+      const key = `${rule.id}\0${index}`;
+      if (seen.has(key)) continue;
+      for (const variant of variants) {
+        pattern.lastIndex = 0;
+        let hit = false;
+        for (let match = pattern.exec(variant); match !== null; match = pattern.exec(variant)) {
+          if (match[0].length === 0) {
+            pattern.lastIndex += 1;
+            continue;
+          }
+          if (rule.permit?.(match)) continue;
+          hit = true;
+          break;
+        }
+        if (hit) {
+          seen.add(key);
+          findings.push({ layer: rule.layer, rule: rule.id, path, line: index + 1, lineSha256: lineSha256(line) });
+          break;
+        }
+      }
     }
   }
   return findings;

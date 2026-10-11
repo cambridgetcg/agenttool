@@ -363,6 +363,35 @@ describe("guard layers", () => {
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-binary-entry", "path/binary"]);
   });
 
+  test("escaped and Unicode-variant spellings are scanned and reported on the original line", () => {
+    const jsonEscaped = [...TERM].map((char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+    const fullWidth = [...TERM].map((char) => String.fromCharCode(char.charCodeAt(0) + 0xfee0)).join("");
+    const dataLine = `{"note":"${jsonEscaped}"}`;
+    const repo = makeFixture({
+      denylist: { ...DENYLIST, terms: [...DENYLIST.terms, { id: "r02", pattern: "\u00e9tudefixture", flags: "u" }] },
+      files: {
+        "packages/alpha/data.json": `${dataLine}\n`,
+        "packages/alpha/es6.ts": `export const note = "\\u{${TERM.charCodeAt(0).toString(16)}}${TERM.slice(1)}";\n`,
+        "packages/alpha/page.html": `<p>&#${TERM.charCodeAt(0)};${TERM.slice(1)} and &#x2F;Users&#x2F;realperson&#x2F;x</p>\n`,
+        "packages/alpha/link.md": `[x](https://example.com/?u=%2FUsers%2Frealperson%2Fnotes&to=someone%40gmail.com)\n`,
+        "packages/alpha/wide.md": `${fullWidth}\n`,
+        "packages/alpha/nfd.md": `${"\u00e9tudefixture".normalize("NFD")}\n`,
+      },
+    });
+    const findings = guardProjection(repo, buildProjection(repo, "HEAD"));
+    expect(findings.map((finding) => `${finding.path}:${finding.line}:${finding.rule}`)).toEqual([
+      "packages/alpha/data.json:1:relational/r01",
+      "packages/alpha/es6.ts:1:relational/r01",
+      "packages/alpha/link.md:1:personal/email",
+      "packages/alpha/link.md:1:personal/home-path",
+      "packages/alpha/nfd.md:1:relational/r02",
+      "packages/alpha/page.html:1:personal/home-path",
+      "packages/alpha/page.html:1:relational/r01",
+      "packages/alpha/wide.md:1:relational/r01",
+    ]);
+    expect(findings[0]?.lineSha256).toBe(lineSha256(dataLine));
+  });
+
   test("allow entries cover exactly one line and stale entries fail closed", () => {
     const line = `Write to ${["someone", "gmail.com"].join("@")}.`;
     const entry = (sha: string) => ({
