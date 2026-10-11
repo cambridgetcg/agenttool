@@ -155,8 +155,14 @@ every stream through `/events` without knowing repository ids in advance. It
 pages with the family's exclusive `?after=<repository_id>&limit=` (default 100,
 at most 200) and `page {after, next_after, has_more}`; order is the server's
 `repository_id` collation, so callers echo `next_after` rather than sorting.
+`next_after` continues one enumeration only: a repository created later
+appears at its collation position, possibly before a saved `next_after`, so a
+reader looking for new streams enumerates again without `after` and compares
+each `last_received_seq` with the cursor it already holds for that stream.
 Like the other reads it is exact vendor or plain JSON with strong ETags, and it
-is not a claim, lock, or authority.
+is not a claim, lock, or authority. The 0.1 profile marks the index optional
+(`404` where it is not offered), and the TypeScript and Python SDK clients do
+not call it yet.
 
 Sender `issued_at`, causal `parents`, per-session `session_seq`, and the
 server's `received_seq` do different work. Parents form the causal graph.

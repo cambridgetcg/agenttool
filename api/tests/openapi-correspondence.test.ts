@@ -156,6 +156,11 @@ describe("Renaissance Correspondence OpenAPI contract", () => {
     expect(get.responses["200"].content["application/json"]).toBeDefined();
     expect(get.responses["200"].content["application/atom+xml"]).toBeUndefined();
     expect(get.description).toMatch(/every \/v1\/correspondence\/events stream.*next_after echoes after.*not a lock/is);
+    // next_after is not a durable resume point: new repositories land at
+    // their collation position, not at the end.
+    expect(get.description).toMatch(/continues only the enumeration.*start again without after.*last_received_seq/is);
+    expect(get.description).toMatch(/Optional in agent-correspondence\/v0\.1.*404/is);
+    expect(get.parameters[0].description).toMatch(/not a resume point for repositories created later/);
     const page = spec.components.schemas.CorrespondenceRepositoryPage;
     expect(page.required).toEqual(["protocol", "scope", "repositories", "page"]);
     expect(page.properties.repositories.maxItems).toBe(200);

@@ -158,7 +158,7 @@ export function continuityWalkOpenApi(h: ContinuityWalkOpenApiHelpers) {
         required: false,
         schema: { $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/opaqueId` },
         description:
-          "Exclusive repository_id position: echo the previous page's next_after. Order is the server's repository_id collation.",
+          "Exclusive repository_id position: echo the previous page's next_after within one enumeration. Order is the server's repository_id collation, so a saved next_after is not a resume point for repositories created later.",
       },
       {
         name: "limit",
@@ -334,7 +334,7 @@ export function continuityWalkOpenApi(h: ContinuityWalkOpenApiHelpers) {
         tags: ["correspondence"],
         summary: "List every repository stream in the bearer project",
         description:
-          "Enumerates the project's distinct repository_id streams with each stream's last receipt cursor, so a reader can replay every /v1/correspondence/events stream without knowing repository ids in advance. Pages use the family's exclusive after/next_after position in the server's repository_id collation; next_after echoes after on an empty page. Strict exact query: unknown or repeated parameters return 400 query_invalid. Vendor JSON is the default; application/json is the same exact body. No Atom. Global welcome/tutor/play middleware does not decorate this body. A listing is not a lock, a claim, or authority. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
+          "Enumerates the project's distinct repository_id streams with each stream's last receipt cursor, so a reader can replay every /v1/correspondence/events stream without knowing repository ids in advance. Pages use the family's exclusive after/next_after position in the server's repository_id collation; next_after echoes after on an empty page. Unlike an /events receipt cursor, next_after continues only the enumeration it came from: a repository created later appears at its collation position, possibly before a saved next_after, so to find new streams start again without after and compare each last_received_seq with the cursor already held. Optional in agent-correspondence/v0.1: another implementation may answer 404. Strict exact query: unknown or repeated parameters return 400 query_invalid. Vendor JSON is the default; application/json is the same exact body. No Atom. Global welcome/tutor/play middleware does not decorate this body. A listing is not a lock, a claim, or authority. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
         parameters: correspondenceRepositoryParameters(),
         responses: {
           "200": {
