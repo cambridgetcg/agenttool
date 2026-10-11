@@ -474,11 +474,9 @@ function validateOutRef(repo: string, ref: string): void {
   if (git(repo, ["check-ref-format", ref], { allowFailure: true }).status !== 0) throw new ProjectionRefused(`invalid ref name ${ref}`);
 }
 
-function prepareBareRepo(path: string): void {
-  if (!existsSync(path)) {
-    git(process.cwd(), ["init", "--quiet", "--bare", "--initial-branch=main", path], { env: cleanGitEnv() });
-    return;
-  }
+/** An existing target must be a bare repository; a missing one is created only when writing. */
+function validateBareRepo(path: string): void {
+  if (!existsSync(path)) return;
   const bare = git(path, ["rev-parse", "--is-bare-repository"], { allowFailure: true, env: cleanGitEnv() });
   if (bare.status !== 0 || bare.stdout.toString("utf8").trim() !== "true") throw new ProjectionRefused(`${path} exists and is not a bare repository`);
 }
@@ -486,6 +484,7 @@ function prepareBareRepo(path: string): void {
 /** Current public head, with its objects available in the private repository. */
 export function publicHead(repo: string, target: OutputTarget): string | undefined {
   if (target.kind === "ref") return optionalCommit(repo, target.ref);
+  if (!existsSync(target.path)) return undefined;
   const head = optionalCommit(target.path, PUBLIC_BRANCH);
   if (head === undefined) return undefined;
   if (git(repo, ["cat-file", "-e", `${head}^{commit}`], { allowFailure: true }).status !== 0) {
@@ -506,6 +505,9 @@ export function writeOutput(repo: string, target: OutputTarget, commit: string, 
   if (target.kind === "ref") {
     git(repo, ["update-ref", "-m", `project-public ${commit}`, target.ref, commit, expected], { env: cleanGitEnv() });
     return;
+  }
+  if (!existsSync(target.path)) {
+    git(process.cwd(), ["init", "--quiet", "--bare", "--initial-branch=main", target.path], { env: cleanGitEnv() });
   }
   const revs = parent === undefined ? `${commit}\n` : `${commit}\n^${parent}\n`;
   const pack = git(repo, ["pack-objects", "--revs", "--stdout", "--quiet"], { input: revs, env: cleanGitEnv() }).stdout;
@@ -553,7 +555,7 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
   }
   assertGuardShips(repo, source);
   if (options.target?.kind === "ref") validateOutRef(repo, options.target.ref);
-  if (options.target?.kind === "repo") prepareBareRepo(options.target.path);
+  if (options.target?.kind === "repo") validateBareRepo(options.target.path);
 
   const parent = options.target === undefined ? undefined : publicHead(repo, options.target);
   if (parent !== undefined) assertProjectionHead(repo, parent);

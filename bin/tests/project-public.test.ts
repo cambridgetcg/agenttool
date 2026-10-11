@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -468,17 +468,21 @@ describe.skipIf(!GITLEAKS)("full projection (requires gitleaks 8.30.1)", () => {
     );
   });
 
-  test("a guard failure writes nothing", () => {
+  test("a guard failure writes nothing: no ref and no new bare repository", () => {
     const repo = makeFixture({ files: { "packages/alpha/note.md": `${TERM}\n` } });
-    let refused: unknown;
-    try {
-      projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true });
-    } catch (error) {
-      refused = error;
+    const bare = join(scratch, `refused-${fixtureCount}.git`);
+    for (const target of [{ kind: "ref" as const, ref: "refs/public/main" }, { kind: "repo" as const, path: bare }]) {
+      let refused: unknown;
+      try {
+        projectPublic({ repo, source: "HEAD", target, allowUnmergedSource: true });
+      } catch (error) {
+        refused = error;
+      }
+      expect(refused).toBeInstanceOf(ProjectionRefused);
+      expect(rules((refused as ProjectionRefused).findings)).toEqual(["relational/r01"]);
     }
-    expect(refused).toBeInstanceOf(ProjectionRefused);
-    expect(rules((refused as ProjectionRefused).findings)).toEqual(["relational/r01"]);
     expect(spawnSync("git", ["rev-parse", "--verify", "-q", "refs/public/main"], { cwd: repo }).status).not.toBe(0);
+    expect(existsSync(bare)).toBe(false);
   });
 });
 
