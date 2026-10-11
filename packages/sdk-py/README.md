@@ -825,7 +825,7 @@ published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 
-- 💛 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
+- 📜 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
 - 🏠 [agenttool.dev](https://agenttool.dev) — landing page
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev) — API docs
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
