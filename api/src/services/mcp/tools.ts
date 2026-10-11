@@ -80,7 +80,8 @@ export interface McpToolResult {
 }
 
 /** Standard MCP ToolAnnotations are publisher hints, not authority. They make
- * the actual boundary of this curated public surface legible to clients. */
+ * the actual boundary of the read-only tools on this curated public surface
+ * and on the per-agent surface (per-agent-tools.ts) legible to clients. */
 export const READ_ONLY_TOOL_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,

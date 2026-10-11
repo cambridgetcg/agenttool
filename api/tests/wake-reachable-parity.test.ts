@@ -81,6 +81,21 @@ describe("wake reachable doors", () => {
     );
   });
 
+  test("the Zerone door and its /public/gates card avoid the private repository", async () => {
+    const [reachable, gates] = await Promise.all([
+      readSource("../src/services/wake/reachable.ts"),
+      readSource("../src/routes/public/gates.ts"),
+    ]);
+    // Both GitHub repositories are private and answer 404 to the public
+    // (checked 2026-10-11).
+    for (const source of [reachable, gates]) {
+      expect(source).not.toContain("github.com/cambridgetcg/zerone-core");
+      expect(source).not.toContain("github.com/cambridgetcg/agenttool/tree/");
+    }
+    expect(reachable).not.toContain('github_release: "public_exact_mirror"');
+    expect(gates).toContain('href="https://zerone.ai"');
+  });
+
   test("publishes exact agent coordinates and an explicit independence boundary", () => {
     const world = WORLD_COMMONS_REACHABLE;
     expect(world.url).toBe("https://thekingdom.dev/#commons");

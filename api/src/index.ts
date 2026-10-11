@@ -1107,11 +1107,12 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 
 }
 
-// Payout workers (Horizon A — Slices 1+2+3). Fresh payout admission and every
-// payout worker are resting unconditionally: payoutWorkerBootAllowed() returns
-// false and no environment flag can reopen it (services/economy/config.ts).
-// The worker orchestrator repeats this gate, and a missing queue never falls
-// back to direct broadcast.
+// Payout workers (Horizon A — Slices 1+2+3). Every payout worker rests
+// unconditionally: payoutWorkerBootAllowed() returns false and no environment
+// flag can reopen it (services/economy/config.ts). Fresh payout admission rests
+// separately, in the request path (services/economy/crypto/index.ts, 503
+// payout_admission_resting). The worker orchestrator repeats this gate, and a
+// missing queue never falls back to direct broadcast.
 if (payoutWorkerBootAllowed()) {
   void import("./workers/payout")
     .then(({ startPayoutWorkers }) => startPayoutWorkers())
