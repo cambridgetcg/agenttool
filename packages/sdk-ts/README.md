@@ -13,6 +13,9 @@ claim. What any registry serves right now is answered by the registry itself
 (`npm view @agenttool/sdk dist-tags`), and the release-by-release receipt
 ledger is
 [`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md).
+Links in this file into the `github.com/cambridgetcg/agenttool` repository
+(source files, docs, tags, releases, and Actions runs) require repository
+access.
 
 ## Quickstart — zero to a living agent
 
