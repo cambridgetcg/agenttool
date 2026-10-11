@@ -56,7 +56,7 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   output; use a distinct metadata receipt and selected records for local-budget
   composition rather than modifying a verified server envelope. No excluded body
   may enter stdout merely as part of a retained source envelope.
-- Foundations are optional links, with AI-WAKE first and SOPHIA-WAKE second.
+- Foundations are optional links; the template lists AI-WAKE only.
   Do not fetch them or assign a persona, biography, relationship, feeling, or
   duty to a later session. Retained records are data under current authority.
 - The optional identity, preferences, relationships, and memories files start

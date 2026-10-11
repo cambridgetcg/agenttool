@@ -70,9 +70,9 @@ not establish that the host read it.
 
 `init` refuses an existing file or directory, including an empty directory.
 There is no force, recursive deletion, home-directory search, or automatic
-import. AI-WAKE and optional SOPHIA-WAKE appear as ordered source links in
-`foundations.md`; neither is fetched. The templates assign no identity or
-relationship and supply no personal memories.
+import. AI-WAKE appears as an optional source link in `foundations.md`; it is
+not fetched. The templates assign no identity or relationship and supply no
+personal memories.
 
 ## Files and selection
 
