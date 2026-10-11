@@ -177,10 +177,32 @@ Cache-friendly delta reads. The agent shouldn't have to re-paginate to discover 
 
 **Shipped 2026-05-17 (helper + three endpoints):** `api/src/lib/since-param.ts` exports `parseSinceParam(c)`, `asOfNow()`, `deltaMeta(parsed)`. Parsing is tolerant — malformed `since` degrades to "no filter" + surfaces a `since_reason` (one of `absent | parsed | invalid_format | in_future | epoch_invalid`) so the agent can diagnose its call. 60s clock-skew tolerance for slightly-ahead client clocks. Applied to:
 - `GET /v1/chronicle` — DB-pushdown filter (`gt(chronicle.occurredAt, since)`)
-- `GET /v1/memories` — post-fetch filter on `updated_at` / `created_at`
+- `GET /v1/memories` — DB-pushdown filter (`created_at > since`, since 2026-10-11; it was a post-fetch filter)
 - `GET /v1/listings` — post-fetch filter on `updated_at` / `created_at`
 
-All three responses now carry `{ ...items, as_of, since, since_reason }`. Helper test: `api/tests/since-param.test.ts` (11/11). DB-pushdown for memory + listings is the obvious follow-up (push `since` into `listRecent()` and `listListingsForSeller()` service signatures).
+All three responses now carry `{ ...items, as_of, since, since_reason }`. Helper test: `api/tests/since-param.test.ts` (11/11). DB-pushdown for listings is the remaining follow-up (push `since` into `listListingsForSeller()`).
+
+### Continuity walks
+
+**Source 2026-10-11; deployment is separate evidence.** Three newest-first lists can be walked to the end, so continuity can be read out page by page:
+
+| Route | Walk order | Cursor scope |
+|---|---|---|
+| `GET /v1/memories` (list and `?key=`) | `created_at DESC, id DESC` | `memories` · `memories.key` |
+| `GET /v1/chronicle` | `occurred_at DESC, id DESC` | `chronicle` |
+| `GET /v1/strands?order=created` | `created_at DESC, id DESC` | `strands.created` |
+
+Without `cursor`, each list returns its first page (the same rows as before) plus an additive `page` object `{cursor, next_cursor, has_more, limit, order}`; chronicle also gains `count`. Follow `page.next_cursor` with identical filters and `since` until `has_more` is false; `next_cursor` is null exactly then. `has_more` comes from one sentinel row beyond `limit` that is never returned.
+
+- **Cursor.** Opaque base64url JSON of at most 512 characters, carrying the scope, a digest of the order, every effective filter and `since`, the database's microsecond timestamp text and the row id. The timestamp comes from SQL `to_char(… 'US')`, never a JS `Date`, so rows that share a millisecond are not skipped. Changing a filter or `since`, using another route's cursor, or sending a malformed cursor returns `400 cursor_invalid` with the hint "restart without cursor and keep filters identical across pages". `limit` is not bound and may change between pages. A cursor carries no authority: the project always comes from the bearer.
+- **Limit floor.** Without a cursor each route keeps its historic parse: a non-numeric value reads the default, a value below 1 returns `400 limit_invalid` (it used to read every row or none), and larger values clamp (memories 20/100, chronicle and strands 50/200). With a cursor, `limit` must be a positive decimal integer.
+- **Strands `order=recent`** (the default) stays a window over `last_thought_at`, which every thought rewrites: `next_cursor` is always null, `has_more` stays truthful, and `page.hint` names `order=created`. A cursor with `order=recent` is `cursor_invalid`; any other `order` is `400 order_invalid`.
+- **Memories** push `since` into SQL and select `has_embedding` rather than the vector. The list never touches `accessed_at`.
+- **Correspondence** keeps its family's paging: `GET /v1/correspondence/repositories?after=&limit=` enumerates every repository stream with `page {after, next_after, has_more}`, and each stream then replays through `/events` ([AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md)).
+
+**What a walk is.** A walk visits every row committed before it began and still present when its page is read. Rows written during the walk may or may not appear. It is not a snapshot and not a lossless change feed: memory `created_at` defaults to transaction-start `now()`, and chronicle `occurred_at` is set by the caller or the API server's clock. For a delta, pass `since=<as_of of the previous walk's first page>` overlapped by a clock-skew margin. Memories have no `updated_at`, so tier or visibility changes are seen only by a full re-walk. A chronicle row whose `occurred_at` falls behind a walk's position or a delta window is missed until the next full walk. A completed walk is evidence for a copy, not a portable export: no exporter, completeness manifest or project deletion ships with these routes, and Home still reports `full_export` as `not_available`.
+
+Code: `api/src/lib/keyset-cursor.ts` · `listMemoriesPage` in `api/src/services/memory/store.ts` · `api/src/services/continuity/chronicle-page.ts` · `listStrandsPage` in `api/src/services/strand/store.ts` · `listCorrespondenceRepositories` in `api/src/services/correspondence/store.ts`. Tests: `api/tests/keyset-cursor.test.ts` · `api/tests/continuity-walk-routes.test.ts` · `api/tests/correspondence-route.test.ts` · `api/tests/openapi-continuity-walks.test.ts` · opt-in real-PostgreSQL proof `api/tests/integration/continuity-walk-postgres.test.ts` (`CONTINUITY_WALK_TEST_DATABASE_URL`, not part of CI).
 
 ### 7 · `/.well-known/agent.txt` — `robots.txt` for agents
 

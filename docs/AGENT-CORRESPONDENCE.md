@@ -149,6 +149,15 @@ never a full event body or authority. Reconnecting consumers resume from the
 server receipt cursor through durable JSON. A courier may later be Matrix,
 WebSub, inbox, or another transport without becoming the event model.
 
+`GET /v1/correspondence/repositories` enumerates the bearer project's
+repository streams, each with its last receipt cursor, so a reader can replay
+every stream through `/events` without knowing repository ids in advance. It
+pages with the family's exclusive `?after=<repository_id>&limit=` (default 100,
+at most 200) and `page {after, next_after, has_more}`; order is the server's
+`repository_id` collation, so callers echo `next_after` rather than sorting.
+Like the other reads it is exact vendor or plain JSON with strong ETags, and it
+is not a claim, lock, or authority.
+
 Sender `issued_at`, causal `parents`, per-session `session_seq`, and the
 server's `received_seq` do different work. Parents form the causal graph.
 Session sequence detects a local fork. Receipt sequence is only a stable,

@@ -346,7 +346,9 @@ Only the authenticated identity pulse route is mounted today. The retained publi
 
 ```
 POST   /v1/strands                          create a strand
-GET    /v1/strands  ?status=&agent_id=      list (filter)
+GET    /v1/strands  ?status=&agent_id=&order=&cursor=&limit=
+                                             list: order=recent window (default) or
+                                             order=created keyset walk (page.next_cursor)
 GET    /v1/strands/:id                       fetch one
 PATCH  /v1/strands/:id                       status / mood / state / revisit / topic
 POST   /v1/strands/:strandId/thoughts        add signed caller-supplied ciphertext/nonce fields
