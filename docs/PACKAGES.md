@@ -75,6 +75,9 @@ not assertions about mutable registry tags. Current Collab source is the
 **0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
 These release-candidate bytes do not establish npm publication; verify the
 protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
+**Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
+public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -155,7 +158,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `alchemy-agentcred/` | `@agenttool/alchemy-agentcred` · npm-allowlisted | Strict AgentCred transport for AgentTool's seven bounded Alchemy EVM reads | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/alchemy-agentcred/CLAUDE.md) |
 | `browser/` | `@agenttool/browser` · LOVE + npm-allowlisted | Local-first browser control shaped for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/browser/CLAUDE.md) |
 | `codex-usage/` | `@agenttool/codex-usage` · npm-allowlisted | Privacy-minimal live local Codex token usage inspection for agents and operators | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/codex-usage/CLAUDE.md) |
-| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 release candidate | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab/README.md) · [public distribution](https://github.com/cambridgetcg/agenttool-collab) · [Channels](COLLABORATION-CHANNELS.md) |
+| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 public GitHub Release (not npm) | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab/README.md) · [public distribution](https://github.com/cambridgetcg/agenttool-collab) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-courier/` | `@agenttool/collab-courier` · private source candidate | Explicit own-fleet selected summaries/replies over signed Correspondence and single-receiver Telegram human feedback; no distributed task authority | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-courier/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-zerone/` | `@agenttool/collab-zerone` · private | Witness-only zerone anchoring for agenttool-collab journals — the local journal stays canonical, the chain witnesses its head hashes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-zerone/CLAUDE.md) |
 | `common-ground-atlas/` | `@agenttool/common-ground-atlas` · private | Private deterministic generator and exact verifier for the public Xenia–Helly Common Ground Atlas | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/common-ground-atlas/CLAUDE.md) |
