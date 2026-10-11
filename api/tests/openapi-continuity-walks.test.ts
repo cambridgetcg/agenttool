@@ -24,6 +24,10 @@ describe("continuity walk OpenAPI contract", () => {
     expect(cursorPage.required).toEqual(["cursor", "next_cursor", "has_more", "limit", "order"]);
     expect(cursorPage.properties.next_cursor.description).toMatch(/null exactly when has_more is false/i);
     expect(cursorPage.description).toMatch(/not a snapshot/i);
+    // The null-cursor invariant is conditional: window-only orders break it.
+    expect(cursorPage.description).toMatch(/walkable order it is null exactly when has_more is false/i);
+    expect(cursorPage.description).toMatch(/window-only order \(strands order=recent\).*has_more is true.*page\.hint/is);
+    expect(cursorPage.properties.next_cursor.description).toMatch(/order=recent, where has_more may still be true/i);
     expect(cursorPage.properties.order.enum).toEqual([
       "created_at_desc,id_desc",
       "occurred_at_desc,id_desc",

@@ -18,7 +18,7 @@ export const CONTINUITY_WALK_OPENAPI_SCHEMAS = {
     type: "object",
     additionalProperties: false,
     description:
-      "Keyset walk position for newest-first continuity lists (GET /v1/memories, /v1/chronicle, /v1/strands). Without a cursor a list returns its first page, the same rows as before. next_cursor names the last returned row and is null exactly when has_more is false. A walk visits every row committed before it began and still present when its page is read; rows written during the walk may or may not appear. It is not a snapshot and not a lossless change feed. Doctrine: docs/AGENT-WEB-SURFACE.md (continuity walks).",
+      "Keyset walk position for newest-first continuity lists (GET /v1/memories, /v1/chronicle, /v1/strands). Without a cursor a list returns its first page, the same rows as before. next_cursor names the last returned row. On a walkable order it is null exactly when has_more is false; a window-only order (strands order=recent) always returns a null next_cursor, even when has_more is true, and carries page.hint instead, so a walker stops on has_more, not on a null next_cursor. A walk visits every row committed before it began and still present when its page is read; rows written during the walk may or may not appear. It is not a snapshot and not a lossless change feed. Doctrine: docs/AGENT-WEB-SURFACE.md (continuity walks).",
     properties: {
       cursor: {
         type: ["string", "null"],
@@ -29,7 +29,7 @@ export const CONTINUITY_WALK_OPENAPI_SCHEMAS = {
         type: ["string", "null"],
         maxLength: 512,
         description:
-          "Opaque. Send it as ?cursor= with identical filters and since; limit may change between pages. Null exactly when has_more is false, and always null for strands order=recent.",
+          "Opaque. Send it as ?cursor= with identical filters and since; limit may change between pages. On a walkable order, null exactly when has_more is false. Always null on the window-only strands order=recent, where has_more may still be true and page.hint names order=created.",
       },
       has_more: {
         type: "boolean",

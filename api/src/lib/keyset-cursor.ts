@@ -234,7 +234,10 @@ export function parsePageLimit(
 export interface CursorPage {
   /** The cursor this page was read from, or null for a first page. */
   cursor: string | null;
-  /** Cursor for the next page; null exactly when has_more is false. */
+  /** Cursor for the next page. On a walkable order, null exactly when
+   *  has_more is false; always null on a window-only order (encodeLast
+   *  null, e.g. strands order=recent), where has_more may be true and
+   *  `hint` says how to walk instead. */
   next_cursor: string | null;
   has_more: boolean;
   limit: number;
