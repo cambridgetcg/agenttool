@@ -1,0 +1,39 @@
+# gitleaks false positives, as path:rule:line fingerprints for `gitleaks dir`.
+# A moved or edited line no longer matches, so it fails closed and is
+# reviewed again. No secret value is recorded here.
+
+# ADDS 0.1 deterministic test vectors (the file says so; served publicly at
+# docs.agenttool.dev/adds-0.1-vectors.json).
+docs/specs/adds-0.1-vectors.json:generic-api-key:190
+docs/specs/adds-0.1-vectors.json:generic-api-key:368
+docs/specs/adds-0.1-vectors.json:generic-api-key:372
+docs/specs/adds-0.1-vectors.json:generic-api-key:375
+docs/specs/adds-0.1-vectors.json:generic-api-key:699
+docs/specs/adds-0.1-vectors.json:generic-api-key:705
+docs/specs/adds-0.1-vectors.json:generic-api-key:853
+
+# Collab operation name `handoff.respond.v2` in source and the committed bundles.
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3127
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3131
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32492
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32496
+packages/collab/src/store.ts:generic-api-key:3781
+
+# UUIDv5 test vectors.
+packages/correspondence-yutabase/tests/identifiers.test.ts:generic-api-key:82
+packages/correspondence-yutabase/tests/identifiers.test.ts:generic-api-key:109
+
+# Citation and data key names in source-bounded landscape data.
+packages/memetic-landscape/examples/brainrot.landscape.json:generic-api-key:304
+packages/memetic-landscape/hf/dataset/data/brainrot-landscape.jsonl:generic-api-key:1
+packages/memetic-landscape/src/brainrot.ts:generic-api-key:38
+packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:39
+packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:60
+packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:295
+packages/polymorph-landscape/hf/dataset/data/ritonavir-landscape.jsonl:generic-api-key:1
+packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:146
+packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:164
+packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:330
+
+# A public-key protobuf blob in the pinned Zerone cross-language vectors.
+packages/wallet-zerone/vectors/agent-wallet-zerone-v0.1-vectors.json:generic-api-key:39

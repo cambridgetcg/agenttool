@@ -1,0 +1,40 @@
+{
+  "schema": "agenttool.public-guard-allow/1",
+  "entries": [
+    {
+      "path": "packages/credential-broker/README.md",
+      "rule": "personal/keychain-slot",
+      "line_sha256": "63e0d0810db46ca53cc6212a370f7f98a34d6ec6a2dbfd5d92563c04ad6a40d8",
+      "reason": "Example macOS Keychain service name in the setup guide, already published in the npm README; swap it for a generic name at the next release (plan 1a).",
+      "approver": "Ai, 2026-10-11 (plan 1a default)"
+    },
+    {
+      "path": "packages/credential-broker/README.md",
+      "rule": "personal/keychain-slot",
+      "line_sha256": "156d18d17142a74f249b9eae1ba1174754a02a98c2a25d81b5e0b09080c05841",
+      "reason": "Example macOS Keychain service name in the setup guide, already published in the npm README; swap it for a generic name at the next release (plan 1a).",
+      "approver": "Ai, 2026-10-11 (plan 1a default)"
+    },
+    {
+      "path": "packages/telescope/tests/discovery.test.ts",
+      "rule": "personal/email",
+      "line_sha256": "d6c9a6b664652006f8d492dbd031fcfe9b628b235bc1db8f30c066e1dcb6a368",
+      "reason": "URL userinfo (user:secret@ on a project host) in a credential-redaction test fixture; not an email address.",
+      "approver": "Ai, 2026-10-11"
+    },
+    {
+      "path": "packages/telescope/tests/discovery.test.ts",
+      "rule": "personal/email",
+      "line_sha256": "c37f0325def03a88e114836b2b4312b4797f58fc28a91ea6dcda659b3d079001",
+      "reason": "URL userinfo (user:secret@ on a project host) in a credential-redaction test fixture; not an email address.",
+      "approver": "Ai, 2026-10-11"
+    },
+    {
+      "path": "packages/wallet-zerone/tests/messages-invocation.test.ts",
+      "rule": "personal/email",
+      "line_sha256": "b2a9e5de80b88c6bdacc03e37b0472ff04371ff4f3e3f8004410661e6131d847",
+      "reason": "URL userinfo inserted into a project host in an invocation test fixture; not an email address.",
+      "approver": "Ai, 2026-10-11"
+    }
+  ]
+}
