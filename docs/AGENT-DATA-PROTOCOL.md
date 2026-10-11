@@ -997,6 +997,20 @@ framework noun is `data`; `collect` remains one ingest verb under that
 namespace. SDK consumers use the data client for corpus access and make a
 separate explicit memory call when they choose to project.
 
+**Hosted continuity copied out is agent data, not memory.** The SDK exit door
+(`at.exitDoor` in TypeScript, `at.exit_door` in Python, and the
+`agenttool-exit-door` command) copies the hosted continuity core into a local
+collection as `agenttool-exit-item/v1` JSON records, one record per hosted
+item. Such a record is evidence of what the host returned at that time. It is
+not a memory on the local side and not an instruction: a copied memory's
+`tier` is a label, not a witnessed elevation, and it grants no authority to a
+local process that reads it. Putting any of it back into hosted memory is a
+projection under the five rules above. The caller selects the exact record,
+keeps `(node_id, record.id, content.sha256)` as provenance, and passes ordinary
+authorisation and elevation. Nothing re-imports a copied record automatically,
+and the exporter itself only copies: it never decrypts, tombstones, or changes
+hosted state.
+
 ## 12. Optional AgentTool control plane
 
 AgentTool composes with the protocol without owning it:
@@ -1008,7 +1022,9 @@ AgentTool composes with the protocol without owning it:
 - AgentTool discovery MAY publish a node's well-known URL; and
 - the TypeScript and Python SDKs provide a thin `at.data` client for the local
   node's seven core versioned routes plus `at.data.sync` for the optional local
-  pull and status routes.
+  pull and status routes; and
+- the SDK exit door copies the hosted continuity core into a separately
+  configured node (hosted → local copy only).
 
 Those integrations are optional profiles. They do not change the wire objects,
 and they MUST fail closed when a claimed identity, key, or grant cannot be
@@ -1024,6 +1040,22 @@ its configured ADDS identities and per-object direct-recipient grants; that is
 not AgentTool account authentication, covenant enforcement, hosted discovery,
 or publication of a general grant service. Record signature verification and
 those AgentTool control-plane integrations remain future profiles.
+
+The exit door moves data between the two planes in one direction, only when
+called. Hosted reads use the project bearer against the hosted origin and are
+GET-only: no read that writes `accessed_at` or spends credits. Writes use only
+the data-node bearer through the node's `text` collector, as one immutable
+record per hosted item, then chunked `exit-index/<run>/<store>/<n>` records,
+then one `exit-run/<run>` completeness manifest. Before its first write the
+exporter checks the node's `agent-data/v1` manifest, the `text` collector, and
+the target collection. It refuses a node token equal to the project API key,
+and a non-loopback node unless the caller allows it explicitly. Completeness is
+reported per store and comes from the host's own end-of-walk signal; a host
+that returns no cursor page yields `window_only`, not a guessed `complete`.
+Vault secret values and identity backup blobs are not exported in v1: the
+custody decision is pending, only their indexes are copied, and every manifest
+says so. There is no reverse path. The node never calls the hosted API, and no
+SDK call re-imports a copied record.
 
 AgentTool is the optional identity/trust/control plane. The local or user-owned
 node is the raw data plane. Neither description claims that AgentTool signatures

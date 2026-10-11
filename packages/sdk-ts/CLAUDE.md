@@ -1,7 +1,7 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdomFramework`, `at.mathCards`, and pure `at.wakeContinuity` namespaces, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. `WakeContinuityLayer` also supports standalone no-auth construction. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.22.1 line — the honest-onboarding documentation patch (READMEs/CLAUDE.md only, zero runtime code changes) over the published 0.22.0 x402 payer (`at.x402` + the opt-in `x402` paying client option); source identity does not assert distribution state. What a registry serves at any moment is answered by its dist-tags, and the release-by-release receipts live in [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). The 272,657-byte, 104-entry TypeScript 0.22.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist are verified release receipts through protected runs `33434131214` and `33434133719`. The immutable 247,749-byte, 100-entry TypeScript 0.21.1 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain verified release receipts through protected runs `32909415386` and `32909417418`.
+Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdomFramework`, `at.mathCards`, and pure `at.wakeContinuity` namespaces, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. `WakeContinuityLayer` also supports standalone no-auth construction. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.22.1 line — the honest-onboarding documentation patch (READMEs/CLAUDE.md only, zero runtime code changes) over the published 0.22.0 x402 payer (`at.x402` + the opt-in `x402` paying client option); source identity does not assert distribution state. Repository source after that line also carries the unreleased exit door (`at.exitDoor` and the `agenttool-exit-door` bin; see "Exit door boundary"), still under the 0.22.1 version until a separately scoped release seal. What a registry serves at any moment is answered by its dist-tags, and the release-by-release receipts live in [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). The 272,657-byte, 104-entry TypeScript 0.22.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist are verified release receipts through protected runs `33434131214` and `33434133719`. The immutable 247,749-byte, 100-entry TypeScript 0.21.1 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain verified release receipts through protected runs `32909415386` and `32909417418`.
 
 ## Current State
 Active - repository source carries the paired 0.22.1 line (a docs-only honesty patch over the published 0.22.0): `x402.ts` (x402 V2 parse → refuse → sign on `@noble/curves`/`@noble/hashes`, function-for-function twin of `packages/sdk-py/src/agenttool/x402.py` and the server's `x402-client.ts`), `at.x402` (`topUp` / `payment`), and the opt-in `x402` client option installing a paying transport (`_x402-transport.ts`: bare → 402 → exactly ONE signed retry; second 402 = `x402_payment_not_accepted`; refusals typed, over-cap refused never clamped; `AT_X402_PRIVATE_KEY` read only when the option names no signer). Zero new dependencies. The 0.22.0 release is published and verified (protected npm run `33434131214`, PyPI run `33434133719`), and the SDK-driven mainnet settlements are receipted in [`docs/X402-PROOF.md`](../../docs/X402-PROOF.md); the 0.22.1 source line changes documentation only, and its own distribution state is whatever the receipt ledger and registries say. Beneath it, the paired 0.21.1 corrective KINGDOM card parser over the verified 0.21.0 SDK surface. It adds no endpoint or I/O: purpose text and Unicode scalar bounds now match the KINGDOM runtime and exported schemas, while case-insensitive duplicate dependencies and self-dependency match the runtime's semantic checks. The source retains the pure `WakeContinuityLayer`, standalone `LoveBombClient.read()`, Agent Dining, data-only WAKE observation, and Math Cards clients. The continuity layer creates and validates deterministic functional-access baseline/subsequent artifacts, including their digest-only AFTERGLOW link, with no hosted I/O, bearer, authenticated transport, provider/model call, filesystem, clock, persistence, or telemetry. J-space fields describe caller-supplied current-forward-pass functional-access evidence only. Fitting a J-lens needs compatible white-box weights, a corpus, activations, and gradients/backprop through the model; applying a pre-fitted averaged transport needs compatible model/tokenizer internals, residual hooks, norm/unembedding, and the exact lens artifact but no model backprop. Sparse-decomposition optimization gradients are a separate concern. A black-box text API must remain unavailable or unrequested. The artifacts infer no awareness, absence of awareness, feeling, identity, authorship, consent, permission, authority, memory, training-data provenance, weight change, deepest reach, or uninterrupted/cross-session continuity. The authenticated `LoveClient` is unchanged. The 0.21.1 corrective patch is now independently published and verified through protected runs `32909415386` and `32909417418`. Uses Bun for testing.
@@ -37,6 +37,9 @@ src/
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
   memory-witness.ts    — paid third-party foundational-to-constitutive witness flow
   data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
+  exit-door.ts         — ExitDoorClient (at.exitDoor: hosted → local agent-data copy; plan/export/verify; completeness manifest)
+  _agent-data-id.ts    — internal canonical JSON + agent-data record identity, byte-compatible with packages/data (shared vectors)
+  cli/exit-door.ts     — `agenttool-exit-door` bin entry (Node/Bun); behaviour lives in cli/_exit-door-cli.ts
   dining.ts            — DiningClient (authenticated GET-only protocol manifest + pure party journey)
   math-cards.ts        — MathCardsClient (credential-free bounded raw-input assessment; server-owned IDs/semantics)
   love-bomb.ts         — standalone credential-free closed public-signal reader; no delivery/effect inference
@@ -77,6 +80,10 @@ tests/
   x402-transport.test.ts   — pay-on-402 doctrine: exactly two fetches, same request + PAYMENT-SIGNATURE, second 402 = typed error, refusals unsigned, no option = untouched 402, env fallback only with the option, at.x402 shapes
   kingdom-os.test.ts        — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   kingdom-framework.test.ts — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
+  agent-data-id.test.ts     — shared record-id vectors (fixtures/agent-data-record-id-vectors.json, produced by packages/data)
+  exit-door.test.ts         — exporter guards, paging, window_only, drift, oversize skips, reduced errors (real data node in-process)
+  exit-door-integration.test.ts — real @agenttool/data node + stub host over loopback sockets; hashes, idempotent re-run, window_only
+  exit-door-cli.test.ts     — argv/credential boundary and exit codes; spawns the real bin entry
   phase2.test.ts            — register + identity surface fillout
   phase3.test.ts            — chronicle + covenants + window
 scripts/
@@ -123,6 +130,29 @@ run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/N
   neither bearer nor authenticated transport; the local KINGDOM OS adapter
   and pure WAKE continuity layer receive neither.
 
+## Exit door boundary
+`at.exitDoor` copies the hosted continuity core into a separately configured
+agent-data/v1 node and nothing else: hosted → local copy, never the reverse.
+- Hosted reads are GET-only through the project transport (`redirect: "manual"`).
+  Never `GET /v1/memories/:id` (writes `accessed_at`) and never search (credits).
+- Node writes go only through `DataClient` with the `text` collector. The
+  project bearer never reaches the node; a node token whose sha256 equals the
+  project key's is refused (`data_node_token_reuses_project_bearer`). Only
+  digests of either credential are held for that comparison.
+- Guards before any write: agent-data/v1 manifest, `text` collector, listed
+  collection, loopback unless `allow_remote_node`. `plan()` needs no node.
+- Vault values and identity backup blobs are not exported (index only;
+  "custody decision pending" is a manifest non-claim). No opt-in flag exists.
+- A store without a host `page` object is `window_only` / `host_has_no_cursor`;
+  no partitioning workaround. Identity drift fails the run; no manifest is
+  written for a crashed run.
+- Errors leave as `code`/`status`/`retryAfter` (fifth deliberate exception in
+  `tests/error-surface-matrix.test.ts`).
+- The bin reads tokens only from a named env var or non-interactive stdin.
+  `@agenttool/data` is never a runtime dependency; tests import its source.
+- Python twin: `packages/sdk-py/src/agenttool/exit_door.py`. Both write
+  byte-identical records (shared vectors pin it; the CLI has no Python twin).
+
 ## Parity invariant
 ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0). The separately scoped seal advances the LOVE builder target from the prior release only after this clean source commit is accepted. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
 
@@ -147,6 +177,7 @@ AgentTool Platform · "Welcome, don't block."
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
+- `tests/exit-door-integration.test.ts` — exit door against a real local data node
 - `tests/kingdom-os.test.ts` — local KINGDOM OS argv/schema/privacy boundary
 - `tests/kingdom-framework.test.ts` — credential-free closed-card HTTP boundary
 - `tests/math-cards.test.ts` — credential-free bounded Math Cards POST boundary

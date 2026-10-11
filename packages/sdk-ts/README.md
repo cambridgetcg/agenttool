@@ -572,6 +572,71 @@ to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
 and later carry it. Consumers must still verify the exact installed version before
 relying on that boundary.
 
+### Exit door: copy hosted continuity to a local node
+
+`at.exitDoor` copies the hosted continuity core into an existing collection on
+the separately configured `at.data` node. The direction is hosted → local copy
+only. Hosted reads are GET-only through this client's project transport, and
+writes go only through `at.data`, so the project bearer never reaches the node.
+
+```typescript
+const at = new AgentTool({
+  apiKey,
+  dataNode: {
+    baseUrl: "http://127.0.0.1:7742",
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
+});
+
+const plan = await at.exitDoor.plan(); // hosted reads only; needs no node
+const { manifest_record_id, manifest } = await at.exitDoor.export({
+  collection_id: "agenttool-exit", // must already exist on the node
+});
+console.log(plan.overall, manifest.overall); // complete | partial | failed
+const check = await at.exitDoor.verify(manifest_record_id); // re-reads, re-hashes
+console.log(check.verified);
+```
+
+What v1 copies: memories, chronicle, strands and their ciphertext thoughts,
+correspondence events, covenants, identities and keys (as context), and the
+vault and identity-backup indexes. Vault secret values and backup blobs are
+not exported. The custody decision for them is pending, and every manifest
+says so.
+
+Every guard runs before the first write. The node manifest must report
+`agent-data/v1` with the `text` collector, and the target collection must be
+listed. The node URL must be loopback unless you pass
+`allow_remote_node: true`. A node token equal to the project API key is
+refused with `data_node_token_reuses_project_bearer`. Errors leave the exit
+door as `code`, `status`, and `retryAfter` only.
+
+Completeness is reported per store and comes from the host's own end-of-walk
+signal. A host that returns no cursor `page` gives `window_only` with reason
+`host_has_no_cursor`; the exporter does not partition its way around it. Each
+hosted item becomes one immutable record keyed `<store>/<hosted id>`. Volatile
+fields (`memories.accessed_at`; strands `last_thought_at`, `last_thought_seq`,
+`updated_at`) are left out, so an unchanged re-run inserts nothing. The
+exporter never calls `GET /v1/memories/:id` (it writes `accessed_at`) or
+search (it costs credits), never decrypts, and never deletes. The copy is
+agent data, not memory: putting any of it back is an explicit projection
+([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
+
+The package also declares a Node bin, `agenttool-exit-door`, with `plan`,
+`export`, and `verify`:
+
+```sh
+agenttool-exit-door export \
+  --hosted-token-env AT_API_KEY \
+  --node-url http://127.0.0.1:7742 --node-token-env AGENT_DATA_NODE_TOKEN \
+  --collection agenttool-exit
+```
+
+Tokens come only from `--*-token-env NAME` or non-interactive
+`--*-token-stdin`, never from argv, and at most one token can come from stdin.
+Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door is in
+repository source after the 0.22.1 line and is not part of any published
+release yet; check the installed version before relying on it.
+
 ### Bounded Math Cards
 
 ```typescript
