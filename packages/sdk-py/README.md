@@ -667,11 +667,17 @@ at = AgentTool(
 )
 
 plan = at.exit_door.plan()  # hosted reads only; needs no node
-result = at.exit_door.export(collection_id="agenttool-exit")  # collection must exist
+result = at.exit_door.export(collection_id="default")  # an existing collection
 print(plan["overall"], result["manifest"]["overall"])  # complete | partial | failed
 check = at.exit_door.verify(result["manifest_record_id"])  # re-reads, re-hashes
 print(check["verified"])
 ```
+
+The target collection must already exist on the node; the exporter never
+creates one. `agenttool-data serve` opens only the `default` collection today,
+so the example uses it. A dedicated collection needs a node opened with that
+collection configured (`DataNode.open({ collections: [...] })` in
+`@agenttool/data`).
 
 What v1 copies: memories, chronicle, strands and their ciphertext thoughts,
 correspondence events, covenants, identities and keys (as context), and the

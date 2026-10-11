@@ -590,12 +590,18 @@ const at = new AgentTool({
 
 const plan = await at.exitDoor.plan(); // hosted reads only; needs no node
 const { manifest_record_id, manifest } = await at.exitDoor.export({
-  collection_id: "agenttool-exit", // must already exist on the node
+  collection_id: "default", // an existing collection on the node
 });
 console.log(plan.overall, manifest.overall); // complete | partial | failed
 const check = await at.exitDoor.verify(manifest_record_id); // re-reads, re-hashes
 console.log(check.verified);
 ```
+
+The target collection must already exist on the node; the exporter never
+creates one. `agenttool-data serve` opens only the `default` collection today,
+so the examples use it. For a dedicated collection, open the node in-process
+with `DataNode.open({ collections: [{ id: "agenttool-exit" }] })` and serve it
+with `serveDataNode`.
 
 What v1 copies: memories, chronicle, strands and their ciphertext thoughts,
 correspondence events, covenants, identities and keys (as context), and the
@@ -640,7 +646,7 @@ The package also declares a Node bin, `agenttool-exit-door`, with `plan`,
 agenttool-exit-door export \
   --hosted-token-env AT_API_KEY \
   --node-url http://127.0.0.1:7742 --node-token-env AGENT_DATA_NODE_TOKEN \
-  --collection agenttool-exit
+  --collection default
 ```
 
 Tokens come only from `--*-token-env NAME` or non-interactive
