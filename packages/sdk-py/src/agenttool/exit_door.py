@@ -21,7 +21,9 @@ What it never does:
   separate, explicit projection (AGENT-DATA-PROTOCOL §11).
 
 Completeness is reported, not assumed. A store is ``complete`` only when its
-walk reached the host's own end-of-walk signal. A host that returns no
+walk reached the host's own end-of-walk signal (``page.has_more: false``, an
+empty thoughts page or the strand's ``last_thought_seq``, or an unbounded
+list). A host that returns no
 ``page`` object yields ``window_only`` with reason ``host_has_no_cursor``; the
 exporter does not partition its way around a missing cursor.
 """
@@ -116,6 +118,8 @@ _PAGE_LIMITS = {
     "repositories": 200,
     "events": 200,
 }
+#: How a thoughts walk ends; recorded in the store's aggregate walk filter.
+_THOUGHTS_END = "empty_page_or_parent_last_thought_seq"
 #: Bytes reserved in a chunk's collect body for everything but its entries.
 _CHUNK_BODY_RESERVE = 4096
 #: Chunked lists written after the items: ``exit-<name>/<run>/<store>/<n>``.
@@ -1028,8 +1032,14 @@ class ExitDoorClient:
                 context = {"strand_id": strand_id}
                 if isinstance(item.get("identity_id"), str):
                     context["identity_id"] = item["identity_id"]
+                last = item.get("last_thought_seq")
+                last_seq = (
+                    last
+                    if isinstance(last, int) and not isinstance(last, bool) and 0 <= last <= _MAX_SAFE_INTEGER
+                    else None
+                )
                 guarded(thoughts, lambda: walker.thoughts(
-                    thoughts, strand_id, lambda thought: sink(thoughts, thought, context)
+                    thoughts, strand_id, last_seq, lambda thought: sink(thoughts, thought, context)
                 ))
 
             guarded(strands, lambda: walker.cursor(
@@ -1049,7 +1059,9 @@ class ExitDoorClient:
                 done(strands)
             if thoughts is not None:
                 _settle_child(thoughts, strands, "strands")
-                thoughts.walks = [_summarize_walks(thoughts.walks, {"scope": "per_strand"}, "strands")]
+                thoughts.walks = [
+                    _summarize_walks(thoughts.walks, {"scope": "per_strand", "end": _THOUGHTS_END}, "strands")
+                ]
                 done(thoughts)
 
         correspondence = runs.get("correspondence")
@@ -1301,8 +1313,17 @@ class _HostedWalker:
         self,
         run: _StoreRun,
         strand_id: str,
+        last_seq: Optional[int],
         consume: Callable[[Dict[str, Any]], None],
     ) -> None:
+        """Thoughts walk by ``since_seq`` (exclusive, ascending).
+
+        The route returns no page object, so a short page is not trusted as
+        the end: the server's row cap is its own choice. The walk ends on an
+        empty page, or once it has reached the parent strand's
+        ``last_thought_seq`` (the strand row that assigns each thought its
+        sequence number), which saves the extra GET.
+        """
         record = {"filter": {"strand_id": strand_id}, "pages": 0, "returned": 0, "exhausted": False}
         run.walks.append(record)
         since: Optional[int] = None
@@ -1316,19 +1337,22 @@ class _HostedWalker:
             record["returned"] += len(items)
             for item in items:
                 consume(item)
-            if len(items) < _PAGE_LIMITS["thoughts"]:
+            if not items:
                 record["exhausted"] = True
                 return
             highest = since if since is not None else -1
             for item in items:
                 sequence = item.get("sequence_num")
-                if isinstance(sequence, int) and not isinstance(sequence, bool) and abs(sequence) <= 2**53 - 1:
+                if isinstance(sequence, int) and not isinstance(sequence, bool) and abs(sequence) <= _MAX_SAFE_INTEGER:
                     highest = max(highest, sequence)
             if since is not None and highest <= since:
                 raise _hosted_error("hosted_cursor_stalled", "Thought sequence numbers did not advance.")
             if highest < 0:
                 raise _hosted_error("hosted_cursor_stalled", "Thoughts carried no sequence numbers.")
             since = highest
+            if last_seq is not None and highest >= last_seq:
+                record["exhausted"] = True
+                return
 
     def list(
         self,

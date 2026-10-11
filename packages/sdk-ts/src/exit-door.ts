@@ -17,8 +17,9 @@
  *     is a separate, explicit projection (AGENT-DATA-PROTOCOL §11).
  *
  * Completeness is reported, not assumed. A store is `complete` only when its
- * walk reached the host's own end-of-walk signal (`page.has_more: false`, a
- * short thoughts page, or an unbounded list). A host that returns no `page`
+ * walk reached the host's own end-of-walk signal (`page.has_more: false`, an
+ * empty thoughts page or the strand's `last_thought_seq`, or an unbounded
+ * list). A host that returns no `page`
  * object yields `window_only` with reason `host_has_no_cursor`; the exporter
  * does not try to partition its way around a missing cursor.
  *
@@ -121,6 +122,8 @@ const PAGE_LIMITS = {
   repositories: 200,
   events: 200,
 } as const;
+/** How a thoughts walk ends; recorded in the store's aggregate walk filter. */
+const THOUGHTS_END = "empty_page_or_parent_last_thought_seq";
 /** Bytes reserved in a chunk's collect body for everything but its entries. */
 const CHUNK_BODY_RESERVE = 4096;
 
@@ -1176,13 +1179,18 @@ export class ExitDoorClient {
           strand_id: strandId,
           ...(typeof item.identity_id === "string" ? { identity_id: item.identity_id } : {}),
         };
-        await guarded(thoughts, () => walker.thoughts(thoughts, strandId, (thought) =>
+        const lastSeq = typeof item.last_thought_seq === "number"
+          && Number.isSafeInteger(item.last_thought_seq)
+          && item.last_thought_seq >= 0
+          ? item.last_thought_seq
+          : undefined;
+        await guarded(thoughts, () => walker.thoughts(thoughts, strandId, lastSeq, (thought) =>
           sink(thoughts, thought, context)));
       }));
       if (runs.has("strands")) done(strands, progress);
       if (thoughts) {
         settleChild(thoughts, strands, "strands");
-        thoughts.walks = [summarizeWalks(thoughts.walks, { scope: "per_strand" }, "strands")];
+        thoughts.walks = [summarizeWalks(thoughts.walks, { scope: "per_strand", end: THOUGHTS_END }, "strands")];
         done(thoughts, progress);
       }
     }
@@ -1401,10 +1409,17 @@ class HostedWalker {
     }
   }
 
-  /** Thoughts walk by `since_seq` until a short page. */
+  /**
+   * Thoughts walk by `since_seq` (exclusive, ascending). The route returns
+   * no page object, so a short page is not trusted as the end: the server's
+   * row cap is its own choice. The walk ends on an empty page, or once it
+   * has reached the parent strand's `last_thought_seq` (the strand row that
+   * assigns each thought its sequence number), which saves the extra GET.
+   */
   async thoughts(
     run: StoreRun,
     strandId: string,
+    lastSeq: number | undefined,
     consume: (item: JsonObject) => Promise<void>,
   ): Promise<void> {
     const record: ExitWalk = { filter: { strand_id: strandId }, pages: 0, returned: 0, exhausted: false };
@@ -1419,7 +1434,7 @@ class HostedWalker {
       record.pages += 1;
       record.returned += items.length;
       for (const item of items) await consume(item);
-      if (items.length < PAGE_LIMITS.thoughts) {
+      if (items.length === 0) {
         record.exhausted = true;
         return;
       }
@@ -1434,6 +1449,10 @@ class HostedWalker {
       }
       if (highest < 0) throw hostedError("hosted_cursor_stalled", "Thoughts carried no sequence numbers.");
       since = highest;
+      if (lastSeq !== undefined && highest >= lastSeq) {
+        record.exhausted = true;
+        return;
+      }
     }
   }
 

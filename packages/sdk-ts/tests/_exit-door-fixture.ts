@@ -24,6 +24,8 @@ export interface HostedFakeOptions {
   paged: boolean;
   /** Cap every cursor page at this many rows to force multi-page walks. */
   maxPage?: number;
+  /** Row cap of the thoughts route (the live host clamps to 500). */
+  thoughtsCap?: number;
   /** Project bearer the fake accepts. */
   bearer: string;
   /** Replace the default dataset. */
@@ -323,7 +325,7 @@ export function createHostedFake(options: HostedFakeOptions) {
     if (thoughtMatch) {
       const strandId = decodeURIComponent(thoughtMatch[1]!);
       const since = url.searchParams.get("since_seq");
-      const limit = Math.min(Number(url.searchParams.get("limit") ?? "100"), 500);
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? "100"), options.thoughtsCap ?? 500);
       const rows = (data.thoughts[strandId] ?? [])
         .filter((row) => since === null || (row.sequence_num as number) > Number(since))
         .slice(0, limit);

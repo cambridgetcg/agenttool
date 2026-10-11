@@ -298,6 +298,61 @@ describe("exit door: export against a paged host", () => {
   });
 });
 
+describe("exit door: thoughts walk", () => {
+  const STRAND = "dddddddd-0000-4000-8000-000000000077";
+  const created = "2026-09-01T00:00:00.000Z";
+  function thoughtRows(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `eeeeeeee-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      strand_id: STRAND,
+      sequence_num: index + 1,
+      ciphertext: `c${index + 1}`,
+      created_at: created,
+    }));
+  }
+  async function walkThoughts(count: number, strand: Record<string, unknown>, thoughtsCap?: number) {
+    const h = await harness({
+      hosted: {
+        ...(thoughtsCap !== undefined ? { thoughtsCap } : {}),
+        dataset: {
+          strands: [{ id: STRAND, identity_id: null, created_at: created, ...strand }],
+          thoughts: { [STRAND]: thoughtRows(count) },
+        },
+      },
+    });
+    const { manifest } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["strand_thoughts"] });
+    const calls = h.hosted.calls.filter((call) => call.path === `/v1/strands/${STRAND}/thoughts`);
+    return { entry: store(manifest, "strand_thoughts"), sinceSeq: calls.map((call) => call.query.since_seq ?? null) };
+  }
+
+  test("follows since_seq across full pages without losing a thought at the boundaries", async () => {
+    const { entry, sinceSeq } = await walkThoughts(1001, { last_thought_seq: 1001 });
+    expect(entry.status).toBe("complete");
+    expect(entry.current.record_count).toBe(1001);
+    expect(sinceSeq).toEqual([null, "500", "1000"]);
+    expect(entry.walks).toEqual([{
+      filter: { scope: "per_strand", end: "empty_page_or_parent_last_thought_seq", strands: 1 },
+      pages: 3,
+      returned: 1001,
+      exhausted: true,
+    }]);
+  });
+
+  test("a short page is not the end: a host that caps thoughts below 500 is still walked fully", async () => {
+    const { entry, sinceSeq } = await walkThoughts(450, { last_thought_seq: 450 }, 200);
+    expect(entry.status).toBe("complete");
+    expect(entry.current.record_count).toBe(450);
+    expect(sinceSeq).toEqual([null, "200", "400"]);
+  });
+
+  test("without last_thought_seq the walk ends on an empty page", async () => {
+    const { entry, sinceSeq } = await walkThoughts(3, {});
+    expect(entry.status).toBe("complete");
+    expect(entry.current.record_count).toBe(3);
+    expect(sinceSeq).toEqual([null, "3"]);
+  });
+});
+
 describe("exit door: hostile hosted ids", () => {
   test("hosted ids cannot steer a request or a source uri out of its prefix", async () => {
     const strand = "../memories/pwned";

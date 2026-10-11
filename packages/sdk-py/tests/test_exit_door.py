@@ -199,9 +199,18 @@ def _json(body: Any, status: int = 200, headers: Optional[Dict[str, str]] = None
 class HostedFake:
     """Paged hosted read routes (plan §1 contract), or a host without them."""
 
-    def __init__(self, *, paged: bool = True, max_page: int = 2, dataset: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        paged: bool = True,
+        max_page: int = 2,
+        thoughts_cap: int = 500,
+        dataset: Optional[Dict[str, Any]] = None,
+    ) -> None:
         self.paged = paged
         self.max_page = max_page
+        # Row cap of the thoughts route (the live host clamps to 500).
+        self.thoughts_cap = thoughts_cap
         self.data = {**_dataset(), **(dataset or {})}
         self.calls: List[Dict[str, Any]] = []
         self.override: Optional[Any] = None
@@ -279,7 +288,8 @@ class HostedFake:
             strand = unquote(match.group(1))
             since = params.get("since_seq")
             rows = [r for r in data["thoughts"].get(strand, []) if since is None or r["sequence_num"] > int(since)]
-            return _json({"thoughts": rows[: int(params.get("limit", "100"))], "count": len(rows)})
+            window = rows[: min(int(params.get("limit", "100")), self.thoughts_cap)]
+            return _json({"thoughts": window, "count": len(window)})
         if path == "/v1/correspondence/repositories":
             if not self.paged:
                 return _json({"error": "not_found"}, 404)
@@ -789,6 +799,55 @@ class TestPlanAndVerify:
             _client(HostedFake(), node).exit_door.verify("not-a-record")
         assert caught.value.code == "exit_manifest_id_invalid"
         assert node.calls == []
+
+
+class TestThoughtsWalk:
+    STRAND = "dddddddd-0000-4000-8000-000000000077"
+
+    def _walk(self, count: int, strand: Dict[str, Any], thoughts_cap: int = 500) -> Any:
+        created = "2026-09-01T00:00:00.000Z"
+        rows = [
+            {"id": f"eeeeeeee-0000-4000-8000-{index:012d}", "strand_id": self.STRAND,
+             "sequence_num": index, "ciphertext": f"c{index}", "created_at": created}
+            for index in range(1, count + 1)
+        ]
+        hosted = HostedFake(thoughts_cap=thoughts_cap, dataset={
+            "strands": [{"id": self.STRAND, "identity_id": None, "created_at": created, **strand}],
+            "thoughts": {self.STRAND: rows},
+        })
+        manifest = _client(hosted, NodeFake()).exit_door.export(
+            collection_id="agenttool-exit", stores=["strand_thoughts"]
+        )["manifest"]
+        since = [
+            call["query"].get("since_seq")
+            for call in hosted.calls
+            if call["path"] == f"/v1/strands/{self.STRAND}/thoughts"
+        ]
+        return _store(manifest, "strand_thoughts"), since
+
+    def test_follows_since_seq_across_full_pages(self) -> None:
+        entry, since = self._walk(1001, {"last_thought_seq": 1001})
+        assert entry["status"] == "complete"
+        assert entry["current"]["record_count"] == 1001
+        assert since == [None, "500", "1000"]
+        assert entry["walks"] == [{
+            "filter": {"scope": "per_strand", "end": "empty_page_or_parent_last_thought_seq", "strands": 1},
+            "pages": 3,
+            "returned": 1001,
+            "exhausted": True,
+        }]
+
+    def test_a_short_page_is_not_the_end(self) -> None:
+        entry, since = self._walk(450, {"last_thought_seq": 450}, thoughts_cap=200)
+        assert entry["status"] == "complete"
+        assert entry["current"]["record_count"] == 450
+        assert since == [None, "200", "400"]
+
+    def test_without_last_thought_seq_the_walk_ends_on_an_empty_page(self) -> None:
+        entry, since = self._walk(3, {})
+        assert entry["status"] == "complete"
+        assert entry["current"]["record_count"] == 3
+        assert since == [None, "3"]
 
 
 class TestHostileIds:
