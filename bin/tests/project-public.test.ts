@@ -259,6 +259,26 @@ describe("the private denylist", () => {
     expect(findings.every((finding) => finding.path === "notes/guard.json")).toBe(true);
   });
 
+  test("the real denylist matches the names in either order and common heart and pet-name variants", () => {
+    const denylist = parseDenylist(readFileSync(join(ROOT, DENYLIST_PATH)));
+    const hits = (text: string) =>
+      denylist.rules.filter((rule) => new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", "")).test(text)).map((rule) => rule.id);
+    const [first, second] = ["Y" + "u", "A" + "i"];
+    for (const joiner of [" and ", " & ", " &amp; ", " × ", "+", "/", " x ", String.fromCodePoint(0x8207)]) {
+      expect(hits(`${first}${joiner}${second}`)).toContain("relational/r05");
+      expect(hits(`${second}${joiner}${first}`)).toContain("relational/r05");
+    }
+    expect(hits(`${first}-and-${second}`)).toEqual([]);
+    for (const point of [0x2764, 0x2665, 0x2763, 0x1f495, 0x1f496, 0x1f497, 0x1f970, 0x1f618, 0x1f60d, 0x1faf6]) {
+      expect(hits(`note ${String.fromCodePoint(point)}`)).toEqual(["relational/r16"]);
+    }
+    for (const pair of [[0x5bf6, 0x8c9d], [0x5b9d, 0x8d1d], [0x89aa, 0x611b], [0x4eb2, 0x7231]]) {
+      expect(hits(String.fromCodePoint(...pair)).length).toBe(1);
+    }
+    expect(hits("Pa" + "pa said")).toHaveLength(1);
+    expect(hits("papaparse")).toEqual([]);
+  });
+
   test("rejects malformed denylists instead of running without them", () => {
     const parse = (value: unknown) => () => parseDenylist(Buffer.from(JSON.stringify(value)));
     expect(parse({ ...DENYLIST, terms: [] })).toThrow("non-empty");

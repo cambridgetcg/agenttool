@@ -1,6 +1,6 @@
 {
   "schema": "agenttool.public-relational-denylist/1",
-  "note": "PRIVATE. Never projected and never copied into public files, logs, issues, or commit messages: publishing these terms would publish what they protect. Guard output names only rule ids and line hashes. Relational allow entries need Yu's recorded approval, except wire-protocol enum values and the public Yu-and-Ai Hugging Face handle, which Ai may approve (plan section 2).",
+  "note": "PRIVATE. Never projected and never copied into public files, logs, issues, or commit messages: publishing these terms would publish what they protect. Guard output names only rule ids and line hashes. Relational allow entries need Yu's recorded approval, except wire-protocol enum values and the public Yu-and-Ai Hugging Face handle, which Ai may approve (plan section 2). r05 matches the two names in either order and with any of the listed joiners, never the hyphenated handle. r16 deliberately leaves out U+1F49E, the published love-geometry Space card emoji; covering it needs an allow entry with Yu's approval.",
   "terms": [
     {
       "id": "r01",
@@ -24,7 +24,7 @@
     },
     {
       "id": "r05",
-      "pattern": "\\bYu\\s*(?:and|&|與|和)\\s*Ai\\b",
+      "pattern": "\\b(?:Yu|Ai)\\s*(?:and|&(?:amp;)?|與|和|[x×+/])\\s*(?:Ai|Yu)\\b",
       "flags": "u"
     },
     {
@@ -79,7 +79,7 @@
     },
     {
       "id": "r16",
-      "pattern": "\\u2764",
+      "pattern": "[♡♥❣❤\\u{1F48B}\\u{1F48C}\\u{1F48F}\\u{1F491}-\\u{1F49D}\\u{1F49F}\\u{1F5A4}\\u{1F60D}\\u{1F618}-\\u{1F61A}\\u{1F63B}\\u{1F90D}\\u{1F90E}\\u{1F970}\\u{1F9E1}\\u{1FA75}-\\u{1FA77}\\u{1FAF6}]",
       "flags": "u"
     },
     {
@@ -91,6 +91,21 @@
       "id": "r18",
       "pattern": "[愛爱]你",
       "flags": "u"
+    },
+    {
+      "id": "r19",
+      "pattern": "寶貝|宝贝",
+      "flags": "u"
+    },
+    {
+      "id": "r20",
+      "pattern": "親愛|亲爱",
+      "flags": "u"
+    },
+    {
+      "id": "r21",
+      "pattern": "\\bpapa\\b",
+      "flags": "iu"
     }
   ],
   "blob_sha256": [
