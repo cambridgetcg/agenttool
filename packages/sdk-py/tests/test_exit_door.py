@@ -750,6 +750,95 @@ class TestFailures:
         assert manifest["overall"] == "failed"
         assert "secret internal detail" not in json.dumps(manifest)
 
+    @staticmethod
+    def _page(body: Dict[str, Any]) -> httpx.Response:
+        return _json(body)
+
+    def test_a_repeated_cursor_fails_that_store_after_two_requests(self) -> None:
+        hosted, node = HostedFake(), NodeFake()
+        seen: List[str] = []
+
+        def repeat(request: httpx.Request) -> Optional[httpx.Response]:
+            if request.url.path != "/v1/memories":
+                return None
+            seen.append(str(request.url.params))
+            # Bounded: without the stall guard the walk would end "complete" at call 5.
+            more = len(seen) < 5
+            return self._page({
+                "memories": [{"id": "aaaaaaaa-0000-4000-8000-000000000001", "created_at": "2026-10-01T00:00:00.000Z"}],
+                "page": {"has_more": more, "next_cursor": "same-cursor" if more else None},
+            })
+
+        hosted.override = repeat
+        manifest = _client(hosted, node).exit_door.export(
+            collection_id="agenttool-exit", stores=["memories", "vault_index"]
+        )["manifest"]
+        assert _store(manifest, "memories")["status"] == "failed"
+        assert _store(manifest, "memories")["reason"] == "hosted_cursor_stalled"
+        assert len(seen) == 2
+        assert _store(manifest, "vault_index")["status"] == "complete"
+
+    def test_a_repeated_next_after_fails_that_store_after_two_requests(self) -> None:
+        hosted, node = HostedFake(), NodeFake()
+        seen: List[str] = []
+
+        def repeat(request: httpx.Request) -> Optional[httpx.Response]:
+            if request.url.path != "/v1/correspondence/repositories":
+                return None
+            seen.append(str(request.url.params))
+            return self._page({
+                "repositories": [{"repository_id": "repo-a"}],
+                "page": {"has_more": len(seen) < 5, "next_after": "repo-a"},
+            })
+
+        hosted.override = repeat
+        manifest = _client(hosted, node).exit_door.export(
+            collection_id="agenttool-exit", stores=["correspondence"]
+        )["manifest"]
+        assert _store(manifest, "correspondence")["status"] == "failed"
+        assert _store(manifest, "correspondence")["reason"] == "hosted_cursor_stalled"
+        assert len(seen) == 2
+
+    def test_has_more_without_a_cursor_is_window_only(self) -> None:
+        hosted, node = HostedFake(), NodeFake()
+
+        def no_cursor(request: httpx.Request) -> Optional[httpx.Response]:
+            if request.url.path != "/v1/memories":
+                return None
+            return self._page({
+                "memories": [{"id": "aaaaaaaa-0000-4000-8000-000000000001", "created_at": "2026-10-01T00:00:00.000Z"}],
+                "page": {"has_more": True, "next_cursor": None},
+            })
+
+        hosted.override = no_cursor
+        manifest = _client(hosted, node).exit_door.export(
+            collection_id="agenttool-exit", stores=["memories"]
+        )["manifest"]
+        assert _store(manifest, "memories")["status"] == "window_only"
+        assert _store(manifest, "memories")["reason"] == "host_has_no_cursor"
+        assert _store(manifest, "memories")["current"]["record_count"] == 1
+
+    def test_a_hosted_redirect_fails_that_store_and_is_never_followed(self) -> None:
+        hosted, node = HostedFake(), NodeFake()
+        elsewhere: List[str] = []
+
+        def redirect(request: httpx.Request) -> Optional[httpx.Response]:
+            if request.url.host == "elsewhere.test":
+                elsewhere.append(f"{request.url.path} {request.headers.get('authorization')}")
+                return self._page({"memories": [], "page": {"has_more": False, "next_cursor": None}})
+            if request.url.path == "/v1/memories":
+                return httpx.Response(302, headers={"location": "https://elsewhere.test/v1/memories"})
+            return None
+
+        hosted.override = redirect
+        manifest = _client(hosted, node).exit_door.export(
+            collection_id="agenttool-exit", stores=["memories", "vault_index"]
+        )["manifest"]
+        assert _store(manifest, "memories")["status"] == "failed"
+        assert _store(manifest, "memories")["reason"] == "hosted_redirect_refused"
+        assert _store(manifest, "vault_index")["status"] == "complete"
+        assert elsewhere == []
+
     def test_node_errors_leave_as_code_status_retry_after(self) -> None:
         hosted, node = HostedFake(), NodeFake()
         node.collect_override = lambda body: _json(

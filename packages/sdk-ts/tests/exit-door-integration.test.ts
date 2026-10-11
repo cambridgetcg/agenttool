@@ -134,6 +134,40 @@ describe("exit door integration (real data node, real sockets)", () => {
     }
   });
 
+  test("a hosted redirect fails that store and the project bearer never follows it", async () => {
+    const { url: nodeUrl } = await startNode();
+    const elsewhere: string[] = [];
+    const offOrigin = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        elsewhere.push(`${request.method} ${new URL(request.url).pathname} ${request.headers.get("authorization")}`);
+        return Response.json({ memories: [], page: { has_more: false, next_cursor: null } });
+      },
+    });
+    cleanups.push(() => offOrigin.stop(true));
+    const fake = createHostedFake({ paged: true, bearer: PROJECT_KEY, maxPage: 2 });
+    const hosted = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        if (new URL(request.url).pathname === "/v1/memories") {
+          return new Response(null, { status: 302, headers: { location: `http://127.0.0.1:${offOrigin.port}/v1/memories` } });
+        }
+        return fake.handle(request);
+      },
+    });
+    cleanups.push(() => hosted.stop(true));
+    const at = client(`http://127.0.0.1:${hosted.port}`, nodeUrl);
+
+    const { manifest } = await at.exitDoor.export({ collection_id: COLLECTION, stores: ["memories", "vault_index"] });
+    const byStore = new Map(manifest.stores.map((entry) => [entry.store, entry]));
+    expect(byStore.get("memories")!.status).toBe("failed");
+    expect(byStore.get("memories")!.reason).toBe("hosted_redirect_refused");
+    expect(byStore.get("vault_index")!.status).toBe("complete");
+    expect(elsewhere).toEqual([]);
+  });
+
   test("a host without page objects yields window_only, honestly labelled", async () => {
     const { node, url: nodeUrl } = await startNode();
     const { url: hostedUrl } = startHosted(false);

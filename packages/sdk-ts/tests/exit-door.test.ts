@@ -680,6 +680,62 @@ describe("exit door: failure handling", () => {
     expect(JSON.stringify(manifest)).not.toContain("secret internal detail");
   });
 
+  /** Replace one hosted route's answer; every other route keeps the fake.
+   *  `answer` gets the 1-based call number so a fake can stay bounded. */
+  function overrideHosted(path: string, answer: (url: URL, call: number) => Response): string[] {
+    const seen: string[] = [];
+    const harnessFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.origin === new URL(HOSTED).origin && url.pathname === path) {
+        seen.push(url.search);
+        return answer(url, seen.length);
+      }
+      return harnessFetch(input, init);
+    }) as typeof fetch;
+    return seen;
+  }
+  const page = (body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+  test("a host that repeats a cursor fails that store after two requests", async () => {
+    const h = await harness();
+    // Bounded: without the stall guard the walk would end "complete" at call 5.
+    const seen = overrideHosted("/v1/memories", (_url, call) => page({
+      memories: [{ id: "aaaaaaaa-0000-4000-8000-000000000001", created_at: "2026-10-01T00:00:00.000Z" }],
+      page: call < 5 ? { has_more: true, next_cursor: "same-cursor" } : { has_more: false, next_cursor: null },
+    }));
+    const { manifest } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["memories", "vault_index"] });
+    expect(store(manifest, "memories").status).toBe("failed");
+    expect(store(manifest, "memories").reason).toBe("hosted_cursor_stalled");
+    expect(seen).toHaveLength(2);
+    expect(store(manifest, "vault_index").status).toBe("complete");
+  });
+
+  test("a host that repeats a next_after position fails that store after two requests", async () => {
+    const h = await harness();
+    const seen = overrideHosted("/v1/correspondence/repositories", (_url, call) => page({
+      repositories: [{ repository_id: "repo-a" }],
+      page: call < 5 ? { has_more: true, next_after: "repo-a" } : { has_more: false, next_after: "repo-a" },
+    }));
+    const { manifest } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["correspondence"] });
+    expect(store(manifest, "correspondence").status).toBe("failed");
+    expect(store(manifest, "correspondence").reason).toBe("hosted_cursor_stalled");
+    expect(seen).toHaveLength(2);
+  });
+
+  test("has_more without a next cursor is window_only, never complete", async () => {
+    const h = await harness();
+    overrideHosted("/v1/memories", () => page({
+      memories: [{ id: "aaaaaaaa-0000-4000-8000-000000000001", created_at: "2026-10-01T00:00:00.000Z" }],
+      page: { has_more: true, next_cursor: null },
+    }));
+    const { manifest } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["memories"] });
+    expect(store(manifest, "memories").status).toBe("window_only");
+    expect(store(manifest, "memories").reason).toBe("host_has_no_cursor");
+    expect(store(manifest, "memories").current.record_count).toBe(1);
+  });
+
   test("node errors leave the exit door as code/status/retryAfter only", async () => {
     const h = await harness();
     h.intercept.collect = () =>
