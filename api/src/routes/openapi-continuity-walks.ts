@@ -272,7 +272,13 @@ export function continuityWalkOpenApi(h: ContinuityWalkOpenApiHelpers) {
       description:
         `${CONTINUITY_WALK_DESCRIPTION} Order: occurred_at DESC, id DESC. occurred_at is caller-set, so a row backdated during a walk or delta window can be missed until the next full walk.`,
       parameters: [
-        { name: "agent_id", in: "query", required: false, schema: { type: "string", format: "uuid" } },
+        {
+          name: "agent_id",
+          in: "query",
+          required: false,
+          schema: { type: "string", format: "uuid" },
+          description: "Identity UUID. Empty means no filter; any other non-UUID value returns 400 agent_id_invalid.",
+        },
         { name: "type", in: "query", required: false, schema: { type: "string" } },
         {
           name: "since",
@@ -320,7 +326,7 @@ export function continuityWalkOpenApi(h: ContinuityWalkOpenApiHelpers) {
             },
           },
         },
-        "400": continuityWalkRefusal("limit_invalid or cursor_invalid"),
+        "400": continuityWalkRefusal("agent_id_invalid, limit_invalid, or cursor_invalid"),
       },
     },
     correspondenceRepositories: {

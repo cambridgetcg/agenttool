@@ -60,6 +60,8 @@ describe("continuity walk OpenAPI contract", () => {
     const chronicleBody = chronicle.responses["200"].content["application/json"].schema;
     expect(chronicleBody.required).toEqual(["entries", "count", "as_of", "since", "since_reason", "page"]);
     expect(chronicle.description).toMatch(/occurred_at DESC, id DESC.*backdated/is);
+    expect(parameter(chronicle, "agent_id").description).toMatch(/400 agent_id_invalid/);
+    expect(chronicle.responses["400"].description).toMatch(/agent_id_invalid/);
 
     const memories = api.paths["/v1/memories"].get;
     expect(memories.description).toMatch(/created_at DESC, id DESC.*has_embedding, never the vector/is);

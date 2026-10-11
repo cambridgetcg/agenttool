@@ -396,6 +396,35 @@ describe("GET /v1/chronicle walk", () => {
     expect(loose.body.error).toBe("limit_invalid");
     expect(reads('"agent_continuity"."chronicle"')).toHaveLength(0);
   });
+
+  test("a non-UUID agent_id is a 400 before any read, never a uuid cast failure", async () => {
+    chronicleRows = [chronicleRow(1), chronicleRow(2)];
+    const cursor = (await get("/v1/chronicle?limit=1")).body.page.next_cursor;
+    queries = [];
+    for (const path of [
+      "/v1/chronicle?agent_id=not-a-uuid",
+      "/v1/chronicle?agent_id=did:at:00000000-0000-4000-8000-000000000007",
+      `/v1/chronicle?agent_id=${uuid(7)}x`,
+      `/v1/chronicle?agent_id=not-a-uuid&limit=1&cursor=${cursor}`,
+    ]) {
+      const { status, body } = await get(path);
+      expect(status, path).toBe(400);
+      expect(body.error, path).toBe("agent_id_invalid");
+      expect(typeof body.message, path).toBe("string");
+      expect(typeof body.hint, path).toBe("string");
+    }
+    expect(reads('"agent_continuity"."chronicle"')).toHaveLength(0);
+
+    // Empty stays "no filter"; an uppercase UUID is still a UUID.
+    for (const [path, params] of [
+      ["/v1/chronicle?agent_id=", [PROJECT, 51]],
+      [`/v1/chronicle?agent_id=${uuid(7).toUpperCase()}`, [PROJECT, uuid(7).toUpperCase(), 51]],
+    ] as const) {
+      queries = [];
+      expect((await get(path)).status, path).toBe(200);
+      expect(reads('"agent_continuity"."chronicle"')[0]!.params, path).toEqual([...params]);
+    }
+  });
 });
 
 /** All strand columns in table order, plus cursor_at when withCursor. */

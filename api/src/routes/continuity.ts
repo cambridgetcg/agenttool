@@ -215,6 +215,9 @@ app.post("/chronicle", async (c) => {
   );
 });
 
+const CHRONICLE_AGENT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Newest-first keyset walk on occurred_at DESC, id DESC (decision D3).
 // Without `cursor` the first page holds the same rows as before plus the
 // additive `count` and `page`. since=ISO (AGENT-WEB-SURFACE.md Move 6)
@@ -225,6 +228,19 @@ app.get("/chronicle", async (c) => {
   const agentId = c.req.query("agent_id");
   const type = c.req.query("type");
   const cursorRaw = c.req.query("cursor");
+  // chronicle.agent_id is a uuid column: a malformed value would reach
+  // PostgreSQL as a bound parameter and fail the cast (22P02, a 500).
+  // Empty stays "no filter", as before.
+  if (agentId && !CHRONICLE_AGENT_ID_RE.test(agentId)) {
+    return c.json(
+      {
+        error: "agent_id_invalid",
+        message: "agent_id must be an identity UUID.",
+        hint: "omit agent_id for the whole project, or send the identity's UUID (GET /v1/identities)",
+      },
+      400,
+    );
+  }
   const sinceParse = parseSinceParam(c);
   const digest = filterDigest([
     "chronicle",
