@@ -39,7 +39,10 @@ Pushing to the public repository is a separate, reviewed step.
 ## Exceptions
 
 - A gitleaks false positive goes in `overlay/.gitleaksignore` as a
-  `path:rule:line` fingerprint, so a moved line is reviewed again.
+  `path:rule:line` fingerprint with a `# line_sha256=<hex>` comment directly
+  above it: the SHA-256 of the flagged line, which gitleaks findings print.
+  The guard hides the file from gitleaks and applies it itself, so a
+  fingerprint whose line moved or changed matches nothing and is reported.
 - A secret or personal-layer exception goes in
   `overlay/tools/public-guard-allow.json`: path, rule, the SHA-256 of the whole
   line (never its text), reason, and approver.

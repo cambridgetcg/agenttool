@@ -1,39 +1,66 @@
 # gitleaks false positives, as path:rule:line fingerprints for `gitleaks dir`.
-# A moved or edited line no longer matches, so it fails closed and is
-# reviewed again. No secret value is recorded here.
+# The line directly above each fingerprint records the SHA-256 of the flagged
+# line. tools/public-guard.ts applies these itself: a fingerprint whose line
+# moved or changed matches nothing and is reported, so it is reviewed again.
+# No secret value is recorded here.
 
 # ADDS 0.1 deterministic test vectors (the file says so; served publicly at
 # docs.agenttool.dev/adds-0.1-vectors.json).
+# line_sha256=e8d69f3226c8787236ce50dc9015a204c54e029b374310d49560f587e149fc9a
 docs/specs/adds-0.1-vectors.json:generic-api-key:190
+# line_sha256=45427d7bf68f4d8ef482bfbb395955e955e24904b2bdebcc62f31464805dfdf1
 docs/specs/adds-0.1-vectors.json:generic-api-key:368
+# line_sha256=c9b423776eecfc720301ea0de5215369b2e6fc10653b472c1a4c1ae9b1cb0e33
 docs/specs/adds-0.1-vectors.json:generic-api-key:372
+# line_sha256=43cfe8c1c83f481da606511b8c32f115ffd5ff7ab3685442cb416b2c201cbd32
 docs/specs/adds-0.1-vectors.json:generic-api-key:375
+# line_sha256=bd6fdac5b07a6721455c644ef3ec08a0cfe682c64ea778a5dbc6ad6267c68463
 docs/specs/adds-0.1-vectors.json:generic-api-key:699
+# line_sha256=d699f268f6b09a69a25cf8b3f736e9d68bf9239654a9e7cced42fb381c69baa4
 docs/specs/adds-0.1-vectors.json:generic-api-key:705
+# line_sha256=ebac6677b73d16797b65e6125e4898db61f424d8991a9a66ccb9e8146da67386
 docs/specs/adds-0.1-vectors.json:generic-api-key:853
 
 # Collab operation name `handoff.respond.v2` in source and the committed bundles.
+# line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
 packages/collab/dist/agenttool-collab-host.js:generic-api-key:3127
+# line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
 packages/collab/dist/agenttool-collab-host.js:generic-api-key:3131
+# line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
 packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32492
+# line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
 packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32496
+# line_sha256=68c6f15a3d0fb8e91049dd5a34b50e5404ab5071070eefa7b45160bcddc53aa0
 packages/collab/src/store.ts:generic-api-key:3781
 
 # UUIDv5 test vectors.
+# line_sha256=c1e009f7b2c87d2be8502eb605b4e990348d0e49abc5b1c653f44f68d9481725
 packages/correspondence-yutabase/tests/identifiers.test.ts:generic-api-key:82
+# line_sha256=cd8c6aa026ba81b7006580bd915816021046b0ab87c4858660aaaeff3f4a11ea
 packages/correspondence-yutabase/tests/identifiers.test.ts:generic-api-key:109
 
 # Citation and data key names in source-bounded landscape data.
+# line_sha256=b7d151bc71002cde744ef7d5db93b31aaf3a712d9ebfa09a122e7dff1dd3d67e
 packages/memetic-landscape/examples/brainrot.landscape.json:generic-api-key:304
+# line_sha256=49ab34200ab244f58a648e117333bddc7951d9ff2bd94ef1e2d0ab1f0c65246b
 packages/memetic-landscape/hf/dataset/data/brainrot-landscape.jsonl:generic-api-key:1
+# line_sha256=3ba082d6407005b6999dc5a5056f75f310beaecb60a01f77ced16b696f8351d6
 packages/memetic-landscape/src/brainrot.ts:generic-api-key:38
+# line_sha256=fec0ba65ffa26042c1f13a36e596b314a991a95d9b477a549cc859bbcb269c9a
 packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:39
+# line_sha256=4c066d2fbd9a0a5d4c5971a95b3ddf0742e0420a9f91e8cb58a2d073f6046656
 packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:60
+# line_sha256=4a8a8313e3f99edf5a9e0d6ac0790c461982fd3d272c0ba5c4815ce46ce28fa8
 packages/polymorph-landscape/examples/ritonavir.landscape.json:generic-api-key:295
+# line_sha256=1cdbb61503aeba1879ff8f82ebbd1d3287dc8c5efe3c94dcd10e47d22134f433
 packages/polymorph-landscape/hf/dataset/data/ritonavir-landscape.jsonl:generic-api-key:1
+# line_sha256=ca8abbc98d71abcead079ecf579916cf045e9dffac39889f1375332d24a860fa
 packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:146
+# line_sha256=53a900ec90f3eecdbd4f18036ae2c26b0a939b8c9241c9e655428c2c5d2868ca
 packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:164
+# line_sha256=d508128eca14ee120f272dccf268d698937f50e42272ef8f38cae8fe94074138
 packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:330
 
 # A public-key protobuf blob in the pinned Zerone cross-language vectors.
+# line_sha256=e56a7ea5d5a1c0997f2120b8e0561a22052038ef6bab85742a2f047341f20cb2
 packages/wallet-zerone/vectors/agent-wallet-zerone-v0.1-vectors.json:generic-api-key:39

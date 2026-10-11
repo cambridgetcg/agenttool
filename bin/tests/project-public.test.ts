@@ -19,12 +19,15 @@ import {
   projectPublic,
 } from "../project-public.ts";
 import {
+  applyGitleaksIgnore,
   commitShapeFindings,
+  type Finding,
   formatFinding,
   GITLEAKS_VERSION,
   lineSha256,
   listTree,
   parseCommit,
+  parseGitleaksIgnore,
   parseProjection,
   projectionMessage,
 } from "../../public/overlay/tools/public-guard.ts";
@@ -456,17 +459,60 @@ describe("guard layers", () => {
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-allow-entry"]);
   });
 
-  test.skipIf(!GITLEAKS)("runs gitleaks over the exact projected bytes and honours only the root ignore file", () => {
-    const leak = `const config = { api_key: "${["Zx81kQp3", "Lm09TvBn", "72WcRt5YhJ"].join("")}" };\n`;
-    const repo = makeFixture({ files: { "packages/alpha/config.ts": leak, "packages/alpha/inline.ts": leak.replace(";\n", "; // gitleaks:allow\n") } });
+  test("gitleaksignore fingerprints need the flagged line's hash and fail closed when stale or edited", () => {
+    const hash = "c".repeat(64);
+    const ignore = (text: string) => parseGitleaksIgnore(Buffer.from(text));
+    expect(ignore(`# a note\n\n# line_sha256=${hash}\npkg/a.ts:generic-api-key:3\n`)).toEqual([
+      { path: "pkg/a.ts", rule: "generic-api-key", line: 3, lineSha256: hash },
+    ]);
+    expect(() => ignore("pkg/a.ts:generic-api-key:3\n")).toThrow("line_sha256");
+    expect(() => ignore(`# line_sha256=${hash}\n\npkg/a.ts:generic-api-key:3\n`)).toThrow("directly precede");
+    expect(() => ignore(`# line_sha256=${hash}\npkg/a.ts:generic-api-key\n`)).toThrow("path:rule:line");
+    expect(() => ignore(`# line_sha256=${hash}\n../a.ts:generic-api-key:3\n`)).toThrow("path:rule:line");
+    expect(() => ignore(`# line_sha256=${hash}\npkg/a.ts:x:3\n# line_sha256=${hash}\npkg/a.ts:x:3\n`)).toThrow("duplicates");
+    expect(() => ignore(`# line_sha256=${hash}\n`)).toThrow("without a fingerprint");
+
+    const leak = (line: number, sha = hash): Finding => ({ layer: "gitleaks", rule: "gitleaks/generic-api-key", path: "pkg/a.ts", line, lineSha256: sha });
+    const fingerprints = ignore(`# line_sha256=${hash}\npkg/a.ts:generic-api-key:3\n`);
+    expect(applyGitleaksIgnore([leak(3)], fingerprints)).toEqual([]);
+    expect(rules(applyGitleaksIgnore([leak(3, "d".repeat(64))], fingerprints))).toEqual(["gitleaks/generic-api-key", "integrity/unused-gitleaksignore"]);
+    expect(rules(applyGitleaksIgnore([leak(4)], fingerprints))).toEqual(["gitleaks/generic-api-key", "integrity/unused-gitleaksignore"]);
+    expect(rules(applyGitleaksIgnore([], fingerprints))).toEqual(["integrity/unused-gitleaksignore"]);
+  });
+
+  test.skipIf(!GITLEAKS)("runs gitleaks over the exact projected bytes and honours only hashed root fingerprints", () => {
+    const key = ["Zx81kQp3", "Lm09TvBn", "72WcRt5YhJ"].join("");
+    const leakLine = `const config = { api_key: "${key}" };`;
+    const inlineLine = `${leakLine} // gitleaks:allow`;
+    const repo = makeFixture({ files: { "packages/alpha/config.ts": `${leakLine}\n`, "packages/alpha/inline.ts": `${inlineLine}\n` } });
     const findings = guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" });
     expect(findings.map((finding) => `${finding.path}:${finding.rule}`)).toEqual([
       "packages/alpha/config.ts:gitleaks/generic-api-key",
       "packages/alpha/inline.ts:gitleaks/generic-api-key",
     ]);
-    write(repo, "public/overlay/.gitleaksignore", "packages/alpha/config.ts:generic-api-key:1\npackages/alpha/inline.ts:generic-api-key:1\n");
+    expect(findings[0]?.lineSha256).toBe(lineSha256(leakLine));
+    const ignoreFile = (configSha: string, extra = "") =>
+      `# fixture\n# line_sha256=${configSha}\npackages/alpha/config.ts:generic-api-key:1\n# line_sha256=${lineSha256(inlineLine)}\npackages/alpha/inline.ts:generic-api-key:1\n${extra}`;
+    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
     commitAll(repo, "ignore");
     expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" })).toEqual([]);
+
+    // A fingerprint whose line moved away is reported, not kept silently.
+    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine), `# line_sha256=${"e".repeat(64)}\npackages/alpha/old.ts:github-pat:5\n`));
+    commitAll(repo, "stale fingerprint");
+    expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }).map(formatFinding)).toEqual([
+      "packages/alpha/old.ts:5: integrity/unused-gitleaksignore (.gitleaksignore: github-pat)",
+    ]);
+
+    // A different credential at the fingerprinted position is still a finding:
+    // gitleaks never sees the ignore file, and the guard checks the line's hash.
+    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
+    write(repo, "packages/alpha/config.ts", `${leakLine.replace(key, key.split("").reverse().join(""))}\n`);
+    commitAll(repo, "edited line");
+    expect(rules(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }))).toEqual([
+      "gitleaks/generic-api-key",
+      "integrity/unused-gitleaksignore",
+    ]);
   });
 });
 

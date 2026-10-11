@@ -17,7 +17,9 @@
  *   nested gitleaks configuration, or binary files (a NUL byte, including
  *   UTF-16 without a byte-order mark) unless their content digest is allowed;
  * - secret layer: credential signatures shared with the npm release tool and
- *   the public doors guard, plus gitleaks when a pinned binary is given;
+ *   the public doors guard, plus gitleaks when a pinned binary is given; the
+ *   guard applies .gitleaksignore itself, and each fingerprint must record
+ *   the flagged line's SHA-256 and still match;
  * - personal layer: home-directory and device paths, email addresses outside
  *   reserved and project domains, hosted database project references, and
  *   local keychain slot names;
@@ -858,11 +860,87 @@ export function materialize(blobs: ReadonlyArray<{ path: string; bytes: Uint8Arr
   }
 }
 
+export interface GitleaksFingerprint {
+  path: string;
+  rule: string;
+  line: number;
+  /** SHA-256 of the flagged line, from the `# line_sha256=` comment directly above. */
+  lineSha256: string;
+}
+
+/**
+ * Parses the root .gitleaksignore. Each `path:rule:line` fingerprint (the
+ * form `gitleaks dir` uses) must have a `# line_sha256=<hex>` comment on the
+ * line directly above it, holding the SHA-256 of the flagged line. Other
+ * comments and blank lines are allowed elsewhere. Plain gitleaks skips the
+ * comments, so the file still works on its own.
+ */
+export function parseGitleaksIgnore(bytes: Uint8Array, source = GITLEAKS_IGNORE_FILE): GitleaksFingerprint[] {
+  const fingerprints: GitleaksFingerprint[] = [];
+  const seen = new Set<string>();
+  let pending: string | undefined;
+  const lines = decodeText(bytes).replace(/\n$/u, "").split("\n");
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.replace(/\r$/u, "").trim();
+    const where = `${source}:${index + 1}`;
+    const hash = /^#\s*line_sha256=([0-9a-f]{64})$/u.exec(line);
+    if (pending !== undefined && (line === "" || (line.startsWith("#") && hash === null))) {
+      throw new Error(`${where}: a line_sha256 comment must directly precede its fingerprint`);
+    }
+    if (line === "") continue;
+    if (hash !== null) {
+      if (pending !== undefined) throw new Error(`${where}: a line_sha256 comment must directly precede its fingerprint`);
+      pending = hash[1];
+      continue;
+    }
+    if (line.startsWith("#")) continue;
+    const match = /^(.+):([A-Za-z0-9._-]+):([1-9][0-9]*)$/u.exec(line);
+    if (match === null || !isSafeRelativePath(match[1] as string)) throw new Error(`${where}: expected a path:rule:line fingerprint`);
+    if (pending === undefined) throw new Error(`${where}: the fingerprint needs a "# line_sha256=<hex>" comment on the line above`);
+    if (seen.has(line)) throw new Error(`${where}: duplicates an earlier fingerprint`);
+    seen.add(line);
+    fingerprints.push({ path: match[1] as string, rule: match[2] as string, line: Number(match[3]), lineSha256: pending });
+    pending = undefined;
+  }
+  if (pending !== undefined) throw new Error(`${source}: a line_sha256 comment without a fingerprint`);
+  return fingerprints;
+}
+
+/**
+ * Removes gitleaks findings covered by a fingerprint for the same path, rule,
+ * and line whose recorded hash equals the flagged line's. Fingerprints that
+ * cover nothing are integrity findings, so a moved or edited line fails
+ * closed instead of silencing whatever lands at its old position.
+ */
+export function applyGitleaksIgnore(findings: readonly Finding[], fingerprints: readonly GitleaksFingerprint[]): Finding[] {
+  const byKey = new Map(fingerprints.map((entry) => [`${entry.path}:${entry.rule}:${entry.line}`, entry]));
+  const used = new Set<string>();
+  const remaining: Finding[] = [];
+  for (const finding of findings) {
+    const key = `${finding.path}:${finding.rule.replace(/^gitleaks\//u, "")}:${finding.line ?? 0}`;
+    const entry = byKey.get(key);
+    if (finding.layer === "gitleaks" && entry !== undefined && finding.lineSha256 === entry.lineSha256) {
+      used.add(key);
+      continue;
+    }
+    remaining.push(finding);
+  }
+  for (const [key, entry] of byKey) {
+    if (!used.has(key)) {
+      remaining.push({ layer: "integrity", rule: "integrity/unused-gitleaksignore", path: entry.path, line: entry.line, detail: `${GITLEAKS_IGNORE_FILE}: ${entry.rule}` });
+    }
+  }
+  return remaining;
+}
+
 /**
  * Runs gitleaks over materialized committed bytes. `gitleaks:allow` comments
- * are ignored, no repository config is honoured (the path layer forbids one),
- * and the only ignore file is the root .gitleaksignore. Any exit status other
- * than "clean" or "leaks found" is an operational failure and throws.
+ * are ignored and no repository config is honoured (the path layer forbids
+ * one). The root .gitleaksignore is never materialized and gitleaks gets an
+ * empty ignore file, so every raw finding comes back; applyGitleaksIgnore
+ * applies the fingerprints. Each finding carries the flagged line's SHA-256.
+ * Any exit status other than "clean" or "leaks found" is an operational
+ * failure and throws.
  */
 export function gitleaksFindings(binary: string, blobs: ReadonlyArray<{ path: string; bytes: Uint8Array; mode: string }>): Finding[] {
   const version = gitleaksVersion(binary);
@@ -871,9 +949,10 @@ export function gitleaksFindings(binary: string, blobs: ReadonlyArray<{ path: st
   try {
     const scan = join(work, "tree");
     mkdirSync(scan);
-    materialize(blobs, scan);
+    materialize(blobs.filter((blob) => blob.path !== GITLEAKS_IGNORE_FILE), scan);
     const report = join(work, "report.json");
-    const ignore = join(scan, GITLEAKS_IGNORE_FILE);
+    const ignore = join(work, "empty.gitleaksignore");
+    writeFileSync(ignore, "");
     const args = [
       "dir",
       ".",
@@ -890,7 +969,7 @@ export function gitleaksFindings(binary: string, blobs: ReadonlyArray<{ path: st
       "--report-path",
       report,
       "--gitleaks-ignore-path",
-      blobs.some((blob) => blob.path === GITLEAKS_IGNORE_FILE) ? ignore : join(work, "no-ignore"),
+      ignore,
     ];
     const result = spawnSync(binary, args, { cwd: scan, env: sanitizedEnv(), encoding: "utf8", maxBuffer: 1 << 28 });
     if (result.error) throw result.error;
@@ -900,12 +979,26 @@ export function gitleaksFindings(binary: string, blobs: ReadonlyArray<{ path: st
     const parsed = JSON.parse(readFileSync(report, "utf8")) as Array<{ RuleID: string; File: string; StartLine: number }>;
     if (result.status === 0 && parsed.length > 0) throw new Error("gitleaks reported findings with a clean exit status");
     if (result.status === 99 && parsed.length === 0) throw new Error("gitleaks reported leaks without findings");
-    return parsed.map((leak) => ({
-      layer: "gitleaks" as const,
-      rule: `gitleaks/${leak.RuleID}`,
-      path: leak.File.replace(/^\.\//u, ""),
-      line: leak.StartLine,
-    }));
+    const lines = new Map<string, string[]>();
+    const lineOf = (path: string, line: number): string | undefined => {
+      if (!lines.has(path)) {
+        const blob = blobs.find((entry) => entry.path === path);
+        const kind = blob === undefined ? "text" : blobKind(blob.bytes);
+        lines.set(path, blob === undefined ? [] : (kind === "utf-16le" || kind === "utf-16be" ? scannableText(blob.bytes) : decodeText(blob.bytes)).split("\n"));
+      }
+      return lines.get(path)?.[line - 1];
+    };
+    return parsed.map((leak) => {
+      const path = leak.File.replace(/^\.\//u, "");
+      const text = lineOf(path, leak.StartLine);
+      return {
+        layer: "gitleaks" as const,
+        rule: `gitleaks/${leak.RuleID}`,
+        path,
+        line: leak.StartLine,
+        ...(text === undefined ? {} : { lineSha256: lineSha256(text) }),
+      };
+    });
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -1071,7 +1164,9 @@ export function publicLayerFindings(
   findings.push(...binaryFindings(scannable, allow.binaries, GUARD_ALLOW_FILE));
   const raw = contentFindings(scannable, [...SECRET_RULES, ...PERSONAL_RULES]);
   findings.push(...applyAllowEntries(raw, allow.entries, GUARD_ALLOW_FILE));
-  if (options.gitleaks !== undefined) findings.push(...gitleaksFindings(options.gitleaks, scannable));
+  const ignoreBlob = files.find((file) => file.path === GITLEAKS_IGNORE_FILE);
+  const fingerprints = ignoreBlob ? parseGitleaksIgnore(ignoreBlob.bytes) : [];
+  if (options.gitleaks !== undefined) findings.push(...applyGitleaksIgnore(gitleaksFindings(options.gitleaks, scannable), fingerprints));
   return { projection, findings };
 }
 
