@@ -43,6 +43,12 @@ Pushing to the public repository is a separate, reviewed step.
 - A secret or personal-layer exception goes in
   `overlay/tools/public-guard-allow.json`: path, rule, the SHA-256 of the whole
   line (never its text), reason, and approver.
+- A binary file (a NUL byte in its first 8000 bytes, which includes UTF-16
+  without a byte-order mark) is a `path/binary` finding unless the same file's
+  `binaries` list names its path, the SHA-256 of its bytes, a reason, and an
+  approver. The finding prints that digest. An allowed binary's printable
+  strings are still scanned by every content layer, and BOM-marked UTF-16
+  text is scanned as text.
 - A relational exception goes in the `allow` list of the private denylist with
   the same fields. Only wire-protocol enum values and the public `Yu-and-Ai`
   Hugging Face handle may be approved by Ai; any other relational exception

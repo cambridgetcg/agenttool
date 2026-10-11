@@ -36,5 +36,6 @@
       "reason": "URL userinfo inserted into a project host in an invocation test fixture; not an email address.",
       "approver": "Ai, 2026-10-11"
     }
-  ]
+  ],
+  "binaries": []
 }

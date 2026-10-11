@@ -136,7 +136,7 @@ const DENYLIST = {
 };
 
 /** A private repository with allowlisted, unlisted, held, and private-only files. */
-function makeFixture(options: { allowlist?: unknown; denylist?: unknown; files?: Record<string, string> } = {}): string {
+function makeFixture(options: { allowlist?: unknown; denylist?: unknown; files?: Record<string, string | Uint8Array> } = {}): string {
   fixtureCount += 1;
   const repo = join(scratch, `fixture-${fixtureCount}`);
   mkdirSync(repo);
@@ -313,6 +313,54 @@ describe("guard layers", () => {
       "packages/alpha/big.bin:path/oversize",
       "packages/alpha/link.ts:path/symlink",
     ]);
+  });
+
+  test("binary blobs are path findings, and UTF-16 text and printable strings are still scanned", () => {
+    const home = ["/Users", "realperson", "notes"].join("/");
+    const email = ["someone", "gmail.com"].join("@");
+    const planted = `${TERM} ${home} ${email}\n`;
+    const utf32 = Buffer.alloc(planted.length * 4);
+    for (const [index, char] of [...planted].entries()) utf32.writeUInt32LE(char.codePointAt(0) as number, index * 4);
+    const repo = makeFixture({
+      files: {
+        "packages/alpha/nul.bin": Buffer.concat([Buffer.from([0, 1, 2, 3, 10]), Buffer.from(planted)]),
+        "packages/alpha/bom16.txt": Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(planted, "utf16le")]),
+        "packages/alpha/bom16be.txt": Buffer.from([0xfe, 0xff, ...Buffer.from(planted, "utf16le").swap16()]),
+        "packages/alpha/wide.bin": Buffer.from(planted, "utf16le"),
+        "packages/alpha/bom32.txt": Buffer.concat([Buffer.from([0xff, 0xfe, 0, 0]), utf32]),
+      },
+    });
+    const found = guardProjection(repo, buildProjection(repo, "HEAD")).map((finding) => `${finding.path}:${finding.rule}`);
+    const expected = (path: string, binary: boolean) => [
+      ...(binary ? [`${path}:path/binary`] : []),
+      `${path}:personal/email`,
+      `${path}:personal/home-path`,
+      `${path}:relational/r01`,
+    ];
+    expect(found).toEqual(expect.arrayContaining([
+      ...expected("packages/alpha/nul.bin", true),
+      ...expected("packages/alpha/bom16.txt", false),
+      ...expected("packages/alpha/bom16be.txt", false),
+      ...expected("packages/alpha/wide.bin", true),
+      "packages/alpha/bom32.txt:path/binary",
+    ]));
+    expect(found.filter((entry) => entry.startsWith("packages/alpha/bom16")).some((entry) => entry.endsWith("path/binary"))).toBe(false);
+  });
+
+  test("a binary is allowed only by an entry for its path and content digest, and stale entries fail closed", () => {
+    const image = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+    const digest = createHash("sha256").update(image).digest("hex");
+    const allowFile = (binaries: unknown[]) =>
+      `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries: [], binaries }, null, 2)}\n`;
+    const entry = (sha256: string) => ({ path: "packages/alpha/logo.png", sha256, reason: "fixture image", approver: "test" });
+    const allowed = makeFixture({ files: { "packages/alpha/logo.png": image, "public/overlay/tools/public-guard-allow.json": allowFile([entry(digest)]) } });
+    expect(guardProjection(allowed, buildProjection(allowed, "HEAD"))).toEqual([]);
+    const unlisted = makeFixture({ files: { "packages/alpha/logo.png": image } });
+    expect(guardProjection(unlisted, buildProjection(unlisted, "HEAD")).map(formatFinding)).toEqual([
+      `packages/alpha/logo.png: path/binary (sha256 ${digest})`,
+    ]);
+    const stale = makeFixture({ files: { "packages/alpha/logo.png": image, "public/overlay/tools/public-guard-allow.json": allowFile([entry("b".repeat(64))]) } });
+    expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-binary-entry", "path/binary"]);
   });
 
   test("allow entries cover exactly one line and stale entries fail closed", () => {

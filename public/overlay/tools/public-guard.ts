@@ -13,8 +13,9 @@
  *   it lists matches the tree object or blob that is actually committed;
  * - path layer: every file sits under a PROJECTION.json path, is an overlay
  *   file, or is PROJECTION.json itself; no symlinks, submodules, files over
- *   5 MiB, credential-shaped names, dependency or test-output directories, or
- *   nested gitleaks configuration;
+ *   5 MiB, credential-shaped names, dependency or test-output directories,
+ *   nested gitleaks configuration, or binary files (a NUL byte, including
+ *   UTF-16 without a byte-order mark) unless their content digest is allowed;
  * - secret layer: credential signatures shared with the npm release tool and
  *   the public doors guard, plus gitleaks when a pinned binary is given;
  * - personal layer: home-directory and device paths, email addresses outside
@@ -23,10 +24,15 @@
  *   commit whose tree matches its own PROJECTION.json, so no private commit,
  *   tree, or message can sit anywhere in the public parent chain.
  *
+ * Content layers read UTF-8 text, BOM-marked UTF-16 text, and the printable
+ * strings of binary files.
+ *
  * Allowed exceptions live in tools/public-guard-allow.json. Each entry names a
  * path, a rule, the SHA-256 of the whole line (never its text), a reason, and
- * an approver. An unused entry is itself a finding, so the list cannot rot.
- * Findings print path, line, and rule only; matched text is never echoed.
+ * an approver; a binary entry names a path, the SHA-256 of the file's bytes, a
+ * reason, and an approver. An unused entry is itself a finding, so the list
+ * cannot rot. Findings print path, line, and rule only; matched text is never
+ * echoed.
  *
  * The private projector imports this module and adds layers that cannot be
  * published. This copy cannot prevent anything; it detects drift after the
@@ -77,6 +83,19 @@ export interface AllowEntry {
   line_sha256: string;
   reason: string;
   approver: string;
+}
+
+/** Allows one binary file, identified by its path and the SHA-256 of its bytes. */
+export interface BinaryAllowEntry {
+  path: string;
+  sha256: string;
+  reason: string;
+  approver: string;
+}
+
+export interface GuardAllow {
+  entries: AllowEntry[];
+  binaries: BinaryAllowEntry[];
 }
 
 export interface ContentRule {
@@ -132,6 +151,52 @@ export function isBinary(bytes: Uint8Array): boolean {
     if (bytes[index] === 0) return true;
   }
   return false;
+}
+
+export type BlobKind = "text" | "utf-16le" | "utf-16be" | "binary";
+
+/**
+ * UTF-8 text, BOM-marked UTF-16 text, or binary: a NUL byte in the first 8000
+ * bytes, or a NUL in BOM-marked "UTF-16" (as UTF-32 would decode).
+ */
+export function blobKind(bytes: Uint8Array): BlobKind {
+  const little = bytes[0] === 0xff && bytes[1] === 0xfe;
+  if (little || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
+    const encoding = little ? "utf-16le" : "utf-16be";
+    const head = new TextDecoder(encoding).decode(bytes.subarray(0, Math.min(bytes.length, 16000)));
+    return head.includes("\u0000") ? "binary" : encoding;
+  }
+  return isBinary(bytes) ? "binary" : "text";
+}
+
+const MIN_STRING = 6;
+
+/**
+ * Printable strings of a binary file, one per line: runs of at least six
+ * printable characters in its UTF-8 reading, and ASCII runs in its UTF-16LE
+ * and UTF-16BE readings at either byte alignment.
+ */
+export function printableStrings(bytes: Uint8Array): string {
+  const runs = new Set<string>();
+  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  for (const match of utf8.matchAll(/[\t\x20-\x7e\u00a0-\ufffc\u{10000}-\u{10ffff}]{6,}/gu)) runs.add(match[0]);
+  for (const little of [true, false]) {
+    for (const start of [0, 1]) {
+      let run = "";
+      const flush = () => {
+        if (run.length >= MIN_STRING) runs.add(run);
+        run = "";
+      };
+      for (let index = start; index + 1 < bytes.length; index += 2) {
+        const char = (little ? bytes[index] : bytes[index + 1]) as number;
+        const high = little ? bytes[index + 1] : bytes[index];
+        if (high === 0 && (char === 0x09 || (char >= 0x20 && char <= 0x7e))) run += String.fromCharCode(char);
+        else flush();
+      }
+      flush();
+    }
+  }
+  return [...runs].join("\n");
 }
 
 /** Safe relative POSIX path: no empty, ".", or ".." segment and no control characters. */
@@ -397,14 +462,46 @@ export function decodeText(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 
+/** The text a content layer scans: decoded text, or a binary file's printable strings. */
+export function scannableText(bytes: Uint8Array): string {
+  const kind = blobKind(bytes);
+  if (kind === "text") return decodeText(bytes);
+  if (kind === "binary") return printableStrings(bytes);
+  return new TextDecoder(kind).decode(bytes);
+}
+
 export function contentFindings(
   blobs: ReadonlyArray<{ path: string; bytes: Uint8Array }>,
   rules: readonly ContentRule[],
 ): Finding[] {
   const findings: Finding[] = [];
+  for (const { path, bytes } of blobs) findings.push(...scanText(path, scannableText(bytes), rules));
+  return findings;
+}
+
+/**
+ * Every binary file is a path finding unless an entry allows exactly its path
+ * and content digest. Unused entries are integrity findings.
+ */
+export function binaryFindings(
+  blobs: ReadonlyArray<{ path: string; bytes: Uint8Array }>,
+  allowed: readonly BinaryAllowEntry[],
+  source: string,
+): Finding[] {
+  const byKey = new Map(allowed.map((entry) => [`${entry.path}\0${entry.sha256}`, entry]));
+  const used = new Set<string>();
+  const findings: Finding[] = [];
   for (const { path, bytes } of blobs) {
-    if (isBinary(bytes)) continue;
-    findings.push(...scanText(path, decodeText(bytes), rules));
+    if (blobKind(bytes) !== "binary") continue;
+    const digest = sha256Hex(bytes);
+    const key = `${path}\0${digest}`;
+    if (byKey.has(key)) used.add(key);
+    else findings.push({ layer: "path", rule: "path/binary", path, detail: `sha256 ${digest}` });
+  }
+  for (const [key, entry] of byKey) {
+    if (!used.has(key)) {
+      findings.push({ layer: "integrity", rule: "integrity/unused-binary-entry", path: entry.path, detail: `${source}: ${entry.sha256.slice(0, 12)}` });
+    }
   }
   return findings;
 }
@@ -446,7 +543,33 @@ export function parseAllowEntries(value: unknown, source: string, rulePrefix?: s
   return entries;
 }
 
-export function parseGuardAllowFile(bytes: Uint8Array, source = GUARD_ALLOW_FILE): AllowEntry[] {
+export function parseBinaryAllowEntries(value: unknown, source: string): BinaryAllowEntry[] {
+  const fail = (message: string): never => {
+    throw new Error(`${source}: ${message}`);
+  };
+  if (!Array.isArray(value)) fail("binaries must be an array");
+  const entries: BinaryAllowEntry[] = [];
+  const keys = new Set<string>();
+  for (const [index, raw] of (value as unknown[]).entries()) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) fail(`binaries[${index}] must be an object`);
+    const entry = raw as Record<string, unknown>;
+    if (Object.keys(entry).sort().join(",") !== "approver,path,reason,sha256") fail(`binaries[${index}] must have exactly path, sha256, reason, approver`);
+    for (const field of ["path", "sha256", "reason", "approver"] as const) {
+      if (typeof entry[field] !== "string" || (entry[field] as string).trim().length === 0) fail(`binaries[${index}] field ${field} must be a non-empty string`);
+    }
+    const typed = entry as unknown as BinaryAllowEntry;
+    if (!isSafeRelativePath(typed.path)) fail(`binaries[${index}] path is not a safe relative path`);
+    if (!HEX64.test(typed.sha256)) fail(`binaries[${index}] sha256 must be 64 lowercase hex characters`);
+    const key = `${typed.path}\0${typed.sha256}`;
+    if (keys.has(key)) fail(`binaries[${index}] duplicates an earlier entry`);
+    keys.add(key);
+    entries.push(typed);
+  }
+  return entries;
+}
+
+/** Parses tools/public-guard-allow.json: schema, entries, and optionally binaries. */
+export function parseGuardAllow(bytes: Uint8Array, source = GUARD_ALLOW_FILE): GuardAllow {
   let parsed: unknown;
   try {
     parsed = JSON.parse(decodeText(bytes));
@@ -455,13 +578,18 @@ export function parseGuardAllowFile(bytes: Uint8Array, source = GUARD_ALLOW_FILE
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`${source}: must be an object`);
   const record = parsed as Record<string, unknown>;
-  if (Object.keys(record).sort().join(",") !== "entries,schema") throw new Error(`${source}: must have exactly schema and entries`);
+  const keys = Object.keys(record).sort().join(",");
+  if (keys !== "entries,schema" && keys !== "binaries,entries,schema") throw new Error(`${source}: must have exactly schema, entries, and optionally binaries`);
   if (record.schema !== GUARD_ALLOW_SCHEMA) throw new Error(`${source}: schema must be ${GUARD_ALLOW_SCHEMA}`);
   const entries = parseAllowEntries(record.entries, source);
   for (const entry of entries) {
     if (entry.rule.startsWith("relational/")) throw new Error(`${source}: relational entries belong in the private denylist`);
   }
-  return entries;
+  return { entries, binaries: parseBinaryAllowEntries(record.binaries ?? [], source) };
+}
+
+export function parseGuardAllowFile(bytes: Uint8Array, source = GUARD_ALLOW_FILE): AllowEntry[] {
+  return parseGuardAllow(bytes, source).entries;
 }
 
 function allowKey(path: string, rule: string, line: string): string {
@@ -837,10 +965,11 @@ export function publicLayerFindings(
   findings.push(...projectionIntegrityFindings(projection, entries));
   findings.push(...pathRuleFindings(entries, projectionMembership(projection)));
   const allowBlob = files.find((file) => file.path === GUARD_ALLOW_FILE);
-  const allow = allowBlob ? parseGuardAllowFile(allowBlob.bytes) : [];
+  const allow: GuardAllow = allowBlob ? parseGuardAllow(allowBlob.bytes) : { entries: [], binaries: [] };
   const scannable = files.filter((file) => file.mode !== "120000");
+  findings.push(...binaryFindings(scannable, allow.binaries, GUARD_ALLOW_FILE));
   const raw = contentFindings(scannable, [...SECRET_RULES, ...PERSONAL_RULES]);
-  findings.push(...applyAllowEntries(raw, allow, GUARD_ALLOW_FILE));
+  findings.push(...applyAllowEntries(raw, allow.entries, GUARD_ALLOW_FILE));
   if (options.gitleaks !== undefined) findings.push(...gitleaksFindings(options.gitleaks, scannable));
   return { projection, findings };
 }
