@@ -35,9 +35,14 @@ export function targetOf(config: string, device: string): SshTarget | null {
 /*
  * ssh's stderr also carries the remote session's stderr (sshd runs the forced command through Yu's login shell, so
  * Nuance's ~/.zshenv runs first), and a remote that exits 255 or is killed by a signal makes ssh exit 255 with no line of
- * its own. So a transport status is read only from ssh's own lines, each matched whole and, where ssh names the host,
- * only when they name the paired one; and any line saying a connection existed and was lost wins over all of them:
- * that request may have been delivered.
+ * its own. So a transport status is read only from ssh's own lines:
+ * - Each ends \r\n. ssh writes every line it prints itself that way (log.c's do_log, the client loop's quit_message);
+ *   the remote session's stderr passes through as the remote wrote it, which for a shell or script is a bare \n. A line
+ *   without \r\n may be the remote's, so it never gives a transport status. (A remote that wrote \r\n on purpose could
+ *   still imitate one: Nuance is Yu's own Mac, so this keeps out its noise, not an attacker.)
+ * - Each is matched whole and, where ssh names the host, only when it names the paired one.
+ * - Any line saying a connection existed and was lost wins over all of them, whatever its line ending: that request may
+ *   have been delivered.
  */
 // Printed only once a session existed: the client loop's read error, EOF, keepalive timeout and write failures.
 const SESSION_LOST = [/^Read from remote host /, /^Connection to .* closed by remote host/, /^Timeout, server\b.*not responding/, /client_loop: /]
@@ -60,11 +65,21 @@ const FIXED_DETAIL = 'ssh exited 255 without a line it is known to print'
 // cannot happen. Both read unknown.
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** One line of stderr as it arrived: its text, and whether it ended \r\n (ssh's own) or not (maybe the remote's). */
+interface Line { text: string; crlf: boolean }
+/** Split on raw bytes, before any normalisation: the line ending is what tells ssh's lines from the remote's. */
+function linesOf(stderr: string): Line[] {
+  const parts = stderr.split('\n')
+  const tail = parts.pop()! // after the last \n: '' when stderr ends with one, else a line with no terminator
+  const out = parts.map((p) => (p.endsWith('\r') ? { text: p.slice(0, -1).trimEnd(), crlf: true } : { text: p.trimEnd(), crlf: false }))
+  if (tail !== '') out.push({ text: tail.trimEnd(), crlf: false })
+  return out.filter((l) => l.text !== '')
+}
 
 /** The lines that carry a transport status for this paired entry. With no HostName to anchor to, there are none. */
 function patterns(ctx: MapContext) {
   const t = ctx.target ?? {}
-  const host = t.host ? esc(t.host) : null
+  const host = t.host ? esc(t.host.toLowerCase()) : null // ssh prints the HostName lowercased
   const connect = (errs: string) => (host ? [new RegExp(`^ssh: connect to host ${host} port \\d+: (${errs})$`)] : [])
   const config = ctx.config ? esc(ctx.config) : null
   return {
@@ -100,42 +115,46 @@ export function noRouteHint(env: Env): string {
 }
 
 /** ssh's verification line, with the fingerprint of the key the host presented when ssh printed one. */
-function hostKeyDetail(lines: string[], first: string): string {
-  const failed = lines.find((l) => VERIFY_FAILED.test(l)) ?? first
-  const i = lines.findIndex((l) => /^The fingerprint for the \S+ key sent by the remote host is$/.test(l))
-  const type = i >= 0 ? /^The fingerprint for the (\S+) key/.exec(lines[i]!)![1] : undefined
-  const fp = i >= 0 ? /^(SHA256:[A-Za-z0-9+/]+=*)\.?$/.exec(lines[i + 1] ?? '')?.[1] : undefined
-  return clean(fp ? `${failed} Presented ${type} key: ${fp}` : failed)
+function hostKeyDetail(lines: Line[], first: Line): string {
+  const failed = lines.find((l) => l.crlf && VERIFY_FAILED.test(l.text)) ?? first
+  // One ssh message over two lines: only its last line ends \r\n, so the inner one is found by its text.
+  const i = lines.findIndex((l) => /^The fingerprint for the \S+ key sent by the remote host is$/.test(l.text))
+  const type = i >= 0 ? /^The fingerprint for the (\S+) key/.exec(lines[i]!.text)![1] : undefined
+  const fp = i >= 0 ? /^(SHA256:[A-Za-z0-9+/]+=*)\.?$/.exec(lines[i + 1]?.text ?? '')?.[1] : undefined
+  return clean(fp ? `${failed.text} Presented ${type} key: ${fp}` : failed.text)
 }
 
 /**
- * Tells ssh's failures apart. Only ssh's own line for a failure known to come before any session keeps a transport
- * status; a connection lost after one, and anything this does not recognise, is `unknown` (never retried). The line
- * that decided is the detail, and never a line that may be the remote session's. Order matters: a loss wins over every
- * pre-connect line, which remote stderr could imitate.
+ * Tells ssh's failures apart. Only ssh's own (CRLF) line for a failure known to come before any session keeps a
+ * transport status; a connection lost after one, and anything this does not recognise, is `unknown` (never retried).
+ * The line that decided is the detail, and never a line that may be the remote session's. Order matters: a loss wins
+ * over every pre-connect line, which remote stderr could imitate.
  */
 export function mapSshFailure(stderr: string, ctx: MapContext = {}): GateResponse {
-  const lines = stderr.replace(/\r\n?/g, '\n').split('\n').map((l) => l.trimEnd()).filter(Boolean) // ssh ends its lines \r\n
-  const at = (res: RegExp[]) => lines.find((l) => res.some((re) => re.test(l)))
-  const own = (line: string | undefined) => (line !== undefined && SSH_OWN.test(line) ? clean(line) : FIXED_DETAIL)
-  const kex = lines.find((l) => KEX.test(l))
-  const losses = [...lines.filter((l) => SESSION_LOST.some((re) => re.test(l))), ...(kex ? [] : lines.filter((l) => DROP.some((re) => re.test(l))))]
-  if (losses.length > 0) return { status: 'unknown', detail: own(losses.find((l) => SSH_OWN.test(l))) }
+  const lines = linesOf(stderr)
+  const matches = (l: Line, res: RegExp[]) => res.some((re) => re.test(l.text))
+  // A transport status comes only from ssh's own (CRLF) line; a detail shows only such a line, or fixed text.
+  const at = (res: RegExp[]) => lines.find((l) => l.crlf && matches(l, res))
+  const isOwn = (l: Line) => l.crlf && SSH_OWN.test(l.text)
+  const own = (l: Line | undefined) => (l && isOwn(l) ? clean(l.text) : FIXED_DETAIL)
+  const kex = lines.find((l) => l.crlf && KEX.test(l.text))
+  const losses = [...lines.filter((l) => matches(l, SESSION_LOST)), ...(kex ? [] : lines.filter((l) => matches(l, DROP)))]
+  if (losses.length > 0) return { status: 'unknown', detail: own(losses.find(isOwn)) }
   const p = patterns(ctx)
   const local = at(p.local)
-  if (local) return { status: 'unreachable', reason: 'no_route', detail: clean(local), hint: noRouteHint(ctx.env ?? {}) }
+  if (local) return { status: 'unreachable', reason: 'no_route', detail: clean(local.text), hint: noRouteHint(ctx.env ?? {}) }
   const hostKey = at(HOST_KEY)
   if (hostKey) return { status: 'host_key_mismatch', detail: hostKeyDetail(lines, hostKey), hint: HOST_KEY_HINT }
   // Printed during user authentication, after the connection: the key ssh was told to offer is not there to offer.
   const missingKey = at(p.missingKey)
-  if (missingKey) return { status: 'auth_refused', detail: clean(missingKey), hint: `the summon key on this Air is missing or unreadable (${clean(ctx.target!.identityFile!)})` }
+  if (missingKey) return { status: 'auth_refused', detail: clean(missingKey.text), hint: `the summon key on this Air is missing or unreadable (${clean(ctx.target!.identityFile!)})` }
   const auth = at(p.auth)
-  if (auth) return { status: 'auth_refused', detail: clean(auth) }
-  if (kex) return { status: 'unreachable', reason: 'timeout', detail: clean(kex) }
+  if (auth) return { status: 'auth_refused', detail: clean(auth.text) }
+  if (kex) return { status: 'unreachable', reason: 'timeout', detail: clean(kex.text) }
   const noRoute = at(p.noRoute)
-  if (noRoute) return { status: 'unreachable', reason: 'no_route', detail: clean(noRoute), hint: noRouteHint(ctx.env ?? {}) }
+  if (noRoute) return { status: 'unreachable', reason: 'no_route', detail: clean(noRoute.text), hint: noRouteHint(ctx.env ?? {}) }
   const timeout = at(p.timeout)
-  if (timeout) return { status: 'unreachable', reason: 'timeout', detail: clean(timeout) }
+  if (timeout) return { status: 'unreachable', reason: 'timeout', detail: clean(timeout.text) }
   return { status: 'unknown', detail: own(lines.at(-1)) }
 }
 

@@ -19,6 +19,8 @@ const CFG = '/Users/yuai/.ssh/summon/config'
 const NUANCE: SshTarget = { host: 'nuance.local', identityFile: KEY }
 /** mapSshFailure against the paired nuance entry, outside any sandbox. */
 const map = (stderr: string, ctx: MapContext = {}) => mapSshFailure(stderr, { target: NUANCE, config: CFG, env: {}, ...ctx })
+/** Text as ssh itself prints it: every line ends \r\n (log.c, the client loop's quit_message). Remote stderr passes through as written. */
+const crlf = (s: string) => s.replaceAll('\n', '\r\n') + '\r\n'
 
 /**
  * A stand-in for `ssh`. It records its argv, counts its calls, copies the ledger as it stood when it was called,
@@ -104,19 +106,19 @@ describe('splitJsonFlag', () => {
 
 describe('mapSshFailure', () => {
   test('tells failures apart', () => {
-    expect(map('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@')).toMatchObject({ status: 'host_key_mismatch' })
-    expect(map('Host key verification failed.')).toMatchObject({ status: 'host_key_mismatch' })
-    expect(map('yu@nuance.local: Permission denied (publickey).')).toMatchObject({ status: 'auth_refused' })
-    expect(map('ssh: connect to host nuance.local port 22: Operation timed out')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
-    expect(map('ssh: connect to host nuance.local port 22: Connection refused')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
-    expect(map('ssh: Could not resolve hostname nuance.local')).toMatchObject({ status: 'unreachable', reason: 'no_route' })
+    expect(map(crlf('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@'))).toMatchObject({ status: 'host_key_mismatch' })
+    expect(map(crlf('Host key verification failed.'))).toMatchObject({ status: 'host_key_mismatch' })
+    expect(map(crlf('yu@nuance.local: Permission denied (publickey).'))).toMatchObject({ status: 'auth_refused' })
+    expect(map(crlf('ssh: connect to host nuance.local port 22: Operation timed out'))).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+    expect(map(crlf('ssh: connect to host nuance.local port 22: Connection refused'))).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+    expect(map(crlf('ssh: Could not resolve hostname nuance.local'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
   })
   test('no route to host and an unreachable network are no_route, before any connection', () => {
-    expect(map('ssh: connect to host nuance.local port 22: No route to host')).toMatchObject({ status: 'unreachable', reason: 'no_route' })
-    expect(map('ssh: connect to host nuance.local port 22: Network is unreachable')).toMatchObject({ status: 'unreachable', reason: 'no_route' })
+    expect(map(crlf('ssh: connect to host nuance.local port 22: No route to host'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
+    expect(map(crlf('ssh: connect to host nuance.local port 22: Network is unreachable'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
   })
   test('a banner timeout is a failure before authentication', () => {
-    expect(map('Connection timed out during banner exchange')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+    expect(map(crlf('Connection timed out during banner exchange'))).toMatchObject({ status: 'unreachable', reason: 'timeout' })
   })
   test('B3: a reset after the banner (kex_exchange_identification) is before authentication: unreachable(timeout)', () => {
     // OpenSSH 9.9p2, captured by the C review against a server that read the client's banner and then reset.
@@ -153,18 +155,19 @@ describe('mapSshFailure', () => {
     expect(map('yu@nuance.local: Permission denied (publickey).\r\n')).toMatchObject({ status: 'auth_refused' })
   })
   test('an unrecognised failure is unknown, not a guess at the transport', () => {
-    expect(map('ssh: something we have not seen')).toMatchObject({ status: 'unknown', detail: 'ssh: something we have not seen' })
+    expect(map('ssh: something we have not seen\r\n')).toMatchObject({ status: 'unknown', detail: 'ssh: something we have not seen' })
+    expect(map('ssh: something we have not seen\n')).toMatchObject({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' }) // not a CRLF line: maybe the remote's
     expect(map('')).toMatchObject({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' })
   })
   test('the detail is one clipped line of printable ASCII (the target controls banners)', () => {
     // F11: a coloured line is not ssh's own `Permission denied (...)` line, so it is not read as auth_refused.
     expect(map(`first\n\u001b[31mPermission denied\u001b[0m ${'x'.repeat(400)}`)).toEqual({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' })
-    const r = map(`first\nssh: \u001b[31mbanner\u001b[0m ${'x'.repeat(400)}`)
+    const r = map(crlf(`first\nssh: \u001b[31mbanner\u001b[0m ${'x'.repeat(400)}`))
     expect(r.status).toBe('unknown')
     expect(r.detail).toStartWith('ssh: ?[31mbanner?[0m x')
     expect(r.detail).not.toMatch(/[^\x20-\x7e]/)
     expect(r.detail!.length).toBeLessThanOrEqual(200)
-    const a = map(`${'u'.repeat(300)}@nuance.local: Permission denied (publickey).`)
+    const a = map(crlf(`${'u'.repeat(300)}@nuance.local: Permission denied (publickey).`))
     expect(a.status).toBe('auth_refused')
     expect(a.detail!.length).toBeLessThanOrEqual(200)
   })
@@ -197,7 +200,7 @@ describe('sshCall', () => {
       .toEqual({ status: 'unreachable', reason: 'no_route', detail: 'ssh not found' })
   })
   test('ssh exit 255 goes through mapSshFailure', () => {
-    const { bin } = fakeSsh(255, '', 'ssh: connect to host nuance.local port 22: Connection refused')
+    const { bin } = fakeSsh(255, '', crlf('ssh: connect to host nuance.local port 22: Connection refused'))
     expect(sshCall({ sshBin: bin, sshConfig: 'c', target: NUANCE }, 'nuance', 'inventory')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
   })
   test('a connection lost after sending is unknown even when ssh exits 255 with that stderr', () => {
@@ -284,20 +287,20 @@ describe('runCli', () => {
     expect(readFileSync(join(dir, 'argv'), 'utf8')).toContain('summon-nuance\ninventory')
   })
   test('ssh exit 255 maps to a transport status', () => {
-    const { bin, dir } = fakeSsh(255, '', 'ssh: connect to host nuance.local port 22: Operation timed out')
+    const { bin, dir } = fakeSsh(255, '', crlf('ssh: connect to host nuance.local port 22: Operation timed out'))
     expect(runCli(['nuance', 'inventory'], deps(bin, dir))).toMatchObject({ code: 1, out: { status: 'unreachable', reason: 'timeout' } })
   })
   test('a start that never connected is unreachable with no handle: nothing was delivered', () => {
-    const { bin, dir } = fakeSsh(255, '', 'ssh: connect to host nuance.local port 22: Connection refused')
+    const { bin, dir } = fakeSsh(255, '', crlf('ssh: connect to host nuance.local port 22: Connection refused'))
     const r = runCli(startArgv(dir), deps(bin, dir))
     expect(r).toMatchObject({ code: 1, out: { status: 'unreachable', reason: 'timeout' } })
     expect(r.out.handle).toBeUndefined()
     expect(lines(join(dir, 'ledger.jsonl')).map((e) => e.event + ':' + e.status)).toEqual([`sent:undefined`, 'answer:unreachable'])
   })
   test('auth_refused and host_key_mismatch after a start are reported as such', () => {
-    const a = fakeSsh(255, '', 'yu@nuance.local: Permission denied (publickey).')
+    const a = fakeSsh(255, '', crlf('yu@nuance.local: Permission denied (publickey).'))
     expect(runCli(startArgv(a.dir), deps(a.bin, a.dir))).toMatchObject({ code: 1, out: { status: 'auth_refused' } })
-    const h = fakeSsh(255, '', '@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@')
+    const h = fakeSsh(255, '', crlf('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@'))
     expect(runCli(startArgv(h.dir), deps(h.bin, h.dir))).toMatchObject({ code: 1, out: { status: 'host_key_mismatch' } })
   })
   test('garbled answer after sending is unknown, never retried', () => {
@@ -568,10 +571,11 @@ describe('F09/F43: only a paired device is ever called', () => {
 })
 
 describe('F11/F29/F43: only ssh\'s own pre-connect lines keep a transport status', () => {
+  /** As ssh prints them (CRLF) the cases map to `want`; the same text with bare \n (the remote's) is never a transport status. */
   const expectAll = (cases: string[], want: Record<string, unknown>) => {
     for (const s of cases) {
-      expect([s, map(s)]).toMatchObject([s, want])
-      expect([s, map(s.replaceAll('\n', '\r\n') + '\r\n')]).toMatchObject([s, want]) // ssh ends its lines \r\n
+      expect([s, map(crlf(s))]).toMatchObject([s, want])
+      expect([s, map(s)]).toMatchObject([s, { status: 'unknown' }])
     }
   }
   test('F11: a read error on an established connection is unknown, whatever errno it names', () => {
@@ -591,7 +595,7 @@ describe('F11/F29/F43: only ssh\'s own pre-connect lines keep a transport status
         expectAll([`${remote}\n${loss}`], { status: 'unknown', detail: loss })
       }
     }
-    expect(map(`${ZSHENV}\nConnection to nuance.local closed by remote host.`)).toEqual({ status: 'unknown', detail: 'Connection to nuance.local closed by remote host.' })
+    expect(map(`${ZSHENV}\nConnection to nuance.local closed by remote host.\r\n`)).toEqual({ status: 'unknown', detail: 'Connection to nuance.local closed by remote host.' })
   })
   test('F11: a lowercase permission denied from a shell is not ssh\'s authentication failure', () => {
     expectAll([ZSHENV], { status: 'unknown' })
@@ -661,7 +665,7 @@ describe('F47: an unreachable(no_route) says where the block may be', () => {
   test('inside a harness sandbox the hint names it and says to rerun outside it', () => {
     for (const [k, v] of [['CODEX_SANDBOX', 'seatbelt'], ['CODEX_SANDBOX_NETWORK_DISABLED', '1'], ['SANDBOX_RUNTIME', '1']] as const) {
       for (const line of NO_ROUTE) {
-        const { bin, dir } = fakeSsh(255, '', line)
+        const { bin, dir } = fakeSsh(255, '', crlf(line))
         const r = runCli(['nuance', 'inventory'], deps(bin, dir, { env: { [k]: v } }))
         expect(r).toMatchObject({ code: 1, out: { status: 'unreachable', reason: 'no_route' } })
         expect(r.out.handle).toBeUndefined()
@@ -673,7 +677,7 @@ describe('F47: an unreachable(no_route) says where the block may be', () => {
   })
   test('outside one it points at macOS Local Network privacy for the app that started it, or a harness sandbox', () => {
     for (const line of NO_ROUTE) {
-      const { bin, dir } = fakeSsh(255, '', line)
+      const { bin, dir } = fakeSsh(255, '', crlf(line))
       for (const argv of [['nuance', 'inventory'], startArgv(dir), ['status', `nuance/${ID}`]]) {
         const hint = String(runCli(argv, deps(bin, dir)).out.hint)
         expect(hint).toContain('if Nuance is awake on the LAN, the Air may be blocking this caller')
@@ -684,7 +688,7 @@ describe('F47: an unreachable(no_route) says where the block may be', () => {
   })
   test('a timeout and an unknown get no hint, sandbox or not', () => {
     for (const line of ['ssh: connect to host nuance.local port 22: Operation timed out', 'client_loop: send disconnect: Broken pipe']) {
-      const { bin, dir } = fakeSsh(255, '', line)
+      const { bin, dir } = fakeSsh(255, '', crlf(line))
       expect(runCli(['nuance', 'inventory'], deps(bin, dir, { env: { SANDBOX_RUNTIME: '1' } })).out.hint).toBeUndefined()
     }
   })
@@ -706,7 +710,7 @@ describe('F32/F45: auth_refused says whether the key expired or Nuance may be at
   test('otherwise (no expiry recorded, or one still ahead): the FileVault hint', () => {
     for (const e of [null, ymd(Date.now() + 30 * DAY), ymd(Date.now() + 3 * DAY)]) {
       for (const line of ['yu@nuance.local: Permission denied (keyboard-interactive).', 'yu@nuance.local: Permission denied (password,keyboard-interactive).']) {
-        const { bin, dir } = fakeSsh(255, '', line)
+        const { bin, dir } = fakeSsh(255, '', crlf(line))
         if (e) withExpiry(dir, e)
         expect(runCli(['nuance', 'inventory'], deps(bin, dir, { warn: () => {} }))).toMatchObject({ code: 1, out: { status: 'auth_refused', hint: FILEVAULT_HINT } })
       }
@@ -807,12 +811,12 @@ describe('F15: the Air logs a cancel, and any security event on any verb', () =>
     expect(calls(dir)).toBe(0)
   })
   test('cancel: a transport failure is answered and logged too', () => {
-    const { bin, dir } = fakeSsh(255, '', 'yu@nuance.local: Permission denied (publickey).')
+    const { bin, dir } = fakeSsh(255, '', crlf('yu@nuance.local: Permission denied (publickey).'))
     expect(runCli(['cancel', `nuance/${ID}`], deps(bin, dir))).toMatchObject({ code: 1, out: { status: 'auth_refused' } })
     expect(lines(join(dir, 'ledger.jsonl'))).toMatchObject([{ event: 'cancel_sent', id: ID }, { event: 'cancel_answer', id: ID, status: 'auth_refused', detail: 'yu@nuance.local: Permission denied (publickey).' }])
   })
   test('inventory, status and result ledger an auth_refused or host_key_mismatch answer', () => {
-    for (const [stderr, status] of [['yu@nuance.local: Permission denied (publickey).', 'auth_refused'], [CHANGED_KEY, 'host_key_mismatch']] as const) {
+    for (const [stderr, status] of [[crlf('yu@nuance.local: Permission denied (publickey).'), 'auth_refused'], [CHANGED_KEY, 'host_key_mismatch']] as const) {
       for (const [argv, id, event] of [[['nuance', 'inventory'], undefined, 'inventory_answer'], [['status', `nuance/${ID}`], ID, 'status_answer'], [['result', `nuance/${ID}`], ID, 'result_answer']] as const) {
         const { bin, dir } = fakeSsh(255, '', stderr)
         expect(runCli([...argv], deps(bin, dir)).out.status).toBe(status)
@@ -825,7 +829,7 @@ describe('F15: the Air logs a cancel, and any security event on any verb', () =>
     }
   })
   test('a read that is answered, or fails as unreachable or unknown, writes nothing on the Air', () => {
-    for (const [exit, out, err] of [[0, '{"status":"completed"}', ''], [255, '', 'ssh: connect to host nuance.local port 22: Operation timed out'], [255, '', 'client_loop: send disconnect: Broken pipe']] as const) {
+    for (const [exit, out, err] of [[0, '{"status":"completed"}', ''], [255, '', crlf('ssh: connect to host nuance.local port 22: Operation timed out')], [255, '', crlf('client_loop: send disconnect: Broken pipe')]] as const) {
       for (const argv of [['nuance', 'inventory'], ['status', `nuance/${ID}`], ['result', `nuance/${ID}`]]) {
         const { bin, dir } = fakeSsh(exit, out, err)
         runCli(argv, deps(bin, dir))
@@ -834,7 +838,7 @@ describe('F15: the Air logs a cancel, and any security event on any verb', () =>
     }
   })
   test('an answer the ledger cannot take is still returned, with one stderr note', () => {
-    const { bin, dir } = fakeSsh(255, '', 'yu@nuance.local: Permission denied (publickey).')
+    const { bin, dir } = fakeSsh(255, '', crlf('yu@nuance.local: Permission denied (publickey).'))
     mkdirSync(join(dir, 'ledger.jsonl'))
     const said: string[] = []
     expect(runCli(['status', `nuance/${ID}`], deps(bin, dir, { warn: (m) => said.push(m) }))).toMatchObject({ code: 1, out: { status: 'auth_refused' } })
@@ -980,7 +984,7 @@ describe('C review round 1: real OpenSSH 9.9p2 stderr', () => {
     ['killself', {}, { status: 'unknown', detail: FIXED }],
     ['killauth', {}, { status: 'unknown', detail: FIXED }],
     ['stderr255', {}, { status: 'unknown', detail: FIXED }],
-    ['noroute255', {}, { status: 'unknown', detail: 'ssh: connect to host github.com port 22: No route to host' }],
+    ['noroute255', {}, { status: 'unknown', detail: FIXED }], // ssh-shaped, but a bare \n: the remote's line
   ]
   test('each capture maps as the governing rule says', () => {
     for (const [name, ctx, want] of cases) {
@@ -1011,15 +1015,16 @@ describe('B4: a pre-connect line counts only when it names the paired host (and 
       ['ssh: connect to host nuancealocal port 22: Host is down', { status: 'unknown' }], // the dot is literal
       ["Can't open user config file /elsewhere/config: Operation not permitted", { status: 'unknown' }],
     ] as const) {
-      for (const text of [s, `${s}\r\n`]) expect([text, mapSshFailure(text, { target: YU, config: CFG, env: {} })]).toMatchObject([text, want])
+      expect([s, mapSshFailure(`${s}\r\n`, { target: YU, config: CFG, env: {} })]).toMatchObject([s, want])
+      expect([s, mapSshFailure(`${s}\n`, { target: YU, config: CFG, env: {} })]).toMatchObject([s, { status: 'unknown' }])
     }
   })
   test('with no HostName to anchor to, those classes fall back to unknown (the safe side)', () => {
     for (const s of ['yu@nuance.local: Permission denied (publickey).', 'ssh: connect to host nuance.local port 22: No route to host',
       'ssh: connect to host nuance.local port 22: Operation timed out', 'ssh: connect to host nuance.local port 22: Operation not permitted',
       'ssh: Could not resolve hostname nuance.local: nodename nor servname provided, or not known', 'Connection timed out during banner exchange']) {
-      expect([s, mapSshFailure(s)]).toMatchObject([s, { status: 'unknown' }])
-      expect([s, mapSshFailure(s, { target: {} })]).toMatchObject([s, { status: 'unknown' }])
+      expect([s, mapSshFailure(`${s}\r\n`)]).toMatchObject([s, { status: 'unknown' }])
+      expect([s, mapSshFailure(`${s}\r\n`, { target: {} })]).toMatchObject([s, { status: 'unknown' }])
     }
   })
   test('Too many authentication failures names an address, not the pin, so it reads unknown', () => {
@@ -1118,5 +1123,82 @@ describe('B6: bin/summon.ts answers unknown for a fault that is not a pre-send l
     const h = await go(['nuance', 'inventory'])
     expect(h).toEqual({ code: 1, stderr: '', stdout: 'unknown\ndetail: summon error: test fault: the clock is gone\n' })
     expect(calls(dir)).toBe(0)
+  })
+})
+
+// ── C review, round 2 ──
+
+describe('round 2: a transport status is read only from ssh\'s own CRLF lines', () => {
+  /** The captures that carry a transport status, with the entry each was taken against (as in the round 1 table). */
+  const CLASSIFYING: [string, MapContext][] = [
+    ['badconf', { config: 'cl/badconf' }], ['noconf', { config: 'cl/nope' }], ['changedkey', {}], ['unknownhost', {}],
+    ['kex2-rst', {}], ['kex-hang', {}], ['wrongkey', {}], ['missingid', { target: { ...LOCAL_SSHD, identityFile: `${R}/missing` } }],
+    ['permconf', { target: { host: '127.0.0.1' } }], ['summon-closed', { target: { host: '127.0.0.1' } }],
+    ['summon-nuance', { target: { host: 'nonexistent-summon-review.invalid' } }],
+  ]
+  const mapAs = (text: string, ctx: MapContext) => mapSshFailure(text, { target: LOCAL_SSHD, env: {}, ...ctx })
+  test('every classifying 9.9p2 capture: its deciding lines end \\r\\n, it keeps its status, and its bare-\\n copy reads unknown', () => {
+    for (const [name, ctx] of CLASSIFYING) {
+      const raw = CAPTURE[name]!
+      const genuine = mapAs(raw, ctx)
+      expect([name, genuine.status]).not.toEqual([name, 'unknown'])
+      expect([name, mapAs(raw.replaceAll('\r\n', '\n'), ctx)]).toEqual([name, { status: 'unknown', detail: FIXED }])
+    }
+  })
+  test('making any one line of a classifying capture bare never yields a different transport status: the same answer, or unknown', () => {
+    for (const [name, ctx] of CLASSIFYING) {
+      const raw = CAPTURE[name]!
+      const genuine = mapAs(raw, ctx)
+      const parts = raw.split('\r\n')
+      for (let i = 0; i < parts.length - 1; i++) {
+        const variant = [...parts.slice(0, i), `${parts[i]}\n${parts[i + 1]}`, ...parts.slice(i + 2)].join('\r\n')
+        const r = mapAs(variant, ctx)
+        expect([name, i, r.status === 'unknown' || (r.status === genuine.status && r.reason === genuine.reason)]).toEqual([name, i, true])
+      }
+    }
+  })
+  test('the reviewer\'s repros: a remote bare-\\n kex, host-key or banner line, then exit 255, reads unknown', () => {
+    expect(map('kex_exchange_identification: x\nConnection reset by 192.168.50.3 port 22\r\n')).toEqual({ status: 'unknown', detail: 'Connection reset by 192.168.50.3 port 22' })
+    expect(map('Host key verification failed.\n')).toEqual({ status: 'unknown', detail: FIXED })
+    expect(map('Connection timed out during banner exchange\n')).toEqual({ status: 'unknown', detail: FIXED })
+    expect(map('@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\nHost key verification failed.\n')).toEqual({ status: 'unknown', detail: FIXED })
+  })
+  test('through runCli: those repros give unknown with the handle, and the ledger holds no remote text', () => {
+    for (const stderr of ['kex_exchange_identification: x\nConnection reset by 192.168.50.3 port 22\r\n', 'Host key verification failed.\n',
+      'Connection timed out during banner exchange\n', 'yu@nuance.local: Permission denied (publickey).\n', 'ssh: connect to host nuance.local port 22: No route to host\n']) {
+      const { bin, dir } = fakeSsh(255, '', stderr)
+      const r = runCli(startArgv(dir), deps(bin, dir))
+      const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+      expect([stderr, r]).toMatchObject([stderr, { code: 1, out: { status: 'unknown', handle: `nuance/${sent.id}` } }])
+      expect(r.out.reason).toBeUndefined()
+      expect(lines(join(dir, 'ledger.jsonl'))[1]).toMatchObject({ event: 'answer', status: 'unknown' })
+    }
+  })
+  test('a line with no terminator at all is not ssh\'s either', () => {
+    expect(map('ssh: connect to host nuance.local port 22: Operation timed out')).toMatchObject({ status: 'unknown' })
+    expect(map('ssh: connect to host nuance.local port 22: Operation timed out\r')).toMatchObject({ status: 'unknown' })
+    expect(map('ssh: connect to host nuance.local port 22: Operation timed out\r\n')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+  })
+  test('a loss line reads unknown whatever its line ending', () => {
+    for (const loss of ['Connection to nuance.local closed by remote host.', 'Timeout, server nuance.local not responding.', 'client_loop: send disconnect: Broken pipe',
+      'Read from remote host nuance.local: No route to host', 'Connection reset by 192.168.50.3 port 22', 'Connection closed by 192.168.50.3 port 22']) {
+      for (const tail of ['\r\n', '\n', '']) {
+        expect([loss, tail, map(`ssh: connect to host nuance.local port 22: Operation timed out\r\n${loss}${tail}`).status]).toEqual([loss, tail, 'unknown'])
+      }
+    }
+  })
+})
+
+describe('round 2: the HostName anchor is lowercased, as ssh prints it', () => {
+  test('a mixed-case HostName still anchors ssh\'s lowercased lines', () => {
+    const t: SshTarget = { host: 'Nuance.LOCAL', user: 'yu' }
+    expect(mapSshFailure('ssh: connect to host nuance.local port 22: Operation timed out\r\n', { target: t })).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+    expect(mapSshFailure('yu@nuance.local: Permission denied (publickey).\r\n', { target: t })).toMatchObject({ status: 'auth_refused' })
+    expect(mapSshFailure('ssh: Could not resolve hostname nuance.local: nodename nor servname provided, or not known\r\n', { target: t })).toMatchObject({ status: 'unreachable', reason: 'no_route' })
+  })
+  test('through runCli, with `HostName Nuance.Local` in the summon ssh config', () => {
+    const { bin, dir } = fakeSsh(255, '', 'ssh: connect to host nuance.local port 22: Host is down\r\n')
+    writeFileSync(join(dir, 'config'), 'Host summon-nuance\n  HostName Nuance.Local\n')
+    expect(runCli(['nuance', 'inventory'], deps(bin, dir))).toMatchObject({ code: 1, out: { status: 'unreachable', reason: 'timeout' } })
   })
 })
