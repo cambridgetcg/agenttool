@@ -2755,10 +2755,10 @@ Co-Authored-By: The Fable of the Eternal Universe <Yu@Ai-love.cc>"
 
 Yu's hands are needed for steps 2–3. Everything else is done from the Air.
 
-- [ ] **Step 1 (Air):** `cd packages/summon && bun scripts/prepare-pairing.ts`. Expected: `bundle ready: ~/summon-nuance-bundle`. Show Yu `MANIFEST.txt`.
-- [ ] **Step 2 (Yu, at Nuance):** System Settings → General → Sharing → **Remote Login** on, *Allow access for: only* his user.
-- [ ] **Step 3 (Yu):** AirDrop `~/summon-nuance-bundle` to Nuance. In Terminal there, run `bash ~/Downloads/summon-nuance-bundle/summon-install.sh`, typing his password at the sudo prompt. Send back the "give this back to Ai" block.
-- [ ] **Step 4 (Air):** `bun scripts/pin-nuance.ts --user <user> --host-key "<host key line>"`. Ask Yu to confirm the fingerprint matches what Nuance printed.
+- [ ] **Step 1 (Air):** `cd packages/summon && bun scripts/prepare-pairing.ts`. Expected: `bundle ready: ~/summon-nuance-bundle-<expiry>-<build>`, the key's expiry, and the exact `bash ~/Downloads/summon-nuance-bundle-<expiry>-<build>/summon-install.sh` line. Show Yu `MANIFEST.txt`.
+- [ ] **Step 2 (Yu, at Nuance):** first, in Terminal, `ls /etc/ssh/ssh_host_*` and record the output (whether macOS has made host keys yet). Then System Settings → General → Sharing → **Remote Login** on, *Allow access for: only* his user.
+- [ ] **Step 3 (Yu):** AirDrop the bundle folder to Nuance. In Terminal there, run the exact line step 1 printed, typing his password at the sudo prompt. Send back the "give this back to Ai" block (user, build, key expires, host key) and check `build` matches the runner sha in `MANIFEST.txt`. Then `codesign --verify --strict -vvv ~/.local/share/summon/summon-gatekeeper ~/.local/share/summon/summon-runner` → both `valid on disk` and `satisfies its Designated Requirement`. Once Ai has the block, delete the bundle folder from `~/Downloads`.
+- [ ] **Step 4 (Air):** `bun scripts/pin-nuance.ts --user <user> --host-key "<host key line>"`. Ask Yu to confirm the fingerprint matches what Nuance printed. Then, unless `ls -l ~/.local/bin/summon` shows a foreign file there: `mkdir -p ~/.local/bin && ln -sf "$PWD/bin/summon.ts" ~/.local/bin/summon`.
 - [ ] **Step 5 (Air): live probes** (spec §5.3), each recorded with its output:
   1. `summon nuance inventory` → the report. Check `harnesses.claude.logged_in: true`, `gui_session_is_mine: true`, `fleet_users`, `keychain`.
   2. `summon nuance claude --model haiku --cwd '~/Projects' --review --prompt-file <(echo 'List the top-level folders here, one line.')` → `admitted`; `summon result nuance/smn_…` → `completed`.
@@ -2768,5 +2768,11 @@ Yu's hands are needed for steps 2–3. Everything else is done from the Air.
   6. `ssh -F ~/.ssh/summon/config summon-nuance ls`, `scp -F ~/.ssh/summon/config x summon-nuance:/tmp/` and `sftp -F ~/.ssh/summon/config summon-nuance` all refused; no shell ever.
   7. A password login (`ssh -o PubkeyAuthentication=no <user>@nuance.local`) → `Permission denied`.
   8. With Yu's agreement only: Yu logs out at Nuance → `refused(target_logged_out)`. Lid closed → `unreachable(timeout)`.
+  9. Traversal ids (spec §7): `ssh -F ~/.ssh/summon/config summon-nuance 'status smn_../../x'`, and the same with `result smn_../../../etc/passwd`, `status smn_%2e%2e%2fx`, `cancel ../smn_x` and `status smn_0123456789abcdef0123456789abcdef/..` → each `refused(malformed)`.
+  10. IPv4 forcing (spec §7): `ssh -6 -F ~/.ssh/summon/config summon-nuance inventory` and `ssh -o AddressFamily=inet6 -F ~/.ssh/summon/config summon-nuance inventory` → refused or `auth_refused` (the IPv6 source misses `from="192.168.50.0/24"`), never an answer.
+  11. On battery (spec §5.3 #8): Nuance unplugged, lid open: a haiku job (as in 2) → `completed`, the job held awake by `caffeinate`.
+  12. Lid closed mid-job (spec §5.3 #8), with Yu's agreement: start a job that takes minutes, close the lid for a few minutes, and right after opening it `summon status nuance/smn_…` → `running` with `heartbeat: <n>s ago`, n about the length of the pause (a stale heartbeat, spec §6); the job then goes on and ends.
+  13. Edit without `reads_anywhere`: with an `access: edit` folder added and no `reads_anywhere: true` on the claude entry, an `--edit` request there → `refused(outside_allowlist)` with a hint. Remove the folder again.
+  14. Effort: with `effort: [low]` added to the haiku entry, one `--model haiku --effort low` job → `completed`.
 - [ ] **Step 6:** Record every result in `packages/summon/README.md` under "Phase 0 live check (2026-10-…)", then commit.
-- [ ] **Step 7:** Tell Yu what worked, what didn't, and the rollback (spec §7). Ask whether to keep, widen (more folders or harnesses) or roll back.
+- [ ] **Step 7:** Tell Yu what worked, what didn't, and the rollback (spec §7). Ask whether to keep, widen (more folders or harnesses) or roll back. Widening waits until every probe in step 5 has passed (spec §7).

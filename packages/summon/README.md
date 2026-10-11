@@ -5,26 +5,49 @@ Start a new agent session on another of Yu's Macs. Design: `docs/superpowers/spe
 Phase 0 (SSH at home): `summon nuance claude --model sonnet --cwd '~/Projects/x' --review --prompt-file task.md`,
 then `summon status|result nuance/smn_<id>`. Nuance runs `summon-gatekeeper` (SSH forced command) and
 `summon-runner` (LaunchAgent in Yu's GUI session). Install: `bun scripts/prepare-pairing.ts`, AirDrop the bundle,
-`bash ~/Downloads/summon-nuance-bundle/summon-install.sh` on Nuance, then `bun scripts/pin-nuance.ts`.
+`bash ~/Downloads/summon-nuance-bundle-<expiry>-<build>/summon-install.sh` on Nuance, then `bun scripts/pin-nuance.ts`
+and the `summon` link on the Air.
 
 ## Install and rollback (Phase 0)
 
 **Install, in this order.** Everything Summon writes is private: directories 0700, files 0600, the two programs 0700.
 
-1. On the Air: `bun scripts/prepare-pairing.ts` makes the summon key (once; it is never replaced), compiles the two
-   programs, and writes the bundle with an installer pinned to their checksums. Running it again keeps the key and
-   puts a fresh 90-day expiry in the new bundle; run that installer on Nuance to apply it.
-2. AirDrop `~/summon-nuance-bundle` to Nuance. Turn on Remote Login there (allow access for Yu's user only). Read
-   `summon-install.sh`, then run `bash ~/Downloads/summon-nuance-bundle/summon-install.sh`. It asks for the Mac
-   password once, for the sshd drop-in, then asks `sshd -T` what sshd would really use for a LAN login by Yu's user.
-   Unless password logins are off there, it stops without writing the key line or loading the runner. It is safe to
-   run again: it replaces its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never
-   empties `runner.log`. Run it again only when no job is running: it replaces the program files.
+1. On the Air, from `packages/summon`: `bun scripts/prepare-pairing.ts` makes the summon key (once; it is never
+   replaced), compiles the two programs, and writes the bundle `~/summon-nuance-bundle-<expiry>-<build>` (the key's
+   expiry date, then the first 8 hex digits of the runner's sha256) with an installer pinned to their checksums. It
+   prints the exact `bash ~/Downloads/<that folder>/summon-install.sh` line and the key's expiry, which it also keeps in
+   `~/.ssh/summon/expiry`. Running it again keeps the key and makes a new bundle with a fresh 90-day expiry, in a folder
+   of its own; run that installer on Nuance to apply it.
+2. At Nuance, **turn on Remote Login first** (System Settings → General → Sharing → Remote Login, allow access for
+   Yu's user only). AirDrop the bundle folder there. Read `summon-install.sh`, then run the line step 1 printed,
+   `bash ~/Downloads/summon-nuance-bundle-<expiry>-<build>/summon-install.sh`. Before it writes anything it stops if:
+   - Remote Login is off (nothing answers on port 22): turn it on, then run it again;
+   - the bundle's key has expired (ask Ai for a fresh bundle);
+   - the bundle is older than what is installed (its key expires earlier): run the newest bundle instead, or
+     `SUMMON_ALLOW_OLDER=1` to go back on purpose;
+   - a summon is `queued` or `running`: installing restarts the runner, which ends a running job as `unknown`, with
+     no result. Wait for it, or re-run with `SUMMON_INSTALL_ANYWAY=1`.
+
+   It asks for the Mac password once. If sshd has never run on this Mac, it first makes the host keys
+   (`ssh-keygen -A`, as macOS does at the first SSH connection). It writes the sshd drop-in, has `sshd -t` check it,
+   then asks `sshd -T` what sshd would really use for a LAN login, by Yu's user and by root. Unless password (and every
+   other non-key) login is off there, it stops without writing the key line or loading the runner; **until that is
+   fixed, turn Remote Login off.** It is safe to run again: it replaces its one key line, keeps every other
+   `authorized_keys` line and an edited allowlist, and never empties `runner.log`. If the runner does not load, it says
+   so (the key line is already updated): run it again, or log out and in. Once it says `Done` and Ai has the
+   "give this back to Ai" lines (user, build, key expiry, host key), delete the bundle folder from `~/Downloads` on
+   Nuance, so a later re-pair can never run an old one by mistake.
 3. Back on the Air: `bun scripts/pin-nuance.ts --user <name> --host-key "<the ssh-ed25519 line the installer printed>"`.
    Check that `ssh-keygen -lf ~/.ssh/summon/known_hosts` shows the same fingerprint the installer printed.
+4. Once, on the Air, from `packages/summon`: put the front door on PATH,
+   `mkdir -p ~/.local/bin && ln -sf "$PWD/bin/summon.ts" ~/.local/bin/summon`. First check `ls -l ~/.local/bin/summon`:
+   if it exists and is not a link to this file, do not overwrite it; tell Ai. Then `summon nuance inventory`.
 
 After the installer, Nuance takes SSH logins by key only, and only for Yu's user. Keep another way in (a key of your own
 in `authorized_keys`, or the Mac in front of you) before you rely on that.
+
+The two Nuance programs ignore `.env*` and `bunfig.toml` files (the build turns that loading off), even in the home
+folder sshd starts the gatekeeper in. The Air's `summon` ignores `.env` files in the folder it is run from.
 
 **What is where.**
 
@@ -32,13 +55,15 @@ in `authorized_keys`, or the Mac in front of you) before you rely on that.
 |---|---|---|
 | Air | `~/.ssh/summon/summon_nuance_ed25519`, `summon_nuance_ed25519.pub` | the summon key (this key and nothing else) |
 | Air | `~/.ssh/summon/config`, `~/.ssh/summon/known_hosts` | the `summon-nuance` ssh entry (used with `ssh -F`, nothing is added to `~/.ssh/config`) and Nuance's pinned host key |
+| Air | `~/.ssh/summon/expiry` | the summon key's expiry in the latest bundle (YYYYMMDD) |
 | Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger |
-| Air | `~/summon-nuance-bundle` | the AirDrop bundle: `summon-install.sh`, `summon-gatekeeper`, `summon-runner`, `MANIFEST.txt` |
-| Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner` |
+| Air | `~/.local/bin/summon` | a link to `packages/summon/bin/summon.ts`: the front door |
+| Air | `~/summon-nuance-bundle-<expiry>-<build>` | one AirDrop bundle per pairing: `summon-install.sh`, `summon-gatekeeper`, `summon-runner`, `MANIFEST.txt` |
+| Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner`, and `INSTALLED` (both sha256s and the key expiry, as in `MANIFEST.txt`) |
 | Nuance | `~/.local/state/summon/` | spool, jobs, seen ids, ledger, `inventory.json`, `runner.log` |
 | Nuance | `~/.config/summon/allowlist.yaml` | what Summon may do (edited only on Nuance) |
 | Nuance | `~/.ssh/authorized_keys` | one line, the one ending ` summon-air`: `restrict`, `from=` the home LAN, `expiry-time`, `command=` the gatekeeper |
-| Nuance | `/etc/ssh/sshd_config.d/010-summon.conf` | key logins only, no root login, `AllowUsers <user>` |
+| Nuance | `/etc/ssh/sshd_config.d/010-summon.conf` | `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin no`, `AllowUsers <user>`, `AuthenticationMethods publickey`, `GSSAPIAuthentication no`, `HostbasedAuthentication no` |
 | Nuance | `~/Library/LaunchAgents/dev.summon.runner.plist` | the runner, loaded in Yu's GUI session |
 
 The drop-in is `010-`, not `100-`: sshd keeps the first value it reads, and macOS's own `100-macos.conf` would
@@ -50,10 +75,11 @@ otherwise win. sshd is not reloaded: macOS starts it per connection, so the next
 2. Remove the one key line: `sed -i '' '/ summon-air$/d' ~/.ssh/authorized_keys` (no other line matches).
 3. Delete the drop-in: `sudo rm /etc/ssh/sshd_config.d/010-summon.conf`. Password logins come back with it.
 4. Turn Remote Login off (System Settings → General → Sharing) if nothing else needs it.
-5. Archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.local/share/summon`, `~/.local/state/summon` and
-   `~/.config/summon`.
-6. On the Air, archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.ssh/summon` (the key, its ssh entry and
-   `known_hosts`) and `~/summon-nuance-bundle`.
+5. Archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.local/share/summon`, `~/.local/state/summon`,
+   `~/.config/summon`, and any `~/Downloads/summon-nuance-bundle-*` still there.
+6. On the Air, archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.ssh/summon` (the key, its expiry, its ssh
+   entry and `known_hosts`), every `~/summon-nuance-bundle-*`, and the link `~/.local/bin/summon` (only if
+   `ls -l` shows it pointing at `packages/summon/bin/summon.ts`).
 
 ## The allowlist
 

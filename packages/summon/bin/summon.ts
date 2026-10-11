@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S bun --no-env-file
+// --no-env-file: a .env in the folder the caller runs `summon` from must not set SUMMON_* values.
 import { defaultCliDeps, runCli, splitJsonFlag } from '../src/cli.ts'
 
 const { argv, json } = splitJsonFlag(process.argv.slice(2))

@@ -1,5 +1,5 @@
-// On the Air: make the summon key (once), build the Nuance binaries, and write the
-// AirDrop bundle ~/summon-nuance-bundle/ with a checksum-pinned installer.
+// On the Air: make the summon key (once), build the Nuance binaries, and write the AirDrop bundle
+// ~/summon-nuance-bundle-<expiry>-<build>/ with a checksum-pinned installer.
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -14,12 +14,21 @@ export function renderInstaller(tmpl: string, v: { pubkey: string; expiry: strin
 
 const KEY_LIFETIME_DAYS = 90
 
-export interface PreparedBundle { bundle: string; pubkey: string; expiry: string; sha: NuanceBuild['sha'] }
+export interface PreparedBundle {
+  bundle: string
+  /** What Yu runs on Nuance once the bundle is AirDropped there. */
+  command: string
+  pubkey: string
+  expiry: string
+  sha: NuanceBuild['sha']
+}
 
 /**
- * Everything under `home` (the Air's home): the summon key in ~/.ssh/summon (made once, never replaced) and the
- * bundle folder ~/summon-nuance-bundle. Folders are 0700 and files 0600, the two programs 0700, even when they already exist.
- * `build` and `now` are for tests.
+ * Everything under `home` (the Air's home): the summon key in ~/.ssh/summon (made once, never replaced), the key's expiry
+ * next to it (~/.ssh/summon/expiry, YYYYMMDD), and the bundle folder ~/summon-nuance-bundle-<expiry>-<build>, where the
+ * build is the first 8 hex digits of the runner's sha256. Each pairing gets a folder of its own, so a bundle AirDropped
+ * earlier can never be the one the printed command runs. Folders are 0700 and files 0600, the two programs 0700, even
+ * when they already exist. `build` and `now` are for tests.
  */
 export function prepareBundle(o: { home: string; build?: () => NuanceBuild; now?: number }): PreparedBundle {
   const build = o.build ?? (() => buildNuance(join(import.meta.dir, '..', 'dist', 'nuance')))
@@ -37,19 +46,25 @@ export function prepareBundle(o: { home: string; build?: () => NuanceBuild; now?
   const pubkey = readFileSync(`${key}.pub`, 'utf8').trim()
   const expiry = new Date((o.now ?? Date.now()) + KEY_LIFETIME_DAYS * 86_400_000).toISOString().slice(0, 10).replaceAll('-', '')
 
-  const bundle = join(o.home, 'summon-nuance-bundle')
-  private700(bundle)
   const built = build()
+  const folder = `summon-nuance-bundle-${expiry}-${built.sha.runner.slice(0, 8)}`
+  const bundle = join(o.home, folder)
+  private700(bundle)
   for (const [src, name] of [[built.gatekeeper, 'summon-gatekeeper'], [built.runner, 'summon-runner']] as const) {
     copyFileSync(src, join(bundle, name)); chmodSync(join(bundle, name), 0o700)
   }
   const tmpl = readFileSync(join(import.meta.dir, '..', 'nuance', 'install.sh.tmpl'), 'utf8')
   writePrivate(join(bundle, 'summon-install.sh'), renderInstaller(tmpl, { pubkey, expiry, shaGatekeeper: built.sha.gatekeeper, shaRunner: built.sha.runner }))
   writePrivate(join(bundle, 'MANIFEST.txt'), `summon-gatekeeper ${built.sha.gatekeeper}\nsummon-runner ${built.sha.runner}\nkey summon-air expires ${expiry}\n`)
-  return { bundle, pubkey, expiry, sha: built.sha }
+  writePrivate(join(sshDir, 'expiry'), `${expiry}\n`)
+  return { bundle, command: `bash ~/Downloads/${folder}/summon-install.sh`, pubkey, expiry, sha: built.sha }
 }
 
-if (import.meta.main) {
-  const r = prepareBundle({ home: homedir() })
-  console.log(`bundle ready: ${r.bundle}\nAirDrop the folder to Nuance, then on Nuance: bash ~/Downloads/summon-nuance-bundle/summon-install.sh`)
+/** What the script prints once the bundle is ready: where it is, when its key expires, and the exact command for Nuance. */
+export function bundleReadyText(r: PreparedBundle): string {
+  const day = `${r.expiry.slice(0, 4)}-${r.expiry.slice(4, 6)}-${r.expiry.slice(6)}`
+  return [`bundle ready: ${r.bundle}`, `the summon key expires ${day} (${r.expiry}); pair again before then (README step 1).`,
+    'AirDrop the folder to Nuance. There, turn on Remote Login (only your user), then run:', `  ${r.command}`, ''].join('\n')
 }
+
+if (import.meta.main) process.stdout.write(bundleReadyText(prepareBundle({ home: homedir() })))

@@ -4,6 +4,13 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
+/** What to do after pinning: put `summon` on PATH (the Phase 0 front door), then try it. `pkg` is packages/summon. */
+export function pinnedText(pkg: string): string {
+  return ['pinned.', 'Next, once: put `summon` on PATH. If ~/.local/bin/summon is already this link, skip this; if it is some other file,',
+    'do not run it: tell Ai.', `  mkdir -p ~/.local/bin && ln -sf "${join(pkg, 'bin', 'summon.ts')}" ~/.local/bin/summon`,
+    'then try: summon nuance inventory', ''].join('\n')
+}
+
 /** Writes (or rewrites) the pinned known_hosts line and the `summon-nuance` ssh config in `dir`, all private. */
 export function writeSshConfig(dir: string, user: string, hostKeyLine: string): void {
   if (!/^[a-z_][a-z0-9._-]{0,31}$/i.test(user)) throw new Error('bad user name')
@@ -27,5 +34,5 @@ if (import.meta.main) {
   const user = get('--user'); const hostKey = get('--host-key')
   if (!user || !hostKey) { console.error('usage: bun scripts/pin-nuance.ts --user <name> --host-key "<line>"'); process.exit(2) }
   writeSshConfig(join(homedir(), '.ssh', 'summon'), user, hostKey)
-  console.log('pinned. try: summon nuance inventory')
+  process.stdout.write(pinnedText(join(import.meta.dir, '..')))
 }
