@@ -19,7 +19,8 @@
  * - secret layer: credential signatures shared with the npm release tool and
  *   the public doors guard, plus gitleaks when a pinned binary is given;
  * - personal layer: home-directory and device paths, email addresses outside
- *   reserved and project domains, and local keychain slot names;
+ *   reserved and project domains, hosted database project references, and
+ *   local keychain slot names;
  * - history (--history): every ancestor of <rev> is itself a projection
  *   commit whose tree matches its own PROJECTION.json, so no private commit,
  *   tree, or message can sit anywhere in the public parent chain.
@@ -350,6 +351,11 @@ export function pathRuleFindings(entries: readonly TreeEntry[], isAllowedPath: (
 // Content layers
 
 const PLACEHOLDER_HOMES = new Set(["nobody", "test", "example", "person", "you"]);
+
+/** A documented placeholder home name, or a variable or template such as $USER or {name}. */
+function isPlaceholderHome(name: string): boolean {
+  return PLACEHOLDER_HOMES.has(name) || !/^[A-Za-z0-9]/u.test(name);
+}
 const PERMITTED_EMAIL = new Set(["contact@cambridgetcg.com"]);
 const RESERVED_EMAIL_DOMAINS = new Set(["example.com", "example.net", "example.org"]);
 const RESERVED_EMAIL_TLDS = new Set(["example", "invalid", "test", "localhost"]);
@@ -380,23 +386,40 @@ export const SECRET_RULES: readonly ContentRule[] = [
   { id: "secret/stripe-live-key", layer: "secret", pattern: /\b[sr]k_live_[A-Za-z0-9]{16,}/gu },
 ];
 
+/**
+ * Home-directory paths need no trailing separator: a bare `/Users/<name>`,
+ * `/home/<name>`, or `C:\Users\<name>` is enough. Percent-encoded and
+ * entity-encoded spellings are caught through decodedVariants.
+ */
 export const PERSONAL_RULES: readonly ContentRule[] = [
   {
     id: "personal/home-path",
     layer: "personal",
-    pattern: /\/Users\/([^/\s"'`<>()\\]+)\//gu,
-    permit: (match) => PLACEHOLDER_HOMES.has(match[1] ?? ""),
+    pattern: /\/Users\/([^/\s"'`<>()\\,;:]+)/gu,
+    permit: (match) => isPlaceholderHome(match[1] ?? ""),
+  },
+  {
+    id: "personal/unix-home-path",
+    layer: "personal",
+    pattern: /(?<![\w.-])\/home\/([^/\s"'`<>()\\,;:]+)/gu,
+    permit: (match) => isPlaceholderHome(match[1] ?? ""),
   },
   {
     id: "personal/windows-home-path",
     layer: "personal",
-    pattern: /\b[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)([^\\/\s"'`<>()]+)(?:\\|\/)/gu,
-    permit: (match) => PLACEHOLDER_HOMES.has(match[1] ?? ""),
+    pattern: /\b[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)([^\\/\s"'`<>(),;:]+)/gu,
+    permit: (match) => isPlaceholderHome(match[1] ?? ""),
   },
   {
     id: "personal/device-path",
     layer: "personal",
-    pattern: /~\/\.config\/sol\b|~\/Desktop\b|~\/love-unlimited\/|love-unlimited\/(?:HALT|tools\/)/gu,
+    pattern: /(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%)[\\/](?:Desktop\b|love-unlimited[\\/])|\.config[\\/]sol\b|love-unlimited\/(?:HALT|tools\/)/gu,
+  },
+  {
+    id: "personal/supabase-project",
+    layer: "personal",
+    pattern: /\b([a-z0-9]{20})\.supabase\.(?:co|com|in)\b|\bpooler\.supabase\.com\b/giu,
+    permit: (match) => match[1] !== undefined && /^(.)\1*$/u.test(match[1]),
   },
   {
     id: "personal/email",
@@ -408,7 +431,7 @@ export const PERSONAL_RULES: readonly ContentRule[] = [
   {
     id: "personal/keychain-slot",
     layer: "personal",
-    pattern: /\bagenttool-[a-z0-9]+(?:-[a-z0-9]+)*-bearer\b/gu,
+    pattern: /\bagenttool-[a-z0-9]+(?:-[a-z0-9]+)*-(?:bearer|url|key|token|secret|password)(?![\w-])/gu,
   },
 ];
 

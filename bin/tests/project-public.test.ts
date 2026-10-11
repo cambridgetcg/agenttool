@@ -302,6 +302,32 @@ describe("guard layers", () => {
     expect(printed).toContain(`line_sha256=${lineSha256(`A line with the ${TERM.toUpperCase()} in it.`)}`);
   });
 
+  test("the personal layer catches unterminated home paths, device paths, Supabase refs, and keychain names", () => {
+    const user = ["yu", "ai"].join("");
+    const probes: Record<string, [string, string]> = {
+      "home.json": [`{"HOME": "/Users/${user}"}`, "personal/home-path"],
+      "cwd.ts": [`const cwd = "/Users/${user}";`, "personal/home-path"],
+      "encoded.md": [`[a](file:%2FUsers%2F${user})`, "personal/home-path"],
+      "linux.sh": [`cd /home/${user}/work`, "personal/unix-home-path"],
+      "sol.sh": ["cat $HOME/.config/sol/agents/README.md", "personal/device-path"],
+      "desktop.sh": ["ls ${HOME}/Desktop", "personal/device-path"],
+      "windows.txt": [`C:\\Users\\${user}`, "personal/windows-home-path"],
+      "slot.ts": ['const service = "agenttool-database-session-url";', "personal/keychain-slot"],
+      "supabase.md": ["https://abcdefghij0123456789.supabase.co/rest/v1", "personal/supabase-project"],
+      "pooler.md": ["aws-0-eu-west-2.pooler.supabase.com:6543", "personal/supabase-project"],
+    };
+    const quiet = [
+      "/Users/example and /Users/<name>/ and /Users/$USER/ and C:\\Users\\example and /home/you/x",
+      "https://social.example/home/feed and $HOME/.config/other and ~/.config/solana",
+      "mkdtempSync(join(tmpdir(), \"agenttool-loop-atlas-secret-scan-test-\")) and xxxxxxxxxxxxxxxxxxxx.supabase.co",
+    ].join("\n");
+    const files: Record<string, string> = { "packages/alpha/quiet.md": `${quiet}\n` };
+    for (const [name, [line]] of Object.entries(probes)) files[`packages/alpha/probe/${name}`] = `${line}\n`;
+    const repo = makeFixture({ files });
+    const found = guardProjection(repo, buildProjection(repo, "HEAD")).map((finding) => `${finding.path}:${finding.rule}`);
+    expect(found).toEqual(Object.entries(probes).map(([name, [, rule]]) => `packages/alpha/probe/${name}:${rule}`).sort());
+  });
+
   test("catches symlinks, oversize files, and credential-shaped names", () => {
     const repo = makeFixture({ files: { "packages/alpha/.env": "VALUE=1\n" } });
     symlinkSync("../../bin/private.ts", join(repo, "packages/alpha/link.ts"));
