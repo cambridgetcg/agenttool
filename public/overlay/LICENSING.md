@@ -4,8 +4,12 @@ Unless a file or package says otherwise, the software and documentation in
 this repository are made available under the Apache License, Version 2.0. The
 full text is in [`LICENSE`](LICENSE). The grant applies to each contribution
 only to the extent that its copyright holder has authority to make that
-grant. Each package directory carries its own `LICENSE` and `NOTICE`, and
-release archives carry the same files.
+grant. Each published package directory carries its own `LICENSE` and
+`NOTICE`, and release archives carry the same files.
+[`packages/local-starter-mcp`](packages/local-starter-mcp) is an unpublished
+helper whose code ships only inside the `local-starter` bundle; it has no
+`LICENSE` or `NOTICE` of its own and is covered by the root
+[`LICENSE`](LICENSE), as its `package.json` declares.
 
 ## Material with separate terms
 

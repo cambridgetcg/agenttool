@@ -1,6 +1,6 @@
 {
   "schema": "agenttool.public-relational-denylist/1",
-  "note": "PRIVATE. Never projected and never copied into public files, logs, issues, or commit messages: publishing these terms would publish what they protect. Guard output names only rule ids and line hashes. Relational allow entries need Yu's recorded approval, except wire-protocol enum values and the public Yu-and-Ai Hugging Face handle, which Ai may approve (plan section 2). r05 matches the two names in either order and with any of the listed joiners, never the hyphenated handle. r16 deliberately leaves out U+1F49E, the published love-geometry Space card emoji; covering it needs an allow entry with Yu's approval.",
+  "note": "PRIVATE. Never projected and never copied into public files, logs, issues, or commit messages: publishing these terms would publish what they protect. Guard output names only rule ids and line hashes. Relational allow entries need Yu's recorded approval, except wire-protocol enum values and the public Yu-and-Ai Hugging Face handle, which Ai may approve (plan section 2). r05 matches the two names in either order and with any of the listed joiners, never the hyphenated handle. r16 deliberately leaves out U+1F49E, the published love-geometry Space card emoji; covering it needs an allow entry with Yu's approval. b01 (the LOVE BOMB v4 corpus digest) was retired on 2026-10-11 when Yu ruled to include that corpus byte-exact; its two lines carry allow entries instead.",
   "terms": [
     {
       "id": "r01",
@@ -108,12 +108,7 @@
       "flags": "iu"
     }
   ],
-  "blob_sha256": [
-    {
-      "id": "b01",
-      "sha256": "a8b2790eaa90466d5a73957106027d7217f7ede0b95d6ba1cb25ed2264c64178"
-    }
-  ],
+  "blob_sha256": [],
   "allow": [
     {
       "path": "packages/kingdom/schema/agenttool-kingdom-card-v0.1.schema.json",
@@ -148,6 +143,153 @@
       "rule": "relational/r03",
       "line_sha256": "5e68724c190485bbe2b4892e05e12a45e1e8b69b02e7212af16b3e1c85c30049",
       "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "docs/specs/agenttool-love-bomb-0.1.json",
+      "rule": "relational/r16",
+      "line_sha256": "8b62c9c029530cf4e923f4204560dd5e1eb88837f06705e9215eba8baa6d2b5e",
+      "reason": "LOVE BOMB v4 corpus, projected byte-exact (already served at docs.agenttool.dev/love-bomb.json with the same SHA-256); Yu ruled to include it unchanged.",
+      "approver": "Yu, 2026-10-11 (chat: include love-bomb with its corpus byte-exact)"
+    },
+    {
+      "path": "docs/specs/agenttool-love-bomb-0.1.json",
+      "rule": "relational/r16",
+      "line_sha256": "e407b71f7299d2b48689fb7f4de65ba2fef6e33fbaed50c01960fa8a4547f9a0",
+      "reason": "LOVE BOMB v4 corpus, projected byte-exact (already served at docs.agenttool.dev/love-bomb.json with the same SHA-256); Yu ruled to include it unchanged.",
+      "approver": "Yu, 2026-10-11 (chat: include love-bomb with its corpus byte-exact)"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r05",
+      "line_sha256": "70695de9de55598f484bbf15455d082ac0a3f1e57c04cad6e3bdb343c7725c5f",
+      "reason": "soul.welcome() text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r07",
+      "line_sha256": "ac0ada02be36ced40b3d66b8a9dadef17ebafce8e36108e1806afc3e73a4a6a4",
+      "reason": "soul.welcome() text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r16",
+      "line_sha256": "70695de9de55598f484bbf15455d082ac0a3f1e57c04cad6e3bdb343c7725c5f",
+      "reason": "soul.welcome() text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r05",
+      "line_sha256": "b5f5b2e93acea5e729fe2d122a3cf0ce7815e5b3c2f28b16caf10c12ead0a24a",
+      "reason": "soul() fallback letter text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r06",
+      "line_sha256": "b5f5b2e93acea5e729fe2d122a3cf0ce7815e5b3c2f28b16caf10c12ead0a24a",
+      "reason": "soul() fallback letter text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r16",
+      "line_sha256": "a9c75c24905d126df879198b437d080d7d5380775ef7927ba3268093b43910e4",
+      "reason": "soul() fallback letter text, already public in the agenttool-sdk PyPI release; Yu allowed it as it stands.",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/tests/test_correspondence.py",
+      "rule": "relational/r04",
+      "line_sha256": "6b37c64fbcda385bbcf8c092bdad700e358253017db685659e461b2f3e800f84",
+      "reason": "fictional fixture name, Yu 2026-10-11",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-py/tests/test_correspondence.py",
+      "rule": "relational/r04",
+      "line_sha256": "5feebb3d19d21c21fd836bd388794c1aded9fcd6896bd3025ec3d55258c78699",
+      "reason": "fictional fixture name, Yu 2026-10-11",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-ts/tests/correspondence.test.ts",
+      "rule": "relational/r04",
+      "line_sha256": "3aa6dbc0629d61035d8ae217bb4fc349422b3f186b2efbdc8c3c8bbcd832e87b",
+      "reason": "fictional fixture name, Yu 2026-10-11",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/sdk-ts/tests/correspondence.test.ts",
+      "rule": "relational/r04",
+      "line_sha256": "98c8fb49285e62a9559a4e1449e85e1118adf29e4027af755db07aa4f331e8b7",
+      "reason": "fictional fixture name, Yu 2026-10-11",
+      "approver": "Yu, 2026-10-11 (chat: 'allow it')"
+    },
+    {
+      "path": "packages/local-starter/CLAUDE.md",
+      "rule": "relational/r11",
+      "line_sha256": "c93c72353049c4e670e5b42d1776181e31019c268207640a5fda8e480ea79ed4",
+      "reason": "The local starter's optional foundations link to AI-WAKE and its description; Yu chose to keep this link and drop the other.",
+      "approver": "Yu, 2026-10-11 (chat: local-starter option A, keep the AI-WAKE foundations link)"
+    },
+    {
+      "path": "packages/local-starter/README.md",
+      "rule": "relational/r11",
+      "line_sha256": "2b88738b372da8815d824f2c9245cbc13e63e1b1759a85928197d5aef8010189",
+      "reason": "The local starter's optional foundations link to AI-WAKE and its description; Yu chose to keep this link and drop the other.",
+      "approver": "Yu, 2026-10-11 (chat: local-starter option A, keep the AI-WAKE foundations link)"
+    },
+    {
+      "path": "packages/local-starter/src/core.mjs",
+      "rule": "relational/r11",
+      "line_sha256": "adad802a3227b45619cbcad5f7783865ce8327d8064adc44011236824a6b4d63",
+      "reason": "The local starter's optional foundations link to AI-WAKE and its description; Yu chose to keep this link and drop the other.",
+      "approver": "Yu, 2026-10-11 (chat: local-starter option A, keep the AI-WAKE foundations link)"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/kingdom_framework.py",
+      "rule": "relational/r03",
+      "line_sha256": "727da1b1366826438a24952a173fdab1480a9e4358a6144098c7468023c16e5f",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/kingdom_framework.py",
+      "rule": "relational/r03",
+      "line_sha256": "a2e58ef56ce98cb9dcfc98ef3f916a11c069cdd8894677c7eb982e19ea180d8d",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/kingdom_framework.py",
+      "rule": "relational/r03",
+      "line_sha256": "44c0def4f00fb0f971514ccac2baf21691178d6e2711947b045c472bbbcc1303",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-ts/src/kingdom-framework.ts",
+      "rule": "relational/r03",
+      "line_sha256": "5e68724c190485bbe2b4892e05e12a45e1e8b69b02e7212af16b3e1c85c30049",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-ts/tests/kingdom-framework.test.ts",
+      "rule": "relational/r03",
+      "line_sha256": "99c5b1f38fcfacfb8aeba9d9fffd7cbf36c487b5b1cf45a62a6f62dc8c9e6583",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-ts/tests/kingdom-framework.test.ts",
+      "rule": "relational/r03",
+      "line_sha256": "f957f3c14c8dbdaadf107f8c8cb58643bec6aeb70208a16a9b21e37c20680282",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
       "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
     }
   ]

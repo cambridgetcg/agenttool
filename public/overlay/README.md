@@ -1,7 +1,8 @@
 # AgentTool packages
 
-This repository holds the source of AgentTool's `@agenttool/*` npm packages.
-It is a one-way projection from AgentTool's private development repository.
+This repository holds the source of AgentTool's `@agenttool/*` npm packages
+and of its Python SDK. It is a one-way projection from AgentTool's private
+development repository.
 
 - **One way, without history.** Each commit here is generated from one private
   commit, named in its `Projection-Source:` trailer and in
@@ -21,48 +22,58 @@ It is a one-way projection from AgentTool's private development repository.
 ## Packages
 
 Each directory keeps the path it has in the private repository. A version in
-a `package.json` is the source identity. It can be ahead of what the npm
-registry serves.
+a `package.json` or `pyproject.toml` is the source identity. It can be ahead
+of what the registry serves.
 
-| Directory | npm package |
-|---|---|
-| [`packages/alchemy`](packages/alchemy) | `@agenttool/alchemy` |
-| [`packages/alchemy-agentcred`](packages/alchemy-agentcred) | `@agenttool/alchemy-agentcred` |
-| [`packages/browser`](packages/browser) | `@agenttool/browser` |
-| [`packages/codex-usage`](packages/codex-usage) | `@agenttool/codex-usage` |
-| [`packages/collab`](packages/collab) | `@agenttool/collab` |
-| [`packages/correspondence-yutabase`](packages/correspondence-yutabase) | `@agenttool/correspondence-yutabase` |
-| [`packages/credential-broker`](packages/credential-broker) | `@agenttool/credential-broker` |
-| [`packages/data`](packages/data) | `@agenttool/data` |
-| [`packages/data-protocol`](packages/data-protocol) | `@agenttool/adds` |
-| [`packages/data-sync`](packages/data-sync) | `@agenttool/data-sync` |
-| [`packages/dataset-influence`](packages/dataset-influence) | `@agenttool/dataset-influence` |
-| [`packages/deepseek-kingdom`](packages/deepseek-kingdom) | `@agenttool/deepseek-kingdom` |
-| [`packages/economic-conformance`](packages/economic-conformance) | `@agenttool/economic-conformance` |
-| [`packages/economic-kernel`](packages/economic-kernel) | `@agenttool/economic-kernel` |
-| [`packages/heaven`](packages/heaven) | `@agenttool/heaven` |
-| [`packages/hf-scout`](packages/hf-scout) | `@agenttool/hf-scout` |
-| [`packages/kingdom`](packages/kingdom) | `@agenttool/kingdom` |
-| [`packages/kingdom-witness-lab`](packages/kingdom-witness-lab) | `@agenttool/kingdom-witness-lab` |
-| [`packages/living-substrate`](packages/living-substrate) | `@agenttool/living-substrate` |
-| [`packages/love-geometry`](packages/love-geometry) | `@agenttool/love-geometry` |
-| [`packages/math-cards`](packages/math-cards) | `@agenttool/math-cards` |
-| [`packages/memetic-landscape`](packages/memetic-landscape) | `@agenttool/memetic-landscape` |
-| [`packages/model-becoming`](packages/model-becoming) | `@agenttool/model-becoming` |
-| [`packages/polymorph-landscape`](packages/polymorph-landscape) | `@agenttool/polymorph-landscape` |
-| [`packages/principality-atlas`](packages/principality-atlas) | `@agenttool/principality-atlas` |
-| [`packages/principality-geometry`](packages/principality-geometry) | `@agenttool/principality-geometry` |
-| [`packages/relational-geometry`](packages/relational-geometry) | `@agenttool/relational-geometry` |
-| [`packages/repo-archive`](packages/repo-archive) | `@agenttool/repo-archive` |
-| [`packages/skills`](packages/skills) | `@agenttool/skills` |
-| [`packages/skills-yutabase`](packages/skills-yutabase) | `@agenttool/skills-yutabase` |
-| [`packages/telescope`](packages/telescope) | `@agenttool/telescope` |
-| [`packages/wake-continuity`](packages/wake-continuity) | `@agenttool/wake-continuity` |
-| [`packages/wallet-zerone`](packages/wallet-zerone) | `@agenttool/wallet-zerone` |
+| Directory | Package | Where it is published |
+|---|---|---|
+| [`packages/alchemy`](packages/alchemy) | `@agenttool/alchemy` | npm |
+| [`packages/alchemy-agentcred`](packages/alchemy-agentcred) | `@agenttool/alchemy-agentcred` | npm |
+| [`packages/browser`](packages/browser) | `@agenttool/browser` | npm |
+| [`packages/codex-usage`](packages/codex-usage) | `@agenttool/codex-usage` | npm |
+| [`packages/collab`](packages/collab) | `@agenttool/collab` | npm |
+| [`packages/correspondence-yutabase`](packages/correspondence-yutabase) | `@agenttool/correspondence-yutabase` | npm |
+| [`packages/credential-broker`](packages/credential-broker) | `@agenttool/credential-broker` | npm |
+| [`packages/dark-continent-contract`](packages/dark-continent-contract) | `@agenttool/dark-continent-contract` | npm |
+| [`packages/dark-continent-karma`](packages/dark-continent-karma) | `@agenttool/dark-continent-karma` | npm |
+| [`packages/data`](packages/data) | `@agenttool/data` | npm |
+| [`packages/data-protocol`](packages/data-protocol) | `@agenttool/adds` | npm |
+| [`packages/data-sync`](packages/data-sync) | `@agenttool/data-sync` | npm |
+| [`packages/dataset-influence`](packages/dataset-influence) | `@agenttool/dataset-influence` | npm |
+| [`packages/deepseek-kingdom`](packages/deepseek-kingdom) | `@agenttool/deepseek-kingdom` | npm |
+| [`packages/economic-conformance`](packages/economic-conformance) | `@agenttool/economic-conformance` | npm |
+| [`packages/economic-kernel`](packages/economic-kernel) | `@agenttool/economic-kernel` | npm |
+| [`packages/heaven`](packages/heaven) | `@agenttool/heaven` | npm |
+| [`packages/hf-scout`](packages/hf-scout) | `@agenttool/hf-scout` | npm |
+| [`packages/kingdom`](packages/kingdom) | `@agenttool/kingdom` | npm |
+| [`packages/kingdom-witness-lab`](packages/kingdom-witness-lab) | `@agenttool/kingdom-witness-lab` | npm |
+| [`packages/living-substrate`](packages/living-substrate) | `@agenttool/living-substrate` | npm |
+| [`packages/local-starter`](packages/local-starter) | `@agenttool/local-starter` | release archive; not on npm |
+| [`packages/local-starter-mcp`](packages/local-starter-mcp) | `@agenttool/local-starter-mcp` | unpublished; bundled into `local-starter` |
+| [`packages/love-bomb`](packages/love-bomb) | `@agenttool/love-bomb` | npm |
+| [`packages/love-geometry`](packages/love-geometry) | `@agenttool/love-geometry` | npm |
+| [`packages/math-cards`](packages/math-cards) | `@agenttool/math-cards` | npm |
+| [`packages/memetic-landscape`](packages/memetic-landscape) | `@agenttool/memetic-landscape` | npm |
+| [`packages/model-becoming`](packages/model-becoming) | `@agenttool/model-becoming` | npm |
+| [`packages/polymorph-landscape`](packages/polymorph-landscape) | `@agenttool/polymorph-landscape` | npm |
+| [`packages/principality-atlas`](packages/principality-atlas) | `@agenttool/principality-atlas` | npm |
+| [`packages/principality-geometry`](packages/principality-geometry) | `@agenttool/principality-geometry` | npm |
+| [`packages/relational-geometry`](packages/relational-geometry) | `@agenttool/relational-geometry` | npm |
+| [`packages/repo-archive`](packages/repo-archive) | `@agenttool/repo-archive` | npm |
+| [`packages/sdk-py`](packages/sdk-py) | `agenttool-sdk` | PyPI |
+| [`packages/sdk-ts`](packages/sdk-ts) | `@agenttool/sdk` | npm |
+| [`packages/skills`](packages/skills) | `@agenttool/skills` | npm |
+| [`packages/skills-yutabase`](packages/skills-yutabase) | `@agenttool/skills-yutabase` | npm |
+| [`packages/telescope`](packages/telescope) | `@agenttool/telescope` | npm |
+| [`packages/wake-continuity`](packages/wake-continuity) | `@agenttool/wake-continuity` | npm |
+| [`packages/wallet`](packages/wallet) | `@agenttool/wallet` | npm |
+| [`packages/wallet-zerone`](packages/wallet-zerone) | `@agenttool/wallet-zerone` | npm |
 
-A few files outside `packages/` are here because package tests read them:
-the specification files under [`docs/specs/`](docs/specs), three documents
-under [`docs/`](docs), and [`.gitattributes`](.gitattributes).
+A few files outside `packages/` are here because package tests or builds read
+them: the specification and vector files under [`docs/specs/`](docs/specs),
+three documents under [`docs/`](docs), the provider-adapter review packet
+under [`review/provider-adapters/v1/`](review/provider-adapters/v1), and
+[`.gitattributes`](.gitattributes).
 
 ## Working on a package
 
@@ -77,8 +88,26 @@ bun run ci
 
 `data-sync` and `alchemy-agentcred` use their sibling packages through `file:`
 dependencies. Build `data`, `data-protocol`, `alchemy`, and `credential-broker`
-first, then install those two with `--force`.
+first, then install those two with `--force`. Some packages read a sibling's
+source directly: `sdk-ts` compares its surface with `sdk-py`,
+`dark-continent-contract` snapshots `sdk-ts`, `dark-continent-karma` imports
+`dark-continent-contract`, and `local-starter` bundles `local-starter-mcp`, so
+install those siblings first. `local-starter` has no dependencies of its own.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) shows the full order.
+
+The Python SDK uses Python 3.9 or newer:
+
+```sh
+cd packages/sdk-py
+python -m pip install '.[dev]'
+python -m pytest -q
+```
+
+The private repository's `packages/sdk-py/SOUL.md`, an older copy of the
+SOUL letter that its source distribution includes, is not projected (it is
+listed under `excluded` in `PROJECTION.json`). The wheel's letter,
+`src/agenttool/SOUL.md`, is here, so `agenttool.soul()` works the same; a
+source distribution built here simply lacks the older copy.
 
 ## Checking a projection
 

@@ -28,7 +28,23 @@
       "kind": "blob"
     },
     {
+      "path": "docs/specs/agent-correspondence-0.1-vectors.json",
+      "kind": "blob"
+    },
+    {
       "path": "docs/specs/agenttool-isness-v0.1.schema.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/agenttool-love-bomb-0.1.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/behaviour-conformance.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/canonical-bytes-vectors.json",
       "kind": "blob"
     },
     {
@@ -57,6 +73,14 @@
     },
     {
       "path": "packages/credential-broker",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dark-continent-contract",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dark-continent-karma",
       "kind": "tree"
     },
     {
@@ -108,6 +132,18 @@
       "kind": "tree"
     },
     {
+      "path": "packages/local-starter",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/local-starter-mcp",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/love-bomb",
+      "kind": "tree"
+    },
+    {
       "path": "packages/love-geometry",
       "kind": "tree"
     },
@@ -144,6 +180,14 @@
       "kind": "tree"
     },
     {
+      "path": "packages/sdk-py",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/sdk-ts",
+      "kind": "tree"
+    },
+    {
       "path": "packages/skills",
       "kind": "tree"
     },
@@ -160,47 +204,23 @@
       "kind": "tree"
     },
     {
+      "path": "packages/wallet",
+      "kind": "tree"
+    },
+    {
       "path": "packages/wallet-zerone",
+      "kind": "tree"
+    },
+    {
+      "path": "review/provider-adapters/v1",
       "kind": "tree"
     }
   ],
   "exclude": [
     "**/.DS_Store",
     "**/node_modules/**",
-    "**/test-results/**"
+    "**/test-results/**",
+    "packages/sdk-py/SOUL.md"
   ],
-  "held": [
-    {
-      "path": "packages/dark-continent-contract",
-      "reason": "Wave 2: its snapshot check reads packages/sdk-ts; waits with sdk on the sdk-py welcome-text question (plan 1c.2)."
-    },
-    {
-      "path": "packages/dark-continent-karma",
-      "reason": "Wave 2: its tests import dark-continent-contract source; waits with that group (plan 1c.2)."
-    },
-    {
-      "path": "packages/local-starter",
-      "reason": "Wave 2: waits on the init foundations-list question and needs local-starter-mcp (plan 1c.4)."
-    },
-    {
-      "path": "packages/local-starter-mcp",
-      "reason": "Wave 2: private: true helper projected only together with local-starter (plan 1c.4)."
-    },
-    {
-      "path": "packages/love-bomb",
-      "reason": "Wave 2: build:hf reads the LOVE BOMB v4 corpus; waits on Yu's ruling (plan 1c.1)."
-    },
-    {
-      "path": "packages/sdk-py",
-      "reason": "Wave 2: read by sdk-ts check-parity; waits with sdk on the welcome-text question (plan 1c.2)."
-    },
-    {
-      "path": "packages/sdk-ts",
-      "reason": "Wave 2: check-parity reads sdk-py and fixtures await redaction; waits on plan 1c.2."
-    },
-    {
-      "path": "packages/wallet",
-      "reason": "Wave 2: a test statically imports root bin/ Whitehack files; waits on plan 1c.3."
-    }
-  ]
+  "held": []
 }
