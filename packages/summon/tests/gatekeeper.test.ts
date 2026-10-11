@@ -2,13 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  describeCommand, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf,
+  describeCommand, INVENTORY_WAIT_MS, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf,
 } from '../src/gatekeeper.ts'
 import { findClaude } from '../src/harness.ts'
 import { writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { MAX_START_STDIN_BYTES, newRequestId } from '../src/request.ts'
+import { SSH_TIMEOUT_MS } from '../src/ssh.ts'
 import { cleanupTmps, DEFAULT_ALLOWLIST, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -225,6 +226,28 @@ describe('requestInventory', () => {
     const paths = summonPaths(targetHome())
     expect(await requestInventory(paths, Date.now(), 300)).toEqual({ status: 'unknown',
       detail: 'the runner did not answer in time: launchd may be holding it back (it starts the runner at most once every 10 s), it may be busy with a job, or Yu may not be logged in at this Mac; ask again in a minute' })
+  })
+  test('final follow-up: the default wait outlasts launchd\'s throttle plus a slow collection: a runner that answers at ~20 s is read', async () => {
+    const paths = summonPaths(targetHome()); const start = Date.now(); const req = join(paths.spool, `inventory-${start}.req`)
+    // A virtual clock: every sleep advances it and costs no real time; the "runner" answers once 20 s have passed on it.
+    const realNow = Date.now; const realSleep = Bun.sleep; let virtual = start; let answered = false
+    Date.now = () => virtual
+    Bun.sleep = (async (ms: number) => {
+      virtual += Number(ms)
+      if (!answered && virtual >= start + 20_000) {
+        answered = true
+        writeJsonAtomic(paths.inventory, { collected_at: new Date(virtual).toISOString(), device: 'nuance' })
+        rmSync(req)
+      }
+    }) as typeof Bun.sleep
+    try {
+      expect(await requestInventory(paths, start)).toMatchObject({ status: 'completed', inventory: { device: 'nuance' } })
+    } finally { Date.now = realNow; Bun.sleep = realSleep }
+    expect(answered).toBe(true)
+  })
+  test('final follow-up: the inventory wait leaves the Air CLI room (8 s connect + wait fits inside its 60 s ssh timeout)', () => {
+    expect(INVENTORY_WAIT_MS).toBe(40_000)
+    expect(INVENTORY_WAIT_MS + 8_000).toBeLessThanOrEqual(SSH_TIMEOUT_MS)
   })
   test('a stale inventory is not an answer; the runner not answering is unknown, not a guess', async () => {
     const paths = summonPaths(targetHome()); const now = Date.now()

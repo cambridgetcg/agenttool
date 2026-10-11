@@ -45,7 +45,7 @@ and the `summon` link on the Air.
    It is safe to run again: it replaces
    its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never empties `runner.log`.
    If the runner does not load, it says so (the key line is already updated): run it again, or log out and in.
-   macOS shows a "Background Items Added" notification for dev.summon.runner: leave it allowed in System Settings →
+   macOS shows a "Background Items Added" notification for dev.summon.runner (it may be listed as summon-runner): leave it allowed in System Settings →
    General → Login Items, or every start reads `runner_missing`. If `~/Projects`, the starter allowlist's folder, does
    not exist, it warns (⚠) and goes on: make it, or edit the allowlist. It says `Done` only once the runner is loaded,
    the host key is handed back and the runner has answered an inventory request (it waits up to 45 s); otherwise it
@@ -171,7 +171,7 @@ folders:
 ## Known Phase 0 limits
 
 - **The runner is serial.** It runs one job at a time and answers nothing else until that job ends, so
-  `summon nuance inventory` sent while a job runs answers `unknown` after 15 s. Ask again once the job is over.
+  `summon nuance inventory` sent while a job runs answers `unknown` after 40 s. Ask again once the job is over.
 - **Clean-up happens when the runner starts.** A job left `running` by a killed runner is settled the next time
   launchd starts the runner, which any spool entry does: it ends with the outcome in its `result.json` if that was
   written, else `unknown`. Until then it still counts toward `max_concurrent`; `summon nuance inventory` is a quick

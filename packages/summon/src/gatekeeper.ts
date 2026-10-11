@@ -92,11 +92,18 @@ export function requestCancel(paths: SummonPaths, device: string, id: string, no
 }
 
 /**
+ * How long an inventory request waits for the runner. launchd can hold the runner back up to 10 s (ThrottleInterval)
+ * and a collection takes up to ~30 s (inventory.ts allows 15 s per command); the Air CLI's ssh gives up at
+ * SSH_TIMEOUT_MS (60 s) after at most 8 s to connect, so this stays at or under 40 s.
+ */
+export const INVENTORY_WAIT_MS = 40_000
+
+/**
  * Ask the runner (Yu's GUI session) for a fresh inventory and wait for it. The answer is inventory.json only once the
  * runner has consumed this request's .req (it writes the report first) and the report was collected after the request:
  * a file mtime can be ahead of the clock, so it never counts as fresh.
  */
-export async function requestInventory(paths: SummonPaths, nowMs: number, waitMs = 15_000): Promise<GateResponse> {
+export async function requestInventory(paths: SummonPaths, nowMs: number, waitMs = INVENTORY_WAIT_MS): Promise<GateResponse> {
   appendLedger(paths.ledger, { event: 'inventory_requested' }, nowMs) // logged before the request that acts on it
   mkdirSync(paths.spool, { recursive: true, mode: 0o700 })
   const req = join(paths.spool, `inventory-${nowMs}.req`)
