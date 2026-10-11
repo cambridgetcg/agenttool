@@ -106,12 +106,12 @@ describe('splitJsonFlag', () => {
 
 describe('mapSshFailure', () => {
   test('tells failures apart', () => {
-    expect(map(crlf('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@'))).toMatchObject({ status: 'host_key_mismatch' })
+    expect(map(CHANGED_KEY)).toMatchObject({ status: 'host_key_mismatch' })
     expect(map(crlf('Host key verification failed.'))).toMatchObject({ status: 'host_key_mismatch' })
     expect(map(crlf('yu@nuance.local: Permission denied (publickey).'))).toMatchObject({ status: 'auth_refused' })
     expect(map(crlf('ssh: connect to host nuance.local port 22: Operation timed out'))).toMatchObject({ status: 'unreachable', reason: 'timeout' })
     expect(map(crlf('ssh: connect to host nuance.local port 22: Connection refused'))).toMatchObject({ status: 'unreachable', reason: 'timeout' })
-    expect(map(crlf('ssh: Could not resolve hostname nuance.local'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
+    expect(map(crlf('ssh: Could not resolve hostname nuance.local: nodename nor servname provided, or not known'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
   })
   test('no route to host and an unreachable network are no_route, before any connection', () => {
     expect(map(crlf('ssh: connect to host nuance.local port 22: No route to host'))).toMatchObject({ status: 'unreachable', reason: 'no_route' })
@@ -145,26 +145,29 @@ describe('mapSshFailure', () => {
       expect(typeof r.detail).toBe('string')
     }
   })
-  test('a loss after a connect attempt that failed on another address is still unknown', () => {
-    expect(map('ssh: connect to address 192.168.50.9 port 22: Operation timed out\nclient_loop: send disconnect: Broken pipe'))
-      .toMatchObject({ status: 'unknown' })
+  test('a loss after a connect line that did classify is still unknown: a lost connection is checked first', () => {
+    const pre = 'ssh: connect to host nuance.local port 22: Operation timed out\r\n'
+    expect(map(pre)).toMatchObject({ status: 'unreachable', reason: 'timeout' }) // alone it classifies...
+    expect(map(`${pre}client_loop: send disconnect: Broken pipe\r\n`)).toEqual({ status: 'unknown', detail: 'client_loop: send disconnect: Broken pipe' }) // ...a loss beats it
   })
   test('F11: a drop after a permission denied is unknown: a lost connection is checked first', () => {
     // ssh exits at its own `Permission denied (...)` line, so a drop printed after it says a session may have existed.
-    expect(map('yu@nuance.local: Permission denied (publickey).\nConnection closed by 192.168.50.3 port 22')).toMatchObject({ status: 'unknown' })
-    expect(map('yu@nuance.local: Permission denied (publickey).\r\n')).toMatchObject({ status: 'auth_refused' })
+    const pre = 'yu@nuance.local: Permission denied (publickey).\r\n'
+    expect(map(pre)).toMatchObject({ status: 'auth_refused' })
+    expect(map(`${pre}Connection closed by 192.168.50.3 port 22\r\n`)).toEqual({ status: 'unknown', detail: 'Connection closed by 192.168.50.3 port 22' })
   })
   test('an unrecognised failure is unknown, not a guess at the transport', () => {
-    expect(map('ssh: something we have not seen\r\n')).toMatchObject({ status: 'unknown', detail: 'ssh: something we have not seen' })
+    expect(map('ssh: something we have not seen\r\n')).toMatchObject({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' }) // not a known whole ssh line
+    expect(map('Connection to 192.168.50.3 port 22 timed out\r\n')).toMatchObject({ status: 'unknown', detail: 'Connection to 192.168.50.3 port 22 timed out' })
     expect(map('ssh: something we have not seen\n')).toMatchObject({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' }) // not a CRLF line: maybe the remote's
     expect(map('')).toMatchObject({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' })
   })
   test('the detail is one clipped line of printable ASCII (the target controls banners)', () => {
     // F11: a coloured line is not ssh's own `Permission denied (...)` line, so it is not read as auth_refused.
     expect(map(`first\n\u001b[31mPermission denied\u001b[0m ${'x'.repeat(400)}`)).toEqual({ status: 'unknown', detail: 'ssh exited 255 without a line it is known to print' })
-    const r = map(crlf(`first\nssh: \u001b[31mbanner\u001b[0m ${'x'.repeat(400)}`))
+    const r = map(crlf(`first\nConnection to \u001b[31m${'x'.repeat(400)} closed by remote host.`))
     expect(r.status).toBe('unknown')
-    expect(r.detail).toStartWith('ssh: ?[31mbanner?[0m x')
+    expect(r.detail).toStartWith('Connection to ?[31mxxx')
     expect(r.detail).not.toMatch(/[^\x20-\x7e]/)
     expect(r.detail!.length).toBeLessThanOrEqual(200)
     const a = map(crlf(`${'u'.repeat(300)}@nuance.local: Permission denied (publickey).`))
@@ -300,7 +303,7 @@ describe('runCli', () => {
   test('auth_refused and host_key_mismatch after a start are reported as such', () => {
     const a = fakeSsh(255, '', crlf('yu@nuance.local: Permission denied (publickey).'))
     expect(runCli(startArgv(a.dir), deps(a.bin, a.dir))).toMatchObject({ code: 1, out: { status: 'auth_refused' } })
-    const h = fakeSsh(255, '', crlf('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@'))
+    const h = fakeSsh(255, '', CHANGED_KEY)
     expect(runCli(startArgv(h.dir), deps(h.bin, h.dir))).toMatchObject({ code: 1, out: { status: 'host_key_mismatch' } })
   })
   test('garbled answer after sending is unknown, never retried', () => {
@@ -511,7 +514,7 @@ const CHANGED_KEY = [
   'Offending ED25519 key in /Users/yuai/.ssh/summon/known_hosts:1',
   'Host key for summon-nuance has changed and you have requested strict checking.',
   'Host key verification failed.',
-].join('\r\n') + '\r\n'
+].join('\r\n').replace('sent by the remote host is\r\n', 'sent by the remote host is\n') + '\r\n' // one message over two lines: its inner line ends a bare \n
 
 describe('F09/F43: only a paired device is ever called', () => {
   const notPaired = (device: string): { code: number; out: GateResponse } =>
@@ -1067,7 +1070,7 @@ describe('B1: a detail is never the remote session\'s text', () => {
   })
   test('ssh\'s own unrecognised lines are still shown', () => {
     for (const s of ['Unable to negotiate with 192.168.50.3 port 22: no matching host key type found. Their offer: ssh-rsa',
-      'Connection to 192.168.50.3 port 22 timed out', 'ssh_dispatch_run_fatal: Connection to 192.168.50.3 port 22: message authentication code incorrect']) {
+      'Connection to 192.168.50.3 port 22 timed out', 'Disconnected from 192.168.50.3 port 22']) {
       expect([s, map(`${s}\r\n`)]).toEqual([s, { status: 'unknown', detail: s }])
     }
   })
@@ -1200,5 +1203,116 @@ describe('round 2: the HostName anchor is lowercased, as ssh prints it', () => {
     const { bin, dir } = fakeSsh(255, '', 'ssh: connect to host nuance.local port 22: Host is down\r\n')
     writeFileSync(join(dir, 'config'), 'Host summon-nuance\n  HostName Nuance.Local\n')
     expect(runCli(['nuance', 'inventory'], deps(bin, dir))).toMatchObject({ code: 1, out: { status: 'unreachable', reason: 'timeout' } })
+  })
+})
+
+// ── C review, round 3 ──
+
+describe('round 3: a remote head joined to ssh\'s loss line can only read unknown', () => {
+  /** Remote stderr written with no newline: the opening words of every classifier, which ssh's next line would complete. */
+  const HEADS = ['kex_exchange_identification: ', 'kex_exchange_identification: read: Connection reset by peer', 'No ED25519 host key is known for ',
+    "Can't open user config file ", `Can't open user config file ${CFG}: `, `${CFG}: line 1: Bad configuration option: `, 'no such identity: ', `no such identity: ${KEY}: `,
+    'ssh: Could not resolve hostname ', 'ssh: connect to host nuance.local port 22: ', 'yu@nuance.local: Permission denied (',
+    'Host key verification failed.', 'Connection timed out during banner exchange', '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @']
+  /** ssh's own lines for a lost connection, as 9.9p2 prints them. */
+  const LOSSES = ['Connection to nuance.local closed by remote host.', 'Timeout, server nuance.local not responding.', 'Connection closed by 192.168.50.3 port 22',
+    'Connection reset by 192.168.50.3 port 22', 'banner exchange: Connection to 192.168.50.3 port 22: Broken pipe', 'client_loop: send disconnect: Broken pipe',
+    'Read from remote host nuance.local: Connection reset by peer']
+  test(`${HEADS.length} heads × ${LOSSES.length} loss lines: every join is unknown with the fixed detail, alone or after other remote lines`, () => {
+    for (const head of HEADS) {
+      for (const loss of LOSSES) {
+        for (const text of [`${head}${loss}\r\n`, `${ZSHENV}\n${head}${loss}\r\n`, `${head}${loss}\r\nDisconnected from 192.168.50.3 port 22\r\n`]) {
+          const r = map(text)
+          expect([text, r.status, r.reason, r.detail === FIXED || r.detail === 'Disconnected from 192.168.50.3 port 22']).toEqual([text, 'unknown', undefined, true])
+        }
+      }
+    }
+  })
+  test('end to end: a fake ssh that writes the kex head with no newline, then ssh\'s peer drop, reads unknown with the handle', () => {
+    const stderr = 'kex_exchange_identification: Connection reset by 192.168.50.3 port 22\r\n'
+    const { bin, dir } = fakeSsh(255, '', stderr)
+    expect(sshCall({ sshBin: bin, sshConfig: join(dir, 'config'), target: NUANCE }, 'nuance', 'inventory')).toEqual({ status: 'unknown', detail: FIXED })
+    const r = runCli(startArgv(dir), deps(bin, dir))
+    const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+    expect(r).toEqual({ code: 1, out: { status: 'unknown', detail: FIXED, handle: `nuance/${sent.id}` } })
+    expect(lines(join(dir, 'ledger.jsonl'))[1]).toMatchObject({ event: 'answer', status: 'unknown', detail: FIXED })
+  })
+  test('a remote `ssh: …` head joined to a loss is never the detail', () => {
+    for (const head of ['ssh: connect to host github.com port 22: ', 'ssh: ', 'Read from remote host x: ', 'Connection to ', 'client_loop: send disconnect: ']) {
+      for (const loss of LOSSES) expect([head, loss, map(`${head}${loss}\r\n`).detail]).toEqual([head, loss, FIXED])
+    }
+  })
+})
+
+describe('round 3: classifiers match the whole line 9.9p2 prints, start and end', () => {
+  test('the kex failure is exactly its two captured lines, in order; anything else around a reset is a loss', () => {
+    const KEXL = 'kex_exchange_identification: read: Connection reset by peer'
+    const PEER = 'Connection reset by 192.168.50.3 port 22'
+    expect(map(`${KEXL}\r\n${PEER}\r\n`)).toMatchObject({ status: 'unreachable', reason: 'timeout', detail: KEXL })
+    for (const s of [`${KEXL}\r\n`, `${PEER}\r\n${KEXL}\r\n`, `${KEXL}\r\n${PEER}\r\nConnection to nuance.local closed by remote host.\r\n`,
+      `${KEXL} x\r\n${PEER}\r\n`, `${KEXL}\r\n${PEER} x\r\n`, `kex_exchange_identification: Connection closed by remote host\r\n`, `kex_exchange_identification: read: Operation timed out\r\n`]) {
+      expect([s, map(s).status]).toEqual([s, 'unknown'])
+    }
+  })
+  test('each classifier\'s line with anything after it is not that line', () => {
+    for (const s of ['Host key verification failed. x', 'Connection timed out during banner exchange x',
+      'ssh: Could not resolve hostname nuance.local: nodename nor servname provided, or not known x', 'ssh: Could not resolve hostname nuance.local: x',
+      'ssh: connect to host nuance.local port 22: Operation timed out x', 'yu@nuance.local: Permission denied (publickey). x',
+      `no such identity: ${KEY}: No such file or directory x`, `no such identity: ${KEY}: Bogus`,
+      `Can't open user config file ${CFG}: No such file or directory x`, `Can't open user config file ${CFG}: Bogus`, `${CFG}: line 3: Bad configuration option: a b`]) {
+      expect([s, map(`${s}\r\n`).status]).toEqual([s, 'unknown'])
+    }
+  })
+  test('the errno forms each class enumerates still classify', () => {
+    for (const [s, want] of [
+      [`no such identity: ${KEY}: Permission denied`, 'auth_refused'], [`no such identity: ${KEY}: Operation not permitted`, 'auth_refused'],
+      [`Can't open user config file ${CFG}: Permission denied`, 'unreachable'], [`Can't open user config file ${CFG}: Operation not permitted`, 'unreachable'],
+    ] as const) expect([s, map(`${s}\r\n`).status]).toEqual([s, want])
+  })
+  test('only the verify line decides a host key mismatch (both 9.9p2 host-key captures end in it)', () => {
+    for (const s of ['@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @', 'No ED25519 host key is known for summon-nuance and you have requested strict checking.']) {
+      expect([s, map(`${s}\r\n`).status]).toEqual([s, 'unknown'])
+    }
+  })
+  test('a detail of an unknown is a closed, whole ssh line, or fixed text', () => {
+    expect(map('Unable to negotiate with 192.168.50.3 port 22: no matching host key type found. Their offer: ssh-rsa,ssh-dss\r\n').detail)
+      .toBe('Unable to negotiate with 192.168.50.3 port 22: no matching host key type found. Their offer: ssh-rsa,ssh-dss')
+    for (const s of ['Received disconnect from 192.168.50.3 port 22:11: disconnected by user', 'ssh_dispatch_run_fatal: Connection to 192.168.50.3 port 22: message authentication code incorrect',
+      'Unable to negotiate with 192.168.50.3 port 22: no matching cipher found. Their offer: Connection reset by 192.168.50.3 port 22']) {
+      expect([s, map(`${s}\r\n`)]).toEqual([s, { status: 'unknown', detail: FIXED }])
+    }
+  })
+})
+
+describe('round 3: the fingerprint is shown only from ssh\'s exact changed-key block', () => {
+  const VERIFY = 'Host key verification failed.\r\n'
+  const BAR = '@'.repeat(59)
+  const HEADER = `${BAR}\r\n@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\r\n${BAR}\r\n`
+  const FP = `The fingerprint for the ED25519 key sent by the remote host is\n${FINGERPRINT}.\r\n`
+  test('the real block gives the fingerprint', () => {
+    expect(map(`${HEADER}${FP}${VERIFY}`).detail).toBe(`Host key verification failed. Presented ED25519 key: ${FINGERPRINT}`)
+    expect(map(CHANGED_KEY).detail).toBe(`Host key verification failed. Presented ED25519 key: ${FINGERPRINT}`)
+  })
+  test('without the header, before it, with the inner line ended \\r\\n, with the lines apart, or a bad fingerprint: no fingerprint', () => {
+    for (const s of [`${FP}${VERIFY}`, `${FP}${HEADER}${VERIFY}`, `${HEADER}${FP.replace('is\n', 'is\r\n')}${VERIFY}`,
+      `${HEADER}The fingerprint for the ED25519 key sent by the remote host is\nPlease contact your system administrator.\r\n${FINGERPRINT}.\r\n${VERIFY}`,
+      `${HEADER}${FP.replace(FINGERPRINT, 'SHA256:short')}${VERIFY}`, `${HEADER.replace('@    WARNING', '@ WARNING')}${FP}${VERIFY}`]) {
+      expect([s, map(s)]).toEqual([s, { status: 'host_key_mismatch', detail: 'Host key verification failed.', hint: HOST_KEY_HINT }])
+    }
+  })
+  test('a verify line that is not a clean CRLF line gives no host_key_mismatch at all', () => {
+    for (const s of [`${HEADER}${FP}x: Host key verification failed.\r\n`, `${HEADER}${FP}Host key verification failed.\n`, `${HEADER}${FP}Host key verification failed.\r\r\n`]) {
+      expect([s, map(s).status]).toEqual([s, 'unknown'])
+    }
+  })
+})
+
+describe('round 3: a line with a \\r before its final \\r\\n is not ssh\'s', () => {
+  test('\\r\\r\\n and an inner \\r are not CRLF lines', () => {
+    expect(map('ssh: connect to host nuance.local port 22: Operation timed out\r\n')).toMatchObject({ status: 'unreachable', reason: 'timeout' })
+    for (const s of ['ssh: connect to host nuance.local port 22: Operation timed out\r\r\n', 'ssh: connect to host nuance.local port 22: Opera\rtion timed out\r\n',
+      'yu@nuance.local: Permission denied (publickey).\r\r\n', 'Connection to 192.168.50.3 port 22 timed out\r\r\n']) {
+      expect([s, map(s)]).toEqual([s, { status: 'unknown', detail: FIXED }])
+    }
   })
 })
