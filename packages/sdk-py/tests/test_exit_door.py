@@ -615,14 +615,18 @@ class TestFailures:
             {"id": "aaaaaaaa-0000-4000-8000-000000000099", "content": "x" * 12000, "created_at": "2026-10-01T00:00:00.000Z"}
         ]})
         node = NodeFake(max_body=8192)
-        manifest = _client(hosted, node).exit_door.export(
+        result = _client(hosted, node).exit_door.export(
             collection_id="agenttool-exit", stores=["memories", "vault_index"]
-        )["manifest"]
+        )
+        manifest = result["manifest"]
         memories = _store(manifest, "memories")
         assert memories["status"] == "complete"
-        assert memories["item_skips"][0]["hosted_id"] == "aaaaaaaa-0000-4000-8000-000000000099"
-        assert memories["item_skips"][0]["reason"] == "exceeds_node_limit"
-        assert memories["item_skips"][0]["bytes"] > 8192
+        assert memories["item_skip_count"] == 1
+        skips = result["item_skips"]["memories"]
+        assert skips[0]["hosted_id"] == "aaaaaaaa-0000-4000-8000-000000000099"
+        assert skips[0]["reason"] == "exceeds_node_limit"
+        assert skips[0]["bytes"] > 8192
+        assert json.loads(node.texts[memories["item_skip_record_ids"][0]])["item_skips"] == skips
         assert manifest["overall"] == "partial"
         assert _store(manifest, "vault_index")["current"]["record_count"] == 1
 
@@ -648,6 +652,68 @@ class TestFailures:
             listed += len(node.index_entries(index_id))
         assert listed == 300
         assert at.exit_door.verify(result["manifest_record_id"])["verified"] is True
+
+    def test_manifest_does_not_grow_with_repositories_or_identities(self) -> None:
+        repositories = [f"repo-{index:04d}" for index in range(300)]
+        identities = [
+            {"id": f"1d2c3b4a-0000-4000-8000-{index:012d}", "created_at": "2026-05-21T00:00:00.000Z"}
+            for index in range(300)
+        ]
+        hosted = HostedFake(max_page=200, dataset={
+            "repositories": repositories, "events": {}, "identities": identities, "keys": {},
+        })
+        # One walk record per parent would need ~28 KB per store here.
+        node = NodeFake(max_body=16384)
+        at = _client(hosted, node)
+        result = at.exit_door.export(
+            collection_id="agenttool-exit", stores=["correspondence", "identities", "identity_keys"]
+        )
+        manifest = result["manifest"]
+        assert manifest["overall"] == "complete"
+        assert _store(manifest, "correspondence")["walks"] == [
+            {"filter": {"walk": "repositories", "scope": "project"}, "pages": 2, "returned": 300, "exhausted": True},
+            {"filter": {"walk": "events", "scope": "per_repository", "repositories": 300},
+             "pages": 300, "returned": 0, "exhausted": True},
+        ]
+        assert _store(manifest, "identity_keys")["walks"] == [
+            {"filter": {"scope": "per_identity", "identities": 300}, "pages": 300, "returned": 0, "exhausted": True},
+        ]
+        assert len(node.texts[result["manifest_record_id"]].encode("utf-8")) < 16384
+        assert at.exit_door.verify(result["manifest_record_id"])["verified"] is True
+
+    def test_item_skips_live_in_skip_chunks(self) -> None:
+        memories = [
+            {"id": f"aaaaaaaa-0000-4000-8000-{index:012d}", "content": "x" * 12000,
+             "created_at": "2026-10-01T00:00:00.000Z"}
+            for index in range(100)
+        ]
+        node = NodeFake(max_body=8192)
+        at = _client(HostedFake(max_page=100, dataset={"memories": memories}), node)
+        result = at.exit_door.export(collection_id="agenttool-exit", stores=["memories"])
+        manifest = result["manifest"]
+        memories_store = _store(manifest, "memories")
+        assert manifest["overall"] == "partial"
+        assert memories_store["item_skip_count"] == 100
+        assert "item_skips" not in memories_store
+        assert len(result["item_skips"]["memories"]) == 100
+        # 100 skips (~120 bytes each) need several chunks under an 8 KiB body.
+        assert len(memories_store["item_skip_record_ids"]) > 1
+        chunked: List[Any] = []
+        for skip_id in memories_store["item_skip_record_ids"]:
+            chunk = json.loads(node.texts[skip_id])
+            assert chunk["schema"] == "agenttool-exit-skips/v1"
+            assert node.records[skip_id]["key"] == f"exit-skips/{manifest['run_id']}/memories/{chunk['chunk']}"
+            chunked.extend(chunk["item_skips"])
+        assert chunked == result["item_skips"]["memories"]
+        assert len(node.texts[result["manifest_record_id"]].encode("utf-8")) < 8192
+        verified = at.exit_door.verify(result["manifest_record_id"])
+        assert verified["verified"] is True
+        assert verified["checked"] == 1 + len(memories_store["item_skip_record_ids"])
+        victim = memories_store["item_skip_record_ids"][0]
+        node.tombstoned.add(victim)
+        after = at.exit_door.verify(result["manifest_record_id"])
+        assert after["verified"] is False
+        assert {"record_id": victim, "reason": "record_tombstoned"} in after["mismatches"]
 
     def test_manifest_that_cannot_fit_fails_the_run(self) -> None:
         node = NodeFake(max_body=2048)
@@ -739,16 +805,23 @@ class TestHostileIds:
             "keys": {identity: [{"kid": "k/1", "created_at": created}]},
         })
         node = NodeFake()
-        manifest = _client(hosted, node).exit_door.export(
+        result = _client(hosted, node).exit_door.export(
             collection_id="agenttool-exit",
             stores=["strands", "strand_thoughts", "identities", "identity_keys"],
-        )["manifest"]
+        )
+        manifest = result["manifest"]
         paths = [call["path"] for call in hosted.calls]
         assert "/v1/strands/..%2Fmemories%2Fpwned/thoughts" in paths
         assert "/v1/identities/a%2Fb%3Fx%3D1%23frag/keys" in paths
         assert not any(path.startswith("/v1/memories") for path in paths)
-        assert _store(manifest, "strands")["item_skips"] == [{"hosted_id": "..", "reason": "hosted_id_not_addressable"}]
-        assert _store(manifest, "strand_thoughts")["item_skips"] == [{"hosted_id": "..", "reason": "parent_id_not_addressable"}]
+        assert result["item_skips"]["strands"] == [{"hosted_id": "..", "reason": "hosted_id_not_addressable"}]
+        assert result["item_skips"]["strand_thoughts"] == [{"hosted_id": "..", "reason": "parent_id_not_addressable"}]
+        assert result["item_skips"]["identities"] == []
+        assert _store(manifest, "strands")["item_skip_count"] == 1
+        assert _store(manifest, "identities")["item_skip_record_ids"] == []
+        chunk = json.loads(node.texts[_store(manifest, "strands")["item_skip_record_ids"][0]])
+        assert chunk["schema"] == "agenttool-exit-skips/v1"
+        assert chunk["item_skips"] == [{"hosted_id": "..", "reason": "hosted_id_not_addressable"}]
         thought = node.index_entries(_store(manifest, "strand_thoughts")["current"]["index_record_ids"][0])[0]
         assert node.records[thought["record_id"]]["source"]["uri"] == (
             f"{HOSTED}/v1/strands/..%2Fmemories%2Fpwned/thoughts/..%2F..%2Ft"

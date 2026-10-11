@@ -1045,8 +1045,12 @@ The exit door moves data between the two planes in one direction, only when
 called. Hosted reads use the project bearer against the hosted origin and are
 GET-only: no read that writes `accessed_at` or spends credits. Writes use only
 the data-node bearer through the node's `text` collector, as one immutable
-record per hosted item, then chunked `exit-index/<run>/<store>/<n>` records,
-then one `exit-run/<run>` completeness manifest. Before its first write the
+record per hosted item, then chunked `exit-index/<run>/<store>/<n>` records
+(the current record per key) and `exit-skips/<run>/<store>/<n>` records (each
+skipped item and why), then one `exit-run/<run>` completeness manifest. Chunks
+fit both the node's body limit and the collection's record limit, and the
+manifest holds counts, digests, and chunk ids rather than per-item or
+per-parent detail, so its size does not grow with the project. Before its first write the
 exporter checks the node's `agent-data/v1` manifest, the `text` collector, and
 the target collection. It refuses a node token equal to the project API key,
 and a non-loopback node unless the caller allows it explicitly. Completeness is

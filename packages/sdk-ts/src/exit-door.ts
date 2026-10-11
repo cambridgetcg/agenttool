@@ -41,6 +41,7 @@ import { AgentToolError } from "./errors.js";
 
 export const EXIT_ITEM_SCHEMA = "agenttool-exit-item/v1" as const;
 export const EXIT_INDEX_SCHEMA = "agenttool-exit-index/v1" as const;
+export const EXIT_SKIPS_SCHEMA = "agenttool-exit-skips/v1" as const;
 export const EXIT_MANIFEST_SCHEMA = "agenttool-exit-manifest/v1" as const;
 export const EXIT_PLAN_SCHEMA = "agenttool-exit-plan/v1" as const;
 export const EXIT_VERIFY_SCHEMA = "agenttool-exit-verify/v1" as const;
@@ -120,8 +121,17 @@ const PAGE_LIMITS = {
   repositories: 200,
   events: 200,
 } as const;
-/** Bytes reserved in an index chunk's collect body for everything but its entries. */
-const INDEX_CHUNK_RESERVE = 4096;
+/** Bytes reserved in a chunk's collect body for everything but its entries. */
+const CHUNK_BODY_RESERVE = 4096;
+
+/** A chunked list written after the items: `exit-<name>/<run>/<store>/<n>`. */
+interface ChunkKind {
+  name: "index" | "skips";
+  schema: string;
+  field: "entries" | "item_skips";
+}
+const INDEX_CHUNKS: ChunkKind = { name: "index", schema: EXIT_INDEX_SCHEMA, field: "entries" };
+const SKIP_CHUNKS: ChunkKind = { name: "skips", schema: EXIT_SKIPS_SCHEMA, field: "item_skips" };
 
 // ─── Public shapes ──────────────────────────────────────────────────────
 
@@ -216,7 +226,11 @@ export interface ExitManifestStore {
     record_ids_sha256: string;
     index_record_ids: string[];
   };
-  item_skips: ExitItemSkip[];
+  /** How many hosted items this run skipped. The skips themselves are in
+   *  `exit-skips/<run>/<store>/<n>` records, so the manifest stays bounded
+   *  however many items a project has. */
+  item_skip_count: number;
+  item_skip_record_ids: string[];
   fields_not_exported: ExitFieldNotExported[];
   server_exclusions: string[];
 }
@@ -239,6 +253,9 @@ export interface ExitExportResult {
   /** Pass this to `verify()`. */
   manifest_record_id: string;
   manifest: ExitManifest;
+  /** Every skip of this run, per exported store: the same entries the
+   *  store's `item_skip_record_ids` hold. Not part of the manifest record. */
+  item_skips: Partial<Record<ExitStore, ExitItemSkip[]>>;
 }
 
 export interface ExitVerifyMismatch {
@@ -657,11 +674,14 @@ export class ExitDoorClient {
     const runs = await this.walkStores(selected, identityId, sink, options);
 
     const stores: ExitManifestStore[] = [];
+    const itemSkips: Partial<Record<ExitStore, ExitItemSkip[]>> = {};
     for (const run of runs) {
       const entries = [...run.current.entries()]
         .map(([key, value]) => ({ key, hosted_id: value.hosted_id, record_id: value.record_id }))
         .sort((left, right) => compareStrings(left.key, right.key));
-      const indexRecordIds = await this.writeIndex(target, runId, run.store, entries, startedAt);
+      const indexRecordIds = await this.writeChunks(target, runId, run.store, INDEX_CHUNKS, entries, startedAt);
+      const skipRecordIds = await this.writeChunks(target, runId, run.store, SKIP_CHUNKS, run.item_skips, startedAt);
+      itemSkips[run.store] = run.item_skips;
       stores.push({
         store: run.store,
         status: run.status,
@@ -674,7 +694,8 @@ export class ExitDoorClient {
           record_ids_sha256: recordIdsDigest(entries.map((entry) => entry.record_id)),
           index_record_ids: indexRecordIds,
         },
-        item_skips: run.item_skips,
+        item_skip_count: run.item_skips.length,
+        item_skip_record_ids: skipRecordIds,
         fields_not_exported: [...STORE_SPECS[run.store].fieldsNotExported],
         server_exclusions: [...STORE_SPECS[run.store].serverExclusions],
       });
@@ -704,7 +725,7 @@ export class ExitDoorClient {
       metadata: { kind: "exit-manifest", run_id: runId, overall: manifest.overall },
       observed_at: startedAt,
     }, "exit_manifest_too_large");
-    return { manifest_record_id: manifestRecordId, manifest };
+    return { manifest_record_id: manifestRecordId, manifest, item_skips: itemSkips };
   }
 
   /** Read-only node checks. Every one passes before the first write. */
@@ -883,33 +904,37 @@ export class ExitDoorClient {
     };
   }
 
-  /** Chunk the current-id list into `exit-index/<run>/<store>/<n>` records. */
-  private async writeIndex(
+  /**
+   * Write one list as `exit-<kind>/<run>/<store>/<n>` records: the
+   * current-id index, or the item skips. An empty list writes nothing.
+   */
+  private async writeChunks(
     target: NodeTarget,
     runId: string,
     store: ExitStore,
-    entries: Array<{ key: string; hosted_id: string; record_id: string }>,
+    kind: ChunkKind,
+    items: readonly object[],
     observedAt: string,
   ): Promise<string[]> {
     // Two ceilings bound every chunk: the node's request body limit, where
     // the chunk text travels escaped inside JSON, and the collection's record
     // limit, which counts the text's own bytes. Packing against only the
     // first would make a policy-limited collection refuse every chunk.
-    const bodyBudget = Math.max(target.max_body_bytes - INDEX_CHUNK_RESERVE, 1024);
+    const bodyBudget = Math.max(target.max_body_bytes - CHUNK_BODY_RESERVE, 1024);
     const recordBudget = target.max_record_bytes - utf8ByteLength(canonicalJson({
-      schema: EXIT_INDEX_SCHEMA,
+      schema: kind.schema,
       run_id: runId,
       store,
       chunk: Number.MAX_SAFE_INTEGER,
       chunk_count: Number.MAX_SAFE_INTEGER,
-      entries: [],
+      [kind.field]: [],
     }));
-    const chunks: Array<typeof entries> = [];
-    let current: typeof entries = [];
+    const chunks: object[][] = [];
+    let current: object[] = [];
     let bodySize = 0;
     let recordSize = 0;
-    for (const entry of entries) {
-      const text = canonicalJson(entry);
+    for (const item of items) {
+      const text = canonicalJson(item);
       // +1 for the separating comma; the body cost also counts JSON escaping.
       const recordCost = utf8ByteLength(text) + 1;
       const bodyCost = utf8ByteLength(JSON.stringify(text)) + 1;
@@ -922,29 +947,29 @@ export class ExitDoorClient {
         bodySize = 0;
         recordSize = 0;
       }
-      current.push(entry);
+      current.push(item);
       bodySize += bodyCost;
       recordSize += recordCost;
     }
     if (current.length > 0) chunks.push(current);
     const ids: string[] = [];
     for (let index = 0; index < chunks.length; index += 1) {
-      const key = `exit-index/${runId}/${store}/${index}`;
+      const key = `exit-${kind.name}/${runId}/${store}/${index}`;
       ids.push(await this.writeRequired(target, {
         text: canonicalJson({
-          schema: EXIT_INDEX_SCHEMA,
+          schema: kind.schema,
           run_id: runId,
           store,
           chunk: index,
           chunk_count: chunks.length,
-          entries: chunks[index],
+          [kind.field]: chunks[index],
         }),
-        source_uri: `urn:agenttool:exit-door:index:${runId}:${store}:${index}`,
+        source_uri: `urn:agenttool:exit-door:${kind.name}:${runId}:${store}:${index}`,
         external_id: key,
         key,
-        metadata: { kind: "exit-index", run_id: runId, store, chunk: index },
+        metadata: { kind: `exit-${kind.name}`, run_id: runId, store, chunk: index },
         observed_at: observedAt,
-      }, "exit_index_chunk_too_large"));
+      }, `exit_${kind.name}_chunk_too_large`));
     }
     return ids;
   }
@@ -1036,6 +1061,33 @@ export class ExitDoorClient {
         if (current.record_ids_sha256 !== recordIdsDigest(recordIds)) {
           storeResult.mismatches.push({ record_id: manifestRecordId, reason: `record_ids_sha256_mismatch:${rawStore.store}` });
         }
+      }
+      const skipIds = Array.isArray(rawStore.item_skip_record_ids) ? rawStore.item_skip_record_ids : [];
+      let skipCount = 0;
+      let skipsOk = true;
+      for (const skipId of skipIds) {
+        if (typeof skipId !== "string") {
+          storeResult.mismatches.push({ record_id: String(skipId), reason: "skips_id_invalid" });
+          skipsOk = false;
+          continue;
+        }
+        const read = await readVerified(data, skipId, options.signal);
+        storeResult.checked += 1;
+        if ("mismatch" in read) {
+          storeResult.mismatches.push({ record_id: skipId, reason: read.mismatch });
+          skipsOk = false;
+          continue;
+        }
+        const chunk = parseJsonObject(read.text);
+        if (!chunk || chunk.schema !== EXIT_SKIPS_SCHEMA || chunk.store !== rawStore.store || !Array.isArray(chunk.item_skips)) {
+          storeResult.mismatches.push({ record_id: skipId, reason: "not_an_exit_skips_chunk" });
+          skipsOk = false;
+          continue;
+        }
+        skipCount += chunk.item_skips.length;
+      }
+      if (skipsOk && rawStore.item_skip_count !== skipCount) {
+        storeResult.mismatches.push({ record_id: manifestRecordId, reason: `item_skip_count_mismatch:${rawStore.store}` });
       }
       result.checked += storeResult.checked;
       result.mismatches.push(...storeResult.mismatches);
@@ -1130,13 +1182,14 @@ export class ExitDoorClient {
       if (runs.has("strands")) done(strands, progress);
       if (thoughts) {
         settleChild(thoughts, strands, "strands");
-        summarizeThoughtWalks(thoughts);
+        thoughts.walks = [summarizeWalks(thoughts.walks, { scope: "per_strand" }, "strands")];
         done(thoughts, progress);
       }
     }
 
     const correspondence = runs.get("correspondence");
     if (correspondence) {
+      let eventsWalked = false;
       await guarded(correspondence, async () => {
         const repositories: string[] = [];
         const found = await walker.after(correspondence, {
@@ -1152,6 +1205,7 @@ export class ExitDoorClient {
           }
         });
         if (!found) return;
+        eventsWalked = true;
         for (const repositoryId of repositories) {
           await walker.after(correspondence, {
             path: "/v1/correspondence/events",
@@ -1163,6 +1217,13 @@ export class ExitDoorClient {
           }, (item) => sink(correspondence, item, {}));
         }
       });
+      if (eventsWalked) {
+        const [repositoriesWalk, ...eventWalks] = correspondence.walks;
+        correspondence.walks = [
+          repositoriesWalk!,
+          summarizeWalks(eventWalks, { walk: "events", scope: "per_repository" }, "repositories"),
+        ];
+      }
       done(correspondence, progress);
     }
 
@@ -1210,6 +1271,7 @@ export class ExitDoorClient {
       if (runs.has("identities")) done(identities, progress);
       if (keys) {
         settleChild(keys, identities, "identities");
+        keys.walks = [summarizeWalks(keys.walks, { scope: "per_identity" }, "identities")];
         done(keys, progress);
       }
     }
@@ -1502,15 +1564,23 @@ function settleChild(child: StoreRun, parent: StoreRun, parentName: string): voi
   child.reason = `parent_store_incomplete:${parentName}`;
 }
 
-/** Thoughts walk once per strand; the manifest carries one aggregate walk. */
-function summarizeThoughtWalks(run: StoreRun): void {
-  const walks = run.walks;
-  run.walks = [{
-    filter: { scope: "per_strand", strands: walks.length },
+/**
+ * A walk repeated once per parent (thoughts per strand, events per
+ * repository, keys per identity) is recorded as one aggregate, so the
+ * manifest does not grow with the number of parents. `exhausted` is true
+ * only when every per-parent walk reached its end.
+ */
+function summarizeWalks(
+  walks: readonly ExitWalk[],
+  filter: Record<string, string>,
+  parents: string,
+): ExitWalk {
+  return {
+    filter: { ...filter, [parents]: walks.length },
     pages: walks.reduce((sum, walk) => sum + walk.pages, 0),
     returned: walks.reduce((sum, walk) => sum + walk.returned, 0),
     exhausted: walks.every((walk) => walk.exhausted),
-  }];
+  };
 }
 
 function overallOf(runs: readonly StoreRun[]): ExitOverall {

@@ -318,7 +318,7 @@ describe("exit door: hostile hosted ids", () => {
         },
       },
     });
-    const { manifest } = await h.at.exitDoor.export({
+    const { manifest, item_skips } = await h.at.exitDoor.export({
       collection_id: "agenttool-exit",
       stores: ["strands", "strand_thoughts", "identities", "identity_keys"],
     });
@@ -329,12 +329,20 @@ describe("exit door: hostile hosted ids", () => {
     expect(paths.some((path) => path === "/v1/strands/../thoughts" || path === "/v1/thoughts")).toBe(false);
 
     // The dot-segment strand is an item skip on both stores, not a crash.
-    expect(store(manifest, "strands").item_skips).toEqual([
-      { hosted_id: "..", reason: "hosted_id_not_addressable" },
-    ]);
-    expect(store(manifest, "strand_thoughts").item_skips).toEqual([
-      { hosted_id: "..", reason: "parent_id_not_addressable" },
-    ]);
+    expect(item_skips.strands).toEqual([{ hosted_id: "..", reason: "hosted_id_not_addressable" }]);
+    expect(item_skips.strand_thoughts).toEqual([{ hosted_id: "..", reason: "parent_id_not_addressable" }]);
+    expect(item_skips.identities).toEqual([]);
+    expect(store(manifest, "strands").item_skip_count).toBe(1);
+    expect(store(manifest, "identities").item_skip_count).toBe(0);
+    expect(store(manifest, "identities").item_skip_record_ids).toEqual([]);
+    const skipsChunk = await readJsonRecord(h.node, store(manifest, "strands").item_skip_record_ids[0]!);
+    expect(skipsChunk).toMatchObject({
+      schema: "agenttool-exit-skips/v1",
+      store: "strands",
+      chunk: 0,
+      chunk_count: 1,
+      item_skips: [{ hosted_id: "..", reason: "hosted_id_not_addressable" }],
+    });
     const index = await readJsonRecord(h.node, store(manifest, "strand_thoughts").current.index_record_ids[0]!);
     const thought = h.node.getRecord((index.entries as Array<{ record_id: string }>)[0]!.record_id)!;
     expect(thought.source.uri).toBe(`${HOSTED}/v1/strands/..%2Fmemories%2Fpwned/thoughts/..%2F..%2Ft`);
@@ -448,13 +456,16 @@ describe("exit door: failure handling", () => {
         },
       },
     });
-    const { manifest } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["memories", "vault_index"] });
+    const { manifest, item_skips } = await h.at.exitDoor.export({ collection_id: "agenttool-exit", stores: ["memories", "vault_index"] });
     const memories = store(manifest, "memories");
     expect(memories.status).toBe("complete");
-    expect(memories.item_skips).toHaveLength(1);
-    expect(memories.item_skips[0]!.hosted_id).toBe("aaaaaaaa-0000-4000-8000-000000000099");
-    expect(memories.item_skips[0]!.reason).toBe("exceeds_node_limit");
-    expect(memories.item_skips[0]!.bytes).toBeGreaterThan(8192);
+    expect(memories.item_skip_count).toBe(1);
+    expect(item_skips.memories).toHaveLength(1);
+    expect(item_skips.memories![0]!.hosted_id).toBe("aaaaaaaa-0000-4000-8000-000000000099");
+    expect(item_skips.memories![0]!.reason).toBe("exceeds_node_limit");
+    expect(item_skips.memories![0]!.bytes).toBeGreaterThan(8192);
+    const chunk = await readJsonRecord(h.node, memories.item_skip_record_ids[0]!);
+    expect(chunk.item_skips).toEqual(item_skips.memories as never);
     expect(memories.current.record_count).toBe(0);
     expect(manifest.overall).toBe("partial");
     expect(store(manifest, "vault_index").current.record_count).toBe(1);
@@ -488,6 +499,77 @@ describe("exit door: failure handling", () => {
     }
     expect(listed).toBe(300);
     expect((await h.at.exitDoor.verify(manifest_record_id)).verified).toBe(true);
+  });
+
+  test("the manifest does not grow with the number of repositories or identities", async () => {
+    const repositories = Array.from({ length: 300 }, (_, index) => `repo-${String(index).padStart(4, "0")}`);
+    const identities = Array.from({ length: 300 }, (_, index) => ({
+      id: `1d2c3b4a-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      created_at: "2026-05-21T00:00:00.000Z",
+    }));
+    const h = await harness({
+      // One walk record per parent would need ~28 KB per store here.
+      limits: { max_body_bytes: 16_384 },
+      hosted: { maxPage: 200, dataset: { repositories, events: {}, identities, keys: {} } },
+    });
+    const { manifest, manifest_record_id } = await h.at.exitDoor.export({
+      collection_id: "agenttool-exit",
+      stores: ["correspondence", "identities", "identity_keys"],
+    });
+    expect(manifest.overall).toBe("complete");
+    expect(store(manifest, "correspondence").walks).toEqual([
+      { filter: { walk: "repositories", scope: "project" }, pages: 2, returned: 300, exhausted: true },
+      { filter: { walk: "events", scope: "per_repository", repositories: 300 }, pages: 300, returned: 0, exhausted: true },
+    ]);
+    expect(store(manifest, "identity_keys").walks).toEqual([
+      { filter: { scope: "per_identity", identities: 300 }, pages: 300, returned: 0, exhausted: true },
+    ]);
+    expect(store(manifest, "identities").current.record_count).toBe(300);
+    expect(h.node.getRecord(manifest_record_id)!.content.size).toBeLessThan(16_384);
+    expect((await h.at.exitDoor.verify(manifest_record_id)).verified).toBe(true);
+  });
+
+  test("item skips live in exit-skips chunks; the manifest only counts them", async () => {
+    const big = "x".repeat(12_000);
+    const memories = Array.from({ length: 100 }, (_, index) => ({
+      id: `aaaaaaaa-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      content: big,
+      identity_id: null,
+      created_at: "2026-10-01T00:00:00.000Z",
+    }));
+    const h = await harness({
+      limits: { max_body_bytes: 8192 },
+      hosted: { maxPage: 100, dataset: { memories } },
+    });
+    const { manifest, manifest_record_id, item_skips } = await h.at.exitDoor.export({
+      collection_id: "agenttool-exit",
+      stores: ["memories"],
+    });
+    const memoriesStore = store(manifest, "memories");
+    expect(manifest.overall).toBe("partial");
+    expect(memoriesStore.item_skip_count).toBe(100);
+    expect(memoriesStore).not.toHaveProperty("item_skips");
+    expect(item_skips.memories).toHaveLength(100);
+    // 100 skips (~120 bytes each) need several chunks under an 8 KiB body.
+    expect(memoriesStore.item_skip_record_ids.length).toBeGreaterThan(1);
+    const chunked: unknown[] = [];
+    for (const id of memoriesStore.item_skip_record_ids) {
+      const chunk = await readJsonRecord(h.node, id);
+      expect(chunk.schema).toBe("agenttool-exit-skips/v1");
+      expect(h.node.getRecord(id)!.key).toBe(`exit-skips/${manifest.run_id}/memories/${chunk.chunk}`);
+      chunked.push(...(chunk.item_skips as unknown[]));
+    }
+    expect(chunked).toEqual(item_skips.memories as never);
+    expect(h.node.getRecord(manifest_record_id)!.content.size).toBeLessThan(8192);
+
+    const verified = await h.at.exitDoor.verify(manifest_record_id);
+    expect(verified.verified).toBe(true);
+    expect(verified.checked).toBe(1 + memoriesStore.item_skip_record_ids.length);
+    const victim = memoriesStore.item_skip_record_ids[0]!;
+    await h.node.tombstone(victim, "test");
+    const after = await h.at.exitDoor.verify(manifest_record_id);
+    expect(after.verified).toBe(false);
+    expect(after.mismatches).toContainEqual({ record_id: victim, reason: "record_tombstoned" });
   });
 
   test("a manifest that cannot fit fails the run instead of being truncated", async () => {

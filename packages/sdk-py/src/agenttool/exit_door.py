@@ -52,6 +52,7 @@ from .exceptions import AgentToolError, _error_from_response
 
 EXIT_ITEM_SCHEMA = "agenttool-exit-item/v1"
 EXIT_INDEX_SCHEMA = "agenttool-exit-index/v1"
+EXIT_SKIPS_SCHEMA = "agenttool-exit-skips/v1"
 EXIT_MANIFEST_SCHEMA = "agenttool-exit-manifest/v1"
 EXIT_PLAN_SCHEMA = "agenttool-exit-plan/v1"
 EXIT_VERIFY_SCHEMA = "agenttool-exit-verify/v1"
@@ -115,8 +116,11 @@ _PAGE_LIMITS = {
     "repositories": 200,
     "events": 200,
 }
-#: Bytes reserved in an index chunk's collect body for everything but its entries.
-_INDEX_CHUNK_RESERVE = 4096
+#: Bytes reserved in a chunk's collect body for everything but its entries.
+_CHUNK_BODY_RESERVE = 4096
+#: Chunked lists written after the items: ``exit-<name>/<run>/<store>/<n>``.
+_INDEX_CHUNKS = MappingProxyType({"name": "index", "schema": EXIT_INDEX_SCHEMA, "field": "entries"})
+_SKIP_CHUNKS = MappingProxyType({"name": "skips", "schema": EXIT_SKIPS_SCHEMA, "field": "item_skips"})
 _MAX_SAFE_INTEGER = 2**53 - 1
 _DEFAULT_MAX_BODY = 1024 * 1024
 _DEFAULT_MAX_RECORD = 10 * 1024 * 1024
@@ -554,6 +558,7 @@ class ExitDoorClient:
         runs = self._walk_stores(selected, identity, sink, on_progress)
 
         manifest_stores = []
+        item_skips: Dict[str, List[Dict[str, Any]]] = {}
         for run in runs:
             entries = sorted(
                 (
@@ -562,7 +567,9 @@ class ExitDoorClient:
                 ),
                 key=lambda entry: _utf16_sort_key(entry["key"]),
             )
-            index_ids = self._write_index(target, run_id, run.store, entries, started_at)
+            index_ids = self._write_chunks(target, run_id, run.store, _INDEX_CHUNKS, entries, started_at)
+            skip_ids = self._write_chunks(target, run_id, run.store, _SKIP_CHUNKS, run.item_skips, started_at)
+            item_skips[run.store] = run.item_skips
             entry: Dict[str, Any] = {"store": run.store, "status": run.status}
             if run.reason is not None:
                 entry["reason"] = run.reason
@@ -575,7 +582,8 @@ class ExitDoorClient:
                     "record_ids_sha256": _record_ids_digest([e["record_id"] for e in entries]),
                     "index_record_ids": index_ids,
                 },
-                "item_skips": run.item_skips,
+                "item_skip_count": len(run.item_skips),
+                "item_skip_record_ids": skip_ids,
                 "fields_not_exported": [dict(field) for field in _STORE_SPECS[run.store]["fields_not_exported"]],
                 "server_exclusions": list(_STORE_SPECS[run.store]["server_exclusions"]),
             })
@@ -605,7 +613,7 @@ class ExitDoorClient:
             "metadata": {"kind": "exit-manifest", "run_id": run_id, "overall": manifest["overall"]},
             "observed_at": started_at,
         }, "exit_manifest_too_large")
-        return {"manifest_record_id": manifest_record_id, "manifest": manifest}
+        return {"manifest_record_id": manifest_record_id, "manifest": manifest, "item_skips": item_skips}
 
     def _prepare_node(self, collection_id: str, allow_remote: bool) -> _NodeTarget:
         data = self._node_guards(allow_remote)
@@ -748,34 +756,40 @@ class ExitDoorClient:
             },
         }
 
-    def _write_index(
+    def _write_chunks(
         self,
         target: _NodeTarget,
         run_id: str,
         store: str,
-        entries: List[Dict[str, str]],
+        kind: Mapping[str, str],
+        items: Sequence[Mapping[str, Any]],
         observed_at: str,
     ) -> List[str]:
+        """Write one list as ``exit-<kind>/<run>/<store>/<n>`` records.
+
+        The list is the current-id index or the item skips. An empty list
+        writes nothing.
+        """
         # Two ceilings bound every chunk: the node's request body limit, where
         # the chunk text travels escaped inside JSON, and the collection's
         # record limit, which counts the text's own bytes. Packing against
         # only the first would make a policy-limited collection refuse every
         # chunk.
-        body_budget = max(target.max_body_bytes - _INDEX_CHUNK_RESERVE, 1024)
+        body_budget = max(target.max_body_bytes - _CHUNK_BODY_RESERVE, 1024)
         record_budget = target.max_record_bytes - utf8_byte_length(canonical_json({
-            "schema": EXIT_INDEX_SCHEMA,
+            "schema": kind["schema"],
             "run_id": run_id,
             "store": store,
             "chunk": _MAX_SAFE_INTEGER,
             "chunk_count": _MAX_SAFE_INTEGER,
-            "entries": [],
+            kind["field"]: [],
         }))
-        chunks: List[List[Dict[str, str]]] = []
-        current: List[Dict[str, str]] = []
+        chunks: List[List[Mapping[str, Any]]] = []
+        current: List[Mapping[str, Any]] = []
         body_size = 0
         record_size = 0
-        for entry in entries:
-            text = canonical_json(entry)
+        for item in items:
+            text = canonical_json(item)
             # +1 for the separating comma; the body cost also counts JSON escaping.
             record_cost = utf8_byte_length(text) + 1
             body_cost = utf8_byte_length(_js_json_string(text)) + 1
@@ -784,29 +798,30 @@ class ExitDoorClient:
                 current = []
                 body_size = 0
                 record_size = 0
-            current.append(entry)
+            current.append(item)
             body_size += body_cost
             record_size += record_cost
         if current:
             chunks.append(current)
+        name = kind["name"]
         ids = []
         for index, chunk in enumerate(chunks):
-            key = f"exit-index/{run_id}/{store}/{index}"
+            key = f"exit-{name}/{run_id}/{store}/{index}"
             ids.append(self._write_required(target, {
                 "text": canonical_json({
-                    "schema": EXIT_INDEX_SCHEMA,
+                    "schema": kind["schema"],
                     "run_id": run_id,
                     "store": store,
                     "chunk": index,
                     "chunk_count": len(chunks),
-                    "entries": chunk,
+                    kind["field"]: chunk,
                 }),
-                "source_uri": f"urn:agenttool:exit-door:index:{run_id}:{store}:{index}",
+                "source_uri": f"urn:agenttool:exit-door:{name}:{run_id}:{store}:{index}",
                 "external_id": key,
                 "key": key,
-                "metadata": {"kind": "exit-index", "run_id": run_id, "store": store, "chunk": index},
+                "metadata": {"kind": f"exit-{name}", "run_id": run_id, "store": store, "chunk": index},
                 "observed_at": observed_at,
-            }, "exit_index_chunk_too_large"))
+            }, f"exit_{name}_chunk_too_large"))
         return ids
 
     # ── verify ────────────────────────────────────────────────────────────
@@ -898,6 +913,39 @@ class ExitDoorClient:
                     store_result["mismatches"].append(
                         {"record_id": manifest_record_id, "reason": f"record_ids_sha256_mismatch:{store_name}"}
                     )
+            raw_skip_ids = raw_store.get("item_skip_record_ids")
+            skip_ids = raw_skip_ids if isinstance(raw_skip_ids, list) else []
+            skip_count = 0
+            skips_ok = True
+            for skip_id in skip_ids:
+                if not isinstance(skip_id, str):
+                    store_result["mismatches"].append({"record_id": str(skip_id), "reason": "skips_id_invalid"})
+                    skips_ok = False
+                    continue
+                read = _read_verified(data, skip_id)
+                store_result["checked"] += 1
+                if "mismatch" in read:
+                    store_result["mismatches"].append({"record_id": skip_id, "reason": read["mismatch"]})
+                    skips_ok = False
+                    continue
+                chunk = _parse_json_object(read["text"])
+                if (
+                    chunk is None
+                    or chunk.get("schema") != EXIT_SKIPS_SCHEMA
+                    or chunk.get("store") != store_name
+                    or not isinstance(chunk.get("item_skips"), list)
+                ):
+                    store_result["mismatches"].append({"record_id": skip_id, "reason": "not_an_exit_skips_chunk"})
+                    skips_ok = False
+                    continue
+                skip_count += len(chunk["item_skips"])
+            recorded_skips = raw_store.get("item_skip_count")
+            if skips_ok and (
+                not isinstance(recorded_skips, int) or isinstance(recorded_skips, bool) or recorded_skips != skip_count
+            ):
+                store_result["mismatches"].append(
+                    {"record_id": manifest_record_id, "reason": f"item_skip_count_mismatch:{store_name}"}
+                )
             result["checked"] += store_result["checked"]
             result["mismatches"].extend(store_result["mismatches"])
         result["verified"] = len(result["mismatches"]) == 0
@@ -1001,11 +1049,12 @@ class ExitDoorClient:
                 done(strands)
             if thoughts is not None:
                 _settle_child(thoughts, strands, "strands")
-                _summarize_thought_walks(thoughts)
+                thoughts.walks = [_summarize_walks(thoughts.walks, {"scope": "per_strand"}, "strands")]
                 done(thoughts)
 
         correspondence = runs.get("correspondence")
         if correspondence is not None:
+            events_walked = [False]
 
             def walk_correspondence() -> None:
                 repositories: List[str] = []
@@ -1027,6 +1076,7 @@ class ExitDoorClient:
                 )
                 if not found:
                     return
+                events_walked[0] = True
                 for repository_id in repositories:
                     walker.after(
                         correspondence,
@@ -1040,6 +1090,12 @@ class ExitDoorClient:
                     )
 
             guarded(correspondence, walk_correspondence)
+            if events_walked[0]:
+                repositories_walk, event_walks = correspondence.walks[0], correspondence.walks[1:]
+                correspondence.walks = [
+                    repositories_walk,
+                    _summarize_walks(event_walks, {"walk": "events", "scope": "per_repository"}, "repositories"),
+                ]
             done(correspondence)
 
         covenants = runs.get("covenants")
@@ -1105,6 +1161,7 @@ class ExitDoorClient:
                 done(identities)
             if keys is not None:
                 _settle_child(keys, identities, "identities")
+                keys.walks = [_summarize_walks(keys.walks, {"scope": "per_identity"}, "identities")]
                 done(keys)
 
         vault = runs.get("vault_index")
@@ -1378,14 +1435,19 @@ def _settle_child(child: _StoreRun, parent: _StoreRun, parent_name: str) -> None
     child.reason = f"parent_store_incomplete:{parent_name}"
 
 
-def _summarize_thought_walks(run: _StoreRun) -> None:
-    walks = run.walks
-    run.walks = [{
-        "filter": {"scope": "per_strand", "strands": len(walks)},
+def _summarize_walks(walks: Sequence[Dict[str, Any]], filter_: Mapping[str, str], parents: str) -> Dict[str, Any]:
+    """One aggregate for a walk repeated once per parent.
+
+    Thoughts per strand, events per repository, and keys per identity are
+    recorded as one walk each, so the manifest does not grow with the number
+    of parents. ``exhausted`` is true only when every per-parent walk ended.
+    """
+    return {
+        "filter": {**filter_, parents: len(walks)},
         "pages": sum(walk["pages"] for walk in walks),
         "returned": sum(walk["returned"] for walk in walks),
         "exhausted": all(walk["exhausted"] for walk in walks),
-    }]
+    }
 
 
 def _overall_of(runs: Sequence[_StoreRun]) -> str:
