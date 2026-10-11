@@ -344,20 +344,31 @@ async function proveRepositoryWalk(): Promise<void> {
       WHERE project_id = '${P}' GROUP BY repository_id ORDER BY repository_id`,
   );
   expect(expected).toHaveLength(5);
-  for (const limit of [1, 2, 3]) {
+  const lastId = expected.at(-1)!.repository_id;
+  // 5 is exactly the repository count (one full final page); 10 is more.
+  for (const limit of [1, 2, 3, 5, 10]) {
     const seen: Array<{ repository_id: string; last_received_seq: string }> = [];
     let after: string | null = null;
+    let pages = 0;
     for (let page = 0; page < 20; page++) {
       const query = `limit=${limit}${after === null ? "" : `&after=${encodeURIComponent(after)}`}`;
       const response = await app().request(`/v1/correspondence/repositories?${query}`);
       expect(response.status).toBe(200);
       const body = await response.json() as any;
+      pages += 1;
       expect(body.page.after).toBe(after);
+      // has_more comes from a sentinel row, so the walk never needs a
+      // trailing empty page, and the page holding the last repository
+      // says has_more false.
+      expect(body.repositories.length, `limit=${limit} page ${page}`).toBeGreaterThan(0);
+      const holdsLast = body.repositories.some((row: { repository_id: string }) => row.repository_id === lastId);
+      expect(body.page.has_more, `limit=${limit} page ${page}`).toBe(!holdsLast);
       seen.push(...body.repositories);
       after = body.page.next_after;
       if (!body.page.has_more) break;
     }
     expect(seen).toEqual(expected.map((row) => ({ ...row })));
+    expect(pages, `limit=${limit}`).toBe(Math.ceil(expected.length / limit));
   }
   const tail = await (await app().request(
     `/v1/correspondence/repositories?after=${encodeURIComponent(expected.at(-1)!.repository_id)}`,

@@ -868,6 +868,28 @@ describe("correspondence repository index store", () => {
     expect(query!.params).toEqual([PROJECT_ID, "0", PROJECT_ID, PROJECT_ID, 3]);
   });
 
+  test("exactly limit repositories is the final page: has_more false, no empty page to fetch", async () => {
+    // The query asks for limit + 1; getting back exactly limit rows means
+    // no sentinel, so the page must not claim more.
+    const fake = executor([
+      { repository_id: "a", last_received_seq: "3" },
+      { repository_id: "b", last_received_seq: "9" },
+    ]);
+    const page = await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, limit: 2 },
+      { database: fake.database },
+    );
+    expect(page.repositories.map((row) => row.repository_id)).toEqual(["a", "b"]);
+    expect(page.page).toEqual({ after: null, next_after: "b", has_more: false });
+    expect(fake.seen[0]!.params.at(-1)).toBe(3);
+
+    const single = executor([{ repository_id: "z", last_received_seq: "1" }]);
+    expect((await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, after: "y", limit: 1 },
+      { database: single.database },
+    )).page).toEqual({ after: "y", next_after: "z", has_more: false });
+  });
+
   test("an empty page echoes after; the default and maximum match /events", async () => {
     const empty = executor([]);
     const page = await listCorrespondenceRepositories(
