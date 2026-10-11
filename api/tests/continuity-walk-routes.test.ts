@@ -140,6 +140,23 @@ describe("limit floor (decision D1)", () => {
     expect(reads('"agent_continuity"."chronicle"')[0]!.params.at(-1)).toBe(201);
   });
 
+  test("an empty or whitespace limit reads each route's default, chronicle included", async () => {
+    for (const [path, table, expected] of [
+      ["/v1/chronicle?limit=", '"agent_continuity"."chronicle"', 51],
+      ["/v1/chronicle?limit=%20%20", '"agent_continuity"."chronicle"', 51],
+      ["/v1/memories?limit=", '"memory"."memories"', 21],
+      ["/v1/memories?limit=%20", '"memory"."memories"', 21],
+      ["/v1/strands?limit=", '"strand"."strands"', 51],
+      ["/v1/strands?limit=%20", '"strand"."strands"', 51],
+    ] as const) {
+      queries = [];
+      const { status, body } = await get(path);
+      expect(status, path).toBe(200);
+      expect(body.page.limit, path).toBe(expected - 1);
+      expect(reads(table)[0]!.params.at(-1), path).toBe(expected);
+    }
+  });
+
   test("strands refuse -1 and 0 and keep the NaN default", async () => {
     for (const path of ["/v1/strands?limit=-1", "/v1/strands?limit=0"]) {
       const { status, body } = await get(path);

@@ -208,10 +208,12 @@ function limitInvalid(max: number): KeysetRequestError {
 
 /** The limit floor shared by the continuity list routes.
  *
- *  Without a cursor the route's historic parse is kept; NaN falls back to
- *  the route default, a value below 1 is refused (it used to read every row
- *  or none), and values above the maximum are clamped. With a cursor the
- *  value must be a positive decimal integer. */
+ *  Without a cursor the route's historic parse is kept; an empty or
+ *  whitespace value and NaN fall back to the route default, a value below 1
+ *  is refused (it used to read every row or none), and values above the
+ *  maximum are clamped. The empty check comes first so Number("") (0) and
+ *  parseInt("") (NaN) agree across routes. With a cursor the value must be a
+ *  positive decimal integer. */
 export function parsePageLimit(
   raw: string | null | undefined,
   options: PageLimitOptions,
@@ -221,6 +223,7 @@ export function parsePageLimit(
     if (!/^[1-9][0-9]*$/.test(raw)) throw limitInvalid(options.max);
     return Math.min(Number(raw), options.max);
   }
+  if (raw.trim() === "") return options.def;
   const parsed = options.parse === "number" ? Number(raw) : Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) return options.def;
   const whole = Math.trunc(parsed);

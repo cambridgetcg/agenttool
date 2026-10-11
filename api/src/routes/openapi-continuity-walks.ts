@@ -123,7 +123,7 @@ function continuityLimitParameter(defaultLimit: number, maximum: number) {
     required: false,
     schema: { type: "integer", minimum: 1, maximum, default: defaultLimit },
     description:
-      `Rows per page. Without a cursor a non-numeric value reads the default ${defaultLimit}, a value below 1 returns 400 limit_invalid, and values above ${maximum} are clamped. With a cursor only a positive decimal integer is accepted (above ${maximum} is clamped).`,
+      `Rows per page. Without a cursor an empty or non-numeric value reads the default ${defaultLimit}, a value below 1 returns 400 limit_invalid, and values above ${maximum} are clamped. With a cursor only a positive decimal integer is accepted (above ${maximum} is clamped).`,
   };
 }
 

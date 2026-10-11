@@ -152,6 +152,7 @@ describe("limit floor (decision D1) and strict cursor limits", () => {
     expect(memoriesLimit("500")).toBe(100);
     expect(memoriesLimit(undefined)).toBe(20);
     expect(memoriesLimit("")).toBe(20);
+    expect(memoriesLimit("  ")).toBe(20);
     expect(memoriesLimit("7")).toBe(7);
     expect(memoriesLimit("1.9")).toBe(1);
     const strandsLimit = (raw: string) => parsePageLimit(raw, { def: 50, max: 200, strict: false, parse: "int" });
@@ -165,7 +166,11 @@ describe("limit floor (decision D1) and strict cursor limits", () => {
     expect(chronicleLimit("abc")).toBe(50);
     expectCode(() => chronicleLimit("-1"), "limit_invalid");
     expectCode(() => chronicleLimit("0"), "limit_invalid");
-    expectCode(() => chronicleLimit(""), "limit_invalid"); // Number("") is 0
+    // Number("") and Number("  ") are 0; empty reads the default like
+    // memories and strands (parseInt NaN) instead of refusing.
+    expect(chronicleLimit("")).toBe(50);
+    expect(chronicleLimit("  ")).toBe(50);
+    expect(chronicleLimit(" 7 ")).toBe(7);
     expectCode(() => chronicleLimit("0.5"), "limit_invalid");
     expect(chronicleLimit("1.5")).toBe(1);
     expect(chronicleLimit("1000")).toBe(200);
