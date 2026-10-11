@@ -25,6 +25,7 @@ import { chronicle, covenants } from "../db/schema/continuity";
 import { identities, identityKeys } from "../db/schema/identity";
 import { organizations } from "../db/schema/org";
 import { errors, fail } from "../lib/errors";
+import { KeysetRequestError, parsePageLimit } from "../lib/keyset-cursor";
 import { prepareDeclare } from "../services/covenants/prepare";
 import {
   COVENANT_COUNTERPARTY_NAME_MAX_CHARS,
@@ -205,7 +206,15 @@ app.get("/chronicle", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
   const type = c.req.query("type");
-  const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
+  // Limit floor: NaN reads the default, below 1 is refused (it used to read
+  // every row or none), above 200 is clamped. Number() parse is kept.
+  let limit: number;
+  try {
+    limit = parsePageLimit(c.req.query("limit"), { def: 50, max: 200, strict: false, parse: "number" });
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
+  }
 
   // since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Filters to
   // chronicle.occurredAt > since when parsed; full list otherwise.

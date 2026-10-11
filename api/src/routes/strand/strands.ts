@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
+import { KeysetRequestError, parsePageLimit } from "../../lib/keyset-cursor";
 import {
   createStrand,
   getStrand,
@@ -76,12 +77,20 @@ app.post("/", async (c) => {
 app.get("/", async (c) => {
   const status = c.req.query("status");
   const agentId = c.req.query("agent_id") ?? null;
-  const limit = Number.parseInt(c.req.query("limit") ?? "50", 10);
+  // Limit floor: NaN keeps the default, below 1 is refused instead of
+  // reading every strand, above 200 is clamped.
+  let limit: number;
+  try {
+    limit = parsePageLimit(c.req.query("limit"), { def: 50, max: 200, strict: false, parse: "int" });
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
+  }
 
   const list = await listStrands(c.var.project.id, {
     status,
     agent_id: agentId,
-    limit: Number.isFinite(limit) ? limit : 50,
+    limit,
   });
   return c.json({ strands: list, count: list.length });
 });

@@ -16,6 +16,7 @@ import {
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
 import { errors, fail } from "../../lib/errors";
+import { KeysetRequestError, parsePageLimit } from "../../lib/keyset-cursor";
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
@@ -193,7 +194,6 @@ app.get("/", async (c) => {
   const identityId = c.req.query("identity_id");
   const type = c.req.query("type");
   const tier = c.req.query("tier");
-  const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
   const sinceParse = parseSinceParam(c);
 
   // Validate tier early — silent-drop fences are forbidden (see
@@ -207,6 +207,17 @@ app.get("/", async (c) => {
       },
       400,
     );
+  }
+
+  // Limit floor (docs/AGENT-WEB-SURFACE.md continuity walks): NaN keeps the
+  // default, a value below 1 is refused instead of reading every row, and
+  // values above 100 are clamped.
+  let limit: number;
+  try {
+    limit = parsePageLimit(c.req.query("limit"), { def: 20, max: 100, strict: false, parse: "int" });
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
   }
 
   function applySinceFilter<T extends { updated_at?: unknown; created_at?: unknown }>(
@@ -251,7 +262,7 @@ app.get("/", async (c) => {
   if (key) {
     const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null, {
       identity_id: identityId ?? null,
-      limit: Number.isFinite(limit) ? limit : 20,
+      limit,
     }));
     const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
     return c.json(
@@ -272,7 +283,7 @@ app.get("/", async (c) => {
       identity_id: identityId ?? null,
       type,
       tier,
-      limit: Number.isFinite(limit) ? limit : 20,
+      limit,
     }),
   );
   const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
