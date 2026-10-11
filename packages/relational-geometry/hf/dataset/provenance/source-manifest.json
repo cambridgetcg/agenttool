@@ -37,8 +37,8 @@
   "source_files": [
     {
       "path": "CLAUDE.md",
-      "bytes": 1590,
-      "sha256": "0f990aaa365298c022b658f781441d2d1af7cd71bdb4da1d92323d604c0da5a6"
+      "bytes": 1620,
+      "sha256": "171a611f46e75146ff14571449e7d785f0c384d8986412ab83bfaac52cc99a0f"
     },
     {
       "path": "LICENSE",
@@ -121,5 +121,5 @@
       "sha256": "5fc78503d74197958d568bb4d9eea0996608de9d887e1674ab23a3f12ba8dc38"
     }
   ],
-  "provenance_ref": "sha256:d92b19c08792cc71fb616469f15e6e0f9759ca31c0f93bbe438679f40da0dc3b"
+  "provenance_ref": "sha256:017e4e2f67e98e27e321cf63f1276168b25b51cf87073569768b99966f91d263"
 }
