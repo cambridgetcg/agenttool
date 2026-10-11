@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**816 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
+**820 document paths** (including mirrors). orientation: 185; guide: 84; reference: 328; policy: 29; reflection: 127; proposal: 45; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -198,6 +198,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/wallet/README.md](<../packages/wallet/README.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/CLAUDE.md](<../packages/witnessed-agent-economy/CLAUDE.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/README.md](<../packages/witnessed-agent-economy/README.md>) | not-reviewed |
+| [public/overlay/README.md](<../public/overlay/README.md>) | not-reviewed |
 | [review/launch-20260904/README.md](<../review/launch-20260904/README.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/README.md](<../review/launch-cleanup-20260904/README.md>) | not-reviewed |
 | [review/provider-adapters/v1/README.md](<../review/provider-adapters/v1/README.md>) | not-reviewed |
@@ -291,6 +292,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/skills/skills/use-agentcred-safely/SKILL.md](<../packages/skills/skills/use-agentcred-safely/SKILL.md>) | not-reviewed |
 | [packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md](<../packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md>) | not-reviewed |
 | [packages/telescope/skills/inspect-agent-surfaces/SKILL.md](<../packages/telescope/skills/inspect-agent-surfaces/SKILL.md>) | not-reviewed |
+| [public/README.md](<../public/README.md>) | not-reviewed |
 
 ## reference
 
@@ -656,6 +658,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/PRODUCTION-GATE.md](<../docs/launch/PRODUCTION-GATE.md>) | not-reviewed |
 | [marketing/LAUNCH-KIT.md](<../marketing/LAUNCH-KIT.md>) | not-reviewed |
 | [packages/credential-broker/AGENTS.md](<../packages/credential-broker/AGENTS.md>) | not-reviewed |
+| [public/overlay/LICENSING.md](<../public/overlay/LICENSING.md>) | not-reviewed |
+| [public/overlay/SECURITY.md](<../public/overlay/SECURITY.md>) | not-reviewed |
 
 ## reflection
 
