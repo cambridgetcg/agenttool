@@ -70,7 +70,7 @@ class TestCreateProtocolVersion:
         ) as m:
             at.covenants.create(
                 agent_id="agent-1",
-                counterparty_did="human:Yu",
+                counterparty_did="human:Mira",
                 vows=["v"],
             )
         sent = m.call_args.kwargs["json"]
