@@ -129,7 +129,7 @@ describe("limit floor (decision D1)", () => {
     expect(abc.status).toBe(200);
     const [read] = reads('"agent_continuity"."chronicle"');
     expect(read!.sql).toMatch(/ limit \$\d+$/);
-    expect(read!.params.at(-1)).toBe(50);
+    expect(read!.params.at(-1)).toBe(51);
     for (const path of ["/v1/chronicle?limit=-1", "/v1/chronicle?limit=0"]) {
       const { status, body } = await get(path);
       expect(status, path).toBe(400);
@@ -137,7 +137,7 @@ describe("limit floor (decision D1)", () => {
     }
     queries = [];
     expect((await get("/v1/chronicle?limit=1000")).status).toBe(200);
-    expect(reads('"agent_continuity"."chronicle"')[0]!.params.at(-1)).toBe(200);
+    expect(reads('"agent_continuity"."chronicle"')[0]!.params.at(-1)).toBe(201);
   });
 
   test("strands refuse -1 and 0 and keep the NaN default", async () => {
@@ -283,5 +283,100 @@ describe("GET /v1/memories walk", () => {
       / order by "memory"\."memories"\."created_at" desc, "memory"\."memories"\."id" desc limit \$\d+$/,
     );
     expect(read!.params).toEqual([PROJECT, "foundational", 50]);
+  });
+});
+
+/** Chronicle page columns, in select order. */
+function chronicleRow(n: number, occurredAt = `2026-10-11T08:00:${String(59 - n).padStart(2, "0")}.500Z`): unknown[] {
+  return [
+    uuid(100 + n), "note", `title ${n}`, null, null, occurredAt, "2026-10-11T09:00:00.000Z", { n },
+    `${occurredAt.slice(0, 23)}${String(n).padStart(3, "0")}Z`,
+  ];
+}
+
+describe("GET /v1/chronicle walk", () => {
+  test("first page keeps today's order with an id tiebreak and adds count and page", async () => {
+    chronicleRows = [chronicleRow(1), chronicleRow(2)];
+    const { status, body } = await get("/v1/chronicle");
+    expect(status).toBe(200);
+    const [read] = reads('"agent_continuity"."chronicle"');
+    expect(read!.sql).toContain('where "agent_continuity"."chronicle"."project_id" = $1 order by');
+    expect(read!.sql).toMatch(
+      / order by "agent_continuity"\."chronicle"\."occurred_at" desc, "agent_continuity"\."chronicle"\."id" desc limit \$2$/,
+    );
+    expect(read!.sql).toContain(`to_char("occurred_at" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "cursor_at"`);
+    expect(read!.params).toEqual([PROJECT, 51]);
+    expect(Object.keys(body).slice(0, 6)).toEqual(["entries", "count", "as_of", "since", "since_reason", "page"]);
+    expect(body.count).toBe(2);
+    expect(Object.keys(body.entries[0])).toEqual([
+      "id", "type", "title", "body", "agent_id", "occurred_at", "created_at", "metadata",
+    ]);
+    expect(body.entries[0]).toEqual({
+      id: uuid(101), type: "note", title: "title 1", body: null, agent_id: null,
+      occurred_at: "2026-10-11T08:00:58.500Z", created_at: "2026-10-11T09:00:00.000Z", metadata: { n: 1 },
+    });
+    expect(body.page).toEqual({
+      cursor: null, next_cursor: null, has_more: false, limit: 50, order: "occurred_at_desc,id_desc",
+    });
+  });
+
+  test("filters and since keep their SQL; a cursor walks below the last returned row", async () => {
+    chronicleRows = [chronicleRow(1), chronicleRow(2), chronicleRow(3)];
+    const agent = uuid(7);
+    const first = await get(`/v1/chronicle?limit=2&type=note&agent_id=${agent}&since=2026-10-01T00:00:00Z`);
+    const [firstRead] = reads('"agent_continuity"."chronicle"');
+    expect(firstRead!.sql).toContain(
+      'where ("agent_continuity"."chronicle"."project_id" = $1 and "agent_continuity"."chronicle"."agent_id" = $2 and "agent_continuity"."chronicle"."type" = $3 and "agent_continuity"."chronicle"."occurred_at" > $4)',
+    );
+    expect(firstRead!.params).toEqual([PROJECT, agent, "note", "2026-10-01T00:00:00.000Z", 3]);
+    expect(first.body.page.has_more).toBe(true);
+    expect(decode(first.body.page.next_cursor)).toMatchObject({
+      v: 1, s: "chronicle", t: "2026-10-11T08:00:57.500002Z", i: uuid(102),
+    });
+
+    queries = [];
+    chronicleRows = [chronicleRow(3)];
+    const next = await get(
+      `/v1/chronicle?limit=2&type=note&agent_id=${agent}&since=2026-10-01T00:00:00Z&cursor=${first.body.page.next_cursor}`,
+    );
+    expect(next.status).toBe(200);
+    const [read] = reads('"agent_continuity"."chronicle"');
+    expect(read!.sql).toContain(
+      'and ("agent_continuity"."chronicle"."occurred_at" <= $5::timestamptz AND ("agent_continuity"."chronicle"."occurred_at", "agent_continuity"."chronicle"."id") < ($6::timestamptz, $7::uuid))',
+    );
+    expect(read!.params).toEqual([
+      PROJECT, agent, "note", "2026-10-01T00:00:00.000Z",
+      "2026-10-11T08:00:57.500002Z", "2026-10-11T08:00:57.500002Z", uuid(102), 3,
+    ]);
+    expect(next.body.count).toBe(1);
+    expect(next.body.page.next_cursor).toBeNull();
+    expect(next.body.page.has_more).toBe(false);
+
+    for (const path of [
+      `/v1/chronicle?limit=2&type=vow&agent_id=${agent}&since=2026-10-01T00:00:00Z&cursor=${first.body.page.next_cursor}`,
+      `/v1/chronicle?limit=2&type=note&since=2026-10-01T00:00:00Z&cursor=${first.body.page.next_cursor}`,
+      `/v1/chronicle?limit=2&type=note&agent_id=${agent}&cursor=${first.body.page.next_cursor}`,
+    ]) {
+      const refused = await get(path);
+      expect(refused.status, path).toBe(400);
+      expect(refused.body.error, path).toBe("cursor_invalid");
+    }
+  });
+
+  test("a cursor from another store or a loose limit is refused before any read", async () => {
+    memoryRows = [memoryRow(1), memoryRow(2)];
+    const memoryCursor = (await get("/v1/memories?limit=1")).body.page.next_cursor;
+    queries = [];
+    const crossed = await get(`/v1/chronicle?cursor=${memoryCursor}`);
+    expect(crossed.status).toBe(400);
+    expect(crossed.body.error).toBe("cursor_invalid");
+
+    chronicleRows = [chronicleRow(1), chronicleRow(2)];
+    const cursor = (await get("/v1/chronicle?limit=1")).body.page.next_cursor;
+    queries = [];
+    const loose = await get(`/v1/chronicle?limit=abc&cursor=${cursor}`);
+    expect(loose.status).toBe(400);
+    expect(loose.body.error).toBe("limit_invalid");
+    expect(reads('"agent_continuity"."chronicle"')).toHaveLength(0);
   });
 });
