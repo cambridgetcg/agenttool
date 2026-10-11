@@ -434,6 +434,20 @@ self-review where the repository settings allow it, and restrict deployment to
 the reviewed release-tag policy. The environment name is part of the PyPI OIDC
 identity and must remain exact.
 
+**Current state — 2026-10-11.** The required reviewer is not in place. Read
+through the GitHub environments API on 2026-10-11, the `pypi` environment
+carries only a branch policy, with no required reviewer and
+`can_admins_bypass: true`; the repository has been private since 2026-09-25.
+The "protected `pypi` environment" and the approval step in this guide
+therefore describe the intended gate, not the current one. Owner decision,
+2026-10-11: PyPI releases, like npm releases, are frozen until a required
+human reviewer returns. The PyPI workflow has not run since 2026-09-01
+([run 33522323177](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177));
+its prepare job makes the same unauthenticated `git fetch` of the private
+`main` branch (`bin/pypi-release.ts`) that stopped npm run 38034353198 on
+2026-10-10, so it is expected to stop the same way. LOVE covers JavaScript
+packages only, so `agenttool-sdk` has no working release lane today.
+
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant
 `id-token: write` only to the publishing job. References:

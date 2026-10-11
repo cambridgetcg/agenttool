@@ -30,11 +30,17 @@ carry the same release contents. Pin the version and check the download's
 published SHA-256 before extraction. The package's repository metadata identifies
 the protected source repository; the public distribution is separately inspectable.
 
-For an npm-managed project installation:
+The package is not on the npm registry (checked 2026-10-11:
+`npm view @agenttool/local-starter` returns 404), so installation by registry
+name is not available. To install with npm, verify the downloaded archive and
+install it into a dedicated local prefix:
 
 ```sh
-npm install --save-exact --ignore-scripts @agenttool/local-starter@0.1.0-dev.0
+npm install --ignore-scripts --prefix ./agenttool-local-preview /absolute/downloads/agenttool-local-starter-0.1.0-dev.0.tgz
 ```
+
+The README inside the 0.1.0-dev.0 archive still shows a registry-name command
+here; that command fails with 404.
 
 The package has no install lifecycle scripts or runtime dependency installation.
 Node **22 or newer** runs both CLI and MCP; Bun is needed only by maintainers

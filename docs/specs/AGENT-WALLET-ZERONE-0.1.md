@@ -20,6 +20,15 @@ mirrors and must be verified independently. Package distribution does not
 imply a hosted service, deployed bridge, custody, host execution conformance,
 or live-chain execution.
 
+Profile scope note, 2026-10-11: this draft is pinned to zerone-core as of the
+2026-07-28 commit above. zerone-core commit `7f3405b1b` (2026-07-29) made the
+attestation keeper reject a link whose `source.adapter_id` differs from its
+`adapter_id` (`ErrSourceAdapterIdMismatch`, code 28). §5 of this draft requires
+`source.adapter_id` to stay empty, so conforming attestation messages do not
+validate against current zerone-core source. Which zerone-core commit the live
+chains run could not be determined on 2026-10-11. Whether to re-target the
+profile is an open owner decision; this note changes no normative text.
+
 Version 0.1 standardises:
 
 1. Zerone chain, account, key, and native-asset profiles;

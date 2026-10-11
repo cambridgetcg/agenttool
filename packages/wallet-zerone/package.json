@@ -69,5 +69,5 @@
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/wallet-zerone"
   },
-  "homepage": "https://github.com/cambridgetcg/agenttool/blob/main/docs/specs/AGENT-WALLET-ZERONE-0.1.md"
+  "homepage": "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md"
 }

@@ -736,8 +736,8 @@ and source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
 Annotated `sdk-v0.22.1` peels to protected-main commit
 `d49498d266a3594098c36c933cbe410757fc03b3`; protected npm run
 `33522319466` and PyPI run `33522323177` independently read back its exact
-optional mirrors. The hosted static path for the 0.22.1 bytes remains
-prospective, and the release does not
+optional mirrors. On 2026-10-11 the hosted static path for the 0.22.1 bytes
+served exactly 274,443 bytes with that SHA-256, and the release does not
 rewrite or claim publication of the verified 0.22.0 bytes.
 
 The SDK 0.22.0 catalog entry remains an exact 272,657-byte, 104-entry public
@@ -747,8 +747,8 @@ and source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
 Annotated `sdk-v0.22.0` peels to protected-main commit
 `7bc0a902f231ee76aed6dd5316721b65bce58047`; protected npm run
 `33434131214` and PyPI run `33434133719` independently read back its exact
-optional mirrors. The hosted static path for the 0.22.0 bytes remains
-prospective, and the release does not
+optional mirrors. On 2026-10-11 the hosted static path for the 0.22.0 bytes
+served exactly 272,657 bytes with that SHA-256, and the release does not
 rewrite or claim publication of the verified 0.21.1 bytes.
 
 The SDK 0.21.1 catalog entry remains an exact 247,749-byte, 100-entry public

@@ -119,7 +119,7 @@ describe("public and packed boundary", () => {
       id: "alchemy-evidence",
       package: PACKAGE_NAME,
       version: PACKAGE_VERSION,
-      status: "unpublished_source_candidate",
+      status: "developer_preview",
       host_contract: "not_registered",
     });
     expect(extension.proposed_abilities.map(({ id }) => id)).toEqual([

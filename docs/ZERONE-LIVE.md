@@ -17,6 +17,21 @@
 > attestation `att-146-9` was observed SETTLED. These are dated read-only
 > observations, not package guarantees or continuing-liveness proof.
 
+> **Status checked 2026-10-11 (read-only).** Both RPC endpoints below
+> answered: `zerone-1` at height 1,352,685 and `zerone-testnet-1` at height
+> 3,020,736, neither catching up. Both report CometBFT 0.38.19 and ABCI
+> version `dev`, so the zerone-core commit they run could not be determined.
+> The RPC transaction index lists 20 `MsgSubmitExternalAttestation`
+> transactions on `zerone-1`, the latest at height 863021
+> (2026-08-04T07:01:20Z), and 27 on `zerone-testnet-1`, the latest at height
+> 930420 (2026-08-04T07:01:22Z). Neither chain reports the
+> `consolidation-safety-v1` upgrade as applied. On zerone-core `main`,
+> `tools/agenttool-relay` has refused `zerone-1` and `zerone-testnet-1` as
+> local-rehearsal-only since commit `7f3405b1b` (2026-07-29); the relay at the
+> pinned `35284a2` has no such refusal. For the Wallet Zerone profile's scope
+> against current zerone-core, see the
+> [profile scope note](specs/AGENT-WALLET-ZERONE-0.1.md#1-status-and-scope).
+
 ## Current implementation matrix
 
 | Surface | Repository state on 2026-07-29 | What it does not establish |

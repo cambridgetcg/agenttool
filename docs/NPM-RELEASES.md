@@ -27,6 +27,22 @@ is unchanged. The route pins the reviewed external artifact and source edition,
 transfers only verified bytes, retains the protected `npm-bootstrap` reviewer,
 permits first-publication bootstrap only, and verifies the public npm tarball.
 
+**Release gate correction — 2026-10-11.** The reviewer described above and in
+step 7 below is not in place today. Read through the GitHub environments API
+on 2026-10-11, `npm-bootstrap` and `pypi` each carry only a branch policy, with
+no required reviewer and `can_admins_bypass: true`. Run 33736822237 on
+2026-09-03 still recorded a reviewer approval for `npm-bootstrap`; the
+repository has been private since 2026-09-25. Owner decision, 2026-10-11: npm
+and PyPI releases are frozen until a required human reviewer returns to both
+environments. The npm prepare job also stops today at an unauthenticated fetch
+of the private `main` branch:
+[run 38034353198](https://github.com/cambridgetcg/agenttool/actions/runs/38034353198)
+failed there on 2026-10-10 with `could not read Username for
+'https://github.com'`. The PyPI prepare job has not run since 2026-09-01, but
+`bin/pypi-release.ts` makes the same fetch, so it is expected to stop the same
+way. Today the checked-in LOVE catalog served from docs.agenttool.dev is the
+only working release lane.
+
 The three translation layers and the separate incidence Atlas deliberately use
 different artifact and Hub surfaces:
 
@@ -2135,6 +2151,11 @@ bytes. Use the corrected 0.1.3 line for any later Wallet npm attempt. Zerone
 Zerone 0.1.1 remains an exact LOVE artifact whose npm preparation failure is
 recorded above; 0.1.2 is the successful exact GitHub/npm mirror.
 
+Correction, 2026-10-11: published Zerone 0.1.2 names a GitHub page in the
+private repository as its homepage, which returns 404 without access. Source
+now names the served `https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md`;
+that reaches npm only with a new version.
+
 These remain deliberate external actions requiring separate authorization.
 The release path only mirrors reviewed package bytes. It does not configure a
 Zerone endpoint, hold signing keys, provide custody, sign for a host, deploy a
@@ -2186,6 +2207,15 @@ Dev.1 adds Base Mainnet to the explicit internal-transfer support set and
 packs the provider-neutral evidence schemas, fixtures, and declaration-only
 unregistered KINGDOM hint. Neither dev.1 nor dev.0 has a LOVE inventory entry,
 and package publication does not install a host contract.
+
+Correction, 2026-10-11: the published metadata of both Alchemy packages, dev.0
+and dev.1, names `https://docs.agenttool.dev/ALCHEMY.md` as its homepage. The
+docs site has never served that page, so it returns 404. The packed dev.1
+`kingdom.extension.json` also declares `status: unpublished_source_candidate`.
+Source now names `https://docs.agenttool.dev/packages` and
+`status: developer_preview`. Published bytes do not change: the correction
+reaches npm only with a new version, and releases are frozen (see the release
+gate correction near the top of this guide).
 
 Historical immutable receipt—not a command sequence: package
 `@agenttool/alchemy@0.1.0-dev.0`, annotated tag

@@ -59,8 +59,13 @@ describe("optional npm package discovery", () => {
       "npm install --save-exact @agenttool/kingdom@0.1.0",
     );
     expect(packages).toContain(
-      "npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0",
+      "npm install --save-exact @agenttool/alchemy@0.1.0-dev.1 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.1",
     );
+    expect(packages).not.toContain(
+      "npm install --save-exact @agenttool/alchemy@0.1.0-dev.0",
+    );
+    expect(packages).not.toMatch(/sole initial prerelease/i);
+    expect(packages).not.toMatch(/0\.22\.[01] LOVE bytes remains prospective/);
     expect(packages).toContain(
       'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04"',
     );

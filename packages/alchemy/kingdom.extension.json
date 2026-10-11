@@ -3,7 +3,7 @@
   "id": "alchemy-evidence",
   "package": "@agenttool/alchemy",
   "version": "0.1.0-dev.1",
-  "status": "unpublished_source_candidate",
+  "status": "developer_preview",
   "host_contract": "not_registered",
   "proposed_abilities": [
     {
