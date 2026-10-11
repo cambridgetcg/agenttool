@@ -16,6 +16,9 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "bin": {
+    "agenttool-exit-door": "dist/cli/exit-door.js"
+  },
   "files": [
     "dist",
     "LICENSE",
