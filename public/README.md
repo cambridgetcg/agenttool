@@ -40,12 +40,16 @@ back. `--allow-rewind` permits a deliberate rollback, and the result records
 it as `rewound_from`.
 
 Before any ref changes, every layer must pass: projection integrity; the path
-layer (allowlist membership, no symlinks, submodules, files over 5 MiB, or
-credential-shaped names); the secret layer (release-tool signatures, the
-public doors rules, and gitleaks 8.30.1); the personal layer; the private
-relational layer; and the parent/diff rule. The tool refuses to run when the
-guard it imports differs from the overlay copy it ships. It never pushes.
-Pushing to the public repository is a separate, reviewed step.
+layer (allowlist membership, no symlinks, submodules, files over 5 MiB,
+credential-shaped names, or binary files without a digest entry); the secret
+layer (release-tool signatures, the public doors rules, and gitleaks 8.30.1);
+the personal layer; the private relational layer; and the parent/diff rule.
+Content layers also read decoded escapes and NFC/NFKC forms of each line.
+The public head and every commit behind it must be projection commits that
+match their own `PROJECTION.json` (the guard's `--history` check, which the
+public CI also runs on every push). The tool refuses to run when the guard it
+imports differs from the overlay copy it ships. It never pushes. Pushing to
+the public repository is a separate, reviewed step.
 
 ## Exceptions
 
