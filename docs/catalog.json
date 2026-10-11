@@ -6431,6 +6431,14 @@
       "canonical_path": "packages/wallet-zerone/README.md"
     },
     {
+      "path": "packages/wallet/CHANGELOG.md",
+      "title": "@agenttool/wallet changelog",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/wallet/CHANGELOG.md"
+    },
+    {
       "path": "packages/wallet/CLAUDE.md",
       "title": "@agenttool/wallet",
       "type": "orientation",

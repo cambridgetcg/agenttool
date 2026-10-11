@@ -57,6 +57,11 @@ source checkout they live at:
 - `schema/agent-wallet-v0.1.schema.json`
 - `vectors/agent-wallet-v0.1-vectors.json`
 
+Negative vectors, cases a conforming implementation must refuse, live in the
+source checkout at `vectors/agent-wallet-v0.1-negative-vectors.json`. They
+have no subpath export, and the published `0.1.3` artifact does not contain
+them.
+
 ## Record verification
 
 ```typescript
