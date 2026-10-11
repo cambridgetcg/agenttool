@@ -460,6 +460,36 @@ describe("exit door: failure handling", () => {
     expect(store(manifest, "vault_index").current.record_count).toBe(1);
   });
 
+  test("index chunks fit a collection's max_record_bytes, not only the body limit", async () => {
+    const memories = Array.from({ length: 300 }, (_, index) => ({
+      id: `aaaaaaaa-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      content: `m${index}`,
+      identity_id: null,
+      created_at: "2026-10-01T00:00:00.000Z",
+    }));
+    const h = await harness({
+      collection: { id: "agenttool-exit", policy: { max_record_bytes: 16_384 } },
+      hosted: { maxPage: 100, dataset: { memories } },
+    });
+    const { manifest, manifest_record_id } = await h.at.exitDoor.export({
+      collection_id: "agenttool-exit",
+      stores: ["memories"],
+    });
+    const entry = store(manifest, "memories");
+    expect(manifest.overall).toBe("complete");
+    expect(entry.current.record_count).toBe(300);
+    // 300 entries (~200 bytes each) cannot share one 16 KiB record.
+    expect(entry.current.index_record_ids.length).toBeGreaterThan(1);
+    let listed = 0;
+    for (const id of entry.current.index_record_ids) {
+      const record = h.node.getRecord(id)!;
+      expect(record.content.size).toBeLessThanOrEqual(16_384);
+      listed += ((await readJsonRecord(h.node, id)).entries as unknown[]).length;
+    }
+    expect(listed).toBe(300);
+    expect((await h.at.exitDoor.verify(manifest_record_id)).verified).toBe(true);
+  });
+
   test("a manifest that cannot fit fails the run instead of being truncated", async () => {
     const h = await harness({ limits: { max_body_bytes: 2048 } });
     const error = await h.at.exitDoor

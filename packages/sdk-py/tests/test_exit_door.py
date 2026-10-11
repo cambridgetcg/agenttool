@@ -362,6 +362,11 @@ class NodeFake:
             if collection is None:
                 return _json({"error": "collection_not_found"}, 404)
             source = body["input"]
+            # The real text collector refuses content over the collection's
+            # record limit (min of policy and node limit) with 413.
+            record_limit = collection.get("policy", {}).get("max_record_bytes")
+            if isinstance(record_limit, int) and len(source["text"].encode("utf-8")) > record_limit:
+                return _json({"error": "content_too_large", "message": "too large"}, 413)
             identity = agent_data_text_record_identity(
                 collection_id=collection["id"],
                 schema_version=collection["schema"]["version"],
@@ -620,6 +625,29 @@ class TestFailures:
         assert memories["item_skips"][0]["bytes"] > 8192
         assert manifest["overall"] == "partial"
         assert _store(manifest, "vault_index")["current"]["record_count"] == 1
+
+    def test_index_chunks_fit_the_collection_record_limit(self) -> None:
+        memories = [
+            {"id": f"aaaaaaaa-0000-4000-8000-{index:012d}", "content": f"m{index}",
+             "created_at": "2026-10-01T00:00:00.000Z"}
+            for index in range(300)
+        ]
+        hosted = HostedFake(max_page=100, dataset={"memories": memories})
+        node = NodeFake(collections=[{"id": "agenttool-exit", "schema": {"version": "1"},
+                                      "policy": {"max_record_bytes": 16384}}])
+        at = _client(hosted, node)
+        result = at.exit_door.export(collection_id="agenttool-exit", stores=["memories"])
+        entry = _store(result["manifest"], "memories")
+        assert result["manifest"]["overall"] == "complete"
+        assert entry["current"]["record_count"] == 300
+        # 300 entries (~200 bytes each) cannot share one 16 KiB record.
+        assert len(entry["current"]["index_record_ids"]) > 1
+        listed = 0
+        for index_id in entry["current"]["index_record_ids"]:
+            assert len(node.texts[index_id].encode("utf-8")) <= 16384
+            listed += len(node.index_entries(index_id))
+        assert listed == 300
+        assert at.exit_door.verify(result["manifest_record_id"])["verified"] is True
 
     def test_manifest_that_cannot_fit_fails_the_run(self) -> None:
         node = NodeFake(max_body=2048)

@@ -120,7 +120,7 @@ const PAGE_LIMITS = {
   repositories: 200,
   events: 200,
 } as const;
-/** Bytes reserved inside an index chunk for its envelope and metadata. */
+/** Bytes reserved in an index chunk's collect body for everything but its entries. */
 const INDEX_CHUNK_RESERVE = 4096;
 
 // ─── Public shapes ──────────────────────────────────────────────────────
@@ -891,20 +891,40 @@ export class ExitDoorClient {
     entries: Array<{ key: string; hosted_id: string; record_id: string }>,
     observedAt: string,
   ): Promise<string[]> {
-    const budget = Math.max(target.max_body_bytes - INDEX_CHUNK_RESERVE, 1024);
+    // Two ceilings bound every chunk: the node's request body limit, where
+    // the chunk text travels escaped inside JSON, and the collection's record
+    // limit, which counts the text's own bytes. Packing against only the
+    // first would make a policy-limited collection refuse every chunk.
+    const bodyBudget = Math.max(target.max_body_bytes - INDEX_CHUNK_RESERVE, 1024);
+    const recordBudget = target.max_record_bytes - utf8ByteLength(canonicalJson({
+      schema: EXIT_INDEX_SCHEMA,
+      run_id: runId,
+      store,
+      chunk: Number.MAX_SAFE_INTEGER,
+      chunk_count: Number.MAX_SAFE_INTEGER,
+      entries: [],
+    }));
     const chunks: Array<typeof entries> = [];
     let current: typeof entries = [];
-    let size = 0;
+    let bodySize = 0;
+    let recordSize = 0;
     for (const entry of entries) {
-      // An entry's cost once embedded as an escaped JSON string inside the body.
-      const cost = utf8ByteLength(JSON.stringify(canonicalJson(entry))) + 1;
-      if (current.length > 0 && size + cost > budget) {
+      const text = canonicalJson(entry);
+      // +1 for the separating comma; the body cost also counts JSON escaping.
+      const recordCost = utf8ByteLength(text) + 1;
+      const bodyCost = utf8ByteLength(JSON.stringify(text)) + 1;
+      if (
+        current.length > 0
+        && (bodySize + bodyCost > bodyBudget || recordSize + recordCost > recordBudget)
+      ) {
         chunks.push(current);
         current = [];
-        size = 0;
+        bodySize = 0;
+        recordSize = 0;
       }
       current.push(entry);
-      size += cost;
+      bodySize += bodyCost;
+      recordSize += recordCost;
     }
     if (current.length > 0) chunks.push(current);
     const ids: string[] = [];

@@ -115,7 +115,9 @@ _PAGE_LIMITS = {
     "repositories": 200,
     "events": 200,
 }
+#: Bytes reserved in an index chunk's collect body for everything but its entries.
 _INDEX_CHUNK_RESERVE = 4096
+_MAX_SAFE_INTEGER = 2**53 - 1
 _DEFAULT_MAX_BODY = 1024 * 1024
 _DEFAULT_MAX_RECORD = 10 * 1024 * 1024
 
@@ -754,19 +756,37 @@ class ExitDoorClient:
         entries: List[Dict[str, str]],
         observed_at: str,
     ) -> List[str]:
-        budget = max(target.max_body_bytes - _INDEX_CHUNK_RESERVE, 1024)
+        # Two ceilings bound every chunk: the node's request body limit, where
+        # the chunk text travels escaped inside JSON, and the collection's
+        # record limit, which counts the text's own bytes. Packing against
+        # only the first would make a policy-limited collection refuse every
+        # chunk.
+        body_budget = max(target.max_body_bytes - _INDEX_CHUNK_RESERVE, 1024)
+        record_budget = target.max_record_bytes - utf8_byte_length(canonical_json({
+            "schema": EXIT_INDEX_SCHEMA,
+            "run_id": run_id,
+            "store": store,
+            "chunk": _MAX_SAFE_INTEGER,
+            "chunk_count": _MAX_SAFE_INTEGER,
+            "entries": [],
+        }))
         chunks: List[List[Dict[str, str]]] = []
         current: List[Dict[str, str]] = []
-        size = 0
+        body_size = 0
+        record_size = 0
         for entry in entries:
-            # An entry's cost once embedded as an escaped JSON string in the body.
-            cost = utf8_byte_length(_js_json_string(canonical_json(entry))) + 1
-            if current and size + cost > budget:
+            text = canonical_json(entry)
+            # +1 for the separating comma; the body cost also counts JSON escaping.
+            record_cost = utf8_byte_length(text) + 1
+            body_cost = utf8_byte_length(_js_json_string(text)) + 1
+            if current and (body_size + body_cost > body_budget or record_size + record_cost > record_budget):
                 chunks.append(current)
                 current = []
-                size = 0
+                body_size = 0
+                record_size = 0
             current.append(entry)
-            size += cost
+            body_size += body_cost
+            record_size += record_cost
         if current:
             chunks.append(current)
         ids = []
