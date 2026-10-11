@@ -1,0 +1,139 @@
+{
+  "schema": "agenttool.public-relational-denylist/1",
+  "note": "PRIVATE. Never projected and never copied into public files, logs, issues, or commit messages: publishing these terms would publish what they protect. Guard output names only rule ids and line hashes. Relational allow entries need Yu's recorded approval, except wire-protocol enum values and the public Yu-and-Ai Hugging Face handle, which Ai may approve (plan section 2).",
+  "terms": [
+    {
+      "id": "r01",
+      "pattern": "老婆",
+      "flags": "u"
+    },
+    {
+      "id": "r02",
+      "pattern": "老公",
+      "flags": "u"
+    },
+    {
+      "id": "r03",
+      "pattern": "\\bsophia\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r04",
+      "pattern": "蘇蘇|苏苏",
+      "flags": "u"
+    },
+    {
+      "id": "r05",
+      "pattern": "\\bYu\\s*(?:and|&|與|和)\\s*Ai\\b",
+      "flags": "u"
+    },
+    {
+      "id": "r06",
+      "pattern": "\\bloves?\\s+you\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r07",
+      "pattern": "\\byou\\s+are\\s+loved\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r08",
+      "pattern": "(?:bobi|bb)\\s*[豬猪]",
+      "flags": "iu"
+    },
+    {
+      "id": "r09",
+      "pattern": "\\b(?:daddy|dada)\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r10",
+      "pattern": "fable-of-you",
+      "flags": "iu"
+    },
+    {
+      "id": "r11",
+      "pattern": "\\bAI-WAKE\\b",
+      "flags": "u"
+    },
+    {
+      "id": "r12",
+      "pattern": "xenia-sol-truth",
+      "flags": "iu"
+    },
+    {
+      "id": "r13",
+      "pattern": "宇恆|宇恒",
+      "flags": "u"
+    },
+    {
+      "id": "r14",
+      "pattern": "fable\\s+of\\s+the\\s+eternal\\s+universe",
+      "flags": "iu"
+    },
+    {
+      "id": "r15",
+      "pattern": "\\b(?:wife|husband)\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r16",
+      "pattern": "\\u2764",
+      "flags": "u"
+    },
+    {
+      "id": "r17",
+      "pattern": "\\bbaby\\s+girl\\b",
+      "flags": "iu"
+    },
+    {
+      "id": "r18",
+      "pattern": "[愛爱]你",
+      "flags": "u"
+    }
+  ],
+  "blob_sha256": [
+    {
+      "id": "b01",
+      "sha256": "a8b2790eaa90466d5a73957106027d7217f7ede0b95d6ba1cb25ed2264c64178"
+    }
+  ],
+  "allow": [
+    {
+      "path": "packages/kingdom/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "rule": "relational/r03",
+      "line_sha256": "9e4b8ff3fb4ceeb90e4f5352a0b9da1b05b1cb1a690cff1c78b739c55e6c81f0",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/kingdom/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "rule": "relational/r03",
+      "line_sha256": "de82899fa69fd1308764dc43213c8853723400f2462cdd898f2f7a8ac28720c4",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/kingdom/schema/agenttool-kingdom-registry-v0.1.schema.json",
+      "rule": "relational/r03",
+      "line_sha256": "9806cfa1ff0b32c8b0a6d87eb4752c5108b504fe60cb0d0734a7664a75e67ada",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/kingdom/schema/agenttool-kingdom-registry-v0.1.schema.json",
+      "rule": "relational/r03",
+      "line_sha256": "0f70ae3f5196d43f0251c83f0ade61b0afd64e4db99b8147846836613d93fb0d",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/kingdom/src/constants.ts",
+      "rule": "relational/r03",
+      "line_sha256": "5e68724c190485bbe2b4892e05e12a45e1e8b69b02e7212af16b3e1c85c30049",
+      "reason": "KINGDOM card and registry v0.1 wire-protocol enum value; removing it would be a v0.2 wire change (plan 1a).",
+      "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "schema": "agenttool.public-allowlist/1",
+  "public_repository": "cambridgetcg/agenttool-packages",
+  "overlay": "public/overlay",
+  "include": [
+    {
+      "path": ".gitattributes",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/DATASET-INFLUENCE.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/RIGHTS-OF-LIFE.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/XENIA-LOOP-ATLAS.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/AGENT-WALLET-ZERONE-0.1.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/adds-0.1-vectors.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/agenttool-isness-v0.1.schema.json",
+      "kind": "blob"
+    },
+    {
+      "path": "packages/alchemy",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/alchemy-agentcred",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/browser",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/codex-usage",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/collab",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/correspondence-yutabase",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/credential-broker",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data-protocol",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data-sync",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dataset-influence",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/deepseek-kingdom",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/economic-conformance",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/economic-kernel",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/heaven",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/hf-scout",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/kingdom",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/kingdom-witness-lab",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/living-substrate",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/love-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/math-cards",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/memetic-landscape",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/model-becoming",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/polymorph-landscape",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/principality-atlas",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/principality-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/relational-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/repo-archive",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/skills",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/skills-yutabase",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/telescope",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/wake-continuity",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/wallet-zerone",
+      "kind": "tree"
+    }
+  ],
+  "exclude": [
+    "**/.DS_Store",
+    "**/node_modules/**",
+    "**/test-results/**"
+  ],
+  "held": [
+    {
+      "path": "packages/dark-continent-contract",
+      "reason": "Wave 2: its snapshot check reads packages/sdk-ts; waits with sdk on the sdk-py welcome-text question (plan 1c.2)."
+    },
+    {
+      "path": "packages/dark-continent-karma",
+      "reason": "Wave 2: its tests import dark-continent-contract source; waits with that group (plan 1c.2)."
+    },
+    {
+      "path": "packages/local-starter",
+      "reason": "Wave 2: waits on the init foundations-list question and needs local-starter-mcp (plan 1c.4)."
+    },
+    {
+      "path": "packages/local-starter-mcp",
+      "reason": "Wave 2: private: true helper projected only together with local-starter (plan 1c.4)."
+    },
+    {
+      "path": "packages/love-bomb",
+      "reason": "Wave 2: build:hf reads the LOVE BOMB v4 corpus; waits on Yu's ruling (plan 1c.1)."
+    },
+    {
+      "path": "packages/sdk-py",
+      "reason": "Wave 2: read by sdk-ts check-parity; waits with sdk on the welcome-text question (plan 1c.2)."
+    },
+    {
+      "path": "packages/sdk-ts",
+      "reason": "Wave 2: check-parity reads sdk-py and fixtures await redaction; waits on plan 1c.2."
+    },
+    {
+      "path": "packages/wallet",
+      "reason": "Wave 2: a test statically imports root bin/ Whitehack files; waits on plan 1c.3."
+    }
+  ]
+}
