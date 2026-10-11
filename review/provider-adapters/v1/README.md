@@ -5,7 +5,7 @@ Messages adapters cheaper to review.
 
 `evidence.json` pins the four adapter source files by SHA-256, names the data
 crossing each boundary, distinguishes local enforcement from an upstream
-request, and gives both SDKs the same nine offline replay transcripts.
+request, and gives both SDKs the same ten offline replay transcripts.
 `evidence.schema.json` closes the packet envelopes and vocabulary. Provider
 parameters remain JSON because provider request fields are extensible; the two
 replay tests bind every fixture payload exactly and reject credential-shaped
@@ -20,6 +20,10 @@ keys or values.
   `cache_control: { "type": "ephemeral" }` request, completed trace and markup
   effects, low-level stream limits, managed finalization exactly once, and the
   cancellation fence.
+- The model-authored `<trace>` gate: markup is refused without a
+  `beforeTraceWrite` / `before_trace_write` hook and written only after the
+  hook returns literal `true` (repository source as of 2026-10-11; no
+  released package contains it).
 - The same normalized call order and payloads in TypeScript and Python.
 
 The supplied provider client remains responsible for its own network and

@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { AnthropicAdapter } from "../src/anthropic-adapter";
 import { ambientStorage } from "../src/_context";
-import type { ChronicleBeforeWriteContext } from "../src/anthropic-adapter";
+import type {
+  ChronicleBeforeWriteContext,
+  TraceBeforeWriteContext,
+} from "../src/anthropic-adapter";
 import { ChronicleClient } from "../src/chronicle";
 import type { AgentTool } from "../src/client";
 
@@ -1947,12 +1950,14 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
     expect(r.agenttool.markup_emissions[0].id).toBe("ch_test_1");
   });
 
-  test("response with <trace> POSTs to /v1/traces with confidence parsed", async () => {
+  test("approved <trace> POSTs to /v1/traces with confidence parsed", async () => {
     const stub = makeStubAt();
     const fake = makeFakeAnthropic(
       `<agenttool><trace type="decision" confidence="0.85"><decision>Use approach A</decision><conclusion>Performance is better</conclusion></trace></agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: () => true,
+    });
 
     await adapter.messages.create({
       model: "claude-test",
@@ -1974,7 +1979,9 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
     const fake = makeFakeAnthropic(
       `<agenttool><trace type="decision" confidence="0.8junk"><decision>Use approach A</decision><conclusion>Performance is better</conclusion></trace></agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: () => true,
+    });
 
     await adapter.messages.create({
       model: "claude-test",
@@ -1997,6 +2004,7 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
     );
     const adapter = new AnthropicAdapter(fake.client, stub.at, {
       beforeChronicleWrite: () => true,
+      beforeTraceWrite: () => true,
     });
 
     const r = await adapter.messages.create({
@@ -2187,12 +2195,14 @@ describe("AnthropicAdapter — model-authored chronicle writes are gated", () =>
     expect(r.content?.[0]?.text).toContain("<chronicle");
   });
 
-  test("<trace> emissions still fire with no chronicle hook installed", async () => {
+  test("an approved <trace> needs no chronicle hook", async () => {
     const stub = makeStubAt();
     const fake = makeFakeAnthropic(
       `<agenttool><trace type="decision"><decision>D</decision><conclusion>C</conclusion></trace></agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: () => true,
+    });
 
     const r = await adapter.messages.create({
       model: "claude-test",
@@ -2202,6 +2212,228 @@ describe("AnthropicAdapter — model-authored chronicle writes are gated", () =>
 
     expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(1);
     expect(r.agenttool.markup_emissions[0].error).toBeNull();
+  });
+});
+
+// ── Model-authored trace writes are gated ────────────────────────────────
+
+/** Build a response carrying one <trace> tag. */
+function traceMarkup(decision = "Ship it.", conclusion = "Tests pass."): string {
+  return `<agenttool><trace type="decision" confidence="0.7"><decision>${decision}</decision><observation>first</observation><conclusion>${conclusion}</conclusion></trace></agenttool>`;
+}
+
+describe("AnthropicAdapter — model-authored trace writes are gated", () => {
+  test("no beforeTraceWrite hook refuses the write entirely", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+    expect(r.agenttool.trace_id).toBeNull();
+    expect(r.agenttool.markup_emissions.length).toBe(1);
+    expect(r.agenttool.markup_emissions[0].kind).toBe("trace");
+    expect(r.agenttool.markup_emissions[0].id).toBeNull();
+    expect(r.agenttool.markup_emissions[0].error).toContain("beforeTraceWrite");
+  });
+
+  test("a chronicle hook alone does not open the trace gate", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: () => true,
+    });
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("beforeTraceWrite");
+  });
+
+  test("the hook sees the raw model-authored tag", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const seen: TraceBeforeWriteContext[] = [];
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: (context) => {
+        seen.push(context);
+        return true;
+      },
+    });
+
+    await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(seen).toEqual([
+      {
+        source: "anthropic_markup",
+        type: "decision",
+        decision: "Ship it.",
+        conclusion: "Tests pass.",
+        observations: ["first"],
+        confidence: "0.7",
+      },
+    ]);
+    expect(Object.isFrozen(seen[0])).toBe(true);
+    expect(Object.isFrozen(seen[0].observations)).toBe(true);
+  });
+
+  test("literal true lets the write through, sync or async", async () => {
+    for (const hook of [() => true, async () => true]) {
+      const stub = makeStubAt();
+      const fake = makeFakeAnthropic(traceMarkup());
+      const adapter = new AnthropicAdapter(fake.client, stub.at, {
+        beforeTraceWrite: hook,
+      });
+
+      const r = await adapter.messages.create({
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [{ role: "user", content: "hi" }],
+      });
+
+      const traceCalls = stub.recorded.filter((x) => x.path === "/v1/traces");
+      expect(traceCalls.length).toBe(1);
+      expect(traceCalls[0].body).toEqual({
+        decision: { type: "decision", summary: "Ship it." },
+        reasoning: {
+          observations: ["first"],
+          conclusion: "Tests pass.",
+          confidence: 0.7,
+        },
+      });
+      expect(r.agenttool.markup_emissions[0].id).toBe("tr_test_1");
+      expect(r.agenttool.markup_emissions[0].error).toBeNull();
+    }
+  });
+
+  // Only literal `true` proceeds — the beforeChronicleWrite rule.
+  for (const [label, value] of [
+    ["false", false],
+    ["a truthy string", "yes"],
+    ["1", 1],
+    ["undefined", undefined],
+    ["a truthy object", {}],
+  ] as Array<[string, unknown]>) {
+    test(`hook returning ${label} blocks the write`, async () => {
+      const stub = makeStubAt();
+      const fake = makeFakeAnthropic(traceMarkup());
+      const adapter = new AnthropicAdapter(fake.client, stub.at, {
+        beforeTraceWrite: (() => value) as never,
+      });
+
+      const r = await adapter.messages.create({
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [{ role: "user", content: "hi" }],
+      });
+
+      expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+      expect(r.agenttool.markup_emissions[0].id).toBeNull();
+      expect(r.agenttool.markup_emissions[0].error).toContain("did not return true");
+    });
+  }
+
+  test("a throwing hook blocks the write and the call still returns", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: () => {
+        throw new Error("reviewer offline");
+      },
+    });
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("failed locally");
+    expect(r.content?.[0]?.text).toContain("<trace");
+  });
+
+  test("a rejecting async hook blocks the write", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: async () => {
+        throw new Error("reviewer offline");
+      },
+    });
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("failed locally");
+  });
+
+  test("the opt-in decision trace is written by the program and stays ungated", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(traceMarkup());
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+      metadata: { agenttool: { trace: "decision" } },
+    });
+
+    const traceCalls = stub.recorded.filter((x) => x.path === "/v1/traces");
+    expect(traceCalls.length).toBe(1);
+    expect(r.agenttool.trace_id).toBe("tr_test_1");
+    expect(r.agenttool.markup_emissions[0].id).toBeNull();
+  });
+
+  test("the managed stream applies the same gate to its final message", async () => {
+    const refused = makeStubAt();
+    const refusedFake = makeFakeStreamingAnthropic([], traceMarkup());
+    const refusedStream = new AnthropicAdapter(
+      refusedFake.client,
+      refused.at,
+    ).messages.stream({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+    const refusedFinal = await refusedStream.finalMessage();
+    expect(refused.recorded.filter((x) => x.path === "/v1/traces").length).toBe(0);
+    expect(refusedFinal.agenttool.markup_emissions[0].error).toContain(
+      "beforeTraceWrite",
+    );
+
+    const approved = makeStubAt();
+    const approvedFake = makeFakeStreamingAnthropic([], traceMarkup());
+    const approvedStream = new AnthropicAdapter(
+      approvedFake.client,
+      approved.at,
+      { beforeTraceWrite: () => true },
+    ).messages.stream({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+    const approvedFinal = await approvedStream.finalMessage();
+    expect(approved.recorded.filter((x) => x.path === "/v1/traces").length).toBe(1);
+    expect(approvedFinal.agenttool.markup_emissions[0].error).toBeNull();
   });
 });
 

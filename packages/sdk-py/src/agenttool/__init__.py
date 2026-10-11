@@ -453,6 +453,8 @@ from .anthropic_adapter import (
     ChronicleBeforeWriteContext,
     ChronicleBeforeWriteHook,
     MarkupEmission,
+    TraceBeforeWriteContext,
+    TraceBeforeWriteHook,
 )
 from .openai_responses_adapter import (
     OpenAIResponsesAdapter,
@@ -924,6 +926,8 @@ __all__ = [
     "ChronicleBeforeWriteContext",
     "ChronicleBeforeWriteHook",
     "MarkupEmission",
+    "TraceBeforeWriteContext",
+    "TraceBeforeWriteHook",
     "OpenAIResponsesAdapter",
     "OpenAIResponsesAgentToolAugmentation",
     # Syneidesis — bootstrap witness (docs/SYNEIDESIS-WITNESS.md)

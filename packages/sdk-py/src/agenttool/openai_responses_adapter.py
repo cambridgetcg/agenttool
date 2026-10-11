@@ -10,7 +10,10 @@ For each completed, non-streaming response it can:
 
 ``metadata.agenttool`` is removed before the provider call. All other request
 fields are preserved. Because wake text may carry identity context, an omitted
-``store`` defaults to ``False``; an explicit caller value is preserved.
+``store`` defaults to ``False``; an explicit caller value is preserved. The
+``openai`` package's own omission sentinels (``NOT_GIVEN`` / ``omit``) count
+as omitted, because that SDK drops them from the wire. ``metadata`` may be
+any mapping.
 Streaming and background execution are refused before wake or provider I/O
 because this completed-response wrapper cannot preserve either lifecycle
 honestly.
@@ -23,6 +26,7 @@ from __future__ import annotations
 import inspect
 import re
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -101,12 +105,16 @@ class OpenAIResponsesAdapter:
 
     def _do_create(self, params: dict[str, Any]) -> Any:
         metadata_value = params.get("metadata")
-        metadata = metadata_value if isinstance(metadata_value, dict) else None
+        # Any mapping, as in the Anthropic adapter and the TS isRecord check:
+        # a non-dict mapping must not hide skip_wake or the local controls.
+        metadata = (
+            dict(metadata_value) if isinstance(metadata_value, Mapping) else None
+        )
         raw_meta = metadata.get("agenttool") if metadata is not None else None
         if (
             metadata is not None
             and "agenttool" in metadata
-            and not isinstance(raw_meta, dict)
+            and not isinstance(raw_meta, Mapping)
         ):
             raise AgentToolError(
                 "metadata.agenttool must be an object.",
@@ -141,7 +149,10 @@ class OpenAIResponsesAdapter:
             _merge_instructions("", params.get("instructions"))
 
         forward_params = dict(params)
-        forward_params.setdefault("store", False)
+        if "store" not in forward_params or _is_openai_omitted(
+            forward_params["store"]
+        ):
+            forward_params["store"] = False
         wake_meta: Optional[dict[str, Any]] = None
         skip_wake = bool(meta.get("skip_wake"))
 
@@ -445,6 +456,16 @@ def _validate_effective_trace_context(meta: dict[str, Any], ambient: Any) -> Non
                 "hexadecimal characters. This is checked before provider I/O."
             ),
         )
+
+
+def _is_openai_omitted(value: Any) -> bool:
+    """Recognise openai-python's ``NOT_GIVEN`` / ``omit`` sentinels.
+
+    Matched by class name and falsiness so the module keeps no ``openai``
+    import. The SDK removes these values from the request body, which would
+    leave the provider's storage default in force.
+    """
+    return type(value).__name__ in ("NotGiven", "Omit") and not value
 
 
 def _utf16_length(value: str) -> int:

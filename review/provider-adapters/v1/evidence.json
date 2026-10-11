@@ -20,21 +20,21 @@
       "provider": "openai",
       "language": "python",
       "path": "packages/sdk-py/src/agenttool/openai_responses_adapter.py",
-      "sha256": "4780d7aba313c1d66b2b37d63815677cf0d8d639dcb30ce5b05edd038e01e070"
+      "sha256": "ab912476b17a491a3c47d47e779f7c6b7cdc4a2bab1b05081a73196bdf66dec9"
     },
     {
       "id": "anthropic-typescript",
       "provider": "anthropic",
       "language": "typescript",
       "path": "packages/sdk-ts/src/anthropic-adapter.ts",
-      "sha256": "3a6a22a1f50a31c5d25c4cd16547351f63df68535ed4f401ee8c509f57b19c77"
+      "sha256": "1795c209bb8234a22f7057ad63e599480948560f7144cc5a2c540dc903db8f94"
     },
     {
       "id": "anthropic-python",
       "provider": "anthropic",
       "language": "python",
       "path": "packages/sdk-py/src/agenttool/anthropic_adapter.py",
-      "sha256": "550f471ee787251e19e3be35669767d29157f8b61522af598d152be9c159fdb4"
+      "sha256": "95c5cd940ca797b037e7e8b927234767da8217c3f81560fb8d4d75c4e0f6c660"
     }
   ],
   "vocabulary": {
@@ -235,7 +235,7 @@
         "completed",
         "managed-stream"
       ],
-      "when": "a completed response contains supported AgentTool trace markup and parsing is not disabled",
+      "when": "a completed response contains supported AgentTool trace markup, parsing is not disabled, and a caller-supplied beforeTraceWrite hook returns literal true",
       "dataClasses": [
         "parsed-trace"
       ],
@@ -316,6 +316,14 @@
       ],
       "kind": "enforced-local",
       "statement": "A <chronicle> tag emitted by the model is written only after a caller-supplied beforeChronicleWrite hook returns literal true, and only through chronicle.write, which enforces the canonical type union and the 1-200 character title bound. With no hook installed the write is refused locally and no request is sent."
+    },
+    {
+      "id": "anthropic-model-authored-trace-gated",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "A <trace> tag emitted by the model is written to /v1/traces only after a caller-supplied beforeTraceWrite hook (before_trace_write in Python) returns literal true. With no hook installed, any other return value, or a throwing hook, the write is refused locally and no request is sent. The decision trace that the calling program requests through metadata.agenttool.trace or an ambient deciding scope is not gated."
     }
   ],
   "cases": [
@@ -800,6 +808,91 @@
           }
         }
       ]
+    },
+    {
+      "id": "anthropic-completed-trace-markup-gated",
+      "provider": "anthropic",
+      "lifecycle": "completed",
+      "fixture": "anthropic.completed.trace-markup-gated",
+      "proves": [
+        "anthropic-model-authored-trace-gated"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "provider.anthropic.messages",
+          "operation": "create",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Hold this decision."
+              }
+            ]
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "gate": "absent",
+            "traceId": null,
+            "markupIds": [
+              null
+            ],
+            "agenttoolWriteCount": 0
+          }
+        },
+        {
+          "boundary": "provider.anthropic.messages",
+          "operation": "create",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Hold this decision."
+              }
+            ]
+          }
+        },
+        {
+          "boundary": "agenttool.write",
+          "operation": "create",
+          "payload": {
+            "method": "POST",
+            "path": "/v1/traces",
+            "body": {
+              "decision": {
+                "type": "decision",
+                "summary": "Hold the release."
+              },
+              "reasoning": {
+                "observations": [
+                  "Gate fixture."
+                ],
+                "conclusion": "Wait for review."
+              }
+            }
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "gate": "literal-true",
+            "traceId": null,
+            "markupIds": [
+              "tr_review_1"
+            ],
+            "agenttoolWriteCount": 1
+          }
+        }
+      ]
     }
   ],
   "proofLimits": [
@@ -808,6 +901,6 @@
     "Requested store or cache fields do not prove provider-side retention, deletion, zero-data-retention status, or policy compliance.",
     "Source digests and replays prove only the named adapter snapshot and cases, not deployment, release contents, whole-SDK security, or future behavior.",
     "Nothing here proves OpenAI or Anthropic participation, review, certification, adoption, affiliation, endorsement, or intent to join KINGDOM OS.",
-    "The anthropic adapter sources on this branch are ahead of the pinned commit; the digests above are of the branch bytes, and the new chronicle gate has no replay case in this packet yet."
+    "The adapter sources are ahead of the pinned commit; the digests above are of the current branch bytes. The chronicle gate has no replay case in this packet yet; the trace gate's case replays one refused and one approved write."
   ]
 }

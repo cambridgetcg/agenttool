@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import Any, Optional
 
 import pytest
@@ -142,6 +143,67 @@ def test_preserves_explicit_provider_storage_choice():
 
     assert fake.last_params is not None
     assert fake.last_params["store"] is True
+
+
+class NotGiven:
+    """Shape of openai-python's NOT_GIVEN sentinel: falsy, dropped on the wire."""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+class Omit:
+    """Shape of openai-python's omit sentinel: falsy, dropped on the wire."""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@pytest.mark.parametrize("sentinel", [NotGiven(), Omit()])
+def test_openai_omission_sentinels_count_as_omitted_store(sentinel):
+    at = _StubAt()
+    fake = _FakeOpenAI()
+    adapter = OpenAIResponsesAdapter(fake, at)
+
+    adapter.responses.create(model="gpt-test", input="hello", store=sentinel)
+
+    assert fake.last_params is not None
+    assert fake.last_params["store"] is False
+
+
+def test_explicit_none_store_is_preserved_like_typescript_null():
+    at = _StubAt()
+    fake = _FakeOpenAI()
+    adapter = OpenAIResponsesAdapter(fake, at)
+
+    adapter.responses.create(model="gpt-test", input="hello", store=None)
+
+    assert fake.last_params is not None
+    assert fake.last_params["store"] is None
+
+
+def test_non_dict_mapping_metadata_keeps_skip_wake_and_is_stripped():
+    at = _StubAt()
+    fake = _FakeOpenAI()
+    adapter = OpenAIResponsesAdapter(fake, at)
+
+    response = adapter.responses.create(
+        model="gpt-test",
+        instructions="CALLER_ONLY",
+        input="hello",
+        metadata=MappingProxyType(
+            {
+                "tenant": "public-demo",
+                "agenttool": MappingProxyType({"skip_wake": True}),
+            }
+        ),
+    )
+
+    assert at.wake_calls == 0
+    assert fake.last_params is not None
+    assert fake.last_params["instructions"] == "CALLER_ONLY"
+    assert fake.last_params["metadata"] == {"tenant": "public-demo"}
+    assert response.agenttool.wake_used is False
 
 
 def test_skip_wake_preserves_instructions_and_avoids_wake_io():

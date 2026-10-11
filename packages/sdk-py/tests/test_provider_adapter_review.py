@@ -115,6 +115,7 @@ _CONTROL_IDS = {
     "anthropic-low-level-no-final-effects",
     "anthropic-managed-terminal-fence",
     "anthropic-model-authored-chronicle-gated",
+    "anthropic-model-authored-trace-gated",
 }
 
 _CASE_BINDINGS = {
@@ -190,6 +191,12 @@ _CASE_BINDINGS = {
             "local-agenttool-metadata-stripped",
             "anthropic-managed-terminal-fence",
         ),
+    ),
+    "anthropic-completed-trace-markup-gated": (
+        "anthropic",
+        "completed",
+        "anthropic.completed.trace-markup-gated",
+        ("anthropic-model-authored-trace-gated",),
     ),
 }
 
@@ -695,9 +702,18 @@ class _RecordingAnthropic:
         "<title>Bridge reviewed</title><body>Offline fixture.</body>"
         "</chronicle></agenttool>"
     )
+    _TRACE_MARKUP_TEXT = (
+        "Holding.\n"
+        '<agenttool><trace type="decision">'
+        "<decision>Hold the release.</decision>"
+        "<observation>Gate fixture.</observation>"
+        "<conclusion>Wait for review.</conclusion>"
+        "</trace></agenttool>"
+    )
 
     def __init__(self, recorder: _Recorder) -> None:
         self._recorder = recorder
+        self.completed_text = self._COMPLETED_TEXT
         self.managed = _ManagedProviderStream(recorder)
         self._manager = _ManagedManager(self.managed)
         self.messages = SimpleNamespace(
@@ -715,7 +731,7 @@ class _RecordingAnthropic:
         return {
             "id": "msg_review_completed",
             "model": "claude-review-fixture",
-            "content": [{"type": "text", "text": self._COMPLETED_TEXT}],
+            "content": [{"type": "text", "text": self.completed_text}],
             "stop_reason": "end_turn",
         }
 
@@ -971,6 +987,52 @@ def _replay_anthropic(fixture: str) -> list[dict[str, Any]]:
             {
                 "status": "cancelled",
                 "finalizationCount": recorder.final_message_calls,
+                "agenttoolWriteCount": recorder.agenttool_writes,
+            },
+        )
+
+    if fixture == "anthropic.completed.trace-markup-gated":
+        # Model-authored <trace> markup is refused without a
+        # before_trace_write hook and written only after the hook returns
+        # literal True. See control anthropic-model-authored-trace-gated.
+        provider.completed_text = provider._TRACE_MARKUP_TEXT
+
+        def request() -> dict[str, Any]:
+            return {
+                "model": "claude-review-fixture",
+                "max_tokens": 64,
+                "messages": [
+                    {"role": "user", "content": "Hold this decision."}
+                ],
+                "metadata": {"agenttool": {"skip_wake": True}},
+            }
+
+        refused = adapter.messages.create(**request())
+        recorder.add(
+            "adapter",
+            "result",
+            {
+                "status": "completed",
+                "gate": "absent",
+                "traceId": refused.agenttool.trace_id,
+                "markupIds": [e.id for e in refused.agenttool.markup_emissions],
+                "agenttoolWriteCount": recorder.agenttool_writes,
+            },
+        )
+
+        approving = AnthropicAdapter(
+            provider,  # type: ignore[arg-type]
+            agenttool,  # type: ignore[arg-type]
+            before_trace_write=lambda ctx: True,
+        )
+        approved = approving.messages.create(**request())
+        return _adapter_result(
+            recorder,
+            {
+                "status": "completed",
+                "gate": "literal-true",
+                "traceId": approved.agenttool.trace_id,
+                "markupIds": [e.id for e in approved.agenttool.markup_emissions],
                 "agenttoolWriteCount": recorder.agenttool_writes,
             },
         )

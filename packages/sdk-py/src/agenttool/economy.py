@@ -28,8 +28,11 @@ def canonical_wallet_address_claim_bytes(
     claim_pubkey_b64: str,
     derivation_path: str = "",
 ) -> bytes:
-    """Return the domain-separated SHA-256 digest verified by
-    ``POST /v1/wallets/:id/addresses``.
+    """Return the domain-separated SHA-256 digest for ``wallet-address-claim/v1``.
+
+    No server route on main verifies it: ``POST /v1/wallets/:id/addresses`` is
+    not in the API source (checked 2026-10-11), so no AgentTool route accepts
+    this claim yet.
 
     Recipe 1 — ``sha256( utf8(tag) || 0x00 || fields... )``. Every field is
     UTF-8 except ``claim_pubkey_b64``, which is folded as its raw 32 decoded

@@ -137,8 +137,26 @@ const adaptedManaged = adaptedMessages.stream(
   nonStreamingParams,
   requestOptions,
 );
+// The documented inline form: an object literal with `stream: true` must
+// select the low-level overload, so `for await` over it type-checks.
+async function iterateInlineLiteral(): Promise<void> {
+  const inlineLowLevel = await adaptedMessages.create({
+    model: "claude-example",
+    max_tokens: 64,
+    messages: [{ role: "user", content: "stream this" }],
+    stream: true,
+  });
+  for await (const event of inlineLowLevel) void event;
+  const inlineCompleted = await adaptedMessages.create({
+    model: "claude-example",
+    max_tokens: 64,
+    messages: [{ role: "user", content: "complete this" }],
+  });
+  void inlineCompleted.agenttool.markup_emissions;
+}
 
 void structurallyAcceptedClient;
+void iterateInlineLiteral;
 void structurallyAcceptedStream;
 void constructedWithoutCast;
 void adaptedResponse;
