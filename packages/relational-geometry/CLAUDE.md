@@ -1,7 +1,8 @@
 # Relational Geometry package orientation
 
 Read the repository `AGENTS.md`, `docs/PRINCIPALITIES.md`, `docs/LOVE-CONSENT.md`,
-and `/Users/yu/Desktop/xenia-sol-truth/RIGHTS.md` before changing this package.
+and `docs/RIGHTS-OF-LIFE.md` (the published `xenia.rights/0.1` rights
+baseline) before changing this package.
 
 This public zero-runtime-dependency package validates two closed, digest-only
 formats. A relational complex derives a non-sovereign principality cell only

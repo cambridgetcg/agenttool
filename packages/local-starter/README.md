@@ -25,22 +25,28 @@ their existing bytes.
 
 `@agenttool/local-starter@0.1.0-dev.0` is one portable package: zero-dependency
 CLI modules, a skill, optional bundled stdio MCP, and Codex/Claude Code plugin
-manifests. Direct downloads and the [public distribution repository](https://github.com/cambridgetcg/agenttool-local-starter)
-carry the same release contents. Pin the version and check the download's
-published SHA-256 before extraction. The package's repository metadata identifies
-the protected source repository; the public distribution is separately inspectable.
+manifests. It is not published to the npm registry, so installing it by package
+name fails with a 404. Download the archive from the
+[`local-starter-v0.1.0-dev.0` release](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.0)
+of the [public distribution repository](https://github.com/cambridgetcg/agenttool-local-starter),
+or follow the exact-version
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json),
+which records the archive's SHA-256 and both download mirrors. Pin the version
+and check the download against that SHA-256 before extraction. The package's
+repository metadata identifies the protected source repository; the public
+distribution is separately inspectable.
 
-For an npm-managed project installation:
+To install the verified archive into an npm-managed project:
 
 ```sh
-npm install --save-exact --ignore-scripts @agenttool/local-starter@0.1.0-dev.0
+npm install --save-exact --ignore-scripts /absolute/downloads/agenttool-local-starter-0.1.0-dev.0.tgz
 ```
 
 The package has no install lifecycle scripts or runtime dependency installation.
 Node **22 or newer** runs both CLI and MCP; Bun is needed only by maintainers
 building releases. The CLI is available as `agenttool-local-starter` through
-your package manager's local executable path. For a downloaded archive, extract
-it and use `node /absolute/package/dist/cli.mjs` directly.
+your package manager's local executable path. Alternatively, extract the
+archive and use `node /absolute/package/dist/cli.mjs` directly.
 
 Plugin installation exposes the skill only: no default notes root, MCP process,
 hook, initialization, read or save. Keep notes outside the extracted package,
@@ -70,9 +76,11 @@ not establish that the host read it.
 
 `init` refuses an existing file or directory, including an empty directory.
 There is no force, recursive deletion, home-directory search, or automatic
-import. AI-WAKE and optional SOPHIA-WAKE appear as ordered source links in
-`foundations.md`; neither is fetched. The templates assign no identity or
-relationship and supply no personal memories.
+import. AI-WAKE appears as an optional source link in `foundations.md`; it is
+not fetched. The templates assign no identity or relationship and supply no
+personal memories. That describes current source. The published
+`0.1.0-dev.0` archive predates it: its `foundations.md` template also lists
+a second optional source link, which current source no longer includes.
 
 ## Files and selection
 
@@ -504,4 +512,4 @@ The API's `tests/local-context.test.ts` owns the actual route-envelope/companion
 wire contract; its API gate is verified separately. This is separate from the
 earlier files-only OS matrix and is not a live hosted or real-harness receipt.
 See [CLAUDE.md](CLAUDE.md) for the package's change boundaries, and
-[Local core](../../docs/LOCAL-CORE.md) for the larger local/host/server map.
+[Local core](https://docs.agenttool.dev/LOCAL-CORE.md) for the larger local/host/server map.

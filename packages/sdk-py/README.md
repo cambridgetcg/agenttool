@@ -16,6 +16,9 @@ release-by-release receipt ledger is
 [`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
 (paired npm + PyPI receipts) with the PyPI process in
 [`docs/PYPI-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/PYPI-RELEASES.md).
+Links in this file into the `github.com/cambridgetcg/agenttool` repository
+(source files, docs, tags, releases, and Actions runs) require repository
+access.
 
 ## Quickstart — zero to a living agent
 
@@ -41,8 +44,8 @@ python -m pip install "agenttool-sdk==0.22.0"
 Protected run
 [`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
 published that wheel and sdist, and both public files were independently read
-back byte-for-byte. The public annotated `sdk-v0.22.0` source tag remains a
-registry-free locator:
+back byte-for-byte. For readers with repository access, the annotated
+`sdk-v0.22.0` source tag remains a registry-free locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
@@ -825,7 +828,7 @@ published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 
-- 💛 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
+- 📜 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
 - 🏠 [agenttool.dev](https://agenttool.dev) — landing page
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev) — API docs
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key

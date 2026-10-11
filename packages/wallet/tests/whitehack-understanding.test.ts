@@ -1,8 +1,10 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   RECORD_SCHEMAS,
@@ -12,14 +14,7 @@ import {
   sealWalletCapability,
   sealWalletDescriptor,
 } from "../src/index.js";
-import {
-  WHITEHACK_WALLET_INPUT_TYPE,
-  createAgentWalletUnderstanding,
-  projectAgentWalletContext,
-  type WhitehackWalletContext,
-} from "../../../bin/_whitehack-wallet-understanding.js";
-import { loadVerifiedWhitehackModule } from "../../../bin/whitehack-advisory.mjs";
-import { readUnderstandingInput } from "../../../bin/whitehack-wallet-understanding.js";
+import type { WhitehackWalletContext } from "../../../bin/_whitehack-wallet-understanding.js";
 import {
   NATIVE_ASSET,
   capabilityCore,
@@ -34,6 +29,55 @@ import {
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 const EVALUATED_AT = "2026-07-21T10:02:00.000Z";
+
+// The Whitehack adapter is a private, local file set at the monorepo root
+// (bin/), not part of this package. Load it only when it is present; a
+// checkout with none of its files (such as the public package projection)
+// skips these suites instead of failing to import. A partial adapter, or an
+// explicit WHITEHACK_INTEGRATION=1 request without the adapter, fails the
+// file at load: a moved or renamed file must not turn the suites into a
+// silent skip.
+const WHITEHACK_ADAPTER_FILES = [
+  "bin/_whitehack-wallet-understanding.ts",
+  "bin/whitehack-advisory.mjs",
+  "bin/whitehack-wallet-understanding.ts",
+] as const;
+const WHITEHACK_ADAPTER_MISSING = WHITEHACK_ADAPTER_FILES.filter(
+  (file) => !existsSync(resolve(repoRoot, file)),
+);
+const WHITEHACK_ADAPTER_PRESENT = WHITEHACK_ADAPTER_MISSING.length === 0;
+if (!WHITEHACK_ADAPTER_PRESENT && WHITEHACK_ADAPTER_MISSING.length < WHITEHACK_ADAPTER_FILES.length) {
+  throw new Error(
+    `the root bin/ Whitehack adapter is incomplete; missing: ${WHITEHACK_ADAPTER_MISSING.join(", ")}`,
+  );
+}
+if (!WHITEHACK_ADAPTER_PRESENT && process.env.WHITEHACK_INTEGRATION === "1") {
+  throw new Error(
+    "WHITEHACK_INTEGRATION=1 requires the root bin/ Whitehack adapter, which is not in this checkout",
+  );
+}
+const WHITEHACK_SKIP_REASON =
+  "skipped: the private root bin/ Whitehack adapter is not in this checkout";
+
+type AdapterModule = typeof import("../../../bin/_whitehack-wallet-understanding.js");
+type AdvisoryModule = typeof import("../../../bin/whitehack-advisory.mjs");
+type CliModule = typeof import("../../../bin/whitehack-wallet-understanding.js");
+
+async function importRoot<T>(file: string): Promise<T> {
+  return await import(pathToFileURL(resolve(repoRoot, file)).href) as T;
+}
+
+let WHITEHACK_WALLET_INPUT_TYPE: AdapterModule["WHITEHACK_WALLET_INPUT_TYPE"];
+let createAgentWalletUnderstanding: AdapterModule["createAgentWalletUnderstanding"];
+let projectAgentWalletContext: AdapterModule["projectAgentWalletContext"];
+let loadVerifiedWhitehackModule: AdvisoryModule["loadVerifiedWhitehackModule"];
+let readUnderstandingInput: CliModule["readUnderstandingInput"];
+if (WHITEHACK_ADAPTER_PRESENT) {
+  ({ WHITEHACK_WALLET_INPUT_TYPE, createAgentWalletUnderstanding, projectAgentWalletContext } =
+    await importRoot<AdapterModule>("bin/_whitehack-wallet-understanding.ts"));
+  ({ loadVerifiedWhitehackModule } = await importRoot<AdvisoryModule>("bin/whitehack-advisory.mjs"));
+  ({ readUnderstandingInput } = await importRoot<CliModule>("bin/whitehack-wallet-understanding.ts"));
+}
 
 function request(overrides: Record<string, unknown> = {}) {
   return {
@@ -101,7 +145,11 @@ function contextFactory(options: {
   });
 }
 
-describe("Agent Wallet Whitehack projection", () => {
+const PROJECTION_SUITE = WHITEHACK_ADAPTER_PRESENT
+  ? "Agent Wallet Whitehack projection"
+  : `Agent Wallet Whitehack projection (${WHITEHACK_SKIP_REASON})`;
+
+describe.skipIf(!WHITEHACK_ADAPTER_PRESENT)(PROJECTION_SUITE, () => {
   test("verifies exact records and derives bounded enum-only context", async () => {
     const bundle = await signedBundle();
     const context = projectAgentWalletContext(populatedRequest(bundle));
@@ -396,7 +444,7 @@ describe("Agent Wallet Whitehack projection", () => {
   });
 });
 
-describe.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
+describe.skipIf(!WHITEHACK_ADAPTER_PRESENT || process.env.WHITEHACK_INTEGRATION !== "1")(
   "exact Whitehack 0.10.0 integration",
   () => {
     test("returns a schema-valid minimized understanding document", async () => {

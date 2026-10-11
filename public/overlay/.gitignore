@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Build output. Two packages commit their MCP bundles; CI compares them with
+# a fresh build.
+dist/
+!packages/collab/dist/
+packages/collab/dist/*
+!packages/collab/dist/agenttool-collab-mcp.js
+!packages/collab/dist/agenttool-collab-host.js
+!packages/telescope/dist/
+packages/telescope/dist/*
+!packages/telescope/dist/agenttool-telescope-mcp.js
+*.tsbuildinfo
+*.tgz
+
+# Never commit
+.env
+.env.*
+*.pem
+*.key
+*.log
+.DS_Store

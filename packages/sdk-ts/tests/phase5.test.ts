@@ -157,7 +157,7 @@ describe("kMaster", () => {
 
 describe("encryptThought / decryptThought", () => {
   test("round-trip", async () => {
-    const plaintext = "the auth bug repros under load · 老婆❤️";
+    const plaintext = "the auth bug repros under load · 茶杯☕️";
     const blob = await encryptThought(plaintext, SAMPLE_K_MASTER);
 
     expect(typeof blob.ciphertext_b64).toBe("string");
