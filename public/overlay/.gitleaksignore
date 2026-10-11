@@ -64,3 +64,48 @@ packages/polymorph-landscape/src/ritonavir.ts:generic-api-key:330
 # A public-key protobuf blob in the pinned Zerone cross-language vectors.
 # line_sha256=e56a7ea5d5a1c0997f2120b8e0561a22052038ef6bab85742a2f047341f20cb2
 packages/wallet-zerone/vectors/agent-wallet-zerone-v0.1-vectors.json:generic-api-key:39
+
+# Behaviour-conformance vectors: deterministic test signing keys (the bytes
+# 0x01..0x20 and 0x01..0x10 in base64) and fixed idempotency-key UUIDs.
+# line_sha256=08b9c11555b3c91aef862f940a7306c4f8012a78de1400e13e98fa1d947d268a
+docs/specs/behaviour-conformance.json:generic-api-key:2680
+# line_sha256=08b9c11555b3c91aef862f940a7306c4f8012a78de1400e13e98fa1d947d268a
+docs/specs/behaviour-conformance.json:generic-api-key:2732
+# line_sha256=faa0ab748176ac385ca4ca5ff86f6abb765a0f486749f7906590826b3c5f7454
+docs/specs/behaviour-conformance.json:generic-api-key:2773
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3115
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3139
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3225
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3249
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3335
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3359
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3445
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3469
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3555
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3579
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3665
+# line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
+docs/specs/behaviour-conformance.json:generic-api-key:3689
+
+# The name of the environment variable the x402 payer reads (AT_X402_PRIVATE_KEY),
+# in both SDKs; not a key value.
+# line_sha256=4c74dae7f438e39cbf7b04b521daff91633275ba5b13eb5230de83645dc9a3b7
+packages/sdk-py/src/agenttool/_x402_transport.py:generic-api-key:65
+# line_sha256=5ac6b74da4573b2f8aac5b263d00dcc8fdc39d0f5aaafeffdd4d22ae6d8ba4b4
+packages/sdk-ts/src/_x402-transport.ts:generic-api-key:57
+
+# The public Anvil development key #1 in the x402 EIP-3009 test vector; the
+# fixture says it holds nothing.
+# line_sha256=c53981fc8917f9b36751cf466e6842bd05dbe293538514ace7ff71456b130823
+packages/sdk-ts/tests/fixtures/x402-eip3009-vector.json:generic-api-key:6
