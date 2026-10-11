@@ -16,6 +16,17 @@ import {
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
 import { errors, fail } from "../../lib/errors";
+import {
+  KeysetRequestError,
+  decodeCursor,
+  digestPart,
+  encodeCursor,
+  filterDigest,
+  pageFromRows,
+  parsePageLimit,
+  type KeysetPosition,
+  type KeysetScope,
+} from "../../lib/keyset-cursor";
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
@@ -27,9 +38,8 @@ import {
 import {
   deleteById,
   deleteByKey,
-  listRecent,
+  listMemoriesPage,
   readById,
-  readByKey,
   MemoryIdentityBoundaryError,
   PaidMemoryReceiptProtectedError,
   publishMemoryWriteEvent,
@@ -183,9 +193,14 @@ app.post("/", createMemoryWriteHandler());
 
 // ── GET /v1/memories?key=... or just list recent ────────────────────────
 //
-// since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Post-fetch filter
-// today (memory service doesn't accept since at the query layer); push
-// down to listRecent() as a follow-up.
+// Newest-first keyset walk (created_at DESC, id DESC). Without `cursor` the
+// first page holds the same rows as before plus an additive `page` object;
+// `page.next_cursor` continues the walk. since=ISO (AGENT-WEB-SURFACE.md
+// Move 6) is pushed into SQL as created_at > since and bound into the
+// cursor's filter digest. Doctrine: docs/AGENT-WEB-SURFACE.md (continuity
+// walks).
+const MEMORY_WALK_ORDER = "created_at_desc,id_desc";
+
 app.get("/", async (c) => {
   const project = c.var.project;
   const key = c.req.query("key");
@@ -193,7 +208,6 @@ app.get("/", async (c) => {
   const identityId = c.req.query("identity_id");
   const type = c.req.query("type");
   const tier = c.req.query("tier");
-  const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
   const sinceParse = parseSinceParam(c);
 
   // Validate tier early — silent-drop fences are forbidden (see
@@ -209,20 +223,36 @@ app.get("/", async (c) => {
     );
   }
 
-  function applySinceFilter<T extends { updated_at?: unknown; created_at?: unknown }>(
-    rows: T[],
-  ): T[] {
-    if (!sinceParse.since) return rows;
-    const cutoffMs = sinceParse.since.getTime();
-    return rows.filter((row) => {
-      const tsRaw = row.updated_at ?? row.created_at;
-      if (!tsRaw) return false;
-      const ms =
-        tsRaw instanceof Date
-          ? tsRaw.getTime()
-          : Date.parse(String(tsRaw));
-      return Number.isFinite(ms) && ms > cutoffMs;
+  // Limit floor (docs/AGENT-WEB-SURFACE.md continuity walks): NaN keeps the
+  // default, a value below 1 is refused instead of reading every row, and
+  // values above 100 are clamped. With a cursor, limit must be a positive
+  // decimal integer. The cursor must belong to this exact walk: scope,
+  // order, every effective filter and since are bound into its digest.
+  const cursorRaw = c.req.query("cursor");
+  const scope: KeysetScope = key ? "memories.key" : "memories";
+  const digest = filterDigest([
+    scope,
+    MEMORY_WALK_ORDER,
+    digestPart(agentId),
+    digestPart(identityId),
+    key ? null : digestPart(type),
+    key ? null : digestPart(tier),
+    digestPart(key),
+    sinceParse.since?.toISOString() ?? null,
+  ]);
+  let limit: number;
+  let position: KeysetPosition | null = null;
+  try {
+    limit = parsePageLimit(c.req.query("limit"), {
+      def: 20,
+      max: 100,
+      strict: cursorRaw !== undefined,
+      parse: "int",
     });
+    if (cursorRaw !== undefined) position = decodeCursor(cursorRaw, { scope, digest });
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
   }
 
   const memoryVerbs = [
@@ -248,33 +278,25 @@ app.get("/", async (c) => {
     },
   ];
 
-  if (key) {
-    const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null, {
-      identity_id: identityId ?? null,
-      limit: Number.isFinite(limit) ? limit : 20,
-    }));
-    const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
-    return c.json(
-      attachSurface(
-        {
-          memories: memoriesWithReceipts,
-          count: memoriesWithReceipts.length,
-          ...deltaMeta(sinceParse),
-        },
-        { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
-      ),
-    );
-  }
-
-  const rows = applySinceFilter(
-    await listRecent(project.id, {
-      agent_id: agentId ?? null,
-      identity_id: identityId ?? null,
-      type,
-      tier,
-      limit: Number.isFinite(limit) ? limit : 20,
-    }),
-  );
+  const pageRows = await listMemoriesPage(project.id, {
+    mode: key ? "key" : "list",
+    key: key ?? null,
+    agent_id: agentId ?? null,
+    identity_id: identityId ?? null,
+    type: type ?? null,
+    tier: tier ?? null,
+    since: sinceParse.since,
+    cursor: position,
+    limit,
+  });
+  const { items, page } = pageFromRows(pageRows, {
+    limit,
+    cursor: cursorRaw ?? null,
+    order: MEMORY_WALK_ORDER,
+    encodeLast: (row) => encodeCursor({ scope, digest, position: row.position }),
+  });
+  // Attestation receipts attach to the visible rows only, never the sentinel.
+  const rows = items.map((row) => row.memory);
   const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
   return c.json(
     attachSurface(
@@ -282,6 +304,7 @@ app.get("/", async (c) => {
         memories: memoriesWithReceipts,
         count: memoriesWithReceipts.length,
         ...deltaMeta(sinceParse),
+        page,
       },
       { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
     ),

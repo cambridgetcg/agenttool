@@ -18,9 +18,14 @@
  *    authenticated-encryption envelope.
  *    Tested: api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import {
+  cursorTimestampSql,
+  keysetBeforeSql,
+  type KeysetPosition,
+} from "../../lib/keyset-cursor";
 import { identityKeys } from "../../db/schema/identity";
 import {
   llmRequests,
@@ -243,10 +248,72 @@ export async function listStrands(
     .orderBy(
       desc(strands.lastThoughtAt),
       desc(strands.createdAt),
+      desc(strands.id),
     )
     .limit(Math.min(opts.limit ?? 50, 200));
 
   return rows.map(strandToOut);
+}
+
+/** `recent` (default) is a window over last_thought_at, which every thought
+ *  rewrites, so it cannot be walked. `created` walks created_at DESC, id
+ *  DESC, an immutable key. Doctrine: docs/AGENT-WEB-SURFACE.md
+ *  (continuity walks). */
+export type StrandListOrder = "recent" | "created";
+
+export interface StrandPageOptions {
+  status?: string | null;
+  agent_id?: string | null;
+  order: StrandListOrder;
+  /** Only for order=created: the last row the caller already holds. */
+  cursor?: KeysetPosition | null;
+  /** Rows the caller will see. One more row is read as the has_more sentinel. */
+  limit: number;
+  database?: Pick<typeof db, "select">;
+}
+
+export interface StrandPageRow {
+  strand: StrandOut;
+  /** Walk position (created_at text, id); null for the recent window. */
+  position: KeysetPosition | null;
+}
+
+export async function listStrandsPage(
+  projectId: string,
+  options: StrandPageOptions,
+): Promise<StrandPageRow[]> {
+  const filters = [eq(strands.projectId, projectId)];
+  if (options.status) filters.push(eq(strands.status, options.status));
+  if (options.agent_id) filters.push(eq(strands.agentId, options.agent_id));
+  const database = options.database ?? db;
+
+  if (options.order === "recent") {
+    if (options.cursor) throw new Error("strand_recent_order_has_no_cursor");
+    const rows = await database
+      .select()
+      .from(strands)
+      .where(and(...filters))
+      .orderBy(desc(strands.lastThoughtAt), desc(strands.createdAt), desc(strands.id))
+      .limit(options.limit + 1);
+    return rows.map((row) => ({ strand: strandToOut(row), position: null }));
+  }
+
+  if (options.cursor) {
+    filters.push(keysetBeforeSql(strands.createdAt, strands.id, options.cursor));
+  }
+  const rows = await database
+    .select({
+      ...getTableColumns(strands),
+      cursorAt: cursorTimestampSql(strands.createdAt).as("cursor_at"),
+    })
+    .from(strands)
+    .where(and(...filters))
+    .orderBy(desc(strands.createdAt), desc(strands.id))
+    .limit(options.limit + 1);
+  return rows.map(({ cursorAt, ...row }) => ({
+    strand: strandToOut(row),
+    position: { t: cursorAt, i: row.id },
+  }));
 }
 
 export async function patchStrand(

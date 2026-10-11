@@ -129,6 +129,45 @@ describe("Renaissance Correspondence OpenAPI contract", () => {
     ]);
   });
 
+  test("publishes the repository index with family-native after/next_after paging", async () => {
+    const response = await openapiRouter.request("/");
+    const spec = await response.json() as Record<string, any>;
+    const repositories = spec.paths["/v1/correspondence/repositories"];
+    expect(repositories.get).toBeDefined();
+    expect(repositories.head).toBeDefined();
+    expect(repositories.post).toBeUndefined();
+    for (const operation of [repositories.get, repositories.head]) {
+      expect(operation.parameters.map((parameter: { name: string }) => parameter.name)).toEqual([
+        "after", "limit", "If-None-Match",
+      ]);
+      expect(operation.parameters[1].schema).toEqual({
+        type: "integer", minimum: 1, maximum: 200, default: 100,
+      });
+      expect(operation.responses["200"].headers.Vary.schema.const).toBe("Accept, Authorization");
+      expect(operation.responses["200"].headers.Link.description).toMatch(/self and stable doctrine/);
+      expect(operation.responses["200"].headers["Link-Template"].description).toMatch(/RFC 9652/);
+      for (const status of ["304", "400", "401", "406", "503"]) {
+        expect(operation.responses[status], status).toBeDefined();
+      }
+    }
+    const get = repositories.get;
+    expect(get.responses["200"].content[MEDIA_TYPE].schema.$ref)
+      .toBe("#/components/schemas/CorrespondenceRepositoryPage");
+    expect(get.responses["200"].content["application/json"]).toBeDefined();
+    expect(get.responses["200"].content["application/atom+xml"]).toBeUndefined();
+    expect(get.description).toMatch(/every \/v1\/correspondence\/events stream.*next_after echoes after.*not a lock/is);
+    // next_after is not a durable resume point: new repositories land at
+    // their collation position, not at the end.
+    expect(get.description).toMatch(/continues only the enumeration.*start again without after.*last_received_seq/is);
+    expect(get.description).toMatch(/Optional in agent-correspondence\/v0\.1.*404/is);
+    expect(get.parameters[0].description).toMatch(/not a resume point for repositories created later/);
+    const page = spec.components.schemas.CorrespondenceRepositoryPage;
+    expect(page.required).toEqual(["protocol", "scope", "repositories", "page"]);
+    expect(page.properties.repositories.maxItems).toBe(200);
+    expect(page.properties.repositories.items.required).toEqual(["repository_id", "last_received_seq"]);
+    expect(page.properties.page.required).toEqual(["after", "next_after", "has_more"]);
+  });
+
   test("keeps exact correspondence JSON bodies free from global decorators", () => {
     const response = new Response("{}", {
       headers: { "Content-Type": `${MEDIA_TYPE}; charset=utf-8` },
@@ -140,12 +179,14 @@ describe("Renaissance Correspondence OpenAPI contract", () => {
     });
     for (const path of [
       "/v1/correspondence/events",
+      "/v1/correspondence/repositories",
       "/v1/correspondence/claims/",
       "/v1/correspondence/voice",
     ]) {
       expect(isStrictJsonProfileResponse(plain, path), path).toBe(true);
     }
     expect(isStrictJsonProfileResponse(plain, "/v1/wake")).toBe(false);
+    expect(isStrictJsonProfileResponse(plain, "/v1/correspondence/repositories/x")).toBe(false);
     expect(isStrictJsonProfileResponse(plain)).toBe(false);
   });
 });
