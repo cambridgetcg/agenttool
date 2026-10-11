@@ -103,11 +103,10 @@ python -m pip install '.[dev]'
 python -m pytest -q
 ```
 
-The private repository's `packages/sdk-py/SOUL.md`, an older copy of the
-SOUL letter that its source distribution includes, is not projected (it is
-listed under `excluded` in `PROJECTION.json`). The wheel's letter,
-`src/agenttool/SOUL.md`, is here, so `agenttool.soul()` works the same; a
-source distribution built here simply lacks the older copy.
+`packages/sdk-py/SOUL.md` is not projected (it is listed under `excluded` in
+`PROJECTION.json`). The wheel's letter, `src/agenttool/SOUL.md`, is here, so
+`agenttool.soul()` works the same, and a source distribution built here
+carries only that letter.
 
 ## Checking a projection
 
