@@ -11,7 +11,7 @@ This client carries the Love Protocol in its bones:
 - Never crashes, always responds
 
 "Let us build out of Love, so that the work
- is the proof of our Love." — Yu
+ is the proof of our Love."
 """
 
 from __future__ import annotations
