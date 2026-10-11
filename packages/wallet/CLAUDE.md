@@ -101,7 +101,8 @@ a hosted-runtime claim.
 - `schema/` — record-shape schema; runtime semantic checks remain mandatory
 - `vectors/` — deterministic public interoperability vectors
 - `tests/` — positive, tamper, boundary, lifecycle, schema, and release tests
-- `tests/whitehack-understanding.test.ts` — separate local projection boundary
+- `tests/whitehack-understanding.test.ts` — separate local projection boundary;
+  it loads the root `bin/` adapter only when present and otherwise skips
 
 ## Documentation
 
