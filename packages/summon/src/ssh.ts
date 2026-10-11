@@ -87,15 +87,18 @@ const FIXED_DETAIL = 'ssh exited 255 without a line it is known to print'
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 /** One line of stderr as it arrived: its text, and whether it was ssh's own (ended \r\n, no other \r) or maybe the remote's. */
 interface Line { text: string; crlf: boolean }
-/** Split on raw bytes, before any normalisation: the line ending is what tells ssh's lines from the remote's. */
+/**
+ * Split on raw bytes, before any normalisation: the line ending is what tells ssh's lines from the remote's. Only the
+ * terminator is stripped (\r\n or \n): a classifier sees the line exactly, so a trailing space, tab or BOM is not ssh's line.
+ */
 function linesOf(stderr: string): Line[] {
   const parts = stderr.split('\n')
   const tail = parts.pop()! // after the last \n: '' when stderr ends with one, else a line with no terminator
   const out = parts.map((p) => {
     const body = p.endsWith('\r') ? p.slice(0, -1) : p
-    return { text: body.trimEnd(), crlf: p.endsWith('\r') && !body.includes('\r') } // `\r\r\n`, an inner \r: not ssh's
+    return { text: body, crlf: p.endsWith('\r') && !body.includes('\r') } // `\r\r\n`, an inner \r: not ssh's
   })
-  if (tail !== '') out.push({ text: tail.trimEnd(), crlf: false })
+  if (tail !== '') out.push({ text: tail, crlf: false })
   return out.filter((l) => l.text !== '')
 }
 
@@ -163,7 +166,8 @@ export function mapSshFailure(stderr: string, ctx: MapContext = {}): GateRespons
   const known = (l: Line) => l.crlf && KNOWN.some((re) => re.test(l.text))
   const detailOf = (l: Line | undefined) => (l && known(l) ? clean(l.text) : FIXED_DETAIL)
   const k = lines.findIndex((l, i) => l.crlf && KEX.test(l.text) && lines[i + 1]?.crlf === true && KEX_PEER.test(lines[i + 1]!.text))
-  const losses = lines.filter((l, i) => i !== k && i !== k + 1 && LOSS.some((re) => re.test(l.text)))
+  // Only a real kex pair is exempt (k is -1 when there is none, so the first line is checked like any other).
+  const losses = lines.filter((l, i) => !(k >= 0 && (i === k || i === k + 1)) && LOSS.some((re) => re.test(l.text)))
   if (losses.length > 0) return { status: 'unknown', detail: detailOf(losses.find(known)) }
   const p = patterns(ctx)
   const local = at(p.local)

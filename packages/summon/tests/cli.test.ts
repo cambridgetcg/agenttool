@@ -1316,3 +1316,102 @@ describe('round 3: a line with a \\r before its final \\r\\n is not ssh\'s', () 
     }
   })
 })
+
+// ── C review, round 4 ──
+
+/** One line, as 9.9p2 prints it, for each loss the classifier knows; each matches only that loss where ssh's form allows. */
+const LOSS_LINES = [
+  'Read from remote host nuance.local: Operation timed out', // Read from remote host
+  'Connection to nuance.local closed by remote host.', // Connection to … closed by remote host
+  'Timeout, server nuance.local not responding.', // Timeout, server … not responding
+  'client_loop: send disconnect: Operation timed out', // client_loop:
+  'banner exchange: Connection to 192.168.50.3 port 22: Broken pipe', // Broken pipe
+  'Connection reset by 192.168.50.3 port 22', // Connection reset
+  'Connection closed by 192.168.50.3 port 22', // Connection closed by
+  'packet_write_wait: Connection to 192.168.50.3 port 22: Operation timed out', // packet_write_wait
+  'client_loop: ssh_packet_write_poll: Connection to 192.168.50.3 port 22: Operation timed out', // packet_write_poll (with client_loop:, as ssh prints it)
+  'kex_exchange_identification: read: Connection reset by peer', // the kex line without its peer line after it
+]
+/** Every line form that classifies on its own against the paired nuance entry (and the kex pair), as ssh prints it. */
+const NUANCE_CLASSIFYING = [
+  'ssh: connect to host nuance.local port 22: Operation not permitted', `Can't open user config file ${CFG}: No such file or directory`,
+  `${CFG}: line 3: Bad configuration option: bogus`, `no such identity: ${KEY}: No such file or directory`, 'yu@nuance.local: Permission denied (publickey).',
+  'ssh: connect to host nuance.local port 22: No route to host', 'ssh: connect to host nuance.local port 22: Network is unreachable',
+  'ssh: connect to host nuance.local port 22: Network is down', 'ssh: Could not resolve hostname nuance.local: nodename nor servname provided, or not known',
+  'ssh: connect to host nuance.local port 22: Operation timed out', 'ssh: connect to host nuance.local port 22: Host is down',
+  'ssh: connect to host nuance.local port 22: Connection refused', 'Connection timed out during banner exchange', 'Host key verification failed.',
+  'kex_exchange_identification: read: Connection reset by peer\r\nConnection reset by 192.168.50.3 port 22',
+].map((s) => `${s}\r\n`)
+
+describe('round 4: a loss on the first line of stderr wins too', () => {
+  /** The reviewer's repros: a loss on line 0, then a line that would classify on its own. [stderr, the detail of the unknown] */
+  const REPROS: [string, string][] = [
+    ['Connection closed by 192.168.50.3 port 22\r\nyu@nuance.local: Permission denied (publickey).\r\n', 'Connection closed by 192.168.50.3 port 22'],
+    ['Connection reset by 192.168.50.3 port 22\r\nHost key verification failed.\r\n', 'Connection reset by 192.168.50.3 port 22'],
+    ['Connection to nuance.local closed by remote host.\r\nssh: connect to host nuance.local port 22: Operation timed out\r\n', 'Connection to nuance.local closed by remote host.'],
+    // The remote's own bare-\n line is the loss here: it decides, but is never shown.
+    ['cat: stdout: Broken pipe\nssh: connect to host nuance.local port 22: Operation timed out\r\nDisconnected from 192.168.50.3 port 22\r\n', FIXED],
+  ]
+  test('the reviewer\'s four repros read unknown; without their first line the rest classifies', () => {
+    for (const [stderr, detail] of REPROS) {
+      expect([stderr, map(stderr)]).toEqual([stderr, { status: 'unknown', detail }])
+      expect([stderr, map(stderr.slice(stderr.indexOf('\n') + 1)).status]).not.toEqual([stderr, 'unknown'])
+    }
+  })
+  test('through runCli: each repro after a start is unknown with the handle of the request sent, and ssh ran once', () => {
+    for (const [stderr, detail] of REPROS) {
+      const { bin, dir } = fakeSsh(255, '', stderr)
+      const r = runCli(startArgv(dir), deps(bin, dir))
+      const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
+      expect([stderr, r]).toEqual([stderr, { code: 1, out: { status: 'unknown', detail, handle: `nuance/${sent.id}` } }])
+      expect(lines(join(dir, 'ledger.jsonl'))[1]).toMatchObject({ event: 'answer', status: 'unknown', detail })
+      expect(calls(dir)).toBe(1)
+    }
+  })
+  test(`${LOSS_LINES.length} loss lines on line 0 (CRLF or bare), then every classifying line or capture: always unknown`, () => {
+    const CAPTURES: [string, MapContext][] = [
+      ['badconf', { config: 'cl/badconf' }], ['noconf', { config: 'cl/nope' }], ['changedkey', {}], ['unknownhost', {}],
+      ['kex2-rst', {}], ['kex-hang', {}], ['wrongkey', {}], ['missingid', { target: { ...LOCAL_SSHD, identityFile: `${R}/missing` } }],
+      ['permconf', { target: { host: '127.0.0.1' } }], ['summon-closed', { target: { host: '127.0.0.1' } }],
+      ['summon-nuance', { target: { host: 'nonexistent-summon-review.invalid' } }],
+    ]
+    const units: [string, (s: string) => GateResponse][] = NUANCE_CLASSIFYING.map((s) => [s, (t: string) => map(t)])
+    for (const [name, ctx] of CAPTURES) {
+      const mapAs = (t: string) => mapSshFailure(t, { target: LOCAL_SSHD, env: {}, ...ctx })
+      const raw = CAPTURE[name]!
+      units.push([raw, mapAs]) // the whole capture
+      for (const line of raw.split(/(?<=\r\n)/)) if (line !== raw && mapAs(line).status !== 'unknown') units.push([line, mapAs]) // each of its lines that classifies alone
+    }
+    expect(units.length).toBeGreaterThan(NUANCE_CLASSIFYING.length + CAPTURES.length)
+    for (const [unit, m] of units) {
+      expect([unit, m(unit).status]).not.toEqual([unit, 'unknown'])
+      for (const loss of LOSS_LINES) {
+        for (const end of ['\r\n', '\n']) {
+          const r = m(`${loss}${end}${unit}`)
+          expect([loss, end, unit, r.status, r.reason, r.detail === FIXED || r.detail === loss]).toEqual([loss, end, unit, 'unknown', undefined, true])
+        }
+      }
+    }
+  })
+})
+
+describe('round 4: a classifying line is ssh\'s line exactly, with only its final \\r\\n stripped', () => {
+  const VARIANTS = (s: string) => [`${s}\t`, `${s} `, `${s}\u00a0`, `${s}\ufeff`, `\ufeff${s}`, `${s}\t `]
+  test('the reviewer\'s variants of the verify line (a tab, a space, a no-break space, a BOM) read unknown', () => {
+    expect(map('Host key verification failed.\r\n')).toMatchObject({ status: 'host_key_mismatch' })
+    for (const v of VARIANTS('Host key verification failed.')) expect([v, map(`${v}\r\n`)]).toEqual([v, { status: 'unknown', detail: FIXED }])
+  })
+  test('every classifying line with whitespace or a BOM added at either end reads unknown', () => {
+    for (const unit of NUANCE_CLASSIFYING) {
+      const parts = unit.slice(0, -2).split('\r\n') // the kex pair is two lines: vary each in turn
+      for (const v of parts.flatMap((l, i) => VARIANTS(l).map((x) => parts.with(i, x).join('\r\n')))) {
+        expect([v, map(`${v}\r\n`).status]).toEqual([v, 'unknown'])
+      }
+    }
+  })
+  test('the fingerprint lines must be exact too (the verify line alone still decides)', () => {
+    const plain: GateResponse = { status: 'host_key_mismatch', detail: 'Host key verification failed.', hint: HOST_KEY_HINT }
+    expect(map(CHANGED_KEY.replace('remote host is\n', 'remote host is \n'))).toEqual(plain)
+    expect(map(CHANGED_KEY.replace(`${FINGERPRINT}.\r\n`, `${FINGERPRINT}. \r\n`))).toEqual(plain)
+  })
+})
