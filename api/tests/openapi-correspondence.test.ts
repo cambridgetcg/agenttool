@@ -140,12 +140,14 @@ describe("Renaissance Correspondence OpenAPI contract", () => {
     });
     for (const path of [
       "/v1/correspondence/events",
+      "/v1/correspondence/repositories",
       "/v1/correspondence/claims/",
       "/v1/correspondence/voice",
     ]) {
       expect(isStrictJsonProfileResponse(plain, path), path).toBe(true);
     }
     expect(isStrictJsonProfileResponse(plain, "/v1/wake")).toBe(false);
+    expect(isStrictJsonProfileResponse(plain, "/v1/correspondence/repositories/x")).toBe(false);
     expect(isStrictJsonProfileResponse(plain)).toBe(false);
   });
 });

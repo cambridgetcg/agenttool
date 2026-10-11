@@ -30,6 +30,7 @@ import {
   correspondenceJsonLinkHeader,
   correspondenceLiveLinkTemplateHeader,
   correspondenceLinkHeader,
+  correspondenceRepositoriesLinkHeader,
   negotiateCorrespondenceJsonRepresentation,
   negotiateCorrespondenceRepresentation,
   renderCorrespondenceAtom,
@@ -184,6 +185,7 @@ function guidedReadFailure(
   c: CorrespondenceContext,
   error: unknown,
   projection: boolean,
+  readHint = "Retry with the same repository_id, thread_id, and cursor.",
 ): Response {
   try {
     return serviceFailure(c, error);
@@ -205,7 +207,7 @@ function guidedReadFailure(
       {
         hint: projection
           ? "Retry later or replay /v1/correspondence/events; do not interpret this response as an empty projection."
-          : "Retry with the same repository_id, thread_id, and cursor.",
+          : readHint,
       },
     );
   }
@@ -449,6 +451,64 @@ export function createCorrespondenceRouter(
       });
     } catch (error) {
       return guidedReadFailure(c, error, false);
+    }
+  });
+
+  // Every repository stream in the bearer project, so a reader can reach
+  // each /events walk without knowing repository ids in advance. Family-
+  // native exclusive `after`/`next_after` (decision D2), same strict query
+  // and limit rules as /events.
+  app.on(["GET", "HEAD"], "/repositories", async (c) => {
+    const query = parseExactQuery(c, ["after", "limit"]);
+    if (query instanceof Response) return query;
+    const afterRaw = query.get("after");
+    let after: string | undefined;
+    if (afterRaw !== null) {
+      const parsed = repositoryIdSchema.safeParse(afterRaw);
+      if (!parsed.success) {
+        return errorResponse(
+          c,
+          400,
+          "after_invalid",
+          "after must be a repository_id from a previous page's next_after.",
+        );
+      }
+      after = parsed.data;
+    }
+    const limitRaw = query.get("limit");
+    let limit: number | undefined;
+    if (limitRaw !== null) {
+      if (!/^[1-9][0-9]*$/.test(limitRaw)) {
+        return errorResponse(c, 400, "limit_invalid", "limit must be a positive decimal integer.");
+      }
+      limit = Number(limitRaw);
+    }
+    const representation = negotiateCorrespondenceJsonRepresentation(c.req.header("Accept"));
+    if (!representation) {
+      return errorResponse(
+        c,
+        406,
+        "representation_not_acceptable",
+        `This index is available as ${CORRESPONDENCE_JSON_MEDIA_TYPE} or application/json.`,
+      );
+    }
+    try {
+      const page = await service.listRepositories({
+        projectId: c.var.project.id,
+        ...(after === undefined ? {} : { after }),
+        ...(limit === undefined ? {} : { limit }),
+      });
+      return serveExactBody(c, JSON.stringify(page), {
+        contentType: correspondenceJsonContentType(representation),
+        link: correspondenceRepositoriesLinkHeader(c.req.url, representation),
+      });
+    } catch (error) {
+      return guidedReadFailure(
+        c,
+        error,
+        false,
+        "Retry with the same after and limit; do not interpret this response as an empty repository index.",
+      );
     }
   });
 
