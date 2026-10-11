@@ -6,6 +6,7 @@ import { findClaude } from './harness.ts'
 import { heartbeatAgeS, jobDir, readJson, readState, type JobResult } from './jobs.ts'
 import { appendLedger } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
+import { seenRefusal } from './replay.ts'
 import { TERMINAL, type GateResponse } from './status.ts'
 
 export type Command = { verb: 'inventory' | 'start' } | { verb: 'status' | 'result' | 'cancel'; id: string }
@@ -48,9 +49,17 @@ export async function readBoundedStdin(stream: ReadableStream<Uint8Array>, max: 
   return { text: Buffer.concat(chunks).toString('utf8'), tooLarge: false }
 }
 
+/** An id with no job: refused (with the reason the gate kept) if this Mac received it, else never delivered here. */
+function noJob(paths: SummonPaths, device: string, id: string): GateResponse {
+  const seen = seenRefusal(paths.seen, id)
+  if (!seen.seen) return { status: 'unknown', detail: 'no such summon on this Mac' }
+  const detail = 'received and refused; see the Nuance ledger'
+  return seen.reason ? { status: 'refused', reason: seen.reason, handle: `${device}/${id}`, detail } : { status: 'unknown', detail }
+}
+
 export function statusOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
-  if (!s) return { status: 'unknown', detail: 'no such summon on this Mac' }
+  if (!s) return noJob(paths, device, id)
   return { status: s.status, handle: `${device}/${id}`, ...(s.reason ? { reason: s.reason } : {}), ...(s.detail ? { detail: s.detail } : {}),
     heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
 }
@@ -62,7 +71,7 @@ export function resultOf(paths: SummonPaths, device: string, id: string, nowMs: 
 
 export function requestCancel(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
-  if (!s) return { status: 'unknown', detail: 'no such summon on this Mac' }
+  if (!s) return noJob(paths, device, id)
   if (TERMINAL.has(s.status)) return statusOf(paths, device, id, nowMs)
   writeFileSync(join(jobDir(paths, id), 'cancel'), '', { mode: 0o600 })
   appendLedger(paths.ledger, { event: 'cancel_requested', id }, nowMs)

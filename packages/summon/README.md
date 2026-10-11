@@ -55,6 +55,45 @@ otherwise win. sshd is not reloaded: macOS starts it per connection, so the next
 6. On the Air, archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.ssh/summon` (the key, its ssh entry and
    `known_hosts`) and `~/summon-nuance-bundle`.
 
+## The allowlist
+
+`~/.config/summon/allowlist.yaml` on Nuance decides what Summon may do. It is read on every request and edited only
+there, by Yu. The installer's starter file allows Claude Code (sonnet, haiku) to review `~/Projects`, and it is the
+reference for the format. If the file is missing or does not parse, every summon is refused `outside_allowlist`, with a
+hint that says what is wrong.
+
+- **`limits.max_concurrent` must be 1.** The runner is serial, so a second admitted job could only wait, and it could
+  expire before its turn.
+- **Only `claude` runs in Phase 0.** A `codex` or `hermes` request, or a `claude` request that names a provider, is
+  refused `runtime_unavailable` before the allowlist is read. A claude model entry may list `effort` values that
+  `claude --help` accepts (`low`, `medium`, `high`, `xhigh`, `max`), and an admitted effort reaches claude as `--effort`.
+- **A review folder** gives the job Read, Glob and Grep, and Claude Code keeps those reads inside the folder.
+- **An edit folder also needs `reads_anywhere: true` on the claude runtime entry**, because an edit grant reaches well
+  past its folder:
+  1. The job can **read any file Yu can**, through git's own file options (`git commit -F <file>`,
+     `git add --pathspec-from-file=<file>`), and return what it read in its result.
+  2. `git add` and `git commit` act on the **whole enclosing repository**, not just the folder. The job can stage and
+     commit other agents' uncommitted work anywhere in that repository, or amend its last commit. Nothing is pushed or
+     deleted, and the reflog keeps the old commit.
+  3. The job can write **`CLAUDE.md`, `AGENTS.md` and `CLAUDE.local.md`**. Summon's own jobs ignore them, but later
+     agent sessions in that folder load them as instructions. `CLAUDE.local.md` is often gitignored, so `git status`
+     may not show it.
+
+  So grant edit on a repository root or a worktree of its own, and read a job's diff (and any `CLAUDE.local.md`)
+  before you open your own session there.
+
+```yaml
+runtimes:
+  - id: claude
+    models: [{ model: sonnet }, { model: haiku }]
+    reads_anywhere: true      # needed by every edit folder below
+folders:
+  - path: ~/Projects
+    access: review
+  - path: ~/Projects/some-repo
+    access: edit
+```
+
 ## Known Phase 0 limits
 
 - **The runner is serial.** It runs one job at a time and answers nothing else until that job ends, so

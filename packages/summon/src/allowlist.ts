@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { CLAUDE_EFFORTS } from './harness.ts'
 import { DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
 
 export interface AllowlistModel { model: string; provider?: string; effort?: string[] }
@@ -47,7 +48,8 @@ export function parseAllowlist(text: string): Parsed {
     for (const m of r.models) {
       if (!m || typeof m.model !== 'string' || !TOKEN_RE.test(m.model)) return fail(`model in ${r.id}`)
       if (m.provider !== undefined && (typeof m.provider !== 'string' || !TOKEN_RE.test(m.provider))) return fail(`provider in ${r.id}`)
-      if (m.effort !== undefined && (!Array.isArray(m.effort) || !m.effort.every((e: unknown) => typeof e === 'string' && TOKEN_RE.test(e)))) return fail(`effort in ${r.id}`)
+      if (m.effort !== undefined && (!Array.isArray(m.effort) || !m.effort.every((e: unknown) => typeof e === 'string' && TOKEN_RE.test(e)
+        && (r.id !== 'claude' || (CLAUDE_EFFORTS as readonly string[]).includes(e))))) return fail(`effort in ${r.id}`)
       models.push({ model: m.model, ...(m.provider ? { provider: m.provider } : {}), ...(m.effort ? { effort: m.effort } : {}) })
     }
     runtimes.push({ id: r.id, models, reads_anywhere: r.reads_anywhere === true })
@@ -61,7 +63,9 @@ export function parseAllowlist(text: string): Parsed {
   }
   const l = y.limits ?? {}
   const timeout = parseDurationS(l.job_timeout_max)
-  if (!isInt(l.max_concurrent, 1, 8) || !isInt(l.starts_per_hour, 1, 120) || timeout === null || timeout > 86_400) return fail('limits')
+  // Phase 0's runner runs one job at a time: a second admitted job would only wait, and could expire unrun.
+  if (l.max_concurrent !== 1) return fail('limits.max_concurrent must be 1 in Phase 0 (the runner is serial)')
+  if (!isInt(l.starts_per_hour, 1, 120) || timeout === null || timeout > 86_400) return fail('limits')
   return {
     ok: true,
     allowlist: { version: 1, device: y.device, peers: y.peers, runtimes, folders,
@@ -115,12 +119,18 @@ export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
     const pr = realpath(join(home, p)) ?? join(home, p)
     if (within(cwdReal, pr)) return { ok: false, reason: 'tcc_protected_folder', detail: `${req.cwd} is inside ~/${p}` }
   }
+  // A claude edit job may run `git add` / `git commit`, and git's own file options (-F, --pathspec-from-file) read any
+  // file Yu can, so edit is the same power reads_anywhere names. Review jobs stay inside the folder and need no flag.
+  const editNeedsFlag = req.access === 'edit' && rt.id === 'claude' && !rt.reads_anywhere
+  const FLAG_HINT = 'add reads_anywhere: true to the claude runtime entry'
+  const folderHint = (path: string) => `folders:\n  - path: ${path}\n    access: ${req.access}${editNeedsFlag ? `\nand ${FLAG_HINT}` : ''}`
   let best: { real: string; f: AllowlistFolder } | null = null
   for (const f of al.folders) {
     const fr = realpath(expandHome(f.path, home))
     if (fr && within(cwdReal, fr) && (!best || fr.length > best.real.length)) best = { real: fr, f }
   }
-  if (!best) return out(`folder ${req.cwd} is not allowed`, `folders:\n  - path: ${req.cwd}\n    access: ${req.access}`)
-  if (rank(req.access) > rank(best.f.access)) return out(`${req.access} is not allowed in ${best.f.path} (${best.f.access})`, `folders:\n  - path: ${best.f.path}\n    access: edit`)
+  if (!best) return out(`folder ${req.cwd} is not allowed`, folderHint(req.cwd))
+  if (rank(req.access) > rank(best.f.access)) return out(`${req.access} is not allowed in ${best.f.path} (${best.f.access})`, folderHint(best.f.path))
+  if (editNeedsFlag) return out('edit jobs run git, which can read any file on this Mac', FLAG_HINT)
   return { ok: true, cwdReal }
 }

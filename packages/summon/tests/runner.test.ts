@@ -6,9 +6,9 @@ import { requestCancel, statusOf } from '../src/gatekeeper.ts'
 import { countActive, jobDir, readJson, readState, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
-import { newRequestId } from '../src/request.ts'
+import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
 import { markOrphans, reapStranded, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
-import { cleanupTmps, makeFakeClaude, sampleRequest, targetHome } from './helpers.ts'
+import { cleanupTmps, DEFAULT_ALLOWLIST, makeFakeClaude, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -113,6 +113,59 @@ describe('runOnce', () => {
     await runOnce(rdeps(h, { nowMs: () => Date.now() + 2 * 86_400_000 }))
     expect(readState(summonPaths(h), req.id)?.status).toBe('expired')
     expect(existsSync(fake.argvOut)).toBe(false)
+  })
+  test('F18: a request past its expiry but inside the skew grace the gate admitted it under is run, not expired', async () => {
+    const h = targetHome(); const now = Date.now()
+    // The Air's clock is 2 min behind: issued "2 min ago" with --expires 90s, so by this Mac's clock it expired 30 s ago.
+    const req = admit(h, { issued_at: iso(now - 120_000), expires_at: iso(now - 30_000) })
+    fake.setMode('ok')
+    await runOnce(rdeps(h))
+    expect(existsSync(fake.argvOut)).toBe(true) // claude was launched
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+  })
+  test('F18: the runner keeps the same grace as the gate, and no more', async () => {
+    const h = targetHome(); const late = admit(h)
+    const expiresMs = Date.parse(readState(summonPaths(h), late.id)!.expires_at)
+    await runOnce(rdeps(h, { nowMs: () => expiresMs + CLOCK_SKEW_MS + 1_000 }))
+    expect(readState(summonPaths(h), late.id)).toMatchObject({ status: 'expired', detail: 'expired before the runner reached it' })
+    expect(existsSync(fake.argvOut)).toBe(false)
+    const h2 = targetHome(); const inGrace = admit(h2)
+    const expires2 = Date.parse(readState(summonPaths(h2), inGrace.id)!.expires_at)
+    await runOnce(rdeps(h2, { nowMs: () => expires2 + CLOCK_SKEW_MS - 60_000 }))
+    expect(readState(summonPaths(h2), inGrace.id)?.status).toBe('completed')
+  })
+  test('F02: a run with denied tool calls ends blocked(permission), and the ledger job_end carries the reason', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('denied')
+    await runOnce(rdeps(h))
+    expect(readState(paths, req.id)).toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied' })
+    expect(resultOf(h, req.id)).toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied',
+      result_text: 'I was not allowed to read /Users/yu/.zshrc', exit_code: 0 })
+    expect(ledgerOf(h).find((e) => e.event === 'job_end' && e.id === req.id)).toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied' })
+    expect(readFileSync(paths.ledger, 'utf8')).not.toContain('zshrc')
+    expect(verifyLedger(paths.ledger).ok).toBe(true)
+  })
+  test('F33: a command line claude rejects ends failed with a fixed detail, and no stderr text is kept anywhere', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('badflag')
+    await runOnce(rdeps(h))
+    const DRIFT = 'claude rejected its command line (version drift?)'
+    expect(readState(paths, req.id)).toMatchObject({ status: 'failed', detail: DRIFT })
+    expect(resultOf(h, req.id)).toMatchObject({ status: 'failed', detail: DRIFT, result_text: '', exit_code: 1 })
+    expect(ledgerOf(h).find((e) => e.event === 'job_end' && e.id === req.id)).toMatchObject({ status: 'failed', detail: DRIFT })
+    for (const f of [paths.ledger, join(paths.jobs, req.id, 'result.json'), join(paths.jobs, req.id, 'state.json')]) {
+      const text = readFileSync(f, 'utf8')
+      expect(text).not.toContain('--x')
+      expect(text).not.toContain('unknown option')
+    }
+  })
+  test('F24: an admitted effort reaches claude as --effort', async () => {
+    const h = targetHome(DEFAULT_ALLOWLIST.replace('{ model: sonnet }', '{ model: sonnet, effort: [low] }'))
+    const req = admit(h, { effort: 'low' })
+    fake.setMode('ok')
+    await runOnce(rdeps(h))
+    expect(JSON.parse(readFileSync(fake.argvOut, 'utf8')).argv).toContain('--effort=low')
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
   })
   test('auth failure is blocked(auth)', async () => {
     const h = targetHome(); const req = admit(h)
@@ -324,7 +377,7 @@ describe('recovery', () => {
   })
 
   describe('reapStranded (ruling 3)', () => {
-    const past = { expires_at: iso(Date.now() - 60_000) }
+    const past = { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) } // past the gate's skew grace too
     test('a queued job past expiry with no spool marker and no claim becomes expired and stops counting as active', () => {
       const h = targetHome(); const paths = summonPaths(h)
       const req = enqueue(h, past)
@@ -336,6 +389,14 @@ describe('recovery', () => {
       expect(ledgerOf(h)).toContainEqual(expect.objectContaining({ event: 'job_end', id: req.id, status: 'expired' }))
       expect(countActive(paths)).toBe(0)
       expect(reapStranded(paths, Date.now())).toBe(0) // idempotent
+    })
+    test('F18: a stranded job past its expiry but still inside the skew grace is left alone', () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const req = enqueue(h, { expires_at: iso(Date.now() - 60_000) })
+      unlinkSync(join(paths.spool, req.id))
+      expect(reapStranded(paths, Date.now())).toBe(0)
+      expect(readState(paths, req.id)?.status).toBe('queued')
+      expect(reapStranded(paths, Date.now() + CLOCK_SKEW_MS)).toBe(1)
     })
     test('is left alone: not yet expired, still in the spool, claimed, or already finished', () => {
       const h = targetHome(); const paths = summonPaths(h)
@@ -390,7 +451,7 @@ describe('runner-main (a fresh process, as launchd starts it)', () => {
 
     fake.setMode('ok')
     const next = enqueue(h)
-    const stranded = enqueue(h, { expires_at: iso(Date.now() - 60_000) })
+    const stranded = enqueue(h, { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) })
     unlinkSync(join(paths.spool, stranded.id))
     const p2 = start()
     expect(await p2.exited).toBe(0)

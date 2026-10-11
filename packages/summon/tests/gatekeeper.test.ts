@@ -247,6 +247,15 @@ describe('gatekeeper-main', () => {
     expect(await runGatekeeper(h, 'start', JSON.stringify(sampleRequest({ cwd: '~/Elsewhere' }))))
       .toMatchObject({ code: 0, out: { status: 'refused', reason: 'outside_allowlist' } })
   })
+  test('F07: a refused start can be traced by its id: status names the refusal, not "no such summon"', async () => {
+    const h = targetHome(); const req = sampleRequest({ cwd: '~/Elsewhere' })
+    expect((await runGatekeeper(h, 'start', JSON.stringify(req))).out).toMatchObject({ status: 'refused', reason: 'outside_allowlist' })
+    for (const verb of ['status', 'result', 'cancel']) {
+      const { code, out } = await runGatekeeper(h, `${verb} ${req.id}`)
+      expect(code).toBe(0)
+      expect(out).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: 'received and refused; see the Nuance ledger' })
+    }
+  })
   test('start refuses an oversized stdin as too_large, logs the refusal, and admits nothing', async () => {
     const h = targetHome(); const paths = summonPaths(h)
     const r = await runGatekeeper(h, 'start', 'x'.repeat(MAX_START_STDIN_BYTES + 1))

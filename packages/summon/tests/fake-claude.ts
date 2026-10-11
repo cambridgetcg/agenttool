@@ -17,3 +17,14 @@ if (mode === 'flood') {
   await Bun.sleep(30_000)
 }
 if (mode === 'auth') { emit({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in · Please run /login' }); process.exit(1) }
+if (mode === 'denied') {
+  // 2.1.296 with --permission-prompts=none: the denied call is answered locally, and the run still ends `success`.
+  emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'I was not allowed to read /Users/yu/.zshrc' }] } })
+  emit({ type: 'result', subtype: 'success', is_error: false, result: 'I was not allowed to read /Users/yu/.zshrc', num_turns: 2,
+    permission_denials: [{ tool_name: 'Read', tool_use_id: 'toolu_1', tool_input: { file_path: '/Users/yu/.zshrc' } }] })
+}
+// What 2.1.296 prints for a flag it does not know: stderr only, no stdout, exit 1.
+if (mode === 'badflag') {
+  await new Promise<void>((done) => process.stderr.write("error: unknown option '--x=none'\n", () => done()))
+  process.exit(1)
+}

@@ -1,7 +1,9 @@
-export type RefusalReason =
-  | 'malformed' | 'too_large' | 'expired' | 'clock' | 'replayed' | 'outside_allowlist'
-  | 'target_logged_out' | 'runner_missing' | 'runtime_unavailable' | 'rate_limited' | 'busy'
-  | 'tcc_protected_folder'
+export const REFUSAL_REASONS = [
+  'malformed', 'too_large', 'expired', 'clock', 'replayed', 'outside_allowlist',
+  'target_logged_out', 'runner_missing', 'runtime_unavailable', 'rate_limited', 'busy',
+  'tcc_protected_folder',
+] as const
+export type RefusalReason = (typeof REFUSAL_REASONS)[number]
 export type BlockedReason = 'usage' | 'auth' | 'permission'
 export type JobStatus =
   | 'queued' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled' | 'timed_out' | 'expired' | 'unknown'

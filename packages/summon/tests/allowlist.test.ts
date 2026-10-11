@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkAdmission, parseAllowlist, parseDurationS, type Admission, type Allowlist } from '../src/allowlist.ts'
@@ -58,6 +58,27 @@ describe('parseAllowlist', () => {
   test('refuses a zero job_timeout_max', () => {
     expect(parseAllowlist(YAML.replace('job_timeout_max: 30m', 'job_timeout_max: 0m')).ok).toBe(false)
   })
+  test('F22: max_concurrent must be 1 in Phase 0, because the runner is serial', () => {
+    for (const n of ['2', '8', '0']) {
+      expect(parseAllowlist(YAML.replace('max_concurrent: 1', `max_concurrent: ${n}`)))
+        .toEqual({ ok: false, detail: 'limits.max_concurrent must be 1 in Phase 0 (the runner is serial)' })
+    }
+    expect(parseAllowlist(YAML).ok).toBe(true)
+  })
+  test("F22: the installer's starter allowlist parses", () => {
+    const tmpl = readFileSync(join(import.meta.dir, '..', 'nuance', 'install.sh.tmpl'), 'utf8')
+    const m = /<<'YAML'\n([\s\S]*?)\nYAML\n/.exec(tmpl)
+    expect(m).not.toBeNull()
+    const r = parseAllowlist(m![1]!)
+    expect(r).toMatchObject({ ok: true, allowlist: { limits: { max_concurrent: 1 } } })
+  })
+  test('F24: a claude effort must be one claude --help lists; other runtimes keep plain tokens', () => {
+    const withEffort = (id: string, effort: string) => YAML.replace('models: [{ model: sonnet }, { model: haiku }]',
+      `models: [{ model: sonnet, effort: [${effort}] }]`).replace('id: claude', `id: ${id}`)
+    for (const e of ['low', 'medium', 'high', 'xhigh', 'max']) expect(parseAllowlist(withEffort('claude', e)).ok).toBe(true)
+    for (const e of ['ultra', 'Low', 'none']) expect(parseAllowlist(withEffort('claude', e))).toEqual({ ok: false, detail: 'effort in claude' })
+    expect(parseAllowlist(withEffort('codex', 'ultra')).ok).toBe(true)
+  })
 })
 
 describe('checkAdmission', () => {
@@ -69,6 +90,40 @@ describe('checkAdmission', () => {
     const r = checkAdmission(sampleRequest({ access: 'edit' }), al(), home())
     expect(r).toMatchObject({ ok: false, reason: 'outside_allowlist' })
     expect((r as { hint?: string }).hint).toContain('access: edit')
+  })
+  describe('F00: an edit job runs git, which reads anywhere, so claude edit needs reads_anywhere', () => {
+    const editAl = (readsAnywhere: boolean): Allowlist => {
+      const r = parseAllowlist(YAML.replace('access: review', 'access: edit')
+        .replace('models: [{ model: sonnet }, { model: haiku }]', `models: [{ model: sonnet }, { model: haiku }]${readsAnywhere ? '\n    reads_anywhere: true' : ''}`))
+      if (!r.ok) throw new Error(r.detail)
+      return r.allowlist
+    }
+    test('edit in an edit folder without the flag is refused, with the flag as the hint', () => {
+      expect(checkAdmission(sampleRequest({ access: 'edit' }), editAl(false), home())).toEqual({ ok: false, reason: 'outside_allowlist',
+        detail: 'edit jobs run git, which can read any file on this Mac', hint: 'add reads_anywhere: true to the claude runtime entry' })
+    })
+    test('with reads_anywhere: true the edit job is admitted', () => {
+      const h = home()
+      expect(checkAdmission(sampleRequest({ access: 'edit' }), editAl(true), h)).toEqual({ ok: true, cwdReal: join(h, 'Projects/x') })
+    })
+    test('review needs no flag, even in an edit folder', () => {
+      const h = home()
+      expect(checkAdmission(sampleRequest({ access: 'review' }), editAl(false), h)).toEqual({ ok: true, cwdReal: join(h, 'Projects/x') })
+    })
+    test('a hint that grants edit also names the flag while it is missing, and only then', () => {
+      const h = home()
+      const escalate = checkAdmission(sampleRequest({ access: 'edit' }), al(), h)
+      expect(refusalHint(escalate)).toContain('access: edit')
+      expect(refusalHint(escalate)).toContain('reads_anywhere: true')
+      const newFolder = checkAdmission(sampleRequest({ access: 'edit', cwd: '/' }), al(), h)
+      expect(refusalHint(newFolder)).toContain('access: edit')
+      expect(refusalHint(newFolder)).toContain('reads_anywhere: true')
+      const flagged = parseAllowlist(YAML.replace('models: [{ model: sonnet }, { model: haiku }]', 'models: [{ model: sonnet }, { model: haiku }]\n    reads_anywhere: true'))
+      if (!flagged.ok) throw new Error(flagged.detail)
+      const escalateFlagged = checkAdmission(sampleRequest({ access: 'edit' }), flagged.allowlist, h)
+      expect(refusalHint(escalateFlagged)).toBe('folders:\n  - path: ~/Projects\n    access: edit')
+      expect(refusalHint(checkAdmission(sampleRequest({ access: 'review', cwd: '/' }), al(), h))).not.toContain('reads_anywhere')
+    })
   })
   test('refuses an unknown peer, runtime or model', () => {
     const h = home()

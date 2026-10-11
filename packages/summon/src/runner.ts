@@ -5,7 +5,7 @@ import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation,
 import { jobDir, readJson, readState, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
-import { ID_RE, type SummonRequest } from './request.ts'
+import { CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
 import { TERMINAL } from './status.ts'
 
 export interface RunnerDeps {
@@ -21,6 +21,8 @@ export interface RunnerDeps {
 }
 
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
+/** Kept in memory only, to recognise a command line claude rejects; never written anywhere. */
+const STDERR_KEEP_BYTES = 4096
 const INVENTORY_REQ_RE = /^inventory-\d+\.req$/
 const iso = (ms: number) => new Date(ms).toISOString()
 
@@ -68,13 +70,14 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   if (!s) { appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'job state unreadable' }, deps.nowMs()); return }
   if (s.status !== 'queued') return
   if (existsSync(join(dir, 'cancel'))) return finish(deps, s, { status: 'cancelled', detail: 'cancelled before it started' })
-  if (deps.nowMs() > Date.parse(s.expires_at)) return finish(deps, s, { status: 'expired', detail: 'expired before the runner reached it' })
+  // The same ±5 min grace the gate admitted it under: a job the gate admitted is never expired by the skew alone.
+  if (deps.nowMs() > Date.parse(s.expires_at) + CLOCK_SKEW_MS) return finish(deps, s, { status: 'expired', detail: 'expired before the runner reached it' })
   const req = readJson<SummonRequest>(join(dir, 'request.json'))
   if (!req || typeof req.prompt !== 'string') return finish(deps, s, { status: 'failed', detail: 'request file is missing or unreadable' })
   const bin = deps.claudeBin()
   if (!bin) return finish(deps, s, { status: 'failed', detail: 'claude is not installed on this Mac' })
   let inv: Invocation
-  try { inv = claudeInvocation({ model: s.model, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
+  try { inv = claudeInvocation({ model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
     return finish(deps, s, { status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
   }
   const started = await startChild(inv, s.cwd_real)
@@ -117,7 +120,13 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
       if (usageWarning(line)) stop({ status: 'blocked', reason: 'usage' })
     }
   })
-  child.stderr!.resume()
+  const stderrHead: Buffer[] = []
+  let stderrBytes = 0
+  child.stderr!.on('data', (chunk: Buffer) => {
+    if (stderrBytes >= STDERR_KEEP_BYTES) return
+    const part = chunk.subarray(0, STDERR_KEEP_BYTES - stderrBytes)
+    stderrHead.push(part); stderrBytes += part.length
+  })
 
   const beat = () => { try { writeFileSync(join(dir, 'heartbeat'), String(deps.nowMs()), { mode: 0o600 }) } catch { /* dir swept */ } }
   beat()
@@ -139,7 +148,7 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   clearTimeout(killTimer)
   child.stdout!.destroy(); child.stderr!.destroy()
   if (buf) lines.push(buf)
-  const interpreted = interpretClaudeStream(lines, code)
+  const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'))
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
   finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
 }
@@ -232,14 +241,15 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
 }
 
 /**
- * A `queued` job past its expiry with no spool marker and no claim was stranded by a gate that died between writing
- * state.json and the marker. Nothing will ever run it, and it would count toward max_concurrent, so it ends `expired`.
+ * A `queued` job past its expiry (plus the gate's skew grace) with no spool marker and no claim was stranded by a gate
+ * that died between writing state.json and the marker. Nothing will ever run it, and it would count toward
+ * max_concurrent, so it ends `expired`.
  */
 export function reapStranded(paths: SummonPaths, nowMs: number): number {
   let n = 0
   for (const id of jobIds(paths)) {
     const s = readState(paths, id)
-    if (s?.status !== 'queued' || !(nowMs > Date.parse(s.expires_at))) continue
+    if (s?.status !== 'queued' || !(nowMs > Date.parse(s.expires_at) + CLOCK_SKEW_MS)) continue
     if (existsSync(join(paths.spool, id)) || existsSync(join(jobDir(paths, id), 'claimed'))) continue
     finishJob(paths, nowMs, s, { status: 'expired', detail: 'never reached the runner' })
     n++

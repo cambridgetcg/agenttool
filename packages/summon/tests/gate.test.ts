@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gateStart, type GateDeps } from '../src/gate.ts'
+import { requestCancel, resultOf, statusOf } from '../src/gatekeeper.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
+import { claimId } from '../src/replay.ts'
 import { cleanupTmps, DEFAULT_ALLOWLIST, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -41,7 +43,7 @@ describe('gateStart', () => {
     const h = targetHome()
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h))).toMatchObject({ reason: 'busy' })
-    const h2 = targetHome(DEFAULT_ALLOWLIST.replace('max_concurrent: 1', 'max_concurrent: 8').replace('starts_per_hour: 6', 'starts_per_hour: 1'))
+    const h2 = targetHome(DEFAULT_ALLOWLIST.replace('starts_per_hour: 6', 'starts_per_hour: 1'))
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h2)).status).toBe('admitted')
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h2))).toMatchObject({ reason: 'rate_limited' })
   })
@@ -79,6 +81,98 @@ describe('gateStart', () => {
     const old = new Date(Date.now() - 60_000); utimesSync(lock, old, old)
     expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
     expect(existsSync(lock)).toBe(false)
+  })
+  describe('F21/F24: runtime availability is decided before the allowlist', () => {
+    test('codex and hermes against the starter allowlist are runtime_unavailable, with no hint toward reads_anywhere', () => {
+      const h = targetHome()
+      for (const runtime of ['codex', 'hermes'] as const) {
+        expect(gateStart(JSON.stringify(sampleRequest({ runtime, model: 'gpt-6-astra' })), deps(h)))
+          .toEqual({ status: 'refused', reason: 'runtime_unavailable', detail: `${runtime} is not wired in Phase 0` })
+      }
+    })
+    test('a claude request with a provider is runtime_unavailable, even when the allowlist lists that provider', () => {
+      const h = targetHome(DEFAULT_ALLOWLIST.replace('{ model: haiku }', '{ model: haiku, provider: bedrock }'))
+      const NOT_WIRED = { status: 'refused', reason: 'runtime_unavailable', detail: 'provider selection is not wired for claude in Phase 0' } as const
+      expect(gateStart(JSON.stringify(sampleRequest({ model: 'haiku', provider: 'bedrock' })), deps(h))).toEqual(NOT_WIRED)
+      expect(gateStart(JSON.stringify(sampleRequest({ provider: 'anthropic', cwd: '~/Elsewhere' })), deps(h))).toEqual(NOT_WIRED)
+    })
+    test('claude missing from the Mac is answered before any allowlist hint', () => {
+      const h = targetHome()
+      expect(gateStart(JSON.stringify(sampleRequest({ cwd: '~/Elsewhere' })), deps(h, { claudeAvailable: () => false })))
+        .toEqual({ status: 'refused', reason: 'runtime_unavailable', detail: 'claude is not installed on this Mac' })
+    })
+  })
+  test('F24: an admitted effort is stored with the job; no effort stores none', () => {
+    const h = targetHome(DEFAULT_ALLOWLIST.replace('{ model: sonnet }', '{ model: sonnet, effort: [low] }'))
+    const withEffort = sampleRequest({ effort: 'low' })
+    expect(gateStart(JSON.stringify(withEffort), deps(h)).status).toBe('admitted')
+    expect(JSON.parse(readFileSync(join(h, '.local/state/summon/jobs', withEffort.id, 'state.json'), 'utf8'))).toMatchObject({ model: 'sonnet', effort: 'low' })
+    const h2 = targetHome(); const plain = sampleRequest()
+    expect(gateStart(JSON.stringify(plain), deps(h2)).status).toBe('admitted')
+    expect('effort' in JSON.parse(readFileSync(join(h2, '.local/state/summon/jobs', plain.id, 'state.json'), 'utf8'))).toBe(false)
+  })
+  test('F20: a missing or broken allowlist refuses with a hint naming the file and what is wrong', () => {
+    const hintFor = (detail: string) => `fix ~/.config/summon/allowlist.yaml on Nuance (${detail}); the installer's starter file is the reference`
+    const missing = targetHome(); rmSync(join(missing, '.config/summon/allowlist.yaml'))
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(missing)))
+      .toEqual({ status: 'refused', reason: 'outside_allowlist', detail: 'allowlist: missing', hint: hintFor('missing') })
+    const serialOnly = 'limits.max_concurrent must be 1 in Phase 0 (the runner is serial)'
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(targetHome(DEFAULT_ALLOWLIST.replace('max_concurrent: 1', 'max_concurrent: 2')))))
+      .toEqual({ status: 'refused', reason: 'outside_allowlist', detail: `allowlist: ${serialOnly}`, hint: hintFor(serialOnly) })
+    const typo = gateStart(JSON.stringify(sampleRequest()), deps(targetHome(': : :')))
+    expect(typo).toMatchObject({ status: 'refused', reason: 'outside_allowlist' })
+    expect(typo.hint).toStartWith('fix ~/.config/summon/allowlist.yaml on Nuance (yaml: ')
+  })
+  describe('F07: a refused id can be traced', () => {
+    const ledgerOf = (h: string): any[] => readFileSync(summonPaths(h).ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    const SEEN = 'received and refused; see the Nuance ledger'
+    test('a schema refusal ledgers the request id when the id is well-formed, and only then', () => {
+      const h = targetHome()
+      const relative = sampleRequest({ cwd: 'Projects/x' })
+      expect(gateStart(JSON.stringify(relative), deps(h))).toMatchObject({ status: 'refused', reason: 'malformed', detail: 'cwd' })
+      const extra = sampleRequest()
+      expect(gateStart(JSON.stringify({ ...extra, extra: 1 }), deps(h))).toMatchObject({ reason: 'malformed', detail: 'unknown field: extra' })
+      gateStart(JSON.stringify({ ...sampleRequest(), id: 'smn_../../etc/passwd', cwd: 'x' }), deps(h))
+      gateStart('{', deps(h))
+      const [a, b, c, d] = ledgerOf(h)
+      expect(a).toMatchObject({ event: 'refused', reason: 'malformed', detail: 'cwd', id: relative.id })
+      expect(b).toMatchObject({ event: 'refused', reason: 'malformed', id: extra.id })
+      expect(c.id).toBeUndefined()
+      expect(d.id).toBeUndefined()
+      expect(verifyLedger(summonPaths(h).ledger)).toEqual({ ok: true, entries: 4 })
+    })
+    test('after the id is claimed, status, result and cancel answer refused with the reason, never "no such summon"', () => {
+      const h = targetHome(); const p = summonPaths(h); const now = Date.now()
+      const outside = sampleRequest({ cwd: '~/Elsewhere' })
+      expect(gateStart(JSON.stringify(outside), deps(h))).toMatchObject({ reason: 'outside_allowlist' })
+      for (const r of [statusOf(p, 'nuance', outside.id, now), resultOf(p, 'nuance', outside.id, now), requestCancel(p, 'nuance', outside.id, now)]) {
+        expect(r).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: SEEN })
+      }
+      expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
+      const busy = sampleRequest()
+      expect(gateStart(JSON.stringify(busy), deps(h))).toMatchObject({ reason: 'busy' })
+      expect(statusOf(p, 'nuance', busy.id, now)).toMatchObject({ status: 'refused', reason: 'busy', detail: SEEN })
+      const loggedOut = sampleRequest()
+      gateStart(JSON.stringify(loggedOut), deps(h, { guiSessionIsMine: () => false }))
+      expect(statusOf(p, 'nuance', loggedOut.id, now)).toMatchObject({ status: 'refused', reason: 'target_logged_out' })
+      // Sending the refused id again is replayed, and that answer does not overwrite the first one's record.
+      expect(gateStart(JSON.stringify(outside), deps(h))).toMatchObject({ reason: 'replayed' })
+      expect(statusOf(p, 'nuance', outside.id, now)).toMatchObject({ status: 'refused', reason: 'outside_allowlist' })
+      expect(existsSync(join(p.jobs, outside.id))).toBe(false) // a refused id never gets a job dir
+      for (const f of readdirSync(p.seen)) expect(statSync(join(p.seen, f)).mode & 0o777).toBe(0o600)
+    })
+    test('a seen id with no recorded reason and no job is unknown: received and refused', () => {
+      const p = summonPaths(targetHome()); const id = sampleRequest().id
+      claimId(p.seen, id)
+      expect(statusOf(p, 'nuance', id, Date.now())).toEqual({ status: 'unknown', detail: SEEN })
+    })
+    test('a seen marker that holds anything but a refusal reason is never echoed', () => {
+      const p = summonPaths(targetHome()); const id = sampleRequest().id
+      claimId(p.seen, id)
+      writeFileSync(join(p.seen, id), 'SECRET prompt text')
+      const r = statusOf(p, 'nuance', id, Date.now())
+      expect(r).toEqual({ status: 'unknown', detail: SEEN })
+    })
   })
   test('private modes and an intact ledger chain after admitted, busy and replayed outcomes', () => {
     const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()

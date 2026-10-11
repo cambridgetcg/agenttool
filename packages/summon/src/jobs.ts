@@ -11,6 +11,8 @@ export interface JobState {
   detail?: string
   runtime: Runtime
   model: string
+  /** The effort the allowlist admitted, passed to claude as `--effort`. Absent when the request named none. */
+  effort?: string
   access: Access
   cwd_real: string
   admitted_at: string
