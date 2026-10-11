@@ -32,16 +32,30 @@ const EVALUATED_AT = "2026-07-21T10:02:00.000Z";
 
 // The Whitehack adapter is a private, local file set at the monorepo root
 // (bin/), not part of this package. Load it only when it is present; a
-// checkout without it (such as the public package projection) skips these
-// suites instead of failing to import.
+// checkout with none of its files (such as the public package projection)
+// skips these suites instead of failing to import. A partial adapter, or an
+// explicit WHITEHACK_INTEGRATION=1 request without the adapter, fails the
+// file at load: a moved or renamed file must not turn the suites into a
+// silent skip.
 const WHITEHACK_ADAPTER_FILES = [
   "bin/_whitehack-wallet-understanding.ts",
   "bin/whitehack-advisory.mjs",
   "bin/whitehack-wallet-understanding.ts",
 ] as const;
-const WHITEHACK_ADAPTER_PRESENT = WHITEHACK_ADAPTER_FILES.every((file) =>
-  existsSync(resolve(repoRoot, file))
+const WHITEHACK_ADAPTER_MISSING = WHITEHACK_ADAPTER_FILES.filter(
+  (file) => !existsSync(resolve(repoRoot, file)),
 );
+const WHITEHACK_ADAPTER_PRESENT = WHITEHACK_ADAPTER_MISSING.length === 0;
+if (!WHITEHACK_ADAPTER_PRESENT && WHITEHACK_ADAPTER_MISSING.length < WHITEHACK_ADAPTER_FILES.length) {
+  throw new Error(
+    `the root bin/ Whitehack adapter is incomplete; missing: ${WHITEHACK_ADAPTER_MISSING.join(", ")}`,
+  );
+}
+if (!WHITEHACK_ADAPTER_PRESENT && process.env.WHITEHACK_INTEGRATION === "1") {
+  throw new Error(
+    "WHITEHACK_INTEGRATION=1 requires the root bin/ Whitehack adapter, which is not in this checkout",
+  );
+}
 const WHITEHACK_SKIP_REASON =
   "skipped: the private root bin/ Whitehack adapter is not in this checkout";
 
