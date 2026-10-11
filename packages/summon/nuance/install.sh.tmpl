@@ -21,14 +21,15 @@ SKIP_SUDO="${SUMMON_SKIP_SUDO:-0}"; SKIP_LAUNCHCTL="${SUMMON_SKIP_LAUNCHCTL:-0}"
 # The host key sshd uses, which the Air pins (tests point this at a temp file).
 HOST_KEY="${SUMMON_HOST_KEY:-/etc/ssh/ssh_host_ed25519_key}"
 # Summon's sshd drop-in (tests point this elsewhere). 010 sorts before macOS's own 100-macos.conf; sshd keeps the first
-# value it reads. It is root's, 0600, and only ever left in place after an install whose `sshd -t` passed.
+# value it reads. It is root's, 0600, and left in place by an install whose `sshd -t` passed (even if `sshd -T` then refused).
 DROPIN="${SUMMON_DROPIN:-/etc/ssh/sshd_config.d/010-summon.conf}"
 SHARE="$ROOT/.local/share/summon"; STATE="$ROOT/.local/state/summon"; CONF="$ROOT/.config/summon"; AK="$ROOT/.ssh/authorized_keys"
 NOTHING_DONE="  No summon key line was written and the runner was not loaded. Tell Ai."
 
 # Remote Login is on before this runs, and until sshd is confirmed to take keys only it may let passwords in from the LAN.
-# So every stop before that says, once, what to do about Remote Login: an earlier Summon install's drop-in still keeps
-# passwords off (until this run puts its own in place), so it can stay on; otherwise turn it off until this is fixed.
+# So every stop before that says, once, what to do about Remote Login. After an earlier Summon install, both its drop-in
+# and its key line are in place (the key line is written only once sshd -T confirmed key logins only), so passwords are
+# still off and it can stay on, until this run puts its own drop-in in place. Otherwise: turn it off until this is fixed.
 # A stop with no message of its own is named as one.
 TMP=""; EXPLAINED=0; KEYS_ONLY=0; REMOTE_LOGIN_ADVICE=1; DROPIN_PLACED=0
 finish() {
@@ -37,7 +38,7 @@ finish() {
   [ "$code" != 0 ] || return 0
   [ "$EXPLAINED" = 1 ] || echo "✗ the installer stopped unexpectedly (exit $code); nothing after the last ✓ line was done. Tell Ai."
   if [ "$KEYS_ONLY" != 1 ] && [ "$REMOTE_LOGIN_ADVICE" = 1 ]; then
-    if [ "$DROPIN_PLACED" = 0 ] && [ -e "$DROPIN" ]; then
+    if [ "$DROPIN_PLACED" = 0 ] && [ -e "$DROPIN" ] && grep -q ' summon-air$' "$AK" 2>/dev/null; then
       echo "  SSH passwords are still off from the earlier Summon install; Remote Login can stay on."
     else
       echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."

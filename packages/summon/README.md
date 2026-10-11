@@ -38,7 +38,8 @@ and the `summon` link on the Air.
    programs, the allowlist, the key line, the runner) is written until that says key logins only, so a refused re-run
    leaves the earlier install as it was. **Whenever it stops before that point, it says what to do about Remote Login:
    on a first install, turn it off until the problem is fixed** (sshd still takes passwords until then); when an
-   earlier Summon install's drop-in is still in place, it says passwords are still off and Remote Login can stay on.
+   earlier Summon install left both its drop-in and its key line (so its `sshd -T` check passed), it says passwords are
+   still off and Remote Login can stay on.
    Once the new drop-in is in and sshd refuses it, it always says to turn Remote Login off.
    It is safe to run again: it replaces
    its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never empties `runner.log`.

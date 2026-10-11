@@ -337,57 +337,67 @@ describe('installer', () => {
     }, 15_000)
   })
 
-  describe('B2: with an earlier Summon drop-in in place, a stop before the new one goes in says Remote Login can stay on', () => {
-    type Scenario = (env: Record<string, string>) => ReturnType<typeof run>
+  describe('B2: after an earlier Summon install (its drop-in and its key line), a stop before the new drop-in says Remote Login can stay on', () => {
+    type Scenario = (root: string, env: Record<string, string>) => ReturnType<typeof run>
     const withStubs = (env: Record<string, string>, extra: Record<string, string> = {}) => {
       const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB, ...extra })
       return { s, env: { ...s.env, PATH: s.path, ...WITH_SUDO, ...env } }
     }
-    /** An earlier install's drop-in: it exists only after that install's `sshd -t` passed. */
-    const earlier = () => { const f = join(temp('summon-etc-'), '010-summon.conf'); writeFileSync(f, 'PasswordAuthentication no\n'); return { SUMMON_DROPIN: f } }
+    /** An earlier install's drop-in: it exists once that install's `sshd -t` passed (and stays if its `sshd -T` refused). */
+    const dropin = () => { const f = join(temp('summon-etc-'), '010-summon.conf'); writeFileSync(f, 'PasswordAuthentication no\n'); return { SUMMON_DROPIN: f } }
+    /** An earlier install's key line: it is written only once that install's `sshd -T` check passed. */
+    const keyLine = (root: string) => {
+      mkdirSync(join(root, '.ssh'), { recursive: true, mode: 0o700 })
+      writeFileSync(AK(root), `restrict,from="192.168.50.0/24",expiry-time="${EXPIRY}",command="${root}/.local/share/summon/summon-gatekeeper" ${PUB}\n`)
+    }
     const before: Record<string, Scenario> = {
-      'a checksum mismatch': (env) => { const b = bundle(); writeFileSync(join(b.dir, 'summon-runner'), 'tampered'); return run(b.dir, b.root, withStubs(env).env) },
-      'an expired bundle': (env) => { const b = bundle(undefined, { expiry: '20200101' }); return run(b.dir, b.root, withStubs(env).env) },
-      'an older bundle': (env) => {
-        const root = temp('summon-root-')
-        expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root).exitCode).toBe(0)
-        return run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, withStubs(env).env)
-      },
-      'a running job': (env) => {
-        const b = bundle(); const job = join(b.root, '.local/state/summon/jobs', `smn_${'1'.repeat(32)}`); mkdirSync(job, { recursive: true })
+      'a checksum mismatch': (root, env) => { const b = bundle(root); writeFileSync(join(b.dir, 'summon-runner'), 'tampered'); return run(b.dir, root, withStubs(env).env) },
+      'an expired bundle': (root, env) => { const b = bundle(root, { expiry: '20200101' }); return run(b.dir, root, withStubs(env).env) },
+      'a running job': (root, env) => {
+        const b = bundle(root); const job = join(root, '.local/state/summon/jobs', `smn_${'1'.repeat(32)}`); mkdirSync(job, { recursive: true })
         writeFileSync(join(job, 'state.json'), JSON.stringify({ status: 'running', pid: process.pid }))
-        return run(b.dir, b.root, withStubs(env).env)
+        return run(b.dir, root, withStubs(env).env)
       },
-      'a silent stop (shasum fails)': (env) => { const b = bundle(); return run(b.dir, b.root, withStubs(env, { shasum: 'exit 1' }).env) },
-      'sudo not taking the password': (env) => { const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SUDO, ''); return run(b.dir, b.root, w.env) },
-      'host keys that cannot be made': (env) => {
-        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_KEYGEN, '')
-        return run(b.dir, b.root, { ...w.env, SUMMON_HOST_KEY: w.s.missingHostKey })
+      'a silent stop (shasum fails)': (root, env) => { const b = bundle(root); return run(b.dir, root, withStubs(env, { shasum: 'exit 1' }).env) },
+      'sudo not taking the password': (root, env) => { const b = bundle(root); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SUDO, ''); return run(b.dir, root, w.env) },
+      'host keys that cannot be made': (root, env) => {
+        const b = bundle(root); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_KEYGEN, '')
+        return run(b.dir, root, { ...w.env, SUMMON_HOST_KEY: w.s.missingHostKey })
       },
+    }
+    const lines = (r: ReturnType<typeof run>) => {
+      expect(r.exitCode).not.toBe(0)
+      const said = r.stdout.toString()
+      return [timesIn(said, STILL_OFF), timesIn(said, RL_OFF)]
     }
     for (const [name, go] of Object.entries(before)) {
       test(name, () => {
-        const r = go(earlier())
-        expect(r.exitCode).not.toBe(0)
-        const said = r.stdout.toString()
-        expect([timesIn(said, STILL_OFF), timesIn(said, RL_OFF)]).toEqual([1, 0])
+        const root = temp('summon-root-'); keyLine(root)
+        expect(lines(go(root, dropin()))).toEqual([1, 0])
+      })
+      test(`but with the drop-in and no summon key line (an earlier sshd -T refused), it says to turn Remote Login off: ${name}`, () => {
+        expect(lines(go(temp('summon-root-'), dropin()))).toEqual([0, 1])
       })
     }
+    test('an older bundle, after a full earlier install', () => {
+      const root = temp('summon-root-')
+      expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root).exitCode).toBe(0)
+      expect(readFileSync(AK(root), 'utf8')).toContain(' summon-air\n')
+      expect(lines(run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, withStubs(dropin()).env))).toEqual([1, 0])
+    })
     // Once this run has put its own drop-in in place, the earlier one is gone: replaced, or removed when sshd rejects it.
     const after: Record<string, Scenario> = {
-      'sshd -t rejecting the new drop-in (which is then removed)': (env) => {
-        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SSHD!, ''); return run(b.dir, b.root, w.env)
+      'sshd -t rejecting the new drop-in (which is then removed)': (root, env) => {
+        const b = bundle(root); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SSHD!, ''); return run(b.dir, root, w.env)
       },
-      'sshd -T showing password logins still on': (env) => {
-        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' })); return run(b.dir, b.root, w.env)
+      'sshd -T showing password logins still on': (root, env) => {
+        const b = bundle(root); const w = withStubs(env); writeFileSync(w.s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' })); return run(b.dir, root, w.env)
       },
     }
     for (const [name, go] of Object.entries(after)) {
       test(`but after the new drop-in went in, it says to turn Remote Login off: ${name}`, () => {
-        const r = go(earlier())
-        expect(r.exitCode).not.toBe(0)
-        const said = r.stdout.toString()
-        expect([timesIn(said, STILL_OFF), timesIn(said, RL_OFF)]).toEqual([0, 1])
+        const root = temp('summon-root-'); keyLine(root)
+        expect(lines(go(root, dropin()))).toEqual([0, 1])
       })
     }
   })
