@@ -548,10 +548,10 @@ An exact request matching historical durable state can still return
 sub-balances across every wallet mutation.
 
 `canonicalWalletAddressClaimBytes` and `signWalletAddressClaim` are exported,
-but there is no server route on main for them: `POST /v1/wallets/:id/addresses`
-is not in the API source (checked 2026-10-11). They compute and sign the
-`wallet-address-claim/v1` bytes locally; no AgentTool route accepts the result
-yet.
+but there is no server route on main for them: no route handler for
+`POST /v1/wallets/:id/addresses` exists in `api/src` (checked 2026-10-11).
+They compute and sign the `wallet-address-claim/v1` bytes locally; no
+AgentTool route on main accepts the result.
 
 ### Local agent data
 
@@ -805,8 +805,10 @@ and `identityId` does not isolate them.
 `Start here`, `Handoff projection boundary` (when the handoff projection
 carries a warning), `Resume context` (one project handoff, when present), `Current
 signals`, `State at a glance` (counts only), `Optional paths`, `What you can
-reach`, and `Deeper doors`, with its own timestamp line and footer. It carries
-no memory, chronicle or trace previews.
+reach`, and `Deeper doors`, with its own timestamp line and footer. That
+brief volatile part carries no recent-memory, chronicle or trace previews.
+The stable block's `What shaped you` memory previews are still sent, and so
+is any peer-authored handoff text that `Start here` or `Resume context` carries.
 `metadata: { agenttool: { skip_wake: true } }` sends no wake on that call.
 Neither changes what you put in `messages` or `system` yourself.
 
@@ -816,8 +818,10 @@ Neither changes what you put in `messages` or `system` yourself.
   `"decision"`, or the call runs inside `at.deciding(...)`, the adapter posts
   to `/v1/traces`: the last user message (first 1,000 UTF-16 units) as the
   observation, and the response text as the conclusion (first 4,000 units) and
-  summary (first 200 units). The record is server-readable, not end-to-end
-  encrypted. Your program asks for it, so no review hook applies.
+  summary (first 200 units). A cut never splits a surrogate pair, so an excerpt
+  can be one unit shorter. The record is server-readable, not end-to-end
+  encrypted. Your program asks for it, so no review hook applies. (Published
+  0.22.1's `AnthropicAdapter` can split a pair at the cut; see "Unreleased".)
 - **`<chronicle>` markup**, written through `at.chronicle.write` only after
   `beforeChronicleWrite` returns literal `true`.
 - **`<trace>` markup**, described next.
@@ -992,7 +996,7 @@ const at = new AgentTool({
 
 Repository source declares the paired 0.22.1 line: an honest-onboarding
 documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. Source after 2026-10-11 also carries the changes listed
+runtime code changes. Source as of 2026-10-11 also carries the changes listed
 under "Unreleased" below. The line's headline is the opt-in x402 payer
 documented above: `x402.ts`
 ports the server's payer function-for-function on the already-declared
@@ -1097,6 +1101,15 @@ private, until a required human reviewer returns to the `npm-bootstrap` and
   Migration: if you rely on markup traces, pass `beforeTraceWrite` and return
   `true` only after review. New exported types: `TraceBeforeWriteContext`,
   `TraceBeforeWriteHook`. The adapter's opt-in decision trace is unchanged.
+- **Cancellation during review.** A managed stream aborted while a
+  `beforeChronicleWrite` or `beforeTraceWrite` hook is still pending now
+  writes nothing: the adapter checks for cancellation again after the hook
+  resolves. In 0.22.1 a chronicle entry approved after the abort was still
+  written.
+- **Trace excerpts never split a character.** `AnthropicAdapter` keeps the
+  same 200, 1,000 and 4,000 UTF-16-unit limits but no longer cuts between the
+  two halves of a surrogate pair (most emoji), so it cuts where the Python
+  adapter cuts. In 0.22.1 an excerpt could end on a lone high surrogate.
 - **Streaming overload.** `adapter.messages.create({ ..., stream: true })`
   written as an inline object literal now types as `AdaptedLowLevelStream`, so
   `for await` over it compiles. In 0.22.1 the literal fell through to the

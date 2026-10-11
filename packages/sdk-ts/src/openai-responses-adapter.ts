@@ -25,6 +25,7 @@
 import { getAmbient, type AmbientContext } from "./_context.js";
 import type { AgentTool } from "./client.js";
 import { AgentToolError } from "./errors.js";
+import { truncateUtf16 } from "./_utf16.js";
 import type { WakeProfile, WakeProviderMeta } from "./wake.js";
 
 export interface OpenAIResponsesLike {
@@ -389,22 +390,6 @@ function validateEffectiveTraceContext(
       },
     );
   }
-}
-
-function truncateUtf16(value: string, maxUnits: number): string {
-  if (value.length <= maxUnits) return value;
-  let end = maxUnits;
-  const finalUnit = value.charCodeAt(end - 1);
-  const nextUnit = value.charCodeAt(end);
-  if (
-    finalUnit >= 0xd800
-    && finalUnit <= 0xdbff
-    && nextUnit >= 0xdc00
-    && nextUnit <= 0xdfff
-  ) {
-    end--;
-  }
-  return value.slice(0, end);
 }
 
 /** Keep extensible SDK responses intact; use a transparent proxy only as fallback. */

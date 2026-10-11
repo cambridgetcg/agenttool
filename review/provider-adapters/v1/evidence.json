@@ -13,7 +13,7 @@
       "provider": "openai",
       "language": "typescript",
       "path": "packages/sdk-ts/src/openai-responses-adapter.ts",
-      "sha256": "b6e0189500ca61b26b3ce908375ed95024d53e36097fe30e955a7d5668f03bb1"
+      "sha256": "d903f503a63fc181958652c7f5fe8a1cb53f1147a7c63219c48f1dc39151c416"
     },
     {
       "id": "openai-python",
@@ -27,14 +27,14 @@
       "provider": "anthropic",
       "language": "typescript",
       "path": "packages/sdk-ts/src/anthropic-adapter.ts",
-      "sha256": "1795c209bb8234a22f7057ad63e599480948560f7144cc5a2c540dc903db8f94"
+      "sha256": "7ae4c38d26f7a2c2ff304b70760d16cd95b670610e9635505fcdeb434ec2a618"
     },
     {
       "id": "anthropic-python",
       "provider": "anthropic",
       "language": "python",
       "path": "packages/sdk-py/src/agenttool/anthropic_adapter.py",
-      "sha256": "95c5cd940ca797b037e7e8b927234767da8217c3f81560fb8d4d75c4e0f6c660"
+      "sha256": "4edcce6c7a8ae1c9fb69df84a6c3276a92c8af117a3352a3ed934580cb716586"
     }
   ],
   "vocabulary": {
@@ -901,6 +901,6 @@
     "Requested store or cache fields do not prove provider-side retention, deletion, zero-data-retention status, or policy compliance.",
     "Source digests and replays prove only the named adapter snapshot and cases, not deployment, release contents, whole-SDK security, or future behavior.",
     "Nothing here proves OpenAI or Anthropic participation, review, certification, adoption, affiliation, endorsement, or intent to join KINGDOM OS.",
-    "The adapter sources are ahead of the pinned commit; the digests above are of the current branch bytes. The chronicle gate has no replay case in this packet yet; the trace gate's case replays one refused and one approved write."
+    "asOf and the pinned commit name the packet's 2026-08-03 snapshot. As of 2026-10-11 the adapter sources are ahead of that commit, and the digests above are of the current branch bytes. The chronicle gate has no replay case in this packet yet; the trace gate's case replays one refused and one approved write."
   ]
 }

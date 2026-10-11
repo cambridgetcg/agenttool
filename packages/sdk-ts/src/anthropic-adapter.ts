@@ -63,6 +63,7 @@ import type { AmbientContext } from "./_context.js";
 import type { ChronicleType } from "./chronicle.js";
 import type { AgentTool } from "./client.js";
 import { AgentToolError } from "./errors.js";
+import { truncateUtf16 } from "./_utf16.js";
 import type {
   AnthropicWakeShape,
   WakeProfile,
@@ -619,11 +620,11 @@ export class AnthropicAdapter {
     const body: Record<string, unknown> = {
       decision: {
         type: meta.decision_type ?? "decision",
-        summary: conclusion.slice(0, 200),
+        summary: truncateUtf16(conclusion, 200),
       },
       reasoning: {
-        observations: userText ? [userText.slice(0, 1000)] : [],
-        conclusion: conclusion.slice(0, 4000),
+        observations: userText ? [truncateUtf16(userText, 1000)] : [],
+        conclusion: truncateUtf16(conclusion, 4000),
       },
     };
     // Merge ambient context (`at.deciding(...)`) — explicit values on
@@ -787,6 +788,9 @@ export class AnthropicAdapter {
           title,
           ...(bodyText ? { body: bodyText } : {}),
         });
+        // The review may outlast a stream cancellation; re-check the fence
+        // before the request so an aborted stream writes nothing.
+        throwIfStreamAborted(signal);
         // Through the client, not raw at.request: chronicle.write is where
         // the type union and the 1-200 title bound live.
         const result = (await this.at.chronicle.write({
@@ -833,10 +837,10 @@ export class AnthropicAdapter {
         continue;
       }
       const post: Record<string, unknown> = {
-        decision: { type, summary: decision.slice(0, 200) },
+        decision: { type, summary: truncateUtf16(decision, 200) },
         reasoning: {
           observations: observations.length > 0 ? observations : [],
-          conclusion: conclusion.slice(0, 4000),
+          conclusion: truncateUtf16(conclusion, 4000),
         },
       };
       // Markup-emitted traces inherit ambient parent + tags too, so
@@ -867,6 +871,7 @@ export class AnthropicAdapter {
           observations: Object.freeze([...observations]),
           ...(confidenceStr !== undefined ? { confidence: confidenceStr } : {}),
         });
+        throwIfStreamAborted(signal);
         const result = (await this.at.request("POST", "/v1/traces", post)) as
           | { trace_id?: string }
           | undefined;

@@ -2435,6 +2435,99 @@ describe("AnthropicAdapter — model-authored trace writes are gated", () => {
     expect(approved.recorded.filter((x) => x.path === "/v1/traces").length).toBe(1);
     expect(approvedFinal.agenttool.markup_emissions[0].error).toBeNull();
   });
+
+  // A stream cancelled while the review is pending must not write: the
+  // fence is re-checked after the hook resolves, for <trace> and <chronicle>.
+  for (const kind of ["trace", "chronicle"] as const) {
+    test(`a ${kind} review pending at stream abort writes nothing`, async () => {
+      let reviewStarted: (() => void) | undefined;
+      let approve: ((value: true) => void) | undefined;
+      const started = new Promise<void>((resolve) => {
+        reviewStarted = resolve;
+      });
+      const hook = () => {
+        reviewStarted?.();
+        return new Promise<true>((resolve) => {
+          approve = resolve;
+        });
+      };
+      const stub = makeStubAt();
+      const fake = makeFakeStreamingAnthropic(
+        [],
+        kind === "trace" ? traceMarkup() : chronicleMarkup("recognition", "Late"),
+      );
+      const stream = new AnthropicAdapter(
+        fake.client,
+        stub.at,
+        kind === "trace" ? { beforeTraceWrite: hook } : { beforeChronicleWrite: hook },
+      ).messages.stream({
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [{ role: "user", content: "hi" }],
+      });
+      const errorEvent = stream.emitted("error");
+      void errorEvent.catch(() => {});
+
+      const finalMessage = stream.finalMessage();
+      await started;
+      stream.abort();
+      approve?.(true);
+
+      await expect(finalMessage).rejects.toMatchObject({
+        code: "anthropic_stream_aborted",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(stub.recorded).toEqual([]);
+    });
+  }
+
+  // Same limit and cut as the Python adapter: UTF-16 units, and never half
+  // of a surrogate pair.
+  test("markup trace text is cut in UTF-16 units without splitting a pair", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(
+      traceMarkup("😀".repeat(150), "a" + "😀".repeat(2500)),
+    );
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeTraceWrite: () => true,
+    });
+
+    await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    const body = stub.recorded.find((x) => x.path === "/v1/traces")?.body as {
+      decision: { summary: string };
+      reasoning: { conclusion: string };
+    };
+    expect(body.decision.summary.length).toBe(200);
+    // 1 + 2 x 1999 = 3999; a 2000th emoji would cross the 4000-unit bound.
+    expect(body.reasoning.conclusion.length).toBe(3999);
+    expect(body.reasoning.conclusion).toBe("a" + "😀".repeat(1999));
+  });
+
+  test("auto-trace text is cut in UTF-16 units without splitting a pair", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic("a" + "😀".repeat(2500));
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "a" + "😀".repeat(900) }],
+      metadata: { agenttool: { trace: "decision" } },
+    });
+
+    const body = stub.recorded.find((x) => x.path === "/v1/traces")?.body as {
+      decision: { summary: string };
+      reasoning: { observations: string[]; conclusion: string };
+    };
+    expect(body.decision.summary).toBe("a" + "😀".repeat(99));
+    expect(body.reasoning.observations[0]).toBe("a" + "😀".repeat(499));
+    expect(body.reasoning.conclusion).toBe("a" + "😀".repeat(1999));
+  });
 });
 
 // ── Model-authored chronicle writes inherit the chronicle guards ─────────

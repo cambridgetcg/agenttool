@@ -47,8 +47,9 @@ any synchronous object with a ``messages.create(**kwargs)`` method and
 optionally a ``messages.stream(**kwargs)`` helper, so it works with the
 official SDK, Bedrock client, or a custom HTTP client. ``AsyncAnthropic``
 and other asynchronous clients are refused: at construction when
-``messages.create`` is a coroutine function, and otherwise when the
-provider call returns an awaitable, before any trace or markup I/O.
+``messages.create``, or a function it wraps through ``__wrapped__``, is a
+coroutine function, and otherwise when the provider call returns an
+awaitable, before any trace or markup I/O.
 
 Streaming boundary:
 
@@ -1664,7 +1665,9 @@ def _is_coroutine_callable(value: Any) -> bool:
 
     The official ``AsyncAnthropic`` client wraps ``messages.create`` in a
     synchronous argument-checking decorator, so the coroutine function is
-    only visible through ``__wrapped__``.
+    only visible through ``__wrapped__``. Every ``__wrapped__`` link is
+    followed, so a synchronous shim built with ``functools.wraps`` over a
+    coroutine function is refused too; this fails closed.
     """
     if value is None or not callable(value):
         return False
