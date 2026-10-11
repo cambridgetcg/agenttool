@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path'
 import { parseDurationS } from './allowlist.ts'
 import { appendLedger, type LedgerFields } from './ledger.ts'
 import { summonPaths } from './paths.ts'
-import { DEVICE_RE, ID_RE, RUNTIMES, newRequestId, originTag, type Access, type Runtime, type SummonRequest } from './request.ts'
+import { DEVICE_RE, ID_RE, RUNTIMES, TOKEN_RE, newRequestId, originTag, type Access, type Runtime, type SummonRequest } from './request.ts'
 import { processStartTime } from './runner.ts'
-import { noRouteHint, sshCall, type Env } from './ssh.ts'
+import { noRouteHint, sshCall, targetOf, type Env, type SshTarget } from './ssh.ts'
 import type { GateResponse } from './status.ts'
 
 export interface CliDeps {
@@ -52,6 +52,8 @@ export function parseCli(argv: string[]): CliCommand | { error: string } {
     flags[f] = rest[++i]!
   }
   if (!flags['--model'] || !flags['--cwd'] || !flags['--prompt-file']) return { error: `--model, --cwd and --prompt-file are required\n${USAGE}` }
+  // Checked as Nuance checks it, so the Air's `sent` entry and Nuance's `admitted` one record the same shape.
+  if (flags['--effort'] !== undefined && !TOKEN_RE.test(flags['--effort'])) return { error: `--effort is a word such as low, medium or high\n${USAGE}` }
   const timeoutS = parseDurationS(flags['--timeout'] ?? '15m'); const expiresS = parseDurationS(flags['--expires'] ?? '15m')
   if (!timeoutS || !expiresS) return { error: 'durations look like 90s, 15m or 2h' }
   return { kind: 'start', device: a, runtime: b as Runtime, model: flags['--model'], provider: flags['--provider'], effort: flags['--effort'],
@@ -106,19 +108,19 @@ const NOT_PAIRED_HINT = 'run bun scripts/pin-nuance.ts (README install step 3)'
 /**
  * Only a device that pin-nuance paired is called: one with an exact `Host summon-<device>` line in the summon ssh
  * config. Any other name would get ssh's defaults under -F (Yu's own keys and known_hosts, no BatchMode), so it is
- * answered here, before anything is ledgered or sent.
+ * answered here, before anything is ledgered or sent. A paired device's entry is what ssh's failures are read against.
  */
-function unpaired(deps: CliDeps, device: string): GateResponse | null {
+function pairing(deps: CliDeps, device: string): { target: SshTarget } | { out: GateResponse } {
   let config = ''
   try { config = deps.readFile(deps.sshConfig) } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code
     if (code !== 'ENOENT' && code !== 'ENOTDIR') {
       // It is there but this caller may not read it (a sandbox, its mode): nothing can be sent either way.
-      return { status: 'unreachable', reason: 'no_route', detail: `cannot read the summon ssh config (${whyOf(e)})`, hint: noRouteHint(envOf(deps)) }
+      return { out: { status: 'unreachable', reason: 'no_route', detail: `cannot read the summon ssh config (${whyOf(e)})`, hint: noRouteHint(envOf(deps)) } }
     }
   }
-  return config.split('\n').includes(`Host summon-${device}`) ? null
-    : { status: 'unreachable', reason: 'no_route', detail: `not paired: ${device}`, hint: NOT_PAIRED_HINT }
+  const target = targetOf(config, device)
+  return target ? { target } : { out: { status: 'unreachable', reason: 'no_route', detail: `not paired: ${device}`, hint: NOT_PAIRED_HINT } }
 }
 
 const DAY_MS = 86_400_000
@@ -145,7 +147,10 @@ function expiryWarning(expiry: string | null, nowMs: number): string | null {
   if (!expiry) return null
   const left = expiryStartMs(expiry) - nowMs
   if (left > 7 * DAY_MS) return null
-  return left <= 0 ? `summon: ${expiredOn(expiry)}` : `summon: the summon key expires on ${dashedDate(expiry)}: re-pair before then (README install step 1)`
+  if (left <= 0) return `summon: ${expiredOn(expiry)}`
+  const today = new Date(nowMs)
+  const days = Math.round((expiryStartMs(expiry) - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / DAY_MS) // calendar days
+  return `summon: the summon key expires on ${dashedDate(expiry)} (in ${days} day${days === 1 ? '' : 's'}): re-pair before then (README install step 1)`
 }
 
 const warnOf = (deps: CliDeps) => deps.warn ?? ((m: string) => { process.stderr.write(m + '\n') })
@@ -157,10 +162,10 @@ function logBefore(deps: CliDeps, fields: LedgerFields): void {
   }
 }
 
-/** The answer to a call that may have been delivered: it reaches the caller whatever the ledger does. */
-function logAnswer(deps: CliDeps, id: string | undefined, out: GateResponse, what: string): void {
+/** The answer to a call that may have been delivered (`answer` for a start, `<verb>_answer` for the others): it reaches the caller whatever the ledger does. */
+function logAnswer(deps: CliDeps, event: string, id: string | undefined, out: GateResponse, what: string): void {
   try {
-    appendLedger(deps.ledgerPath, { event: 'answer', id, status: String(out.status), reason: out.reason, detail: out.detail }, deps.nowMs())
+    appendLedger(deps.ledgerPath, { event, id, status: String(out.status), reason: out.reason, detail: out.detail }, deps.nowMs())
   } catch (e) { warnOf(deps)(`summon: the Air ledger could not record the answer for ${what} (${whyOf(e)})`) }
 }
 
@@ -172,25 +177,27 @@ export function runCli(argv: string[], deps: CliDeps): { code: number; out: Gate
   const expiry = keyExpiry(deps)
   const warning = expiryWarning(expiry, now)
   if (warning) warnOf(deps)(warning)
-  const notPaired = unpaired(deps, cmd.device)
-  if (notPaired) return { code: 1, out: notPaired }
+  const paired = pairing(deps, cmd.device)
+  if ('out' in paired) return { code: 1, out: paired.out }
+  const ssh = { ...deps, target: paired.target }
   const answer = (out: GateResponse) => {
-    const o = out.status === 'auth_refused' ? { ...out, hint: authHint(expiry, now) } : out
+    // A hint ssh's own line already gave (a missing key) is the more exact one.
+    const o = out.status === 'auth_refused' && !out.hint ? { ...out, hint: authHint(expiry, now) } : out
     return { code: failed(o) ? 1 : 0, out: o }
   }
 
   if (cmd.kind === 'cancel') {
     // A cancel acts on a job, so it is ledgered before it is sent (fail closed, as a start is) and answered after.
     logBefore(deps, { event: 'cancel_sent', id: cmd.id })
-    const out = sshCall(deps, cmd.device, `cancel ${cmd.id}`)
-    logAnswer(deps, cmd.id, out, `${cmd.device}/${cmd.id}`)
+    const out = sshCall(ssh, cmd.device, `cancel ${cmd.id}`)
+    logAnswer(deps, 'cancel_answer', cmd.id, out, `${cmd.device}/${cmd.id}`)
     return answer(out)
   }
   if (cmd.kind !== 'start') {
     const id = cmd.kind === 'inventory' ? undefined : cmd.id
-    const out = sshCall(deps, cmd.device, id ? `${cmd.kind} ${id}` : 'inventory')
+    const out = sshCall(ssh, cmd.device, id ? `${cmd.kind} ${id}` : 'inventory')
     // A read changes nothing, so only a security event is logged: the Air may hold the only trace of it.
-    if (out.status === 'auth_refused' || out.status === 'host_key_mismatch') logAnswer(deps, id, out, id ? `${cmd.device}/${id}` : `${cmd.device} inventory`)
+    if (out.status === 'auth_refused' || out.status === 'host_key_mismatch') logAnswer(deps, `${cmd.kind}_answer`, id, out, id ? `${cmd.device}/${id}` : `${cmd.device} inventory`)
     return answer(out)
   }
 
@@ -202,10 +209,10 @@ export function runCli(argv: string[], deps: CliDeps): { code: number; out: Gate
   // The request is on the Air's ledger before it is sent. If that fails nothing has been sent, so it fails closed: bin/summon.ts reports it.
   logBefore(deps, { event: 'sent', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, effort: req.effort,
     cwd: req.cwd, access: req.access, origin: originTag(req.origin) })
-  const out = sshCall(deps, cmd.device, 'start', JSON.stringify(req))
+  const out = sshCall(ssh, cmd.device, 'start', JSON.stringify(req))
   const handle = `${cmd.device}/${req.id}`
   // From here the request may have been delivered, so the answer must reach the caller whatever the ledger does.
-  logAnswer(deps, req.id, out, handle)
+  logAnswer(deps, 'answer', req.id, out, handle)
   const r = answer(out)
   return out.status === 'unknown' ? { ...r, out: { ...r.out, handle } } : r
 }

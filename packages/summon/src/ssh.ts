@@ -5,30 +5,80 @@ export const SSH_TIMEOUT_MS = 60_000
 
 /** The caller's environment, as far as a hint reads it: which sandbox, if any, summon runs in. */
 export type Env = Record<string, string | undefined>
-export interface SshDeps { sshBin: string; sshConfig: string; timeoutMs?: number; env?: Env }
+/** What the summon ssh config says about the paired device. ssh names these in the pre-connect lines it prints. */
+export interface SshTarget { host?: string; user?: string; identityFile?: string }
+export interface SshDeps { sshBin: string; sshConfig: string; timeoutMs?: number; env?: Env; target?: SshTarget }
+/** What a failure is read against: the paired entry, the config path ssh was given with -F, and the caller's environment. */
+export interface MapContext { target?: SshTarget; config?: string; env?: Env }
+
+/**
+ * The `Host summon-<device>` entry of the summon ssh config, or null when no line is exactly `Host summon-<device>`.
+ * Only what the classifier needs is read, up to the next Host or Match line; as in ssh, the first value wins.
+ */
+export function targetOf(config: string, device: string): SshTarget | null {
+  const lines = config.split('\n')
+  const at = lines.indexOf(`Host summon-${device}`)
+  if (at < 0) return null
+  const t: SshTarget = {}
+  for (const line of lines.slice(at + 1)) {
+    if (/^\s*(Host|Match)\s/i.test(line)) break
+    const m = /^\s*(HostName|User|IdentityFile)(?:\s*=\s*|\s+)(\S+)\s*$/i.exec(line)
+    if (!m) continue
+    const key = m[1]!.toLowerCase()
+    if (key === 'hostname') t.host ??= m[2]
+    else if (key === 'user') t.user ??= m[2]
+    else t.identityFile ??= m[2]
+  }
+  return t
+}
 
 /*
  * ssh's stderr also carries the remote session's stderr (sshd runs the forced command through Yu's login shell, so
- * Nuance's ~/.zshenv runs first). So a transport status is read only from ssh's own lines, each matched whole, and any
- * line saying a connection existed and was lost wins over all of them: that request may have been delivered.
+ * Nuance's ~/.zshenv runs first), and a remote that exits 255 or is killed by a signal makes ssh exit 255 with no line of
+ * its own. So a transport status is read only from ssh's own lines, each matched whole and, where ssh names the host,
+ * only when they name the paired one; and any line saying a connection existed and was lost wins over all of them:
+ * that request may have been delivered.
  */
 // Printed only once a session existed: the client loop's read error, EOF, keepalive timeout and write failures.
 const SESSION_LOST = [/^Read from remote host /, /^Connection to .* closed by remote host/, /^Timeout, server\b.*not responding/, /client_loop: /]
-// A drop that can come before authentication or after the session started. Only a kex line places it before (R11).
+// A drop that can come before authentication or after the session started: unknown, unless a kex line places it before.
 const DROP = [/Broken pipe/, /Connection reset/, /^Connection closed by /, /packet_write_(wait|poll)/]
-// The server hung up during the identification exchange (sshd's MaxStartups, a restarting sshd): before authentication.
-const KEX = [/^kex_exchange_identification: /]
-// Failures on this Mac, before any connection: a sandbox or privacy layer, or a broken summon ssh entry or key file.
-const LOCAL = [/^ssh: connect to (host|address) .*: Operation not permitted$/, /^Can't open user config file /, /^Bad owner or permissions on /,
-  /: line \d+: Bad configuration option: /, /^no such identity: /]
+// On OpenSSH 9.9p2 a hang-up before the server's banner (sshd's MaxStartups included) prints only
+// `Connection closed by <ip> port N`, a DROP, so it reads unknown (the safe side). Only a reset after the banners were
+// exchanged prints this line, and that is still before authentication: unreachable(timeout).
+const KEX = /^kex_exchange_identification: /
 const VERIFY_FAILED = /^Host key verification failed\.$/
 const HOST_KEY = [VERIFY_FAILED, /^@+ *WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! *@+$/, /^No \S+ host key is known for /]
-const AUTH = [/: Permission denied \([a-z,-]+\)\.$/, /^Received disconnect from .*: Too many authentication failures/]
-const NO_ROUTE = [/^ssh: connect to (host|address) .*: (No route to host|Network is unreachable|Network is down)$/, /^ssh: Could not resolve hostname /]
-// Asleep, off, away (the ARP reject window answers Host is down), or Remote Login off (refused).
-const TIMEOUT = [/^ssh: connect to (host|address) .*: (Operation timed out|Host is down|Connection refused)$/, /^Connection timed out during banner exchange$/]
+const BANNER_TIMEOUT = /^Connection timed out during banner exchange$/
+// Lines ssh itself prints that are not classified further: a detail may show them (ssh exits right after its own line).
+// Anything else on stderr may be the remote session's, so the detail is then fixed text.
+const SSH_OWN = /^(ssh: |ssh_\w+: |client_loop: |packet_write_\w+: |banner exchange: |kex_exchange_identification: |Unable to negotiate |Connection (to|closed by|reset by) |Disconnected from |Received disconnect from |Timeout, server |Read from remote host |Bad packet length |Corrupted MAC |Host key |No \S+ host key is known |Can't open user config file |no such identity: )/
+const FIXED_DETAIL = 'ssh exited 255 without a line it is known to print'
+// Not a pattern: `Bad owner or permissions on <file>` is checked only for ~/.ssh/config, never for a -F file (a 0666
+// -F config connects as usual, as the C review saw), so ssh never prints it for summon. `Too many authentication
+// failures` is not one either: its line names an address, not the pinned host, and with IdentitiesOnly and one key it
+// cannot happen. Both read unknown.
 
-export const HOST_KEY_HINT = 'security event — Nuance presented a different host key. Do not re-pin from the network. On Nuance run ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub; only if it shows this fingerprint and you know why it changed, re-pin with bun scripts/pin-nuance.ts --host-key "<line read on Nuance>"'
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The lines that carry a transport status for this paired entry. With no HostName to anchor to, there are none. */
+function patterns(ctx: MapContext) {
+  const t = ctx.target ?? {}
+  const host = t.host ? esc(t.host) : null
+  const connect = (errs: string) => (host ? [new RegExp(`^ssh: connect to host ${host} port \\d+: (${errs})$`)] : [])
+  const config = ctx.config ? esc(ctx.config) : null
+  return {
+    local: [...connect('Operation not permitted'),
+      ...(config ? [new RegExp(`^Can't open user config file ${config}: `), new RegExp(`^${config}: line \\d+: Bad configuration option: `)] : [])],
+    missingKey: t.identityFile ? [new RegExp(`^no such identity: ${esc(t.identityFile)}: `)] : [],
+    auth: host ? [new RegExp(`^${t.user ? esc(t.user) : '[^@\\s]+'}@${host}: Permission denied \\([a-z,-]+\\)\\.$`)] : [],
+    noRoute: [...connect('No route to host|Network is unreachable|Network is down'), ...(host ? [new RegExp(`^ssh: Could not resolve hostname ${host}(: .*)?$`)] : [])],
+    // Asleep, off, away (the ARP reject window answers Host is down), or Remote Login off (refused).
+    timeout: [...connect('Operation timed out|Host is down|Connection refused'), ...(host ? [BANNER_TIMEOUT] : [])],
+  }
+}
+
+export const HOST_KEY_HINT = 'security event — Nuance presented a different host key. Do not re-pin from the network. On Nuance run ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub; only if it shows this fingerprint and you know why it changed, re-pin with bun scripts/pin-nuance.ts --user <your Nuance user> --host-key "<line read on Nuance>" --expires <YYYYMMDD from the hand-back>'
 
 /** One line, printable ASCII only, clipped: the target controls banners, and a detail can reach a hash-chained ledger. */
 const clean = (line: string): string => line.slice(0, 200).replace(/[^\x20-\x7e]/g, '?')
@@ -61,26 +111,32 @@ function hostKeyDetail(lines: string[], first: string): string {
 /**
  * Tells ssh's failures apart. Only ssh's own line for a failure known to come before any session keeps a transport
  * status; a connection lost after one, and anything this does not recognise, is `unknown` (never retried). The line
- * that decided is the detail. Order matters: a loss wins over every pre-connect line, which remote stderr could imitate.
+ * that decided is the detail, and never a line that may be the remote session's. Order matters: a loss wins over every
+ * pre-connect line, which remote stderr could imitate.
  */
-export function mapSshFailure(stderr: string, env: Env = {}): GateResponse {
+export function mapSshFailure(stderr: string, ctx: MapContext = {}): GateResponse {
   const lines = stderr.replace(/\r\n?/g, '\n').split('\n').map((l) => l.trimEnd()).filter(Boolean) // ssh ends its lines \r\n
   const at = (res: RegExp[]) => lines.find((l) => res.some((re) => re.test(l)))
-  const lost = at(SESSION_LOST) ?? (at(KEX) ? undefined : at(DROP))
-  if (lost) return { status: 'unknown', detail: clean(lost) }
-  const local = at(LOCAL)
-  if (local) return { status: 'unreachable', reason: 'no_route', detail: clean(local), hint: noRouteHint(env) }
+  const own = (line: string | undefined) => (line !== undefined && SSH_OWN.test(line) ? clean(line) : FIXED_DETAIL)
+  const kex = lines.find((l) => KEX.test(l))
+  const losses = [...lines.filter((l) => SESSION_LOST.some((re) => re.test(l))), ...(kex ? [] : lines.filter((l) => DROP.some((re) => re.test(l))))]
+  if (losses.length > 0) return { status: 'unknown', detail: own(losses.find((l) => SSH_OWN.test(l))) }
+  const p = patterns(ctx)
+  const local = at(p.local)
+  if (local) return { status: 'unreachable', reason: 'no_route', detail: clean(local), hint: noRouteHint(ctx.env ?? {}) }
   const hostKey = at(HOST_KEY)
   if (hostKey) return { status: 'host_key_mismatch', detail: hostKeyDetail(lines, hostKey), hint: HOST_KEY_HINT }
-  const auth = at(AUTH)
+  // Printed during user authentication, after the connection: the key ssh was told to offer is not there to offer.
+  const missingKey = at(p.missingKey)
+  if (missingKey) return { status: 'auth_refused', detail: clean(missingKey), hint: `the summon key on this Air is missing or unreadable (${clean(ctx.target!.identityFile!)})` }
+  const auth = at(p.auth)
   if (auth) return { status: 'auth_refused', detail: clean(auth) }
-  const kex = at(KEX)
   if (kex) return { status: 'unreachable', reason: 'timeout', detail: clean(kex) }
-  const noRoute = at(NO_ROUTE)
-  if (noRoute) return { status: 'unreachable', reason: 'no_route', detail: clean(noRoute), hint: noRouteHint(env) }
-  const timeout = at(TIMEOUT)
+  const noRoute = at(p.noRoute)
+  if (noRoute) return { status: 'unreachable', reason: 'no_route', detail: clean(noRoute), hint: noRouteHint(ctx.env ?? {}) }
+  const timeout = at(p.timeout)
   if (timeout) return { status: 'unreachable', reason: 'timeout', detail: clean(timeout) }
-  return { status: 'unknown', detail: clean(lines.at(-1) ?? 'ssh failed') }
+  return { status: 'unknown', detail: own(lines.at(-1)) }
 }
 
 export function sshCall(deps: SshDeps, device: string, remote: string, stdin?: string): GateResponse {
@@ -94,7 +150,7 @@ export function sshCall(deps: SshDeps, device: string, remote: string, stdin?: s
     return { status: 'unknown', detail: clean(`ssh could not finish: ${r.error.message}`.trim().split('\n').filter(Boolean).at(-1)!) }
   }
   if (r.signal) return { status: 'unknown', detail: `ssh was killed by ${r.signal}` }
-  if (r.status === 255) return mapSshFailure(String(r.stderr ?? ''), deps.env ?? process.env)
+  if (r.status === 255) return mapSshFailure(String(r.stderr ?? ''), { target: deps.target, config: deps.sshConfig, env: deps.env ?? process.env })
   const last = String(r.stdout ?? '').trim().split('\n').pop() ?? ''
   try {
     const answer: unknown = JSON.parse(last)

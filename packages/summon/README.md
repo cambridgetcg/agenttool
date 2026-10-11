@@ -71,7 +71,7 @@ folder sshd starts the gatekeeper in. The Air's `summon` ignores `.env` files in
 | Air | `~/.ssh/summon/summon_nuance_ed25519`, `summon_nuance_ed25519.pub` | the summon key (this key and nothing else) |
 | Air | `~/.ssh/summon/config`, `~/.ssh/summon/known_hosts` | the `summon-nuance` ssh entry (used with `ssh -F`, nothing is added to `~/.ssh/config`) and Nuance's pinned host key |
 | Air | `~/.ssh/summon/expiry` | the summon key's expiry on Nuance (YYYYMMDD), written by `pin-nuance --expires` |
-| Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger: `sent` (with the effort and the advisory origin: harness, pid, start time) and `answer` for each start, `cancel_sent` and `answer` for each cancel, and an `answer` for any `auth_refused` or `host_key_mismatch` |
+| Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger: `sent` (with the effort and the advisory origin: harness, pid, start time) and `answer` for each start, `cancel_sent` and `cancel_answer` for each cancel, and an `inventory_answer`, `status_answer` or `result_answer` for any `auth_refused` or `host_key_mismatch` |
 | Air | `~/.local/bin/summon` | a link to `packages/summon/bin/summon.ts`: the front door |
 | Air | `~/summon-nuance-bundle-<expiry>-<build id>` | one AirDrop bundle per build and expiry: `summon-install.sh`, `summon-gatekeeper`, `summon-runner`, `MANIFEST.txt` |
 | Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner`, and `INSTALLED` (build, prepared, both sha256s and the key expiry: the bundle's `MANIFEST.txt`, written once the new programs and key line are in place); `keys-only`, the installer's record that its last drop-in passed the `sshd -T` check |
@@ -108,7 +108,10 @@ have been delivered, so it is never sent again; ask `summon status` with its han
   the app that started `summon` (System Settings › Privacy & Security › Local Network); Terminal.app and SSH logins are
   exempt, so `summon nuance inventory` from Terminal.app tells the two apart.
 - **The key expired.** The summon key works until the date in `~/.ssh/summon/expiry`; every summon warns on stderr from
-  7 days before it. From that day `auth_refused` says the key expired: re-pair from install step 1.
+  7 days before it (`expires on <date> (in N days)`). From that day `auth_refused` says the key expired: re-pair from
+  install step 1.
+- **The summon key is missing or unreadable on the Air** (deleted, or a sandbox that cannot read `~/.ssh/summon`):
+  `auth_refused`, with a hint naming the key file ssh could not offer.
 - **Nuance restarted (FileVault).** After a restart (power loss, a drained battery, a panic) Nuance may be waiting at the
   FileVault screen, where its sshd cannot read the summon key line, so a summon answers `auth_refused` (or
   `host_key_mismatch`, if the pre-boot host key differs). Unlock it at the Mac. Do not re-pin or re-key from this state.
@@ -118,9 +121,9 @@ have been delivered, so it is never sent again; ask `summon status` with its han
   changed (macOS was reinstalled, say), re-pin with the line read there:
   `bun scripts/pin-nuance.ts --user <name> --host-key "<line read on Nuance>" --expires <YYYYMMDD>`.
 - **The Air ledger cannot be written** (a sandbox, a full disk). A start or a cancel is logged before it is sent, so it
-  stops there and exits 3; with `--json` it prints one line,
-  `{"status":"unreachable","detail":"could not write the Air ledger (<code>); nothing was sent"}`, with a hint inside a
-  sandbox. Usage errors exit 2.
+  stops there and answers `unreachable (no_route)` with exit 3; with `--json` that is one line,
+  `{"status":"unreachable","reason":"no_route","detail":"could not write the Air ledger (<code>); nothing was sent"}`,
+  with a hint inside a sandbox. Usage errors exit 2; any other fault inside `summon` answers `unknown` (exit 1).
 
 ## The allowlist
 

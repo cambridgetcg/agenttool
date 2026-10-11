@@ -6,7 +6,8 @@ export const CLOCK_SKEW_MS = 5 * 60_000
 export const MAX_ADMISSION_MS = 24 * 3_600_000
 export const ID_RE = /^smn_[0-9a-f]{32}$/
 export const DEVICE_RE = /^[a-z][a-z0-9-]{0,31}$/
-const TOKEN_RE = /^[A-Za-z0-9._:-]{1,64}$/
+/** A model, provider, effort or harness name: what the request schema allows, checked the same on both Macs. */
+export const TOKEN_RE = /^[A-Za-z0-9._:-]{1,64}$/
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 export const RUNTIMES = ['claude', 'codex', 'hermes'] as const
 /** What `claude --help` (2.1.296) lists for `--effort <level>`. */
