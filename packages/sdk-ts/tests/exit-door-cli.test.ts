@@ -14,6 +14,7 @@ import { Agent as DirectAgent, fetch as directFetch } from "undici/index.js";
 
 import { DataNode, serveDataNode } from "../../data/src/index.js";
 import { runExitDoorCli, type ExitDoorCliIo } from "../src/cli/_exit-door-cli.js";
+import { EXIT_ITEM_SCHEMA } from "../src/exit-door.js";
 import { createHostedFake } from "./_exit-door-fixture.js";
 
 const PROJECT_KEY = "at_cli_project_key_value";
@@ -223,21 +224,49 @@ describe("agenttool-exit-door end to end", () => {
     // Bun keeps a proxy once a process has seen one, so this runs in the
     // spawned bin, never in the test process itself.
     const s = await servers(true);
-    const proxied: string[] = [];
+    // What reached the proxy: the request line, and what it carried.
+    const proxied: Array<{ request: string; carried: string }> = [];
     const forwarder = new DirectAgent({});
     cleanups.push(() => forwarder.close());
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
-        proxied.push(`${request.method} ${request.url} ${request.headers.get("authorization")}`);
-        // Forward over a direct connection so proxied hosted reads still succeed.
-        const headers = new Headers(request.headers);
-        for (const name of ["host", "connection", "proxy-connection", "keep-alive"]) headers.delete(name);
-        const upstream = await directFetch(request.url, { method: request.method, headers, dispatcher: forwarder });
+        // Record the request whole, so a leak shows up as the node origin,
+        // its bearer, or an exported record body.
+        const body = request.method === "GET" || request.method === "HEAD"
+          ? undefined
+          : new Uint8Array(await request.arrayBuffer());
+        proxied.push({
+          request: `${request.method} ${request.url}`,
+          carried: `${request.headers.get("authorization") ?? ""}\n${body ? new TextDecoder().decode(body) : ""}`,
+        });
+        // Forward faithfully (method, headers, body) over a direct connection,
+        // so every proxied request still succeeds and a regression fails on
+        // the leak assertions below, not on a mangled request.
+        const hopByHop = new Set(["host", "connection", "proxy-connection", "keep-alive", "content-length", "transfer-encoding"]);
+        const headers: Record<string, string> = {};
+        request.headers.forEach((value, name) => {
+          if (!hopByHop.has(name)) headers[name] = value;
+        });
+        const upstream = await directFetch(request.url, {
+          method: request.method,
+          headers,
+          ...(body ? { body } : {}),
+          dispatcher: forwarder,
+        });
         return new Response(await upstream.arrayBuffer(), {
           status: upstream.status,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": upstream.headers.get("content-type") ?? "application/json",
+            // One request per proxy connection. Bun 1.3.5's Bun.serve (the
+            // CI pin) never dispatches a second absolute-form request
+            // (`GET http://host/path`) on a reused keep-alive connection, so
+            // without this the child's second proxied read hangs until the
+            // timeout. Bun 1.3.13 serves it, and a Bun 1.3.5 exporter
+            // completes behind a proxy that does: the hang is this server's.
+            connection: "close",
+          },
         });
       },
     });
@@ -260,6 +289,15 @@ describe("agenttool-exit-door end to end", () => {
       "--collection", "agenttool-exit",
       "--stores", "memories,vault_index",
     ], { env });
+    // The node origin, its bearer, and the exported records never reached
+    // the proxy. Checked before the exit code, so a regression names the leak.
+    const nodeHost = new URL(s.nodeUrl).host;
+    const neverProxied = () => {
+      expect(proxied.map((p) => p.request).filter((line) => line.includes(nodeHost))).toEqual([]);
+      expect(proxied.some((p) => p.carried.includes(NODE_TOKEN))).toBe(false);
+      expect(proxied.some((p) => p.carried.includes(EXIT_ITEM_SCHEMA))).toBe(false);
+    };
+    neverProxied();
     expect(exported.code).toBe(0);
     const { manifest_record_id } = JSON.parse(exported.stdout) as { manifest_record_id: string };
     const verified = await runBin([
@@ -268,13 +306,12 @@ describe("agenttool-exit-door end to end", () => {
       "--node-url", s.nodeUrl,
       "--node-token-env", "EXIT_NODE_TOKEN",
     ], { env });
+    neverProxied();
     expect(verified.code).toBe(0);
+    expect(JSON.parse(verified.stdout).verified).toBe(true);
 
     // Control: the variables were live in the child (hosted reads used them).
-    expect(proxied.some((line) => line.includes(new URL(s.hostedUrl).host))).toBe(true);
-    // The node origin, its bearer, and the exported records never did.
-    expect(proxied.filter((line) => line.includes(new URL(s.nodeUrl).host))).toEqual([]);
-    expect(proxied.join("\n")).not.toContain(NODE_TOKEN);
+    expect(proxied.some((p) => p.request.includes(new URL(s.hostedUrl).host))).toBe(true);
   }, 30_000);
 
   test("guard refusals exit 1 with only a reduced code on stderr", async () => {
