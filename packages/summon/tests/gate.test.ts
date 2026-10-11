@@ -126,6 +126,7 @@ describe('gateStart', () => {
   describe('F07: a refused id can be traced', () => {
     const ledgerOf = (h: string): any[] => readFileSync(summonPaths(h).ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
     const SEEN = 'received and refused; see the Nuance ledger'
+    const NO_DECISION = 'received; no decision was recorded — see the Nuance ledger'
     test('a schema refusal ledgers the request id when the id is well-formed, and only then', () => {
       const h = targetHome()
       const relative = sampleRequest({ cwd: 'Projects/x' })
@@ -161,17 +162,20 @@ describe('gateStart', () => {
       expect(existsSync(join(p.jobs, outside.id))).toBe(false) // a refused id never gets a job dir
       for (const f of readdirSync(p.seen)) expect(statSync(join(p.seen, f)).mode & 0o777).toBe(0o600)
     })
-    test('a seen id with no recorded reason and no job is unknown: received and refused', () => {
+    test('a seen id with no recorded reason and no job is unknown, and claims no refusal (e.g. the gate threw after the claim)', () => {
       const p = summonPaths(targetHome()); const id = sampleRequest().id
       claimId(p.seen, id)
-      expect(statusOf(p, 'nuance', id, Date.now())).toEqual({ status: 'unknown', detail: SEEN })
+      const now = Date.now()
+      for (const r of [statusOf(p, 'nuance', id, now), resultOf(p, 'nuance', id, now), requestCancel(p, 'nuance', id, now)]) {
+        expect(r).toEqual({ status: 'unknown', detail: NO_DECISION })
+      }
     })
     test('a seen marker that holds anything but a refusal reason is never echoed', () => {
       const p = summonPaths(targetHome()); const id = sampleRequest().id
       claimId(p.seen, id)
       writeFileSync(join(p.seen, id), 'SECRET prompt text')
       const r = statusOf(p, 'nuance', id, Date.now())
-      expect(r).toEqual({ status: 'unknown', detail: SEEN })
+      expect(r).toEqual({ status: 'unknown', detail: NO_DECISION })
     })
   })
   test('private modes and an intact ledger chain after admitted, busy and replayed outcomes', () => {

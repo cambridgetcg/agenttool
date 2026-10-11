@@ -182,6 +182,16 @@ describe('interpretClaudeStream', () => {
       const text = 'Failed to refresh OAuth token: another Claude Code process is refreshing it. This is usually transient; retry in a minute.'
       const o = interpretClaudeStream(apiError(text, 'server_error'), 1)
       expect(o).toMatchObject({ status: 'failed', detail: "claude's login refresh was busy; try again in a minute", result_text: text })
+      expect(interpretClaudeStream([L({ type: 'result', subtype: 'success', is_error: true, result: text })], 1))
+        .toMatchObject({ status: 'failed', detail: "claude's login refresh was busy; try again in a minute" })
+    })
+    test('a successful answer that quotes the busy-refresh text stays completed, and a denial in it is still blocked(permission)', () => {
+      // e.g. a review of packages/summon itself: harness.ts holds the phrase.
+      const quote = 'harness.ts matches "another Claude Code process is refreshing it" to spot a busy login refresh.'
+      expect(interpretClaudeStream([L({ type: 'result', subtype: 'success', is_error: false, result: quote })], 0))
+        .toMatchObject({ status: 'completed', result_text: quote })
+      expect(interpretClaudeStream([L({ type: 'result', subtype: 'success', is_error: false, result: quote, permission_denials: [{ tool_name: 'Read' }] })], 0))
+        .toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied' })
     })
     test('narration is never read as an auth failure: no result line, or an error result without result text', () => {
       const narration = L({ type: 'assistant', message: { content: [{ type: 'text', text: 'the OAuth token is refreshed in api/src/auth; Not logged in is shown when' }] } })

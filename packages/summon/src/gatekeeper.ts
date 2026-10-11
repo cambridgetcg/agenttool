@@ -49,12 +49,15 @@ export async function readBoundedStdin(stream: ReadableStream<Uint8Array>, max: 
   return { text: Buffer.concat(chunks).toString('utf8'), tooLarge: false }
 }
 
-/** An id with no job: refused (with the reason the gate kept) if this Mac received it, else never delivered here. */
+/**
+ * An id with no job: refused with the reason the gate kept, if it kept one. A seen id with no reason was received but no
+ * decision was recorded (the gate threw after the claim, or is still deciding), so that answer claims no refusal.
+ */
 function noJob(paths: SummonPaths, device: string, id: string): GateResponse {
   const seen = seenRefusal(paths.seen, id)
   if (!seen.seen) return { status: 'unknown', detail: 'no such summon on this Mac' }
-  const detail = 'received and refused; see the Nuance ledger'
-  return seen.reason ? { status: 'refused', reason: seen.reason, handle: `${device}/${id}`, detail } : { status: 'unknown', detail }
+  if (!seen.reason) return { status: 'unknown', detail: 'received; no decision was recorded — see the Nuance ledger' }
+  return { status: 'refused', reason: seen.reason, handle: `${device}/${id}`, detail: 'received and refused; see the Nuance ledger' }
 }
 
 export function statusOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {

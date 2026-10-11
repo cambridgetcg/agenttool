@@ -60,7 +60,7 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
   if (!claimId(deps.paths.seen, req.id)) return refuse(deps, req, 'replayed', 'this id was already received')
   // From here the id is claimed: a refusal is also kept with its seen marker, so `status <id>` can name it.
   const refuseClaimed = (reason: RefusalReason, detail: string, hint?: string): GateResponse => {
-    try { recordRefusal(deps.paths.seen, req.id, reason) } catch { /* status then answers "received and refused" without the reason */ }
+    try { recordRefusal(deps.paths.seen, req.id, reason) } catch { /* status then answers unknown: received, no decision recorded */ }
     return refuse(deps, req, reason, detail, hint)
   }
   if (!deps.guiSessionIsMine()) return refuseClaimed('target_logged_out', 'Yu is not logged in at this Mac')

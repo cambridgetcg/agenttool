@@ -65,7 +65,7 @@ hint that says what is wrong.
 - **`limits.max_concurrent` must be 1.** The runner is serial, so a second admitted job could only wait, and it could
   expire before its turn.
 - **Only `claude` runs in Phase 0.** A `codex` or `hermes` request, or a `claude` request that names a provider, is
-  refused `runtime_unavailable` before the allowlist is read. A claude model entry may list `effort` values that
+  refused `runtime_unavailable` before the allowlist's admission check. A claude model entry may list `effort` values that
   `claude --help` accepts (`low`, `medium`, `high`, `xhigh`, `max`), and an admitted effort reaches claude as `--effort`.
 - **A review folder** gives the job Read, Glob and Grep, and Claude Code keeps those reads inside the folder.
 - **An edit folder also needs `reads_anywhere: true` on the claude runtime entry**, because an edit grant reaches well

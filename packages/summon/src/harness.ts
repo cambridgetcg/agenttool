@@ -17,8 +17,6 @@ export function findClaude(home: string): string | null {
 }
 
 export const MAX_TURNS = 12
-/** What `claude --help` (2.1.296) lists for `--effort <level>`. */
-export const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 
 export interface Invocation { bin: string; args: string[]; env: Record<string, string>; stdin: string }
 export interface Outcome {
@@ -129,7 +127,8 @@ export function interpretClaudeStream(lines: string[], exitCode: number | null, 
     num_turns: typeof result?.num_turns === 'number' ? result.num_turns : undefined,
     cost_usd: typeof result?.total_cost_usd === 'number' ? result.total_cost_usd : undefined,
   }
-  const refreshBusy = (resultText !== null && REFRESH_BUSY.test(resultText))
+  // Only an error result's text counts: a successful answer may quote the phrase (a review of this very file does).
+  const refreshBusy = (result?.is_error === true && resultText !== null && REFRESH_BUSY.test(resultText))
     || apiErrors.some((a) => a.error === 'server_error' && REFRESH_BUSY.test(a.text))
   const auth = apiErrors.some((a) => AUTH_ERRORS.has(a.error))
     || (!refreshBusy && result?.is_error === true && resultText !== null && AUTH_TEXT.test(resultText))

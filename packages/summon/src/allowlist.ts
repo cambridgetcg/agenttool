@@ -1,7 +1,6 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { CLAUDE_EFFORTS } from './harness.ts'
-import { DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
+import { CLAUDE_EFFORTS, DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
 
 export interface AllowlistModel { model: string; provider?: string; effort?: string[] }
 export interface AllowlistRuntime { id: Runtime; models: AllowlistModel[]; reads_anywhere: boolean }
