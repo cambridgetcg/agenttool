@@ -311,6 +311,15 @@ async function proveChronicleWalks(): Promise<void> {
   const titles = (await getJson("/v1/chronicle?limit=200")).entries.map((e: { title: string }) => e.title);
   expect(titles.filter((title: string) => title.startsWith("sub-ms"))).toEqual(["sub-ms 900", "sub-ms 100"]);
   expect(titles).not.toContain("foreign");
+  // agent_id is a uuid column: a malformed value is refused before the
+  // query instead of failing PostgreSQL's cast (22P02) as a 500.
+  const malformed = await app().request("/v1/chronicle?agent_id=not-a-uuid");
+  expect(malformed.status).toBe(400);
+  expect((await malformed.json() as any).error).toBe("agent_id_invalid");
+  // An empty limit reads the default page, as memories and strands do.
+  const empty = await getJson("/v1/chronicle?limit=");
+  expect(empty.page.limit).toBe(50);
+  expect(empty.entries.map((e: { id: string }) => e.id)).toEqual(all);
 }
 
 async function proveStrandWalks(): Promise<void> {
