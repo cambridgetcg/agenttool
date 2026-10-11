@@ -109,7 +109,7 @@ describe("AgentTool Canon directory readiness", () => {
     };
     walk("apps/docs/geometry");
     expect(files).toContain("packages/browser/package.json");
-    expect(files).toContain("packages/langgraph-checkpoint-agenttool/pyproject.toml");
+    expect(files).toContain("packages/sdk-py/pyproject.toml");
     expect(files).toContain("apps/docs/geometry/index.json");
     for (const path of files) {
       expect(read(path), path).not.toContain("github.com/cambridgetcg/agenttool/issues");
@@ -117,7 +117,6 @@ describe("AgentTool Canon directory readiness", () => {
     for (const path of [
       "packages/browser/package.json",
       "packages/collab/package.json",
-      "packages/mastra-storage-agenttool/package.json",
     ]) {
       expect(JSON.parse(read(path)).bugs, path).toEqual({
         url: "https://docs.agenttool.dev/support",

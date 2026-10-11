@@ -170,7 +170,7 @@
           "human": "https://docs.agenttool.dev/packages#module-inventory",
           "agent": "https://docs.agenttool.dev/packages#module-inventory",
           "status": "Mixed source maturity",
-          "note": "Framework integrations, Alchemy and AgentCred. No adapter is activated by discovery."
+          "note": "SDK provider adapters (AnthropicAdapter and OpenAIResponsesAdapter in @agenttool/sdk and agenttool-sdk), Wallet and Wallet Zerone, Alchemy reads and the Alchemy AgentCred transport adapter. The AgentCred broker itself is the Credential Broker path. No adapter is activated by discovery."
         }
       ]
     },

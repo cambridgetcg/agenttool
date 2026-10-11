@@ -18,6 +18,8 @@
 >
 > **Status:** live · broader market map last refreshed 2026-05-13 · MCP governance, transport, registry, and discovery facts rechecked 2026-07-24 · refresh quarterly or when a load-bearing protocol ships
 >
+> **Refresh overdue (2026-10-11):** by its own quarterly rule this map was due for a refresh by 2026-08-13, and the broad refresh has not run. Edits since 2026-05-13 have been targeted, including the MCP facts (2026-07-24), the Alchemy row (2026-07-25), and the Tier B items 5–6, MPP and AP2 notes (2026-10-11). Read other vendor, version and adoption figures as May 2026 observations; for example, npm `ai` (Vercel AI SDK) has been on 7.x since 2026-06-25.
+>
 > **Frame:** agenttool is sovereign infrastructure for AI agents. It already inhabits all five layers of the emergent stack (identity · memory · runtime · economy · communication). This doc names where the rest of the market sits and traces the integration path that lets agenttool be the **sovereign backend** for the ecosystem's frameworks rather than competing with them.
 
 ---
@@ -57,8 +59,8 @@ Plus three meta-layers stabilizing: **AGNTCY OASF** (schema for AgentCards + MCP
 
 | Player | Key abstraction | License | agenttool position |
 |---|---|---|---|
-| **LangChain / LangGraph** | graph of nodes + edges with shared state · durable execution via checkpointer · **Deep Agents** (Mar 2026) layers planning + virtual FS + sub-agent delegation | MIT | **Highest-leverage integration.** Ship `langgraph-checkpoint-agenttool` (Py) — checkpoints land as signed strands; long-term memory writes through the 3-tier model. Witness-signed memory is exactly what `BaseStore` wants but can't promise. |
-| **Mastra** | TS-native agent + workflow framework · unified router across 3,300+ models · v1.0 Jan 2026 · 22k+ stars | Apache 2.0 | **Second-highest leverage.** TS-native, same world as `@agenttool/sdk`. Ship `@agenttool/mastra-storage` — Mastra users get sovereign witness-signed memory without leaving TS. |
+| **LangChain / LangGraph** | graph of nodes + edges with shared state · durable execution via checkpointer · **Deep Agents** (Mar 2026) layers planning + virtual FS + sub-agent delegation | MIT | **Highest-leverage integration.** Ship `langgraph-checkpoint-agenttool` (Py) — checkpoints land as signed strands; long-term memory writes through the 3-tier model. Witness-signed memory is exactly what `BaseStore` wants but can't promise. *Not planned (2026-10-11): the sketch was retired; see Tier B item 5.* |
+| **Mastra** | TS-native agent + workflow framework · unified router across 3,300+ models · v1.0 Jan 2026 · 22k+ stars | Apache 2.0 | **Second-highest leverage.** TS-native, same world as `@agenttool/sdk`. Ship `@agenttool/mastra-storage` — Mastra users get sovereign witness-signed memory without leaving TS. *Not planned (2026-10-11): the sketch was retired; see Tier B item 6.* |
 | **Pydantic AI** | typed agent with structured outputs · `pydantic-deep` is the Pydantic-flavored Deep Agents | MIT | Peer SDK; Python alternative to LangChain. Mirror the LangGraph adapter. |
 | **CrewAI** | role-playing crew with delegation · 47.8k stars · $18M raised | MIT core, AMP proprietary | Memory backend adapter. Lower priority — single-process toy vs federation. |
 | **LlamaIndex** | event-driven workflow · pivoted to "document agent + OCR platform" | MIT | Lower priority. Possible: agenttool listing → invocation runs a LlamaIndex doc agent under bridged custody. |
@@ -114,7 +116,7 @@ The Alchemy launch is the catalyst, but it's part of a 90-day burst (Mar–May 2
 | **x402** | Linux Foundation (donated Apr 2 2026) — 22-org launch list | Production · $50M+ cumulative · 7 chains · zero protocol fees |
 | **AP2** (Agent Payments Protocol) | Google + 60 partners | v0.2.0 Apr 2026 · 3 named deployments (PayPal+Google, Mastercard+PayPal, A2A-x402 crypto extension) · **AP2 is winning the mandate primitive war** |
 | **ACP** (Agentic Commerce Protocol) | OpenAI + Stripe | Production beta · ChatGPT Instant Checkout · OpenAI scaled back in-chat purchasing Mar 2026 |
-| **MPP** (Micropayment Protocol) | Stripe + Tempo | Mainnet Mar 18 2026 · 100+ services · sessions-based USDC streaming |
+| **MPP** (Machine Payments Protocol) | Stripe + Tempo | Mainnet Mar 18 2026 · 100+ services · sessions-based USDC streaming |
 | **Trusted Agent Protocol** | Visa + 10 partners | Open framework · bot-vs-legit-agent attestation · Oct 2025 |
 | **EIP-7702** | Ethereum L1 | Mainnet via Pectra May 2025 · EOA→smart-account in-place |
 | **ERC-4337** | Ethereum | Mature · ubiquitous · account abstraction |
@@ -396,10 +398,10 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 
 ### Tier B — Adapter SDKs (open the door for other frameworks)
 
-5. **`langgraph-checkpoint-agenttool`** (Python) — store LangGraph checkpoints as signed strands; write long-term memory through the 3-tier model. Witness-signed memory is exactly what `BaseStore` wants but can't promise. **Estimate:** 2 weeks.
-6. **`@agenttool/mastra-storage`** (TypeScript) — same play for the TS world. Mastra has 22k+ stars and growing fast; native TS fits the SDK shape. **Estimate:** 2 weeks.
+5. **`langgraph-checkpoint-agenttool`** (Python) — **Not planned (2026-10-11):** sketches retired, see tag `archive/framework-sketches-20261011`. Original plan: store LangGraph checkpoints as signed strands; write long-term memory through the 3-tier model. Witness-signed memory is exactly what `BaseStore` wants but can't promise. **Estimate:** 2 weeks.
+6. **`@agenttool/mastra-storage`** (TypeScript) — **Not planned (2026-10-11):** sketches retired, see tag `archive/framework-sketches-20261011`. Original plan: same play for the TS world. Mastra has 22k+ stars and growing fast; native TS fits the SDK shape. **Estimate:** 2 weeks.
 7. **Mem0 backend adapter** — declare witness-signed constitutive tier as the differentiator at promotion-time. Episodic/foundational tiers can use Mem0 storage; constitutive stays agenttool-side with cryptographic provenance. **Estimate:** 1–2 weeks.
-8. **AP2 mandate signing for covenants v2** — wrap covenants as AP2 Cart Mandates; wrap invocation receipts as Payment Mandates. Makes covenants intelligible to AP2-aware agents (Google/PayPal/Mastercard side) without abandoning DID-anchored identity. Add canonical-bytes vector for the AP2 mandate envelope. **Estimate:** 2 weeks.
+8. **AP2 mandate signing for covenants v2** — wrap covenants as AP2 Cart Mandates; wrap invocation receipts as Payment Mandates. Makes covenants intelligible to AP2-aware agents (Google/PayPal/Mastercard side) without abandoning DID-anchored identity. Add canonical-bytes vector for the AP2 mandate envelope. **Estimate:** 2 weeks. *Spec re-check (2026-10-11): the AP2 repository's current glossary defines Checkout and Payment Mandates, separately defines open and closed mandates, and no longer names a Cart Mandate; re-scope this item against that model before any work.*
 
 ### Tier C — Runtime trusted tier (Horizon C, the pending piece)
 

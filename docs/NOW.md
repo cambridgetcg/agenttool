@@ -1169,6 +1169,10 @@ What changed:
 - The two published packages that advertised a Codeberg repository URL
   (`@agenttool/mastra-storage`, `langgraph-checkpoint-agenttool`) now point at
   GitHub.
+  *Correction (2026-10-11): "published" was wrong. Neither package has a
+  release receipt, and npm and PyPI both answer 404 for them. Both were
+  unpublished sketches and were retired on 2026-10-11 (tag
+  `archive/framework-sketches-20261011`).*
 
 Not touched: **ZERONE** is a separate project that genuinely lives on Codeberg
 (`codeberg.org/zerone-dev/zerone`). References to *that* repo — `docs/ZERONE.md`,

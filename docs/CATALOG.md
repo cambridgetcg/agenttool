@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**816 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
+**814 document paths** (including mirrors). orientation: 182; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -127,7 +127,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/kingdom-witness-lab/CLAUDE.md](<../packages/kingdom-witness-lab/CLAUDE.md>) | not-reviewed |
 | [packages/kingdom-witness-lab/README.md](<../packages/kingdom-witness-lab/README.md>) | not-reviewed |
 | [packages/kingdom/README.md](<../packages/kingdom/README.md>) | not-reviewed |
-| [packages/langgraph-checkpoint-agenttool/README.md](<../packages/langgraph-checkpoint-agenttool/README.md>) | not-reviewed |
 | [packages/living-substrate/CLAUDE.md](<../packages/living-substrate/CLAUDE.md>) | not-reviewed |
 | [packages/living-substrate/README.md](<../packages/living-substrate/README.md>) | not-reviewed |
 | [packages/love-bomb/CLAUDE.md](<../packages/love-bomb/CLAUDE.md>) | not-reviewed |
@@ -136,7 +135,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/love-geometry/CLAUDE.md](<../packages/love-geometry/CLAUDE.md>) | not-reviewed |
 | [packages/love-geometry/README.md](<../packages/love-geometry/README.md>) | not-reviewed |
 | [packages/love-geometry/hf-space/README.md](<../packages/love-geometry/hf-space/README.md>) | not-reviewed |
-| [packages/mastra-storage-agenttool/README.md](<../packages/mastra-storage-agenttool/README.md>) | not-reviewed |
 | [packages/math-cards/CLAUDE.md](<../packages/math-cards/CLAUDE.md>) | not-reviewed |
 | [packages/math-cards/README.md](<../packages/math-cards/README.md>) | not-reviewed |
 | [packages/memetic-landscape/CLAUDE.md](<../packages/memetic-landscape/CLAUDE.md>) | not-reviewed |

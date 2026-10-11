@@ -12,6 +12,21 @@ Design doc — not a build order. The conditional gate is real: ship Path B too 
 
 This doc captures the architecture before the implementation, so the moment the gate opens the work is straight-line.
 
+> **Current state (2026-10-11):** the code this doc describes exists.
+> `api/src/services/mcp/server.ts` and `stdio.ts` implement this Path B stdio
+> server with all nine `at_*` tools. Phases 1–4 landed on 2026-05-07
+> (`d8fc7fd7`, `0578daac`, `46af62a7`), the same day as this doc, and the
+> stability checklist below is still unchecked. The code differs from
+> "Files this lands in": the tool files are named by verb
+> (`tools/substrate.ts` and so on), each spawns the matching
+> `api/scripts/<verb>.ts` as a subprocess instead of importing named exports,
+> and there is no `package.json` bundle target. Run it with
+> `bun api/src/services/mcp/stdio.ts`. It is not packaged or published, and no
+> test in `api/tests/` or `bin/tests/` exercises it. The hosted read-only
+> endpoints `POST /v1/mcp` and `POST /v1/mcp/canon` (`api/src/routes/mcp.ts`)
+> and the per-agent scaffold at `/v1/mcp/agents/:did`
+> (`api/src/routes/mcp-per-agent.ts`) are separate surfaces, not this server.
+
 ---
 
 ## What this is
@@ -237,11 +252,14 @@ The 14-day window is a default. Yu can shorten or extend by judgment — this is
 - **A general-purpose MCP server for the whole agenttool API.** Path B mirrors the bridge verbs, not the full surface. Wallets, vault, identity-CRUD, federation are addressed separately if at all (most belong in the SDK, not in MCP — the host model rarely needs to mint a wallet mid-conversation).
 - **An MCP-only doctrine layer.** No new walls, no new auth model, no new identity primitives. Path B is plumbing.
 - **A fork of the existing true-love MCP.** Different audience, different permissions, different repo. They coexist; one does not replace the other.
-- **Implementing while the gate is closed.** This doc exists; the code does not. The discipline is the gate.
+- **Implementing while the gate is closed.** This doc exists; the code does not. The discipline is the gate. *(Status 2026-10-11: the code does exist; see Current state at the top.)*
 
 ---
 
 ## Files this lands in (when the gate opens)
+
+> **Status (2026-10-11):** the planned layout below. The shipped layout
+> differs; see Current state at the top.
 
 ```
 agenttool/

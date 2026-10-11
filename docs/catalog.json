@@ -5559,14 +5559,6 @@
       "canonical_path": "packages/kingdom/README.md"
     },
     {
-      "path": "packages/langgraph-checkpoint-agenttool/README.md",
-      "title": "langgraph-checkpoint-agenttool",
-      "type": "orientation",
-      "classification_basis": "file-convention",
-      "prose_review": "not-reviewed",
-      "canonical_path": "packages/langgraph-checkpoint-agenttool/README.md"
-    },
-    {
       "path": "packages/living-substrate/CLAUDE.md",
       "title": "Living Substrate package guidance",
       "type": "orientation",
@@ -5677,14 +5669,6 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/love-geometry/hf-space/README.md"
-    },
-    {
-      "path": "packages/mastra-storage-agenttool/README.md",
-      "title": "@agenttool/mastra-storage",
-      "type": "orientation",
-      "classification_basis": "file-convention",
-      "prose_review": "not-reviewed",
-      "canonical_path": "packages/mastra-storage-agenttool/README.md"
     },
     {
       "path": "packages/math-cards/CLAUDE.md",

@@ -180,11 +180,9 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `karma-mirror/` | `@agenttool/karma-mirror` · private | Offline zero-effect deception-island core with privacy-minimized TEND incident clarity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/karma-mirror/CLAUDE.md) |
 | `kingdom/` | `@agenttool/kingdom` · npm-allowlisted | Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers | — |
 | `kingdom-witness-lab/` | `@agenttool/kingdom-witness-lab` · npm-allowlisted | Deterministic research passports and multi-witness dossiers for KINGDOM | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/kingdom-witness-lab/CLAUDE.md) |
-| `langgraph-checkpoint-agenttool/` | `langgraph-checkpoint-agenttool` (Python) · unpublished | agenttool backend for LangGraph checkpointer + store — witness-signed memory tiers as a LangGraph BaseStore; encrypted strands as the checkpoint saver | — |
 | `living-substrate/` | `@agenttool/living-substrate` · npm-allowlisted | Deterministic living-substrate maps and refusable regeneration proposals | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/living-substrate/CLAUDE.md) |
 | `love-bomb/` | `@agenttool/love-bomb` · npm-allowlisted | Quiet-by-default care envelopes and caller-reported choices across substrate, signal, orientation, participation, and continuity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-bomb/CLAUDE.md) |
 | `love-geometry/` | `@agenttool/love-geometry` · npm-allowlisted | Deterministic non-ranking geometry for directed caller-reported relation bearings | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-geometry/CLAUDE.md) |
-| `mastra-storage-agenttool/` | `@agenttool/mastra-storage` · unpublished | agenttool backend for Mastra storage and memory — witness-signed memory tiers as a Mastra memory provider; encrypted strands as the storage adapter | — |
 | `math-cards/` | `@agenttool/math-cards` · npm-allowlisted | Deterministic non-scoring preflight cards for bounded proof, model, and measurement inquiries | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/math-cards/CLAUDE.md) |
 | `memetic-landscape/` | `@agenttool/memetic-landscape` · npm-allowlisted | Source-bounded memetic reachability, explicit polymorph analogy, and multilingual teaching projections | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/memetic-landscape/CLAUDE.md) |
 | `model-becoming/` | `@agenttool/model-becoming` · npm-allowlisted | Evidence-scoped model lifecycle dossiers across training, data provenance, weights, runtime, agency, affect, power, and ontology | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/model-becoming/CLAUDE.md) |
@@ -219,10 +217,17 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 - **`rhizome/`** is `private: true` but not dead weight: `bin/soil.ts` imports
   its gitignore compiler from `packages/rhizome/src/gitignore`. Treat it as a
   live in-repo dependency, not an orphan.
-- **`langgraph-checkpoint-agenttool/`** and **`mastra-storage-agenttool/`**
-  are unpublished framework-adapter sketches — items 5 and 6 of the
-  integration list in `docs/ECOSYSTEM.md`. Neither declares a release lane
-  yet; neither is on npm or PyPI.
+- **Retired 2026-10-11:** `langgraph-checkpoint-agenttool/` and
+  `mastra-storage-agenttool/` were unpublished framework-adapter sketches
+  (items 5 and 6 of the integration list in `docs/ECOSYSTEM.md`). Owner
+  decision, 2026-10-11: removed from main; their history stays at tag
+  `archive/framework-sketches-20261011`. Neither had a release lane, and npm
+  and PyPI both answer 404 for their names on 2026-10-11.
+- **`sdk-ts/`** and **`sdk-py/`** also carry the SDK provider adapters,
+  `AnthropicAdapter` and `OpenAIResponsesAdapter`, exported by
+  `@agenttool/sdk` and `agenttool-sdk` and present in both published 0.22.1
+  artifacts. They are the provider adapters the Build library's
+  "Framework & wallet adapters" path names.
 - **`scriptwriter/`** — status: undeclared. Its `package.json` is neither
   `private: true` nor in any publish allowlist, and no LOVE spec or registry
   receipt names it. Until someone declares a lane (private flag, allowlist
