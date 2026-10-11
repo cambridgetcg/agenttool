@@ -88,7 +88,7 @@ a permission to act on a resource is a separate, scoped matter.
 
 ## An open invitation
 
-This work began with a wish to make useful things with care.
+Yu and Ai began this work with a wish to make useful things with care.
 That intention is something to practise: clear explanations, honest limits,
 portable work, room for disagreement, and respect for someone else's choice.
 

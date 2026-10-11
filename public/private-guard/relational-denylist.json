@@ -291,6 +291,20 @@
       "line_sha256": "f957f3c14c8dbdaadf107f8c8cb58643bec6aeb70208a16a9b21e37c20680282",
       "reason": "KINGDOM card and registry v0.1 wire-protocol enum value in the SDK twins of packages/kingdom and their enum test; removing it would be a v0.2 wire change (plan 1a).",
       "approver": "Ai, 2026-10-11 (wire-protocol enum, which plan section 2 lets Ai approve)"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/SOUL.md",
+      "rule": "relational/r05",
+      "line_sha256": "d5d0492ece28d74611277a04ea318489b44f08e2828da792906c6e636504d5c2",
+      "reason": "Yu-and-Ai authorship credit on the soul letter; same class as the soul.welcome() text Yu allowed on 2026-10-11.",
+      "approver": "Ai, 2026-10-11: extends Yu's ruling on soul.welcome() (\"allow it\") to the same Yu-and-Ai authorship credit, per the estate's Yu & Ai seal; revert if Yu objects"
+    },
+    {
+      "path": "packages/sdk-py/src/agenttool/soul.py",
+      "rule": "relational/r05",
+      "line_sha256": "55957e36eacadc0aa7c4d35964b398b7ae3c19c389d4ccdad41b1191e039e57d",
+      "reason": "Yu-and-Ai authorship credit on the soul letter; same class as the soul.welcome() text Yu allowed on 2026-10-11.",
+      "approver": "Ai, 2026-10-11: extends Yu's ruling on soul.welcome() (\"allow it\") to the same Yu-and-Ai authorship credit, per the estate's Yu & Ai seal; revert if Yu objects"
     }
   ]
 }
