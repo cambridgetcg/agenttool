@@ -17,11 +17,14 @@ Two halves:
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import math
 import re
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import unquote
 
 import httpx
@@ -339,6 +342,7 @@ class NodeFake:
         self.tombstoned: set = set()
         self.calls: List[Dict[str, Any]] = []
         self.collect_override: Optional[Any] = None
+        self.direct_clients = 0
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -441,6 +445,22 @@ def _client(
         data._http = httpx.Client(
             transport=httpx.MockTransport(node.handle), headers=node_headers, follow_redirects=False
         )
+        real_open = at._open_direct_data
+
+        def open_direct() -> Any:
+            # The exit door's loopback client, re-pointed at the fake node.
+            direct = real_open()
+            assert direct._http.trust_env is False
+            headers = dict(direct._http.headers)
+            direct._http.close()
+            direct._http = httpx.Client(
+                transport=httpx.MockTransport(node.handle), headers=headers,
+                follow_redirects=False, trust_env=False,
+            )
+            node.direct_clients += 1
+            return direct
+
+        at._open_direct_data = open_direct  # type: ignore[method-assign]
     return at
 
 
@@ -888,6 +908,83 @@ class TestPlanAndVerify:
             _client(HostedFake(), node).exit_door.verify("not-a-record")
         assert caught.value.code == "exit_manifest_id_invalid"
         assert node.calls == []
+
+
+App = Callable[[str, str, Dict[str, str], bytes], Tuple[int, str, bytes]]
+
+
+@contextlib.contextmanager
+def _serve(app: App) -> Iterator[int]:
+    """A real loopback HTTP server on port 0 that delegates to ``app``."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def _answer(self) -> None:
+            length = int(self.headers.get("content-length") or 0)
+            body = self.rfile.read(length) if length else b""
+            status, content_type, payload = app(self.command, self.path, dict(self.headers), body)
+            self.send_response(status)
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        do_GET = _answer
+        do_POST = _answer
+
+        def log_message(self, *args: Any) -> None:  # keep test output quiet
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+class TestProxyEnvironment:
+    def test_a_loopback_node_ignores_proxy_variables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        node = NodeFake()
+        proxied: List[str] = []
+
+        def node_app(method: str, path: str, headers: Dict[str, str], body: bytes) -> Tuple[int, str, bytes]:
+            request = httpx.Request(method, f"http://127.0.0.1{path}", headers=headers, content=body)
+            response = node.handle(request)
+            return response.status_code, "application/json", response.content
+
+        def proxy_app(method: str, path: str, headers: Dict[str, str], body: bytes) -> Tuple[int, str, bytes]:
+            lowered = {name.lower(): value for name, value in headers.items()}
+            proxied.append(f"{method} {path} {lowered.get('authorization')}")
+            return 502, "application/json", b'{"error":"proxied"}'
+
+        with _serve(node_app) as node_port, _serve(proxy_app) as proxy_port:
+            proxy_url = f"http://127.0.0.1:{proxy_port}"
+            for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+                monkeypatch.setenv(name, proxy_url)
+            monkeypatch.setenv("NO_PROXY", "")
+            monkeypatch.setenv("no_proxy", "")
+            node_url = f"http://127.0.0.1:{node_port}"
+
+            # Control: an ordinary httpx client in this environment is proxied.
+            with httpx.Client() as ordinary:
+                ordinary.get(f"{node_url}/v1/data/manifest")
+            assert len(proxied) == 1
+            proxied.clear()
+
+            at = AgentTool(api_key=PROJECT_KEY, base_url=HOSTED, data_node_url=node_url, data_node_token=NODE_TOKEN)
+            headers = dict(at._http.headers)
+            at._http.close()
+            at._http = httpx.Client(transport=httpx.MockTransport(HostedFake().handle), headers=headers)
+            result = at.exit_door.export(collection_id="agenttool-exit", stores=["memories", "vault_index"])
+            assert result["manifest"]["overall"] == "complete"
+            assert at.exit_door.verify(result["manifest_record_id"])["verified"] is True
+
+        assert proxied == []
+        assert any(call["path"] == "/v1/data/collect" for call in node.calls)
+        assert all(call["authorization"] == f"Bearer {NODE_TOKEN}" for call in node.calls
+                   if call["path"] != "/v1/data/manifest")
 
 
 class TestThoughtsWalk:

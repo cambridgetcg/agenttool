@@ -958,6 +958,16 @@ def test_exit_door_deliberately_keeps_only_code_status_retry_after() -> None:
     with at:
         data = at.data
         data._http = httpx.Client(transport=httpx.MockTransport(_handler))
+        # A loopback node is reached through the exit door's own direct client.
+        real_open = at._open_direct_data
+
+        def open_direct() -> Any:
+            direct = real_open()
+            direct._http.close()
+            direct._http = httpx.Client(transport=httpx.MockTransport(_handler), trust_env=False)
+            return direct
+
+        at._open_direct_data = open_direct  # type: ignore[method-assign]
         plan = at.exit_door.plan(stores=["memories"])
         assert plan["stores"][0]["status"] == "failed"
         assert plan["stores"][0]["reason"] == "signing_key_not_found"

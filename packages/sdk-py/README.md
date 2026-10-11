@@ -681,7 +681,10 @@ says so.
 
 Every guard runs before the first write: the node manifest must report
 `agent-data/v1` with the `text` collector and list the target collection, the
-node URL must be loopback unless `allow_remote_node=True`, and (in direct
+node URL must be loopback unless `allow_remote_node=True` (a loopback node is
+always reached through a client that ignores `HTTP_PROXY`, `HTTPS_PROXY`, and
+`ALL_PROXY`, so a proxy never sees the node bearer or the exported records; a
+remote node uses `at.data` and its environment), and (in direct
 `api_key` mode) a node token equal to the project API key is refused with
 `data_node_token_reuses_project_bearer`. A caller-owned `transport=` keeps the
 key out of the SDK, so that comparison cannot run there. A failure that comes

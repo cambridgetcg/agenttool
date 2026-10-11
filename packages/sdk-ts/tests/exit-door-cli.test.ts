@@ -10,6 +10,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Agent as DirectAgent, fetch as directFetch } from "undici/index.js";
+
 import { DataNode, serveDataNode } from "../../data/src/index.js";
 import { runExitDoorCli, type ExitDoorCliIo } from "../src/cli/_exit-door-cli.js";
 import { createHostedFake } from "./_exit-door-fixture.js";
@@ -194,6 +196,64 @@ describe("agenttool-exit-door end to end", () => {
     ], { stdin: PROJECT_KEY });
     expect(planned.code).toBe(3);
     expect(JSON.parse(planned.stdout).stores[0].reason).toBe("host_has_no_cursor");
+  }, 30_000);
+
+  test("a loopback node is reached directly even with proxy variables set", async () => {
+    // Bun keeps a proxy once a process has seen one, so this runs in the
+    // spawned bin, never in the test process itself.
+    const s = await servers(true);
+    const proxied: string[] = [];
+    const forwarder = new DirectAgent({});
+    cleanups.push(() => forwarder.close());
+    const proxy = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        proxied.push(`${request.method} ${request.url} ${request.headers.get("authorization")}`);
+        // Forward over a direct connection so proxied hosted reads still succeed.
+        const headers = new Headers(request.headers);
+        for (const name of ["host", "connection", "proxy-connection", "keep-alive"]) headers.delete(name);
+        const upstream = await directFetch(request.url, { method: request.method, headers, dispatcher: forwarder });
+        return new Response(await upstream.arrayBuffer(), {
+          status: upstream.status,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    cleanups.push(() => proxy.stop(true));
+    const proxyUrl = `http://127.0.0.1:${proxy.port}`;
+    const env = {
+      EXIT_HOSTED_TOKEN: PROJECT_KEY,
+      EXIT_NODE_TOKEN: NODE_TOKEN,
+      HTTP_PROXY: proxyUrl, http_proxy: proxyUrl,
+      HTTPS_PROXY: proxyUrl, https_proxy: proxyUrl,
+      ALL_PROXY: proxyUrl, all_proxy: proxyUrl,
+      NO_PROXY: "", no_proxy: "",
+    };
+    const exported = await runBin([
+      "export",
+      "--hosted-url", s.hostedUrl,
+      "--hosted-token-env", "EXIT_HOSTED_TOKEN",
+      "--node-url", s.nodeUrl,
+      "--node-token-env", "EXIT_NODE_TOKEN",
+      "--collection", "agenttool-exit",
+      "--stores", "memories,vault_index",
+    ], { env });
+    expect(exported.code).toBe(0);
+    const { manifest_record_id } = JSON.parse(exported.stdout) as { manifest_record_id: string };
+    const verified = await runBin([
+      "verify",
+      "--manifest", manifest_record_id,
+      "--node-url", s.nodeUrl,
+      "--node-token-env", "EXIT_NODE_TOKEN",
+    ], { env });
+    expect(verified.code).toBe(0);
+
+    // Control: the variables were live in the child (hosted reads used them).
+    expect(proxied.some((line) => line.includes(new URL(s.hostedUrl).host))).toBe(true);
+    // The node origin, its bearer, and the exported records never did.
+    expect(proxied.filter((line) => line.includes(new URL(s.nodeUrl).host))).toEqual([]);
+    expect(proxied.join("\n")).not.toContain(NODE_TOKEN);
   }, 30_000);
 
   test("guard refusals exit 1 with only a reduced code on stderr", async () => {

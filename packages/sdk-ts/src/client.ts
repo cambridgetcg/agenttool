@@ -518,6 +518,10 @@ export class AgentTool {
           ? sha256Hex(this.dataNode.token)
           : undefined,
       data: () => this.data,
+      openData: (fetch) => {
+        void this.data; // the same data_node_not_configured refusal
+        return new DataClient(this.dataNode!, { fetch });
+      },
     });
     return this._exitDoor;
   }

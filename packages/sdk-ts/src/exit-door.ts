@@ -36,8 +36,11 @@ import {
   type AgentDataRecordIdentity,
 } from "./_agent-data-id.js";
 import { errorFromResponse, type HttpConfig } from "./_http.js";
+// The explicit package subpath keeps Bun from substituting its global
+// `undici` shim, which honours HTTP(S)_PROXY (as in love-bomb.ts).
+import { Agent as DirectAgent, request as directRequest } from "undici/index.js";
 import { encodePathSegment } from "./_url.js";
-import type { DataClient, DataRecord } from "./data.js";
+import type { DataClient, DataNodeFetch, DataRecord } from "./data.js";
 import { AgentToolError } from "./errors.js";
 
 export const EXIT_ITEM_SCHEMA = "agenttool-exit-item/v1" as const;
@@ -311,6 +314,8 @@ export interface ExitDoorWiring {
   nodeTokenDigest?: string;
   /** Resolves the separately configured data client; throws when absent. */
   data: () => DataClient;
+  /** A fresh client for the same node and bearer over the given fetch. */
+  openData: (fetch: DataNodeFetch) => DataClient;
 }
 
 // ─── Item shaping (shared with the Python twin through vectors) ──────────
@@ -640,7 +645,17 @@ export class ExitDoorClient {
     }
     const selected = selectStores(options.stores);
     const identityId = optionalIdentity(options.identity_id);
-    const target = await this.prepareNode(options.collection_id, options.allow_remote_node === true);
+    return this.withNode(options.allow_remote_node === true, (data) =>
+      this.exportRun(options, selected, identityId, data));
+  }
+
+  private async exportRun(
+    options: ExitExportOptions,
+    selected: ReadonlySet<ExitStore>,
+    identityId: string | null,
+    data: DataClient,
+  ): Promise<ExitExportResult> {
+    const target = await this.prepareNode(data, options.collection_id);
     const origin = this.http.baseUrl;
     const runId = globalThis.crypto.randomUUID();
     const startedAt = new Date().toISOString();
@@ -732,8 +747,7 @@ export class ExitDoorClient {
   }
 
   /** Read-only node checks. Every one passes before the first write. */
-  private async prepareNode(collectionId: string, allowRemote: boolean): Promise<NodeTarget> {
-    const data = this.nodeGuards(allowRemote);
+  private async prepareNode(data: DataClient, collectionId: string): Promise<NodeTarget> {
     const manifest = asObject(await data.manifest());
     if (manifest.protocol !== "agent-data/v1") {
       throw exitError("data_node_protocol_unsupported", "The node does not report agent-data/v1.");
@@ -772,9 +786,32 @@ export class ExitDoorClient {
     };
   }
 
-  /** Configuration, loopback, and bearer-separation guards. No I/O. */
-  private nodeGuards(allowRemote: boolean): DataClient {
-    const data = this.wiring.data();
+  /** Run `work` against the node, then release the node transport. */
+  private async withNode<T>(allowRemote: boolean, work: (data: DataClient) => Promise<T>): Promise<T> {
+    const node = this.openNode(allowRemote);
+    let finished = false;
+    try {
+      const result = await work(node.data);
+      finished = true;
+      return result;
+    } finally {
+      await node.close(finished);
+    }
+  }
+
+  /**
+   * Configuration, loopback, and bearer-separation guards (no I/O), then the
+   * node transport. A loopback node is reached over a dedicated direct
+   * connection that ignores HTTP(S)_PROXY / ALL_PROXY: a proxy would receive
+   * the node bearer and every exported record, and a loopback destination
+   * never needs one. A remote node (only with `allow_remote_node`) uses the
+   * configured `at.data` client and the runtime's own HTTP stack.
+   */
+  private openNode(allowRemote: boolean): {
+    data: DataClient;
+    close: (finished: boolean) => Promise<void>;
+  } {
+    const configured = this.wiring.data();
     const baseUrl = this.wiring.nodeBaseUrl ?? "";
     if (!allowRemote && !isLoopbackUrl(baseUrl)) {
       throw exitError("data_node_not_loopback", "The data node URL is not a loopback address.", {
@@ -792,7 +829,20 @@ export class ExitDoorClient {
         { hint: "Give the node its own bearer; the project key must never reach the node." },
       );
     }
-    return data;
+    if (!isLoopbackUrl(baseUrl)) return { data: configured, close: async () => {} };
+    const dispatcher = new DirectAgent({ connections: 1, pipelining: 1 });
+    const data = this.wiring.openData(directNodeFetch(dispatcher));
+    return {
+      data,
+      close: async (finished) => {
+        try {
+          if (finished) await dispatcher.close();
+          else await dispatcher.destroy();
+        } catch {
+          // Releasing the transport must not replace the run's own outcome.
+        }
+      },
+    };
   }
 
   /** Write one text record; returns false when it was skipped. */
@@ -986,7 +1036,15 @@ export class ExitDoorClient {
     if (typeof manifestRecordId !== "string" || !/^rec_[a-f0-9]{64}$/.test(manifestRecordId)) {
       throw exitError("exit_manifest_id_invalid", "verify() needs a manifest record id (rec_<64 hex>).");
     }
-    const data = this.nodeGuards(options.allow_remote_node === true);
+    return this.withNode(options.allow_remote_node === true, (data) =>
+      this.verifyRun(manifestRecordId, options, data));
+  }
+
+  private async verifyRun(
+    manifestRecordId: string,
+    options: ExitVerifyOptions,
+    data: DataClient,
+  ): Promise<ExitVerifyResult> {
     const result: ExitVerifyResult = {
       schema: EXIT_VERIFY_SCHEMA,
       manifest_record_id: manifestRecordId,
@@ -1521,6 +1579,33 @@ class HostedWalker {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * The `DataClient` fetch for a loopback node: one direct undici dispatcher,
+ * which never consults proxy environment variables. It uses undici's
+ * `request()`, which never follows redirects, rather than undici's
+ * `fetch()`: under Bun 1.3.13 the latter stalled reading response bodies of
+ * about 18 KB. The body is read whole, as `DataClient` reads it anyway.
+ */
+function directNodeFetch(dispatcher: InstanceType<typeof DirectAgent>): DataNodeFetch {
+  return async (url, init) => {
+    const response = await directRequest(url, {
+      method: (init.method ?? "GET") as "GET" | "POST",
+      headers: init.headers as Record<string, string>,
+      ...(typeof init.body === "string" ? { body: init.body } : {}),
+      ...(init.signal ? { signal: init.signal } : {}),
+      dispatcher,
+    });
+    const bytes = await response.body.arrayBuffer();
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(response.headers)) {
+      if (Array.isArray(value)) for (const entry of value) headers.append(name, entry);
+      else if (value !== undefined) headers.append(name, value);
+    }
+    const empty = response.statusCode === 204 || response.statusCode === 205 || response.statusCode === 304;
+    return new Response(empty ? null : bytes, { status: response.statusCode, headers });
+  };
+}
 
 /** A bare dot segment cannot be carried in a path by any encoding. */
 function isAddressable(id: string): boolean {

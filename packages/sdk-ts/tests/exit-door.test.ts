@@ -1,8 +1,10 @@
 /** Exit door unit tests.
  *
- *  Hosted calls go to an in-memory fake of the paged read routes; node calls
- *  go to a REAL `@agenttool/data` node through its in-process fetch handler
- *  (no sockets). The socket-level proof is `exit-door-integration.test.ts`. */
+ *  Hosted calls go to an in-memory fake of the paged read routes. Node calls
+ *  go to a REAL `@agenttool/data` node through its fetch handler, served on a
+ *  loopback port-0 socket because the exporter reaches a loopback node over
+ *  its own direct connection, never through `globalThis.fetch`. The full
+ *  socket-level proof (`serveDataNode`) is `exit-door-integration.test.ts`. */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -22,16 +24,17 @@ import {
 import { createHostedFake, IDENTITY_A, type HostedFakeOptions } from "./_exit-door-fixture.js";
 
 const HOSTED = "https://api.exit-door.test";
-const NODE = "http://127.0.0.1:7799";
 const PROJECT_KEY = "at_project_key_for_tests";
 const NODE_TOKEN = "node_token_for_tests";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 const nodes: DataNode[] = [];
 const roots: string[] = [];
+const servers: Array<{ stop(force?: boolean): unknown }> = [];
 
 afterEach(async () => {
   globalThis.fetch = ORIGINAL_FETCH;
+  for (const server of servers.splice(0)) server.stop(true);
   for (const node of nodes.splice(0)) node.close();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
@@ -73,32 +76,37 @@ async function harness(options: {
   const hosted = createHostedFake({ paged: true, bearer: PROJECT_KEY, maxPage: 2, ...options.hosted });
   const nodeCalls: NodeCall[] = [];
   const intercept: Harness["intercept"] = {};
-  const nodeUrl = options.nodeUrl ?? NODE;
+  const serveNode = async (request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    const text = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
+    nodeCalls.push({
+      method: request.method,
+      path: url.pathname,
+      authorization: request.headers.get("authorization"),
+      ...(text ? { body: JSON.parse(text) } : {}),
+    });
+    // The data handler builds its manifest base URL from the request URL.
+    const real = await handler(new Request(`http://127.0.0.1:7742${url.pathname}${url.search}`, {
+      method: request.method,
+      headers: request.headers,
+      ...(text !== undefined ? { body: text } : {}),
+    }));
+    if (url.pathname === "/v1/data/collect" && intercept.collect && text) {
+      return intercept.collect(JSON.parse(text), real);
+    }
+    return real;
+  };
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: serveNode });
+  servers.push(server);
+  const nodeUrl = options.nodeUrl ?? `http://127.0.0.1:${server.port}`;
   const nodeOrigin = new URL(nodeUrl).origin;
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     const request = new Request(url, init);
     if (url.origin === new URL(HOSTED).origin) return hosted.handle(request);
-    if (url.origin === nodeOrigin) {
-      const text = init?.body !== undefined ? String(init.body) : undefined;
-      nodeCalls.push({
-        method: request.method,
-        path: url.pathname,
-        authorization: request.headers.get("authorization"),
-        ...(text ? { body: JSON.parse(text) } : {}),
-      });
-      // The data handler builds its manifest base URL from the request URL.
-      const real = await handler(new Request(`http://127.0.0.1:7742${url.pathname}${url.search}`, {
-        method: request.method,
-        headers: request.headers,
-        ...(text !== undefined ? { body: text } : {}),
-      }));
-      if (url.pathname === "/v1/data/collect" && intercept.collect && text) {
-        return intercept.collect(JSON.parse(text), real);
-      }
-      return real;
-    }
+    // Only a non-loopback node URL (allow_remote_node) arrives here.
+    if (url.origin === nodeOrigin) return serveNode(request);
     throw new Error(`unexpected origin ${url.origin}`);
   }) as typeof fetch;
 

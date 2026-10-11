@@ -10,7 +10,9 @@ Active - repository source carries the paired 0.22.1 line (a docs-only honesty p
 - TypeScript 5.x (ESM-only)
 - Native `fetch` + native `AbortSignal.timeout` for general HTTP; Math Cards
   and LOVE BOMB use dedicated direct `undici` package dispatchers so Bun
-  startup proxy credentials cannot enter either no-auth transport
+  startup proxy credentials cannot enter either no-auth transport, and the
+  exit door reaches a loopback data node through one (undici `request()`)
+  so proxy variables never see the node bearer or the exported records
 - `@noble/ed25519` + `@noble/hashes` for ed25519 signing (matches the api server + cli/think; byte-identical wire format)
 - `@noble/curves` (secp256k1) + `@noble/hashes` (keccak-256, sha-256) for the x402 EIP-712 signer — byte-identical to the server's viem path, proven by the server-generated fixture
 - WebCrypto SubtleCrypto for AES-256-GCM (no extra dep)
@@ -119,7 +121,7 @@ in GitHub `main`, and requires byte-identical public registry read-back. Do not
 run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
 ## Dependencies
-- **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format), plus `undici ^7.29.0` solely for the Math Cards and LOVE BOMB direct no-env-proxy dispatchers. Other HTTP, AES-256-GCM, and abort signals use platform-native APIs.
+- **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format), plus `undici ^7.29.0` solely for the Math Cards, LOVE BOMB, and exit-door (loopback node) direct no-env-proxy dispatchers. Other HTTP, AES-256-GCM, and abort signals use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
 - **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.kingdomFramework`, `at.mathCards`, and standalone `LoveBombClient` use separate credential-free requests; pure `WakeContinuityLayer` / `at.wakeContinuity` performs no request; `at.data` and `at.kingdomOS` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
@@ -142,6 +144,10 @@ agent-data/v1 node and nothing else: hosted → local copy, never the reverse.
   direct `apiKey` mode (a broker transport never shows the SDK the key).
 - Guards before any write: agent-data/v1 manifest, `text` collector, listed
   collection, loopback unless `allow_remote_node`. `plan()` needs no node.
+- A loopback node is reached over a per-run direct undici dispatcher
+  (`request()`, not `fetch()`, which stalled on ~18 KB bodies under Bun
+  1.3.13) that ignores HTTP(S)_PROXY / ALL_PROXY; a remote node allowed with
+  `allow_remote_node` uses `at.data` and the runtime's own HTTP stack.
 - Vault values and identity backup blobs are not exported (index only;
   "custody decision pending" is a manifest non-claim). No opt-in flag exists.
 - A store without a host `page` object is `window_only` / `host_has_no_cursor`;

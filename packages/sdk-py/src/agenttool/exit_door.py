@@ -400,6 +400,7 @@ class ExitDoorClient:
         node_base_url: Optional[str],
         node_token_digest: Optional[str],
         data: Callable[[], DataClient],
+        open_data: Callable[[], DataClient],
     ) -> None:
         self._http = http
         self._base_url = base_url.rstrip("/")
@@ -410,6 +411,7 @@ class ExitDoorClient:
         self._node_base_url = node_base_url
         self._node_token_digest = node_token_digest
         self._data = data
+        self._open_data = open_data
 
     def plan(
         self,
@@ -525,7 +527,20 @@ class ExitDoorClient:
             )
         selected = _select_stores(stores)
         identity = _optional_identity(identity_id)
-        target = self._prepare_node(collection_id, allow_remote_node is True)
+        return self._with_node(
+            allow_remote_node is True,
+            lambda data: self._export_run(data, collection_id, selected, identity, on_progress),
+        )
+
+    def _export_run(
+        self,
+        data: DataClient,
+        collection_id: str,
+        selected: Set[str],
+        identity: Optional[str],
+        on_progress: Optional[ProgressCallback],
+    ) -> Dict[str, Any]:
+        target = self._prepare_node(data, collection_id)
         origin = self._base_url
         run_id = str(uuid.uuid4())
         started_at = _now()
@@ -619,8 +634,7 @@ class ExitDoorClient:
         }, "exit_manifest_too_large")
         return {"manifest_record_id": manifest_record_id, "manifest": manifest, "item_skips": item_skips}
 
-    def _prepare_node(self, collection_id: str, allow_remote: bool) -> _NodeTarget:
-        data = self._node_guards(allow_remote)
+    def _prepare_node(self, data: DataClient, collection_id: str) -> _NodeTarget:
         manifest = _obj(data.manifest())
         if manifest.get("protocol") != "agent-data/v1":
             raise _exit_error("data_node_protocol_unsupported", "The node does not report agent-data/v1.")
@@ -668,7 +682,24 @@ class ExitDoorClient:
             max_record_bytes=node_record_limit if policy_limit is None else min(policy_limit, node_record_limit),
         )
 
-    def _node_guards(self, allow_remote: bool) -> DataClient:
+    def _with_node(self, allow_remote: bool, work: Callable[[DataClient], Dict[str, Any]]) -> Dict[str, Any]:
+        """Run ``work`` against the node, then release a client opened for it."""
+        data, owned = self._open_node(allow_remote)
+        try:
+            return work(data)
+        finally:
+            if owned:
+                data._close()
+
+    def _open_node(self, allow_remote: bool) -> Tuple[DataClient, bool]:
+        """Guards (no I/O), then the node client and whether this run owns it.
+
+        A loopback node is reached through a dedicated client that ignores
+        HTTP(S)_PROXY / ALL_PROXY: a proxy would receive the node bearer and
+        every exported record, and a loopback destination never needs one. A
+        remote node (only with ``allow_remote_node``) uses the configured
+        ``at.data`` client and its environment.
+        """
         data = self._data()
         if not allow_remote and not _is_loopback_url(self._node_base_url or ""):
             raise _exit_error(
@@ -686,7 +717,9 @@ class ExitDoorClient:
                 "The data node token equals the AgentTool project API key.",
                 hint="Give the node its own bearer; the project key must never reach the node.",
             )
-        return data
+        if not _is_loopback_url(self._node_base_url or ""):
+            return data, False
+        return self._open_data(), True
 
     def _write_text(
         self,
@@ -833,7 +866,9 @@ class ExitDoorClient:
     def _verify(self, manifest_record_id: str, allow_remote: bool) -> Dict[str, Any]:
         if not isinstance(manifest_record_id, str) or not _is_record_id(manifest_record_id):
             raise _exit_error("exit_manifest_id_invalid", "verify() needs a manifest record id (rec_<64 hex>).")
-        data = self._node_guards(allow_remote is True)
+        return self._with_node(allow_remote is True, lambda data: self._verify_run(data, manifest_record_id))
+
+    def _verify_run(self, data: DataClient, manifest_record_id: str) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             "schema": EXIT_VERIFY_SCHEMA,
             "manifest_record_id": manifest_record_id,

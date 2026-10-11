@@ -606,7 +606,10 @@ says so.
 Every guard runs before the first write. The node manifest must report
 `agent-data/v1` with the `text` collector, and the target collection must be
 listed. The node URL must be loopback unless you pass
-`allow_remote_node: true`. In direct `apiKey` mode, a node token equal to the
+`allow_remote_node: true`. A loopback node is always reached over a direct
+connection that ignores `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`, so a
+proxy never sees the node bearer or the exported records; a remote node uses
+the runtime's normal HTTP stack, proxy settings included. In direct `apiKey` mode, a node token equal to the
 project API key is refused with `data_node_token_reuses_project_bearer`; a
 broker `transport` keeps the key out of the SDK, so that comparison cannot run
 there. A failure that comes from either server leaves the exit door as `code`,

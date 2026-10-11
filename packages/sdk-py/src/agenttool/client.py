@@ -600,8 +600,24 @@ class AgentTool:
                 node_base_url=self._data_node_url,
                 node_token_digest=_sha256_hex(token) if token else None,
                 data=lambda: self.data,
+                open_data=lambda: self._open_direct_data(),
             )
         return self._exit_door
+
+    def _open_direct_data(self) -> DataClient:
+        """A fresh client for the configured node that ignores proxy env.
+
+        Used only by the exit door for a loopback node, which closes it after
+        the run.
+        """
+        configured = self.data  # the same data_node_not_configured refusal
+        del configured
+        return DataClient(
+            self._data_node_url or "",
+            token=self._data_node_token,
+            timeout=self._data_node_timeout,
+            _direct=True,
+        )
 
     @property
     def dining(self) -> DiningClient:

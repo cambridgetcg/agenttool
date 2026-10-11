@@ -132,6 +132,9 @@ local agent-data copy only, GET-only hosted reads (`follow_redirects=False`;
 never `GET /v1/memories/{id}`, never search), node writes only through
 `DataClient` with the `text` collector, all node guards before the first
 write, a node token equal to the project key refused (digests only are kept),
+a loopback node reached through a separate `DataClient(_direct=True)`
+(`trust_env=False`, closed after the run) so proxy variables never see the
+node bearer or records,
 vault values and backup blobs never exported (index only, custody decision
 pending), `window_only` / `host_has_no_cursor` for a host without `page`
 objects, and errors reduced to `code`/`status`/`retry_after`. Both SDKs write

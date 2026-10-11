@@ -936,12 +936,22 @@ describe("guidance deliberately does not survive five surfaces", () => {
   });
 
   test("the exit door keeps only code, status, and retryAfter from either authority", async () => {
-    // Hosted reads (the guided transport) and node reads (the stubbed fetch)
-    // both answer with the guided 400. sdk-py's exit door makes the same cut.
-    stubFetch(guidedResponse);
+    // Hosted reads (the guided transport) and node reads both answer with the
+    // guided 400. The exit door reaches a loopback node over its own direct
+    // connection, so the node is a real loopback socket rather than a stubbed
+    // fetch. sdk-py's exit door makes the same cut.
+    const node = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => guidedResponse() });
     const at = guidedClient({
-      dataNode: { baseUrl: "http://127.0.0.1:8787", token: "node-token" },
+      dataNode: { baseUrl: `http://127.0.0.1:${node.port}`, token: "node-token" },
     });
+    try {
+      await exitDoorReducesBoth(at);
+    } finally {
+      node.stop(true);
+    }
+  });
+
+  async function exitDoorReducesBoth(at: AgentTool): Promise<void> {
     const plan = await at.exitDoor.plan({ stores: ["memories"] });
     expect(plan.stores[0]).toMatchObject({
       store: "memories",
@@ -963,7 +973,7 @@ describe("guidance deliberately does not survive five surfaces", () => {
       expect(err.next_actions).toBeUndefined();
       expect(err.hint).toBeUndefined();
     }
-  });
+  }
 
   test("darkContinent.explore raises nothing at all", async () => {
     // Public discovery carries no hosted API authority, and an unmapped edge
