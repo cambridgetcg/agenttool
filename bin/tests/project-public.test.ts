@@ -781,13 +781,24 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
   });
 });
 
-describe("the real wave-1 allowlist and overlay", () => {
+describe("the real allowlist and overlay", () => {
   const allowlist = parseAllowlist(readFileSync(join(ROOT, ALLOWLIST_PATH)));
-  const packages = allowlist.include.filter((entry) => entry.kind === "tree").map((entry) => entry.path.slice("packages/".length));
+  const packages = allowlist.include
+    .filter((entry) => entry.kind === "tree" && entry.path.startsWith("packages/"))
+    .map((entry) => entry.path.slice("packages/".length));
   const ci = readFileSync(join(ROOT, "public/overlay/.github/workflows/ci.yml"), "utf8");
 
-  test("holds the 33 wave-1 packages, the seven closure files, and no held package", () => {
-    expect(packages).toHaveLength(33);
+  test("holds all 39 npm packages, the Python SDK, the local MCP helper, and their closure files", () => {
+    expect(packages).toHaveLength(41);
+    const npmPackages = packages.filter((dir) => dir !== "sdk-py" && dir !== "local-starter-mcp");
+    expect(npmPackages).toHaveLength(39);
+    for (const dir of ["love-bomb", "sdk-ts", "sdk-py", "dark-continent-contract", "dark-continent-karma", "wallet", "local-starter", "local-starter-mcp"]) {
+      expect(packages).toContain(dir);
+    }
+    expect(allowlist.held).toEqual([]);
+    expect(allowlist.include.filter((entry) => entry.kind === "tree" && !entry.path.startsWith("packages/")).map((entry) => entry.path)).toEqual([
+      "review/provider-adapters/v1",
+    ]);
     expect(allowlist.include.filter((entry) => entry.kind === "blob").map((entry) => entry.path)).toEqual([
       ".gitattributes",
       "docs/DATASET-INFLUENCE.md",
@@ -795,29 +806,43 @@ describe("the real wave-1 allowlist and overlay", () => {
       "docs/XENIA-LOOP-ATLAS.md",
       "docs/specs/AGENT-WALLET-ZERONE-0.1.md",
       "docs/specs/adds-0.1-vectors.json",
+      "docs/specs/agent-correspondence-0.1-vectors.json",
       "docs/specs/agenttool-isness-v0.1.schema.json",
+      "docs/specs/agenttool-love-bomb-0.1.json",
+      "docs/specs/behaviour-conformance.json",
+      "docs/specs/canonical-bytes-vectors.json",
     ]);
-    for (const held of ["love-bomb", "sdk-ts", "sdk-py", "dark-continent-contract", "dark-continent-karma", "wallet", "local-starter", "local-starter-mcp"]) {
-      expect(packages).not.toContain(held);
-      expect(allowlist.held.map((entry) => entry.path)).toContain(`packages/${held}`);
-    }
+    // The older sdist-only SOUL letter stays private; the wheel's copy is projected.
+    expect(allowlist.exclude).toContain("packages/sdk-py/SOUL.md");
+    // The root bin/ Whitehack adapter that a wallet test can use stays private.
+    expect(allowlist.include.some((entry) => entry.path.startsWith("bin/"))).toBe(false);
     expect(allowlist.include.some((entry) => DENYLIST_PATH.startsWith(entry.path))).toBe(false);
   });
 
-  test("the overlay LICENSE is a byte copy and the README lists every package with its npm name", () => {
+  test("the overlay LICENSE is a byte copy and the README lists every package with its registry name", () => {
     expect(readFileSync(join(ROOT, "public/overlay/LICENSE"))).toEqual(readFileSync(join(ROOT, "LICENSE")));
     const readme = readFileSync(join(ROOT, "public/overlay/README.md"), "utf8");
-    const rows = [...readme.matchAll(/^\| \[`packages\/([^`]+)`\]\(packages\/\1\) \| `([^`]+)` \|$/gmu)].map((match) => [match[1], match[2]]);
+    const rows = [...readme.matchAll(/^\| \[`packages\/([^`]+)`\]\(packages\/\1\) \| `([^`]+)` \| ([^|]+) \|$/gmu)].map((match) => [match[1], match[2], match[3]]);
     expect(rows.map(([dir]) => dir)).toEqual(packages);
-    for (const [dir, name] of rows) {
-      expect(JSON.parse(readFileSync(join(ROOT, "packages", dir as string, "package.json"), "utf8")).name).toBe(name);
+    for (const [dir, name, registry] of rows) {
+      if (dir === "sdk-py") {
+        expect(readFileSync(join(ROOT, "packages/sdk-py/pyproject.toml"), "utf8")).toContain(`name = "${name}"`);
+        expect(registry).toBe("PyPI");
+        continue;
+      }
+      const manifest = JSON.parse(readFileSync(join(ROOT, "packages", dir as string, "package.json"), "utf8"));
+      expect(manifest.name).toBe(name);
+      if (manifest.private === true) expect(registry).toStartWith("unpublished");
     }
   });
 
   test("the public CI gates exactly the allowlisted packages with pinned tools and actions", () => {
     const gated = [...ci.matchAll(/^ {8}working-directory: packages\/([a-z0-9-]+)\n {8}run: bun run ci/gmu)].map((match) => match[1]);
-    expect([...gated].sort()).toEqual([...packages].sort());
+    expect([...gated].sort()).toEqual(packages.filter((dir) => dir !== "sdk-py").sort());
     expect(new Set(gated).size).toBe(gated.length);
+    // The Python SDK has its own job: install, pytest, and a wheel smoke.
+    expect(ci).toMatch(/^ {8}working-directory: packages\/sdk-py$/mu);
+    expect(ci).toContain("run: python -m pytest -q");
     const bunPins = [...ci.matchAll(/bun-version:\s*(\S+)/gu)].map((match) => match[1]);
     expect(bunPins.length).toBeGreaterThan(0);
     expect(new Set(bunPins)).toEqual(new Set(["1.3.5"]));
@@ -825,13 +850,13 @@ describe("the real wave-1 allowlist and overlay", () => {
     for (const match of ci.matchAll(/uses:\s*(\S+)/gu)) expect(match[1]).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/u);
     expect(ci).toContain("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb");
     expect(ci).not.toContain("apps/docs");
-    expect(ci).not.toMatch(/packages\/(?:sdk-ts|sdk-py|wallet|love-bomb|local-starter|dark-continent-[a-z]+)(?![\w-])/u);
+    expect(ci).not.toMatch(/(?:^|[\s"'])bin\//mu);
   });
 
   test("the committed allowlist projects cleanly through every layer except gitleaks", () => {
     const build = buildProjection(ROOT, "HEAD");
     const findings = guardProjection(ROOT, build);
     expect(findings.map(formatFinding)).toEqual([]);
-    expect(build.projection.paths).toHaveLength(40);
+    expect(build.projection.paths).toHaveLength(53);
   }, 120_000);
 });
