@@ -142,7 +142,9 @@ if (economyConfig.allowUnreconciledSolanaDeposits) {
 
 // Deposit-webhook posture warning. Boot loudly if a provider secret is unset
 // while unsigned webhooks are NOT explicitly allowed — those chains' webhooks
-// will (correctly) reject, so real deposits pause until the secret is set. The
+// will (correctly) reject. Setting a secret restores signature verification
+// only: deposit-address disclosure is resting and credit has further
+// conditions (see errors.webhookSecretUnset). The
 // dangerous inverse — unset secret WITH unsigned allowed — mints on forged
 // payloads, so shout about it too.
 {
@@ -168,7 +170,7 @@ if (economyConfig.allowUnreconciledSolanaDeposits) {
     console.warn(
       `[economyConfig] deposit webhooks will REJECT for: ${missing.join(", ")} — ` +
         "secret unset and unsigned webhooks are not allowed (fail-closed, correct for prod). " +
-        "Set the secret to resume deposits on that chain.",
+        "Setting the secret restores signature verification only; deposit-address disclosure is resting and credit has further conditions.",
     );
   } else if (missing.length && unsignedAllowed) {
     console.warn(

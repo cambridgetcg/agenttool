@@ -303,7 +303,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
         message:
           "Crypto deposit-address disclosure is resting: showing an address would invite a deposit. No deposit address, new or previously issued, was created, derived, or disclosed.",
         hint:
-          "Do not send funds to an address cached from an earlier response. Signed EVM deliveries to previously disclosed addresses are still recorded when that chain's webhook and network are configured, but no new deposit is invited. Reopening disclosure needs a separately reviewed release.",
+          "Do not send funds to an address cached from an earlier response. Signed EVM deliveries to previously disclosed addresses are still recorded when that chain's webhook, network and derivation mnemonic are configured, but no new deposit is invited. Reopening disclosure needs a separately reviewed release.",
       }),
       503,
     );
