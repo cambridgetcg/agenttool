@@ -1,7 +1,7 @@
 // On the Air: make the summon key (once), build the Nuance binaries, and write the AirDrop bundle
 // ~/summon-nuance-bundle-<expiry>-<build>/ with a checksum-pinned installer.
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { buildNuance, type NuanceBuild } from './build-nuance.ts'
@@ -75,7 +75,8 @@ export function prepareBundle(o: { home: string; build?: () => NuanceBuild; now?
   writePrivate(join(bundle, 'MANIFEST.txt'), `build ${id}\nprepared ${preparedAt}\nsummon-gatekeeper ${built.sha.gatekeeper}\n` +
     `summon-runner ${built.sha.runner}\nkey summon-air expires ${expiry}\n`)
   const older = readdirSync(o.home).filter((n) => n.startsWith('summon-nuance-bundle-') && n !== folder)
-    .map((n) => join(o.home, n)).filter((p) => statSync(p).isDirectory()).sort()
+    // lstat: a link (even a dangling one) is not a bundle folder, and must not stop the ready text from printing.
+    .map((n) => join(o.home, n)).filter((p) => lstatSync(p).isDirectory()).sort()
   return { bundle, command: `bash ~/Downloads/${folder}/summon-install.sh`, pubkey, expiry, buildId: id, preparedAt, sha: built.sha, older }
 }
 

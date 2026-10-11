@@ -37,9 +37,9 @@ and the `summon` link on the Air.
    then asks `sshd -T` what sshd would really use for a LAN login, by Yu's user and by root. Nothing of Summon's (the
    programs, the allowlist, the key line, the runner) is written until that says key logins only, so a refused re-run
    leaves the earlier install as it was. **Whenever it stops before that point, it says what to do about Remote Login:
-   on a first install, turn it off until the problem is fixed** (sshd still takes passwords until then); when an
-   earlier Summon install left both its drop-in and its key line (so its `sshd -T` check passed), it says passwords are
-   still off and Remote Login can stay on.
+   on a first install, turn it off until the problem is fixed** (sshd still takes passwords until then); when the
+   drop-in an earlier run put in place passed its `sshd -T` check (the installer keeps its own record of that,
+   `~/.local/share/summon/keys-only`), it says passwords are still off and Remote Login can stay on.
    Once the new drop-in is in and sshd refuses it, it always says to turn Remote Login off.
    It is safe to run again: it replaces
    its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never empties `runner.log`.
@@ -73,7 +73,7 @@ folder sshd starts the gatekeeper in. The Air's `summon` ignores `.env` files in
 | Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger |
 | Air | `~/.local/bin/summon` | a link to `packages/summon/bin/summon.ts`: the front door |
 | Air | `~/summon-nuance-bundle-<expiry>-<build id>` | one AirDrop bundle per build and expiry: `summon-install.sh`, `summon-gatekeeper`, `summon-runner`, `MANIFEST.txt` |
-| Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner`, and `INSTALLED` (build, prepared, both sha256s and the key expiry: the bundle's `MANIFEST.txt`, written at the end of a successful install) |
+| Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner`, and `INSTALLED` (build, prepared, both sha256s and the key expiry: the bundle's `MANIFEST.txt`, written once the new programs and key line are in place); `keys-only`, the installer's record that its last drop-in passed the `sshd -T` check |
 | Nuance | `~/.local/state/summon/` | spool, jobs, seen ids, ledger, `inventory.json`, `runner.log` |
 | Nuance | `~/.config/summon/allowlist.yaml` | what Summon may do (edited only on Nuance) |
 | Nuance | `~/.ssh/authorized_keys` | one line, the one ending ` summon-air`: `restrict`, `from=` the home LAN, `expiry-time`, `command=` the gatekeeper |

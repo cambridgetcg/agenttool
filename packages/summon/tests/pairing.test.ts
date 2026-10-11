@@ -86,6 +86,7 @@ describe('prepareBundle (the Air side)', () => {
     const a = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-')), now: NOW })
     const b = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-'), ' v2'), now: NOW + DAY })
     writeFileSync(join(home, 'summon-nuance-bundle-notes.txt'), 'a file, not a bundle folder')
+    symlinkSync(join(home, 'no-such-folder'), join(home, 'summon-nuance-bundle-dangling'))   // R4.3: a dangling link
     const c = prepareBundle({ home, build: () => fakeBuild(temp('summon-fb-'), ' v3'), now: NOW + 2 * DAY })
     expect(c.older).toEqual([a.bundle, b.bundle].sort())
     expect(bundleReadyText(c)).toContain(`rm -rf '${[a.bundle, b.bundle].sort().join("' '")}'`)

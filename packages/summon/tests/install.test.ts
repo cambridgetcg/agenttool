@@ -12,6 +12,7 @@ const SHA_A = 'a'.repeat(64)
 const SHA_B = 'b'.repeat(64)
 const RL_OFF = 'Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login.'
 const STILL_OFF = 'SSH passwords are still off from the earlier Summon install; Remote Login can stay on.'
+const KEYS_ONLY_MARK = (root: string) => join(root, '.local/share/summon/keys-only')
 const timesIn = (text: string, part: string) => text.split(part).length - 1
 const shasOf = (dir: string) => ({ gatekeeper: sha(join(dir, 'summon-gatekeeper')), runner: sha(join(dir, 'summon-runner')) })
 
@@ -337,7 +338,7 @@ describe('installer', () => {
     }, 15_000)
   })
 
-  describe('B2: after an earlier Summon install (its drop-in and its key line), a stop before the new drop-in says Remote Login can stay on', () => {
+  describe('B2: after an earlier install whose sshd check passed, a stop before the new drop-in says Remote Login can stay on', () => {
     type Scenario = (root: string, env: Record<string, string>) => ReturnType<typeof run>
     const withStubs = (env: Record<string, string>, extra: Record<string, string> = {}) => {
       const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB, ...extra })
@@ -345,10 +346,16 @@ describe('installer', () => {
     }
     /** An earlier install's drop-in: it exists once that install's `sshd -t` passed (and stays if its `sshd -T` refused). */
     const dropin = () => { const f = join(temp('summon-etc-'), '010-summon.conf'); writeFileSync(f, 'PasswordAuthentication no\n'); return { SUMMON_DROPIN: f } }
-    /** An earlier install's key line: it is written only once that install's `sshd -T` check passed. */
+    /** An earlier install's key line. */
     const keyLine = (root: string) => {
       mkdirSync(join(root, '.ssh'), { recursive: true, mode: 0o700 })
       writeFileSync(AK(root), `restrict,from="192.168.50.0/24",expiry-time="${EXPIRY}",command="${root}/.local/share/summon/summon-gatekeeper" ${PUB}\n`)
+    }
+    /** What an earlier run leaves once its sshd -T check passed: the key line, and the installer's own keys-only marker. */
+    const earlierInstall = (root: string) => {
+      keyLine(root)
+      mkdirSync(join(root, '.local/share/summon'), { recursive: true, mode: 0o700 })
+      writeFileSync(KEYS_ONLY_MARK(root), '', { mode: 0o600 })
     }
     const before: Record<string, Scenario> = {
       'a checksum mismatch': (root, env) => { const b = bundle(root); writeFileSync(join(b.dir, 'summon-runner'), 'tampered'); return run(b.dir, root, withStubs(env).env) },
@@ -372,19 +379,42 @@ describe('installer', () => {
     }
     for (const [name, go] of Object.entries(before)) {
       test(name, () => {
-        const root = temp('summon-root-'); keyLine(root)
+        const root = temp('summon-root-'); earlierInstall(root)
         expect(lines(go(root, dropin()))).toEqual([1, 0])
       })
-      test(`but with the drop-in and no summon key line (an earlier sshd -T refused), it says to turn Remote Login off: ${name}`, () => {
-        expect(lines(go(temp('summon-root-'), dropin()))).toEqual([0, 1])
+      test(`but with the drop-in and key line and no keys-only marker (an earlier sshd -T refused), it says to turn Remote Login off: ${name}`, () => {
+        const root = temp('summon-root-'); keyLine(root)
+        expect(lines(go(root, dropin()))).toEqual([0, 1])
       })
     }
-    test('an older bundle, after a full earlier install', () => {
-      const root = temp('summon-root-')
-      expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root).exitCode).toBe(0)
-      expect(readFileSync(AK(root), 'utf8')).toContain(' summon-air\n')
-      expect(lines(run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, withStubs(dropin()).env))).toEqual([1, 0])
+    test('but with the marker and no drop-in (it was rolled back), it says to turn Remote Login off', () => {
+      const root = temp('summon-root-'); earlierInstall(root)
+      expect(lines(before['a running job']!(root, {}))).toEqual([0, 1])
     })
+    test('an older bundle, after a full earlier install, which wrote the marker 0600', () => {
+      const root = temp('summon-root-'); const d = dropin()
+      expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root, withStubs(d).env).exitCode).toBe(0)
+      expect(mode(KEYS_ONLY_MARK(root))).toBe(0o600)
+      expect(lines(run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, withStubs(d).env))).toEqual([1, 0])
+    })
+    for (const [name, refuse] of [
+      ['sshd -T then showing passwords on', (w: ReturnType<typeof withStubs>) => writeFileSync(w.s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' }))],
+      ['sshd -t then rejecting the new drop-in', (w: ReturnType<typeof withStubs>) => writeFileSync(w.s.env.STUB_FAIL_SSHD!, '')],
+    ] as const) {
+      test(`R4.1 three runs: success, a re-run refused by ${name}, then an early stop says to turn Remote Login off`, () => {
+        const root = temp('summon-root-'); const d = dropin()
+        expect(run(bundle(root, { prepared: stampOf(Date.now() - 120_000) }).dir, root, withStubs(d).env).exitCode).toBe(0)
+        expect(existsSync(KEYS_ONLY_MARK(root))).toBe(true)
+        const second = withStubs(d); refuse(second)
+        const r2 = run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, second.env)
+        expect(lines(r2)).toEqual([0, 1])
+        expect(existsSync(KEYS_ONLY_MARK(root))).toBe(false)
+        // The earlier drop-in file and key line are still there; only the installer's own marker says what was confirmed.
+        expect(readFileSync(AK(root), 'utf8')).toContain(' summon-air\n')
+        const third = withStubs(d); writeFileSync(third.s.env.STUB_FAIL_SUDO, '')
+        expect(lines(run(bundle(root).dir, root, third.env))).toEqual([0, 1])
+      })
+    }
     // Once this run has put its own drop-in in place, the earlier one is gone: replaced, or removed when sshd rejects it.
     const after: Record<string, Scenario> = {
       'sshd -t rejecting the new drop-in (which is then removed)': (root, env) => {
@@ -396,7 +426,7 @@ describe('installer', () => {
     }
     for (const [name, go] of Object.entries(after)) {
       test(`but after the new drop-in went in, it says to turn Remote Login off: ${name}`, () => {
-        const root = temp('summon-root-'); keyLine(root)
+        const root = temp('summon-root-'); earlierInstall(root)
         expect(lines(go(root, dropin()))).toEqual([0, 1])
       })
     }
@@ -424,13 +454,20 @@ describe('installer', () => {
       expect({ installed: readFileSync(INSTALLED(root), 'utf8'), ak: readFileSync(AK(root), 'utf8'),
         gatekeeper: readFileSync(join(root, '.local/share/summon/summon-gatekeeper'), 'utf8') }).toEqual(before)
     })
-    test('INSTALLED is written only once the install succeeded: not when the runner did not load', () => {
-      const { dir, root } = bundle()
+    test('R4.2: INSTALLED is written with the key line, so after a run whose runner did not load an older bundle is still refused', () => {
+      const root = temp('summon-root-')
       const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB })
       writeFileSync(s.env.STUB_BOOTSTRAP_FAILS, '2')
-      expect(run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO }).exitCode).toBe(1)
-      expect(existsSync(INSTALLED(root))).toBe(false)
-      expect(existsSync(join(root, '.local/share/summon/summon-gatekeeper'))).toBe(true)
+      const env = { ...s.env, PATH: s.path, ...WITH_SUDO }
+      const prepared = stampOf(Date.now())
+      const newer = bundle(root, { build: 'v2', prepared })
+      expect(run(newer.dir, root, env).exitCode).toBe(1)
+      expect(readFileSync(INSTALLED(root), 'utf8')).toContain(`prepared ${prepared}\n`)
+      expect(mode(INSTALLED(root))).toBe(0o600)
+      const r = run(bundle(root, { build: 'v1', prepared: stampOf(Date.now() - 3_600_000) }).dir, root, env)
+      expect(r.exitCode).toBe(1)
+      expect(r.stdout.toString()).toContain('✗ this installer is older than what is installed (this bundle was prepared')
+      expect(readFileSync(join(root, '.local/share/summon/summon-gatekeeper'), 'utf8')).toContain('v2')
     }, 15_000)
   })
 
@@ -576,7 +613,7 @@ describe('installer', () => {
     const r = run(dir, root, { ...s.env, PATH: s.path, ...WITH_SUDO })
     expect(r.exitCode).not.toBe(0)
     const said = r.stdout.toString()
-    expect(said).toContain('sshd rejected the change')
+    expect(said).toContain("✗ sshd rejected the change — removed this install's drop-in (password logins may be on again).")
     expect(said).toContain(RL_OFF)
     expect(calls(s).slice(3)).toEqual(['sudo /usr/sbin/sshd -t', `sudo rm -f ${envFor(root).SUMMON_DROPIN}`])
     expect(existsSync(AK(root))).toBe(false)

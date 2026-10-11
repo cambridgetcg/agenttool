@@ -27,18 +27,21 @@ SHARE="$ROOT/.local/share/summon"; STATE="$ROOT/.local/state/summon"; CONF="$ROO
 NOTHING_DONE="  No summon key line was written and the runner was not loaded. Tell Ai."
 
 # Remote Login is on before this runs, and until sshd is confirmed to take keys only it may let passwords in from the LAN.
-# So every stop before that says, once, what to do about Remote Login. After an earlier Summon install, both its drop-in
-# and its key line are in place (the key line is written only once sshd -T confirmed key logins only), so passwords are
-# still off and it can stay on, until this run puts its own drop-in in place. Otherwise: turn it off until this is fixed.
+# So every stop before that says, once, what to do about Remote Login. $SHARE/keys-only is this installer's own record
+# that the last drop-in it put in place passed the sshd -T check: written then, and removed by any run that puts a drop-in
+# in place without that check passing (or has sshd reject it). With it and the drop-in there, passwords are still off and
+# Remote Login can stay on, until this run puts its own drop-in in place. Otherwise: turn it off until this is fixed.
 # A stop with no message of its own is named as one.
+KEYS_ONLY_MARK="$SHARE/keys-only"
 TMP=""; EXPLAINED=0; KEYS_ONLY=0; REMOTE_LOGIN_ADVICE=1; DROPIN_PLACED=0
 finish() {
   local code=$?
   [ -z "$TMP" ] || rm -f "$TMP"
+  if [ "$DROPIN_PLACED" = 1 ] && [ "$KEYS_ONLY" != 1 ]; then rm -f "$KEYS_ONLY_MARK"; fi
   [ "$code" != 0 ] || return 0
   [ "$EXPLAINED" = 1 ] || echo "✗ the installer stopped unexpectedly (exit $code); nothing after the last ✓ line was done. Tell Ai."
   if [ "$KEYS_ONLY" != 1 ] && [ "$REMOTE_LOGIN_ADVICE" = 1 ]; then
-    if [ "$DROPIN_PLACED" = 0 ] && [ -e "$DROPIN" ] && grep -q ' summon-air$' "$AK" 2>/dev/null; then
+    if [ "$DROPIN_PLACED" = 0 ] && [ -e "$DROPIN" ] && [ -e "$KEYS_ONLY_MARK" ]; then
       echo "  SSH passwords are still off from the earlier Summon install; Remote Login can stay on."
     else
       echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."
@@ -159,7 +162,7 @@ if [ "$SKIP_SUDO" != 1 ]; then
   # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
   if ! sudo /usr/sbin/sshd -t; then
     sudo rm -f "$DROPIN"
-    stop "✗ sshd rejected the change — removed it, so sshd is as it was (password logins on)." "$NOTHING_DONE"
+    stop "✗ sshd rejected the change — removed this install's drop-in (password logins may be on again)." "$NOTHING_DONE"
   fi
   # A valid file is not an effective one: an earlier line, an earlier-sorting drop-in or a Match block can still win.
   # So ask sshd what it would use for a login from the LAN, by this user and then by root. It is asked by address,
@@ -198,7 +201,9 @@ fi
 # ── Install. ──
 mkdir -p "$SHARE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh" "$ROOT/Library/LaunchAgents"
 chmod 700 "$SHARE" "$STATE" "$STATE/spool" "$STATE/jobs" "$STATE/seen" "$CONF" "$ROOT/.ssh"
-rm -f "$SHARE/INSTALLED"   # the programs change now: written again only at the end of a successful install
+rm -f "$SHARE/INSTALLED"   # the programs change now: written again once the new programs and key line are in place
+# sshd -T confirmed key logins only for the drop-in this run put in place (see finish).
+if [ "$KEYS_ONLY" = 1 ]; then : > "$KEYS_ONLY_MARK"; chmod 600 "$KEYS_ONLY_MARK"; fi
 for b in summon-gatekeeper summon-runner; do
   install -m 700 "$HERE/$b" "$SHARE/$b"
   xattr -d com.apple.quarantine "$SHARE/$b" 2>/dev/null || true
@@ -237,6 +242,11 @@ grep -v ' summon-air$' "$AK" > "$AK.summon-tmp" || [ $? -eq 1 ] || { rm -f "$AK.
 printf '%s\n' "$LINE" >> "$AK.summon-tmp"
 mv "$AK.summon-tmp" "$AK"; chmod 600 "$AK"
 echo "✓ authorized_keys: one restricted summon line (other lines untouched; expires $EXPIRY)"
+# The new programs and key line are in place: record them (the same lines as the bundle's MANIFEST.txt, so the two can be
+# compared, and a later bundle can tell whether it is newer), whether or not the runner then loads.
+printf 'build %s\nprepared %s\nsummon-gatekeeper %s\nsummon-runner %s\nkey summon-air expires %s\n' \
+  "$BUILD_ID" "$PREPARED_AT" "$SHA_GATEKEEPER" "$SHA_RUNNER" "$EXPIRY" > "$SHARE/INSTALLED"
+chmod 600 "$SHARE/INSTALLED"
 
 PLIST="$ROOT/Library/LaunchAgents/dev.summon.runner.plist"
 # launchd would create the log with default modes, so make it first (touch keeps what an earlier run wrote).
@@ -283,12 +293,6 @@ if [ "$SKIP_LAUNCHCTL" != 1 ]; then
     fi
     echo "  The key line was already updated (expires $EXPIRY). Run this installer again, or log out and in. Tell Ai."
   fi
-fi
-if [ "$RUNNER_LOADED" = 1 ]; then
-  # The same lines as the bundle's MANIFEST.txt, so the two can be compared, and a later bundle can tell it is newer.
-  printf 'build %s\nprepared %s\nsummon-gatekeeper %s\nsummon-runner %s\nkey summon-air expires %s\n' \
-    "$BUILD_ID" "$PREPARED_AT" "$SHA_GATEKEEPER" "$SHA_RUNNER" "$EXPIRY" > "$SHARE/INSTALLED"
-  chmod 600 "$SHARE/INSTALLED"
 fi
 
 PROBLEMS=""
