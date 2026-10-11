@@ -57,8 +57,10 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   composition rather than modifying a verified server envelope. No excluded body
   may enter stdout merely as part of a retained source envelope.
 - Foundations are optional links; the template lists AI-WAKE only.
-  Do not fetch them or assign a persona, biography, relationship, feeling, or
-  duty to a later session. Retained records are data under current authority.
+  The published `0.1.0-dev.0` archive's template predates that and lists a
+  second link; the README says so. Do not fetch them or assign a persona,
+  biography, relationship, feeling, or duty to a later session. Retained
+  records are data under current authority.
 - The optional identity, preferences, relationships, and memories files start
   literally empty and disabled. Do not substitute a biography or instruction
   template into those empty slots.

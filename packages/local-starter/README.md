@@ -78,7 +78,9 @@ not establish that the host read it.
 There is no force, recursive deletion, home-directory search, or automatic
 import. AI-WAKE appears as an optional source link in `foundations.md`; it is
 not fetched. The templates assign no identity or relationship and supply no
-personal memories.
+personal memories. That describes current source. The published
+`0.1.0-dev.0` archive predates it: its `foundations.md` template also lists
+a second optional source link, which current source no longer includes.
 
 ## Files and selection
 
