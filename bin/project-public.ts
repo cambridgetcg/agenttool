@@ -57,6 +57,7 @@ import {
   PROJECTION_AUTHOR_NAME,
   PROJECTION_FILE,
   PROJECTION_SCHEMA,
+  projectionHistory,
   projectionMessage,
   publicLayerFindings,
   readTree,
@@ -493,11 +494,28 @@ export function publicHead(repo: string, target: OutputTarget): string | undefin
   return head;
 }
 
-function assertProjectionHead(repo: string, head: string): void {
-  const blob = blobAt(repo, head, PROJECTION_FILE);
-  if (blob === undefined) throw new ProjectionRefused(`public head ${head} is not a projection (no ${PROJECTION_FILE}); refusing to build on it`);
-  const record = JSON.parse(decodeText(blob.bytes)) as { schema?: unknown };
-  if (record.schema !== PROJECTION_SCHEMA) throw new ProjectionRefused(`public head ${head} has an unknown ${PROJECTION_FILE} schema`);
+/**
+ * The public head and every commit behind it must be a projection commit
+ * whose tree matches its own PROJECTION.json (the published history check),
+ * and no projected path anywhere in that history may reach a private-only
+ * area or the denylist. Returns the head's PROJECTION.json.
+ */
+export function assertProjectionHistory(repo: string, head: string): Projection {
+  const { commits, findings } = projectionHistory(repo, head);
+  for (const { commit, projection } of commits) {
+    for (const entry of projection?.paths ?? []) {
+      const root = entry.path.split("/")[0] as string;
+      if (PRIVATE_ONLY_ROOTS.includes(root) || isWithin(DENYLIST_PATH, entry.path) || isWithin(entry.path, DENYLIST_PATH)) {
+        findings.push({ layer: "path", rule: "path/private-area", path: `${commit}:${entry.path}` });
+      }
+    }
+  }
+  if (findings.length > 0) {
+    throw new ProjectionRefused(`public head ${head} is not a chain of projection commits; refusing to build on it`, sortFindings(findings));
+  }
+  const projection = commits.find((entry) => entry.commit === head)?.projection;
+  if (projection === undefined) throw new ProjectionRefused(`public head ${head} has no readable ${PROJECTION_FILE}`);
+  return projection;
 }
 
 export function writeOutput(repo: string, target: OutputTarget, commit: string, parent: string | undefined): void {
@@ -558,7 +576,7 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
   if (options.target?.kind === "repo") validateBareRepo(options.target.path);
 
   const parent = options.target === undefined ? undefined : publicHead(repo, options.target);
-  if (parent !== undefined) assertProjectionHead(repo, parent);
+  if (parent !== undefined) assertProjectionHistory(repo, parent);
 
   const build = buildProjection(repo, source);
   const findings = guardProjection(repo, build, { gitleaks: options.gitleaks ?? "gitleaks", parent });

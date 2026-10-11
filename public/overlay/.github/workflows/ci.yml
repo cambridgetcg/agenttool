@@ -48,11 +48,11 @@ jobs:
           echo "GITLEAKS_BIN=$dir/gitleaks" >> "$GITHUB_ENV"
       - name: Guard the committed tree (integrity, paths, secrets, personal data, gitleaks)
         run: bun tools/public-guard.ts --rev HEAD --gitleaks "$GITLEAKS_BIN"
-      - name: Check the projection commit shape and its single parent
+      - name: Check the projection commit shape, its single parent, and every commit behind it
         if: github.event_name == 'push'
         env:
           BEFORE: ${{ github.event.before }}
-        run: bun tools/public-guard.ts --rev HEAD --projection-commit --expect-parent "$BEFORE"
+        run: bun tools/public-guard.ts --rev HEAD --projection-commit --expect-parent "$BEFORE" --history
 
   packages:
     name: Package gates

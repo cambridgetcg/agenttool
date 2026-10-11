@@ -84,11 +84,14 @@ first, then install those two with `--force`.
 
 ```sh
 bun tools/public-guard.ts --rev HEAD
+bun tools/public-guard.ts --rev HEAD --history
 ```
 
-This checks that every path and overlay file listed in `PROJECTION.json`
+The first checks that every path and overlay file listed in `PROJECTION.json`
 matches the committed object, that nothing else is committed, and that no
-file carries a credential signature or personal data. Anyone with access to
+file carries a credential signature or personal data. The second also checks
+that every earlier commit is itself a projection commit that matches its own
+`PROJECTION.json`. Anyone with access to
 the private repository can also compare
 `git rev-parse <source>:<path>` with the `tree` or `blob` recorded for that
 path.

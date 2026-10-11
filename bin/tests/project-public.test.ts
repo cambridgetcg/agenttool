@@ -458,6 +458,7 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     expect(guard("--rev", "HEAD", "--gitleaks", GITLEAKS_BIN).status).toBe(0);
     expect(guard("--rev", "HEAD", "--projection-commit", "--expect-parent", "none").status).toBe(0);
     expect(guard("--rev", "HEAD", "--projection-commit", "--expect-parent", "f".repeat(40)).status).toBe(1);
+    expect(guard("--rev", "HEAD", "--history").status).toBe(0);
 
     write(clone, "packages/alpha/index.ts", "export const alpha = 99;\n");
     write(clone, "stray.txt", "not projected\n");
@@ -466,6 +467,7 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     expect(tampered.status).toBe(1);
     expect(tampered.stdout).toContain("packages/alpha: integrity/object-mismatch");
     expect(tampered.stdout).toContain("stray.txt: path/not-allowlisted");
+    expect(guard("--rev", "HEAD", "--history").stdout).toContain(": integrity/author");
 
     // A fresh private clone lacks the public head's objects; the tool fetches
     // them from the bare repository before building on that head.
@@ -478,13 +480,65 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     expect(next).toMatchObject({ status: "updated", parent: result.commit });
     expect(git(bare, "rev-list", "--count", "main")).toBe("2");
     expect(git(bare, "rev-list", "--parents", "-n", "1", "main").split(" ")).toEqual([next.commit, result.commit]);
+    const chain = join(scratch, `public-chain-${fixtureCount}`);
+    git(scratch, "clone", "-q", bare, chain);
+    const history = spawnSync("bun", [join(chain, "tools/public-guard.ts"), "--rev", "HEAD", "--history"], { cwd: chain, encoding: "utf8", env: cleanEnv() });
+    expect([history.status, history.stdout]).toEqual([0, ""]);
+  });
+
+  test("refuses a public head whose history holds a commit that is not a projection", () => {
+    const repo = makeFixture();
+    const target = { kind: "ref" as const, ref: "refs/public/main" };
+    const refusal = () => {
+      try {
+        projectPublic({ repo, source: "HEAD", target, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN });
+      } catch (error) {
+        expect(error).toBeInstanceOf(ProjectionRefused);
+        return error as ProjectionRefused;
+      }
+      throw new Error("expected a refusal");
+    };
+
+    // A private commit whose tree carries a PROJECTION.json with only the right schema string.
+    const fixtureCommit = git(repo, "rev-parse", "HEAD");
+    write(repo, "PROJECTION.json", `${JSON.stringify({ schema: "agenttool.public-projection/1" })}\n`);
+    const planted = commitAll(repo, "PRIVATE MESSAGE do-not-leak");
+    git(repo, "update-ref", "refs/public/main", planted);
+    expect(refusal().findings.map((finding) => `${finding.path}:${finding.rule}`)).toContain(`${planted}:PROJECTION.json:integrity/invalid-projection`);
+
+    // A genuine projection commit stacked on that private commit: the tip alone
+    // passes every check, but the walk reaches the private parent and its history.
+    git(repo, "rm", "-q", "PROJECTION.json");
+    commitAll(repo, "drop the planted file");
+    const stacked = createProjectionCommit(repo, buildProjection(repo, "HEAD"), planted);
+    git(repo, "update-ref", "refs/public/main", stacked, planted);
+    const findings = refusal().findings;
+    expect(findings.some((finding) => finding.path.startsWith(`${stacked}:`))).toBe(false);
+    expect(findings.map((finding) => `${finding.path}:${finding.rule}`)).toEqual(
+      expect.arrayContaining([`${planted}:PROJECTION.json:integrity/invalid-projection`, `${fixtureCommit}:PROJECTION.json:integrity/missing-projection`]),
+    );
+    expect(git(repo, "rev-parse", "refs/public/main")).toBe(stacked);
+
+    // The published guard: the tip-only shape check passes, --history does not.
+    const bare = join(scratch, `planted-${fixtureCount}.git`);
+    git(scratch, "init", "-q", "--bare", "--initial-branch=main", bare);
+    git(bare, "fetch", "-q", repo, "refs/public/main:refs/heads/main");
+    const clone = join(scratch, `planted-clone-${fixtureCount}`);
+    git(scratch, "clone", "-q", bare, clone);
+    const guard = (...args: string[]) =>
+      spawnSync("bun", [join(clone, "tools/public-guard.ts"), ...args], { cwd: clone, encoding: "utf8", env: cleanEnv() });
+    expect(guard("--rev", "HEAD", "--projection-commit", "--expect-parent", planted).status).toBe(0);
+    const history = guard("--rev", "HEAD", "--history");
+    expect(history.status).toBe(1);
+    expect(history.stdout).toContain(`${planted}:PROJECTION.json: integrity/invalid-projection`);
+    expect(history.stdout).not.toContain("do-not-leak");
   });
 
   test("refuses to build on a head that is not a projection, to write outside refs/public, or an unmerged source", () => {
     const repo = makeFixture();
     git(repo, "update-ref", "refs/public/main", "HEAD");
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
-      "is not a projection",
+      "is not a chain of projection commits",
     );
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/heads/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "--out-ref must start with",

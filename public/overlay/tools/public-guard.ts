@@ -4,6 +4,7 @@
  *
  *   bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>]
  *                             [--projection-commit] [--expect-parent <sha>|none]
+ *                             [--history]
  *
  * It reads the committed tree of <rev> (default HEAD) through Git plumbing,
  * never the working tree, and fails closed:
@@ -17,7 +18,10 @@
  * - secret layer: credential signatures shared with the npm release tool and
  *   the public doors guard, plus gitleaks when a pinned binary is given;
  * - personal layer: home-directory and device paths, email addresses outside
- *   reserved and project domains, and local keychain slot names.
+ *   reserved and project domains, and local keychain slot names;
+ * - history (--history): every ancestor of <rev> is itself a projection
+ *   commit whose tree matches its own PROJECTION.json, so no private commit,
+ *   tree, or message can sit anywhere in the public parent chain.
  *
  * Allowed exceptions live in tools/public-guard-allow.json. Each entry names a
  * path, a rule, the SHA-256 of the whole line (never its text), a reason, and
@@ -495,7 +499,12 @@ export function canonicalProjectionBytes(projection: Projection): string {
   return `${JSON.stringify(projection, null, 2)}\n`;
 }
 
-export function parseProjection(bytes: Uint8Array): Projection {
+/**
+ * Parses PROJECTION.json strictly. `anyGuardVersion` accepts any well-formed
+ * guard record instead of only the current versions, for reading projections
+ * made by earlier guard or gitleaks versions in the history.
+ */
+export function parseProjection(bytes: Uint8Array, options: { anyGuardVersion?: boolean } = {}): Projection {
   const text = decodeText(bytes);
   let parsed: unknown;
   try {
@@ -517,7 +526,12 @@ export function parseProjection(bytes: Uint8Array): Projection {
   if (typeof guard !== "object" || guard === null || Object.keys(guard).join(",") !== "gitleaks,public_guard") {
     fail("guard must have exactly gitleaks and public_guard, in that order");
   }
-  if (guard!.gitleaks !== GITLEAKS_VERSION || guard!.public_guard !== GUARD_VERSION) {
+  if (options.anyGuardVersion) {
+    const versioned = typeof guard!.gitleaks === "string" && /^\d+\.\d+\.\d+$/u.test(guard!.gitleaks);
+    if (!versioned || typeof guard!.public_guard !== "string" || !/^agenttool\.public-guard\/\d+$/u.test(guard!.public_guard)) {
+      fail("guard must record a gitleaks version and an agenttool.public-guard version");
+    }
+  } else if (guard!.gitleaks !== GITLEAKS_VERSION || guard!.public_guard !== GUARD_VERSION) {
     fail(`guard must record gitleaks ${GITLEAKS_VERSION} and ${GUARD_VERSION}`);
   }
   const paths = record.paths;
@@ -724,6 +738,63 @@ export function commitShapeFindings(shape: CommitShape, projection: Projection, 
 }
 
 // ---------------------------------------------------------------------------
+// History: every commit in the parent chain is a projection
+
+export interface HistoryCommit {
+  commit: string;
+  parents: string[];
+  /** Present when the commit carries a well-formed PROJECTION.json. */
+  projection?: Projection;
+}
+
+/**
+ * Walks every commit reachable from `rev` (only its ancestors with
+ * `skipHead`). Each must be a projection commit: strict headers, at most one
+ * parent, the fixed identity and dates, the projection message for its own
+ * PROJECTION.json source_commit, and a tree that matches that PROJECTION.json
+ * and holds nothing else (integrity and path layers). Content layers are not
+ * re-run here. Findings are reported as `<commit>:<path>`.
+ */
+export function projectionHistory(cwd: string, rev: string, options: { skipHead?: boolean } = {}): { commits: HistoryCommit[]; findings: Finding[] } {
+  const head = gitText(cwd, ["rev-parse", "--verify", `${rev}^{commit}`]).trim();
+  const findings: Finding[] = [];
+  const commits: HistoryCommit[] = [];
+  for (const line of gitText(cwd, ["rev-list", "--parents", head]).split("\n")) {
+    if (line.length === 0) continue;
+    const [commit, ...parents] = line.split(" ") as [string, ...string[]];
+    if (options.skipHead && commit === head) continue;
+    const record: HistoryCommit = { commit, parents };
+    commits.push(record);
+    const at = (finding: Finding) => findings.push({ ...finding, path: `${commit}:${finding.path}` });
+    let shape: CommitShape;
+    try {
+      shape = parseCommit(gitText(cwd, ["cat-file", "commit", commit]));
+    } catch (error) {
+      at({ layer: "integrity", rule: "integrity/commit-header", path: "(commit)", detail: (error as Error).message });
+      continue;
+    }
+    const blob = git(cwd, ["cat-file", "blob", `${commit}:${PROJECTION_FILE}`], { allowFailure: true });
+    if (blob.status !== 0) {
+      at({ layer: "integrity", rule: "integrity/missing-projection", path: PROJECTION_FILE });
+      continue;
+    }
+    let projection: Projection;
+    try {
+      projection = parseProjection(blob.stdout, { anyGuardVersion: true });
+    } catch (error) {
+      at({ layer: "integrity", rule: "integrity/invalid-projection", path: PROJECTION_FILE, detail: (error as Error).message });
+      continue;
+    }
+    record.projection = projection;
+    for (const finding of commitShapeFindings(shape, projection, parents)) at(finding);
+    const entries = listTree(cwd, commit);
+    for (const finding of projectionIntegrityFindings(projection, entries)) at(finding);
+    for (const finding of pathRuleFindings(entries, projectionMembership(projection))) at(finding);
+  }
+  return { commits, findings };
+}
+
+// ---------------------------------------------------------------------------
 // Whole-tree check used by the public CI
 
 export interface TreeFile {
@@ -780,16 +851,19 @@ export interface TreeCheckOptions {
   gitleaks?: string;
   projectionCommit?: boolean;
   expectedParents?: string[];
+  /** Also check every ancestor of `rev` (see projectionHistory). */
+  history?: boolean;
 }
 
 export function checkCommittedTree(options: TreeCheckOptions): Finding[] {
   const commit = gitText(options.cwd, ["rev-parse", "--verify", `${options.rev}^{commit}`]).trim();
   const { entries, files } = readTree(options.cwd, commit);
   const { projection, findings } = publicLayerFindings(entries, files, { gitleaks: options.gitleaks });
-  if (options.projectionCommit && projection !== undefined) {
+  if ((options.projectionCommit || options.history) && projection !== undefined) {
     const shape = parseCommit(gitText(options.cwd, ["cat-file", "commit", commit]));
     findings.push(...commitShapeFindings(shape, projection, options.expectedParents));
   }
+  if (options.history) findings.push(...projectionHistory(options.cwd, commit, { skipHead: true }).findings);
   return sortFindings(findings);
 }
 
@@ -814,7 +888,7 @@ export function formatFinding(finding: Finding): string {
 
 function usage(): never {
   console.error(
-    "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none]",
+    "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]",
   );
   process.exit(2);
 }
@@ -824,19 +898,21 @@ function main(argv: readonly string[]): number {
   let gitleaks: string | undefined;
   let projectionCommit = false;
   let expectedParents: string[] | undefined;
+  let history = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index] ?? usage();
     if (arg === "--rev") rev = value();
     else if (arg === "--gitleaks") gitleaks = value();
     else if (arg === "--projection-commit") projectionCommit = true;
+    else if (arg === "--history") history = true;
     else if (arg === "--expect-parent") {
       const parent = value();
       expectedParents = parent === "none" || /^0+$/u.test(parent) ? [] : [parent];
     } else usage();
   }
-  if (expectedParents !== undefined && !projectionCommit) usage();
-  const findings = checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents });
+  if (expectedParents !== undefined && !projectionCommit && !history) usage();
+  const findings = checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history });
   for (const finding of findings) console.log(formatFinding(finding));
   if (findings.length > 0) {
     console.error(`public guard: ${findings.length} finding(s); nothing here may be published as-is.`);
