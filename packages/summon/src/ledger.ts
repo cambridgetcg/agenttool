@@ -14,10 +14,16 @@ export interface LedgerFields {
   model?: string
   cwd?: string
   access?: string
+  /** The effort that was asked for (Air `sent`) or admitted (Nuance `admitted`). */
+  effort?: string
+  /** The request's advisory origin, flattened by originTag: one string of at most 200 characters. */
+  origin?: string
 }
 export interface LedgerEntry extends LedgerFields { ts: string; prev: string; hash: string }
 
-const ALLOWED = ['event', 'id', 'status', 'reason', 'detail', 'from', 'runtime', 'model', 'cwd', 'access'] as const
+const ALLOWED = ['event', 'id', 'status', 'reason', 'detail', 'from', 'runtime', 'model', 'effort', 'cwd', 'access', 'origin'] as const
+/** Per-key length bounds; any other kept key is clipped at 500. */
+const MAX_LEN: Partial<Record<(typeof ALLOWED)[number], number>> = { origin: 200 }
 const sha = (s: string) => createHash('sha256').update(s).digest('hex')
 
 const TORN_TAIL = 'ledger_torn_tail'
@@ -85,7 +91,7 @@ export function appendLedger(path: string, fields: LedgerFields, nowMs: number =
     const picked: Record<string, string> = {}
     for (const k of ALLOWED) {
       const v = fields[k]
-      if (typeof v === 'string') picked[k] = v.slice(0, 500)
+      if (typeof v === 'string') picked[k] = v.slice(0, MAX_LEN[k] ?? 500)
     }
     const created = !existsSync(path)
     const { prev, before } = tail(path, nowMs)

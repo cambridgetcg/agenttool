@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
 import { requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
@@ -398,6 +398,17 @@ describe('runOnce', () => {
       expect(readState(paths, other)?.status).toBe('completed')
       expect(existsSync(join(paths.spool, first!))).toBe(true)
     })
+    test('carried (A2): a discarded marker takes its claim-failed note with it (no state, or no job dir)', async () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const noState = enqueue(h); const noDir = enqueue(h)
+      unlinkSync(join(jobDir(paths, noState.id), 'state.json'))
+      rmSync(jobDir(paths, noDir.id), { recursive: true, force: true }) // the claim's rename then fails ENOENT
+      for (const id of [noState.id, noDir.id]) { mkdirSync(join(paths.state, 'claim-failed'), { recursive: true }); writeFileSync(join(paths.state, 'claim-failed', id), '') }
+      chmodSync(jobDir(paths, noState.id), 0o500)
+      try { expect(await runOnce(rdeps(h))).toBe(0) } finally { chmodSync(jobDir(paths, noState.id), 0o700) }
+      expect(readdirSync(paths.spool)).toEqual([])
+      expect(readdirSync(join(paths.state, 'claim-failed'))).toEqual([])
+    })
     test('a marker whose job has no state is still discarded, whatever the rename error', async () => {
       const h = targetHome(); const paths = summonPaths(h)
       const req = enqueue(h)
@@ -566,6 +577,16 @@ describe('recovery', () => {
     const paths = summonPaths(targetHome()); const id = running(paths, { pid: undefined })
     expect(markOrphans(paths, Date.now(), () => true)).toBe(1)
     expect(readState(paths, id)?.status).toBe('unknown')
+  })
+  test('carried (A2): a claimed job the dead runner never started, with a cancel asked for, ends cancelled like every never-started job', () => {
+    const h = targetHome(); const paths = summonPaths(h); const now = Date.now()
+    const req = enqueue(h)
+    unlinkSync(join(paths.spool, req.id)); writeFileSync(join(jobDir(paths, req.id), 'claimed'), ''); writeFileSync(join(jobDir(paths, req.id), 'cancel'), '')
+    expect(markOrphans(paths, now, () => false)).toBe(1)
+    expect(readState(paths, req.id)).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started', ended_at: iso(now) })
+    expect(resultOf(h, req.id)).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started' })
+    expect(statusOf(paths, 'nuance', req.id, now)).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started' })
+    expect(ledgerOf(h).filter((e) => e.event === 'job_end')).toEqual([expect.objectContaining({ id: req.id, status: 'cancelled' })])
   })
   test('a queued job the dead runner had already claimed becomes unknown; one still in the spool does not', () => {
     const h = targetHome(); const paths = summonPaths(h)

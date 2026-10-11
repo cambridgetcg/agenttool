@@ -5,7 +5,7 @@ import { admittedSince, countActive, errTag, jobDir, settleNeverReached, writeJs
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { claimId, recordRefusal } from './replay.ts'
-import { checkTiming, ID_RE, validateRequest, type SummonRequest } from './request.ts'
+import { checkTiming, ID_RE, originTag, validateRequest, type SummonRequest } from './request.ts'
 import type { GateResponse, RefusalReason } from './status.ts'
 
 export interface GateDeps {
@@ -60,7 +60,7 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
   if (!claimId(deps.paths.seen, req.id)) return refuse(deps, req, 'replayed', 'this id was already received')
   // From here the id is claimed: a refusal is also kept with its seen marker, so `status <id>` can name it.
   const refuseClaimed = (reason: RefusalReason, detail: string, hint?: string): GateResponse => {
-    try { recordRefusal(deps.paths.seen, req.id, reason) } catch { /* status then answers unknown: received, no decision recorded */ }
+    try { recordRefusal(deps.paths.seen, req.id, reason) } catch { /* status then answers unknown: received; no job state on this Mac — see the Nuance ledger */ }
     return refuse(deps, req, reason, detail, hint)
   }
   if (!deps.guiSessionIsMine()) return refuseClaimed('target_logged_out', 'Yu is not logged in at this Mac')
@@ -79,7 +79,9 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
 
     // Logged before it is acted on, and fsync'd before the append returns: if it throws, nothing has been written, and
     // once it returns the entry reached the disk ahead of any job file.
-    appendLedger(deps.paths.ledger, { event: 'admitted', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, cwd: req.cwd, access: req.access }, now)
+    // The admitted triple (model, effort, access) is on record, with the advisory origin, which nothing above has read.
+    appendLedger(deps.paths.ledger, { event: 'admitted', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, effort: req.effort,
+      cwd: req.cwd, access: req.access, origin: originTag(req.origin) }, now)
     const dir = jobDir(deps.paths, req.id)
     const marker = join(deps.paths.spool, req.id)
     try {

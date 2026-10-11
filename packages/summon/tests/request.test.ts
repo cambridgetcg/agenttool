@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  CLOCK_SKEW_MS, ID_RE, MAX_PROMPT_BYTES, checkTiming, newRequestId, validateRequest,
+  CLOCK_SKEW_MS, ID_RE, MAX_PROMPT_BYTES, checkTiming, newRequestId, originTag, validateRequest,
 } from '../src/request.ts'
 import { canonicalJson } from '../src/json.ts'
 import { sampleRequest } from './helpers.ts'
@@ -90,5 +90,24 @@ describe('checkTiming', () => {
 describe('canonicalJson', () => {
   test('sorts keys recursively and drops undefined', () => {
     expect(canonicalJson({ b: 1, a: { d: [2, { y: 1, x: 2 }], c: undefined } })).toBe('{"a":{"d":[2,{"x":2,"y":1}]},"b":1}')
+  })
+})
+
+describe('F19: origin', () => {
+  test('origin.started_at is RFC 3339 UTC, as the CLI sends it, or absent', () => {
+    expect(validateRequest(JSON.stringify(sampleRequest({ origin: { harness: 'claude-code', pid: 4242, started_at: '2026-10-11T00:38:43.000Z' } }))).ok).toBe(true)
+    expect(validateRequest(JSON.stringify(sampleRequest({ origin: { harness: 'shell', pid: 1 } }))).ok).toBe(true)
+    for (const started_at of ['Sat Oct 10 12:00:00 2026', '2026-10-11', '2026-02-31T00:00:00Z', '2026-10-11T00:38:43+01:00', 7]) {
+      expect(validateRequest(JSON.stringify(sampleRequest({ origin: { harness: 'shell', pid: 1, started_at } as never }))))
+        .toMatchObject({ ok: false, reason: 'malformed', detail: 'origin.started_at' })
+    }
+  })
+  test('originTag flattens it to one bounded ledger string: harness kind, pid, start', () => {
+    expect(originTag({ harness: 'claude-code', pid: 4242, started_at: '2026-10-11T00:38:43.000Z' })).toBe('claude-code pid 4242 started 2026-10-11T00:38:43.000Z')
+    expect(originTag({ harness: 'codex', pid: 7 })).toBe('codex pid 7')
+    expect(originTag({ pid: 7 })).toBe('pid 7')
+    expect(originTag({})).toBeUndefined()
+    expect(originTag(undefined)).toBeUndefined()
+    expect(originTag({ harness: 'h'.repeat(300), pid: 1 })!.length).toBe(200)
   })
 })

@@ -86,11 +86,21 @@ export function validateRequest(raw: string): Valid | Invalid {
     for (const k of Object.keys(o)) if (!ORIGIN_KEYS.has(k)) return bad('malformed', 'origin field')
     if (o.harness !== undefined && (typeof o.harness !== 'string' || !TOKEN_RE.test(o.harness))) return bad('malformed', 'origin.harness')
     if (o.pid !== undefined && !Number.isInteger(o.pid)) return bad('malformed', 'origin.pid')
-    if (o.started_at !== undefined && (typeof o.started_at !== 'string' || o.started_at.length > 64)) return bad('malformed', 'origin.started_at')
+    if (o.started_at !== undefined && !isIsoUtc(o.started_at)) return bad('malformed', 'origin.started_at')
   }
   if (typeof j.prompt !== 'string' || j.prompt.length === 0 || j.prompt.includes('\u0000')) return bad('malformed', 'prompt')
   if (Buffer.byteLength(j.prompt, 'utf8') > MAX_PROMPT_BYTES) return bad('too_large', 'prompt exceeds 128 KiB')
   return { ok: true, request: j as SummonRequest }
+}
+
+/**
+ * The advisory origin as one bounded ledger string (`<harness> pid <pid> started <ISO>`), or undefined when it says
+ * nothing. Logged on both ends; never read for authority.
+ */
+export function originTag(o: SummonOrigin | undefined): string | undefined {
+  if (!o) return undefined
+  const parts = [o.harness, o.pid !== undefined ? `pid ${o.pid}` : '', o.started_at ? `started ${o.started_at}` : ''].filter(Boolean)
+  return parts.length > 0 ? parts.join(' ').slice(0, 200) : undefined
 }
 
 export type TimingOk = { ok: true; expiresAtMs: number; timeoutS: number }

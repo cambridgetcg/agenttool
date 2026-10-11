@@ -211,6 +211,7 @@ export async function runOnce(deps: RunnerDeps): Promise<number> {
     try { renameSync(marker, join(jobDir(deps.paths, id), 'claimed')) } catch (e) {
       if (errTag(e) === 'ENOENT' || readState(deps.paths, id) === null) {
         if (removeEntry(marker)) appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'no job to claim' }, deps.nowMs())
+        try { rmSync(note, { force: true }) } catch { /* only a note */ } // nothing will ever claim it, so no note accumulates
       } else {
         if (!existsSync(note)) {
           try {
@@ -264,7 +265,10 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
     if (!s || !detail) continue
     // result.json is written atomically and before state.json, so one that parses is the job's whole outcome.
     const r = readJson<JobResult>(join(jobDir(paths, id), 'result.json'))
-    settleJob(paths, nowMs, s, r && TERMINAL.has(r.status) ? { status: r.status, reason: r.reason, detail: r.detail, resets_at: r.resets_at } : { status: 'unknown', detail })
+    if (r && TERMINAL.has(r.status)) settleJob(paths, nowMs, s, { status: r.status, reason: r.reason, detail: r.detail, resets_at: r.resets_at })
+    // A claimed job that never started, with a cancel asked for, ends as every never-started job does; without one, unknown.
+    else if (s.status === 'queued' && existsSync(join(jobDir(paths, id), 'cancel'))) finishJob(paths, nowMs, s, notStartedOutcome(paths, id))
+    else settleJob(paths, nowMs, s, { status: 'unknown', detail })
     n++
   }
   return n

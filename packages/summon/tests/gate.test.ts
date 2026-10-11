@@ -223,3 +223,21 @@ describe('gateStart', () => {
     expect(verifyLedger(p.ledger)).toEqual({ ok: true, entries: 3 })
   })
 })
+
+describe('F19: the admitted entry records origin and effort, and origin never decides', () => {
+  const ledger = (h: string) => readFileSync(join(h, '.local/state/summon/ledger.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  test('admitted carries the admitted effort and the origin string', () => {
+    const h = targetHome(DEFAULT_ALLOWLIST.replace('{ model: sonnet }', '{ model: sonnet, effort: [high] }'))
+    const req = sampleRequest({ effort: 'high', origin: { harness: 'claude-code', pid: 4242, started_at: '2026-10-11T00:38:43.000Z' } })
+    expect(gateStart(JSON.stringify(req), deps(h)).status).toBe('admitted')
+    expect(ledger(h)).toEqual([expect.objectContaining({ event: 'admitted', id: req.id, model: 'sonnet', effort: 'high', access: 'review',
+      origin: 'claude-code pid 4242 started 2026-10-11T00:38:43.000Z' })])
+  })
+  test('requests that differ only in origin get the same decision', () => {
+    for (const origin of [undefined, { harness: 'codex', pid: 1 }, { harness: 'shell' }, { harness: 'claude-code', pid: 99, started_at: '2026-01-01T00:00:00Z' }]) {
+      const h = targetHome()
+      expect(gateStart(JSON.stringify(sampleRequest(origin ? { origin } : {})), deps(h)).status).toBe('admitted')
+      expect(gateStart(JSON.stringify(sampleRequest({ cwd: '~/Elsewhere', ...(origin ? { origin } : {}) })), deps(h))).toMatchObject({ reason: 'outside_allowlist' })
+    }
+  })
+})

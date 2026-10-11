@@ -27,6 +27,15 @@ describe('ledger', () => {
     writeFileSync(p, readFileSync(p, 'utf8').replace('"busy"', '"rate_limited"'))
     expect(verifyLedger(p)).toMatchObject({ ok: false, brokenAt: 2 })
   })
+  test('F19: keeps the effort and the origin string (origin bounded to 200 characters)', () => {
+    const p = join(tmp(), 'ledger.jsonl')
+    appendLedger(p, { event: 'admitted', effort: 'high', origin: 'claude-code pid 4242 started 2026-10-11T00:38:43.000Z' })
+    appendLedger(p, { event: 'sent', origin: 'o'.repeat(400) })
+    const [a, b] = readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    expect(a).toMatchObject({ effort: 'high', origin: 'claude-code pid 4242 started 2026-10-11T00:38:43.000Z' })
+    expect(b.origin).toBe('o'.repeat(200))
+    expect(verifyLedger(p)).toEqual({ ok: true, entries: 2 })
+  })
   test('never records a prompt field', () => {
     const p = join(tmp(), 'ledger.jsonl')
     appendLedger(p, { event: 'admitted', prompt: 'secret' } as never)

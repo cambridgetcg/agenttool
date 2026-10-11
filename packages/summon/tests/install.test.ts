@@ -387,6 +387,16 @@ describe('installer', () => {
         expect(lines(go(root, dropin()))).toEqual([0, 1])
       })
     }
+    test('carried (B): a kill between placing the new drop-in and its sshd -T check leaves no keys-only marker', () => {
+      const root = temp('summon-root-'); earlierInstall(root)
+      // SIGKILL (or a power loss) skips the EXIT trap, so the marker must already be gone when the drop-in goes in.
+      const w = withStubs(dropin(), { sudo: 'if [ "$1" = /usr/sbin/sshd ] && [ "$2" = -t ]; then kill -9 "$PPID"; exit 1; fi\n' + SUDO_STUB })
+      const r = run(bundle(root).dir, root, w.env)
+      expect(r.exitCode).not.toBe(0)
+      expect(r.signalCode).toBe('SIGKILL')
+      expect(calls(w.s).some((c) => c.startsWith('sudo install -m 600 -o root -g wheel '))).toBe(true) // the drop-in went in before the kill
+      expect(existsSync(KEYS_ONLY_MARK(root))).toBe(false)
+    })
     test('but with the marker and no drop-in (it was rolled back), it says to turn Remote Login off', () => {
       const root = temp('summon-root-'); earlierInstall(root)
       expect(lines(before['a running job']!(root, {}))).toEqual([0, 1])

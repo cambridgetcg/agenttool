@@ -158,6 +158,7 @@ if [ "$SKIP_SUDO" != 1 ]; then
     echo "✓ made this Mac's SSH host keys (ssh-keygen -A, as macOS does at the first SSH connection)"
   fi
   DROPIN_PLACED=1   # from here an earlier install's drop-in is replaced, or (if sshd rejects this one) removed
+  rm -f "$KEYS_ONLY_MARK"   # now, not only in finish: a kill or power loss before this run's sshd -T check must not leave it
   sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN" || stop "✗ could not write $DROPIN, so sshd was not changed." "$NOTHING_DONE"
   # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
   if ! sudo /usr/sbin/sshd -t; then

@@ -3,7 +3,8 @@
 Start a new agent session on another of Yu's Macs. Design: `docs/superpowers/specs/2026-10-10-summon-design.md`.
 
 Phase 0 (SSH at home): `summon nuance claude --model sonnet --cwd '~/Projects/x' --review --prompt-file task.md`,
-then `summon status|result nuance/smn_<id>`. Nuance runs `summon-gatekeeper` (SSH forced command) and
+then `summon status|result nuance/smn_<id>`. `--job` may be given (it is Phase 0's only mode); `--live` is refused until
+Phase 1. Nuance runs `summon-gatekeeper` (SSH forced command) and
 `summon-runner` (LaunchAgent in Yu's GUI session). Install: `bun scripts/prepare-pairing.ts`, AirDrop the bundle,
 `bash ~/Downloads/summon-nuance-bundle-<expiry>-<build id>/summon-install.sh` on Nuance, then `bun scripts/pin-nuance.ts`
 and the `summon` link on the Air.
@@ -70,7 +71,7 @@ folder sshd starts the gatekeeper in. The Air's `summon` ignores `.env` files in
 | Air | `~/.ssh/summon/summon_nuance_ed25519`, `summon_nuance_ed25519.pub` | the summon key (this key and nothing else) |
 | Air | `~/.ssh/summon/config`, `~/.ssh/summon/known_hosts` | the `summon-nuance` ssh entry (used with `ssh -F`, nothing is added to `~/.ssh/config`) and Nuance's pinned host key |
 | Air | `~/.ssh/summon/expiry` | the summon key's expiry on Nuance (YYYYMMDD), written by `pin-nuance --expires` |
-| Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger |
+| Air | `~/.local/state/summon/ledger.jsonl` | the Air's ledger: `sent` (with the effort and the advisory origin: harness, pid, start time) and `answer` for each start, `cancel_sent` and `answer` for each cancel, and an `answer` for any `auth_refused` or `host_key_mismatch` |
 | Air | `~/.local/bin/summon` | a link to `packages/summon/bin/summon.ts`: the front door |
 | Air | `~/summon-nuance-bundle-<expiry>-<build id>` | one AirDrop bundle per build and expiry: `summon-install.sh`, `summon-gatekeeper`, `summon-runner`, `MANIFEST.txt` |
 | Nuance | `~/.local/share/summon/` | `summon-gatekeeper`, `summon-runner`, and `INSTALLED` (build, prepared, both sha256s and the key expiry: the bundle's `MANIFEST.txt`, written once the new programs and key line are in place); `keys-only`, the installer's record that its last drop-in passed the `sshd -T` check |
@@ -94,6 +95,32 @@ otherwise win. sshd is not reloaded: macOS starts it per connection, so the next
 6. On the Air, archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.ssh/summon` (the key, its expiry, its ssh
    entry and `known_hosts`), every `~/summon-nuance-bundle-*`, and the link `~/.local/bin/summon` (only if
    `ls -l` shows it pointing at `packages/summon/bin/summon.ts`).
+
+## When a summon does not reach Nuance
+
+Every answer here means nothing reached Nuance, so a new summon is safe. `unknown` is the exception: the request may
+have been delivered, so it is never sent again; ask `summon status` with its handle.
+
+- **`unreachable (no_route)`, `not paired: <device>`.** `~/.ssh/summon/config` has no `Host summon-<device>` entry:
+  before install step 3, after rollback, or a mistyped device (Phase 0 pairs only `nuance`). Nothing is ledgered or sent.
+- **`unreachable (no_route)` while Nuance is awake.** The Air may be blocking the caller. Inside a harness sandbox
+  (Codex's, or Claude Code's), the hint names it: rerun outside it. Otherwise it may be macOS Local Network privacy for
+  the app that started `summon` (System Settings › Privacy & Security › Local Network); Terminal.app and SSH logins are
+  exempt, so `summon nuance inventory` from Terminal.app tells the two apart.
+- **The key expired.** The summon key works until the date in `~/.ssh/summon/expiry`; every summon warns on stderr from
+  7 days before it. From that day `auth_refused` says the key expired: re-pair from install step 1.
+- **Nuance restarted (FileVault).** After a restart (power loss, a drained battery, a panic) Nuance may be waiting at the
+  FileVault screen, where its sshd cannot read the summon key line, so a summon answers `auth_refused` (or
+  `host_key_mismatch`, if the pre-boot host key differs). Unlock it at the Mac. Do not re-pin or re-key from this state.
+- **Host key changed.** `host_key_mismatch` is a security event: the host at `nuance.local` presented a different key from
+  the one pinned, and the detail shows the fingerprint it presented. Do not re-pin from the network (no `ssh-keyscan`).
+  At Nuance, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Only if it shows that fingerprint and you know why it
+  changed (macOS was reinstalled, say), re-pin with the line read there:
+  `bun scripts/pin-nuance.ts --user <name> --host-key "<line read on Nuance>" --expires <YYYYMMDD>`.
+- **The Air ledger cannot be written** (a sandbox, a full disk). A start or a cancel is logged before it is sent, so it
+  stops there and exits 3; with `--json` it prints one line,
+  `{"status":"unreachable","detail":"could not write the Air ledger (<code>); nothing was sent"}`, with a hint inside a
+  sandbox. Usage errors exit 2.
 
 ## The allowlist
 

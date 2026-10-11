@@ -136,7 +136,9 @@ exec '${process.execPath}' '${GATE}' < '${sent}'
 `)
   chmodSync(ssh, 0o755)
   writeFileSync(join(air, 'task.md'), 'Summarise the README.')
+  writeFileSync(join(air, 'config'), 'Host summon-nuance\n  HostName nuance.local\n') // what pin-nuance pairs
   const deps: CliDeps = { sshBin: ssh, sshConfig: join(air, 'config'), ledgerPath: join(air, 'ledger.jsonl'), device: 'air',
+    env: { CLAUDECODE: '1' }, startTimeOf: () => 'Sun Oct 11 00:38:43 2026',
     nowMs: () => Date.now(), readFile: (p) => readFileSync(p, 'utf8'), readStdin: () => '' }
   const runner = compiled
     ? async () => {
@@ -179,6 +181,9 @@ export const END_TO_END: Record<string, (w: World) => void | Promise<void>> = {
     expect(verifyLedger(nuance)).toEqual({ ok: true, entries: 3 })
     expect(entriesOf(air).map((e) => e.event)).toEqual(['sent', 'answer'])
     expect(entriesOf(nuance).map((e) => [e.event, e.status])).toEqual([['admitted', undefined], ['job_start', 'running'], ['job_end', 'completed']])
+    // The advisory origin (with its start time) is on both ends' record of the request.
+    const origin = `claude-code pid ${process.ppid} started 2026-10-11T00:38:43.000Z`
+    expect([entriesOf(air)[0].origin, entriesOf(nuance)[0].origin]).toEqual([origin, origin])
     // The prompt travelled on stdin only: not on claude's argv, not in either ledger.
     expect(readFileSync(w.fake.argvOut, 'utf8')).not.toContain('Summarise')
     expect(readFileSync(air, 'utf8')).not.toContain('Summarise')
