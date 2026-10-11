@@ -34,7 +34,12 @@ changes.
 
 ### Added
 
-- Tests for every denial branch in `src/capability.ts`.
+- Refusal tests in `tests/capability-denials.test.ts`, which pin the error
+  code and message. With the existing tests, deleting any one condition of a
+  denial check in `src/capability.ts` fails the suite, except four that record
+  validation and the remaining conditions already imply: either half of the
+  signing-key comparison, the simulation `chain_id` comparison, and the
+  non-null method guard in rule matching.
 - `vectors/agent-wallet-v0.1-negative-vectors.json`: seven deterministic cases
   a conforming implementation must refuse (signature scalar not reduced,
   small-order authority key, both overlapping-rule shapes, simulation fee asset
@@ -46,5 +51,5 @@ changes.
 
 - Agent Wallet 0.1 now says signing receipts are attestation-only with no
   cross-record binding check (§5.5, §12), and names `intent_id` and
-  (`grant_id`, `nonce`), never `record_id`, as the intent replay dedupe keys
-  (§6 step 6).
+  (`grant_id`, `nonce`) as the intent replay dedupe keys; a host must not
+  rely on `record_id` as one (§6 step 6).

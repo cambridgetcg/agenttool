@@ -90,6 +90,13 @@ const authorization = assertIntentWithinCapabilityStatic({
 });
 ```
 
+`context` must be plain data: exactly `now` and `usage`, with `usage` holding
+exactly `revocation_nonce`, `intent_count`, `spent`, and
+`host_verified_approval_ids`, and each `spent` entry exactly `asset_id` and
+`amount_atomic`. This source refuses extra keys, accessors, and non-plain
+objects, such as a class-backed database row, with `INVALID_INPUT`; the
+published `0.1.3` artifact does not (see `CHANGELOG.md`).
+
 That final helper checks signed relationships, allowlists, deadlines,
 host-supplied approval counts, simulation effects, cumulative spend input, and
 fee bounds. It does **not** authenticate approval evidence, establish that the

@@ -154,9 +154,10 @@ are snapshotted as data before validation and canonicalization.
 Deterministic public vectors live at
 `packages/wallet/vectors/agent-wallet-v0.1-vectors.json`. Since 2026-10-11,
 deterministic negative vectors, cases a conforming implementation MUST refuse,
-live in source beside them at
-`packages/wallet/vectors/agent-wallet-v0.1-negative-vectors.json`. The
-published 0.1.3 artifact does not contain that file.
+live beside them in the AgentTool source repository at
+`packages/wallet/vectors/agent-wallet-v0.1-negative-vectors.json`. The source
+repository is private, so that path is not a promise of anonymous public
+access, and the published 0.1.3 artifact does not contain that file.
 
 ## 5. Records
 
@@ -204,7 +205,7 @@ rule in sorted order was read, will now be denied unless the host supplies at
 least `approval_threshold` distinct approval IDs. The published
 `@agenttool/wallet` 0.1.3 artifact still has first-match behaviour until a
 release ships the source change (see the Unreleased entry in
-`packages/wallet/CHANGELOG.md`).
+`packages/wallet/CHANGELOG.md` in the private source repository).
 
 Spend and fee limits use CAIP-19 assets and atomic amounts. `max_total` is a
 cumulative bound over durable usage for the capability and revocation epoch,
@@ -301,10 +302,10 @@ one durable authorization transaction or an equivalent serializable mechanism:
 6. reserve the capability intent count, cumulative spend, chain nonce or
    sequence, and a unique request/intent identity atomically. The intent
    replay dedupe keys are `intent_id` and the (`grant_id`, `nonce`) pair: a
-   host MUST reserve both as unique and MUST NOT dedupe on `record_id`,
-   because the delegate key holder can produce another valid signature over
-   the same intent core and so a different `record_id` (clarified
-   2026-10-11);
+   host MUST reserve both as unique and MUST NOT rely on `record_id` as a
+   replay key, because the delegate key holder can produce another valid
+   signature over the same intent core and so a different `record_id`
+   (clarified 2026-10-11);
 7. persist an operation in `reserved`, then commit; and
 8. only then invoke the signer with the exact unsigned payload bytes.
 

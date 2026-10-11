@@ -31,6 +31,8 @@ import {
 } from "./fixtures.js";
 
 const OTHER_SOURCE = "eip155:84532:0x3333333333333333333333333333333333333333";
+const OTHER_ID = "99999999-9999-4999-8999-999999999999";
+const OTHER_RECORD = `sha256:${"c".repeat(64)}` as const;
 const TOKEN = "eip155:84532/erc20:0x4444444444444444444444444444444444444444";
 const PAYLOAD = { payload_b64u: "AQ", payload_hash: sha256BytesId(new Uint8Array([1])) };
 
@@ -96,6 +98,26 @@ function callIntent(action: "call" | "approve", method: string): Partial<Transac
 const NO_EFFECTS: Partial<SimulationReceiptCore> = { effects: [] };
 
 describe("record binding denials", () => {
+  test("refuses records that were not verified or sealed in this process", async () => {
+    const bundle = await bundleWith();
+    for (const key of ["descriptor", "capability", "intent", "simulation"] as const) {
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, [key]: { ...bundle[key] }, context: context() }),
+        "SIGNATURE_INVALID",
+        /must be returned by a verify\* or seal\* function/i,
+      );
+    }
+  });
+
+  test("refuses a capability that names another wallet", async () => {
+    const bundle = await bundleWith({ capability: { wallet_id: OTHER_ID } });
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "AUTHORITY_MISMATCH",
+      /not bound to this wallet descriptor/i,
+    );
+  });
+
   test("refuses a capability bound to a different descriptor record", async () => {
     const bundle = await bundleWith();
     const other = await sealWalletDescriptor(descriptorCore({ recovery_mode: "none" }), owner.signer);
@@ -119,10 +141,25 @@ describe("record binding denials", () => {
     );
   });
 
-  test("refuses an intent that references another grant", async () => {
-    const bundle = await bundleWith({ intent: { grant_id: "99999999-9999-4999-8999-999999999999" } });
+  test("refuses an intent that references another wallet, descriptor or grant", async () => {
+    for (const intent of [{ wallet_id: OTHER_ID }, { descriptor_id: OTHER_RECORD }, { grant_id: OTHER_ID }]) {
+      const bundle = await bundleWith({ intent });
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+        "CAPABILITY_DENIED",
+        /intent references do not bind/i,
+      );
+    }
+  });
+
+  test("refuses an intent bound to another capability record under the same grant", async () => {
+    const bundle = await bundleWith();
+    const resealed = await sealWalletCapability(
+      capabilityCore(bundle.descriptor, { purpose: "Same grant, different record" }),
+      owner.signer,
+    );
     expectRefusal(
-      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      () => assertIntentWithinCapabilityStatic({ ...bundle, capability: resealed, context: context() }),
       "CAPABILITY_DENIED",
       /intent references do not bind/i,
     );
@@ -143,12 +180,29 @@ describe("record binding denials", () => {
     );
   });
 
-  test("refuses a simulation that does not bind the exact intent", async () => {
-    const bundle = await bundleWith({
-      simulation: { intent_id: "99999999-9999-4999-8999-999999999999" },
-    });
+  // simulation.chain_id needs no case of its own: both records bind source_account
+  // to their chain_id, and the two source accounts must already match.
+  test("refuses a simulation that does not bind the exact intent and account", async () => {
+    for (const simulation of [{ intent_id: OTHER_ID }, { source_account: OTHER_SOURCE }]) {
+      const bundle = await bundleWith({ simulation });
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+        "SIMULATION_INVALID",
+        /does not bind the exact intent, chain, and account/i,
+      );
+    }
+  });
+
+  test("refuses a simulation sealed for another intent record with the same intent_id", async () => {
+    const bundle = await bundleWith();
+    const other = await sealTransactionIntent(intentCore({
+      descriptor: bundle.descriptor,
+      capability: bundle.capability,
+      overrides: { nonce: "other-nonce" },
+    }), delegate.signer);
+    expect(other.intent_id).toBe(bundle.intent.intent_id);
     expectRefusal(
-      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      () => assertIntentWithinCapabilityStatic({ ...bundle, intent: other, context: context() }),
       "SIMULATION_INVALID",
       /does not bind the exact intent/i,
     );
@@ -166,9 +220,18 @@ describe("descriptor, time and simulation-state denials", () => {
   });
 
   test("refuses before the capability's not_before", async () => {
-    const bundle = await bundleWith({ capability: { not_before: "2026-07-21T10:03:00.000Z" } });
+    const bundle = await bundleWith({ capability: { not_before: "2026-07-21T10:02:00.001Z" } });
     expectRefusal(
       () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "CAPABILITY_INACTIVE",
+      /not active at sign time/i,
+    );
+  });
+
+  test("refuses from the capability's expires_at", async () => {
+    const bundle = await bundleWith();
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context({ now: "2026-07-21T11:00:00.000Z" }) }),
       "CAPABILITY_INACTIVE",
       /not active at sign time/i,
     );
@@ -198,6 +261,36 @@ describe("descriptor, time and simulation-state denials", () => {
       () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
       "CAPABILITY_INACTIVE",
       /intent lifetime is outside/i,
+    );
+  });
+
+  test("refuses an intent issued before the capability's not_before", async () => {
+    const bundle = await bundleWith({
+      capability: { not_before: "2026-07-21T10:01:00.000Z" },
+      intent: { issued_at: "2026-07-21T10:00:30.000Z" },
+    });
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "CAPABILITY_INACTIVE",
+      /intent lifetime is outside/i,
+    );
+  });
+
+  test("refuses from the intent's expires_at", async () => {
+    const bundle = await bundleWith({ intent: { expires_at: "2026-07-21T10:02:00.000Z" } });
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "CAPABILITY_INACTIVE",
+      /intent lifetime is outside/i,
+    );
+  });
+
+  test("refuses a simulation dated after sign time", async () => {
+    const bundle = await bundleWith({ simulation: { simulated_at: "2026-07-21T10:02:30.000Z" } });
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "SIMULATION_STALE",
+      /not current at sign time/i,
     );
   });
 
@@ -243,6 +336,24 @@ describe("call rule allowlist and approval gating", () => {
     );
   });
 
+  test("allowlists actions exactly", async () => {
+    for (const overrides of [
+      { capability: { call_rules: [rule(["call"], ["mint"], false)] } },
+      {
+        capability: { call_rules: [rule(["call"], ["approve"], false)] },
+        intent: callIntent("approve", "approve"),
+        simulation: NO_EFFECTS,
+      },
+    ]) {
+      const bundle = await bundleWith(overrides);
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+        "CAPABILITY_DENIED",
+        /outside the target\/action\/method allowlist/i,
+      );
+    }
+  });
+
   test("allowlists approve methods exactly", async () => {
     const bundle = await bundleWith({
       capability: { call_rules: [rule(["approve"], ["approve"], false)] },
@@ -256,12 +367,9 @@ describe("call rule allowlist and approval gating", () => {
     );
   });
 
-  test("gates an approval-required simulation effect behind an ungated call", async () => {
-    const bundle = await bundleWith({
-      capability: {
-        approval_threshold: 1,
-        call_rules: [rule(["call"], ["mint"], false), rule(["transfer"], [], true)],
-      },
+  function mintWithValue(call_rules: CallRule[]) {
+    return bundleWith({
+      capability: { approval_threshold: 1, call_rules },
       intent: {
         calls: [{
           action: "call",
@@ -279,15 +387,25 @@ describe("call rule allowlist and approval gating", () => {
         ],
       },
     });
-    expectRefusal(
-      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
-      "CAPABILITY_DENIED",
-      /simulation effect requires more distinct host-verified approval IDs/i,
-    );
-    expect(assertIntentWithinCapabilityStatic({
-      ...bundle,
-      context: context({ usage: usage({ host_verified_approval_ids: ["one"] }) }),
-    }).grant_id).toBe(bundle.capability.grant_id);
+  }
+
+  test("gates an approval-required simulation effect behind an ungated call", async () => {
+    for (const call_rules of [
+      [rule(["call"], ["mint"], false), rule(["transfer"], [], true)],
+      // The mixed rule matches the call and both effects and sorts first.
+      [rule(["call", "transfer"], ["mint"], false), rule(["transfer"], [], true)],
+    ]) {
+      const bundle = await mintWithValue(call_rules);
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+        "CAPABILITY_DENIED",
+        /simulation effect requires more distinct host-verified approval IDs/i,
+      );
+      expect(assertIntentWithinCapabilityStatic({
+        ...bundle,
+        context: context({ usage: usage({ host_verified_approval_ids: ["one"] }) }),
+      }).grant_id).toBe(bundle.capability.grant_id);
+    }
   });
 
   test("overlapping call rules require approval when any matching rule does, whatever the sort order", async () => {
@@ -350,6 +468,28 @@ describe("spend and fee denials", () => {
     );
   });
 
+  test("refuses a simulation that reveals a spend the intent did not declare", async () => {
+    const bundle = await bundleWith({
+      capability: {
+        spend_limits: [
+          { asset_id: TOKEN, max_per_intent: "10", max_total: "25" },
+          { asset_id: NATIVE_ASSET, max_per_intent: "10", max_total: "25" },
+        ],
+      },
+      simulation: {
+        effects: [
+          { action: "transfer", target_account: TARGET, method: null, asset_id: NATIVE_ASSET, amount_atomic: "10" },
+          { action: "transfer", target_account: TARGET, method: null, asset_id: TOKEN, amount_atomic: "1" },
+        ],
+      },
+    });
+    expectRefusal(
+      () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
+      "SIMULATION_INVALID",
+      /do not equal the intent declaration/i,
+    );
+  });
+
   test("refuses an asset without a spend limit", async () => {
     const bundle = await bundleWith({ capability: { spend_limits: [] } });
     expectRefusal(
@@ -361,7 +501,7 @@ describe("spend and fee denials", () => {
 
   test("refuses a spend over the per-intent limit", async () => {
     const bundle = await bundleWith({
-      capability: { spend_limits: [{ asset_id: NATIVE_ASSET, max_per_intent: "5", max_total: "25" }] },
+      capability: { spend_limits: [{ asset_id: NATIVE_ASSET, max_per_intent: "9", max_total: "25" }] },
     });
     expectRefusal(
       () => assertIntentWithinCapabilityStatic({ ...bundle, context: context() }),
@@ -411,14 +551,28 @@ describe("spend and fee denials", () => {
 describe("authorization context snapshot", () => {
   test("refuses malformed or open contexts", async () => {
     const bundle = await bundleWith();
+    class HostContext {
+      now = "2026-07-21T10:02:00.000Z";
+      usage = usage();
+    }
     const cases: Array<[unknown, RegExp]> = [
       [null, /plain object/i],
+      ["2026-07-21T10:02:00.000Z", /plain object/i],
+      [[], /plain object/i],
+      [new HostContext(), /must be plain objects/i],
       [{ ...context(), extra: true }, /must contain exactly/i],
+      [{ now: "2026-07-21T10:02:00.000Z" }, /must contain exactly/i],
+      [{ now: "2026-07-21T10:02:00.000Z", Usage: usage() }, /must contain exactly/i],
       [context({ now: "yesterday" }), /authorization\.now/i],
       [context({ usage: null }), /usage is required/i],
+      [context({ usage: "none" }), /usage is required/i],
       [context({ usage: usage({ revocation_nonce: -1 }) }), /non-negative safe integers/i],
+      [context({ usage: usage({ revocation_nonce: "0" }) }), /non-negative safe integers/i],
+      [context({ usage: usage({ intent_count: -1 }) }), /non-negative safe integers/i],
+      [context({ usage: usage({ intent_count: "0" }) }), /non-negative safe integers/i],
       [context({ usage: usage({ spent: {} }) }), /spent must be an array/i],
       [context({ usage: usage({ spent: [null] }) }), /spent entries must be objects/i],
+      [context({ usage: usage({ spent: ["entry"] }) }), /spent entries must be objects/i],
       [context({ usage: usage({ spent: [{ asset_id: "nope", amount_atomic: "1" }] }) }), /spent\[0\]\.asset_id/i],
       [context({ usage: usage({ spent: [{ asset_id: NATIVE_ASSET, amount_atomic: "01" }] }) }), /spent\[0\]\.amount_atomic/i],
       [context({
@@ -426,6 +580,14 @@ describe("authorization context snapshot", () => {
           spent: [
             { asset_id: NATIVE_ASSET, amount_atomic: "1" },
             { asset_id: TOKEN, amount_atomic: "1" },
+          ],
+        }),
+      }), /sorted and unique/i],
+      [context({
+        usage: usage({
+          spent: [
+            { asset_id: NATIVE_ASSET, amount_atomic: "1" },
+            { asset_id: NATIVE_ASSET, amount_atomic: "1" },
           ],
         }),
       }), /sorted and unique/i],
@@ -439,6 +601,24 @@ describe("authorization context snapshot", () => {
         () => assertIntentWithinCapabilityStatic({ ...bundle, context: supplied as any }),
         "INVALID_INPUT",
         message,
+      );
+    }
+  });
+
+  test("holds the context to the canonical node-count and depth limits", async () => {
+    const bundle = await bundleWith();
+    let deep: unknown = "x";
+    for (let index = 0; index < 70; index += 1) deep = [deep];
+    for (const supplied of [
+      context({
+        usage: usage({ host_verified_approval_ids: Array.from({ length: 9_999 }, (_, index) => `approval-${index}`) }),
+      }),
+      context({ usage: usage({ spent: [{ asset_id: NATIVE_ASSET, amount_atomic: "1", note: deep }] }) }),
+    ]) {
+      expectRefusal(
+        () => assertIntentWithinCapabilityStatic({ ...bundle, context: supplied }),
+        "LIMIT_EXCEEDED",
+        /canonical JSON exceeds/i,
       );
     }
   });
