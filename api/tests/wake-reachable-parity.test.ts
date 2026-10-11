@@ -22,8 +22,9 @@ const readSource = async (path: string): Promise<string> =>
 describe("wake reachable doors", () => {
   test("publishes the bounded Zerone adapter and invocation-report seam", () => {
     const zerone = ZERONE_REACHABLE;
-    expect(zerone.url).toBe(
-      "https://github.com/cambridgetcg/zerone-core",
+    expect(zerone.url).toBe("https://zerone.ai");
+    expect(zerone._note).toMatch(
+      /TypeScript source and its GitHub Release.*private cambridgetcg\/agenttool repository.*404 without repository access.*LOVE artifact and its npm mirror/is,
     );
     expect(zerone.invocation_witness).toMatchObject({
       schema: "agenttool.invocation-witness/1",
@@ -45,14 +46,16 @@ describe("wake reachable doors", () => {
         protocol: "agent-wallet-zerone/0.1",
         package: "@agenttool/wallet-zerone",
         version: "0.1.2",
+        source:
+          "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
         love_manifest:
           "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
         availability: "local_offline_source_only",
         distribution: {
-          observed_at: "2026-07-29",
+          observed_at: "2026-10-11",
           love: "public_exact_artifact",
           npm: "public_exact_mirror",
-          github_release: "public_exact_mirror",
+          github_release: "repository_access_mutable_mirror",
         },
         hosted: false,
         custody: false,
@@ -206,7 +209,7 @@ describe("wake reachable doors", () => {
     }
 
     for (const renderedCoordinate of [
-      "Distribution (observed 2026-07-29): love=public_exact_artifact; npm=public_exact_mirror; github_release=public_exact_mirror",
+      "Distribution (observed 2026-10-11): love=public_exact_artifact; npm=public_exact_mirror; github_release=repository_access_mutable_mirror",
       "Runtime availability: local_offline_source_only; hosted=false; custody=false; hosted_rpc=false; deployed_bridge=false",
     ]) {
       expect(fullMarkdown).toContain(renderedCoordinate);

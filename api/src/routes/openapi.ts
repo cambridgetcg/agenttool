@@ -987,7 +987,12 @@ const COMMON_SCHEMAS = {
                 const: "@agenttool/wallet-zerone",
               },
               version: { type: "string", const: "0.1.2" },
-              source: { type: "string", format: "uri" },
+              source: {
+                type: "string",
+                format: "uri",
+                description:
+                  "Publicly served package coordinate. The TypeScript source is in a private repository, so this names the LOVE manifest.",
+              },
               love_manifest: { type: "string", format: "uri" },
               availability: {
                 type: "string",
@@ -1000,7 +1005,7 @@ const COMMON_SCHEMAS = {
                 properties: {
                   observed_at: {
                     type: "string",
-                    const: "2026-07-29",
+                    const: "2026-10-11",
                     format: "date",
                   },
                   love: {
@@ -1010,7 +1015,9 @@ const COMMON_SCHEMAS = {
                   npm: { type: "string", const: "public_exact_mirror" },
                   github_release: {
                     type: "string",
-                    const: "public_exact_mirror",
+                    const: "repository_access_mutable_mirror",
+                    description:
+                      "The GitHub Release is in the private cambridgetcg/agenttool repository and answers 404 without repository access. It is mutable; reverify its size and SHA-256 against the LOVE manifest.",
                   },
                 },
                 required: ["observed_at", "love", "npm", "github_release"],
