@@ -38,7 +38,8 @@ exec '${process.execPath}' '${GATE}' < '${sent}'
   const deps: CliDeps = { sshBin: ssh, sshConfig: join(air, 'config'), ledgerPath: join(air, 'ledger.jsonl'), device: 'air',
     nowMs: () => Date.now(), readFile: (p) => readFileSync(p, 'utf8'), readStdin: () => '' }
   const runner = () => runOnce({ paths: summonPaths(nuance), home: nuance, user: 'yu', nowMs: () => Date.now(),
-    claudeBin: () => fake.bin, collectInventory: async () => ({ macos: 'e2e' }), heartbeatMs: 50, pollMs: 25, killGraceMs: 200 })
+    claudeBin: () => fake.bin, collectInventory: async () => ({ macos: 'e2e' }), heartbeatMs: 50, pollMs: 25, killGraceMs: 200,
+    processStartTime: () => null })
   const start = (cwd = '~/Projects/x') => runCli(['nuance', 'claude', '--model', 'sonnet', '--cwd', cwd, '--review', '--prompt-file', join(air, 'task.md')], deps)
   return { fake, nuance, air, deps, sent, runner, start }
 }
@@ -58,9 +59,9 @@ describe('Phase 0 end to end (spec §5.3)', () => {
     const air = w.deps.ledgerPath
     const nuance = summonPaths(w.nuance).ledger
     expect(verifyLedger(air)).toEqual({ ok: true, entries: 2 })
-    expect(verifyLedger(nuance)).toEqual({ ok: true, entries: 2 })
+    expect(verifyLedger(nuance)).toEqual({ ok: true, entries: 3 })
     expect(entriesOf(air).map((e) => e.event)).toEqual(['sent', 'answer'])
-    expect(entriesOf(nuance).map((e) => [e.event, e.status])).toEqual([['admitted', undefined], ['job_end', 'completed']])
+    expect(entriesOf(nuance).map((e) => [e.event, e.status])).toEqual([['admitted', undefined], ['job_start', 'running'], ['job_end', 'completed']])
     // The prompt travelled on stdin only: not on claude's argv, not in either ledger.
     expect(readFileSync(w.fake.argvOut, 'utf8')).not.toContain('Summarise')
     expect(readFileSync(air, 'utf8')).not.toContain('Summarise')

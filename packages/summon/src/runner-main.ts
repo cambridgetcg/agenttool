@@ -6,7 +6,7 @@ import { findClaude } from './harness.ts'
 import { collectInventory } from './inventory.ts'
 import { summonPaths } from './paths.ts'
 import { pruneSeen } from './replay.ts'
-import { markOrphans, reapStranded, runOnce, sweepJobs } from './runner.ts'
+import { markOrphans, processStartTime, reapStranded, runOnce, sweepJobs } from './runner.ts'
 
 const paths = summonPaths()
 const user = userInfo().username
@@ -26,7 +26,7 @@ for (const [what, step] of [
 let exitCode = 0
 try {
   await runOnce({ paths, home: paths.home, user, nowMs: () => Date.now(), claudeBin: () => findClaude(paths.home),
-    collectInventory: async () => collectInventory(paths.home, user), heartbeatMs: 10_000, pollMs: 2_000, killGraceMs: 5_000 })
+    collectInventory: async () => collectInventory(paths.home, user), heartbeatMs: 10_000, pollMs: 2_000, killGraceMs: 5_000, processStartTime })
 } catch (e) {
   console.error(`summon-runner: runOnce failed: ${tag(e)}`)
   exitCode = 1

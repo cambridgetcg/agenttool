@@ -17,6 +17,15 @@ export function which(name: string, home: string, executable: (p: string) => boo
   return null
 }
 
+/**
+ * Where each harness keeps its own files from a summoned job (spec §4.5): they follow that harness's retention, not
+ * Summon's 30-day sweep. Phase 0 runs only Claude Code, with --no-session-persistence.
+ */
+const RETENTION = {
+  claude: "no session persistence; large tool outputs may remain under ~/.claude/projects per Claude Code's own cleanup",
+  other: 'not run by Summon in Phase 0',
+} as const
+
 /** Short facts (versions, paths, names) are trimmed and clipped, so no harness output travels in full. */
 const MAX_REPORTED = 200
 /** The pmset dump is local settings, not harness output, so it keeps its own, larger bound. */
@@ -45,14 +54,14 @@ function codexFacts(home: string, run: Run, executable: (p: string) => boolean):
   const path = which('codex', home, executable)
   if (!path) return null
   const login = run(path, ['login', 'status'], 15_000).code
-  return { path, version: firstLine(run(path, ['--version'])), logged_in: login === null ? null : login === 0 }
+  return { path, version: firstLine(run(path, ['--version'])), logged_in: login === null ? null : login === 0, retention: RETENTION.other }
 }
 
 /** Hermes keeps its login in auth.json; only that file's existence is read, never its contents. */
 function hermesFacts(home: string, run: Run, exists: (p: string) => boolean): Record<string, unknown> | null {
   const path = join(home, '.hermes/hermes-agent/venv/bin/hermes')
   if (!exists(path)) return null
-  return { path, version: firstLine(run(path, ['--version'])), logged_in: exists(join(home, '.hermes/auth.json')) }
+  return { path, version: firstLine(run(path, ['--version'])), logged_in: exists(join(home, '.hermes/auth.json')), retention: RETENTION.other }
 }
 
 /** sol counts as verified when `sol version` runs and prints a version. */
@@ -83,7 +92,7 @@ export function collectInventory(home: string, user: string, run: Run = runCmd, 
       filevault: run('/usr/bin/fdesetup', ['isactive']).stdout,
       keychain: kc.stdout + kc.stderr,
       harnesses: {
-        claude: claude ? { path: claude, version: run(claude, ['--version']).stdout, logged_in: claudeLoggedIn } : null,
+        claude: claude ? { path: claude, version: run(claude, ['--version']).stdout, logged_in: claudeLoggedIn, retention: RETENTION.claude } : null,
         codex: codexFacts(home, run, executable),
         hermes: hermesFacts(home, run, exists),
       },

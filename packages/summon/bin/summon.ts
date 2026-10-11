@@ -14,6 +14,7 @@ else {
   const head = [out.status, out.reason ? `(${out.reason})` : '', out.handle ?? ''].filter(Boolean).join(' ')
   console.log(head)
   if (typeof out.heartbeat_age_s === 'number') console.log(`heartbeat: ${out.heartbeat_age_s}s ago`)
+  if (typeof out.resets_at === 'string') console.log(`resets: ${out.resets_at}`)
   for (const k of ['detail', 'hint', 'result_text'] as const) if (out[k]) console.log(`${k === 'result_text' ? '' : k + ': '}${out[k]}`)
   if (out.inventory) console.log(JSON.stringify(out.inventory, null, 2))
 }

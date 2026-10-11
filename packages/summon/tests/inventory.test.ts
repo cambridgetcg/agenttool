@@ -101,6 +101,16 @@ describe('collectInventory', () => {
     })
   })
 
+  test('F26/F36: each detected harness carries a short retention note', () => {
+    const inv = inventoryWithClaude(fakeRun(), present, executable)
+    expect(inv).toMatchObject({
+      harnesses: {
+        claude: { retention: "no session persistence; large tool outputs may remain under ~/.claude/projects per Claude Code's own cleanup" },
+        codex: { retention: 'not run by Summon in Phase 0' },
+        hermes: { retention: 'not run by Summon in Phase 0' },
+      },
+    })
+  })
   test('a version is the first line of the output; the banner with install paths never reaches the inventory', () => {
     const inv = inventoryWithClaude(fakeRun(), present, executable)
     expect(inv).toMatchObject({ harnesses: { hermes: { version: 'Hermes Agent v2.0.0' } } })

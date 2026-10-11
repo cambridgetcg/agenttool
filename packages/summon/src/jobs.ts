@@ -1,7 +1,9 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Outcome } from './harness.ts'
+import { appendLedger } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
-import { ID_RE, type Access, type Runtime } from './request.ts'
+import { CLOCK_SKEW_MS, ID_RE, type Access, type Runtime } from './request.ts'
 import type { JobStatus } from './status.ts'
 
 export interface JobState {
@@ -21,6 +23,10 @@ export interface JobState {
   started_at?: string
   ended_at?: string
   pid?: number
+  /** The child's start time as `ps -o lstart=` printed it at spawn: with `pid`, what identifies the process. */
+  pid_lstart?: string
+  /** When Yu's usage limit resets, for a job that ended blocked(usage) and was told. */
+  resets_at?: string
 }
 export interface JobResult {
   status: JobStatus
@@ -31,6 +37,12 @@ export interface JobResult {
   num_turns?: number
   cost_usd?: number
   resets_at?: string
+}
+
+/** Content-free tag for an error: an errno-style code (ENOENT, ENOTDIR...) or a fixed word. Never the message. */
+export function errTag(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code
+  return typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,31}$/.test(code) ? code : 'error'
 }
 
 export function jobDir(paths: SummonPaths, id: string): string {
@@ -58,6 +70,23 @@ export function writeState(paths: SummonPaths, s: JobState): void {
   writeJsonAtomic(join(dir, 'state.json'), s)
 }
 
+/** Result file first, then state, then ledger: a terminal state always has its result beside it. */
+export function finishJob(paths: SummonPaths, nowMs: number, s: JobState, o: Outcome, exitCode: number | null = null): void {
+  const result: JobResult = { status: o.status, ...(o.reason ? { reason: o.reason } : {}), ...(o.detail ? { detail: o.detail } : {}),
+    ...(o.result_text !== undefined ? { result_text: o.result_text } : {}), exit_code: exitCode,
+    ...(o.num_turns !== undefined ? { num_turns: o.num_turns } : {}), ...(o.cost_usd !== undefined ? { cost_usd: o.cost_usd } : {}),
+    ...(o.resets_at ? { resets_at: o.resets_at } : {}) }
+  writeJsonAtomic(join(jobDir(paths, s.id), 'result.json'), result)
+  settleJob(paths, nowMs, s, o)
+}
+
+/** The terminal state, then its ledger entry. finishJob's second half, and all of it for a job whose result.json is already there. */
+export function settleJob(paths: SummonPaths, nowMs: number, s: JobState, o: Outcome): void {
+  writeState(paths, { ...s, status: o.status, reason: o.reason, detail: o.detail, ...(o.resets_at ? { resets_at: o.resets_at } : {}),
+    ended_at: new Date(nowMs).toISOString(), pid: undefined, pid_lstart: undefined })
+  appendLedger(paths.ledger, { event: 'job_end', id: s.id, status: o.status, reason: o.reason, detail: o.detail?.slice(0, 200) }, nowMs)
+}
+
 export function heartbeatAgeS(paths: SummonPaths, id: string, nowMs: number): number | null {
   try { return Math.round((nowMs - statSync(join(jobDir(paths, id), 'heartbeat')).mtimeMs) / 1000) } catch { return null }
 }
@@ -68,8 +97,34 @@ function allStates(paths: SummonPaths): JobState[] {
   return names.filter((n) => ID_RE.test(n)).map((n) => readState(paths, n)).filter((s): s is JobState => s !== null)
 }
 
-export function countActive(paths: SummonPaths): number {
-  return allStates(paths).filter((s) => s.status === 'queued' || s.status === 'running').length
+/**
+ * A `queued` job past its expiry plus the gate's skew grace that the runner never claimed. The runner would only end it
+ * `expired` (runJob's own check uses the same grace), so it no longer counts as active and `status` already says expired.
+ */
+export function neverReached(paths: SummonPaths, s: JobState, nowMs: number): boolean {
+  return s.status === 'queued' && nowMs > Date.parse(s.expires_at) + CLOCK_SKEW_MS && !existsSync(join(jobDir(paths, s.id), 'claimed'))
+}
+
+export const NEVER_REACHED = 'never reached the runner'
+
+/** Called by the gate under the admission lock: each never-reached job loses its spool marker and ends `expired`. */
+export function settleNeverReached(paths: SummonPaths, nowMs: number): number {
+  let n = 0
+  for (const s of allStates(paths)) {
+    if (!neverReached(paths, s, nowMs)) continue
+    try {
+      rmSync(join(paths.spool, s.id), { force: true })
+      // A claim that landed before the marker went is the runner's: its own expiry check ends the job.
+      if (existsSync(join(jobDir(paths, s.id), 'claimed'))) continue
+      finishJob(paths, nowMs, s, { status: 'expired', detail: NEVER_REACHED })
+      n++
+    } catch { /* best effort: it no longer counts as active either way */ }
+  }
+  return n
+}
+
+export function countActive(paths: SummonPaths, nowMs: number): number {
+  return allStates(paths).filter((s) => s.status === 'running' || (s.status === 'queued' && !neverReached(paths, s, nowMs))).length
 }
 
 export function admittedSince(paths: SummonPaths, sinceMs: number): number {

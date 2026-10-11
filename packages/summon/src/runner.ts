@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
-import { jobDir, readJson, readState, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
+import { errTag, finishJob, jobDir, NEVER_REACHED, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
@@ -18,6 +18,10 @@ export interface RunnerDeps {
   heartbeatMs: number
   pollMs: number
   killGraceMs: number
+  /** The start time of a pid (runner-main passes processStartTime); recorded at spawn so a reused pid is not taken for the job. */
+  processStartTime(pid: number): string | null
+  /** A monotonic clock for the timeout and heartbeat intervals; defaults to performance.now(). nowMs stamps what is written to disk. */
+  monoMs?(): number
 }
 
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
@@ -26,22 +30,6 @@ const STDERR_KEEP_BYTES = 4096
 const INVENTORY_REQ_RE = /^inventory-\d+\.req$/
 const iso = (ms: number) => new Date(ms).toISOString()
 
-/** Content-free tag for an error: an errno-style code (ENOENT, ENOTDIR...) or a fixed word. Never the message. */
-function errTag(e: unknown): string {
-  const code = (e as { code?: unknown } | null)?.code
-  return typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,31}$/.test(code) ? code : 'error'
-}
-
-/** Result file first, then state, then ledger: a terminal state always has its result beside it. */
-function finishJob(paths: SummonPaths, nowMs: number, s: JobState, o: Outcome, exitCode: number | null = null): void {
-  const result: JobResult = { status: o.status, ...(o.reason ? { reason: o.reason } : {}), ...(o.detail ? { detail: o.detail } : {}),
-    ...(o.result_text !== undefined ? { result_text: o.result_text } : {}), exit_code: exitCode,
-    ...(o.num_turns !== undefined ? { num_turns: o.num_turns } : {}), ...(o.cost_usd !== undefined ? { cost_usd: o.cost_usd } : {}),
-    ...(o.resets_at ? { resets_at: o.resets_at } : {}) }
-  writeJsonAtomic(join(jobDir(paths, s.id), 'result.json'), result)
-  writeState(paths, { ...s, status: o.status, reason: o.reason, detail: o.detail, ended_at: iso(nowMs), pid: undefined })
-  appendLedger(paths.ledger, { event: 'job_end', id: s.id, status: o.status, reason: o.reason, detail: o.detail?.slice(0, 200) }, nowMs)
-}
 const finish = (deps: RunnerDeps, s: JobState, o: Outcome, exitCode: number | null = null) => finishJob(deps.paths, deps.nowMs(), s, o, exitCode)
 
 /** Spawns claude. Bun reports some failures by throwing (ENOTDIR) and some later as an 'error' event with no pid (ENOENT). */
@@ -84,7 +72,12 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   if ('error' in started) return finish(deps, s, { status: 'failed', detail: `could not start claude: ${started.error}` })
   const { child } = started
   const startedMs = deps.nowMs()
-  try { writeState(deps.paths, { ...s, status: 'running', started_at: iso(startedMs), pid: child.pid }) } catch (e) {
+  // A job whose start cannot be recorded (state or ledger) is stopped at once: nothing runs on unrecorded.
+  try {
+    const lstart = deps.processStartTime(child.pid!)
+    writeState(deps.paths, { ...s, status: 'running', started_at: iso(startedMs), pid: child.pid, ...(lstart ? { pid_lstart: lstart } : {}) })
+    appendLedger(deps.paths.ledger, { event: 'job_start', id, status: 'running' }, startedMs)
+  } catch (e) {
     try { child.kill('SIGKILL') } catch { /* gone */ }
     throw e
   }
@@ -128,14 +121,18 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     stderrHead.push(part); stderrBytes += part.length
   })
 
+  // Intervals are measured on a monotonic clock, so a wall-clock step (NTP) neither pauses the heartbeat nor moves the timeout.
+  const mono = deps.monoMs ?? (() => performance.now())
   const beat = () => { try { writeFileSync(join(dir, 'heartbeat'), String(deps.nowMs()), { mode: 0o600 }) } catch { /* dir swept */ } }
+  const startedMono = mono()
   beat()
-  let lastBeat = deps.nowMs()
+  let lastBeat = mono()
   const timer = setInterval(() => {
-    const now = deps.nowMs()
-    if (now - lastBeat >= deps.heartbeatMs) { beat(); lastBeat = now }
+    const m = mono()
+    const sinceBeat = m - lastBeat
+    if (sinceBeat >= deps.heartbeatMs || sinceBeat < 0) { beat(); lastBeat = m }
     if (existsSync(join(dir, 'cancel'))) stop({ status: 'cancelled', detail: 'cancelled by request' })
-    if (now - startedMs > s.timeout_s * 1000) stop({ status: 'timed_out', detail: `ran past ${s.timeout_s}s` })
+    if (m - startedMono > s.timeout_s * 1000) stop({ status: 'timed_out', detail: `ran past ${s.timeout_s}s` })
   }, deps.pollMs)
 
   // 'close' waits for the pipes; a grandchild holding one open must not hold the runner, so 'exit' gets a bounded wait.
@@ -195,7 +192,9 @@ async function answerInventory(deps: RunnerDeps, reqs: string[]): Promise<void> 
 
 /**
  * Consume every spool entry once (strays first, then inventory, then jobs in id = time order), then return. Nothing
- * is left behind for launchd's QueueDirectories to relaunch the runner over, except what arrives while a job runs.
+ * is left behind for launchd's QueueDirectories to relaunch the runner over, except what arrives while a job runs,
+ * and the marker of a real job whose claim failed (ENOSPC, EACCES): that one stays, and runOnce throws once the rest
+ * of the spool is done, so the runner exits non-zero and launchd retries it.
  */
 export async function runOnce(deps: RunnerDeps): Promise<number> {
   mkdirSync(deps.paths.spool, { recursive: true, mode: 0o700 })
@@ -204,16 +203,33 @@ export async function runOnce(deps: RunnerDeps): Promise<number> {
   const reqs = names.filter((n) => INVENTORY_REQ_RE.test(n))
   if (reqs.length > 0) await answerInventory(deps, reqs)
   let ran = 0
+  let claimError: unknown
   for (const id of names.filter((n) => ID_RE.test(n))) {
     const marker = join(deps.paths.spool, id)
-    try { renameSync(marker, join(jobDir(deps.paths, id), 'claimed')) } catch {
-      if (removeEntry(marker)) appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'no job to claim' }, deps.nowMs())
+    try { renameSync(marker, join(jobDir(deps.paths, id), 'claimed')) } catch (e) {
+      if (errTag(e) === 'ENOENT' || readState(deps.paths, id) === null) {
+        if (removeEntry(marker)) appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'no job to claim' }, deps.nowMs())
+      } else {
+        try { appendLedger(deps.paths.ledger, { event: 'claim_failed', id, detail: `could not claim the job: ${errTag(e)}` }, deps.nowMs()) } catch { /* the exit code still says it */ }
+        claimError ??= e
+      }
       continue
     }
     try { await runJob(deps, id) } catch (e) { failStranded(deps, id, e) }
     ran++
   }
+  if (claimError !== undefined) throw claimError
   return ran
+}
+
+/**
+ * When the kernel started this pid, exactly as `ps -o lstart= -p <pid>` prints it (C locale, UTC, trimmed), or null when ps
+ * cannot say (no such process). A pid alone is not an identity: the counter wraps and the number goes to another process.
+ */
+export function processStartTime(pid: number): string | null {
+  const r = spawnSync('/bin/ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', timeout: 3000, env: { LC_ALL: 'C', TZ: 'UTC' } })
+  const out = r.status === 0 ? String(r.stdout ?? '').trim() : ''
+  return out === '' ? null : out
 }
 
 function jobIds(paths: SummonPaths): string[] {
@@ -223,18 +239,23 @@ function jobIds(paths: SummonPaths): string[] {
 /**
  * A runner killed mid-job leaves `running` with a dead pid (or `queued` with a claim it never got to use). The next
  * runner start calls this: the job becomes `unknown` (never retried), and its last heartbeat stays on disk for `status`.
+ * A `running` job is alive only while its pid is alive AND still has the start time recorded at spawn; a pid whose start
+ * time differs belongs to another process, so it is never probed or signalled, and the job is orphaned.
  */
 export function markOrphans(paths: SummonPaths, nowMs: number,
-  isAlive: (pid: number) => boolean = (pid) => { try { process.kill(pid, 0); return true } catch { return false } }): number {
+  isAlive: (pid: number) => boolean = (pid) => { try { process.kill(pid, 0); return true } catch { return false } },
+  startTimeOf: (pid: number) => string | null = processStartTime): number {
+  const stillOurs = (s: JobState) => !!s.pid && !!s.pid_lstart && startTimeOf(s.pid) === s.pid_lstart && isAlive(s.pid)
   let n = 0
   for (const id of jobIds(paths)) {
     const s = readState(paths, id)
     let detail: string | undefined
-    if (s?.status === 'running' && (!s.pid || !isAlive(s.pid))) detail = 'runner stopped mid-job'
+    if (s?.status === 'running' && !stillOurs(s)) detail = 'runner stopped mid-job'
     else if (s?.status === 'queued' && existsSync(join(jobDir(paths, id), 'claimed'))) detail = 'runner stopped before the job started'
     if (!s || !detail) continue
-    writeState(paths, { ...s, status: 'unknown', detail, ended_at: iso(nowMs), pid: undefined })
-    appendLedger(paths.ledger, { event: 'job_end', id, status: 'unknown', detail }, nowMs)
+    // result.json is written atomically and before state.json, so one that parses is the job's whole outcome.
+    const r = readJson<JobResult>(join(jobDir(paths, id), 'result.json'))
+    settleJob(paths, nowMs, s, r && TERMINAL.has(r.status) ? { status: r.status, reason: r.reason, detail: r.detail, resets_at: r.resets_at } : { status: 'unknown', detail })
     n++
   }
   return n
@@ -251,7 +272,7 @@ export function reapStranded(paths: SummonPaths, nowMs: number): number {
     const s = readState(paths, id)
     if (s?.status !== 'queued' || !(nowMs > Date.parse(s.expires_at) + CLOCK_SKEW_MS)) continue
     if (existsSync(join(paths.spool, id)) || existsSync(join(jobDir(paths, id), 'claimed'))) continue
-    finishJob(paths, nowMs, s, { status: 'expired', detail: 'never reached the runner' })
+    finishJob(paths, nowMs, s, { status: 'expired', detail: NEVER_REACHED })
     n++
   }
   return n

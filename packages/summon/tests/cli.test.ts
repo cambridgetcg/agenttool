@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseCli, runCli, splitJsonFlag, type CliDeps } from '../src/cli.ts'
+import { verifyLedger } from '../src/ledger.ts'
 import { mapSshFailure, sshCall } from '../src/ssh.ts'
 import { cleanupTmps, trackTmp } from './helpers.ts'
 
@@ -315,6 +316,21 @@ describe('runCli', () => {
   })
 })
 
+describe('F04: the Air ledger survives a torn tail', () => {
+  for (const [what, torn] of [['a half line', '{"event":"answer","id":"smn_01a1'], ['a `null` line', 'null\n']] as const) {
+    test(`a start after ${what} still ledgers and sends`, () => {
+      const { bin, dir } = fakeSsh(0, '{"status":"admitted","handle":"nuance/x"}')
+      const ledger = join(dir, 'ledger.jsonl')
+      runCli(startArgv(dir), deps(bin, dir))
+      appendFileSync(ledger, torn)
+      expect(runCli(startArgv(dir), deps(bin, dir))).toMatchObject({ code: 0, out: { status: 'admitted' } })
+      expect(calls(dir)).toBe(2)
+      expect(JSON.parse(readFileSync(join(dir, 'ledger-at-call'), 'utf8').trimEnd().split('\n').at(-1)!)).toMatchObject({ event: 'sent' }) // ledgered before the send
+      expect(verifyLedger(ledger)).toEqual({ ok: true, entries: 5, torn: [3] })
+    })
+  }
+})
+
 describe('runCli when the Air ledger cannot be written', () => {
   // The fake replaces the ledger file with a directory once it is called, so the `sent` entry is written and the `answer` append throws.
   const BREAK_LEDGER = 'rm -f "@DIR@/ledger.jsonl"; mkdir "@DIR@/ledger.jsonl"'
@@ -400,6 +416,13 @@ describe('bin/summon.ts', () => {
     expect((await run(['status', handle], fresh.bin)).stdout).toBe(`running ${handle}\nheartbeat: 0s ago\n`)
     const none = fakeSsh(0, JSON.stringify({ status: 'queued', handle, heartbeat_age_s: null }))
     expect((await run(['status', handle], none.bin)).stdout).toBe(`queued ${handle}\n`)
+  })
+  test('F17: a usage stop prints its reset time', async () => {
+    const handle = `nuance/smn_${'d'.repeat(32)}`
+    const { bin } = fakeSsh(0, JSON.stringify({ status: 'blocked', reason: 'usage', handle, detail: 'usage allowed_warning', resets_at: '2026-10-11T03:00:00.000Z', result_text: 'partial' }))
+    const r = await run(['result', handle], bin)
+    expect(r.code).toBe(1)
+    expect(r.stdout).toBe(`blocked (usage) ${handle}\nresets: 2026-10-11T03:00:00.000Z\ndetail: usage allowed_warning\npartial\n`)
   })
   test('--json keeps heartbeat_age_s in the object', async () => {
     const handle = `nuance/smn_${'c'.repeat(32)}`

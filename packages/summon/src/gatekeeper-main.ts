@@ -3,8 +3,8 @@
 // It never runs a harness. Every path answers with exactly one JSON line on stdout:
 //   exit 0  answered (including a refusal the gate decided on)
 //   exit 2  the command itself was refused (not one of the five verbs)
-//   exit 1  something threw — the answer is `unknown`, never `refused`, because a `start`
-//           that throws may already have spooled its job
+//   exit 1  something threw — the answer is `unknown`, never `refused`: the caller cannot tell
+//           what was done (a `start` is ledgered before it is spooled, so a throw never spools unrecorded)
 import { loadAllowlist } from './allowlist.ts'
 import { gateStart } from './gate.ts'
 import { describeCommand, liveGateDeps, parseCommand, readBoundedStdin, requestCancel, requestInventory, resultOf, sanitizeForLog, statusOf, type Command } from './gatekeeper.ts'

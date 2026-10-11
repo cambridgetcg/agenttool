@@ -1,9 +1,9 @@
-import { mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import type { GateDeps } from './gate.ts'
 import { findClaude } from './harness.ts'
-import { heartbeatAgeS, jobDir, readJson, readState, type JobResult } from './jobs.ts'
+import { heartbeatAgeS, jobDir, NEVER_REACHED, neverReached, readJson, readState, type JobResult } from './jobs.ts'
 import { appendLedger } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { seenRefusal } from './replay.ts'
@@ -63,8 +63,10 @@ function noJob(paths: SummonPaths, device: string, id: string): GateResponse {
 export function statusOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
   if (!s) return noJob(paths, device, id)
+  // The runner would only end it expired; the next start settles it on disk under the admission lock.
+  if (neverReached(paths, s, nowMs)) return { status: 'expired', handle: `${device}/${id}`, detail: NEVER_REACHED, heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
   return { status: s.status, handle: `${device}/${id}`, ...(s.reason ? { reason: s.reason } : {}), ...(s.detail ? { detail: s.detail } : {}),
-    heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
+    ...(s.resets_at ? { resets_at: s.resets_at } : {}), heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
 }
 
 export function resultOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
@@ -75,24 +77,28 @@ export function resultOf(paths: SummonPaths, device: string, id: string, nowMs: 
 export function requestCancel(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
   if (!s) return noJob(paths, device, id)
-  if (TERMINAL.has(s.status)) return statusOf(paths, device, id, nowMs)
+  if (TERMINAL.has(s.status) || neverReached(paths, s, nowMs)) return statusOf(paths, device, id, nowMs)
+  appendLedger(paths.ledger, { event: 'cancel_requested', id }, nowMs) // logged before the marker that acts on it
   writeFileSync(join(jobDir(paths, id), 'cancel'), '', { mode: 0o600 })
-  appendLedger(paths.ledger, { event: 'cancel_requested', id }, nowMs)
   return { status: s.status, handle: `${device}/${id}`, detail: 'cancel requested' }
 }
 
-/** Ask the runner (Yu's GUI session) for a fresh inventory and wait for it. */
+/**
+ * Ask the runner (Yu's GUI session) for a fresh inventory and wait for it. The answer is inventory.json only once the
+ * runner has consumed this request's .req (it writes the report first) and the report was collected after the request:
+ * a file mtime can be ahead of the clock, so it never counts as fresh.
+ */
 export async function requestInventory(paths: SummonPaths, nowMs: number, waitMs = 15_000): Promise<GateResponse> {
+  appendLedger(paths.ledger, { event: 'inventory_requested' }, nowMs) // logged before the request that acts on it
   mkdirSync(paths.spool, { recursive: true, mode: 0o700 })
-  writeFileSync(join(paths.spool, `inventory-${nowMs}.req`), '', { mode: 0o600 })
+  const req = join(paths.spool, `inventory-${nowMs}.req`)
+  writeFileSync(req, '', { mode: 0o600 })
   const deadline = Date.now() + waitMs
   while (Date.now() < deadline) {
-    try {
-      if (statSync(paths.inventory).mtimeMs >= nowMs) {
-        const inv = readJson<Record<string, unknown>>(paths.inventory)
-        if (inv) return { status: 'completed', inventory: inv }
-      }
-    } catch { /* not yet */ }
+    if (!existsSync(req)) {
+      const inv = readJson<Record<string, unknown>>(paths.inventory)
+      if (inv && typeof inv.collected_at === 'string' && Date.parse(inv.collected_at) >= nowMs) return { status: 'completed', inventory: inv }
+    }
     await Bun.sleep(250)
   }
   return { status: 'unknown', detail: 'the runner did not answer (is Yu logged in at this Mac?)' }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import {
@@ -100,6 +100,13 @@ describe('status, result and cancel', () => {
     expect(readFileSync(paths.ledger, 'utf8')).toContain('cancel_requested')
     expect(verifyLedger(paths.ledger)).toMatchObject({ ok: true })
   })
+  test('F04: cancel_requested is ledgered before the cancel marker: a ledger that cannot be written leaves no marker', () => {
+    const h = targetHome(); const paths = summonPaths(h); const id = newRequestId()
+    writeState(paths, stateOf(id, 'running'))
+    mkdirSync(paths.ledger, { recursive: true }) // every append now fails (EISDIR)
+    expect(() => requestCancel(paths, 'nuance', id, Date.now())).toThrow()
+    expect(existsSync(join(paths.jobs, id, 'cancel'))).toBe(false)
+  })
   test('cancel leaves a finished job alone', () => {
     const h = targetHome(); const paths = summonPaths(h); const id = newRequestId()
     writeState(paths, stateOf(id, 'completed'))
@@ -132,17 +139,54 @@ describe('status, result and cancel', () => {
 })
 
 describe('requestInventory', () => {
-  test('writes a spool request and returns the fresh inventory the runner produces', async () => {
+  /** What the runner does: once the request is in the spool, write inventory.json (collected now, or at `collectedAt`), then consume the request unless told not to. */
+  const fakeRunner = (paths: ReturnType<typeof summonPaths>, now: number, o: { collectedAt?: number; consume?: boolean } = {}) => (async () => {
+    const req = join(paths.spool, `inventory-${now}.req`)
+    for (let i = 0; i < 80 && !existsSync(req); i++) await Bun.sleep(25)
+    await Bun.sleep(100)
+    writeJsonAtomic(paths.inventory, { collected_at: new Date(o.collectedAt ?? Date.now()).toISOString(), device: 'nuance' })
+    if (o.consume !== false) rmSync(req)
+  })()
+  test('writes a spool request and returns the fresh inventory once the runner has consumed it', async () => {
     const paths = summonPaths(targetHome()); const now = Date.now()
-    const answer = (async () => {
-      for (let i = 0; i < 40 && !existsSync(paths.spool); i++) await Bun.sleep(25)
-      await Bun.sleep(100)
-      writeJsonAtomic(paths.inventory, { device: 'nuance', claude: true })
-    })()
+    const answer = fakeRunner(paths, now)
     const r = await requestInventory(paths, now, 5000)
     await answer
-    expect(r).toEqual({ status: 'completed', inventory: { device: 'nuance', claude: true } })
-    expect(readdirSync(paths.spool)).toContain(`inventory-${now}.req`)
+    expect(r).toMatchObject({ status: 'completed', inventory: { device: 'nuance' } })
+    expect(Date.parse(String((r.inventory as any).collected_at))).toBeGreaterThanOrEqual(now)
+    expect(readdirSync(paths.spool)).not.toContain(`inventory-${now}.req`)
+  })
+  test('F15: an inventory request is ledgered (event only), before its .req is written', async () => {
+    const paths = summonPaths(targetHome()); const now = Date.now()
+    await requestInventory(paths, now, 300)
+    const entries = readFileSync(paths.ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ event: 'inventory_requested' })
+    expect(Object.keys(entries[0]).sort()).toEqual(['event', 'hash', 'prev', 'ts'])
+    expect(verifyLedger(paths.ledger)).toEqual({ ok: true, entries: 1 })
+    const p2 = summonPaths(targetHome())
+    mkdirSync(p2.ledger, { recursive: true }) // every append now fails (EISDIR)
+    await expect(requestInventory(p2, now, 300)).rejects.toThrow()
+    expect(existsSync(join(p2.spool, `inventory-${now}.req`))).toBe(false)
+  })
+  test('F05: a future-dated inventory.json is not fresh: with no runner the answer is unknown, not the old report', async () => {
+    const paths = summonPaths(targetHome()); const now = Date.now()
+    mkdirSync(paths.state, { recursive: true })
+    writeJsonAtomic(paths.inventory, { collected_at: '2026-01-01T00:00:00.000Z', note: 'STALE' })
+    utimesSync(paths.inventory, (now + 3_600_000) / 1000, (now + 3_600_000) / 1000) // written while the clock ran an hour ahead
+    expect(await requestInventory(paths, now, 400)).toMatchObject({ status: 'unknown' })
+  })
+  test('F05: a fresh report is not this request\'s answer while this request\'s .req is still in the spool', async () => {
+    const paths = summonPaths(targetHome()); const now = Date.now()
+    const answer = fakeRunner(paths, now, { consume: false })
+    expect(await requestInventory(paths, now, 800)).toMatchObject({ status: 'unknown' })
+    await answer
+  })
+  test('F05: a consumed request with a report collected before it was made is not an answer', async () => {
+    const paths = summonPaths(targetHome()); const now = Date.now()
+    const answer = fakeRunner(paths, now, { collectedAt: now - 60_000 })
+    expect(await requestInventory(paths, now, 800)).toMatchObject({ status: 'unknown' })
+    await answer
   })
   test('a stale inventory is not an answer; the runner not answering is unknown, not a guess', async () => {
     const paths = summonPaths(targetHome()); const now = Date.now()
@@ -302,14 +346,27 @@ describe('gatekeeper-main', () => {
   test('inventory asks the runner and relays what it writes', async () => {
     const h = targetHome(); const paths = summonPaths(h)
     const run = runGatekeeper(h, 'inventory')
-    for (let i = 0; i < 200; i++) {
-      if (existsSync(paths.spool) && readdirSync(paths.spool).some((n) => n.startsWith('inventory-'))) break
-      await Bun.sleep(25)
+    let req: string | undefined
+    for (let i = 0; i < 200 && !req; i++) {
+      req = existsSync(paths.spool) ? readdirSync(paths.spool).find((n) => n.startsWith('inventory-')) : undefined
+      if (!req) await Bun.sleep(25)
     }
-    writeJsonAtomic(paths.inventory, { device: 'nuance', claude: { available: true } })
+    writeJsonAtomic(paths.inventory, { collected_at: new Date().toISOString(), device: 'nuance', claude: { available: true } })
+    rmSync(join(paths.spool, req!))
     expect(await run).toMatchObject({ code: 0, out: { status: 'completed', inventory: { device: 'nuance' } } })
   })
 
+  test('F04: with a torn ledger tail, a start, a refusal and a cancel are still answered and ledgered', async () => {
+    const h = targetHome(); const paths = summonPaths(h); const req = sampleRequest()
+    expect((await runGatekeeper(h, 'start', JSON.stringify(sampleRequest({ cwd: '~/Elsewhere' })))).out).toMatchObject({ status: 'refused' })
+    appendFileSync(paths.ledger, '{"event":"admitted","id":"smn_01a1') // what an unclean shutdown can leave
+    expect(await runGatekeeper(h, 'start', JSON.stringify(req))).toMatchObject({ code: 0, out: { status: 'admitted' } })
+    expect(await runGatekeeper(h, 'start', JSON.stringify(req))).toMatchObject({ code: 0, out: { status: 'refused', reason: 'replayed' } })
+    expect(await runGatekeeper(h, `cancel ${req.id}`)).toMatchObject({ code: 0, out: { status: 'queued', detail: 'cancel requested' } })
+    const events = readFileSync(paths.ledger, 'utf8').split('\n').filter(Boolean).slice(2).map((l) => JSON.parse(l).event)
+    expect(events).toEqual(['ledger_torn_tail', 'admitted', 'refused', 'cancel_requested'])
+    expect(verifyLedger(paths.ledger)).toEqual({ ok: true, entries: 5, torn: [2] })
+  })
   test('any throw answers unknown, exit 1, one line, never refused (the outcome is uncertain)', async () => {
     const h = targetHome()
     mkdirSync(join(h, '.local/state'), { recursive: true })

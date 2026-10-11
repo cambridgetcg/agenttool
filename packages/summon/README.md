@@ -98,10 +98,14 @@ folders:
 
 - **The runner is serial.** It runs one job at a time and answers nothing else until that job ends, so
   `summon nuance inventory` sent while a job runs answers `unknown` after 15 s. Ask again once the job is over.
-- **Clean-up happens when the runner starts.** A job left `running` by a killed runner (it becomes `unknown`) or
-  `queued` by a gatekeeper that died mid-admission (it becomes `expired`) is settled the next time launchd starts the
-  runner, which any spool entry does. Until then it still counts toward `max_concurrent`; `summon nuance inventory`
-  is a quick way to start it.
+- **Clean-up happens when the runner starts.** A job left `running` by a killed runner is settled the next time
+  launchd starts the runner, which any spool entry does: it ends with the outcome in its `result.json` if that was
+  written, else `unknown`. Until then it still counts toward `max_concurrent`; `summon nuance inventory` is a quick
+  way to start it. A job still `queued` that the runner never claimed stops counting once its expiry (plus the 5 min
+  clock-skew grace) has passed: `status` then says `expired`, and the next `start` settles it.
+- **Claude Code keeps some files of its own.** Claude Code may save large tool outputs of a summoned job under
+  `~/.claude/projects/<cwd-slug>/<session>/tool-results/` on Nuance, even with `--no-session-persistence`. They follow
+  Claude Code's own cleanup, not Summon's 30-day sweep. The inventory carries a short `retention` note per harness.
 
 ## Deferred on purpose
 
@@ -109,3 +113,5 @@ folders:
   anchor entry, so it waits for Phase 1.
 - **The `sol summon` alias.** `~/.config/sol` is unversioned and other agents edit it, so `summon` on PATH is the
   Phase 0 front door.
+- **Reusing `sol agent start`.** Phase 0 runs jobs with its own minimal runner, not `sol agent start`, even when the
+  inventory shows a verified `sol`. Reuse is Phase 1.

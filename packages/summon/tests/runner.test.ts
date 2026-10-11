@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
-import { requestCancel, statusOf } from '../src/gatekeeper.ts'
+import { requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
 import { countActive, jobDir, readJson, readState, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
-import { markOrphans, reapStranded, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
+import { markOrphans, processStartTime, reapStranded, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
 import { cleanupTmps, DEFAULT_ALLOWLIST, makeFakeClaude, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -19,7 +19,8 @@ const RUNNER_MAIN = join(import.meta.dir, '..', 'src', 'runner-main.ts')
 const iso = (ms: number) => new Date(ms).toISOString()
 const rdeps = (home: string, over: Partial<RunnerDeps> = {}): RunnerDeps => ({
   paths: summonPaths(home), home, user: 'yu', nowMs: () => Date.now(), claudeBin: () => fake.bin,
-  collectInventory: async () => ({ macos: 'test' }), heartbeatMs: 50, pollMs: 25, killGraceMs: 200, ...over,
+  collectInventory: async () => ({ macos: 'test' }), heartbeatMs: 50, pollMs: 25, killGraceMs: 200,
+  processStartTime: (pid) => `fake-lstart-${pid}`, ...over,
 })
 /** Admits through the real gate, as the gatekeeper would. */
 function admit(home: string, over = {}) {
@@ -74,6 +75,32 @@ describe('runOnce', () => {
     expect(resultOf(h, req.id)).toMatchObject({ status: 'blocked', reason: 'usage' })
     expect(typeof resultOf(h, req.id).resets_at).toBe('string')
   }, 15_000)
+  test('F15: the move to running is ledgered job_start (id, status running) between admitted and job_end', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('ok')
+    await runOnce(rdeps(h))
+    const mine = ledgerOf(h).filter((e) => e.id === req.id)
+    expect(mine.map((e) => [e.event, e.status])).toEqual([['admitted', undefined], ['job_start', 'running'], ['job_end', 'completed']])
+    expect(Object.keys(mine[1]).sort()).toEqual(['event', 'hash', 'id', 'prev', 'status', 'ts'])
+    expect(verifyLedger(paths.ledger)).toEqual({ ok: true, entries: 3 })
+  })
+  test('F15: a job whose start cannot be ledgered is stopped and ends failed, never run unrecorded', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('ok')
+    unlinkSync(paths.ledger); mkdirSync(paths.ledger) // from here every append fails (EISDIR)
+    await runOnce(rdeps(h))
+    expect(readState(paths, req.id)).toMatchObject({ status: 'failed', detail: 'runner error: EISDIR' })
+  })
+  test('F17: a usage stop keeps its reset time in state.json, and status and result both return it', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('warn')
+    await runOnce(rdeps(h))
+    const resets = resultOf(h, req.id).resets_at
+    expect(typeof resets).toBe('string')
+    expect(readState(paths, req.id)?.resets_at).toBe(resets)
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'blocked', reason: 'usage', resets_at: resets })
+    expect(gateResult(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'blocked', reason: 'usage', resets_at: resets })
+  }, 15_000)
   test('cancel marker stops the job; while it runs, status shows a pid and a fresh heartbeat', async () => {
     const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
     fake.setMode('slow')
@@ -95,6 +122,17 @@ describe('runOnce', () => {
     expect(resultOf(h, req.id)).toMatchObject({ status: 'cancelled' })
     expect(alive(running.pid!)).toBe(false)
   }, 15_000)
+  test('F27: the runner records the child\'s start time, from the injected lookup, next to its pid', async () => {
+    const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h))
+    await waitFor(() => readState(paths, req.id)?.status === 'running')
+    const running = readState(paths, req.id)!
+    expect(running.pid_lstart).toBe(`fake-lstart-${running.pid}`)
+    requestCancel(paths, 'nuance', req.id, Date.now())
+    await p
+    expect(readState(paths, req.id)?.pid_lstart).toBeUndefined() // a finished job keeps neither
+  }, 15_000)
   test('timeout stops the job', async () => {
     const h = targetHome(); const req = admit(h, { timeout_s: 1 })
     fake.setMode('slow')
@@ -102,6 +140,43 @@ describe('runOnce', () => {
     expect(readState(summonPaths(h), req.id)?.status).toBe('timed_out')
     expect(resultOf(h, req.id)).toMatchObject({ status: 'timed_out', detail: 'ran past 1s' })
   }, 15_000)
+  describe('F08: the timeout and heartbeat intervals use a monotonic clock', () => {
+    const beatsWhile = async (beat: string, until: () => boolean, ms: number, keep: (v: number) => boolean = () => true) => {
+      const seen = new Set<string>()
+      const end = Date.now() + ms
+      while (!until() && Date.now() < end) {
+        try { const v = readFileSync(beat, 'utf8'); if (keep(Number(v))) seen.add(v) } catch { /* not yet */ }
+        await Bun.sleep(10)
+      }
+      return seen
+    }
+    test('a wall clock stepped back an hour after the first beat pauses neither the heartbeat nor the timeout', async () => {
+      const h = targetHome(); const req = admit(h, { timeout_s: 1 }); const paths = summonPaths(h)
+      const beat = join(jobDir(paths, req.id), 'heartbeat')
+      fake.setMode('slow')
+      let offset = 0
+      const p = runOnce(rdeps(h, { nowMs: () => Date.now() + offset }))
+      try {
+        await waitFor(() => existsSync(beat))
+        offset = -3_600_000 // an NTP correction
+        const steppedBack = await beatsWhile(beat, () => readState(paths, req.id)?.status === 'timed_out', 4_000, (v) => v < Date.now() - 1_800_000)
+        expect(steppedBack.size).toBeGreaterThanOrEqual(3) // beats kept coming, stamped with the stepped wall clock
+        expect(readState(paths, req.id)).toMatchObject({ status: 'timed_out', detail: 'ran past 1s' })
+      } finally { writeFileSync(join(jobDir(paths, req.id), 'cancel'), ''); await p }
+    }, 15_000)
+    test('a monotonic delta that is somehow negative beats at once', async () => {
+      const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+      const beat = join(jobDir(paths, req.id), 'heartbeat')
+      fake.setMode('slow')
+      let t = 1e9
+      const p = runOnce(rdeps(h, { heartbeatMs: 1e9, monoMs: () => (t -= 1_000) }))
+      try {
+        await waitFor(() => existsSync(beat))
+        expect((await beatsWhile(beat, () => false, 400)).size).toBeGreaterThanOrEqual(3)
+      } finally { requestCancel(paths, 'nuance', req.id, Date.now()); await p }
+      expect(readState(paths, req.id)?.status).toBe('cancelled')
+    }, 15_000)
+  })
   test('output over 8 MiB stops the job as failed', async () => {
     const h = targetHome(); const req = admit(h)
     fake.setMode('flood')
@@ -274,6 +349,47 @@ describe('runOnce', () => {
     })
   })
 
+  describe('F25: a claim that fails on a real job never discards its marker', () => {
+    test('the marker stays, nothing says "no job to claim", runOnce fails (so launchd retries), and the next run completes the job', async () => {
+      const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+      fake.setMode('ok')
+      chmodSync(jobDir(paths, req.id), 0o500) // the claim rename is refused (EACCES), as it is on a full disk (ENOSPC)
+      let err: unknown
+      try { await runOnce(rdeps(h)) } catch (e) { err = e } finally { chmodSync(jobDir(paths, req.id), 0o700) }
+      expect((err as { code?: string } | undefined)?.code).toBe('EACCES')
+      expect(existsSync(join(paths.spool, req.id))).toBe(true)
+      expect(readState(paths, req.id)?.status).toBe('queued')
+      expect(ledgerOf(h).filter((e) => e.event === 'spool_discard')).toEqual([])
+      expect(ledgerOf(h).find((e) => e.event === 'claim_failed')).toMatchObject({ id: req.id, detail: 'could not claim the job: EACCES' })
+      expect(existsSync(fake.argvOut)).toBe(false)
+      expect(await runOnce(rdeps(h))).toBe(1)
+      expect(readState(paths, req.id)?.status).toBe('completed')
+      expect(verifyLedger(paths.ledger).ok).toBe(true)
+    })
+    test('other spool work still runs before the failure is reported', async () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const stuck = enqueue(h); const next = enqueue(h)
+      fake.setMode('ok')
+      const [first] = [stuck.id, next.id].sort()
+      const other = first === stuck.id ? next.id : stuck.id
+      chmodSync(jobDir(paths, first!), 0o500)
+      let err: unknown
+      try { await runOnce(rdeps(h)) } catch (e) { err = e } finally { chmodSync(jobDir(paths, first!), 0o700) }
+      expect(err).toBeDefined()
+      expect(readState(paths, other)?.status).toBe('completed')
+      expect(existsSync(join(paths.spool, first!))).toBe(true)
+    })
+    test('a marker whose job has no state is still discarded, whatever the rename error', async () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const req = enqueue(h)
+      unlinkSync(join(jobDir(paths, req.id), 'state.json'))
+      chmodSync(jobDir(paths, req.id), 0o500)
+      try { expect(await runOnce(rdeps(h))).toBe(0) } finally { chmodSync(jobDir(paths, req.id), 0o700) }
+      expect(readdirSync(paths.spool)).toEqual([])
+      expect(ledgerOf(h).find((e) => e.event === 'spool_discard' && e.id === req.id)).toMatchObject({ detail: 'no job to claim' })
+    })
+  })
+
   describe('no job is stranded by a runner error (ruling 2)', () => {
     const failedWith = (h: string, id: string, detail: string | RegExp) => {
       const s = readState(summonPaths(h), id)!
@@ -344,10 +460,88 @@ describe('recovery', () => {
     expect(readState(paths, id)?.pid).toBeUndefined()
     expect(ledgerOf(paths.home)).toContainEqual(expect.objectContaining({ event: 'job_end', id, status: 'unknown' }))
   })
-  test('a running job whose pid is still alive is left alone', () => {
-    const paths = summonPaths(targetHome()); const id = running(paths)
-    expect(markOrphans(paths, Date.now(), () => true)).toBe(0)
+  test('a running job whose pid is still alive with the start time it was recorded with is left alone', () => {
+    const paths = summonPaths(targetHome()); const id = running(paths, { pid_lstart: 'Sun Oct 11 00:38:43 2026' })
+    expect(markOrphans(paths, Date.now(), () => true, () => 'Sun Oct 11 00:38:43 2026')).toBe(0)
     expect(readState(paths, id)?.status).toBe('running')
+  })
+  describe('F27: a reused pid does not keep a dead job running', () => {
+    test('a live pid with another start time is orphaned, and the next request is admitted', () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const other = Bun.spawn(['/bin/sleep', '60'], { stdout: 'ignore', stderr: 'ignore' }) // an unrelated live process that got the old pid
+      try {
+        const id = running(paths, { pid: other.pid, pid_lstart: 'Fri Oct  9 10:00:00 2026', started_at: iso(Date.now() - 2 * 86_400_000) })
+        expect(alive(other.pid)).toBe(true)
+        expect(markOrphans(paths, Date.now(), undefined, () => 'Sun Oct 11 00:38:43 2026')).toBe(1) // the default liveness check
+        expect(readState(paths, id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+        expect(countActive(paths, Date.now())).toBe(0)
+        admit(h)
+        expect(alive(other.pid)).toBe(true) // never signalled
+      } finally { other.kill('SIGKILL') }
+    })
+    test('a running state with no recorded start time is orphaned even when its pid is alive', () => {
+      const paths = summonPaths(targetHome()); const id = running(paths)
+      expect(markOrphans(paths, Date.now(), () => true, () => 'Sun Oct 11 00:38:43 2026')).toBe(1)
+      expect(readState(paths, id)?.status).toBe('unknown')
+    })
+    test('a pid whose start time does not match is never probed or signalled', () => {
+      const paths = summonPaths(targetHome()); running(paths, { pid_lstart: 'then' })
+      let probed = 0
+      expect(markOrphans(paths, Date.now(), () => { probed++; return true }, () => 'now')).toBe(1)
+      expect(probed).toBe(0)
+    })
+    test('processStartTime reads the kernel start time with ps: stable for a live pid, null once it is gone', async () => {
+      const p = Bun.spawn(['/bin/sleep', '60'], { stdout: 'ignore', stderr: 'ignore' })
+      const first = processStartTime(p.pid)
+      expect(first).toMatch(/^[A-Z][a-z]{2} [A-Z][a-z]{2} [ \d]\d \d{2}:\d{2}:\d{2} \d{4}$/) // C locale: `Sun Oct 11 00:38:43 2026`
+      expect(processStartTime(p.pid)).toBe(first)
+      p.kill('SIGKILL'); await p.exited
+      expect(processStartTime(p.pid)).toBeNull()
+    })
+  })
+  describe('F28: an orphan whose result.json landed finishes from it', () => {
+    test('a running job with a dead pid and a completed result ends completed: status and result agree', () => {
+      const paths = summonPaths(targetHome()); const id = running(paths); const now = Date.now()
+      writeJsonAtomic(join(jobDir(paths, id), 'result.json'), { status: 'completed', result_text: 'the answer', exit_code: 0, num_turns: 3, cost_usd: 0.05 })
+      expect(markOrphans(paths, now, () => false)).toBe(1)
+      const s = readState(paths, id)!
+      expect(s).toMatchObject({ status: 'completed', ended_at: iso(now) })
+      expect(s.detail).toBeUndefined()
+      expect(s.pid).toBeUndefined()
+      expect(statusOf(paths, 'nuance', id, now)).toMatchObject({ status: 'completed' })
+      expect(gateResult(paths, 'nuance', id, now)).toMatchObject({ status: 'completed', result_text: 'the answer' })
+      const ends = ledgerOf(paths.home).filter((e) => e.event === 'job_end' && e.id === id)
+      expect(ends).toEqual([expect.objectContaining({ status: 'completed' })])
+      expect(JSON.stringify(ends)).not.toContain('the answer')
+      expect(markOrphans(paths, now, () => false)).toBe(0)
+    })
+    test('its reason and detail come along (blocked permission)', () => {
+      const paths = summonPaths(targetHome()); const id = running(paths)
+      writeJsonAtomic(join(jobDir(paths, id), 'result.json'), { status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied', exit_code: 0 })
+      markOrphans(paths, Date.now(), () => false)
+      expect(readState(paths, id)).toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied' })
+      expect(ledgerOf(paths.home).find((e) => e.event === 'job_end')).toMatchObject({ status: 'blocked', reason: 'permission', detail: '1 tool call(s) denied' })
+    })
+    test('F17: a usage result keeps its reset time in state.json', () => {
+      const paths = summonPaths(targetHome()); const id = running(paths)
+      writeJsonAtomic(join(jobDir(paths, id), 'result.json'), { status: 'blocked', reason: 'usage', detail: 'usage allowed_warning', resets_at: '2026-10-11T03:00:00.000Z', exit_code: null })
+      markOrphans(paths, Date.now(), () => false)
+      expect(readState(paths, id)).toMatchObject({ status: 'blocked', reason: 'usage', resets_at: '2026-10-11T03:00:00.000Z' })
+    })
+    test('a claimed queued job whose result landed (cancelled before it started) ends cancelled', () => {
+      const h = targetHome(); const paths = summonPaths(h); const req = enqueue(h)
+      unlinkSync(join(paths.spool, req.id)); writeFileSync(join(jobDir(paths, req.id), 'claimed'), '')
+      writeJsonAtomic(join(jobDir(paths, req.id), 'result.json'), { status: 'cancelled', detail: 'cancelled before it started', exit_code: null })
+      expect(markOrphans(paths, Date.now(), () => false)).toBe(1)
+      expect(readState(paths, req.id)).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started' })
+    })
+    test('a result.json that does not parse, or names no final status, still ends unknown', () => {
+      const paths = summonPaths(targetHome()); const torn = running(paths); const odd = running(paths)
+      writeFileSync(join(jobDir(paths, torn), 'result.json'), '{"status":"compl')
+      writeJsonAtomic(join(jobDir(paths, odd), 'result.json'), { status: 'running' })
+      expect(markOrphans(paths, Date.now(), () => false)).toBe(2)
+      for (const id of [torn, odd]) expect(readState(paths, id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+    })
   })
   test('a running job with no pid at all becomes unknown', () => {
     const paths = summonPaths(targetHome()); const id = running(paths, { pid: undefined })
@@ -382,12 +576,12 @@ describe('recovery', () => {
       const h = targetHome(); const paths = summonPaths(h)
       const req = enqueue(h, past)
       unlinkSync(join(paths.spool, req.id)) // the gate died between state.json and the marker
-      expect(countActive(paths)).toBe(1)
+      expect(countActive(paths, Date.parse(past.expires_at))).toBe(1) // while it could still run, it counts
       expect(reapStranded(paths, Date.now())).toBe(1)
       expect(readState(paths, req.id)).toMatchObject({ status: 'expired' })
       expect(resultOf(h, req.id)).toMatchObject({ status: 'expired' })
       expect(ledgerOf(h)).toContainEqual(expect.objectContaining({ event: 'job_end', id: req.id, status: 'expired' }))
-      expect(countActive(paths)).toBe(0)
+      expect(countActive(paths, Date.now())).toBe(0)
       expect(reapStranded(paths, Date.now())).toBe(0) // idempotent
     })
     test('F18: a stranded job past its expiry but still inside the skew grace is left alone', () => {
@@ -432,6 +626,49 @@ describe('recovery', () => {
   })
 })
 
+describe('F38: a queued job the runner never reached', () => {
+  const gate = (home: string, nowMs: number) => ({ nowMs: () => nowMs, home, paths: summonPaths(home),
+    guiSessionIsMine: () => true, runnerLoaded: () => true, claudeAvailable: () => true })
+  test('past its expiry and the skew grace, with no claim: not busy, status says expired, and the next start settles it once', async () => {
+    const h = targetHome(); const paths = summonPaths(h); const t0 = Date.now()
+    const stuck = sampleRequest({ expires_at: iso(t0 + 60_000) })
+    expect(gateStart(JSON.stringify(stuck), gate(h, t0)).status).toBe('admitted')
+    const later = t0 + 60_000 + CLOCK_SKEW_MS + 1_000 // the runner never ran in between
+    expect(countActive(paths, later)).toBe(0)
+    expect(statusOf(paths, 'nuance', stuck.id, later)).toMatchObject({ status: 'expired', handle: `nuance/${stuck.id}`, detail: 'never reached the runner' })
+    expect(requestCancel(paths, 'nuance', stuck.id, later)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+    expect(existsSync(join(jobDir(paths, stuck.id), 'cancel'))).toBe(false)
+    const next = sampleRequest({ issued_at: iso(later), expires_at: iso(later + 15 * 60_000) })
+    expect(gateStart(JSON.stringify(next), gate(h, later))).toMatchObject({ status: 'admitted' })
+    expect(readState(paths, stuck.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner', ended_at: iso(later) })
+    expect(resultOf(h, stuck.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+    expect(existsSync(join(paths.spool, stuck.id))).toBe(false)
+    const endsOf = (id: string) => ledgerOf(h).filter((e) => e.event === 'job_end' && e.id === id)
+    expect(endsOf(stuck.id)).toEqual([expect.objectContaining({ status: 'expired', detail: 'never reached the runner' })])
+    // The runner then runs only the new job: the settled one is not started and gets no second job_end.
+    fake.setMode('ok')
+    expect(await runOnce(rdeps(h))).toBe(1)
+    expect(readState(paths, next.id)?.status).toBe('completed')
+    expect(existsSync(join(jobDir(paths, stuck.id), 'claimed'))).toBe(false)
+    expect(endsOf(stuck.id)).toHaveLength(1)
+    expect(verifyLedger(paths.ledger).ok).toBe(true)
+  })
+  test('inside the skew grace, or once the runner has claimed it, it still counts and still says queued', () => {
+    const h = targetHome(); const paths = summonPaths(h); const t0 = Date.now()
+    const req = sampleRequest({ expires_at: iso(t0 + 60_000) })
+    expect(gateStart(JSON.stringify(req), gate(h, t0)).status).toBe('admitted')
+    const inGrace = t0 + 60_000 + CLOCK_SKEW_MS - 1_000
+    expect(countActive(paths, inGrace)).toBe(1)
+    expect(statusOf(paths, 'nuance', req.id, inGrace).status).toBe('queued')
+    unlinkSync(join(paths.spool, req.id)); writeFileSync(join(jobDir(paths, req.id), 'claimed'), '') // the runner has it
+    const past = t0 + 60_000 + CLOCK_SKEW_MS + 1_000
+    expect(countActive(paths, past)).toBe(1)
+    expect(statusOf(paths, 'nuance', req.id, past).status).toBe('queued')
+    expect(gateStart(JSON.stringify(sampleRequest({ issued_at: iso(past), expires_at: iso(past + 60_000) })), gate(h, past))).toMatchObject({ reason: 'busy' })
+    expect(readState(paths, req.id)?.status).toBe('queued')
+  })
+})
+
 describe('runner-main (a fresh process, as launchd starts it)', () => {
   test('after a runner is killed mid-job, the next start marks the job unknown, reaps the stranded, runs the queue and exits 0', async () => {
     const h = targetHome(); const paths = summonPaths(h)
@@ -464,5 +701,19 @@ describe('runner-main (a fresh process, as launchd starts it)', () => {
     expect(readState(paths, stranded.id)?.status).toBe('expired')
     expect(readdirSync(paths.spool)).toEqual([])
     expect(verifyLedger(paths.ledger).ok).toBe(true)
+  }, 30_000)
+  test('F25: exits non-zero while an admitted job cannot be claimed, and keeps its marker for the retry', async () => {
+    const h = targetHome(); const paths = summonPaths(h); const req = admit(h)
+    const env = { PATH: process.env.PATH!, HOME: h, SUMMON_HOME_OVERRIDE: h, SUMMON_CLAUDE_BIN: fake.bin }
+    chmodSync(jobDir(paths, req.id), 0o500)
+    let code: number, stderr: string
+    try {
+      const p = Bun.spawn([process.execPath, RUNNER_MAIN], { env, stdout: 'pipe', stderr: 'pipe' })
+      ;[code, stderr] = await Promise.all([p.exited, new Response(p.stderr).text()])
+    } finally { chmodSync(jobDir(paths, req.id), 0o700) }
+    expect(code).toBe(1)
+    expect(stderr).toContain('summon-runner: runOnce failed: EACCES')
+    expect(existsSync(join(paths.spool, req.id))).toBe(true)
+    expect(readState(paths, req.id)?.status).toBe('queued')
   }, 30_000)
 })

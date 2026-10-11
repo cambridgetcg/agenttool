@@ -1,7 +1,7 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkAdmission, loadAllowlist } from './allowlist.ts'
-import { admittedSince, countActive, jobDir, writeJsonAtomic, writeState } from './jobs.ts'
+import { admittedSince, countActive, errTag, jobDir, settleNeverReached, writeJsonAtomic, writeState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { claimId, recordRefusal } from './replay.ts'
@@ -73,22 +73,30 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
   const { limits, device } = al.allowlist
   mkdirSync(deps.paths.state, { recursive: true, mode: 0o700 })
   return withLock(join(deps.paths.state, 'admission'), () => {
+    settleNeverReached(deps.paths, now)
     if (admittedSince(deps.paths, now - 3_600_000) >= limits.starts_per_hour) return refuseClaimed('rate_limited', `more than ${limits.starts_per_hour} starts in the last hour`)
-    if (countActive(deps.paths) >= limits.max_concurrent) return refuseClaimed('busy', `${limits.max_concurrent} summon(s) already queued or running`)
+    if (countActive(deps.paths, now) >= limits.max_concurrent) return refuseClaimed('busy', `${limits.max_concurrent} summon(s) already queued or running`)
 
-    const dir = jobDir(deps.paths, req.id)
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    writeJsonAtomic(join(dir, 'request.json'), req)
-    writeState(deps.paths, {
-      id: req.id, status: 'queued', runtime: req.runtime, model: req.model!, ...(req.effort ? { effort: req.effort } : {}),
-      access: req.access, cwd_real: adm.cwdReal,
-      admitted_at: new Date(now).toISOString(), expires_at: new Date(t.expiresAtMs).toISOString(), timeout_s: t.timeoutS,
-    })
-    mkdirSync(deps.paths.spool, { recursive: true, mode: 0o700 })
-    const marker = join(deps.paths.spool, req.id)
-    writeFileSync(`${marker}.tmp`, '', { mode: 0o600 })
-    renameSync(`${marker}.tmp`, marker)
+    // Logged before it is acted on: if this append throws, nothing has been written and nothing can run unrecorded.
     appendLedger(deps.paths.ledger, { event: 'admitted', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, cwd: req.cwd, access: req.access }, now)
+    const dir = jobDir(deps.paths, req.id)
+    const marker = join(deps.paths.spool, req.id)
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      writeJsonAtomic(join(dir, 'request.json'), req)
+      writeState(deps.paths, {
+        id: req.id, status: 'queued', runtime: req.runtime, model: req.model!, ...(req.effort ? { effort: req.effort } : {}),
+        access: req.access, cwd_real: adm.cwdReal,
+        admitted_at: new Date(now).toISOString(), expires_at: new Date(t.expiresAtMs).toISOString(), timeout_s: t.timeoutS,
+      })
+      mkdirSync(deps.paths.spool, { recursive: true, mode: 0o700 })
+      writeFileSync(`${marker}.tmp`, '', { mode: 0o600 })
+      renameSync(`${marker}.tmp`, marker) // the last step: only a job whose marker landed is admitted
+    } catch (e) {
+      try { appendLedger(deps.paths.ledger, { event: 'admission_failed', id: req.id }, now) } catch { /* best effort: `admitted` is already there */ }
+      for (const p of [dir, `${marker}.tmp`]) { try { rmSync(p, { recursive: true, force: true }) } catch { /* best effort */ } }
+      return { status: 'unknown', detail: `admission did not complete (${errTag(e)}); nothing was spooled` }
+    }
     return { status: 'admitted', handle: `${device}/${req.id}` }
   })
 }

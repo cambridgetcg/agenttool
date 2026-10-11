@@ -178,6 +178,32 @@ describe('gateStart', () => {
       expect(r).toEqual({ status: 'unknown', detail: NO_DECISION })
     })
   })
+  describe('F04: Nuance logs an admission before it acts on it', () => {
+    const ledgerOf = (h: string): any[] => readFileSync(summonPaths(h).ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    test('a ledger that cannot be written stops the admission before state.json or the spool marker exist', () => {
+      const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()
+      mkdirSync(p.ledger, { recursive: true }) // every append now fails (EISDIR)
+      expect(() => gateStart(JSON.stringify(req), deps(h))).toThrow()
+      expect(existsSync(join(p.jobs, req.id))).toBe(false)
+      expect(existsSync(join(p.spool, req.id))).toBe(false)
+    })
+    test('a later admission write that fails is ledgered admission_failed (id only), its job dir is removed, and the answer is unknown', () => {
+      const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()
+      mkdirSync(p.state, { recursive: true, mode: 0o700 })
+      writeFileSync(p.spool, 'a file where the spool directory should be')
+      const r = gateStart(JSON.stringify(req), deps(h))
+      expect(r).toEqual({ status: 'unknown', detail: 'admission did not complete (EEXIST); nothing was spooled' })
+      expect(existsSync(join(p.jobs, req.id))).toBe(false)
+      const entries = ledgerOf(h)
+      expect(entries.map((e) => [e.event, e.id])).toEqual([['admitted', req.id], ['admission_failed', req.id]])
+      expect(Object.keys(entries[1]).sort()).toEqual(['event', 'hash', 'id', 'prev', 'ts'])
+      expect(verifyLedger(p.ledger)).toEqual({ ok: true, entries: 2 })
+      expect(statusOf(p, 'nuance', req.id, Date.now())).toMatchObject({ status: 'unknown' })
+      // Nothing was left to count as active: the next request is admitted once the spool can be made.
+      rmSync(p.spool)
+      expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
+    })
+  })
   test('private modes and an intact ledger chain after admitted, busy and replayed outcomes', () => {
     const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()
     gateStart(JSON.stringify(req), deps(h))
