@@ -18,6 +18,9 @@ import {
   AgentToolError,
   agentDataRecordId,
   agentDataTextRecordIdentity,
+  exitItemRecord,
+  type ExitItemContext,
+  type ExitStore,
 } from "../src/index.js";
 
 interface Vectors {
@@ -37,6 +40,23 @@ interface Vectors {
     content_sha256: string;
     content_size: number;
     record_id: string;
+  }>;
+  exit_items: Array<{
+    name: string;
+    origin: string;
+    store: ExitStore;
+    context?: ExitItemContext;
+    item: Record<string, unknown>;
+    expected: {
+      hosted_id: string;
+      text: string;
+      source_uri: string;
+      external_id: string;
+      key: string;
+      collection_id: string;
+      schema_version: string;
+      record_id: string;
+    };
   }>;
 }
 
@@ -85,4 +105,49 @@ describe("agent-data record ids (shared vectors)", () => {
       expect(agentDataRecordId(identity)).toBe(vector.record_id);
     });
   }
+});
+
+describe("exit-door item records (shared vectors)", () => {
+  for (const vector of vectors.exit_items) {
+    test(vector.name, () => {
+      const built = exitItemRecord({
+        origin: vector.origin,
+        store: vector.store,
+        item: vector.item,
+        context: vector.context,
+      });
+      expect(built).toEqual({
+        hosted_id: vector.expected.hosted_id,
+        text: vector.expected.text,
+        source_uri: vector.expected.source_uri,
+        external_id: vector.expected.external_id,
+        key: vector.expected.key,
+      });
+      const identity = agentDataTextRecordIdentity({
+        collection_id: vector.expected.collection_id,
+        schema_version: vector.expected.schema_version,
+        text: built.text,
+        media_type: "application/json",
+        source_uri: built.source_uri,
+        external_id: built.external_id,
+        key: built.key,
+      });
+      expect(agentDataRecordId(identity)).toBe(vector.expected.record_id);
+    });
+  }
+
+  test("volatile fields are absent from the exported text", () => {
+    const memory = vectors.exit_items.find((vector) => vector.store === "memories")!;
+    const strand = vectors.exit_items.find((vector) => vector.store === "strands")!;
+    expect(JSON.parse(memory.expected.text).item).not.toHaveProperty("accessed_at");
+    for (const field of ["last_thought_at", "last_thought_seq", "updated_at"]) {
+      expect(JSON.parse(strand.expected.text).item).not.toHaveProperty(field);
+    }
+  });
+
+  test("an item without its id is refused, not exported under a guessed key", () => {
+    expect(() =>
+      exitItemRecord({ origin: "https://api.agenttool.dev", store: "memories", item: { content: "x" } }),
+    ).toThrow(AgentToolError);
+  });
 });

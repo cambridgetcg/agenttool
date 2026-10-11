@@ -547,6 +547,41 @@ export type {
   DataSyncStatusResult,
 } from "./data.js";
 export {
+  ExitDoorClient,
+  exitItemRecord,
+  EXIT_INDEX_SCHEMA,
+  EXIT_ITEM_SCHEMA,
+  EXIT_MANIFEST_SCHEMA,
+  EXIT_NON_CLAIMS,
+  EXIT_PLAN_SCHEMA,
+  EXIT_STORES,
+  EXIT_VERIFY_SCHEMA,
+  EXIT_VOLATILE_FIELDS,
+} from "./exit-door.js";
+export type {
+  ExitExportOptions,
+  ExitExportResult,
+  ExitFieldNotExported,
+  ExitHostedDescriptor,
+  ExitItemContext,
+  ExitItemRecord,
+  ExitItemSkip,
+  ExitManifest,
+  ExitManifestStore,
+  ExitOverall,
+  ExitPlan,
+  ExitPlanOptions,
+  ExitPlanStore,
+  ExitProgress,
+  ExitStore,
+  ExitStoreStatus,
+  ExitVerifyMismatch,
+  ExitVerifyOptions,
+  ExitVerifyResult,
+  ExitVerifyStore,
+  ExitWalk,
+} from "./exit-door.js";
+export {
   agentDataRecordId,
   agentDataTextRecordIdentity,
 } from "./_agent-data-id.js";

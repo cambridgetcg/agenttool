@@ -32,6 +32,8 @@ import { DarkContinentClient } from "./dark-continent.js";
 import { DiningClient } from "./dining.js";
 import { MathCardsClient, type MathCardsOptions } from "./math-cards.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
+import { sha256Hex } from "./_agent-data-id.js";
+import { ExitDoorClient } from "./exit-door.js";
 import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
@@ -134,6 +136,11 @@ export interface AgentToolOptions {
 export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
+  /** How hosted calls authenticate; recorded in exit manifests. */
+  private readonly authMode: "api_key" | "transport";
+  /** sha256 of the direct project key, kept only so the exit door can refuse
+   *  a data-node token equal to it. The key itself is never stored here. */
+  private readonly projectKeyDigest: string | undefined;
   private readonly kingdomFrameworkOptions: KingdomFrameworkOptions;
   private readonly mathCardsOptions: MathCardsOptions;
   private readonly kingdomOSOptions: KingdomOSOptions;
@@ -167,6 +174,7 @@ export class AgentTool {
   private _mathCards: MathCardsClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
+  private _exitDoor: ExitDoorClient | undefined;
   private _kingdomFramework: KingdomFrameworkClient | undefined;
   private _kingdomOS: KingdomOSClient | undefined;
   private _wakeContinuity: WakeContinuityLayer | undefined;
@@ -187,6 +195,7 @@ export class AgentTool {
     }
 
     let transport: AgentToolTransport;
+    let projectKeyDigest: string | undefined;
     if (options?.transport) {
       // Deliberately do not inspect AT_API_KEY in broker/transport mode.
       transport = options.transport;
@@ -201,7 +210,10 @@ export class AgentTool {
         });
       }
       transport = directBearerTransport(resolvedKey);
+      projectKeyDigest = sha256Hex(resolvedKey);
     }
+    this.authMode = options?.transport ? "transport" : "api_key";
+    this.projectKeyDigest = projectKeyDigest;
 
     // Pay-on-402 is opt-in and wraps whichever transport was selected, so the
     // signed retry authenticates exactly as the bare request did. The policy
@@ -487,6 +499,27 @@ export class AgentTool {
     }
     this._data ??= new DataClient(this.dataNode);
     return this._data;
+  }
+
+  /** Copy the hosted continuity core into the separately configured
+   *  agent-data/v1 node (hosted → local copy only). Hosted reads use this
+   *  client's project transport; node writes use only `at.data`. `plan()`
+   *  needs no node; `export()` and `verify()` throw `data_node_not_configured`
+   *  without one and refuse a node token equal to the project API key. */
+  get exitDoor(): ExitDoorClient {
+    this._exitDoor ??= new ExitDoorClient(this.http, {
+      sdkPackage: "@agenttool/sdk",
+      sdkVersion: SDK_VERSION,
+      authMode: this.authMode,
+      projectKeyDigest: this.projectKeyDigest,
+      nodeBaseUrl: this.dataNode?.baseUrl,
+      nodeTokenDigest:
+        this.dataNode?.token !== undefined && this.dataNode.token !== ""
+          ? sha256Hex(this.dataNode.token)
+          : undefined,
+      data: () => this.data,
+    });
+    return this._exitDoor;
   }
 
   /** Access AgentTool's public KINGDOM project card without forwarding the
