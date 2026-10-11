@@ -3,12 +3,12 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, 
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
 import { requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
-import { countActive, jobDir, readJson, readState, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
+import { countActive, jobDir, readJson, readState, settleNeverReached, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
-import { markOrphans, processStartTime, reapStranded, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
-import { cleanupTmps, DEFAULT_ALLOWLIST, makeFakeClaude, sampleRequest, targetHome } from './helpers.ts'
+import { markOrphans, processStartTime, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
+import { cleanupTmps, DEFAULT_ALLOWLIST, makeFakeClaude, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -202,7 +202,7 @@ describe('runOnce', () => {
     const h = targetHome(); const late = admit(h)
     const expiresMs = Date.parse(readState(summonPaths(h), late.id)!.expires_at)
     await runOnce(rdeps(h, { nowMs: () => expiresMs + CLOCK_SKEW_MS + 1_000 }))
-    expect(readState(summonPaths(h), late.id)).toMatchObject({ status: 'expired', detail: 'expired before the runner reached it' })
+    expect(readState(summonPaths(h), late.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
     expect(existsSync(fake.argvOut)).toBe(false)
     const h2 = targetHome(); const inGrace = admit(h2)
     const expires2 = Date.parse(readState(summonPaths(h2), inGrace.id)!.expires_at)
@@ -365,6 +365,25 @@ describe('runOnce', () => {
       expect(await runOnce(rdeps(h))).toBe(1)
       expect(readState(paths, req.id)?.status).toBe('completed')
       expect(verifyLedger(paths.ledger).ok).toBe(true)
+    })
+    test('review #1: claim_failed is ledgered once per job, however many passes fail; a later claim clears the note', async () => {
+      const h = targetHome(); const req = admit(h); const paths = summonPaths(h)
+      fake.setMode('ok')
+      chmodSync(jobDir(paths, req.id), 0o500)
+      try {
+        for (let i = 0; i < 3; i++) {
+          let err: unknown
+          try { await runOnce(rdeps(h)) } catch (e) { err = e }
+          expect((err as { code?: string } | undefined)?.code).toBe('EACCES')
+        }
+      } finally { chmodSync(jobDir(paths, req.id), 0o700) }
+      expect(ledgerOf(h).filter((e) => e.event === 'claim_failed')).toHaveLength(1)
+      const note = join(paths.state, 'claim-failed', req.id)
+      expect(existsSync(note)).toBe(true) // kept under state/, never in the spool
+      expect(readdirSync(paths.spool)).toEqual([req.id])
+      expect(await runOnce(rdeps(h))).toBe(1)
+      expect(existsSync(note)).toBe(false)
+      expect(readState(paths, req.id)?.status).toBe('completed')
     })
     test('other spool work still runs before the failure is reported', async () => {
       const h = targetHome(); const paths = summonPaths(h)
@@ -570,39 +589,51 @@ describe('recovery', () => {
     expect(st.heartbeat_age_s as number).toBeLessThan(45)
   })
 
-  describe('reapStranded (ruling 3)', () => {
+  describe('settleNeverReached (ruling 3, F38; replaced reapStranded)', () => {
     const past = { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) } // past the gate's skew grace too
     test('a queued job past expiry with no spool marker and no claim becomes expired and stops counting as active', () => {
       const h = targetHome(); const paths = summonPaths(h)
       const req = enqueue(h, past)
       unlinkSync(join(paths.spool, req.id)) // the gate died between state.json and the marker
       expect(countActive(paths, Date.parse(past.expires_at))).toBe(1) // while it could still run, it counts
-      expect(reapStranded(paths, Date.now())).toBe(1)
+      expect(settleNeverReached(paths, Date.now())).toBe(1)
       expect(readState(paths, req.id)).toMatchObject({ status: 'expired' })
       expect(resultOf(h, req.id)).toMatchObject({ status: 'expired' })
       expect(ledgerOf(h)).toContainEqual(expect.objectContaining({ event: 'job_end', id: req.id, status: 'expired' }))
       expect(countActive(paths, Date.now())).toBe(0)
-      expect(reapStranded(paths, Date.now())).toBe(0) // idempotent
+      expect(settleNeverReached(paths, Date.now())).toBe(0) // idempotent
     })
     test('F18: a stranded job past its expiry but still inside the skew grace is left alone', () => {
       const h = targetHome(); const paths = summonPaths(h)
       const req = enqueue(h, { expires_at: iso(Date.now() - 60_000) })
       unlinkSync(join(paths.spool, req.id))
-      expect(reapStranded(paths, Date.now())).toBe(0)
+      expect(settleNeverReached(paths, Date.now())).toBe(0)
       expect(readState(paths, req.id)?.status).toBe('queued')
-      expect(reapStranded(paths, Date.now() + CLOCK_SKEW_MS)).toBe(1)
+      expect(settleNeverReached(paths, Date.now() + CLOCK_SKEW_MS)).toBe(1)
     })
-    test('is left alone: not yet expired, still in the spool, claimed, or already finished', () => {
+    test('a never-reached job still in the spool loses its marker and is settled too; fresh, claimed and finished ones are left alone', () => {
       const h = targetHome(); const paths = summonPaths(h)
       const fresh = enqueue(h); unlinkSync(join(paths.spool, fresh.id))
       const inSpool = enqueue(h, past)
       const claimed = enqueue(h, past); unlinkSync(join(paths.spool, claimed.id)); writeFileSync(join(jobDir(paths, claimed.id), 'claimed'), '')
       const done = enqueue(h, { ...past, status: 'completed' }); unlinkSync(join(paths.spool, done.id))
-      expect(reapStranded(paths, Date.now())).toBe(0)
+      expect(settleNeverReached(paths, Date.now())).toBe(1)
+      expect(readState(paths, inSpool.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+      expect(existsSync(join(paths.spool, inSpool.id))).toBe(false)
       expect(readState(paths, fresh.id)?.status).toBe('queued')
-      expect(readState(paths, inSpool.id)?.status).toBe('queued')
       expect(readState(paths, claimed.id)?.status).toBe('queued')
       expect(readState(paths, done.id)?.status).toBe('completed')
+    })
+    test('review #5: a queued state with no request.json and no marker (a crash between the two writes) is never run and settles expired', async () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const req = enqueue(h, past)
+      unlinkSync(join(jobDir(paths, req.id), 'request.json')); unlinkSync(join(paths.spool, req.id))
+      expect(await runOnce(rdeps(h))).toBe(0) // nothing to claim: it can never start
+      expect(existsSync(fake.argvOut)).toBe(false)
+      expect(countActive(paths, Date.now())).toBe(0)
+      expect(settleNeverReached(paths, Date.now())).toBe(1)
+      expect(readState(paths, req.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+      expect(sweepJobs(paths, Date.now() + 31 * 86_400_000)).toBe(1) // terminal now, so the 30-day sweep removes it
     })
   })
 
@@ -653,6 +684,29 @@ describe('F38: a queued job the runner never reached', () => {
     expect(endsOf(stuck.id)).toHaveLength(1)
     expect(verifyLedger(paths.ledger).ok).toBe(true)
   })
+  describe('review #8: one outcome for a job that never started, wherever it is decided', () => {
+    const past = { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) }
+    test('without a cancel: status says expired, never reached the runner, and the runner ends it the same way', async () => {
+      const h = targetHome(); const paths = summonPaths(h); const req = enqueue(h, past)
+      const said = statusOf(paths, 'nuance', req.id, Date.now())
+      expect(said).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+      await runOnce(rdeps(h)) // the marker is still there, so the runner claims it and decides for itself
+      expect(readState(paths, req.id)).toMatchObject({ status: said.status, detail: said.detail })
+      expect(existsSync(fake.argvOut)).toBe(false)
+    })
+    test('with a cancel marker: status says cancelled before it started, and so do the runner and the gate', async () => {
+      const h = targetHome(); const paths = summonPaths(h)
+      const viaRunner = enqueue(h, past); writeFileSync(join(jobDir(paths, viaRunner.id), 'cancel'), '')
+      const said = statusOf(paths, 'nuance', viaRunner.id, Date.now())
+      expect(said).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started' })
+      await runOnce(rdeps(h))
+      expect(readState(paths, viaRunner.id)).toMatchObject({ status: said.status, detail: said.detail })
+      const viaGate = enqueue(h, past); writeFileSync(join(jobDir(paths, viaGate.id), 'cancel'), '')
+      expect(settleNeverReached(paths, Date.now())).toBe(1)
+      expect(readState(paths, viaGate.id)).toMatchObject({ status: 'cancelled', detail: 'cancelled before it started' })
+      expect(ledgerOf(h).find((e) => e.event === 'job_end' && e.id === viaGate.id)).toMatchObject({ status: 'cancelled' })
+    })
+  })
   test('inside the skew grace, or once the runner has claimed it, it still counts and still says queued', () => {
     const h = targetHome(); const paths = summonPaths(h); const t0 = Date.now()
     const req = sampleRequest({ expires_at: iso(t0 + 60_000) })
@@ -702,6 +756,37 @@ describe('runner-main (a fresh process, as launchd starts it)', () => {
     expect(readdirSync(paths.spool)).toEqual([])
     expect(verifyLedger(paths.ledger).ok).toBe(true)
   }, 30_000)
+  test('review #1: a job whose claim keeps failing is settled once past expiry + grace: one pass removes its marker and exits 0', async () => {
+    const h = targetHome(); const paths = summonPaths(h)
+    const env = { PATH: process.env.PATH!, HOME: h, SUMMON_HOME_OVERRIDE: h, SUMMON_CLAUDE_BIN: fake.bin }
+    const req = enqueue(h, { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) })
+    chmodSync(jobDir(paths, req.id), 0o500) // the claim rename fails (EACCES), and so does every write into the job dir
+    let code: number
+    try { code = await Bun.spawn([process.execPath, RUNNER_MAIN], { env, stdout: 'ignore', stderr: 'ignore' }).exited } finally { chmodSync(jobDir(paths, req.id), 0o700) }
+    expect(code).toBe(0) // the loop is over: nothing is left in the spool to relaunch the runner over
+    expect(readdirSync(paths.spool)).toEqual([])
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+    expect(ledgerOf(h).filter((e) => e.event === 'claim_failed')).toEqual([])
+    // Once the job dir is writable again, the next start settles it on disk, once.
+    expect(await Bun.spawn([process.execPath, RUNNER_MAIN], { env, stdout: 'ignore', stderr: 'ignore' }).exited).toBe(0)
+    expect(readState(paths, req.id)).toMatchObject({ status: 'expired', detail: 'never reached the runner' })
+    expect(ledgerOf(h).filter((e) => e.event === 'job_end' && e.id === req.id)).toHaveLength(1)
+  }, 30_000)
+  test('review #3: a runner start and a gate start at the same moment settle a never-reached job exactly once', async () => {
+    for (let round = 0; round < 3; round++) {
+      const h = targetHome(); const paths = summonPaths(h)
+      const env = { PATH: process.env.PATH!, HOME: h, SUMMON_HOME_OVERRIDE: h, SUMMON_CLAUDE_BIN: fake.bin }
+      const stuck = enqueue(h, { expires_at: iso(Date.now() - CLOCK_SKEW_MS - 60_000) })
+      unlinkSync(join(paths.spool, stuck.id)) // stranded: both settlers can see it at once
+      fake.setMode('ok')
+      const runner = Bun.spawn([process.execPath, RUNNER_MAIN], { env, stdout: 'ignore', stderr: 'ignore' })
+      const [code, gate] = await Promise.all([runner.exited, runGatekeeper(h, 'start', JSON.stringify(sampleRequest()))])
+      expect(code).toBe(0)
+      expect(gate.out.status).toBe('admitted')
+      expect(readState(paths, stuck.id)?.status).toBe('expired')
+      expect(ledgerOf(h).filter((e) => e.event === 'job_end' && e.id === stuck.id)).toHaveLength(1)
+    }
+  }, 60_000)
   test('F25: exits non-zero while an admitted job cannot be claimed, and keeps its marker for the retry', async () => {
     const h = targetHome(); const paths = summonPaths(h); const req = admit(h)
     const env = { PATH: process.env.PATH!, HOME: h, SUMMON_HOME_OVERRIDE: h, SUMMON_CLAUDE_BIN: fake.bin }

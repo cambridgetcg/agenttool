@@ -77,18 +77,21 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
     if (admittedSince(deps.paths, now - 3_600_000) >= limits.starts_per_hour) return refuseClaimed('rate_limited', `more than ${limits.starts_per_hour} starts in the last hour`)
     if (countActive(deps.paths, now) >= limits.max_concurrent) return refuseClaimed('busy', `${limits.max_concurrent} summon(s) already queued or running`)
 
-    // Logged before it is acted on: if this append throws, nothing has been written and nothing can run unrecorded.
+    // Logged before it is acted on, and fsync'd before the append returns: if it throws, nothing has been written, and
+    // once it returns the entry reached the disk ahead of any job file.
     appendLedger(deps.paths.ledger, { event: 'admitted', id: req.id, from: req.from_device, runtime: req.runtime, model: req.model, cwd: req.cwd, access: req.access }, now)
     const dir = jobDir(deps.paths, req.id)
     const marker = join(deps.paths.spool, req.id)
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 })
-      writeJsonAtomic(join(dir, 'request.json'), req)
+      // State first: a crash before request.json leaves a queued job with no prompt on disk, which settles `expired` and is
+      // swept; the other order could leave a prompt with no state, which nothing would ever sweep.
       writeState(deps.paths, {
         id: req.id, status: 'queued', runtime: req.runtime, model: req.model!, ...(req.effort ? { effort: req.effort } : {}),
         access: req.access, cwd_real: adm.cwdReal,
         admitted_at: new Date(now).toISOString(), expires_at: new Date(t.expiresAtMs).toISOString(), timeout_s: t.timeoutS,
       })
+      writeJsonAtomic(join(dir, 'request.json'), req)
       mkdirSync(deps.paths.spool, { recursive: true, mode: 0o700 })
       writeFileSync(`${marker}.tmp`, '', { mode: 0o600 })
       renameSync(`${marker}.tmp`, marker) // the last step: only a job whose marker landed is admitted

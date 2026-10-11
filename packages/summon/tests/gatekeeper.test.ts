@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import {
@@ -106,6 +106,18 @@ describe('status, result and cancel', () => {
     mkdirSync(paths.ledger, { recursive: true }) // every append now fails (EISDIR)
     expect(() => requestCancel(paths, 'nuance', id, Date.now())).toThrow()
     expect(existsSync(join(paths.jobs, id, 'cancel'))).toBe(false)
+  })
+  test('review #7: a cancel marker that cannot be written after cancel_requested is ledgered cancel_failed, and the answer is unknown', () => {
+    const h = targetHome(); const paths = summonPaths(h); const id = newRequestId()
+    writeState(paths, stateOf(id, 'running'))
+    chmodSync(join(paths.jobs, id), 0o500) // the marker write fails (EACCES); the ledger, elsewhere, still works
+    let r: ReturnType<typeof requestCancel>
+    try { r = requestCancel(paths, 'nuance', id, Date.now()) } finally { chmodSync(join(paths.jobs, id), 0o700) }
+    expect(r).toEqual({ status: 'unknown', handle: `nuance/${id}`, detail: 'cancel did not complete (EACCES); no cancel marker was written' })
+    expect(existsSync(join(paths.jobs, id, 'cancel'))).toBe(false)
+    const entries = readFileSync(paths.ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    expect(entries.map((e) => [e.event, e.id])).toEqual([['cancel_requested', id], ['cancel_failed', id]])
+    expect(Object.keys(entries[1]).sort()).toEqual(['event', 'hash', 'id', 'prev', 'ts'])
   })
   test('cancel leaves a finished job alone', () => {
     const h = targetHome(); const paths = summonPaths(h); const id = newRequestId()

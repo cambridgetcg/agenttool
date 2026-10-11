@@ -77,6 +77,23 @@ describe('ledger', () => {
       expect(linesOf(p)).toHaveLength(5)
       expect(verifyLedger(p)).toEqual({ ok: true, entries: 4, torn: [2] })
     })
+    test('review #2: a run of non-entry lines before the marker is accepted as a whole, and every line in it is reported', () => {
+      const p = join(tmp(), 'ledger.jsonl')
+      const first = appendLedger(p, { event: 'admitted' })
+      appendFileSync(p, '{"event":"job_end","id":"smn_00\n{"event":"adm') // two crashes: one torn line terminated, one not
+      appendLedger(p, { event: 'admitted' })
+      const lines = linesOf(p)
+      expect(JSON.parse(lines[3]!)).toMatchObject({ event: 'ledger_torn_tail', detail: 'lines 2-3 did not parse', prev: first.hash })
+      expect(verifyLedger(p)).toEqual({ ok: true, entries: 3, torn: [2, 3] })
+    })
+    test('review #2: a run of non-entry lines in the middle with no marker after it still fails at its first line', () => {
+      const p = join(tmp(), 'ledger.jsonl')
+      appendLedger(p, { event: 'admitted' })
+      appendLedger(p, { event: 'refused', reason: 'busy' })
+      const [a, b] = linesOf(p)
+      writeFileSync(p, `${a}\n{"x\nnull\n${b}\n`)
+      expect(verifyLedger(p)).toEqual({ ok: false, entries: 1, brokenAt: 2 })
+    })
     test('a torn first line chains its marker from genesis', () => {
       const p = join(tmp(), 'ledger.jsonl')
       writeFileSync(p, '{"event":"adm')

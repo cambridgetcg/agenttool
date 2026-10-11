@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import type { GateDeps } from './gate.ts'
 import { findClaude } from './harness.ts'
-import { heartbeatAgeS, jobDir, NEVER_REACHED, neverReached, readJson, readState, type JobResult } from './jobs.ts'
+import { errTag, heartbeatAgeS, jobDir, neverReached, notStartedOutcome, readJson, readState, type JobResult } from './jobs.ts'
 import { appendLedger } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { seenRefusal } from './replay.ts'
@@ -50,21 +50,25 @@ export async function readBoundedStdin(stream: ReadableStream<Uint8Array>, max: 
 }
 
 /**
- * An id with no job: refused with the reason the gate kept, if it kept one. A seen id with no reason was received but no
- * decision was recorded (the gate threw after the claim, or is still deciding), so that answer claims no refusal.
+ * An id with no job: refused with the reason the gate kept, if it kept one. A seen id with no reason was received, but this
+ * Mac holds no job state for it (the gate is still deciding, timed out on its lock, or ledgered admission_failed), so that
+ * answer claims no refusal and points at the ledger.
  */
 function noJob(paths: SummonPaths, device: string, id: string): GateResponse {
   const seen = seenRefusal(paths.seen, id)
   if (!seen.seen) return { status: 'unknown', detail: 'no such summon on this Mac' }
-  if (!seen.reason) return { status: 'unknown', detail: 'received; no decision was recorded — see the Nuance ledger' }
+  if (!seen.reason) return { status: 'unknown', detail: 'received; no job state on this Mac — see the Nuance ledger' }
   return { status: 'refused', reason: seen.reason, handle: `${device}/${id}`, detail: 'received and refused; see the Nuance ledger' }
 }
 
 export function statusOf(paths: SummonPaths, device: string, id: string, nowMs: number): GateResponse {
   const s = readState(paths, id)
   if (!s) return noJob(paths, device, id)
-  // The runner would only end it expired; the next start settles it on disk under the admission lock.
-  if (neverReached(paths, s, nowMs)) return { status: 'expired', handle: `${device}/${id}`, detail: NEVER_REACHED, heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
+  // The runner would only end it this way; the next start (gate or runner) settles it on disk under the admission lock.
+  if (neverReached(paths, s, nowMs)) {
+    const o = notStartedOutcome(paths, id)
+    return { status: o.status, handle: `${device}/${id}`, detail: o.detail, heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
+  }
   return { status: s.status, handle: `${device}/${id}`, ...(s.reason ? { reason: s.reason } : {}), ...(s.detail ? { detail: s.detail } : {}),
     ...(s.resets_at ? { resets_at: s.resets_at } : {}), heartbeat_age_s: heartbeatAgeS(paths, id, nowMs) }
 }
@@ -79,7 +83,10 @@ export function requestCancel(paths: SummonPaths, device: string, id: string, no
   if (!s) return noJob(paths, device, id)
   if (TERMINAL.has(s.status) || neverReached(paths, s, nowMs)) return statusOf(paths, device, id, nowMs)
   appendLedger(paths.ledger, { event: 'cancel_requested', id }, nowMs) // logged before the marker that acts on it
-  writeFileSync(join(jobDir(paths, id), 'cancel'), '', { mode: 0o600 })
+  try { writeFileSync(join(jobDir(paths, id), 'cancel'), '', { mode: 0o600 }) } catch (e) {
+    try { appendLedger(paths.ledger, { event: 'cancel_failed', id }, nowMs) } catch { /* best effort: cancel_requested is there */ }
+    return { status: 'unknown', handle: `${device}/${id}`, detail: `cancel did not complete (${errTag(e)}); no cancel marker was written` }
+  }
   return { status: s.status, handle: `${device}/${id}`, detail: 'cancel requested' }
 }
 

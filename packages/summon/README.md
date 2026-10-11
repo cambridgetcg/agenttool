@@ -102,7 +102,9 @@ folders:
   launchd starts the runner, which any spool entry does: it ends with the outcome in its `result.json` if that was
   written, else `unknown`. Until then it still counts toward `max_concurrent`; `summon nuance inventory` is a quick
   way to start it. A job still `queued` that the runner never claimed stops counting once its expiry (plus the 5 min
-  clock-skew grace) has passed: `status` then says `expired`, and the next `start` settles it.
+  clock-skew grace) has passed: `status` then says `expired` (or `cancelled`, if a cancel was asked for), and the next
+  `start` or runner start settles it. A job whose claim keeps failing (a full disk) is retried by launchd until it
+  runs or reaches that point.
 - **Claude Code keeps some files of its own.** Claude Code may save large tool outputs of a summoned job under
   `~/.claude/projects/<cwd-slug>/<session>/tool-results/` on Nuance, even with `--no-session-persistence`. They follow
   Claude Code's own cleanup, not Summon's 30-day sweep. The inventory carries a short `retention` note per harness.

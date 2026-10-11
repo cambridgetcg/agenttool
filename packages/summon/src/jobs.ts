@@ -106,8 +106,29 @@ export function neverReached(paths: SummonPaths, s: JobState, nowMs: number): bo
 }
 
 export const NEVER_REACHED = 'never reached the runner'
+export const CANCELLED_BEFORE_START = 'cancelled before it started'
 
-/** Called by the gate under the admission lock: each never-reached job loses its spool marker and ends `expired`. */
+/**
+ * How a job that never started ends, wherever that is decided (the gate, `status`, the runner): `cancelled` if a cancel
+ * was asked for, else `expired`. One function, so the three never disagree.
+ */
+export function notStartedOutcome(paths: SummonPaths, id: string): Outcome {
+  return existsSync(join(jobDir(paths, id), 'cancel'))
+    ? { status: 'cancelled', detail: CANCELLED_BEFORE_START }
+    : { status: 'expired', detail: NEVER_REACHED }
+}
+
+/** Where the runner notes that it has ledgered a job's failed claim, so a retry loop ledgers it once. Never in the spool. */
+export function claimFailedNote(paths: SummonPaths, id: string): string {
+  if (!ID_RE.test(id)) throw new Error('bad id')
+  return join(paths.state, 'claim-failed', id)
+}
+
+/**
+ * Run under the admission lock, by the gate before each admission and by the runner before each pass. Each never-reached
+ * job first loses its spool marker, which ends any claim-retry loop even when its job dir cannot be written, then ends
+ * with notStartedOutcome.
+ */
 export function settleNeverReached(paths: SummonPaths, nowMs: number): number {
   let n = 0
   for (const s of allStates(paths)) {
@@ -116,9 +137,10 @@ export function settleNeverReached(paths: SummonPaths, nowMs: number): number {
       rmSync(join(paths.spool, s.id), { force: true })
       // A claim that landed before the marker went is the runner's: its own expiry check ends the job.
       if (existsSync(join(jobDir(paths, s.id), 'claimed'))) continue
-      finishJob(paths, nowMs, s, { status: 'expired', detail: NEVER_REACHED })
+      rmSync(claimFailedNote(paths, s.id), { force: true })
+      finishJob(paths, nowMs, s, notStartedOutcome(paths, s.id))
       n++
-    } catch { /* best effort: it no longer counts as active either way */ }
+    } catch { /* best effort: it no longer counts as active either way, and the next pass tries again */ }
   }
   return n
 }

@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import { canonicalJson } from './json.ts'
@@ -51,7 +51,9 @@ function tail(path: string, nowMs: number): { prev: string; before: string } {
   let i = lines.length - 1
   while (i >= 0 && !entryOf(lines[i])) i--
   const lastValid = i >= 0 ? entryOf(lines[i])!.hash : 'genesis'
-  const marker = seal({ event: TORN_TAIL, detail: `line ${lines.length} ${last ? 'had no newline' : 'did not parse'}` }, lastValid, nowMs)
+  const [from, to] = [i + 2, lines.length] // the run of non-entry lines after the last valid entry, 1-based
+  const detail = last ? `line ${to} had no newline` : from === to ? `line ${to} did not parse` : `lines ${from}-${to} did not parse`
+  const marker = seal({ event: TORN_TAIL, detail }, lastValid, nowMs)
   return { prev: marker.hash, before: (text.endsWith('\n') ? '' : '\n') + JSON.stringify(marker) + '\n' }
 }
 
@@ -85,16 +87,26 @@ export function appendLedger(path: string, fields: LedgerFields, nowMs: number =
       const v = fields[k]
       if (typeof v === 'string') picked[k] = v.slice(0, 500)
     }
+    const created = !existsSync(path)
     const { prev, before } = tail(path, nowMs)
     const entry = seal(picked, prev, nowMs)
-    appendFileSync(path, before + JSON.stringify(entry) + '\n', { mode: 0o600 })
+    // fsync'd before it returns, so a caller that acts after logging has its entry handed to the disk first (a new file's
+    // directory entry too). macOS fsync(2) can still leave it in the drive's cache; that is as far as this goes.
+    const bytes = Buffer.from(before + JSON.stringify(entry) + '\n', 'utf8')
+    const fd = openSync(path, 'a', 0o600)
+    try {
+      for (let off = 0; off < bytes.length;) off += writeSync(fd, bytes, off, bytes.length - off)
+      fsyncSync(fd)
+    } finally { closeSync(fd) }
+    if (created) { try { const d = openSync(dirname(path), 'r'); try { fsyncSync(d) } finally { closeSync(d) } } catch { /* the entry itself is synced */ } }
     return entry
   })
 }
 
 /**
- * Checks the whole chain. A line that is not an entry is accepted only when the very next line is a `ledger_torn_tail`
- * entry chained to the last valid entry; those line numbers are reported as `torn`. Anything else breaks the chain.
+ * Checks the whole chain. A run of lines that are not entries is accepted only when the line right after it is a
+ * `ledger_torn_tail` entry chained to the last valid entry (what appendLedger writes after a torn tail); every line of
+ * the run is reported in `torn`. Anything else breaks the chain at the run's first line.
  */
 export function verifyLedger(path: string): { ok: boolean; entries: number; brokenAt?: number; torn?: number[] } {
   if (!existsSync(path)) return { ok: true, entries: 0 }
@@ -105,8 +117,10 @@ export function verifyLedger(path: string): { ok: boolean; entries: number; brok
   for (let i = 0; i < lines.length; i++) {
     const e = entryOf(lines[i])
     if (!e) {
-      const next = entryOf(lines[i + 1])
-      if (next?.event === TORN_TAIL && next.prev === prev) { torn.push(i + 1); continue }
+      let j = i + 1
+      while (j < lines.length && !entryOf(lines[j])) j++
+      const next = entryOf(lines[j])
+      if (next?.event === TORN_TAIL && next.prev === prev) { for (let k = i; k < j; k++) torn.push(k + 1); i = j - 1; continue }
       return report({ ok: false, entries: i - torn.length, brokenAt: i + 1 })
     }
     const { hash, ...body } = e

@@ -126,7 +126,7 @@ describe('gateStart', () => {
   describe('F07: a refused id can be traced', () => {
     const ledgerOf = (h: string): any[] => readFileSync(summonPaths(h).ledger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
     const SEEN = 'received and refused; see the Nuance ledger'
-    const NO_DECISION = 'received; no decision was recorded — see the Nuance ledger'
+    const NO_DECISION = 'received; no job state on this Mac — see the Nuance ledger'
     test('a schema refusal ledgers the request id when the id is well-formed, and only then', () => {
       const h = targetHome()
       const relative = sampleRequest({ cwd: 'Projects/x' })
@@ -186,6 +186,15 @@ describe('gateStart', () => {
       expect(() => gateStart(JSON.stringify(req), deps(h))).toThrow()
       expect(existsSync(join(p.jobs, req.id))).toBe(false)
       expect(existsSync(join(p.spool, req.id))).toBe(false)
+    })
+    test('review #5: state.json is written before request.json, and the spool marker last', () => {
+      const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()
+      expect(gateStart(JSON.stringify(req), deps(h)).status).toBe('admitted')
+      // tmp + rename keeps each file's birth time from when it was written; APFS keeps it in nanoseconds.
+      const born = (f: string) => statSync(f, { bigint: true }).birthtimeNs
+      const dir = join(p.jobs, req.id)
+      expect(born(join(dir, 'state.json')) < born(join(dir, 'request.json'))).toBe(true)
+      expect(born(join(dir, 'request.json')) < born(join(p.spool, req.id))).toBe(true)
     })
     test('a later admission write that fails is ledgered admission_failed (id only), its job dir is removed, and the answer is unknown', () => {
       const h = targetHome(); const p = summonPaths(h); const req = sampleRequest()

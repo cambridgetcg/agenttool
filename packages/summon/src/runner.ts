@@ -1,8 +1,8 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
-import { errTag, finishJob, jobDir, NEVER_REACHED, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
+import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
@@ -57,9 +57,9 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const s = readState(deps.paths, id)
   if (!s) { appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'job state unreadable' }, deps.nowMs()); return }
   if (s.status !== 'queued') return
-  if (existsSync(join(dir, 'cancel'))) return finish(deps, s, { status: 'cancelled', detail: 'cancelled before it started' })
-  // The same ±5 min grace the gate admitted it under: a job the gate admitted is never expired by the skew alone.
-  if (deps.nowMs() > Date.parse(s.expires_at) + CLOCK_SKEW_MS) return finish(deps, s, { status: 'expired', detail: 'expired before the runner reached it' })
+  // A cancel asked for, or past expiry plus the same ±5 min grace the gate admitted it under (a job the gate admitted is
+  // never expired by the skew alone): it ends as the gate and `status` would say it does.
+  if (existsSync(join(dir, 'cancel')) || deps.nowMs() > Date.parse(s.expires_at) + CLOCK_SKEW_MS) return finish(deps, s, notStartedOutcome(deps.paths, id))
   const req = readJson<SummonRequest>(join(dir, 'request.json'))
   if (!req || typeof req.prompt !== 'string') return finish(deps, s, { status: 'failed', detail: 'request file is missing or unreadable' })
   const bin = deps.claudeBin()
@@ -194,7 +194,8 @@ async function answerInventory(deps: RunnerDeps, reqs: string[]): Promise<void> 
  * Consume every spool entry once (strays first, then inventory, then jobs in id = time order), then return. Nothing
  * is left behind for launchd's QueueDirectories to relaunch the runner over, except what arrives while a job runs,
  * and the marker of a real job whose claim failed (ENOSPC, EACCES): that one stays, and runOnce throws once the rest
- * of the spool is done, so the runner exits non-zero and launchd retries it.
+ * of the spool is done, so the runner exits non-zero and launchd retries it. The retries end when the claim works or
+ * the job passes expiry + grace, when runner-main's settleNeverReached removes the marker. claim_failed is ledgered once.
  */
 export async function runOnce(deps: RunnerDeps): Promise<number> {
   mkdirSync(deps.paths.spool, { recursive: true, mode: 0o700 })
@@ -206,15 +207,23 @@ export async function runOnce(deps: RunnerDeps): Promise<number> {
   let claimError: unknown
   for (const id of names.filter((n) => ID_RE.test(n))) {
     const marker = join(deps.paths.spool, id)
+    const note = claimFailedNote(deps.paths, id)
     try { renameSync(marker, join(jobDir(deps.paths, id), 'claimed')) } catch (e) {
       if (errTag(e) === 'ENOENT' || readState(deps.paths, id) === null) {
         if (removeEntry(marker)) appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'no job to claim' }, deps.nowMs())
       } else {
-        try { appendLedger(deps.paths.ledger, { event: 'claim_failed', id, detail: `could not claim the job: ${errTag(e)}` }, deps.nowMs()) } catch { /* the exit code still says it */ }
+        if (!existsSync(note)) {
+          try {
+            appendLedger(deps.paths.ledger, { event: 'claim_failed', id, detail: `could not claim the job: ${errTag(e)}` }, deps.nowMs())
+            mkdirSync(dirname(note), { recursive: true, mode: 0o700 })
+            writeFileSync(note, '', { mode: 0o600 })
+          } catch { /* the exit code still says it */ }
+        }
         claimError ??= e
       }
       continue
     }
+    try { rmSync(note, { force: true }) } catch { /* only a note */ }
     try { await runJob(deps, id) } catch (e) { failStranded(deps, id, e) }
     ran++
   }
@@ -256,23 +265,6 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
     // result.json is written atomically and before state.json, so one that parses is the job's whole outcome.
     const r = readJson<JobResult>(join(jobDir(paths, id), 'result.json'))
     settleJob(paths, nowMs, s, r && TERMINAL.has(r.status) ? { status: r.status, reason: r.reason, detail: r.detail, resets_at: r.resets_at } : { status: 'unknown', detail })
-    n++
-  }
-  return n
-}
-
-/**
- * A `queued` job past its expiry (plus the gate's skew grace) with no spool marker and no claim was stranded by a gate
- * that died between writing state.json and the marker. Nothing will ever run it, and it would count toward
- * max_concurrent, so it ends `expired`.
- */
-export function reapStranded(paths: SummonPaths, nowMs: number): number {
-  let n = 0
-  for (const id of jobIds(paths)) {
-    const s = readState(paths, id)
-    if (s?.status !== 'queued' || !(nowMs > Date.parse(s.expires_at) + CLOCK_SKEW_MS)) continue
-    if (existsSync(join(paths.spool, id)) || existsSync(join(jobDir(paths, id), 'claimed'))) continue
-    finishJob(paths, nowMs, s, { status: 'expired', detail: NEVER_REACHED })
     n++
   }
   return n
