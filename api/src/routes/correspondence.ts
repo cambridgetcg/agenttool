@@ -459,9 +459,9 @@ export function createCorrespondenceRouter(
   // native exclusive `after`/`next_after` (decision D2), same strict query
   // and limit rules as /events.
   app.on(["GET", "HEAD"], "/repositories", async (c) => {
-    const query = parseExactQuery(c, ["after", "limit"]);
-    if (query instanceof Response) return query;
-    const afterRaw = query.get("after");
+    const indexQuery = parseExactQuery(c, ["after", "limit"]);
+    if (indexQuery instanceof Response) return indexQuery;
+    const afterRaw = indexQuery.get("after");
     let after: string | undefined;
     if (afterRaw !== null) {
       const parsed = repositoryIdSchema.safeParse(afterRaw);
@@ -475,7 +475,7 @@ export function createCorrespondenceRouter(
       }
       after = parsed.data;
     }
-    const limitRaw = query.get("limit");
+    const limitRaw = indexQuery.get("limit");
     let limit: number | undefined;
     if (limitRaw !== null) {
       if (!/^[1-9][0-9]*$/.test(limitRaw)) {

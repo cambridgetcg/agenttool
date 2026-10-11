@@ -278,7 +278,7 @@ app.get("/", async (c) => {
     },
   ];
 
-  const rows = await listMemoriesPage(project.id, {
+  const pageRows = await listMemoriesPage(project.id, {
     mode: key ? "key" : "list",
     key: key ?? null,
     agent_id: agentId ?? null,
@@ -289,17 +289,15 @@ app.get("/", async (c) => {
     cursor: position,
     limit,
   });
-  const { items, page } = pageFromRows(rows, {
+  const { items, page } = pageFromRows(pageRows, {
     limit,
     cursor: cursorRaw ?? null,
     order: MEMORY_WALK_ORDER,
     encodeLast: (row) => encodeCursor({ scope, digest, position: row.position }),
   });
   // Attestation receipts attach to the visible rows only, never the sentinel.
-  const memoriesWithReceipts = await attachAttestationReceipts(
-    project.id,
-    items.map((row) => row.memory),
-  );
+  const rows = items.map((row) => row.memory);
+  const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
   return c.json(
     attachSurface(
       {
