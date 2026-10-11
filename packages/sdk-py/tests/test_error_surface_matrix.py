@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import importlib
+import json
 import warnings
 from typing import Any, Callable, Dict, Iterable
 
@@ -727,7 +728,8 @@ DOOR_MODULES = {
 #
 # Note for whoever inherits this: an earlier pass recorded *two* such
 # exceptions. There are four. `CollectClient` and `AgentTool.deciding` swallow
-# just as deliberately as the two that were written down.
+# just as deliberately as the two that were written down. The exit door
+# (2026-10-11) reduces errors for the same reason as data.sync.
 DELIBERATE_EXCEPTIONS = {
     # 1. A peer-facing failure may carry an internal checkpoint or capability
     # in prose or details; the local node owns those diagnostics, not the
@@ -761,6 +763,14 @@ DELIBERATE_EXCEPTIONS = {
     # server's 402 envelope and guidance intact; test_x402_transport.py pins
     # those with the real challenge.
     "_x402_transport.X402PayingTransport.handle_request",
+    # 6. The exit door copies between two authorities (hosted → local node).
+    # Neither side's response prose may cross into the other side's logs or
+    # the manifest, so exit_door.py § _reduce keeps only code / status /
+    # retry_after, and a hosted read failure fails one store with only its
+    # code as the reason. sdk-ts exit-door.ts § reduce makes the same cut.
+    "exit_door.ExitDoorClient.plan",
+    "exit_door.ExitDoorClient.export",
+    "exit_door.ExitDoorClient.verify",
 }
 
 
@@ -930,6 +940,42 @@ def test_data_sync_deliberately_keeps_only_safe_metadata() -> None:
     assert err.docs is None
     assert err.next_actions is None
     assert err.hint is None
+
+
+def test_exit_door_deliberately_keeps_only_code_status_retry_after() -> None:
+    """The exit door reduces failures from either authority to stable fields.
+
+    Hosted reads and node reads both answer with the guided 400. A hosted
+    failure fails one store and names only its code; a node failure raises
+    with only ``code``, ``status`` and ``retry_after``. The TypeScript twin's
+    pin (``error-surface-matrix.test.ts``) asserts the same.
+    """
+    at = AgentTool(
+        transport=httpx.MockTransport(_handler),
+        data_node_url="http://127.0.0.1:8787",
+        data_node_token="node-token",
+    )
+    with at:
+        data = at.data
+        data._http = httpx.Client(transport=httpx.MockTransport(_handler))
+        plan = at.exit_door.plan(stores=["memories"])
+        assert plan["stores"][0]["status"] == "failed"
+        assert plan["stores"][0]["reason"] == "signing_key_not_found"
+        assert GUIDED_BODY["message"] not in json.dumps(plan)
+        for run in (
+            lambda: at.exit_door.export(collection_id="agenttool-exit"),
+            lambda: at.exit_door.verify("rec_" + "a" * 64),
+        ):
+            with pytest.raises(AgentToolError) as excinfo:
+                run()
+            err = excinfo.value
+            assert err.code == "signing_key_not_found"
+            assert err.status == 400
+            assert GUIDED_BODY["message"] not in str(err)
+            assert err.details is None
+            assert err.docs is None
+            assert err.next_actions is None
+            assert err.hint is None
 
 
 def test_dark_continent_deliberately_raises_nothing_at_all() -> None:
