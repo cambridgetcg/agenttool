@@ -547,6 +547,14 @@ export type {
   DataSyncStatusResult,
 } from "./data.js";
 export {
+  agentDataRecordId,
+  agentDataTextRecordIdentity,
+} from "./_agent-data-id.js";
+export type {
+  AgentDataRecordIdentity,
+  AgentDataTextRecordInput,
+} from "./_agent-data-id.js";
+export {
   AT_REST_V1_DOMAIN,
   AT_REST_V2_DOMAIN,
   AtRestClient,
