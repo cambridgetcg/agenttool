@@ -456,6 +456,32 @@ describe("exit door: guards before any write", () => {
     expect(ok.manifest.overall).toBe("complete");
   });
 
+  test("refuses a node URL with the hosted API's origin, before any request", async () => {
+    // allow_remote_node lets a non-loopback node through, never the host itself.
+    const remote = await harness({ nodeUrl: `${HOSTED}/` });
+    for (const run of [
+      () => remote.at.exitDoor.export({ collection_id: "agenttool-exit", allow_remote_node: true }),
+      () => remote.at.exitDoor.verify(`rec_${"a".repeat(64)}`, { allow_remote_node: true }),
+    ]) {
+      const error = await run().catch((e) => e);
+      expect(error.code).toBe("data_node_is_hosted_origin");
+    }
+    expect(remote.hosted.calls).toHaveLength(0);
+    expect(remote.nodeCalls).toHaveLength(0);
+
+    // A loopback "host" sharing the node's origin is refused the same way.
+    const loopback = await harness();
+    const nodeUrl = (loopback.at as unknown as { dataNode: { baseUrl: string } }).dataNode.baseUrl;
+    const confused = new AgentTool({
+      apiKey: PROJECT_KEY,
+      baseUrl: `${nodeUrl}/`,
+      dataNode: { baseUrl: nodeUrl, token: NODE_TOKEN },
+    });
+    const error = await confused.exitDoor.export({ collection_id: "agenttool-exit" }).catch((e) => e);
+    expect(error.code).toBe("data_node_is_hosted_origin");
+    expect(loopback.nodeCalls).toHaveLength(0);
+  });
+
   test("refuses a missing collection, a missing text collector, or a JSON-refusing policy", async () => {
     const missing = await harness();
     const error = await missing.at.exitDoor.export({ collection_id: "nope" }).catch((e) => e);

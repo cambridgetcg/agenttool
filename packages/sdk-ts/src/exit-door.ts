@@ -829,6 +829,13 @@ export class ExitDoorClient {
         { hint: "Give the node its own bearer; the project key must never reach the node." },
       );
     }
+    if (sameOrigin(baseUrl, this.http.baseUrl)) {
+      throw exitError(
+        "data_node_is_hosted_origin",
+        "The data node URL has the same origin as the hosted API.",
+        { hint: "Point the node URL at the agent-data node; each bearer must reach only its own server." },
+      );
+    }
     if (!isLoopbackUrl(baseUrl)) return { data: configured, close: async () => {} };
     const dispatcher = new DirectAgent({ connections: 1, pipelining: 1 });
     const data = this.wiring.openData(directNodeFetch(dispatcher));
@@ -1775,6 +1782,16 @@ function compareStrings(left: string, right: string): number {
 
 function recordIdsDigest(recordIds: readonly string[]): string {
   return sha256Hex(canonicalJson([...recordIds]));
+}
+
+/** Same scheme, host, and effective port. Unparseable URLs never match. */
+function sameOrigin(left: string, right: string): boolean {
+  try {
+    const origin = new URL(left).origin;
+    return origin !== "null" && origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
 }
 
 function isLoopbackUrl(value: string): boolean {

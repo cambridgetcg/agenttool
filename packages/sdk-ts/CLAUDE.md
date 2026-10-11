@@ -143,7 +143,10 @@ agent-data/v1 node and nothing else: hosted → local copy, never the reverse.
   digests of either credential are held for that comparison, and only in
   direct `apiKey` mode (a broker transport never shows the SDK the key).
 - Guards before any write: agent-data/v1 manifest, `text` collector, listed
-  collection, loopback unless `allow_remote_node`. `plan()` needs no node.
+  collection, loopback unless `allow_remote_node`, and a node origin different
+  from the hosted origin (`data_node_is_hosted_origin`; scheme/host/port
+  compared, so a hostname alias such as `localhost` vs `127.0.0.1` is not
+  caught). `plan()` needs no node.
 - A loopback node is reached over a per-run direct undici dispatcher
   (`request()`, not `fetch()`, which stalled on ~18 KB bodies under Bun
   1.3.13) that ignores HTTP(S)_PROXY / ALL_PROXY; a remote node allowed with

@@ -606,7 +606,9 @@ says so.
 Every guard runs before the first write. The node manifest must report
 `agent-data/v1` with the `text` collector, and the target collection must be
 listed. The node URL must be loopback unless you pass
-`allow_remote_node: true`. A loopback node is always reached over a direct
+`allow_remote_node: true`, and it must not share the hosted API's origin
+(`data_node_is_hosted_origin`), so neither bearer is sent to the other's
+server. A loopback node is always reached over a direct
 connection that ignores `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`, so a
 proxy never sees the node bearer or the exported records; a remote node uses
 the runtime's normal HTTP stack, proxy settings included. In direct `apiKey` mode, a node token equal to the

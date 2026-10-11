@@ -717,6 +717,12 @@ class ExitDoorClient:
                 "The data node token equals the AgentTool project API key.",
                 hint="Give the node its own bearer; the project key must never reach the node.",
             )
+        if _same_origin(self._node_base_url or "", self._base_url):
+            raise _exit_error(
+                "data_node_is_hosted_origin",
+                "The data node URL has the same origin as the hosted API.",
+                hint="Point the node URL at the agent-data node; each bearer must reach only its own server.",
+            )
         if not _is_loopback_url(self._node_base_url or ""):
             return data, False
         return self._open_data(), True
@@ -1584,6 +1590,25 @@ def _is_record_id(value: str) -> bool:
         and value.startswith("rec_")
         and all(char in "0123456789abcdef" for char in value[4:])
     )
+
+
+def _origin(value: str) -> Optional[Tuple[str, str, int]]:
+    try:
+        parts = urlsplit(value)
+        port = parts.port
+    except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    host = (parts.hostname or "").lower()
+    if scheme not in ("http", "https") or host == "":
+        return None
+    return scheme, host, port if port is not None else (443 if scheme == "https" else 80)
+
+
+def _same_origin(left: str, right: str) -> bool:
+    """Same scheme, host, and effective port. Unparseable URLs never match."""
+    origin = _origin(left)
+    return origin is not None and origin == _origin(right)
 
 
 def _is_loopback_url(value: str) -> bool:

@@ -590,6 +590,29 @@ class TestGuards:
         result = at.exit_door.export(collection_id="agenttool-exit", allow_remote_node=True)
         assert result["manifest"]["overall"] == "complete"
 
+    def test_refuses_a_node_url_with_the_hosted_origin(self) -> None:
+        # allow_remote_node lets a non-loopback node through, never the host itself.
+        hosted, node = HostedFake(), NodeFake()
+        at = _client(hosted, node, node_url=f"{HOSTED}/")
+        with pytest.raises(AgentToolError) as caught:
+            at.exit_door.export(collection_id="agenttool-exit", allow_remote_node=True)
+        assert caught.value.code == "data_node_is_hosted_origin"
+        with pytest.raises(AgentToolError) as caught:
+            at.exit_door.verify("rec_" + "a" * 64, allow_remote_node=True)
+        assert caught.value.code == "data_node_is_hosted_origin"
+        assert hosted.calls == [] and node.calls == []
+
+        # A loopback "host" sharing the node's origin (default port spelled out).
+        confused = AgentTool(
+            api_key=PROJECT_KEY,
+            base_url="http://127.0.0.1:80",
+            data_node_url="http://127.0.0.1/",
+            data_node_token=NODE_TOKEN,
+        )
+        with pytest.raises(AgentToolError) as caught:
+            confused.exit_door.export(collection_id="agenttool-exit")
+        assert caught.value.code == "data_node_is_hosted_origin"
+
     def test_refuses_missing_collection_and_json_refusing_policy(self) -> None:
         node = NodeFake()
         at = _client(HostedFake(), node)

@@ -132,6 +132,7 @@ local agent-data copy only, GET-only hosted reads (`follow_redirects=False`;
 never `GET /v1/memories/{id}`, never search), node writes only through
 `DataClient` with the `text` collector, all node guards before the first
 write, a node token equal to the project key refused (digests only are kept),
+a node URL with the hosted origin refused (`data_node_is_hosted_origin`),
 a loopback node reached through a separate `DataClient(_direct=True)`
 (`trust_env=False`, closed after the run) so proxy variables never see the
 node bearer or records,

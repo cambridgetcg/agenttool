@@ -681,7 +681,8 @@ says so.
 
 Every guard runs before the first write: the node manifest must report
 `agent-data/v1` with the `text` collector and list the target collection, the
-node URL must be loopback unless `allow_remote_node=True` (a loopback node is
+node URL must be loopback unless `allow_remote_node=True` and must not share
+the hosted API's origin (`data_node_is_hosted_origin`) (a loopback node is
 always reached through a client that ignores `HTTP_PROXY`, `HTTPS_PROXY`, and
 `ALL_PROXY`, so a proxy never sees the node bearer or the exported records; a
 remote node uses `at.data` and its environment), and (in direct
