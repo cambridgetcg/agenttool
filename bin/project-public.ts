@@ -11,6 +11,9 @@
  *   --require-ancestor <ref>  the source must be contained in this ref
  *                             (default: refs/remotes/origin/main)
  *   --allow-unmerged-source   skip the containment check (local dry runs only)
+ *   --allow-rewind            allow a source that does not descend from the
+ *                             public head's source (a deliberate rollback);
+ *                             the result records it as rewound_from
  *   --no-write                build, guard, and create the commit object, but
  *                             update no ref
  *
@@ -544,6 +547,8 @@ export interface ProjectOptions {
   gitleaks?: string;
   requireAncestor?: string;
   allowUnmergedSource?: boolean;
+  /** Allow a source that does not descend from the public head's source. */
+  allowRewind?: boolean;
 }
 
 export interface ProjectResult {
@@ -553,6 +558,26 @@ export interface ProjectResult {
   commit: string;
   tree: string;
   target: string | null;
+  /** The public head's source when this projection deliberately rewinds it; otherwise null. */
+  rewound_from: string | null;
+}
+
+/**
+ * A new source must descend from the source of the current public head, so a
+ * stale or mistaken source cannot silently roll the public tree back. Returns
+ * the head's source when an allowed rewind happens, otherwise null.
+ */
+function rewindFrom(repo: string, previous: string, source: string, allowRewind: boolean): string | null {
+  const known = git(repo, ["cat-file", "-e", `${previous}^{commit}`], { allowFailure: true }).status === 0;
+  if (known && git(repo, ["merge-base", "--is-ancestor", previous, source], { allowFailure: true }).status === 0) return null;
+  if (!allowRewind) {
+    throw new ProjectionRefused(
+      known
+        ? `${source} does not descend from ${previous}, the source of the public head; refusing to rewind the public tree (pass --allow-rewind for a deliberate rollback)`
+        : `the public head's source ${previous} is not in this repository, so a rewind cannot be ruled out (pass --allow-rewind to proceed deliberately)`,
+    );
+  }
+  return previous;
 }
 
 function assertGuardShips(repo: string, source: string): void {
@@ -576,7 +601,8 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
   if (options.target?.kind === "repo") validateBareRepo(options.target.path);
 
   const parent = options.target === undefined ? undefined : publicHead(repo, options.target);
-  if (parent !== undefined) assertProjectionHistory(repo, parent);
+  const rewound =
+    parent === undefined ? null : rewindFrom(repo, assertProjectionHistory(repo, parent).source_commit, source, options.allowRewind === true);
 
   const build = buildProjection(repo, source);
   const findings = guardProjection(repo, build, { gitleaks: options.gitleaks ?? "gitleaks", parent });
@@ -584,14 +610,14 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
 
   const targetName = options.target === undefined ? null : options.target.kind === "ref" ? options.target.ref : resolve(options.target.path);
   if (parent !== undefined && gitText(repo, ["rev-parse", `${parent}^{tree}`]).trim() === build.tree) {
-    return { status: "unchanged", source_commit: source, parent, commit: parent, tree: build.tree, target: targetName };
+    return { status: "unchanged", source_commit: source, parent, commit: parent, tree: build.tree, target: targetName, rewound_from: rewound };
   }
   const commit = createProjectionCommit(repo, build, parent);
   if (options.target === undefined) {
-    return { status: "built", source_commit: source, parent: null, commit, tree: build.tree, target: null };
+    return { status: "built", source_commit: source, parent: null, commit, tree: build.tree, target: null, rewound_from: null };
   }
   writeOutput(repo, options.target, commit, parent);
-  return { status: "updated", source_commit: source, parent: parent ?? null, commit, tree: build.tree, target: targetName };
+  return { status: "updated", source_commit: source, parent: parent ?? null, commit, tree: build.tree, target: targetName, rewound_from: rewound };
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +626,7 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
 function usage(): never {
   console.error(
     "usage: bun bin/project-public.ts --source <commit> (--out-ref refs/public/<name> | --out-repo <bare.git> | --no-write)\n" +
-      "       [--repo <path>] [--gitleaks <binary>] [--require-ancestor <ref>] [--allow-unmerged-source]",
+      "       [--repo <path>] [--gitleaks <binary>] [--require-ancestor <ref>] [--allow-unmerged-source] [--allow-rewind]",
   );
   process.exit(2);
 }
@@ -620,6 +646,7 @@ export function parseArgs(argv: readonly string[]): ProjectOptions {
     else if (arg === "--gitleaks") options.gitleaks = value();
     else if (arg === "--require-ancestor") options.requireAncestor = value();
     else if (arg === "--allow-unmerged-source") options.allowUnmergedSource = true;
+    else if (arg === "--allow-rewind") options.allowRewind = true;
     else if (arg === "--out-ref") {
       if (options.target !== undefined) usage();
       options.target = { kind: "ref", ref: value() };

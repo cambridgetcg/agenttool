@@ -28,6 +28,11 @@ head. Its author and committer are `AgentTool projection
 <contact@cambridgetcg.com>`, both dated with the source's committer date, so
 the same source and head always give the same commit id.
 
+The source must descend from the source recorded in the public head's
+`PROJECTION.json`, so a stale source cannot silently roll the public tree
+back. `--allow-rewind` permits a deliberate rollback, and the result records
+it as `rewound_from`.
+
 Before any ref changes, every layer must pass: projection integrity; the path
 layer (allowlist membership, no symlinks, submodules, files over 5 MiB, or
 credential-shaped names); the secret layer (release-tool signatures, the

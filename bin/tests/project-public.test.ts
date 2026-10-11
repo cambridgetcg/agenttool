@@ -715,6 +715,24 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/x" }, gitleaks: GITLEAKS_BIN })).toThrow("is not contained in");
   });
 
+  test("refuses to rewind the public source unless asked, and records a deliberate rewind", () => {
+    const repo = makeFixture();
+    const older = git(repo, "rev-parse", "HEAD");
+    write(repo, "packages/alpha/index.ts", "export const alpha = 2;\n");
+    const newer = commitAll(repo, "newer");
+    const base = { repo, target: { kind: "ref" as const, ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN };
+    const first = projectPublic({ ...base, source: newer });
+    expect(first).toMatchObject({ status: "updated", rewound_from: null });
+    expect(() => projectPublic({ ...base, source: older })).toThrow(`does not descend from ${newer}`);
+    expect(git(repo, "rev-parse", "refs/public/main")).toBe(first.commit);
+
+    const rewound = projectPublic({ ...base, source: older, allowRewind: true });
+    expect(rewound).toMatchObject({ status: "updated", parent: first.commit, rewound_from: newer });
+    expect(projectPublic({ ...base, source: older })).toMatchObject({ status: "unchanged", rewound_from: null });
+    expect(projectPublic({ ...base, source: newer })).toMatchObject({ status: "updated", parent: rewound.commit, rewound_from: null });
+    expect(parseArgs(["--source", "HEAD", "--out-ref", "refs/public/main", "--allow-rewind"]).allowRewind).toBe(true);
+  });
+
   test("refuses when the running guard differs from the shipped overlay copy", () => {
     const repo = makeFixture({ files: { "public/overlay/tools/public-guard.ts": "// a different guard\n" } });
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
