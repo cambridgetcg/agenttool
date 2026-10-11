@@ -74,11 +74,32 @@ describe("agenttool-exit-door argv and credential boundary", () => {
     });
   }
 
-  test("an unset named variable is a usage error that names only the variable", async () => {
+  test("an unset named variable is a usage error that does not echo the name", async () => {
     const { io, err } = fakeIo({ env: {} });
     expect(await runExitDoorCli(["plan", "--hosted-token-env", "AT_EXIT_KEY"], io)).toBe(2);
     expect(err.join("")).toContain("credential_env_missing");
-    expect(err.join("")).toContain("AT_EXIT_KEY");
+    expect(err.join("")).toContain("--hosted-token-env");
+    expect(err.join("")).not.toContain("AT_EXIT_KEY");
+  });
+
+  test("a token pasted in the wrong place is never echoed to stderr", async () => {
+    // Project keys are at_ + 43 base64url characters; this one also passes
+    // the env-name pattern, as about half of real keys do.
+    const key = "at_liveSECRETVALUE0123456789abcdefABCDEFghijk";
+    const cases: Array<[string[], string]> = [
+      [["plan", "--hosted-token-stdin", key], "option_unknown"],
+      [["plan", "--hosted-token-env", key], "credential_env_missing"],
+      [["plan", "--hosted-token-env", "A", "--stores", key], "store_unknown"],
+      [["export", key], "option_unknown"],
+    ];
+    for (const [args, code] of cases) {
+      const { io, err, out } = fakeIo({ env: { A: "x" } });
+      expect(await runExitDoorCli(args, io)).toBe(2);
+      expect(err.join("")).toContain(`: ${code}:`);
+      expect(err.join("")).not.toContain(key);
+      expect(err.join("")).not.toContain(key.slice(0, 16));
+      expect(out).toEqual([]);
+    }
   });
 
   test("stdin tokens refuse an interactive terminal and multi-line input", async () => {

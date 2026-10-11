@@ -1,6 +1,9 @@
 /**
  * `agenttool-exit-door` — plan, export, and verify a hosted → local copy.
  *
+ * No argv value or variable name is ever written to stderr: a credential
+ * pasted in the wrong place must not reach CI logs.
+ *
  * Credential posture mirrors `packages/data/src/cli.ts`: a token is read only
  * from an explicitly named environment variable (`--*-token-env NAME`) or from
  * non-interactive stdin (`--*-token-stdin`), never from argv and never from an
@@ -294,7 +297,8 @@ function parseArgs(args: readonly string[]): Parsed | "help" {
         parsed.progress = true;
         break;
       default:
-        throw new UsageError("option_unknown", `Unknown option ${flag.slice(0, 64)}`);
+        // Never echo the argument: a token pasted in the wrong place lands here.
+        throw new UsageError("option_unknown", "Unknown option or stray argument (not shown); see --help");
     }
   }
 
@@ -367,7 +371,7 @@ function storeList(value: string): ExitStore[] {
   if (stores.length === 0) throw new UsageError("stores_invalid", "--stores needs at least one store");
   for (const store of stores) {
     if (!(EXIT_STORES as readonly string[]).includes(store)) {
-      throw new UsageError("store_unknown", `Unknown store ${store.slice(0, 64)}; known: ${EXIT_STORES.join(", ")}`);
+      throw new UsageError("store_unknown", `Unknown store (not shown); known: ${EXIT_STORES.join(", ")}`);
     }
   }
   return stores as ExitStore[];
@@ -378,7 +382,8 @@ async function readToken(source: TokenSource, io: ExitDoorCliIo, which: "hosted"
   if (source.kind === "env") {
     const raw = io.env[source.name];
     if (raw === undefined) {
-      throw new UsageError("credential_env_missing", `The selected ${which} credential variable '${source.name}' is not set`);
+      // The name is not echoed: a credential passed as the name would leak.
+      throw new UsageError("credential_env_missing", `The variable named by --${which}-token-env is not set`);
     }
     value = raw;
   } else {
