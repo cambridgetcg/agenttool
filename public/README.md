@@ -8,7 +8,7 @@ publishes anything by itself.
 
 | Path | Projected? | Role |
 |---|---|---|
-| [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and the packages held for later waves. Its SHA-256 is recorded in each projection. |
+| [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. |
 | [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, and the public guard with its allow entries. |
 | [`private-guard/`](private-guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |
 
