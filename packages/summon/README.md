@@ -36,8 +36,11 @@ and the `summon` link on the Air.
    (`ssh-keygen -A`, as macOS does at the first SSH connection). It writes the sshd drop-in, has `sshd -t` check it,
    then asks `sshd -T` what sshd would really use for a LAN login, by Yu's user and by root. Nothing of Summon's (the
    programs, the allowlist, the key line, the runner) is written until that says key logins only, so a refused re-run
-   leaves the earlier install as it was. **Whenever it stops before that point, it says to turn Remote Login off until
-   the problem is fixed: do so**, because until then sshd still takes passwords. It is safe to run again: it replaces
+   leaves the earlier install as it was. **Whenever it stops before that point, it says what to do about Remote Login:
+   on a first install, turn it off until the problem is fixed** (sshd still takes passwords until then); when an
+   earlier Summon install's drop-in is still in place, it says passwords are still off and Remote Login can stay on.
+   Once the new drop-in is in and sshd refuses it, it always says to turn Remote Login off.
+   It is safe to run again: it replaces
    its one key line, keeps every other `authorized_keys` line and an edited allowlist, and never empties `runner.log`.
    If the runner does not load, it says so (the key line is already updated): run it again, or log out and in. It
    says `Done` only once the runner is loaded, the host key is handed back and the runner has answered an inventory

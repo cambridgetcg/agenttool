@@ -266,7 +266,9 @@ export function bundle(root: string = temp('summon-root-'), o: { expiry?: string
 }
 export const envFor = (root: string, extra: Record<string, string> = {}): Record<string, string> => ({
   PATH: BASE_PATH, HOME: root, SUMMON_INSTALL_ROOT: root, SUMMON_SKIP_SUDO: '1', SUMMON_SKIP_LAUNCHCTL: '1', SUMMON_SKIP_INVENTORY: '1',
-  SUMMON_HOST_KEY: fixtureHostKey(), ...extra,
+  SUMMON_HOST_KEY: fixtureHostKey(),
+  // Never this Mac's /etc/ssh: no earlier Summon drop-in, unless a test puts one here.
+  SUMMON_DROPIN: join(`${root}-etc`, '010-summon.conf'), ...extra,
 })
 export const run = (dir: string, root: string, extra: Record<string, string> = {}) =>
   Bun.spawnSync(['bash', join(dir, 'summon-install.sh')], { env: envFor(root, extra) })

@@ -11,6 +11,7 @@ afterAll(cleanupFixtureHostKey)
 const SHA_A = 'a'.repeat(64)
 const SHA_B = 'b'.repeat(64)
 const RL_OFF = 'Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login.'
+const STILL_OFF = 'SSH passwords are still off from the earlier Summon install; Remote Login can stay on.'
 const timesIn = (text: string, part: string) => text.split(part).length - 1
 const shasOf = (dir: string) => ({ gatekeeper: sha(join(dir, 'summon-gatekeeper')), runner: sha(join(dir, 'summon-runner')) })
 
@@ -38,7 +39,7 @@ describe('renderInstaller', () => {
   })
   test('the drop-in is 010 (sorts before macOS 100), mode 600, and sshd is never reloaded', () => {
     const s = renderInstaller(TMPL, good)
-    expect(s).toContain('DROPIN="$CONFD/010-summon.conf"')
+    expect(s).toContain('DROPIN="${SUMMON_DROPIN:-/etc/ssh/sshd_config.d/010-summon.conf}"')
     expect(s).toContain('sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN"')
     expect(s).not.toContain('100-summon')
     expect(s).not.toMatch(/com\.openssh|kill -HUP|systemsetup/)
@@ -314,6 +315,7 @@ describe('installer', () => {
         const { r } = make()
         expect(r.exitCode).not.toBe(0)
         expect(timesIn(r.stdout.toString(), RL_OFF)).toBe(1)
+        expect(timesIn(r.stdout.toString(), STILL_OFF)).toBe(0)
       })
     }
     test('a silent stop is named as one', () => {
@@ -333,6 +335,61 @@ describe('installer', () => {
       expect(r.stdout.toString()).toContain('✓ SSH: key logins only')
       expect(timesIn(r.stdout.toString(), RL_OFF)).toBe(0)
     }, 15_000)
+  })
+
+  describe('B2: with an earlier Summon drop-in in place, a stop before the new one goes in says Remote Login can stay on', () => {
+    type Scenario = (env: Record<string, string>) => ReturnType<typeof run>
+    const withStubs = (env: Record<string, string>, extra: Record<string, string> = {}) => {
+      const s = stubs({ sudo: SUDO_STUB, launchctl: LAUNCHCTL_STUB, ...extra })
+      return { s, env: { ...s.env, PATH: s.path, ...WITH_SUDO, ...env } }
+    }
+    /** An earlier install's drop-in: it exists only after that install's `sshd -t` passed. */
+    const earlier = () => { const f = join(temp('summon-etc-'), '010-summon.conf'); writeFileSync(f, 'PasswordAuthentication no\n'); return { SUMMON_DROPIN: f } }
+    const before: Record<string, Scenario> = {
+      'a checksum mismatch': (env) => { const b = bundle(); writeFileSync(join(b.dir, 'summon-runner'), 'tampered'); return run(b.dir, b.root, withStubs(env).env) },
+      'an expired bundle': (env) => { const b = bundle(undefined, { expiry: '20200101' }); return run(b.dir, b.root, withStubs(env).env) },
+      'an older bundle': (env) => {
+        const root = temp('summon-root-')
+        expect(run(bundle(root, { prepared: stampOf(Date.now()) }).dir, root).exitCode).toBe(0)
+        return run(bundle(root, { prepared: stampOf(Date.now() - 60_000) }).dir, root, withStubs(env).env)
+      },
+      'a running job': (env) => {
+        const b = bundle(); const job = join(b.root, '.local/state/summon/jobs', `smn_${'1'.repeat(32)}`); mkdirSync(job, { recursive: true })
+        writeFileSync(join(job, 'state.json'), JSON.stringify({ status: 'running', pid: process.pid }))
+        return run(b.dir, b.root, withStubs(env).env)
+      },
+      'a silent stop (shasum fails)': (env) => { const b = bundle(); return run(b.dir, b.root, withStubs(env, { shasum: 'exit 1' }).env) },
+      'sudo not taking the password': (env) => { const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SUDO, ''); return run(b.dir, b.root, w.env) },
+      'host keys that cannot be made': (env) => {
+        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_KEYGEN, '')
+        return run(b.dir, b.root, { ...w.env, SUMMON_HOST_KEY: w.s.missingHostKey })
+      },
+    }
+    for (const [name, go] of Object.entries(before)) {
+      test(name, () => {
+        const r = go(earlier())
+        expect(r.exitCode).not.toBe(0)
+        const said = r.stdout.toString()
+        expect([timesIn(said, STILL_OFF), timesIn(said, RL_OFF)]).toEqual([1, 0])
+      })
+    }
+    // Once this run has put its own drop-in in place, the earlier one is gone: replaced, or removed when sshd rejects it.
+    const after: Record<string, Scenario> = {
+      'sshd -t rejecting the new drop-in (which is then removed)': (env) => {
+        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_FAIL_SSHD!, ''); return run(b.dir, b.root, w.env)
+      },
+      'sshd -T showing password logins still on': (env) => {
+        const b = bundle(); const w = withStubs(env); writeFileSync(w.s.env.STUB_SSHD_T, sshdT({ passwordauthentication: 'yes' })); return run(b.dir, b.root, w.env)
+      },
+    }
+    for (const [name, go] of Object.entries(after)) {
+      test(`but after the new drop-in went in, it says to turn Remote Login off: ${name}`, () => {
+        const r = go(earlier())
+        expect(r.exitCode).not.toBe(0)
+        const said = r.stdout.toString()
+        expect([timesIn(said, STILL_OFF), timesIn(said, RL_OFF)]).toEqual([0, 1])
+      })
+    }
   })
 
   describe('B4: a run that stops before the key line changes nothing of Summon\'s', () => {
@@ -433,7 +490,7 @@ describe('installer', () => {
     const c = calls(s)
     expect(c[0]).toBe('nc -z -G 2 127.0.0.1 22')
     expect(c[1]).toBe('sudo -v')
-    expect(c[2]).toMatch(/^sudo install -m 600 -o root -g wheel \S+ \/etc\/ssh\/sshd_config\.d\/010-summon\.conf$/)
+    expect(c[2]).toMatch(new RegExp(`^sudo install -m 600 -o root -g wheel \\S+ ${envFor(root).SUMMON_DROPIN}$`))
     expect(c.slice(3)).toEqual(['sudo /usr/sbin/sshd -t', SSHD_T_USER, SSHD_T_ROOT, `launchctl bootout ${SERVICE}`, `launchctl print ${SERVICE}`,
       `launchctl bootstrap gui/${userInfo().uid} ${PLIST(root)}`])
     expect(readFileSync(`${s.log}.dropin`, 'utf8')).toBe(DROPIN_TEXT)
@@ -511,7 +568,7 @@ describe('installer', () => {
     const said = r.stdout.toString()
     expect(said).toContain('sshd rejected the change')
     expect(said).toContain(RL_OFF)
-    expect(calls(s).slice(3)).toEqual(['sudo /usr/sbin/sshd -t', 'sudo rm -f /etc/ssh/sshd_config.d/010-summon.conf'])
+    expect(calls(s).slice(3)).toEqual(['sudo /usr/sbin/sshd -t', `sudo rm -f ${envFor(root).SUMMON_DROPIN}`])
     expect(existsSync(AK(root))).toBe(false)
     expect(existsSync(PLIST(root))).toBe(false)
   })

@@ -20,19 +20,28 @@ ROOT="${SUMMON_INSTALL_ROOT:-$HOME}"
 SKIP_SUDO="${SUMMON_SKIP_SUDO:-0}"; SKIP_LAUNCHCTL="${SUMMON_SKIP_LAUNCHCTL:-0}"; SKIP_INVENTORY="${SUMMON_SKIP_INVENTORY:-0}"
 # The host key sshd uses, which the Air pins (tests point this at a temp file).
 HOST_KEY="${SUMMON_HOST_KEY:-/etc/ssh/ssh_host_ed25519_key}"
+# Summon's sshd drop-in (tests point this elsewhere). 010 sorts before macOS's own 100-macos.conf; sshd keeps the first
+# value it reads. It is root's, 0600, and only ever left in place after an install whose `sshd -t` passed.
+DROPIN="${SUMMON_DROPIN:-/etc/ssh/sshd_config.d/010-summon.conf}"
 SHARE="$ROOT/.local/share/summon"; STATE="$ROOT/.local/state/summon"; CONF="$ROOT/.config/summon"; AK="$ROOT/.ssh/authorized_keys"
 NOTHING_DONE="  No summon key line was written and the runner was not loaded. Tell Ai."
 
-# Remote Login is on before this runs, and until sshd is confirmed to take keys only, it lets passwords in from the LAN.
-# So every stop before that says, once, to turn it off; a stop with no message of its own is named as one.
-TMP=""; EXPLAINED=0; KEYS_ONLY=0; REMOTE_LOGIN_ADVICE=1
+# Remote Login is on before this runs, and until sshd is confirmed to take keys only it may let passwords in from the LAN.
+# So every stop before that says, once, what to do about Remote Login: an earlier Summon install's drop-in still keeps
+# passwords off (until this run puts its own in place), so it can stay on; otherwise turn it off until this is fixed.
+# A stop with no message of its own is named as one.
+TMP=""; EXPLAINED=0; KEYS_ONLY=0; REMOTE_LOGIN_ADVICE=1; DROPIN_PLACED=0
 finish() {
   local code=$?
   [ -z "$TMP" ] || rm -f "$TMP"
   [ "$code" != 0 ] || return 0
   [ "$EXPLAINED" = 1 ] || echo "✗ the installer stopped unexpectedly (exit $code); nothing after the last ✓ line was done. Tell Ai."
   if [ "$KEYS_ONLY" != 1 ] && [ "$REMOTE_LOGIN_ADVICE" = 1 ]; then
-    echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."
+    if [ "$DROPIN_PLACED" = 0 ] && [ -e "$DROPIN" ]; then
+      echo "  SSH passwords are still off from the earlier Summon install; Remote Login can stay on."
+    else
+      echo "  Until this is fixed, turn Remote Login off: System Settings → General → Sharing → Remote Login."
+    fi
   fi
 }
 trap finish EXIT
@@ -123,8 +132,7 @@ if [ "$SKIP_SUDO" != 1 ]; then
   echo "✓ Remote Login is on"
 
   # ── sshd: key logins only. Nothing of Summon's is written until this passes. ──
-  CONFD=/etc/ssh/sshd_config.d; DROPIN="$CONFD/010-summon.conf"
-  # 010 sorts before macOS's own 100-macos.conf; sshd keeps the first value it reads.
+  CONFD=/etc/ssh/sshd_config.d
   INCLUDED=1
   grep -qE '^Include /etc/ssh/sshd_config\.d/\*' /etc/ssh/sshd_config || { INCLUDED=0; echo "⚠ sshd_config does not include $CONFD — the drop-in below would not be read"; }
   TMP="$(mktemp)"
@@ -145,6 +153,7 @@ if [ "$SKIP_SUDO" != 1 ]; then
       stop "✗ ssh-keygen -A ran, but the ed25519 one of this Mac's SSH host keys ($HOST_KEY) is still missing, so sshd was not changed." "$NOTHING_DONE"
     echo "✓ made this Mac's SSH host keys (ssh-keygen -A, as macOS does at the first SSH connection)"
   fi
+  DROPIN_PLACED=1   # from here an earlier install's drop-in is replaced, or (if sshd rejects this one) removed
   sudo install -m 600 -o root -g wheel "$TMP" "$DROPIN" || stop "✗ could not write $DROPIN, so sshd was not changed." "$NOTHING_DONE"
   # sshd runs per connection under launchd on macOS, so the next login reads the file: nothing to reload.
   if ! sudo /usr/sbin/sshd -t; then
