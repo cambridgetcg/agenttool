@@ -338,7 +338,7 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Crypto deposit-address disclosure is resting, so the API currently discloses no deposit address for topping up this internal marketplace wallet. Solana deposit credit is unavailable by default. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
+      hint: "Crypto deposit-address disclosure is resting, so the API currently discloses no deposit address for topping up this internal marketplace wallet. Solana deposit credit is unavailable by default, and always in a production runtime. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
       next_actions: [
         {
           action:
@@ -358,16 +358,17 @@ export const errors = {
 
   /** A crypto deposit webhook arrived for a chain whose provider signing
    *  secret is not configured. The endpoint FAILS CLOSED (503) rather than
-   *  credit an unverifiable payload — the on-chain funds are safe and
-   *  crediting resumes once the operator sets the secret. Not the caller's
-   *  fault; a config gap, so it rests rather than punishes. */
+   *  credit an unverifiable payload — the on-chain funds are safe. Setting
+   *  the secret restores verification only; credit has further conditions
+   *  (see the hint). Not the caller's fault; a config gap, so it rests
+   *  rather than punishes. */
   webhookSecretUnset(opts: { chain?: string } = {}): GuidedErrorBody {
     return {
       error: "webhook_secret_unset",
       message: opts.chain
         ? `Deposit webhook for ${opts.chain} is paused: its provider signing secret is not configured.`
         : "Deposit webhook is paused: the provider signing secret is not configured.",
-      hint: "The endpoint fails closed rather than credit an unverifiable payload. Your on-chain transfer is safe; crediting resumes once the operator configures the secret. This is an operator setting, not a problem with your request.",
+      hint: "The endpoint fails closed rather than credit an unverifiable payload. Your on-chain transfer is safe. Configuring the secret restores signature verification only and does not by itself resume credit: EVM credit has further conditions, including that chain's webhook and network configuration, canonical depth, and a running confirm worker, and Solana deposit credit is refused by default and always in a production runtime. This is an operator setting, not a problem with your request.",
       next_actions: [
         { action: "Check the wallet ledger for a crypto deposit credit", method: "GET", path: "/v1/wallets/{id}/transactions" },
       ],

@@ -836,10 +836,12 @@ router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
 // Deposit-address disclosure rests, but this path deliberately stays as it
 // was, behind the production fence (no unsigned deliveries, no unreconciled
 // Solana credit, no testnet credit in a production runtime). Signed EVM
-// deliveries for addresses disclosed before the rest are still recorded
+// deliveries for addresses disclosed before the rest can still be recorded
 // rather than refused, so a stray deposit leaves durable evidence. Recording
-// needs that chain's signing key, webhook identity, and CRYPTO_NETWORK; the
-// funds stay at the derived address in operator custody either way.
+// needs that chain's signing key and webhook ID, a selected network
+// (CRYPTO_NETWORK, or PAYOUT_NETWORK as fallback), the active derivation
+// mnemonic, and a provider still delivering for that address; the funds stay
+// at the derived address in operator custody either way.
 //
 // Providers wired:
 //   ethereum/base/polygon/arbitrum/optimism — Alchemy ERC-20 transfer

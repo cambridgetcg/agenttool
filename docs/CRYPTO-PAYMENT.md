@@ -83,7 +83,7 @@ Returns:
   "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   "watch_status": "provider_verified",
   "credit_finality": "pending_until_chain_depth",
-  "instructions": "Send USDC to this address from any wallet, in whole multiples of 0.01 USDC: ... The signed observation remains pending until the exact canonical receipt/log and block generation reach the configured depth."
+  "instructions": "Send USDC to this address from any wallet, in whole multiples of 0.01 USDC: ... A signed delivery is stored pending; credits become spendable only after the exact canonical receipt/log and block generation reach the configured depth. ..."
 }
 ```
 
