@@ -130,9 +130,31 @@ jobs:
     timeout-minutes: 25
     environment: npm-bootstrap
     permissions:
+      # actions: read is what GitHub requires to read an environment with an
+      # installation token such as GITHUB_TOKEN; the first step needs it.
+      actions: read
       contents: write
       id-token: write
     steps:
+      # Owner decision, 2026-10-11: npm releases stay frozen until a required
+      # human reviewer returns to npm-bootstrap. When no reviewer is
+      # configured, GitHub runs this job without waiting for anyone. This step
+      # runs before checkout and before NPM_TOKEN or any OIDC token is used,
+      # and stops the job unless the environment has a required_reviewers rule
+      # naming at least one reviewer. An API or parse failure also stops it.
+      - name: Refuse to publish while npm-bootstrap has no required reviewer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/npm-bootstrap" \
+            --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')"
+          if [[ ! "$reviewers" =~ ^[0-9]+$ ]] || (( reviewers < 1 )); then
+            echo "::error::npm-bootstrap has no required reviewer; npm releases stay frozen."
+            exit 1
+          fi
+          echo "npm-bootstrap has ${reviewers} required reviewer(s)."
       - name: Check out the same annotated release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

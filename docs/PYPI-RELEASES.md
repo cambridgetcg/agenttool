@@ -36,7 +36,9 @@ The workflow has four boundaries:
    skips the protected job. Any different hash, size, filename, distribution
    type, project identity, URL origin, or yanked file stops before mutation.
 3. `publish` enters the protected `pypi` GitHub environment and receives only
-   `id-token: write`. It checks out no repository code and defines no
+   `id-token: write` and `actions: read`. Its first step reads the `pypi`
+   environment through the GitHub API and stops unless a required reviewer is
+   configured. It checks out no repository code and defines no other
    repository-authored shell, package, build, test, or verification command.
    The receipt, wheel, and sdist are separate workflow artifacts, so this job
    conditionally downloads only the exact filenames which preflight found
@@ -447,6 +449,15 @@ its prepare job makes the same unauthenticated `git fetch` of the private
 `main` branch (`bin/pypi-release.ts`) that stopped npm run 38034353198 on
 2026-10-10, so it is expected to stop the same way. LOVE covers JavaScript
 packages only, so `agenttool-sdk` has no working release lane today.
+
+Source change, 2026-10-11: the `publish` job of `publish-pypi.yml` now starts
+with a step that reads `pypi` through the GitHub API and fails the job unless
+the environment has a required reviewer; an API failure fails it too.
+`bin/pypi-release.ts` requires a run to be dispatched on its exact `sdk-v*`
+tag, and GitHub runs the workflow file from that tag, so the step guards SDK
+tags cut after this change reaches `main`. Existing `sdk-v*` tags carry either
+no `publish-pypi.yml` or the earlier one, whose prepare job makes the same
+unauthenticated fetch of private `main`.
 
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant

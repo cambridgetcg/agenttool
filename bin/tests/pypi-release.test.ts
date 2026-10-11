@@ -18,6 +18,11 @@ import {
   type PublicArtifact,
   type PyPIReleaseReceipt,
 } from "../pypi-release";
+import {
+  expectReviewerGuardFailsClosed,
+  expectReviewerGuardFirst,
+  readPublishJob,
+} from "./release-reviewer-guard";
 
 const ROOT = resolve(import.meta.dir, "../..");
 
@@ -337,7 +342,8 @@ describe("protected PyPI release policy", () => {
     expect(publishJob).not.toContain("actions/checkout");
     expect(publishJob).not.toContain("setup-bun");
     expect(publishJob).not.toContain("setup-python");
-    expect(publishJob).not.toContain("\n        run:");
+    // The only shell step is the reviewer guard, which runs no repository code.
+    expect(publishJob.match(/\n        run:/g)).toHaveLength(1);
     expect(publishJob).not.toContain("bin/pypi-release.ts");
     expect(publishJob).not.toContain("pypi-release-receipt-");
     expect(publishJob).toContain(
@@ -349,6 +355,13 @@ describe("protected PyPI release policy", () => {
     expect(publishJob).toContain(
       "pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247",
     );
+  });
+
+  test("refuses to publish while pypi has no required reviewer", async () => {
+    const job = await readPublishJob("publish-pypi.yml");
+    expect(job.permissions).toEqual({ actions: "read", "id-token": "write" });
+    const guard = expectReviewerGuardFirst(job, "pypi");
+    await expectReviewerGuardFailsClosed(guard, "pypi");
   });
 
   test("pins every third-party action used by the release boundary", async () => {

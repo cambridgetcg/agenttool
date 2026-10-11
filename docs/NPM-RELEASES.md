@@ -43,6 +43,17 @@ failed there on 2026-10-10 with `could not read Username for
 way. Today the checked-in LOVE catalog served from docs.agenttool.dev is the
 only working release lane.
 
+Source change, 2026-10-11: the `publish` job of `publish-npm.yml` now starts
+with a step that reads `npm-bootstrap` through the GitHub API and fails the job
+unless the environment has a required reviewer; an API failure fails it too.
+`bin/npm-release.ts` requires a run to be dispatched on its exact release tag,
+and GitHub runs the workflow file from that tag, so the step guards tags cut
+after this change reaches `main`. Existing release tags carry either no
+`publish-npm.yml` or the earlier one, whose prepare job makes the same
+unauthenticated fetch of private `main`. `publish-gospel.yml` also uses
+`npm-bootstrap` and has no such step; it can publish only the pinned
+`@agenttool/gospel-of-the-logos@0.1.0`, which npm has served since 2026-09-08.
+
 The three translation layers and the separate incidence Atlas deliberately use
 different artifact and Hub surfaces:
 

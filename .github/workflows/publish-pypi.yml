@@ -133,8 +133,31 @@ jobs:
     timeout-minutes: 10
     environment: pypi
     permissions:
+      # actions: read is what GitHub requires to read an environment with an
+      # installation token such as GITHUB_TOKEN; the first step needs it.
+      actions: read
       id-token: write
     steps:
+      # Owner decision, 2026-10-11: PyPI releases stay frozen until a required
+      # human reviewer returns to pypi. When no reviewer is configured, GitHub
+      # runs this job without waiting for anyone. This step runs before any
+      # download and before any OIDC token is used, and stops the job unless
+      # the environment has a required_reviewers rule naming at least one
+      # reviewer. An API or parse failure also stops it. It runs no repository
+      # code.
+      - name: Refuse to publish while pypi has no required reviewer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/pypi" \
+            --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')"
+          if [[ ! "$reviewers" =~ ^[0-9]+$ ]] || (( reviewers < 1 )); then
+            echo "::error::pypi has no required reviewer; PyPI releases stay frozen."
+            exit 1
+          fi
+          echo "pypi has ${reviewers} required reviewer(s)."
       - name: Download the missing wheel only
         if: ${{ needs.preflight.outputs.wheel_required == 'true' }}
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6

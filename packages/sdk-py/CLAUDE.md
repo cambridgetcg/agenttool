@@ -102,8 +102,9 @@ python -m build
 Use the repository's protected manual `publish-pypi.yml` workflow. It builds
 and inspects exact wheel/sdist bytes without publication authority, requires an
 annotated SDK tag contained in GitHub `main`, enters the protected `pypi`
-environment only for the pinned PyPA trusted-publisher action, and verifies the
-public files independently. Do not run a second local token/Twine upload path.
+environment only for a required-reviewer check and the pinned PyPA
+trusted-publisher action, and verifies the public files independently. Do not
+run a second local token/Twine upload path.
 See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 
 **Frozen — 2026-10-11.** On 2026-10-11 the `pypi` environment carried only a
