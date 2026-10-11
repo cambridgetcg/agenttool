@@ -915,4 +915,3 @@ describe("correspondence repository index store", () => {
     }
   });
 });
-
