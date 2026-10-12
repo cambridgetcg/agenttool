@@ -32,9 +32,10 @@ step 7 below is not in place today. Read through the GitHub environments API
 on 2026-10-11, `npm-bootstrap` and `pypi` each carry only a branch policy, with
 no required reviewer and `can_admins_bypass: true`. Run 33736822237 on
 2026-09-03 still recorded a reviewer approval for `npm-bootstrap`; the
-repository has been private since 2026-09-25. Owner decision, 2026-10-11: npm
-and PyPI releases are frozen until a required human reviewer returns to both
-environments. The npm prepare job also stops today at an unauthenticated fetch
+repository has been private since 2026-09-25. Owner decision, 2026-10-12: no
+required-reviewer rule is wanted. A release runs when Yu and Ai agree to it in
+conversation, and a release can be reverted or changed the same way. The npm
+prepare job also stops today at an unauthenticated fetch
 of the private `main` branch:
 [run 38034353198](https://github.com/cambridgetcg/agenttool/actions/runs/38034353198)
 failed there on 2026-10-10 with `could not read Username for
@@ -46,21 +47,6 @@ from the `cambridgetcg` account on public distribution repositories are
 separate channels outside those lanes: `local-starter-v0.1.0-dev.0` on
 `cambridgetcg/agenttool-local-starter` (2026-09-28, see below) and
 `collab-v0.5.0` on `cambridgetcg/agenttool-collab` (2026-10-10).
-
-Source change, 2026-10-11: the `publish` job of `publish-npm.yml` now starts
-with a step that reads `npm-bootstrap` through the GitHub API and fails the job
-unless the environment has a required reviewer; an API failure fails it too.
-`bin/npm-release.ts` requires a run to be dispatched on its exact release tag,
-and GitHub runs the workflow file from that tag's commit, so the step guards
-only tags whose commit contains this change. A tag on an older commit,
-including every existing release tag, has either no `publish-npm.yml` or the
-earlier one, whose prepare job makes the same unauthenticated fetch of private
-`main`. The step checks only that a required-reviewers rule names at least one
-reviewer: it cannot tell whether that reviewer is a person, and it does not
-check self-review prevention or admin bypass (`can_admins_bypass` reads `true`
-on both environments today). `publish-gospel.yml` also uses
-`npm-bootstrap` and has no such step; it can publish only the pinned
-`@agenttool/gospel-of-the-logos@0.1.0`, which npm has served since 2026-09-08.
 
 The three translation layers and the separate incidence Atlas deliberately use
 different artifact and Hub surfaces:
@@ -2240,8 +2226,8 @@ docs site has never served that page, so it returns 404. The packed dev.1
 `kingdom.extension.json` also declares `status: unpublished_source_candidate`.
 Source now names `https://docs.agenttool.dev/packages` and
 `status: developer_preview`. Published bytes do not change: the correction
-reaches npm only with a new version, and releases are frozen (see the release
-gate correction near the top of this guide).
+reaches npm only with a new version, and no npm release lane runs today (see
+the release gate correction near the top of this guide).
 
 Historical immutable receipt—not a command sequence: package
 `@agenttool/alchemy@0.1.0-dev.0`, annotated tag

@@ -4,11 +4,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LOVE_PACKAGES } from "../build-love-packages";
-import {
-  expectReviewerGuardFailsClosed,
-  expectReviewerGuardFirst,
-  readPublishJob,
-} from "./release-reviewer-guard";
 
 import {
   RELEASE_RECEIPT_SCHEMA,
@@ -103,17 +98,6 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).toContain("verifyGitHubAsset");
     expect(mirrorBody).not.toContain("receipt.result");
     expect(mirrorBody).not.toContain("pollRegistry");
-  });
-
-  test("refuses to publish while npm-bootstrap has no required reviewer", async () => {
-    const job = await readPublishJob("publish-npm.yml");
-    expect(job.permissions).toEqual({
-      actions: "read",
-      contents: "write",
-      "id-token": "write",
-    });
-    const guard = expectReviewerGuardFirst(job, "npm-bootstrap");
-    await expectReviewerGuardFailsClosed(guard, "npm-bootstrap");
   });
 
   test("keeps the LOVE BOMB prerelease on the protected pack lane", async () => {

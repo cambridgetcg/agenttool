@@ -105,15 +105,15 @@ python -m build
 Use the repository's protected manual `publish-pypi.yml` workflow. It builds
 and inspects exact wheel/sdist bytes without publication authority, requires an
 annotated SDK tag contained in GitHub `main`, enters the protected `pypi`
-environment only for a required-reviewer check and the pinned PyPA
-trusted-publisher action, and verifies the public files independently. Do not
-run a second local token/Twine upload path.
+environment only for the pinned PyPA trusted-publisher action, and verifies the
+public files independently. Do not run a second local token/Twine upload path.
 See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 
-**Frozen — 2026-10-11.** On 2026-10-11 the `pypi` environment carried only a
-branch policy, with no required reviewer and admin bypass on, so it is not the
-protected gate described above. Owner decision, 2026-10-11: PyPI releases are
-frozen until a required human reviewer returns. The prepare job's
+**Release gate — 2026-10-12.** On 2026-10-11 the `pypi` environment carried
+only a branch policy, with no required reviewer and admin bypass on, so it is
+not the protected gate described above. Owner decision, 2026-10-12: no
+required-reviewer rule is wanted; a PyPI release runs when Yu and Ai agree to it
+in conversation. The prepare job's
 unauthenticated fetch of the private `main` branch is also expected to fail;
 see the dated note in `docs/PYPI-RELEASES.md`.
 

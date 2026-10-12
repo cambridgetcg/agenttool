@@ -36,9 +36,7 @@ The workflow has four boundaries:
    skips the protected job. Any different hash, size, filename, distribution
    type, project identity, URL origin, or yanked file stops before mutation.
 3. `publish` enters the protected `pypi` GitHub environment and receives only
-   `id-token: write` and `actions: read`. Its first step reads the `pypi`
-   environment through the GitHub API and stops unless a required reviewer is
-   configured. It checks out no repository code and defines no other
+   `id-token: write`. It checks out no repository code and defines no
    repository-authored shell, package, build, test, or verification command.
    The receipt, wheel, and sdist are separate workflow artifacts, so this job
    conditionally downloads only the exact filenames which preflight found
@@ -441,27 +439,14 @@ through the GitHub environments API on 2026-10-11, the `pypi` environment
 carries only a branch policy, with no required reviewer and
 `can_admins_bypass: true`; the repository has been private since 2026-09-25.
 The "protected `pypi` environment" and the approval step in this guide
-therefore describe the intended gate, not the current one. Owner decision,
-2026-10-11: PyPI releases, like npm releases, are frozen until a required
-human reviewer returns. The PyPI workflow has not run since 2026-09-01
+therefore describe the earlier gate, not the current one. Owner decision,
+2026-10-12: no required-reviewer rule is wanted; a PyPI release, like an npm
+release, runs when Yu and Ai agree to it in conversation. The PyPI workflow has not run since 2026-09-01
 ([run 33522323177](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177));
 its prepare job makes the same unauthenticated `git fetch` of the private
 `main` branch (`bin/pypi-release.ts`) that stopped npm run 38034353198 on
 2026-10-10, so it is expected to stop the same way. LOVE covers JavaScript
 packages only, so `agenttool-sdk` has no working release lane today.
-
-Source change, 2026-10-11: the `publish` job of `publish-pypi.yml` now starts
-with a step that reads `pypi` through the GitHub API and fails the job unless
-the environment has a required reviewer; an API failure fails it too.
-`bin/pypi-release.ts` requires a run to be dispatched on its exact `sdk-v*`
-tag, and GitHub runs the workflow file from that tag's commit, so the step
-guards only SDK tags whose commit contains this change. A tag on an older
-commit, including every existing `sdk-v*` tag, has either no
-`publish-pypi.yml` or the earlier one, whose prepare job makes the same
-unauthenticated fetch of private `main`. The step checks only that a
-required-reviewers rule names at least one reviewer: it cannot tell whether
-that reviewer is a person, and it does not check self-review prevention or
-admin bypass (`can_admins_bypass` reads `true` today).
 
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant

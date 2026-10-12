@@ -1809,11 +1809,6 @@ exit 94
     expect(publishJob).toContain("environment: npm-bootstrap");
     expect(publishJob).toContain("contents: write");
     expect(publishJob).toContain("id-token: write");
-    expect(publishJob).toContain("actions: read");
-    expect(publishJob.indexOf("environments/npm-bootstrap")).toBeGreaterThan(-1);
-    expect(publishJob.indexOf("environments/npm-bootstrap")).toBeLessThan(
-      publishJob.indexOf("actions/checkout"),
-    );
     expect(publishJob).not.toContain("bun install");
     expect(publishJob).not.toContain("bun run");
     expect(publishJob).not.toContain("npm pack");
