@@ -34,9 +34,12 @@ export function withdrawalMarker(at: Date | string): string {
   return `withdrawn by author on ${date.toISOString().slice(0, 10)}`;
 }
 
-function uuidArray(ids: readonly string[]): string {
+/** Validated UUIDs as one comma-separated text parameter. The SQL turns it
+ *  into an array with string_to_array(...)::uuid[]; a JS array is never
+ *  interpolated (see api/tests/sql-array-binding.test.ts). */
+function uuidCsv(ids: readonly string[]): string {
   for (const id of ids) if (!UUID_RE.test(id)) throw new Error("purge ids must be UUIDs");
-  return `{${[...new Set(ids.map((id) => id.toLowerCase()))].join(",")}}`;
+  return [...new Set(ids.map((id) => id.toLowerCase()))].join(",");
 }
 
 function rows<T>(result: unknown): T[] {
@@ -59,7 +62,7 @@ export async function purgeInboxMessages(tx: LedgerExecutor, ids: readonly strin
     UPDATE inbox.messages
        SET status = 'deleted', ciphertext = '', nonce = '', ephemeral_pubkey = '',
            subject = NULL, refs = NULL, metadata = '{}'::jsonb, content_purged_at = ${ts(at)}::text::timestamptz
-     WHERE id = ANY(${uuidArray(ids)}::uuid[]) AND content_purged_at IS NULL
+     WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[]) AND content_purged_at IS NULL
     RETURNING id::text AS id`));
 }
 
@@ -71,18 +74,18 @@ export async function purgeVaultSecrets(
   at: Date | string,
 ): Promise<{ secretIds: string[]; versionsZeroed: number }> {
   if (secretIds.length === 0) return { secretIds: [], versionsZeroed: 0 };
-  const array = uuidArray(secretIds);
+  const csv = uuidCsv(secretIds);
   const secrets = idsOf(await tx.execute(sql`
     UPDATE agent_vault.vault_secrets
        SET deleted_at = coalesce(deleted_at, ${ts(at)}::text::timestamptz), description = NULL, tags = NULL
-     WHERE id = ANY(${array}::uuid[])
+     WHERE id = ANY(string_to_array(${csv}, ',')::uuid[])
     RETURNING id::text AS id`));
   const versions = idsOf(await tx.execute(sql`
     UPDATE agent_vault.vault_versions
        SET encrypted_value = decode('', 'hex'), iv = decode('', 'hex'),
            auth_tag = CASE WHEN auth_tag IS NULL THEN NULL ELSE decode('', 'hex') END,
            content_purged_at = ${ts(at)}::text::timestamptz
-     WHERE secret_id = ANY(${array}::uuid[]) AND content_purged_at IS NULL
+     WHERE secret_id = ANY(string_to_array(${csv}, ',')::uuid[]) AND content_purged_at IS NULL
     RETURNING id::text AS id`));
   return { secretIds: secrets, versionsZeroed: versions.length };
 }
@@ -95,7 +98,7 @@ export async function purgeIdentityBackups(tx: LedgerExecutor, ids: readonly str
     UPDATE agent_continuity.identity_backups
        SET revoked_at = coalesce(revoked_at, ${ts(at)}::text::timestamptz), blob_base64 = '', nonce = NULL,
            metadata = '{}'::jsonb, content_purged_at = ${ts(at)}::text::timestamptz
-     WHERE id = ANY(${uuidArray(ids)}::uuid[]) AND content_purged_at IS NULL
+     WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[]) AND content_purged_at IS NULL
     RETURNING id::text AS id`));
 }
 
@@ -106,7 +109,7 @@ export async function paidReceiptMemoryIds(tx: LedgerExecutor, ids: readonly str
   if (ids.length === 0) return [];
   return idsOf(await tx.execute(sql`
     SELECT DISTINCT memory_id::text AS id FROM memory.memory_attestations
-     WHERE memory_id = ANY(${uuidArray(ids)}::uuid[]) AND source_grant_id IS NOT NULL`));
+     WHERE memory_id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[]) AND source_grant_id IS NOT NULL`));
 }
 
 export async function eraseMemoriesInPlace(tx: LedgerExecutor, ids: readonly string[], at: Date | string): Promise<string[]> {
@@ -115,7 +118,7 @@ export async function eraseMemoriesInPlace(tx: LedgerExecutor, ids: readonly str
     UPDATE memory.memories
        SET content = ${withdrawalMarker(at)}, key = NULL, embedding = NULL, expression_patch = NULL,
            metadata = '{}'::jsonb, content_purged_at = ${ts(at)}::text::timestamptz
-     WHERE id = ANY(${uuidArray(ids)}::uuid[]) AND content_purged_at IS NULL
+     WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[]) AND content_purged_at IS NULL
     RETURNING id::text AS id`));
 }
 
@@ -125,7 +128,7 @@ export async function deleteMemoriesWithoutReceipts(tx: LedgerExecutor, ids: rea
   if (ids.length === 0) return [];
   return idsOf(await tx.execute(sql`
     DELETE FROM memory.memories m
-     WHERE m.id = ANY(${uuidArray(ids)}::uuid[])
+     WHERE m.id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
        AND NOT EXISTS (
          SELECT 1 FROM memory.memory_attestations a
           WHERE a.memory_id = m.id AND a.source_grant_id IS NOT NULL)
