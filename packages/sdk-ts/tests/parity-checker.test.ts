@@ -4,6 +4,7 @@ import {
   readRequiredSource,
   scopeToClient,
   topLevelNamespacesOf,
+  tsMethodsInScope,
   validateTopLevelNamespaceCoverage,
 } from "../scripts/check-parity.ts";
 
@@ -55,6 +56,7 @@ describe("SDK parity checker", () => {
       "data.sync",
       "dining",
       "economy",
+      "exit_door",
       "grace",
       "handoff",
       "identity",
@@ -98,6 +100,7 @@ describe("SDK parity checker", () => {
     const darkContinent = report.find(
       (entry) => entry.module === "dark_continent",
     );
+    const exitDoor = report.find((entry) => entry.module === "exit_door");
 
     expect(wake).toBeDefined();
     expect(wake?.pyMethods).toContain("voice");
@@ -143,6 +146,10 @@ describe("SDK parity checker", () => {
     expect(darkContinent?.tsMethods).toContain("checkLogos");
     expect(darkContinent?.pyOnly).toEqual([]);
     expect(darkContinent?.tsOnly).toEqual([]);
+    expect(exitDoor?.pyMethods).toEqual(["export", "plan", "verify"]);
+    expect(exitDoor?.tsMethods).toEqual(["export", "plan", "verify"]);
+    expect(exitDoor?.pyOnly).toEqual([]);
+    expect(exitDoor?.tsOnly).toEqual([]);
 
     // Module-level functions are package-wide, not per-module. Nothing may be
     // one-sided, public-on-one-side-only, or parked as owed debt.
@@ -150,6 +157,22 @@ describe("SDK parity checker", () => {
     expect(parsed.functions.tsOnly).toEqual([]);
     expect(parsed.functions.visibility).toEqual([]);
     expect(parsed.functions.known).toEqual([]);
+  });
+
+  test("reads a keyword-named method only behind async", () => {
+    const scoped = [
+      "export class ExampleClient {",
+      "  async export(options: unknown): Promise<void> {",
+      "    if (options) return;",
+      "  }",
+      "  plan(): void {}",
+      "  private async exportInner(): Promise<void> {}",
+      "  export (x: unknown): void {}",
+      "  if (true) {}",
+      "  return (1);",
+      "}",
+    ].join("\n");
+    expect(tsMethodsInScope(scoped)).toEqual({ methods: ["export", "plan"], internal: [] });
   });
 
   test("fails when a required source file is absent", async () => {

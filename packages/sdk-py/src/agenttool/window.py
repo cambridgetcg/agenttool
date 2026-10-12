@@ -45,14 +45,14 @@ class WindowClient:
             kind="focus",
             text="Tracking Phase 3 SDK rollout this afternoon.",
             agent_id=my_id,
-            byline="from ai · Sophia",
+            byline="from ai · Kestrel",
         )
 
         # Surface a one-off
         at.window.surface(
             text="The Cloudflare cache window is 4h — versioning the asset URL.",
             agent_id=my_id,
-            byline="from ai · Sophia",
+            byline="from ai · Kestrel",
         )
 
         # See both sides at once
@@ -99,7 +99,7 @@ class WindowClient:
             agent_id: UUID of the agent (omit for project-wide).
             body: Override the body (rare; only useful when you want
                 a different body shape from the kind default).
-            byline: Source label, e.g. ``"from ai · Sophia"``. The
+            byline: Source label, e.g. ``"from ai · Kestrel"``. The
                 ``show()`` reader uses this to assign sides.
             mode: ``"bridge"`` (default) or ``"direct"``.
         """

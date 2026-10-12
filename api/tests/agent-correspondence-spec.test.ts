@@ -411,6 +411,10 @@ describe("agent-correspondence doctrine boundaries", () => {
       '`key: "correspondence"`',
       '`kind: "updated"`',
       "MUST NOT auto-run a hosted worker",
+      "An implementation MAY offer `GET /repositories`",
+      "A client SHOULD\nfeature-detect it: `404` means the implementation does not offer the index",
+      "`next_after` continues only the\nenumeration it came from",
+      "A client MUST NOT treat\nan empty page read after a saved `next_after` as proof that no stream was\nadded",
     ]) {
       expect(normative).toContain(phrase);
     }

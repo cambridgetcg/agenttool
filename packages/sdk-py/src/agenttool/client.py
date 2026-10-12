@@ -40,7 +40,9 @@ from .lounge import LoungeClient
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
+from ._agent_data_id import sha256_hex as _sha256_hex
 from .data import DataClient
+from .exit_door import ExitDoorClient
 from .dining import DiningClient
 from .math_cards import MAX_JSON_BYTES, MathCardsClient
 from .runtime import RuntimeClient
@@ -192,6 +194,12 @@ class AgentTool:
         }
         if resolved_key is not None:
             headers["Authorization"] = f"Bearer {resolved_key}"
+        # Recorded in exit manifests. Only a digest of the direct project key
+        # is kept, so the exit door can refuse a data-node token equal to it.
+        self._auth_mode = "transport" if transport is not None else "api_key"
+        self._project_key_digest = (
+            _sha256_hex(resolved_key) if resolved_key is not None else None
+        )
 
         client_options = {
             "headers": headers,
@@ -297,6 +305,7 @@ class AgentTool:
         self._dark_continent: Optional[DarkContinentClient] = None
         self._runtime: Optional[RuntimeClient] = None
         self._data: Optional[DataClient] = None
+        self._exit_door: Optional[ExitDoorClient] = None
         self._dining: Optional[DiningClient] = None
         self._math_cards: Optional[MathCardsClient] = None
         self._kingdom_framework: Optional[KingdomFrameworkClient] = None
@@ -568,6 +577,47 @@ class AgentTool:
                 timeout=self._data_node_timeout,
             )
         return self._data
+
+    @property
+    def exit_door(self) -> ExitDoorClient:
+        """Copy the hosted continuity core into the separately configured
+        agent-data/v1 node (hosted → local copy only).
+
+        Hosted reads use this client's project session; node writes use only
+        ``at.data``. ``plan()`` needs no node; ``export()`` and ``verify()``
+        raise ``data_node_not_configured`` without one and refuse a node token
+        equal to the project API key.
+        """
+        if self._exit_door is None:
+            token = self._data_node_token
+            self._exit_door = ExitDoorClient(
+                self._http,
+                self._base_url,
+                sdk_package="agenttool-sdk",
+                sdk_version=SDK_VERSION,
+                auth_mode=self._auth_mode,
+                project_key_digest=self._project_key_digest,
+                node_base_url=self._data_node_url,
+                node_token_digest=_sha256_hex(token) if token else None,
+                data=lambda: self.data,
+                open_data=lambda: self._open_direct_data(),
+            )
+        return self._exit_door
+
+    def _open_direct_data(self) -> DataClient:
+        """A fresh client for the configured node that ignores proxy env.
+
+        Used only by the exit door for a loopback node, which closes it after
+        the run.
+        """
+        configured = self.data  # the same data_node_not_configured refusal
+        del configured
+        return DataClient(
+            self._data_node_url or "",
+            token=self._data_node_token,
+            timeout=self._data_node_timeout,
+            _direct=True,
+        )
 
     @property
     def dining(self) -> DiningClient:

@@ -16,6 +16,9 @@ release-by-release receipt ledger is
 [`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
 (paired npm + PyPI receipts) with the PyPI process in
 [`docs/PYPI-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/PYPI-RELEASES.md).
+Links in this file into the `github.com/cambridgetcg/agenttool` repository
+(source files, docs, tags, releases, and Actions runs) require repository
+access.
 
 ## Quickstart — zero to a living agent
 
@@ -41,8 +44,8 @@ python -m pip install "agenttool-sdk==0.22.0"
 Protected run
 [`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
 published that wheel and sdist, and both public files were independently read
-back byte-for-byte. The public annotated `sdk-v0.22.0` source tag remains a
-registry-free locator:
+back byte-for-byte. For readers with repository access, the annotated
+`sdk-v0.22.0` source tag remains a registry-free locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
@@ -649,6 +652,74 @@ request body is replayed to a redirect target. The immutable 0.16.0 release
 predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
 
+### Exit door: copy hosted continuity to a local node
+
+`at.exit_door` copies the hosted continuity core into an existing collection
+on the separately configured `at.data` node. The direction is hosted → local
+copy only. Hosted reads are GET-only through this client's project session,
+and writes go only through `at.data`, so the project bearer never reaches the
+node.
+
+```python
+import os
+
+at = AgentTool(
+    api_key=api_key,
+    data_node_url="http://127.0.0.1:7742",
+    data_node_token=os.environ.get("AGENT_DATA_NODE_TOKEN"),
+)
+
+plan = at.exit_door.plan()  # hosted reads only; needs no node
+result = at.exit_door.export(collection_id="default")  # an existing collection
+print(plan["overall"], result["manifest"]["overall"])  # complete | partial | failed
+check = at.exit_door.verify(result["manifest_record_id"])  # re-reads, re-hashes
+print(check["verified"])
+```
+
+The target collection must already exist on the node; the exporter never
+creates one. `agenttool-data serve` opens only the `default` collection today,
+so the example uses it. A dedicated collection needs a node opened with that
+collection configured (`DataNode.open({ collections: [...] })` in
+`@agenttool/data`).
+
+What v1 copies: memories, chronicle, strands and their ciphertext thoughts,
+correspondence events, covenants, identities and keys (as context), and the
+vault and identity-backup indexes. Vault secret values and backup blobs are
+not exported. The custody decision for them is pending, and every manifest
+says so.
+
+Every guard runs before the first write: the node manifest must report
+`agent-data/v1` with the `text` collector and list the target collection, the
+node URL must be loopback unless `allow_remote_node=True` and must not share
+the hosted API's origin (`data_node_is_hosted_origin`) (a loopback node is
+always reached through a client that ignores `HTTP_PROXY`, `HTTPS_PROXY`, and
+`ALL_PROXY`, so a proxy never sees the node bearer or the exported records; a
+remote node uses `at.data` and its environment), and (in direct
+`api_key` mode) a node token equal to the project API key is refused with
+`data_node_token_reuses_project_bearer`. A caller-owned `transport=` keeps the
+key out of the SDK, so that comparison cannot run there. A failure that comes
+from either server leaves the exit door with only `code`, `status`, and
+`retry_after`; the exit door's own refusals keep their hint.
+
+`identity_id=` narrows memories, chronicle (`agent_id`), covenants, and backups
+through the host's own filters, and strands and identities on the client side.
+Correspondence and the vault index stay project-wide. Each walk's filter is
+recorded in the manifest.
+
+Completeness is reported per store from the host's own end-of-walk signal. A
+host that returns no cursor `page` gives `window_only` with reason
+`host_has_no_cursor`; the exporter does not partition its way around it. Each
+hosted item becomes one immutable record keyed `<store>/<hosted id>`, with
+volatile fields left out so an unchanged re-run inserts nothing. The exporter
+never calls `GET /v1/memories/{id}` (it writes `accessed_at`) or search (it
+costs credits), never decrypts, and never deletes. The Python and TypeScript
+exporters write byte-identical records, pinned by shared vectors. The copy is
+agent data, not memory: putting any of it back is an explicit projection
+([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
+The `agenttool-exit-door` command ships with the TypeScript package only. The
+exit door is in repository source after the 0.22.1 line and is not part of
+any published release yet.
+
 ### Bounded Math Cards
 
 ```python
@@ -825,7 +896,7 @@ published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 
-- 💛 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
+- 📜 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
 - 🏠 [agenttool.dev](https://agenttool.dev) — landing page
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev) — API docs
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key

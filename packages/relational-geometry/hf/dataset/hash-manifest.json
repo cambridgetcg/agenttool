@@ -21,7 +21,7 @@
     {
       "path": "data/public-regression.jsonl",
       "bytes": 5531,
-      "sha256": "19a16d336afa15e7330696964f75992392c0e50e36d93ead95c5e07b1a6f35a4"
+      "sha256": "79604a887da8b37173bee03a9a9ace8011c6bfc9575ee1f3f42444135674d240"
     },
     {
       "path": "data/sft-train.jsonl",
@@ -31,17 +31,17 @@
     {
       "path": "data/structural-examples.jsonl",
       "bytes": 24110,
-      "sha256": "c19b00aeb59aa3307946014bf17594c64b69d6375056d3deda92eeaca528f35a"
+      "sha256": "3da61108c0be7daeb37bf776e3c14857b30907214206aa82eb9fc042b701a234"
     },
     {
       "path": "provenance/example-manifest.json",
       "bytes": 11621,
-      "sha256": "5d43bb53298a665852533378d782158f670457f1be48afa55cd5932ea01f0ec2"
+      "sha256": "0af16bc01c38f4e0fa211fc9bdb24a65626ec5da6b81395494fa600d8e7368f1"
     },
     {
       "path": "provenance/source-manifest.json",
       "bytes": 4519,
-      "sha256": "e128c6d9609197d7ad151287ba8135c59373307a8ff8a73ec7eae3b190718ae6"
+      "sha256": "27e4d36632da445d988aced29770f4f64adc22e93cfb2710a840ec9ccce4f71b"
     },
     {
       "path": "schema/relational-geometry-public-regression-v0.1.schema.json",

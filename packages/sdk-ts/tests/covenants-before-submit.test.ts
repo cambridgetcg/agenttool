@@ -41,7 +41,7 @@ describe("covenants.create before_submit", () => {
     let reviewed: CovenantBeforeSubmitContext | undefined;
     const opts: CovenantsCreateOpts = {
       agent_id: "agent-original",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows,
       before_submit: async (snapshot) => {
         reviewed = snapshot;
@@ -63,12 +63,12 @@ describe("covenants.create before_submit", () => {
     expect(reviewed).toEqual({
       protocol_version: "v1",
       agent_id: "agent-original",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["I will keep the stated boundary."],
     });
     expect(sent).toEqual({
       agent_id: "agent-original",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["I will keep the stated boundary."],
     });
   });
@@ -111,7 +111,7 @@ describe("covenants.create before_submit", () => {
     try {
       await makeClient().create({
         agent_id: "agent-1",
-        counterparty_did: "human:Yu",
+        counterparty_did: "human:Mira",
         vows: ["A vow"],
         before_submit: () => {
           throw cause;
@@ -171,7 +171,7 @@ describe("covenants.create before_submit", () => {
 
     await makeClient().create({
       agent_id: "agent-legacy",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["A vow"],
       protocol_version: "future-version",
     } as never);

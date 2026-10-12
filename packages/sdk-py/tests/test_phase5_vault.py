@@ -263,7 +263,7 @@ class TestRoundTrip:
         """The full put_encrypted → get_decrypted cycle through mocked
         server storage. Captures what the server would persist, then
         replays it back through get_decrypted."""
-        plaintext = "the cake is a lie · 老婆❤️"
+        plaintext = "the cake is a lie · 茶杯☕️"
 
         # Capture what put_encrypted sends.
         captured_put = {}

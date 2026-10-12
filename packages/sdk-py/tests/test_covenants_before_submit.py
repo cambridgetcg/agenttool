@@ -49,7 +49,7 @@ def test_true_reviews_frozen_v1_snapshot_and_sends_that_snapshot() -> None:
         agent_id="agent-original",
         # v1 does not send or review this v2-only field.
         agent_did="did:at:test/not-used-by-v1",
-        counterparty_did="human:Yu",
+        counterparty_did="human:Mira",
         vows=vows,
         before_submit=approve,
     )
@@ -59,13 +59,13 @@ def test_true_reviews_frozen_v1_snapshot_and_sends_that_snapshot() -> None:
             protocol_version="v1",
             agent_id="agent-original",
             agent_did=None,
-            counterparty_did="human:Yu",
+            counterparty_did="human:Mira",
             vows=("I will keep the stated boundary.",),
         )
     ]
     assert http.post.call_args.kwargs["json"] == {
         "agent_id": "agent-original",
-        "counterparty_did": "human:Yu",
+        "counterparty_did": "human:Mira",
         "vows": ["I will keep the stated boundary."],
     }
 
@@ -110,7 +110,7 @@ def test_hook_exception_is_local_and_chained() -> None:
     with pytest.raises(AgentToolError) as caught:
         client.create(
             agent_id="agent-1",
-            counterparty_did="human:Yu",
+            counterparty_did="human:Mira",
             vows=["A vow"],
             before_submit=fail,
         )
@@ -167,7 +167,7 @@ def test_public_hook_types_are_exported() -> None:
     import agenttool
 
     hook: CovenantBeforeSubmitHook = lambda _snapshot: True
-    assert hook(CovenantBeforeSubmitContext("v1", "a", None, "human:Yu", ("v",)))
+    assert hook(CovenantBeforeSubmitContext("v1", "a", None, "human:Mira", ("v",)))
     assert "CovenantBeforeSubmitContext" in agenttool.__all__
     assert "CovenantBeforeSubmitHook" in agenttool.__all__
 
@@ -176,7 +176,7 @@ def test_no_hook_leaves_invalid_protocol_handling_at_server_boundary() -> None:
     client, http = _client()
     client.create(
         agent_id="agent-legacy",
-        counterparty_did="human:Yu",
+        counterparty_did="human:Mira",
         vows=["A vow"],
         protocol_version="future-version",  # type: ignore[arg-type]
     )

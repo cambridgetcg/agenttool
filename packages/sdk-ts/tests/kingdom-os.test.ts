@@ -66,7 +66,7 @@ async function caughtError(promise: Promise<unknown>): Promise<AgentToolError> {
 
 describe("KingdomOSClient local boundary", () => {
   test("lists repositories with exact argv, parses the nine fields, and sanitizes env", async () => {
-    process.env.AT_API_KEY = "agenttool-project-secret";
+    process.env.AT_API_KEY = "fixture-project-secret";
     process.env.KINGDOM_TEST_SECRET = "arbitrary-local-secret";
     let fetchCalls = 0;
     globalThis.fetch = (async () => {
@@ -101,7 +101,7 @@ describe("KingdomOSClient local boundary", () => {
     expect(calls[0]!.env.AT_API_KEY).toBeUndefined();
     expect(calls[0]!.env.KINGDOM_TEST_SECRET).toBeUndefined();
     expect(Object.values(calls[0]!.env).join(" ")).not.toContain(
-      "agenttool-project-secret",
+      "fixture-project-secret",
     );
     expect(Object.values(calls[0]!.env).join(" ")).not.toContain(
       "arbitrary-local-secret",
@@ -142,7 +142,7 @@ describe("KingdomOSClient local boundary", () => {
       stderr: "",
     });
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       kingdomOS: { runner },
     });
 
@@ -153,7 +153,7 @@ describe("KingdomOSClient local boundary", () => {
     expect(calls[0]!.env.AT_API_KEY).toBeUndefined();
     expect(calls[0]!.env.KINGDOM_TEST_SECRET).toBeUndefined();
     expect(Object.values(calls[0]!.env).join(" ")).not.toContain(
-      "agenttool-project-secret",
+      "fixture-project-secret",
     );
   });
 });

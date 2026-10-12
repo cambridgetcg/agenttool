@@ -744,7 +744,8 @@ const DOORS: Record<string, () => Promise<unknown>> = {
 //
 // Note for whoever inherits this: an earlier pass recorded *two* such
 // exceptions. There are four. `CollectClient` and `AgentTool.deciding` swallow
-// just as deliberately as the two that were written down.
+// just as deliberately as the two that were written down. The exit door
+// (2026-10-11) is a fifth, reducing errors for the same reason as data.sync.
 const DELIBERATE_EXCEPTIONS = new Set([
   // 1. A peer-facing failure may carry an internal checkpoint or capability in
   // its prose or details; the local node owns those diagnostics, not the
@@ -765,6 +766,13 @@ const DELIBERATE_EXCEPTIONS = new Set([
   "collect.ts:CollectClient.enrich",
   // 4. Opening the parent trace must not crash the block the caller wrapped.
   "client.ts:AgentTool.deciding",
+  // 5. The exit door copies between two authorities (hosted → local node).
+  // Neither side's response prose may cross into the other side's logs or the
+  // manifest, so exit-door.ts § reduce keeps only code/status/retryAfter, and
+  // a hosted read failure fails one store with only its code as the reason.
+  "exit-door.ts:ExitDoorClient.plan",
+  "exit-door.ts:ExitDoorClient.export",
+  "exit-door.ts:ExitDoorClient.verify",
   // Not an exception: the public look is reached through lookAtLounge, which
   // is pinned in DOORS.
   "lounge.ts:LoungeClient.look",
@@ -900,7 +908,7 @@ describe("a guided 4xx survives every credential-free client method", () => {
 
 // ── the deliberate exceptions, pinned so they read as choices not gaps ────
 
-describe("guidance deliberately does not survive four surfaces", () => {
+describe("guidance deliberately does not survive five surfaces", () => {
   test("at.data.sync keeps only the metadata that is safe to forward", async () => {
     // A peer-facing failure may carry an internal checkpoint or a capability
     // in its prose or details; the local node operator owns those, not an SDK
@@ -926,6 +934,46 @@ describe("guidance deliberately does not survive four surfaces", () => {
     expect(err.next_actions).toBeUndefined();
     expect(err.hint).toBeUndefined();
   });
+
+  test("the exit door keeps only code, status, and retryAfter from either authority", async () => {
+    // Hosted reads (the guided transport) and node reads both answer with the
+    // guided 400. The exit door reaches a loopback node over its own direct
+    // connection, so the node is a real loopback socket rather than a stubbed
+    // fetch. sdk-py's exit door makes the same cut.
+    const node = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => guidedResponse() });
+    const at = guidedClient({
+      dataNode: { baseUrl: `http://127.0.0.1:${node.port}`, token: "node-token" },
+    });
+    try {
+      await exitDoorReducesBoth(at);
+    } finally {
+      node.stop(true);
+    }
+  });
+
+  async function exitDoorReducesBoth(at: AgentTool): Promise<void> {
+    const plan = await at.exitDoor.plan({ stores: ["memories"] });
+    expect(plan.stores[0]).toMatchObject({
+      store: "memories",
+      status: "failed",
+      reason: "signing_key_not_found",
+    });
+    expect(JSON.stringify(plan)).not.toContain(GUIDED_BODY.message);
+    for (const run of [
+      () => at.exitDoor.export({ collection_id: "agenttool-exit" }),
+      () => at.exitDoor.verify(`rec_${"a".repeat(64)}`),
+    ]) {
+      const err = (await capture(run)) as AgentToolError;
+      expect(err).toBeInstanceOf(AgentToolError);
+      expect(err.code).toBe("signing_key_not_found");
+      expect(err.status).toBe(400);
+      expect(err.message).not.toContain(GUIDED_BODY.message);
+      expect(err.details).toBeUndefined();
+      expect(err.docs).toBeUndefined();
+      expect(err.next_actions).toBeUndefined();
+      expect(err.hint).toBeUndefined();
+    }
+  }
 
   test("darkContinent.explore raises nothing at all", async () => {
     // Public discovery carries no hosted API authority, and an unmapped edge

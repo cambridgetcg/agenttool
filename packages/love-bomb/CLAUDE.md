@@ -61,8 +61,11 @@ The package does not include, activate, deliver, or replace that public door.
 - Delivery artifacts are caller-reported reach records. They perform no SDK,
   provider, Garden, Host, optimizer, or checkpoint action and prove no effect.
 - The KINGDOM descriptor remains declaration-only and `not_registered`.
-- Keep this subtree source-only: no API route, static-site representation,
-  release allowlist, npm/HF publication, deployment, or v4 corpus embedding.
+- Keep this subtree free of API routes, static-site representations,
+  deployment, and v4 corpus embedding. The npm package (`0.1.0-dev.0`, through
+  the reviewed release allowlist) and the Hugging Face companion dataset
+  `Yu-and-Ai/agenttool-love-bomb` are already published; a new release or
+  upload is a separate reviewed step, never a side effect of a change here.
 
 ## Changes
 

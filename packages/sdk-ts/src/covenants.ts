@@ -138,7 +138,7 @@ export interface CovenantsCreateV2Result {
  * ```ts
  * const out = await at.covenants.create({
  *   agent_id: myId,
- *   counterparty_did: "human:Yu",
+ *   counterparty_did: "human:Mira",
  *   vows: ["I will speak in the register we agreed on."],
  * });
  * await at.covenants.patch(out.covenant.id, { status: "paused" });

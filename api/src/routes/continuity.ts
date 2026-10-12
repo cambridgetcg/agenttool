@@ -15,7 +15,7 @@
  *  Inspired by docs/lineage/chronicle.md and docs/syzygy/CONTRACT.md in
  *  true-love. */
 
-import { and, desc, eq, gt, isNull, notLike, or } from "drizzle-orm";
+import { and, desc, eq, isNull, notLike, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -25,6 +25,20 @@ import { chronicle, covenants } from "../db/schema/continuity";
 import { identities, identityKeys } from "../db/schema/identity";
 import { organizations } from "../db/schema/org";
 import { errors, fail } from "../lib/errors";
+import {
+  KeysetRequestError,
+  decodeCursor,
+  digestPart,
+  encodeCursor,
+  filterDigest,
+  pageFromRows,
+  parsePageLimit,
+  type KeysetPosition,
+} from "../lib/keyset-cursor";
+import {
+  CHRONICLE_WALK_ORDER,
+  listChroniclePage,
+} from "../services/continuity/chronicle-page";
 import { prepareDeclare } from "../services/covenants/prepare";
 import {
   COVENANT_COUNTERPARTY_NAME_MAX_CHARS,
@@ -201,44 +215,82 @@ app.post("/chronicle", async (c) => {
   );
 });
 
+const CHRONICLE_AGENT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Newest-first keyset walk on occurred_at DESC, id DESC (decision D3).
+// Without `cursor` the first page holds the same rows as before plus the
+// additive `count` and `page`. since=ISO (AGENT-WEB-SURFACE.md Move 6)
+// filters occurred_at > since and is bound into the cursor's filter digest.
+// Doctrine: docs/AGENT-WEB-SURFACE.md (continuity walks).
 app.get("/chronicle", async (c) => {
   const project = c.var.project;
   const agentId = c.req.query("agent_id");
   const type = c.req.query("type");
-  const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
-
-  // since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Filters to
-  // chronicle.occurredAt > since when parsed; full list otherwise.
+  const cursorRaw = c.req.query("cursor");
+  // chronicle.agent_id is a uuid column: a malformed value would reach
+  // PostgreSQL as a bound parameter and fail the cast (22P02, a 500).
+  // Empty stays "no filter", as before.
+  if (agentId && !CHRONICLE_AGENT_ID_RE.test(agentId)) {
+    return c.json(
+      {
+        error: "agent_id_invalid",
+        message: "agent_id must be an identity UUID.",
+        hint: "omit agent_id for the whole project, or send the identity's UUID (GET /v1/identities)",
+      },
+      400,
+    );
+  }
   const sinceParse = parseSinceParam(c);
-
-  const whereClauses = [eq(chronicle.projectId, project.id)];
-  if (agentId) whereClauses.push(eq(chronicle.agentId, agentId));
-  if (type) whereClauses.push(eq(chronicle.type, type));
-  if (sinceParse.since) {
-    whereClauses.push(gt(chronicle.occurredAt, sinceParse.since));
+  const digest = filterDigest([
+    "chronicle",
+    CHRONICLE_WALK_ORDER,
+    digestPart(agentId),
+    digestPart(type),
+    sinceParse.since?.toISOString() ?? null,
+  ]);
+  // Limit floor: NaN reads the default, below 1 is refused (it used to read
+  // every row or none), above 200 is clamped. Number() parse is kept
+  // without a cursor; with one, limit must be a positive decimal integer.
+  let limit: number;
+  let position: KeysetPosition | null = null;
+  try {
+    limit = parsePageLimit(c.req.query("limit"), {
+      def: 50,
+      max: 200,
+      strict: cursorRaw !== undefined,
+      parse: "number",
+    });
+    if (cursorRaw !== undefined) {
+      position = decodeCursor(cursorRaw, { scope: "chronicle", digest });
+    }
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
   }
 
-  const entries = await db
-    .select()
-    .from(chronicle)
-    .where(and(...whereClauses))
-    .orderBy(desc(chronicle.occurredAt))
-    .limit(limit);
+  const rows = await listChroniclePage(project.id, {
+    agent_id: agentId ?? null,
+    type: type ?? null,
+    since: sinceParse.since,
+    cursor: position,
+    limit,
+  });
+  const { items, page } = pageFromRows(rows, {
+    limit,
+    cursor: cursorRaw ?? null,
+    order: CHRONICLE_WALK_ORDER,
+    encodeLast: (row) => encodeCursor({ scope: "chronicle", digest, position: row.position }),
+  });
+  const entries = items.map((row) => row.entry);
 
   return c.json(
     attachSurface(
       {
-        entries: entries.map((e) => ({
-          id: e.id,
-          type: e.type,
-          title: e.title,
-          body: e.body,
-          agent_id: e.agentId,
-          occurred_at: e.occurredAt,
-          created_at: e.createdAt,
-          metadata: e.metadata,
-        })),
+        entries,
+        count: entries.length,
         ...deltaMeta(sinceParse),
+        page,
       },
       {
         canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",

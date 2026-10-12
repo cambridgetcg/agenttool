@@ -64,7 +64,7 @@ class TestKingdomOSLocalBoundary:
             patch.dict(
                 os.environ,
                 {
-                    "AT_API_KEY": "agenttool-project-secret",
+                    "AT_API_KEY": "fixture-project-secret",
                     "KINGDOM_TEST_SECRET": "arbitrary-local-secret",
                 },
             ),
@@ -101,7 +101,7 @@ class TestKingdomOSLocalBoundary:
         assert calls[0].env["TERM"] == "dumb"
         assert "AT_API_KEY" not in calls[0].env
         assert "KINGDOM_TEST_SECRET" not in calls[0].env
-        assert "agenttool-project-secret" not in " ".join(calls[0].env.values())
+        assert "fixture-project-secret" not in " ".join(calls[0].env.values())
         assert "arbitrary-local-secret" not in " ".join(calls[0].env.values())
         request.assert_not_called()
 
@@ -153,7 +153,7 @@ class TestKingdomOSLocalBoundary:
             ) as request,
         ):
             at = AgentTool(
-                api_key="agenttool-project-secret",
+                api_key="fixture-project-secret",
                 kingdom_runner=runner,
             )
 
@@ -165,7 +165,7 @@ class TestKingdomOSLocalBoundary:
         assert len(calls) == 1
         assert "AT_API_KEY" not in calls[0].env
         assert "KINGDOM_TEST_SECRET" not in calls[0].env
-        assert "agenttool-project-secret" not in " ".join(calls[0].env.values())
+        assert "fixture-project-secret" not in " ".join(calls[0].env.values())
 
 
 class TestKingdomOSGuidedFailures:
