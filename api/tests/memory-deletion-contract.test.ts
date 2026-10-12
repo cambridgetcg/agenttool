@@ -62,8 +62,12 @@ describe("memory deletion and visibility boundary", () => {
     expect(byKey.description).not.toContain("paid_memory_receipt_preserved");
     expect(byKey.parameters.find((parameter: { name?: string }) => parameter.name === "key"))
       .toMatchObject({ in: "query", required: true });
-    expect(Object.keys(byKey.responses).sort()).toEqual(["200", "400", "409", "503"]);
-    const variants = (schema: { oneOf: Array<{ properties: Record<string, any> }> }) => schema.oneOf;
+    // The owner rule adds its 401/428 refusals and its 409 alternatives
+    // (routes/openapi-owner-gated.ts withOwnerGatedOperations).
+    expect(Object.keys(byKey.responses).sort()).toEqual(["200", "400", "401", "409", "428", "503"]);
+    type Variant = { properties: Record<string, any>; oneOf?: Variant[]; anyOf?: Variant[] };
+    const variants = (schema: Variant): Variant[] =>
+      schema.anyOf || schema.oneOf ? [...(schema.anyOf ?? []), ...(schema.oneOf ?? [])].flatMap(variants) : [schema];
     const byKey409 = variants(byKey.responses["409"].content["application/json"].schema);
     expect(byKey409.find(v => v.properties.error?.const === "authority_quorum_required")).toBeDefined();
     expect(byKey409.find(v => v.properties.error?.const === "authority_sequence_conflict")).toBeDefined();

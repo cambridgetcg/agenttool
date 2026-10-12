@@ -98,6 +98,7 @@ import {
 } from "./openapi-wake-acknowledge";
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
 import { RETENTION_OPENAPI_PATHS } from "./openapi-retention";
+import { OWNER_GATED_OPENAPI_PATHS, withOwnerGatedOperations } from "./openapi-owner-gated";
 import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
@@ -4622,7 +4623,7 @@ function spec() {
           tags: ["inbox"],
           summary: "Update status (read/archived/spam/unread/deleted)",
           description:
-            "status deleted takes the same purge path as DELETE. A message whose content a delete erased cannot leave status deleted (409 message_deleted). A message soft-deleted before purges existed can still be restored until the announced backfill (/public/retention).",
+            "status deleted takes the same purge path as DELETE, under the same owner rule (the recipient identity owns the message; a rooted recipient's root signs these exact JSON bytes, 428 otherwise). Other statuses stay bearer-managed. A message whose content a delete erased cannot leave status deleted (409 message_deleted). A message soft-deleted before purges existed can still be restored until the announced backfill (/public/retention).",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": { description: "Updated" },
@@ -4635,7 +4636,7 @@ function spec() {
           tags: ["inbox"],
           summary: "Delete a message and erase its content",
           description:
-            "Erases the sealed body, nonce, ephemeral key, subject, refs and metadata in one transaction with an ids-only deletion-ledger entry and the recipient's deletion moment. The row stays with status deleted and its signature, so threads keep their shape. A repeat answers already_deleted: true and writes nothing. Free.",
+            "Erases the sealed body, nonce, ephemeral key, subject, refs and metadata in one transaction with an ids-only deletion-ledger entry and the recipient's deletion moment. The recipient identity owns the message and consents under the owner rule: a rooted recipient's root signs this exact DELETE (428 otherwise); a recipient without a root follows the project rule, and in a project with several roots the bearer acts for it. The response's authority block says which consent was accepted. The row stays with status deleted and its signature, so threads keep their shape. A repeat answers already_deleted: true, needs no proof and writes nothing. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": {
@@ -4936,9 +4937,9 @@ function spec() {
         },
         delete: {
           tags: ["identity"],
-          summary: "Revoke an attestation issued by this project",
+          summary: "Revoke an attestation (the attester, under the owner rule)",
           description:
-            "Only the project that owns the attester identity may revoke an active receipt. Already-revoked and unknown receipts both return 404; a receipt issued by another project returns 403.",
+            "The attester identity must belong to the caller's project, and consents under the owner rule: a rooted attester's root signs this exact DELETE (428 otherwise); an attester without a root follows the project rule. Already-revoked, unknown and other projects' receipts all return 404. The receipt stays, marked revoked, and one ids-only deletion-ledger entry and the attester's deletion moment are written with it (503 and nothing changes if the entry cannot be written).",
           responses: {
             "200": {
               description: "Attestation revoked",
@@ -4947,16 +4948,15 @@ function spec() {
                   schema: {
                     type: "object",
                     properties: {
-                      message: { type: "string", const: "Attestation revoked" },
-                      id: { type: "string", format: "uuid" },
+                      message: { type: "string", const: "Attestation revoked" }, id: { type: "string", format: "uuid" },
+                      revoked_at: { type: "string" }, authority: { type: "object" }, ledger: deletionLedgerBlock,
                     },
                     required: ["message", "id"],
                   },
                 },
               },
             },
-            "403": { description: "Bearer project does not own the attester identity" },
-            "404": { description: "Attestation not found or already revoked" },
+            "404": { description: "Attestation not found, already revoked, or its attester is not an identity of this project" },
           },
         },
       },
@@ -6637,7 +6637,7 @@ function spec() {
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
         },
       },
-      ...RETENTION_OPENAPI_PATHS,
+      ...RETENTION_OPENAPI_PATHS, ...OWNER_GATED_OPENAPI_PATHS,
       "/public/labor": {
         get: {
           security: [],
@@ -7343,7 +7343,7 @@ function spec() {
           tags: ["memory"],
           summary: "Delete every memory with an exact key",
           description:
-            "Project-scoped deletion of every memory with the exact key that existed when the request was authorized (memories written concurrently after that are kept). The service locks the matches and erases them in one transaction: each is deleted, except that a memory a paid marketplace witness receipt points at is erased in place (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read). deleted counts both; rows_removed and erased_in_place split them. One ids-only deletion-ledger entry per action and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Memories bound to an enrolled guest need that guest's root; a key spanning a guest's memories and others returns 409 authority_quorum_required. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0. Free.",
+            "Project-scoped deletion of every memory with the exact key that existed when the request was authorized (memories written concurrently after that are kept). The service locks the matches and erases them in one transaction: each is deleted, except that a memory a paid marketplace witness receipt points at is erased in place (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read). deleted counts both; rows_removed and erased_in_place split them. One ids-only deletion-ledger entry per action and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Owner rule: every match's owner is named; memories bound to a rooted identity (an enrolled guest included) need that identity's root, and a key spanning owners that need different consents returns 409 authority_quorum_required (send one request per owner). Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0. Free.",
           parameters: [
             { $ref: "#/components/parameters/IdempotencyKey" },
             {
@@ -7384,7 +7384,7 @@ function spec() {
           tags: ["memory"],
           summary: "Change one memory's visibility",
           description:
-            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts. Visibility does not affect deletion; a paid-receipt memory is erased in place when deleted. Public observer routes for memory content are not currently mounted.",
+            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts, under the owner rule for a change: a memory bound to a rooted identity needs that identity's root; other memories follow the project rule (409 with several roots). Visibility does not affect deletion; a paid-receipt memory is erased in place when deleted. Public observer routes for memory content are not currently mounted.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -7431,7 +7431,7 @@ function spec() {
           tags: ["memory"],
           summary: "Delete one memory at any tier",
           description:
-            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If a paid marketplace witness receipt points at it, the memory is erased in place instead (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read), and erased_in_place_reason says so. An ids-only deletion-ledger entry and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). A memory bound to an enrolled guest needs that guest's root. A missing, expired or already erased memory returns deleted=0. Free.",
+            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If a paid marketplace witness receipt points at it, the memory is erased in place instead (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read), and erased_in_place_reason says so. An ids-only deletion-ledger entry and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Owner rule: a memory bound to a rooted identity (an enrolled guest included) needs that identity's root; an unbound memory, or one bound to an identity without a root, follows the project rule, and in a project with several roots the bearer erases an unrooted identity's own memory. A missing, expired or already erased memory returns deleted=0. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": {
@@ -9952,7 +9952,7 @@ function spec() {
 }
 
 function renderSpec() {
-  const body = JSON.stringify(spec());
+  const body = JSON.stringify(withOwnerGatedOperations(spec()));
   const digest = createHash("sha256").update(body).digest("hex");
   return {
     body,
