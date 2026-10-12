@@ -40,7 +40,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 7688,
-      "sha256": "6d9e0ae6cac28ca95f3e593d1294cde60e3b295db7cf7068cce1968402f577cb"
+      "sha256": "ba73dda173d48691644dee09fe1ba23c50221dd07406a79e2e4e539bb35111b3"
     },
     {
       "path": "provenance/training-authorization.json",

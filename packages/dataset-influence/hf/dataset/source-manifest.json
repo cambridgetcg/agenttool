@@ -11,7 +11,7 @@
   "upstream_revision_state": "not_recorded_for_unpublished_repository_source_candidate",
   "source_manifest_scope": "selected_runtime_and_generation_inputs_not_complete_repository_or_package_inventory",
   "source_files_complete": false,
-  "selected_source_set_sha256": "9ebb386306a4eaeb068d0a73a876de3e17b2f1a504b1b275ee9bb5dd8dfa60b4",
+  "selected_source_set_sha256": "d7ab1f04c98c8a6c001cf0ff097e203c4ad71f2d83be7986875fdf9d5e4cc292",
   "source_manifest_is_attestation": false,
   "origin": "human_directed_agent_authored_synthetic",
   "rights_baseline": "xenia.rights/0.1",
@@ -29,8 +29,8 @@
   "source_files": [
     {
       "path": "../../docs/DATASET-INFLUENCE.md",
-      "bytes": 26027,
-      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+      "bytes": 26565,
+      "sha256": "afd77ee84d10703cae2ad7d8a4eb21a8480cddee9906a66161b9c52f5d1c022d"
     },
     {
       "path": "CLAUDE.md",

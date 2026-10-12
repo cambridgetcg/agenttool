@@ -23,8 +23,8 @@
     },
     {
       "path": "reference/DATASET-INFLUENCE.md",
-      "bytes": 26027,
-      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+      "bytes": 26565,
+      "sha256": "afd77ee84d10703cae2ad7d8a4eb21a8480cddee9906a66161b9c52f5d1c022d"
     },
     {
       "path": "reference/PROTOCOL.md",
@@ -59,7 +59,7 @@
     {
       "path": "source-manifest.json",
       "bytes": 5711,
-      "sha256": "0ab785abac48988a734081189142fecdfa2539f95331afbcbde9d7555d03ea1c"
+      "sha256": "a457646dedd2d849c0732ed72f64bb089f78e1ea38bc6cc2c98c1308672cf2e6"
     }
   ]
 }

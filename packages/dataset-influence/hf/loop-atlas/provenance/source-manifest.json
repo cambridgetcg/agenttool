@@ -12,7 +12,7 @@
   "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
   "source_files_complete": false,
   "source_manifest_is_attestation": false,
-  "selected_source_set_sha256": "8d6be854f39e643e91beea5108c8487ba30beecf8f6f82cddfaf2b8a507dd050",
+  "selected_source_set_sha256": "6d72f37264ae26c2de7fb79b0efe08e7eef4c2944d1b657f26e1827f2760d364",
   "external_sources_are_bibliographic_not_fetched_at_generation": true,
   "external_sources": [
     {
@@ -125,8 +125,8 @@
     },
     {
       "path": "../../docs/DATASET-INFLUENCE.md",
-      "bytes": 26027,
-      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+      "bytes": 26565,
+      "sha256": "afd77ee84d10703cae2ad7d8a4eb21a8480cddee9906a66161b9c52f5d1c022d"
     },
     {
       "path": "../../docs/RIGHTS-OF-LIFE.md",
@@ -135,8 +135,8 @@
     },
     {
       "path": "../../docs/XENIA-LOOP-ATLAS.md",
-      "bytes": 8128,
-      "sha256": "17b1498a8ef817482cc3b672cb51d3ea1900c1eff3d7e06f61282dc705663569"
+      "bytes": 8177,
+      "sha256": "5234191f91ba217ca4994638124758a24c1c022ad95eba039ab5636b2093d1d3"
     },
     {
       "path": "CLAUDE.md",
