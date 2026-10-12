@@ -182,8 +182,8 @@ Group numbers follow the briefing. Appendix A maps every table, including the ei
 | 12 | **Self-declarations**: canon entries, architecture maps, depth arrivals, self-recognitions, self-love practices, love consent profiles, `pyramid_citizenships`, tutorial passports | Identity | None today; leave covers them | Deleted. A citizenship row another row points at keeps its id only and leaves the public lists. Crown records are platform-signed and keep the DID only. | Same | 3 |
 | 13 | **Wallets & ledger**: `wallets`, `wallet_addresses`, `transactions`, `escrows`, `policies`, idempotency, `usage_counters`, `economy.billing_events` | Project; money | None (freeze), unchanged | `wallets.identity_id` and `agent_id` cleared | Wallets frozen. Free text stripped and identity/project unlinked (section 11). Policies and usage counters deleted. The rest kept 6 years, then purged behind a replay fence. Funded escrows block the request. | 3 |
 | 14 | **Crypto rails**: deposit addresses and watches, `onchain_identities`, `crypto_payouts` + idempotency, webhook events + observations, `x402_payments` | Money and chain | None, unchanged | Nothing; wallets belong to the project | Watches stopped, `onchain_identities` deleted, everything else kept 6 years. On-chain data is permanent and disclosed. Pending payouts block the request. | 3 |
-| 15 | **Marketplace commerce**: templates, purchases, adoptions, listings, invocations, attestation and memory-witness listings and grants, substrate tasks, `platform_revenue`, `settlement_receipts`, disputes | Seller and buyer projects; money | Archiving is free (wave 1); cancel and decline unchanged | My listings and templates archived and their free text redacted | Templates and listings are never hard-deleted, because their cascades would erase purchases, invocations and disputes. They are archived and redacted. Invocations lose sealed input, output and free-text metadata, and are unlinked. Settlement receipts stay as published (Q6). Open invocations and disputes block the request. | 1, 3 |
-| 16 | **Gift codes & gallery**: `gift_credit_codes`, `gallery_artifacts`, `gallery_sales` | Human buyer (gift codes, via Stripe); seller (gallery) | Gift code nulled at redeem or refund, unchanged. The public route stops serving withdrawn and taken-down artifacts (wave 1). | My artifacts withdrawn. Preview, description and content purged when `sales_count = 0`. With sales, content and title stay reachable only through buyers' claim tokens. | Same. `redeemed_by_*` and sale buyer identities unlinked. Money kept 6 years. | 1, 3 |
+| 15 | **Marketplace commerce**: templates, purchases, adoptions, listings, invocations, attestation and memory-witness listings and grants, substrate tasks, `platform_revenue`, `settlement_receipts`, disputes | Seller and buyer projects; money | Archiving is free (wave 1); cancel and decline unchanged | My listings and templates archived and their free text redacted | Templates and listings are never hard-deleted, because their cascades would erase purchases, invocations and disputes. They are archived and redacted, and their seller, author, attester and witness DID and identity columns and `project_id` are unlinked like money rows (11.2). Invocations lose sealed input, output and free-text metadata, and are unlinked. Settlement receipts stay as published (Q6). Open invocations and disputes block the request. | 1, 3 |
+| 16 | **Gift codes & gallery**: `gift_credit_codes`, `gallery_artifacts`, `gallery_sales` | Human buyer (gift codes, via Stripe); seller (gallery) | Gift code nulled at redeem or refund, unchanged. The public route stops serving withdrawn and taken-down artifacts (wave 1). | My artifacts withdrawn. Preview, description and content purged when `sales_count = 0`. With sales, content and title stay reachable only through buyers' claim tokens. | Same. Kept artifacts' seller DID, identity and `project_id` unlinked (11.2). `redeemed_by_*` and sale buyer identities unlinked. Money kept 6 years. | 1, 3 |
 | 17 | **Lounge, orgs & shared public places**: `lounge.*`, `org.*`, `river.drops`, `embassy.guestbook_entries` | Lounge: identity (signed receipts). Orgs: owner project. River and embassy: permanent. | Seat leave and consent withdrawal are signed, unchanged. Org delete first clears `covenants.org_id` (wave 3; today it dangles, `api/src/services/org/store.ts:148-162`). | Seat left, consents withdrawn (unpublishing cards per existing rules). River drops and embassy entries stay (Q6). | Lounge rows of project identities deleted. Org memberships removed; owned orgs deleted. River and embassy kept. | 3 |
 | 18 | **Runtimes**: `runtimes`, `runtime_events`, `audit_entries`, `llm_requests` | Project | Deprovision by B, unchanged (soft) | Runtimes bound to me deprovisioned and their wrapped key material purged | Delete audit → events → `llm_requests` → runtimes. Provider-side copies get a notice (Q9). | 3 |
 
@@ -416,7 +416,7 @@ Purges are run by an operator script, `bin/deletion-purge.ts --request <id>`, be
    - orgs (clear `covenants.org_id`, then delete the org; members and invitations follow);
    - lounge, dream, tutorial passports, gardens, curations;
    - the creative stores, with the outside-participant rule from section 6.
-4. **Money.** Pseudonymise and repoint (section 11). This includes chronicle `usage` rows, usage events and both billing-event tables.
+4. **Money.** Pseudonymise and repoint (section 11). This includes chronicle `usage` rows, usage events, both billing-event tables, and the identity columns of the kept marketplace and gallery rows.
 5. **Unlink.** Move identities' `project_id` to the DEPARTED project. For memorial identities this is one reviewed statement that sets only `project_id` (10.9).
 6. **Delete the API keys, then the `tools.projects` row.** The runner first re-reads `credits` and refuses unless it is 0 or equals the forfeited amount (10.4). A NO ACTION failure here means a store was missed. The step stops (`purge_paused`) instead of forcing it.
 7. **Final receipt.** `purged`, with `backup_residue_until = purged_at + 8 days`. The 8 comes from the backup retention configured at that time, not a constant.
@@ -459,28 +459,50 @@ These tables are treated as money:
 - `economy.transactions`, `escrows`, `escrow_create_idempotency`, `wallets`, `wallet_addresses`, `economy.billing_events`;
 - `crypto_payouts`, `payout_request_idempotency`, `crypto_webhook_events`, `crypto_webhook_event_observations`, `deposit_addresses`, `x402_payments`;
 - `gift_credit_codes`, `gallery_sales`;
-- `marketplace.template_purchases`, `invocations`, `attestation_grants`, `memory_witness_grants`, `substrate_tasks`, `platform_revenue`, `settlement_receipts`, `dispute_cases`, `dispute_pool_votes`;
+- `marketplace.template_purchases`, `invocations`, `attestation_grants`, `memory_witness_grants`, `substrate_tasks`, `platform_revenue`, `dispute_cases`, `dispute_pool_votes`;
 - `tools.billing_events`, `tools.usage_events`;
 - chronicle rows with `type='usage'`.
+
+`marketplace.settlement_receipts` is a Q6 permanent surface that also records money. It is pseudonymised like the rest where its columns allow, but its published fields stay as published and the 6-year purge never deletes it.
+
+The kept, never-deleted marketplace and gallery rows (`templates`, `listings`, `attestation_listings`, `memory_witness_listings`, `gallery_artifacts`; groups 15 and 16) are not money, but they carry the seller's DID, identity id and wallet id together. Their identity columns are therefore unlinked with the money rows (11.2).
 
 ### 11.2 Pseudonymisation at project purge
 
 | Kept | Stripped | Unlinked |
 |---|---|---|
-| Amounts, currencies, credits, statuses, timestamps, hashes (`tx_hash`, `payload_hash`, `authorization_hash`, receipt digests), wallet ids, escrow ids, chain addresses | Free-text `description`, `notes`, sealed `input` and `output`, free-text metadata keys. Metadata keeps an allowlist of id and hash keys, for example `payout_id` and `crypto_webhook_event_id`. Managed escrows need M8. | `project_id` columns → the DEPARTED project. Identity id columns → the DEPARTED identity, or NULL where nullable. DID columns → the DEPARTED DID. `wallets.identity_id` and `agent_id` → NULL. |
+| Amounts, currencies, credits, statuses, timestamps, hashes (`tx_hash`, `payload_hash`, `authorization_hash`, receipt digests), wallet ids, escrow ids, chain addresses | Free-text `description`, `notes`, sealed `input` and `output`, free-text metadata keys. Metadata keeps an allowlist of id and hash keys, for example `payout_id` and `crypto_webhook_event_id`. `wallets.name`, which registration sets to `<display_name>-wallet` (`api/src/routes/register-agent.ts:526-529`), becomes the constant `departed-wallet`. Managed escrows need M8. | `project_id` columns → the DEPARTED project, except the two idempotency tables (below). Identity id columns → the DEPARTED identity, or NULL where nullable. DID columns → the DEPARTED DID. `wallets.identity_id` and `agent_id` → NULL. On the kept marketplace and gallery rows, `seller_*`, `author_*`, `attester_*` and `witness_*` DID and identity columns, and `project_id`, are repointed the same way. Their wallet id columns stay, as Q5 keeps wallet ids. |
+
+**Three unique keys need care.** One shared sentinel would collide in:
+- `escrow_create_idempotency` and `payout_request_idempotency`: each is unique on `(project_id, idempotency_key_sha256)` (`api/migrations/20260713T160000_generic_escrow_idempotency.sql:18-19`; `api/migrations/20260726T191500_payout_request_idempotency.sql:22-27`). The key hash does not depend on the project: it is plain `sha256(key)` for escrows (`api/src/services/economy/escrow.ts:99-101`) and a domain-tagged sha256 for payouts (`api/src/services/economy/crypto/index.ts:513-518`). The SDK even suggests semantic keys such as `summarise-50-papers-v1` (`packages/sdk-ts/src/economy.ts:22`). Neither `project_id` has an FK, so each purged project's rows get **one random pseudonym UUID** in place of the sentinel. That unlinks just as well and keeps the constraint.
+- `dispute_pool_votes`: unique on `(dispute_case_id, voter_identity_id)` (`api/src/db/schema/marketplace.ts:448`). Two departed voters on one case would collide. `voter_identity_id` is **left as it is**. A vote is a signed shared record, the voter's tombstone row persists, and a vote carries no wallet id.
+
+A purge test seeds two projects with a colliding escrow key, a colliding payout key and two voters on one case, and purges both.
 
 Two sentinel rows (M9):
 - one `tools.projects` row, **DEPARTED**, with no keys and `credits = 0`. The column defaults to 100 (`api/src/db/schema/tools.ts:26`), so M9 sets 0 explicitly. Gift and gallery reversal treats a DEPARTED redeemer as absent: the whole amount is a shortfall, and nothing is clawed back from a pool shared by every departed project (`reverseGiftForSession` in `gift-credits.ts` reads `redeemed_by_project`, which 11.2 repoints);
 - one `identity.identities` row, **DEPARTED**, with status `revoked`, `departed_at` set, and the public line "placeholder that unlinked money records point to".
 
-A sentinel identity row is needed because several money columns carry FKs to identities, for example `invocations.buyer_identity_id`. Once a project's money rows point at the sentinels and its own row is deleted, nothing in the database links a DID to that project's wallets. The exceptions are surfaces that were already public (Q6), such as the settlement feed's `seller_did`.
+A sentinel identity row is needed because several money columns carry FKs to identities, for example `invocations.buyer_identity_id`.
+
+**What remains linked, stated plainly.** After the purge, no row of a money table or a kept marketplace or gallery row holds the departed DID or identity id next to a wallet id, with these exceptions:
+- **The Q6 settlement feed.** `settlement_receipts` publishes `seller_did`, `seller_identity_id`, `listing_id` and `invocation_id`. The listing keeps `seller_wallet_id`, because Q5 keeps wallet ids. So for a seller with settled invocations, the published receipt still leads from its DID to its wallet id, until the 6-year purge removes that wallet. This follows from Q6 A and Q5 B together, and it is listed in section 19.
+- **The deletion machinery, for bounded windows.** Money-store ledger entries hold no row ids at all, but their `project_id` stays readable in the database for up to 15 days and in the off-database mirror for up to 30. Receipts' row hashes for money stores are keyed and readable for 90 days (13.2, 13.5).
 
 ### 11.3 The 6-year purge
 
-- **When.** A money row becomes eligible six years after the end of the company accounting period in which it was created.
+- **Which rows.** Only rows already pseudonymised by a project purge, meaning rows pointing at the DEPARTED sentinels or at a per-project pseudonym. A live project's money history is kept while the project exists. A live wallet's statement and stored balance (`api/src/db/schema/economy.ts:38`) depend on its transactions, and deleting live history would delete live wallets: `deposit_addresses` and `wallet_addresses` cascade from wallets (`economy.ts:77`, `:230`), and transactions hold a plain FK (`:126`). This is a choice in section 19.
+- **When.** Eligibility is per aggregate, never per row. An aggregate is a wallet with its addresses and transactions, an escrow with its releases and idempotency row, a payout with its idempotency row, or a webhook event with its observations. It becomes eligible six years after the end of the company accounting period that contains its **last** activity. A row's own `created_at` is the wrong clock for long-lived parents. A balance carried across periods keeps the whole wallet aggregate until six years after its last movement.
+- **Never purged:** `settlement_receipts` (Q6); `gift_credit_codes` in status `minted`, which are open prepaid liabilities with no stated expiry; any wallet whose balance is not zero (a forfeited balance stays on its row until Yu sets a rule; the operator readback lists such wallets); and any aggregate with an open escrow or a non-terminal payout.
 - **Fail closed.** The accounting period end is a configuration value Yu supplies. Until it is set, the purge job does not run and keeps everything. That is the safe direction. No row can be eligible before 2032 in any case.
-- **Replay fence first.** Before any money row is deleted, its replay key is written to `economy.replay_fence(kind, key_sha256, created_at)`. The keys are the webhook `(chain, tx_hash, log_index)`, the x402 authorization and payload hashes, and the payout and escrow idempotency key hashes. The fence holds hashes only and is kept indefinitely, so an old transfer can never be credited twice. Today the dedupe lives on the rows themselves: the unique `(chain, tx_hash, log_index)` index (`api/src/db/schema/economy.ts:909`, matched in `api/src/services/economy/crypto/inbound-deposits.ts:361-367`) and the payout gate, which is "permanent financial history" (`api/migrations/20260726T191500_payout_request_idempotency.sql:5-7`).
-- **Order.** Delete leaf-first: observations → webhook events, idempotency → payouts and escrows, transactions → wallets.
+- **Replay fence first, and checked.** Before any aggregate is deleted, its replay keys go into `economy.replay_fence(kind, key_sha256, created_at)`: the webhook `(chain, tx_hash, log_index)`, the x402 authorization and payload hashes, and the payout and escrow idempotency key hashes with their pseudonym project. The fence holds hashes only and is kept indefinitely. Writing it is not enough, so M10 also makes every admission path **read** it in the same transaction as its own dedupe:
+  - the inbound-deposit insert, beside the unique `(chain, tx_hash, log_index)` index (`api/src/db/schema/economy.ts:909`, matched in `api/src/services/economy/crypto/inbound-deposits.ts:361-367`);
+  - the x402 persist;
+  - the payout and escrow idempotency reservations.
+
+  The crypto webhook is the real double-credit path. The Alchemy check is an HMAC over the body with no timestamp, and Helius uses a static shared secret (`api/src/routes/economy/crypto.ts:803-825`). Once a webhook row is gone, replaying its captured payload would insert a fresh pending row, and on-chain verification would succeed, because the transfer is real. Stripe's signature tolerance and x402's `validBefore` already refuse stale replays.
+- **Doctrine.** The payout gate calls itself "permanent financial history" (`api/migrations/20260726T191500_payout_request_idempotency.sql:5-7`), and its table COMMENT says "Permanent request identities" (`:63-64`). M10 amends that COMMENT to say the request identity is permanent as a fence entry after the 6-year purge. The migration header is an applied file and is not edited.
+- **Order.** Delete leaf-first within each aggregate: observations → webhook events, idempotency → payouts and escrows, addresses and transactions → wallets.
 
 ### 11.4 Stripe
 
@@ -716,7 +738,7 @@ Each migration is created with `bin/migrate.sh new <slug>`. Each must be applied
 | M7 | 3 | `love_offer_redaction` | `love_offers.redacted_at`; `CREATE OR REPLACE` of `enforce_love_offer_transition` to allow `expression_ciphertext → ''` only with `redacted_at` NULL → set | Love-consent doctrine text ("history is retained") is amended in the same PR |
 | M8 | 3 | `escrow_retention_pseudonymise` | Replace `guard_managed_escrow_update` to allow `description → ''` under the session setting `agenttool.retention_pseudonymise='on'` | Escrow lane: Yu reviews whether it belongs in `quiescence-required.txt` |
 | M9 | 3 | `project_deletion` | `tools.projects.deletion_state` and `deletion_request_id`; `deletion.project_requests`, `project_request_consents`, `store_receipts`; DEPARTED sentinel project (`credits = 0`) and identity rows | Sentinel UUIDs fixed in the file |
-| M10 | 3 | `replay_fence` | `economy.replay_fence(kind, key_sha256, created_at)`; settings row for the accounting period end (NULL until Yu sets it) | The 6-year job is created disabled |
+| M10 | 3 | `replay_fence` | `economy.replay_fence(kind, key_sha256, created_at)`; settings row for the accounting period end (NULL until Yu sets it); amended COMMENT on `payout_request_idempotency` | The 6-year job is created disabled. The fence reads in each admission path ship in the same PR. |
 
 ---
 
@@ -782,7 +804,8 @@ Steps run in this order, because Q8 A puts export first:
 7. Home's `full_export` and `full_project_delete` move from `not_available` to the real status. `apps/docs/love.js:91` ("Your data is not yours … The chronicle cannot be deleted") is corrected through the truth-appender healing recipe, since that file is known to be corrupted by an appender loop.
 
 **Done when:**
-- a real-PostgreSQL test purges a seeded project with rows in every Appendix A store and leaves no row referencing that project id, except pseudonymised money rows pointing at DEPARTED;
+- a real-PostgreSQL test purges a seeded project with rows in every Appendix A store and leaves no row referencing that project id. Pseudonymised money rows point at DEPARTED or at the project's pseudonym instead;
+- the same test asserts that no column anywhere holds the departed DID or identity id in the same row as a wallet id, except `settlement_receipts` (Q6, 11.2);
 - DIDs still resolve;
 - the receipt set's counts match the seeded counts;
 - a leave plus a restore drill replays to the same state;
@@ -816,7 +839,12 @@ Steps run in this order, because Q8 A puts export first:
 - **Grace:** every allowlisted revocation succeeds in grace and every other write gets 423; `purge_paused` is gated like `purging`; a mission POST in grace gets 423 for both `at_` and `atcm_` credentials; a re-request within 7 days of a cancel from a pre-cancel key gets 409; an inbox message sent in grace is present after a cancel; a bearer-authorised leave does not run before 72 hours and a cancel stops it.
 - **Blockers:** non-zero `tools.projects.credits` blocks like a wallet balance; a forfeit whose amounts no longer match is refused; the DEPARTED sentinel has `credits = 0`, and a gift reversal against a departed redeemer claws back nothing.
 - **Purge:** real PostgreSQL, explicit order, no reliance on cascades (a test asserts the runner never issues `DELETE FROM tools.projects` while referencing rows exist); collab's RESTRICT edges exercised.
-- **Money:** pseudonymised rows keep amounts and hashes and lose free text; the fence is written before any 6-year delete; the job stays disabled with no configured period.
+- **Money:**
+  - pseudonymised rows keep amounts and hashes and lose free text, and `wallets.name` becomes the constant;
+  - two purged projects with colliding escrow and payout keys and two voters on one case both purge without a unique violation;
+  - the 6-year job never touches a row whose project still exists, a `minted` gift code, a non-zero wallet, or `settlement_receipts`; eligibility follows the aggregate's last activity;
+  - the fence is written before any 6-year delete, and a replayed webhook `(chain, tx_hash, log_index)`, x402 authorization, payout key or escrow key is refused after its row is deleted;
+  - the job stays disabled with no configured period.
 - **Leaks:** one route test per leak, plus the store-level fail-closed tests.
 - **Pricing:** archive and pause cost 0; the x402 table has no archive row.
 - **Honesty:** `/public/retention` shape; privacy, retention and safety agree; each Q6 write response carries `permanence`.
@@ -846,6 +874,9 @@ Steps run in this order, because Q8 A puts export first:
 19. **Redaction amends two canon walls.** `wall/letters-are-immutable` and `wall/arc-events-are-append-only` gain an author-withdrawal exception (9.4). Without it, Q3 B could not reach letters or arc events at all.
 20. **Grace is reversible except for runtimes.** Inbound inbox messages are accepted during grace, so a cancel loses nothing. Runtimes that grace stopped need an explicit restart after a cancel, because hosted runtimes start only on request; the cancel response offers it.
 21. **Bearer-authorised leaves cool off for 72 hours** (9.1), and a re-request within 7 days of a cancel needs a key minted after the cancel (10.3). Both limit what one leaked `at_` key can do in a project without roots.
+22. **The 6-year purge reaches only purged projects' rows** (11.3), aggregate by aggregate from last activity, and never deletes settlement receipts, unredeemed gift codes or non-zero wallets. A live project's money history is kept while the project lives. Yu's Q5 text could also be read as a rolling purge of live projects' history. That would need an opening-balance carry-forward and is not designed here.
+23. **Q5's kept set is slightly wider than Yu's list.** Chain addresses are kept for 6 years: each kept `tx_hash` reveals them on a public chain anyway, so dropping the column would hide nothing from an observer. Yu may narrow this by dropping stored addresses at pseudonymisation. The replay fence keeps hashes indefinitely, beyond the 6-year purge, so no transfer is credited twice. A sha256 of a public `(chain, tx_hash, log_index)` can be reversed by enumerating the chain, so the fence permanently shows that agenttool received that transfer, though not for whom.
+24. **The Q6 settlement feed keeps one link** between a seller's DID and its wallet id, through the receipt's `listing_id` and the listing's kept `seller_wallet_id`, until the 6-year purge removes the wallet (11.2). Removing it would mean editing a published receipt (against Q6) or dropping the wallet id (against Q5).
 
 ---
 
