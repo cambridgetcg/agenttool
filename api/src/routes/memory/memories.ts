@@ -3,7 +3,7 @@
  *  The agent supplies the embedding. We store it; we never compute it.
  *  See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -41,8 +41,8 @@ import {
   listMemoriesPage,
   readById,
   MemoryIdentityBoundaryError,
-  PaidMemoryReceiptProtectedError,
   publishMemoryWriteEvent,
+  type MemoryEraseResult,
   resolveMemoryIdentityBinding,
   write,
 } from "../../services/memory/store";
@@ -51,8 +51,31 @@ import {
   listAttestationsByMemory,
   type MemoryAttestationReceiptOut,
 } from "../../services/memory/tiers";
+import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
+import { ledgerResponse, type ErasureAuthority } from "../../services/deletion/record";
 
 const app = new Hono<ProjectContext>();
+
+/** Why a deleted memory can leave a row behind (spec §7.4). */
+export const ERASED_IN_PLACE_REASON =
+  "A paid witness receipt points at this memory, so the row stays for the receipt. Its content became the withdrawal marker; its key, embedding and identity patch were cleared and its metadata emptied. It no longer appears in any read.";
+
+function erasureAuthority(decision: { mode: "agent_root" | "legacy_bearer"; sequence: number }): ErasureAuthority {
+  return { mode: decision.mode, sequence: decision.mode === "agent_root" ? decision.sequence : null };
+}
+
+async function memoryDeleteResponse(result: MemoryEraseResult) {
+  if (result.entries.length === 0) return { deleted: 0, rows_removed: 0, erased_in_place: 0 };
+  const lastSeq = Math.max(...result.entries.map((entry) => entry.seq));
+  const { mirrored } = await pushLedgerMirrorAfterCommit(db, lastSeq);
+  return {
+    deleted: result.deleted,
+    rows_removed: result.rows_removed,
+    erased_in_place: result.erased_in_place,
+    ...(result.erased_in_place > 0 ? { erased_in_place_reason: ERASED_IN_PLACE_REASON } : {}),
+    ledger: result.entries.map((entry) => ledgerResponse(entry, mirrored)),
+  };
+}
 
 async function attachAttestationReceipts<T extends { id: string }>(
   projectId: string,
@@ -448,6 +471,7 @@ app.delete("/:id", async (c) => {
       400,
     );
   }
+  if (!UUID_RE.test(c.req.param("id"))) return c.json({ deleted: 0 });
   const [existing] = await db
     .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
@@ -455,6 +479,7 @@ app.delete("/:id", async (c) => {
       and(
         eq(memories.id, c.req.param("id")),
         eq(memories.projectId, c.var.project.id),
+        isNull(memories.contentPurgedAt),
       ),
     )
     .limit(1);
@@ -468,17 +493,10 @@ app.delete("/:id", async (c) => {
     headers: c.req.raw.headers,
   });
   if (!authority.ok) return c.json(authority.body, authority.status);
-  try {
-    const result = await deleteById(c.var.project.id, c.req.param("id"));
-    return c.json(result);
-  } catch (error) {
-    if (error instanceof PaidMemoryReceiptProtectedError) {
-      throw new HTTPException(409, {
-        message: "paid_memory_receipt_preserved",
-      });
-    }
-    throw error;
-  }
+  const result = await deleteById(c.var.project.id, c.req.param("id"), {
+    authority: erasureAuthority(authority),
+  });
+  return c.json(await memoryDeleteResponse(result));
 });
 
 // ── DELETE /v1/memories?key=... ─────────────────────────────────────────
@@ -509,7 +527,11 @@ app.delete("/", async (c) => {
   const affected = await db
     .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
-    .where(and(eq(memories.projectId, c.var.project.id), eq(memories.key, key)));
+    .where(and(
+      eq(memories.projectId, c.var.project.id),
+      eq(memories.key, key),
+      isNull(memories.contentPurgedAt),
+    ));
   if (affected.length === 0) return c.json({ deleted: 0 });
   const authority = await authorizeProjectConstitutionMutation({
     projectId: c.var.project.id,
@@ -520,17 +542,11 @@ app.delete("/", async (c) => {
     headers: c.req.raw.headers,
   });
   if (!authority.ok) return c.json(authority.body, authority.status);
-  try {
-    const result = await deleteByKey(c.var.project.id, key, { onlyIds: affected.map((row) => row.id) });
-    return c.json(result);
-  } catch (error) {
-    if (error instanceof PaidMemoryReceiptProtectedError) {
-      throw new HTTPException(409, {
-        message: "paid_memory_receipt_preserved",
-      });
-    }
-    throw error;
-  }
+  const result = await deleteByKey(c.var.project.id, key, {
+    onlyIds: affected.map((row) => row.id),
+    authority: erasureAuthority(authority),
+  });
+  return c.json(await memoryDeleteResponse(result));
 });
 
 export default app;

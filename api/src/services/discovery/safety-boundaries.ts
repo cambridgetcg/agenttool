@@ -334,9 +334,21 @@ export const SAFETY_BOUNDARIES = {
     agent_ids_policy:
       "Null agent_ids shares values within the project; [] denies value reads. A nonempty audience requires canonical owned identities. Restricted HTTP reads require X-Agent-Id plus that active identity's exact GET root proof; a caller-supplied header alone is not proof. Hosted runtime reads enforce the audience against their stored identity binding. Project bearers retain policy administration and metadata access, so this does not isolate identities from project administrators.",
     deletion:
-      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed. The DELETE response says so with content_retained: true.",
+      "DELETE zeroes every stored version's ciphertext, IV and auth tag, clears the description and tags, and marks the secret deleted, in the same transaction as its deletion-ledger entry; the response says content_retained: false. The name stays in the audit trail. Deleting a secret does not revoke the upstream credential it held.",
     audit:
-      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request. HTTP audit rows also store the X-Forwarded-For or CF-Connecting-IP header value as sent, with no purge; see /public/retention.",
+      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request. HTTP audit rows also store the X-Forwarded-For or CF-Connecting-IP header value as sent; the vault_audit_ip_30d rule sets it to NULL 30 days later; see /public/retention.",
+  },
+
+  deletion_ledger: {
+    rule:
+      "Inbox, vault, identity-backup and memory deletes, and the retention rules, write an ids-only deletion-ledger entry in the same transaction as the erase. If the entry cannot be written (the ledger key is missing, or a restore is being replayed) the delete answers 503 deletion_ledger_unavailable and nothing is deleted.",
+    contents:
+      "Row ids, counts, hashes, the authority mode and an HMAC. No content, names or keys; non-UUID keys are stored only as salted HMACs. Row ids are cleared after 15 days.",
+    restore:
+      "After a backup restore, deletions recorded after the backup are replayed from an off-database mirror before writes reopen. The mirror needs an operator-provisioned private bucket; a deletion whose entry never reached the mirror cannot be replayed.",
+    void:
+      "During replay, two operators with a written reason can void entries made with a confirmed stolen bearer key; the void is itself a ledger entry and the count is published at /public/retention. An entry the owner root-signed cannot be voided.",
+    details: "/public/retention",
   },
 
   marketplace_input: {

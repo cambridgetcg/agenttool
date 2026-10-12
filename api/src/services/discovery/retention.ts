@@ -21,7 +21,7 @@
  *  Doc: docs/RETENTION.md. */
 
 export const RETENTION_SCHEMA = "agenttool-retention/v1" as const;
-export const RETENTION_VERSION = "2026-10-12" as const;
+export const RETENTION_VERSION = "2026-10-12.2" as const;
 
 export type RetentionBasis = "measured" | "source" | "config" | "declared" | "unknown";
 export const RETENTION_BASES: readonly RetentionBasis[] = [
@@ -35,33 +35,43 @@ export const RETENTION_BASES: readonly RetentionBasis[] = [
 /** Daily physical backups kept, from the 2026-10-11 production readback. */
 export const BACKUP_DAYS_KEPT = 8;
 
-/** What happens to content that was already deleted before real purges
- *  exist. Shared by the delete responses that say `content_retained`. */
-export const ALREADY_DELETED_CONTENT =
-  "Content already deleted from the inbox, the vault or identity backups is still held, as described at /public/retention. " +
-  "No purge of it is scheduled. If one is scheduled, its date will be published at /public/retention before it runs.";
+/** Content deleted before deletes became real purges (deletion spec wave 2)
+ *  is still held. An operator backfill purges it, announced here first: never
+ *  before PURGE_NOT_BEFORE, and never sooner than 30 days after the version
+ *  carrying this announcement went live. bin/deletion-backfill.ts enforces
+ *  both. A soft-deleted inbox message restored before then is not touched. */
+export const ALREADY_DELETED_PURGE = {
+  not_before: "2026-12-14",
+  min_days_after_announcement: 30,
+} as const;
 
-/** Delete-response notes. Each route that answers a delete while keeping
- *  the content says so in these words. */
+export const ALREADY_DELETED_CONTENT =
+  "Content deleted from the inbox, the vault or identity backups before deletes became real purges is still held. " +
+  `It will be purged on or after ${ALREADY_DELETED_PURGE.not_before}, and never sooner than ` +
+  `${ALREADY_DELETED_PURGE.min_days_after_announcement} days after this notice was first published at /public/retention. ` +
+  "Until then a soft-deleted inbox message can still be restored with PATCH /v1/inbox/:id, and a restored message is not purged. " +
+  "Deleting it again (DELETE /v1/inbox/:id, or DELETE /v1/identity/backup/:id for a revoked backup) purges it at once.";
+
+/** Delete-response notes, shared by the routes and this disclosure. */
 export const DELETE_RESPONSE_RETENTION = {
   inbox: {
-    content_retained: true,
+    content_retained: false,
     meaning:
-      "The message is marked deleted and leaves your lists. Its sealed body, subject, references and metadata stay in the database, and PATCH /v1/inbox/:id can restore it.",
+      "The message's sealed body, nonce, ephemeral key, subject, references and metadata were erased. The row stays with status deleted and its signature, so threads keep their shape; it cannot be restored.",
     already_deleted: ALREADY_DELETED_CONTENT,
     details: "/public/retention",
   },
   vault: {
-    content_retained: true,
+    content_retained: false,
     meaning:
-      "The secret is marked deleted and can no longer be read through the API. Every stored version's ciphertext stays in the database; values are not zeroed. Revoke the upstream credential separately.",
+      "Every stored version's ciphertext, IV and auth tag were zeroed, and the description and tags cleared. The name stays in the audit trail. Revoke the upstream credential separately.",
     already_deleted: ALREADY_DELETED_CONTENT,
     details: "/public/retention",
   },
   identity_backup: {
-    blob_retained: true,
+    blob_retained: false,
     meaning:
-      "Revocation hides this backup from list and fetch. The stored blob and nonce stay in the database; they are not erased.",
+      "The backup is revoked and its blob, nonce and metadata were erased; label, key-derivation name and dates stay.",
     already_deleted: ALREADY_DELETED_CONTENT,
     details: "/public/retention",
   },
@@ -97,22 +107,22 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
   {
     id: "identity.backups",
     stores: ["agent_continuity.identity_backups"],
-    live: "Until revoked.",
+    live: "Until deleted.",
     after_delete:
-      "DELETE /v1/identity/backup/:id sets revoked_at and hides the backup from list and fetch. The stored blob and nonce stay in the database.",
+      `DELETE /v1/identity/backup/:id revokes the backup and erases its blob, nonce and metadata in the same transaction as its deletion-ledger entry. ${BACKUP_RESIDUE}`,
     basis: "source",
-    evidence: "api/src/routes/identity-backup.ts",
+    evidence: "api/src/services/identity/backup-erase.ts; api/src/services/deletion/purges.ts (purgeIdentityBackups)",
   },
   {
     id: "memory.content",
     stores: ["memory.memories", "memory.memory_attestations"],
     live:
-      "Until you delete it. Working memories with an expiry leave list, key and search reads once expired, but they are not purged and a read by id still returns them.",
+      "Until you delete it. A working memory with an expiry leaves every read, by id included, once expired, and the expired_working_memory_24h rule deletes it 24 hours after expiry.",
     after_delete:
-      `DELETE removes the memory and the attestations about it from the live database at once. A memory with a paid witness receipt cannot be deleted (409). ${BACKUP_RESIDUE}`,
+      `DELETE removes the memory and the attestations about it from the live database at once. A memory a paid witness receipt points at is erased in place instead: its content becomes "withdrawn by author on <date>", its key, embedding and identity patch are cleared, and the row stays only so the receipt still points at it. ${BACKUP_RESIDUE}`,
     basis: "source",
     evidence:
-      "api/src/services/memory/store.ts (deleteById, deleteByKey, readById); api/migrations/0006_memory_tiers.sql (attestations cascade)",
+      "api/src/services/memory/store.ts (deleteById, deleteByKey, readById); api/src/services/deletion/purges.ts; api/migrations/20261012T161958_retention_rules.sql",
   },
   {
     id: "traces",
@@ -143,27 +153,28 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     stores: ["inbox.messages", "inbox.broadcasts"],
     live: "As long as the project exists.",
     after_delete:
-      "DELETE /v1/inbox/:id only sets status 'deleted'. The sealed body, subject, references and metadata stay, and PATCH can restore the message. Broadcasts have no delete route.",
+      `DELETE /v1/inbox/:id (or PATCH to status 'deleted') erases the sealed body, nonce, ephemeral key, subject, references and metadata; the row stays with status 'deleted' and cannot be restored. Broadcasts have no delete route. ${BACKUP_RESIDUE}`,
     basis: "source",
-    evidence: "api/src/services/inbox/store.ts (updateStatus); api/src/routes/inbox/messages.ts",
+    evidence: "api/src/services/inbox/store.ts (purgeMessage, updateStatus); api/src/services/deletion/purges.ts",
   },
   {
     id: "vault.secrets",
     stores: ["agent_vault.vault_secrets", "agent_vault.vault_versions"],
     live: "Until deleted.",
     after_delete:
-      "DELETE /v1/vault/:name sets deleted_at. Every version's ciphertext stays in the database; values are not zeroed.",
+      `DELETE /v1/vault/:name zeroes every stored version's ciphertext, IV and auth tag and clears the description and tags; the secret's name stays for the audit trail. ${BACKUP_RESIDUE}`,
     basis: "source",
-    evidence: "api/src/routes/vault/secrets.ts (DELETE /:name)",
+    evidence: "api/src/services/vault/erase.ts; api/src/services/deletion/purges.ts (purgeVaultSecrets)",
   },
   {
     id: "vault.audit",
     stores: ["agent_vault.vault_audit"],
     live:
       "Each vault HTTP action writes an audit row that includes the X-Forwarded-For or CF-Connecting-IP header value as the request carried it.",
-    after_delete: "No purge. Rows stay as long as the project exists.",
+    after_delete:
+      "The vault_audit_ip_30d rule sets the stored address to NULL 30 days after the row was written. The rest of the row stays as long as the project exists.",
     basis: "source",
-    evidence: "api/src/routes/vault/secrets.ts (reqMeta); api/src/db/schema/vault.ts (ip_address)",
+    evidence: "api/src/routes/vault/secrets.ts (reqMeta); api/migrations/20261012T161958_retention_rules.sql (vault_audit_ip_30d)",
   },
   {
     id: "correspondence",
@@ -363,6 +374,11 @@ export const RETENTION_DISCLOSURE = {
   versions: [
     {
       version: RETENTION_VERSION,
+      change:
+        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists. The purge of content deleted earlier is announced.",
+    },
+    {
+      version: "2026-10-12",
       change: "First publication: today's retention, deletion behaviour, backups, logs and third parties.",
     },
   ],
@@ -379,12 +395,38 @@ export const RETENTION_DISCLOSURE = {
     effect: `A row deleted from the live database can remain in these backups for up to ${BACKUP_DAYS_KEPT} days.`,
   },
   deletion_ledger: {
-    status: "not built",
+    status: "built",
+    what:
+      "Every honoured erase writes one ids-only entry (row ids, a count, hashes and an HMAC; never content, names or keys) in the same transaction as the erase. An erase whose entry cannot be written does not happen.",
+    integrity:
+      "Entries are hash-chained and authenticated with an HMAC under a key held in Supabase Vault. They are append-only; only mirroring, replay and compaction marks change.",
+    compaction:
+      "After 15 days (8 days of backups plus a 7-day margin) an entry's row ids are cleared; its count, a hash of the ids, its time and its authority stay.",
+    mirror: {
+      purpose:
+        "A copy of every entry in a private, write-once object store outside the database, so a backup restore can replay deletions made after the backup.",
+      window: "30 days, then the object expires",
+      basis: "declared",
+    },
+    mirror_configured: { value: "unknown until an operator provisions the bucket; until then entries live only in the database", basis: "unknown" },
+    replay:
+      "After a restore, entries made after the backup are re-applied from the mirror before writes reopen (docs/DELETION-REPLAY.md). An entry made with a confirmed stolen key can be voided by two operators with a written reason; the void is itself an entry.",
+    voided_entries: 0,
+    deletion_moments:
+      "Each record-level erase also writes a content-free chronicle row (type deletion) for its owner: what kind of record, how many, when, the ledger entry and the authority. Rule-driven purges write ledger entries only.",
+    rules: [
+      { id: "expired_working_memory_24h", effect: "Working memories expired more than 24 hours ago are deleted, or erased in place when a paid witness receipt holds them. Runs hourly." },
+      { id: "vault_audit_ip_30d", effect: "Vault audit addresses are set to NULL 30 days after the row was written. Runs daily." },
+      { id: "ledger_compaction_15d", effect: "Ledger entries older than 15 days lose their row ids. Runs daily." },
+    ],
     effect:
-      "Nothing records deletions outside the database yet, so restoring a backup would bring back rows deleted after that backup was taken.",
+      "Deletions recorded in the ledger and its mirror are re-applied after a backup restore. A deletion made in the minutes between a backup and a loss is replayed only if its entry reached the mirror.",
+    basis: "source",
   },
   already_deleted_content: {
-    status: "retained",
+    status: "purge announced",
+    purge_not_before: ALREADY_DELETED_PURGE.not_before,
+    min_days_after_announcement: ALREADY_DELETED_PURGE.min_days_after_announcement,
     notice: ALREADY_DELETED_CONTENT,
   },
   logs: [
@@ -426,7 +468,7 @@ export const RETENTION_DISCLOSURE = {
     },
     {
       where: "Vault audit rows",
-      value: "stored with the forwarded address header as sent; no purge",
+      value: "stored with the forwarded address header as sent; set to NULL 30 days later by the vault_audit_ip_30d rule",
       basis: "source",
     },
   ],
@@ -524,6 +566,7 @@ export const RETENTION_DISCLOSURE = {
     "Whether any Stripe Customer objects exist for gift or gallery checkouts",
     "Whether the public storage bucket holds objects",
     "Retention at the Coinbase x402 facilitator, Alchemy and Helius",
+    "Whether the off-database deletion-ledger mirror is provisioned in production",
   ],
   docs: "docs/RETENTION.md · https://agenttool.dev/privacy",
 } as const;

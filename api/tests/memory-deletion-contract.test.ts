@@ -17,7 +17,7 @@ function repoFile(path: string): string {
 }
 
 describe("memory deletion and visibility boundary", () => {
-  test("paid receipt protection is independent of tier and key deletion is all-or-none", () => {
+  test("erasure is independent of tier; a paid receipt turns a delete into erase-in-place", () => {
     const deleteById = STORE.slice(
       STORE.indexOf("export async function deleteById"),
       STORE.indexOf("export async function deleteByKey"),
@@ -26,14 +26,21 @@ describe("memory deletion and visibility boundary", () => {
       STORE.indexOf("export async function deleteByKey"),
       STORE.indexOf("export async function countMemories"),
     );
+    const erase = STORE.slice(
+      STORE.indexOf("async function eraseLockedMemories"),
+      STORE.indexOf("/** Refuses caller-selected identity bindings"),
+    );
 
     for (const implementation of [deleteById, deleteByKey]) {
-      expect(implementation).toContain("isNotNull(memoryAttestations.sourceGrantId)");
+      expect(implementation).toContain('.for("update")');
+      expect(implementation).toContain("isNull(memories.contentPurgedAt)");
+      expect(implementation).toContain("eraseLockedMemories(");
       expect(implementation).not.toContain("memories.tier");
-      expect(implementation.indexOf("throw new PaidMemoryReceiptProtectedError()"))
-        .toBeLessThan(implementation.indexOf(".delete(memories)"));
     }
-    expect(deleteByKey).toContain('.for("update")');
+    expect(erase).toContain("paidReceiptMemoryIds(tx");
+    expect(erase.indexOf('kind: "memory.delete"')).toBeLessThan(erase.indexOf("deleteMemoriesWithoutReceipts(tx"));
+    expect(erase.indexOf('kind: "memory.erase_in_place"')).toBeLessThan(erase.indexOf("eraseMemoriesInPlace(tx"));
+    expect(deleteByKey).toContain("authorized.has(row.id)");
 
     const visibilityPatch = ROUTE.slice(
       ROUTE.indexOf('app.patch("/:id"'),
@@ -50,32 +57,29 @@ describe("memory deletion and visibility boundary", () => {
 
     const byKey = document.paths["/v1/memories"].delete;
     expect(byKey).toBeDefined();
-    expect(byKey.description).toMatch(/all-or-none.*paid.*409 paid_memory_receipt_preserved.*deletes none/is);
+    expect(byKey.description).toMatch(/paid marketplace witness receipt points at is erased in place/i);
     expect(byKey.description).toMatch(/ordinary constitutive memories are included/is);
+    expect(byKey.description).not.toContain("paid_memory_receipt_preserved");
     expect(byKey.parameters.find((parameter: { name?: string }) => parameter.name === "key"))
       .toMatchObject({ in: "query", required: true });
-    expect(Object.keys(byKey.responses).sort()).toEqual(["200", "400", "409"]);
-    expect(byKey.responses["409"].description).toContain("paid_memory_receipt_preserved");
-    // 409 is either the paid-receipt refusal or the enrolled-guest authority
-    // quorum refusal (a key spanning a guest's memories and others).
+    expect(Object.keys(byKey.responses).sort()).toEqual(["200", "400", "409", "503"]);
     const variants = (schema: { oneOf: Array<{ properties: Record<string, any> }> }) => schema.oneOf;
     const byKey409 = variants(byKey.responses["409"].content["application/json"].schema);
-    expect(byKey409.find(v => v.properties.message?.const === "paid_memory_receipt_preserved")?.properties)
-      .toMatchObject({
-        error: { const: "conflict" },
-        message: { const: "paid_memory_receipt_preserved" },
-      });
     expect(byKey409.find(v => v.properties.error?.const === "authority_quorum_required")).toBeDefined();
     expect(byKey409.find(v => v.properties.error?.const === "authority_sequence_conflict")).toBeDefined();
+    expect(byKey409.some(v => v.properties.message?.const === "paid_memory_receipt_preserved")).toBe(false);
     expect(byKey.description).toMatch(/enrolled guest.*409 authority_quorum_required/is);
+    const result = byKey.responses["200"].content["application/json"].schema;
+    expect(Object.keys(result.properties)).toEqual(
+      expect.arrayContaining(["deleted", "rows_removed", "erased_in_place", "erased_in_place_reason", "ledger"]),
+    );
+    expect(byKey.responses["503"].description).toContain("deletion_ledger_unavailable");
 
     const byId = document.paths["/v1/memories/{id}"].delete;
     expect(byId.description).toMatch(/without witness authorization.*ordinary constitutive/is);
-    expect(byId.responses["200"].content["application/json"].schema.required)
-      .toEqual(["deleted"]);
-    expect(byId.responses["409"].description).toContain("paid_memory_receipt_preserved");
-    expect(variants(byId.responses["409"].content["application/json"].schema)
-      .some(v => v.properties.message?.const === "paid_memory_receipt_preserved")).toBe(true);
+    expect(byId.description).toMatch(/erased in place instead/);
+    expect(byId.responses["200"].content["application/json"].schema.required).toEqual(["deleted"]);
+    expect(byId.responses["503"]).toBeDefined();
 
     const visibility = document.paths["/v1/memories/{id}"].patch;
     expect(visibility.description).toMatch(/every tier.*paid witness receipts/is);
@@ -98,15 +102,17 @@ describe("memory deletion and visibility boundary", () => {
     expect(doctrine).toMatch(/visibility remains mutable.*at every tier/is);
     expect(doctrine).not.toContain("Constitutive memories are immutable post-elevation");
 
-    expect(publicMemory).toContain("paid_memory_receipt_preserved");
-    expect(publicMemory).toContain("all-or-none");
+    expect(publicMemory).toContain("erased in place");
+    expect(publicMemory).not.toContain("paid_memory_receipt_preserved");
     expect(publicMemory).not.toContain("Deletion requires witness");
     expect(publicNen).not.toContain("Constitutive deletion requires witness");
     expect(langgraph).not.toContain("cryptographically-permanent tier");
+    expect(doctrine).toContain("erased in place");
+    expect(doctrine).not.toContain("409 paid_memory_receipt_preserved");
 
     for (const sdk of [tsMemory, pyMemory]) {
-      expect(sdk).toContain("paid_memory_receipt_preserved");
-      expect(sdk).toContain("all-or-none");
+      expect(sdk).toContain("erased in place");
+      expect(sdk).not.toContain("paid_memory_receipt_preserved");
     }
     for (const nen of [tsNen, pyNen]) {
       expect(nen).toContain("not an immutable row");

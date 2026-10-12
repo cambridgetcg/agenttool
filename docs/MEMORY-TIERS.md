@@ -86,17 +86,26 @@ The covenant primitive itself stays permissive (a project CAN declare a covenant
 The **elevation is witness-sealed; the stored row is not immutable**. The
 owning project bearer can change a memory's `private` / `public` visibility and
 can call `DELETE /v1/memories/:id` at every tier. Delete takes no witness
-signature. Only a memory carrying a paid marketplace witness receipt
-(`memory_attestations.source_grant_id` is non-null) is preserved: deletion
-returns `409 paid_memory_receipt_preserved`, regardless of tier. Ordinary
-constitutive memories remain deletable.
+signature. Ordinary constitutive memories remain deletable. A memory carrying
+a paid marketplace witness receipt (`memory_attestations.source_grant_id` is
+non-null) is erased in place instead of deleted, regardless of tier: its
+content becomes `withdrawn by author on <date>`, its key, embedding and
+identity patch become NULL and its metadata `{}`, and `content_purged_at` is
+set. The row stays only so the paid receipt and its grant still point at it;
+it leaves every read, and the response's `erased_in_place_reason` says so.
 
-`DELETE /v1/memories?key=...` follows the same receipt rule for the whole key.
-It locks all matching rows and is all-or-none: if any matching memory carries a
-paid witness receipt, none are deleted and the route returns the same `409`.
-Otherwise every matching row is deleted. Changing visibility does not bypass
-or add receipt retention; visibility remains mutable for paid and unpaid rows
-at every tier.
+`DELETE /v1/memories?key=...` applies the same rule to every match that existed
+when the request was authorized: in one transaction, ordinary matches are
+deleted and receipt-held ones erased in place (`rows_removed` and
+`erased_in_place` count each). Every memory delete writes an ids-only
+deletion-ledger entry and a deletion moment in the same transaction; if the
+entry cannot be written, nothing is deleted (`503`). Changing visibility does
+not bypass or change any of this; visibility remains mutable for paid and
+unpaid rows at every tier.
+
+An expired working memory leaves every read, by id included; the
+`expired_working_memory_24h` retention rule deletes it (or erases it in place,
+for a receipt) 24 hours after expiry. See [Retention](RETENTION.md).
 
 ## Composition — how identity emerges
 

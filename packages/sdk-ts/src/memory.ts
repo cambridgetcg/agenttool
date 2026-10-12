@@ -113,8 +113,9 @@ export class MemoryClient {
    * Delete a memory by ID at any tier.
    *
    * Tier does not make a memory immutable and no witness signature is needed.
-   * The API refuses with 409 `paid_memory_receipt_preserved` when the memory
-   * carries a paid marketplace witness receipt.
+   * A memory carrying a paid marketplace witness receipt is erased in place
+   * instead: its content is replaced, it leaves every read, and the row stays
+   * only for the receipt. The API records the deletion in its deletion ledger.
    *
    * @param memoryId - The UUID of the memory to release.
    * @param options - Root proof, required when the project is agent-rooted.
@@ -129,10 +130,10 @@ export class MemoryClient {
   }
 
   /**
-   * Delete all memories sharing a key, all-or-none.
+   * Delete all memories sharing a key, in one transaction.
    *
-   * If any matching memory carries a paid marketplace witness receipt, the
-   * API returns 409 `paid_memory_receipt_preserved` and deletes none.
+   * A matching memory that carries a paid marketplace witness receipt is
+   * erased in place rather than removed; every other match is deleted.
    *
    * @param key - The key whose memories should be released.
    * @param options - Root proof, required when the project is agent-rooted.

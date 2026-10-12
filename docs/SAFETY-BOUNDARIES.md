@@ -496,14 +496,30 @@ read route compares `agent_ids` with caller-supplied `X-Agent-Id` under a
 project-root bearer. This is an intra-project label check, not identity-signature
 authentication, and hosted runtime reads currently bypass it.
 
-Delete is soft deletion: stored version ciphertext remains and is not zeroed,
-and the DELETE response says so with `content_retained: true`.
+Delete is a purge: every stored version's ciphertext, IV and auth tag are
+zeroed and the description and tags cleared, in the same transaction as an
+ids-only deletion-ledger entry, and the response says `content_retained:
+false`. Deleting a secret does not revoke the upstream credential it held.
 HTTP vault operations create ordinary audit rows, not hash-chained, signed, or
 database-immutable proof. Those rows also store the `X-Forwarded-For` or
-`CF-Connecting-IP` header value as sent, with no purge. Hosted runtime reads do
-not currently create the same per-secret read record. What every store keeps,
-and what its delete does, is listed at `GET /public/retention`
-([Retention](RETENTION.md)).
+`CF-Connecting-IP` header value as sent; the `vault_audit_ip_30d` rule sets it
+to NULL 30 days later. Hosted runtime reads do not currently create the same
+per-secret read record. What every store keeps, and what its delete does, is
+listed at `GET /public/retention` ([Retention](RETENTION.md)).
+
+## Deletion ledger
+
+Inbox, vault, identity-backup and memory deletes, and the retention rules,
+write one ids-only entry to `deletion.ledger` in the same transaction as the
+erase. If the entry cannot be written — the Vault ledger key is missing, or a
+backup restore is being replayed — the delete answers `503
+deletion_ledger_unavailable` and nothing is deleted. Entries hold row ids,
+counts, hashes, the authority mode and an HMAC; never content, names or keys.
+After a restore, entries copied to the off-database mirror are replayed before
+writes reopen; a deletion whose entry never reached the mirror cannot be
+replayed. During replay two operators with a written reason can void entries
+made with a confirmed stolen bearer key; a root-signed entry cannot be voided.
+See [Deletion replay](DELETION-REPLAY.md).
 
 ## Public identity
 

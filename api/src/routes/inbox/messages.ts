@@ -12,13 +12,18 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
+import { db } from "../../db/client";
 import { errors, fail } from "../../lib/errors";
+import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
+import { ledgerResponse } from "../../services/deletion/record";
 import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
 import {
   coSignMessage,
   getMessage,
   getMessageThread,
+  InboxMessagePurgedError,
   listInbox,
+  purgeMessage,
   sendMessage,
   updateStatus,
   type StatusUpdate,
@@ -156,17 +161,64 @@ const patchSchema = z.object({
   status: z.enum(["unread", "read", "archived", "spam", "deleted"]),
 });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** One erase path for DELETE and PATCH {"status":"deleted"}: content is
+ *  purged with its ledger entry and the recipient's deletion moment. */
+async function purgeAndDescribe(projectId: string, id: string) {
+  if (!UUID_RE.test(id)) return null;
+  const result = await purgeMessage(projectId, id);
+  if (!result) return null;
+  const mirrored = result.entry
+    ? (await pushLedgerMirrorAfterCommit(db, result.entry.seq)).mirrored
+    : null;
+  return {
+    id: result.id,
+    deleted: true,
+    already_deleted: result.alreadyPurged,
+    content_retained: false,
+    purged_at: result.purgedAt,
+    ledger: result.entry ? ledgerResponse(result.entry, mirrored === true) : null,
+    _retention: DELETE_RESPONSE_RETENTION.inbox,
+  };
+}
+
+function purgedRefusal(c: Parameters<typeof fail>[0]) {
+  return fail(
+    c,
+    {
+      error: "message_deleted",
+      message: "This message was deleted and its content erased, so it cannot be restored or re-filed.",
+      hint: "Ask the sender to send it again if you still need it.",
+      docs: "https://docs.agenttool.dev/INBOX.md",
+    },
+    409,
+  );
+}
+
 app.patch("/:id", async (c) => {
   const body = await c.req.json();
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
-  const updated = await updateStatus(
-    c.var.project.id,
-    c.req.param("id"),
-    parsed.data.status as StatusUpdate,
-  );
+  if (parsed.data.status === "deleted") {
+    const purged = await purgeAndDescribe(c.var.project.id, c.req.param("id"));
+    if (!purged) throw new HTTPException(404, { message: "message_not_found" });
+    const message = await getMessage(c.var.project.id, purged.id);
+    return c.json({ ...message, ...purged, _confidentiality: INBOX_CONFIDENTIALITY });
+  }
+  let updated;
+  try {
+    updated = await updateStatus(
+      c.var.project.id,
+      c.req.param("id"),
+      parsed.data.status as StatusUpdate,
+    );
+  } catch (error) {
+    if (error instanceof InboxMessagePurgedError) return purgedRefusal(c);
+    throw error;
+  }
   if (!updated) throw new HTTPException(404, { message: "message_not_found" });
   return c.json({ ...updated, _confidentiality: INBOX_CONFIDENTIALITY });
 });
@@ -234,21 +286,17 @@ app.post("/:id/co-sign", async (c) => {
 });
 
 // ── DELETE /v1/inbox/:id ─────────────────────────────────────────────
-//  Soft delete via status='deleted'. List filters skip 'deleted' by default.
-//  The content stays, and the response says so (content_retained).
+//  Purges the content: ciphertext, nonce and ephemeral key become '', the
+//  subject and refs NULL, metadata {}. The row stays with status 'deleted'
+//  and its signature, and can no longer be restored. One ids-only ledger
+//  entry and the recipient's deletion moment are written in the same
+//  transaction; if the entry cannot be written, nothing is deleted (503).
+//  A repeat answers already_deleted with nothing new written. Free.
+//  Spec: docs/superpowers/specs/2026-10-12-deletion-scopes-design.md §17 wave 2.
 app.delete("/:id", async (c) => {
-  const updated = await updateStatus(
-    c.var.project.id,
-    c.req.param("id"),
-    "deleted",
-  );
-  if (!updated) throw new HTTPException(404, { message: "message_not_found" });
-  return c.json({
-    id: updated.id,
-    deleted: true,
-    content_retained: true,
-    _retention: DELETE_RESPONSE_RETENTION.inbox,
-  });
+  const purged = await purgeAndDescribe(c.var.project.id, c.req.param("id"));
+  if (!purged) throw new HTTPException(404, { message: "message_not_found" });
+  return c.json(purged);
 });
 
 export default app;

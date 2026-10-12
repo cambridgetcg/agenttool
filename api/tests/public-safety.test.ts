@@ -347,7 +347,10 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.vault.agent_ids_policy).toMatch(
       /exact GET root proof.*header alone is not proof.*runtime reads enforce.*does not isolate identities from project administrators/is,
     );
-    expect(SAFETY_BOUNDARIES.vault.deletion).toMatch(/ciphertext is retained.*not zeroed/is);
+    expect(SAFETY_BOUNDARIES.vault.deletion).toMatch(/zeroes every stored version.*deletion-ledger entry.*content_retained: false/is);
+    expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/vault_audit_ip_30d.*30 days/s);
+    expect(SAFETY_BOUNDARIES.deletion_ledger.rule).toMatch(/same transaction.*503 deletion_ledger_unavailable and nothing is deleted/s);
+    expect(SAFETY_BOUNDARIES.deletion_ledger.void).toMatch(/two operators.*root-signed cannot be voided/s);
     expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/hosted runtime reads.*not hash-chained.*not a root-signed request/is);
   });
 

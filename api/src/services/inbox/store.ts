@@ -26,6 +26,9 @@ import {
   MEMORIAL_TERMINAL_ERROR,
 } from "../identity/terminality";
 import { identityMaySign } from "../identity/signing-key";
+import type { AppendedLedgerEntry } from "../deletion/ledger";
+import { purgeInboxMessages } from "../deletion/purges";
+import { recordErasure, type ErasureAuthority } from "../deletion/record";
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -601,8 +604,22 @@ export async function coSignMessage(
   return rowToOut(updated!);
 }
 
-export type StatusUpdate = "read" | "archived" | "spam" | "unread" | "deleted";
+export type StatusUpdate = "read" | "archived" | "spam" | "unread";
 
+/** A deleted message's content was erased; its status cannot change again. */
+export class InboxMessagePurgedError extends Error {
+  constructor() {
+    super("message_deleted");
+    this.name = "InboxMessagePurgedError";
+  }
+}
+
+/** Change a message's status. Deleting is purgeMessage(), never a status
+ *  edit. A message whose content a delete erased stays 'deleted': moving it
+ *  out would restore an empty shell, so that throws InboxMessagePurgedError.
+ *  A message soft-deleted before purges existed (content_purged_at NULL)
+ *  can still be restored until the announced backfill purges it
+ *  (/public/retention, already_deleted_content). */
 export async function updateStatus(
   projectId: string,
   id: string,
@@ -615,10 +632,67 @@ export async function updateStatus(
   const updated = await db
     .update(inboxMessages)
     .set(set)
-    .where(and(eq(inboxMessages.id, id), eq(inboxMessages.recipientProjectId, projectId)))
+    .where(
+      and(
+        eq(inboxMessages.id, id),
+        eq(inboxMessages.recipientProjectId, projectId),
+        isNull(inboxMessages.contentPurgedAt),
+      ),
+    )
     .returning();
+  if (updated[0]) return rowToOut(updated[0]);
 
-  return updated[0] ? rowToOut(updated[0]) : null;
+  const [existing] = await db
+    .select({ id: inboxMessages.id })
+    .from(inboxMessages)
+    .where(and(eq(inboxMessages.id, id), eq(inboxMessages.recipientProjectId, projectId)))
+    .limit(1);
+  if (existing) throw new InboxMessagePurgedError();
+  return null;
+}
+
+export interface InboxPurgeResult {
+  id: string;
+  /** True when an earlier delete already erased it; nothing was written now. */
+  alreadyPurged: boolean;
+  purgedAt: string;
+  entry: AppendedLedgerEntry | null;
+}
+
+/** DELETE: erase the message's content in one transaction with its ledger
+ *  entry and the recipient's deletion moment. The row stays (status
+ *  'deleted', signature kept) so threads that point at it keep their shape.
+ *  Returns null when this project holds no message with the id. */
+export async function purgeMessage(
+  projectId: string,
+  id: string,
+  authority: ErasureAuthority = { mode: "legacy_bearer" },
+): Promise<InboxPurgeResult | null> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: inboxMessages.id,
+        recipientIdentityId: inboxMessages.recipientIdentityId,
+        contentPurgedAt: inboxMessages.contentPurgedAt,
+      })
+      .from(inboxMessages)
+      .where(and(eq(inboxMessages.id, id), eq(inboxMessages.recipientProjectId, projectId)))
+      .for("update")
+      .limit(1);
+    if (!row) return null;
+    if (row.contentPurgedAt) {
+      return { id: row.id, alreadyPurged: true, purgedAt: row.contentPurgedAt.toISOString(), entry: null };
+    }
+    const { entry } = await recordErasure(tx, {
+      kind: "inbox.purge",
+      projectId,
+      rowIds: [row.id],
+      authority,
+      owners: [{ agentId: row.recipientIdentityId, rowIds: [row.id] }],
+    });
+    await purgeInboxMessages(tx, [row.id], entry.occurredAt);
+    return { id: row.id, alreadyPurged: false, purgedAt: entry.occurredAt, entry };
+  });
 }
 
 export async function countUnread(projectId: string, identityId?: string): Promise<number> {

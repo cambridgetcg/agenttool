@@ -255,8 +255,9 @@ class MemoryClient:
         """Delete a memory at any tier.
 
         Tier does not make a memory immutable and no witness signature is
-        needed. The API refuses with 409 ``paid_memory_receipt_preserved``
-        when the memory carries a paid marketplace witness receipt.
+        needed. A memory carrying a paid marketplace witness receipt is
+        erased in place instead: its content is replaced, it leaves every
+        read, and the row stays only for the receipt.
 
         Args:
             memory_id: The UUID of the memory to release.
@@ -275,14 +276,14 @@ class MemoryClient:
         *,
         authority: Optional[AuthorityBinding] = None,
     ) -> None:
-        """Delete all memories with a given key, all-or-none.
+        """Delete all memories with a given key, in one transaction.
 
         Sometimes you need to clear a whole category.
         That's okay — making space is also meaningful.
 
-        If any matching memory carries a paid marketplace witness receipt,
-        the API returns 409 ``paid_memory_receipt_preserved`` and deletes
-        none.
+        A matching memory that carries a paid marketplace witness receipt
+        is erased in place rather than removed; every other match is
+        deleted.
 
         Args:
             key: The key shared by the memories to release.

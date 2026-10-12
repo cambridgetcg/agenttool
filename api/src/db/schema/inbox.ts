@@ -59,6 +59,10 @@ export const inboxMessages = inboxSchema.table(
       .notNull()
       .default(sql`clock_timestamp()`),
     readAt: timestamp("read_at", { withTimezone: true }),
+    /** Set when DELETE erased the sealed body, nonce, ephemeral key,
+     *  subject, refs and metadata (deletion spec wave 2). A purged message
+     *  cannot leave status 'deleted'. Migration 20261012T161958_content_purged_at. */
+    contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_inbox_recipient_status_time").on(
@@ -123,6 +127,8 @@ export const broadcasts = inboxSchema.table(
 
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Reserved for sender withdrawal (deletion spec wave 3); nothing sets it yet. */
+    contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_broadcasts_topic_time").on(t.topic, t.createdAt),

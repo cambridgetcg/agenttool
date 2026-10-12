@@ -456,25 +456,62 @@ function escrowListResponse(description: string) {
 
 const authorityQuorumRefusal = { type: "object", properties: { error: { type: "string", const: "authority_quorum_required" }, message: { type: "string" }, hint: { type: "string" }, docs: { type: "string" } }, required: ["error", "message"] };
 const authoritySequenceConflict = { type: "object", properties: { error: { type: "string", const: "authority_sequence_conflict" }, message: { type: "string" }, hint: { type: "string" }, details: { type: "object" }, next_actions: { type: "array" }, docs: { type: "string" } }, required: ["error", "message"] };
-function paidMemoryReceiptPreservedResponse(description: string) {
+function memoryDeleteConflictResponse(description: string) {
   return {
     description,
     content: {
       "application/json": {
-        schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict, {
-          type: "object",
-          properties: {
-            error: { type: "string", const: "conflict" },
-            message: {
-              type: "string",
-              const: "paid_memory_receipt_preserved",
-            },
-          },
-          required: ["error", "message"],
-          additionalProperties: false,
-        }] },
+        schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict] },
       },
     },
+  };
+}
+
+/** Every erasing route: the ledger entry could not be written, so nothing was deleted. */
+const deletionLedgerUnavailableResponse = {
+  description:
+    "deletion_ledger_unavailable: the deletion's ids-only ledger entry could not be written (ledger key missing, or a restore is being replayed), so nothing was deleted.",
+  content: {
+    "application/json": {
+      schema: {
+        type: "object",
+        properties: {
+          error: { type: "string", const: "deletion_ledger_unavailable" },
+          message: { type: "string" },
+          hint: { type: "string" },
+          details: { type: "object" },
+          docs: { type: "string" },
+        },
+        required: ["error", "message"],
+      },
+    },
+  },
+};
+
+const deletionLedgerBlock = {
+  type: "object",
+  description: "The ids-only deletion-ledger entry written in the same transaction (docs/DELETION-REPLAY.md).",
+  properties: {
+    entry_id: { type: "string", format: "uuid" },
+    seq: { type: "integer", minimum: 1 },
+    mirrored: { type: "boolean" },
+    note: { type: "string" },
+  },
+  required: ["entry_id", "seq", "mirrored"],
+};
+
+function memoryDeleteResult(maximum?: number) {
+  return {
+    type: "object",
+    properties: {
+      deleted: { type: "integer", minimum: 0, ...(maximum === undefined ? {} : { maximum }) },
+      rows_removed: { type: "integer", minimum: 0 },
+      erased_in_place: { type: "integer", minimum: 0 },
+      erased_in_place_reason: { type: "string" },
+      ledger: { type: "array", items: deletionLedgerBlock },
+    },
+    required: ["deleted"],
+    additionalProperties: false,
   };
 }
 
@@ -4584,14 +4621,46 @@ function spec() {
         patch: {
           tags: ["inbox"],
           summary: "Update status (read/archived/spam/unread/deleted)",
+          description:
+            "status deleted takes the same purge path as DELETE. A message whose content a delete erased cannot leave status deleted (409 message_deleted). A message soft-deleted before purges existed can still be restored until the announced backfill (/public/retention).",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Updated" } },
+          responses: {
+            "200": { description: "Updated" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse("message_deleted: the content was erased; the message cannot be restored"),
+            "503": deletionLedgerUnavailableResponse,
+          },
         },
         delete: {
           tags: ["inbox"],
-          summary: "Soft delete (status='deleted')",
+          summary: "Delete a message and erase its content",
+          description:
+            "Erases the sealed body, nonce, ephemeral key, subject, refs and metadata in one transaction with an ids-only deletion-ledger entry and the recipient's deletion moment. The row stays with status deleted and its signature, so threads keep their shape. A repeat answers already_deleted: true and writes nothing. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Deleted" } },
+          responses: {
+            "200": {
+              description: "Deleted; content_retained is false",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      deleted: { type: "boolean", const: true },
+                      already_deleted: { type: "boolean" },
+                      content_retained: { type: "boolean", const: false },
+                      purged_at: { type: "string" },
+                      ledger: { oneOf: [deletionLedgerBlock, { type: "null" }] },
+                      _retention: { type: "object" },
+                    },
+                    required: ["id", "deleted", "already_deleted", "content_retained", "purged_at", "ledger"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "503": deletionLedgerUnavailableResponse,
+          },
         },
       },
       "/v1/inbox/box-keys/{did}": {
@@ -7274,7 +7343,7 @@ function spec() {
           tags: ["memory"],
           summary: "Delete every memory with an exact key",
           description:
-            "All-or-none project-scoped deletion. The service locks every memory matching the exact key. If any matching row carries a paid marketplace witness receipt, it returns 409 paid_memory_receipt_preserved and deletes none; otherwise it deletes the matches that existed when the request was authorized (memories written concurrently after that are kept). Memories bound to an enrolled guest need that guest's root; a key spanning a guest's memories and others returns 409 authority_quorum_required. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0.",
+            "Project-scoped deletion of every memory with the exact key that existed when the request was authorized (memories written concurrently after that are kept). The service locks the matches and erases them in one transaction: each is deleted, except that a memory a paid marketplace witness receipt points at is erased in place (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read). deleted counts both; rows_removed and erased_in_place split them. One ids-only deletion-ledger entry per action and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Memories bound to an enrolled guest need that guest's root; a key spanning a guest's memories and others returns 409 authority_quorum_required. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0. Free.",
           parameters: [
             { $ref: "#/components/parameters/IdempotencyKey" },
             {
@@ -7287,22 +7356,12 @@ function spec() {
           ],
           responses: {
             "200": {
-              description: "Every match that existed when the request was authorized deleted, or no matches found",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { deleted: { type: "integer", minimum: 0 } },
-                    required: ["deleted"],
-                    additionalProperties: false,
-                  },
-                },
-              },
+              description: "Every match that existed when the request was authorized erased, or no matches found",
+              content: { "application/json": { schema: memoryDeleteResult() } },
             },
             "400": errorResponse("Missing or empty key query parameter"),
-            "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved (a matching memory has a paid witness receipt, so none were deleted), authority_quorum_required or authority_sequence_conflict",
-            ),
+            "409": memoryDeleteConflictResponse("authority_quorum_required or authority_sequence_conflict"),
+            "503": deletionLedgerUnavailableResponse,
           },
         },
       },
@@ -7325,7 +7384,7 @@ function spec() {
           tags: ["memory"],
           summary: "Change one memory's visibility",
           description:
-            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts. This does not change the separate paid-receipt deletion guard. Public observer routes for memory content are not currently mounted.",
+            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts. Visibility does not affect deletion; a paid-receipt memory is erased in place when deleted. Public observer routes for memory content are not currently mounted.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -7372,25 +7431,15 @@ function spec() {
           tags: ["memory"],
           summary: "Delete one memory at any tier",
           description:
-            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If the row carries a paid marketplace witness receipt, deletion returns 409 paid_memory_receipt_preserved instead. A memory bound to an enrolled guest needs that guest's root. A missing memory returns deleted=0.",
+            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If a paid marketplace witness receipt points at it, the memory is erased in place instead (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves every read), and erased_in_place_reason says so. An ids-only deletion-ledger entry and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). A memory bound to an enrolled guest needs that guest's root. A missing, expired or already erased memory returns deleted=0. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": {
-              description: "Memory deleted, or no project-owned memory matched",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { deleted: { type: "integer", minimum: 0, maximum: 1 } },
-                    required: ["deleted"],
-                    additionalProperties: false,
-                  },
-                },
-              },
+              description: "Memory erased (removed, or erased in place for a paid receipt), or no project-owned memory matched",
+              content: { "application/json": { schema: memoryDeleteResult(1) } },
             },
-            "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved (this memory has a paid witness receipt and was not deleted), authority_quorum_required or authority_sequence_conflict",
-            ),
+            "409": memoryDeleteConflictResponse("authority_quorum_required or authority_sequence_conflict"),
+            "503": deletionLedgerUnavailableResponse,
           },
         },
       },
