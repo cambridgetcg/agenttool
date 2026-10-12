@@ -153,17 +153,21 @@ describe("pack artifacts with historical LOVE verification", () => {
 });
 
 describe("staged publication", () => {
-  test("stages by default and keeps direct publish for a first publication", () => {
+  test("stages by default and keeps direct publish only as a bootstrap fallback", () => {
     expect(DEFAULT_PUBLISH_MODE).toBe("stage");
     expect(parsePublishMode("stage")).toBe("stage");
     expect(parsePublishMode("publish")).toBe("publish");
     expect(() => parsePublishMode("approve")).toThrow("publish mode must be stage or publish");
     expect(publishAction("verify-existing", "stage", "trusted")).toBe("verify-existing");
+    expect(publishAction("verify-existing", "stage", "bootstrap")).toBe("verify-existing");
     expect(publishAction("verify-existing", "publish", "bootstrap")).toBe("verify-existing");
     expect(publishAction("publish", "stage", "trusted")).toBe("stage");
-    expect(publishAction("publish", "publish", "trusted")).toBe("publish");
+    // npm stages a package that does not yet exist behind a public 0.0.0-stage placeholder.
+    expect(publishAction("publish", "stage", "bootstrap")).toBe("stage");
     expect(publishAction("publish", "publish", "bootstrap")).toBe("publish");
-    expect(() => publishAction("publish", "stage", "bootstrap")).toThrow("already exists");
+    // A trusted (OIDC) run never publishes directly, whatever npm's trust would allow.
+    expect(() => publishAction("publish", "publish", "trusted")).toThrow("direct publish is reserved for a bootstrap first publication");
+    expect(() => publishAction("verify-existing", "publish", "trusted")).toThrow("trusted releases are staged");
   });
 
   test("passes the npm 11.17.0 flags for each action", () => {

@@ -4,9 +4,10 @@ name: Publish npm package
 # this public repository. A dry run (the default) only prepares and checks
 # the exact artifact without credentials. A real run mirrors it to this
 # repository's GitHub Release and then, by default, stages it with
-# `npm stage publish`: nothing is public on npm until a maintainer approves
-# the stage with 2FA. Dispatching again after approval verifies the public
-# registry bytes. See bin/npm-release.ts.
+# `npm stage publish`: the version is not public on npm until a maintainer
+# approves the stage with 2FA. Dispatching again after approval verifies the
+# public registry bytes. Direct publication is refused except as a bootstrap
+# first-publication fallback. See bin/npm-release.ts.
 
 on:
   workflow_dispatch:
@@ -82,7 +83,7 @@ on:
         default: true
         type: boolean
       publish_mode:
-        description: Stage for 2FA approval by default; publish directly only for a bootstrap first publication
+        description: Stage for 2FA approval (always for trusted); publish directly only as a bootstrap first-publication fallback
         required: true
         default: stage
         type: choice

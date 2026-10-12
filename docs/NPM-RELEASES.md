@@ -97,9 +97,11 @@ The workflow:
    records `already_published_exact`.
 
 `publish_mode: publish` publishes directly instead, waits for the registry, and
-records `published`. npm can stage only versions of a package that already
-exists, so that mode exists for a bootstrap first publication; the trusted
-publisher relationship grants staging only.
+records `published`. The release tool refuses it with `trusted` authentication,
+so an OIDC run always stages, whatever an npm trust configuration would allow;
+it remains only as a fallback for a bootstrap first publication. A bootstrap
+stages by default too: npm stages a package that does not yet exist by first
+publishing a public `0.0.0-stage` placeholder.
 
 A version whose immutable LOVE manifest is checked in under
 `apps/docs/packages/v1` (a version released before 2026-10-12) is still
@@ -303,26 +305,48 @@ publishing guidance also recommends setting each package's access page to
 "Require two-factor authentication and disallow tokens" once its trust is in
 place; that is optional here and does not affect OIDC staging.
 
-`@agenttool/local-starter` is not on npm. npm trust and npm stage both need an
-existing package, so it is not in the script; see the next section.
+`@agenttool/local-starter` is not on npm. npm trust needs an existing package,
+so it is not in the script; see the next section.
 
 ## First publication of Local Starter (bootstrap, Yu)
 
 When Yu decides Local Starter should reach npm, its first version needs a new
 version number with public repository metadata (step 1) and a short-lived
-token:
+token. npm's staged publishing accepts a package that does not yet exist: it
+publishes a public `0.0.0-stage` placeholder at once and holds the real version
+until a maintainer approves it (npm's "Staged publishing" page, last edited
+2026-09-29). So the first publication stages like every other release, with a
+token that cannot publish:
 
-1. Create a granular npm token with read/write on `@agenttool/local-starter`
-   only, expiring in a day.
+1. Create a granular npm token with **Read and write (stage only)** on the
+   `@agenttool` scope, expiring in a day. npm's selector lists existing
+   packages and scopes, so the package itself cannot be chosen before it
+   exists. A stage-only token needs no Bypass 2FA: `npm stage publish` defers
+   2FA to the approval.
 2. `sol access run github -- secret set NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`
    and paste the token yourself.
-3. Dispatch with `-f authentication=bootstrap -f publish_mode=publish -f npm_tag=next -f dry_run=false`
-   and approve the environment deployment. Bootstrap is refused for any package
-   that already exists.
-4. `sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`,
-   then revoke the token on npm.
-5. Run the re-point for this one package:
-   `npx --yes npm@11.17.0 trust github @agenttool/local-starter --repo cambridgetcg/agenttool-packages --file publish-npm.yml --env npm-bootstrap --allow-stage-publish --yes`.
+3. Dispatch with `-f authentication=bootstrap -f npm_tag=next -f dry_run=false`
+   (`publish_mode` stays `stage`) and approve the environment deployment.
+   Bootstrap is refused for any package that already exists.
+4. Once the stage id is in the summary:
+   `sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`,
+   then revoke the token on npm. Approval and verification need no token.
+5. Approve the stage (step 7 above), then dispatch again with
+   `-f authentication=trusted` to verify (step 8).
+6. Point trust and publishing access at the public workflow for this one
+   package:
+   `npx --yes npm@11.17.0 trust github @agenttool/local-starter --repo cambridgetcg/agenttool-packages --file publish-npm.yml --env npm-bootstrap --allow-stage-publish --yes`,
+   then `npx --yes npm@11.17.0 access set mfa=publish @agenttool/local-starter`.
+
+The trade-off is the `0.0.0-stage` placeholder, which npm documents as
+publicly visible from staging onward; whether it also takes the package's
+`latest` tag is unverified. If npm refuses to stage a new package, the fallback
+is `-f publish_mode=publish` with a **Read and write (publish and stage)**
+token with Bypass 2FA, again on the `@agenttool` scope for a day. That token
+can create any new `@agenttool` package name, though not publish the 38
+existing ones once the re-point has set them to disallow tokens; delete it
+straight after the run. The release tool refuses `publish_mode: publish` for
+any `trusted` run.
 
 ## Public repository settings (Yu, once)
 
@@ -1714,19 +1738,20 @@ publication needs Yu's `npm stage approve` with 2FA. The workflow grants
 write token, runs no package lifecycle code in that job, and receives automatic
 public provenance.
 
-`bootstrap` exists only because npm cannot attach a trusted publisher to, or
-stage a version of, a package which does not yet exist. It requires
-`publish_mode: publish`. The release engine permits this mode only
-when both the package and version return public registry `404`. The protected
-GitHub environment supplies its existing `NPM_TOKEN` only to the final publish
-step; package install, build, tests, and packing run in the preceding job before
-the protected environment is entered. That secret must be an expiry-limited
-granular npm access token with `@agenttool` read/write package access and
-**Bypass 2FA** enabled. A login credential or granular token without bypass will
-fail with `EOTP`. Do not restrict it to a Mac-only allowed IP range: GitHub-hosted
-runners do not originate from that device. Once a package exists, bootstrap
-cannot create another version; an exact already-published rerun is
-verification-only and does not invoke `npm publish`.
+`bootstrap` exists only because npm cannot attach a trusted publisher to a
+package which does not yet exist. It stages by default, like a trusted run: npm
+stages a new package behind a public `0.0.0-stage` placeholder. It is also the
+only mode that may use the `publish_mode: publish` fallback. The release engine
+permits this mode only when both the package and version return public registry
+`404`. The protected GitHub environment supplies `NPM_TOKEN` only to the final
+publish step; package install, build, tests, and packing run in the preceding
+job before the protected environment is entered. For a stage, that secret is an
+expiry-limited granular token with **Read and write (stage only)** access, which
+needs no Bypass 2FA. Only the direct-publish fallback needs a read/write token
+with **Bypass 2FA**; without bypass it fails with `EOTP`. Do not restrict either
+to a Mac-only allowed IP range: GitHub-hosted runners do not originate from that
+device. Once a package exists, bootstrap cannot create another version; an
+exact already-published rerun is verification-only and does not invoke npm.
 
 The public repository's `npm-bootstrap` environment holds no npm token by
 default; one is added only for a first publication and deleted afterwards (see

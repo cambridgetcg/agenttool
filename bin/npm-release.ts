@@ -633,21 +633,31 @@ export function parsePublishMode(value: string): PublishMode {
 }
 
 /**
- * What one publish run does. An exact existing version is only verified, in
- * either mode. npm can stage a version only for a package that already
- * exists, so a first publication (bootstrap) must use publish mode.
+ * Refuses the one mode/authentication pairing no release may use: a direct
+ * `npm publish` through trusted (OIDC) authentication. Trusted releases are
+ * always staged for a maintainer's 2FA approval; direct publication is kept
+ * only as a fallback for a bootstrap first publication.
+ */
+export function assertPublishModeAllowed(mode: PublishMode, authentication: AuthenticationMode): void {
+  if (mode === "publish" && authentication !== "bootstrap") {
+    fail("direct publish is reserved for a bootstrap first publication; trusted releases are staged");
+  }
+}
+
+/**
+ * What one publish run does. An exact existing version is only verified.
+ * Otherwise the run stages, or, for a bootstrap first publication only,
+ * publishes directly. npm stages a package that does not yet exist by first
+ * publishing a public `0.0.0-stage` placeholder, so a bootstrap may stage too.
  */
 export function publishAction(
   decision: "publish" | "verify-existing",
   mode: PublishMode,
   authentication: AuthenticationMode,
 ): "verify-existing" | "stage" | "publish" {
+  assertPublishModeAllowed(mode, authentication);
   if (decision === "verify-existing") return "verify-existing";
-  if (mode === "publish") return "publish";
-  if (authentication !== "trusted") {
-    fail("npm stages only versions of a package that already exists; a first publication uses --publish-mode publish with bootstrap authentication");
-  }
-  return "stage";
+  return mode;
 }
 
 /**
@@ -2224,7 +2234,8 @@ export function stageApprovalSummary(staged: StageReceipt): string {
   return [
     `## Staged ${staged.package.name}@${staged.package.version} — awaiting maintainer approval`,
     "",
-    "Nothing is public on npm yet. On the device that holds the npm login:",
+    "This version is not public on npm until it is approved (a package new to npm shows only",
+    "npm's public `0.0.0-stage` placeholder meanwhile). On the device that holds the npm login:",
     "",
     "```bash",
     `${npm} stage view ${staged.stage_id}`,
