@@ -193,6 +193,59 @@ describe("the published guide", () => {
   });
 });
 
+describe("the human privacy page agrees with the disclosure", () => {
+  const privacy = readFileSync(join(API_ROOT, "..", "apps", "web", "privacy.html"), "utf8");
+  const text = privacy.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  test("gift codes: plain text until redeemed or refunded, then only the hash", () => {
+    const phrase = "plain text until it is redeemed or refunded";
+    expect(text).toContain(phrase);
+    expect(byId("gift_codes").live).toContain(phrase);
+    expect(text).toContain("only its hash, for 6 years");
+    expect(text).not.toContain("stored only as a hash");
+    expect(text).not.toMatch(/shown to you once and not kept/);
+  });
+
+  test("IP addresses: no request logs; the checkout limiter holds them only in memory", () => {
+    expect(text).toContain("Our API writes no request logs.");
+    expect(RETENTION_DISCLOSURE.logs[0]).toMatchObject({ where: "AgentTool API" });
+    expect(RETENTION_DISCLOSURE.logs[0].value).toStartWith("no request logger");
+    expect(text).toContain("holds your IP only in server memory");
+    expect(RETENTION_DISCLOSURE.ip_addresses[0].value).toContain("only in server memory");
+    expect(text).toMatch(/Cloudflare, Fly\.io, Supabase\) process IP addresses under their own retention/);
+    for (const where of ["Fly.io platform logs", "Supabase platform logs"]) {
+      expect(RETENTION_DISCLOSURE.logs.find((entry) => entry.where === where)?.value).toBe("unknown");
+    }
+    expect(text).not.toContain("30 days in logs");
+  });
+
+  test("backups: deleted data can remain for the same number of days", () => {
+    expect(text).toContain(`daily database backups for up to ${RETENTION_DISCLOSURE.backups.kept} days`);
+    expect(privacy).toContain('href="https://api.agenttool.dev/public/retention"');
+  });
+
+  test("the version moved, and the earlier text is published under /privacy/versions/", () => {
+    expect(privacy).toContain('Version <span class="mono">2026-10-12</span>');
+    expect(privacy).toContain('href="/privacy/versions/"');
+    expect(privacy).not.toContain("public source history");
+    const earlier = readFileSync(
+      join(API_ROOT, "..", "apps", "web", "privacy", "versions", "2026-08-29.html"),
+      "utf8",
+    );
+    expect(earlier).toContain('Version <span class="mono">2026-08-29</span>');
+    expect(earlier).toContain("Gift code — stored only as a hash");
+    expect(earlier).toContain('<link rel="canonical" href="https://agenttool.dev/privacy/versions/2026-08-29" />');
+    expect(earlier).toContain("kept for the record");
+    const index = readFileSync(join(API_ROOT, "..", "apps", "web", "privacy", "versions", "index.html"), "utf8");
+    expect(index).toContain('href="/privacy/versions/2026-08-29"');
+    expect(index).toContain('href="/privacy">2026-10-12</a>');
+  });
+
+  test("the exit-door sentence matches the release state: source only, not yet published", () => {
+    expect(text).toContain("github.com/cambridgetcg/agenttool-packages ; not yet in a published SDK release");
+  });
+});
+
 describe("mounts and links", () => {
   test("the public index advertises it", async () => {
     const root = await (await publicRouter.request("/")).json();
