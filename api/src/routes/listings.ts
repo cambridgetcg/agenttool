@@ -523,9 +523,11 @@ app.patch("/:id", async (c) => {
 //  Free (MARKETPLACE_PRICING.archive = 0). Ownership is resolved before the
 //  zero-credit usage event is written, so an unknown or foreign id is a plain
 //  404 that records nothing.
+const LISTING_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.delete("/:id", async (c) => {
   const id = c.req.param("id");
-  const existing = await getListing(id);
+  const existing = LISTING_ID_RE.test(id) ? await getListing(id) : null;
   if (!existing || existing.project_id !== c.var.project.id) {
     throw new HTTPException(404, { message: "listing_not_found" });
   }

@@ -130,6 +130,12 @@ describe("listing off-switches cost nothing", () => {
     }
   });
 
+  test("DELETE with a non-UUID id is a 404 without a query", async () => {
+    const response = await app().request("/v1/listings/not-a-uuid", { method: "DELETE" });
+    expect(response.status).toBe(404);
+    expect(queries).toHaveLength(0);
+  });
+
   for (const [status, label] of [["archived", "listing.archive"], ["paused", "listing.pause"]] as const) {
     test(`a PATCH that only sets status "${status}" is free`, async () => {
       const response = await app().request(`/v1/listings/${LISTING}`, {
