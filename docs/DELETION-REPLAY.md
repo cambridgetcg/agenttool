@@ -3,7 +3,7 @@
 > **Type:** guide · [Reading labels](DOCUMENTATION.md)
 > **Purpose:** Keep a deletion honoured after a database restore, by replaying the ids-only deletion ledger from its off-database mirror before writes reopen.
 > **Evidence:** Source and opt-in real-PostgreSQL tests as of 2026-10-12 (deletion wave 2). Not yet exercised against production, the real pg_cron or Cloudflare R2.
-> **Compass:** [Retention](RETENTION.md) · [Safety boundaries](SAFETY-BOUNDARIES.md) · [Deploy procedure](DEPLOY-PROCEDURE.md) · [Stack](STACK.md)
+> **Compass:** [Retention](RETENTION.md) · [Safety boundaries](SAFETY-BOUNDARIES.md) · Deploy procedure (`docs/DEPLOY-PROCEDURE.md`) · [Stack](STACK.md)
 > **Code:** `api/src/services/deletion/` (`ledger.ts`, `mirror.ts`, `replay.ts`, `appliers.ts`, `purges.ts`, `backfill.ts`) · `api/migrations/20261012T161958_*.sql` · `bin/deletion-replay.ts` · `bin/deletion-ledger-mirror.ts` · `bin/deletion-backfill.ts`
 > **Tests:** `api/tests/deletion-ledger.test.ts` · `api/tests/deletion-mirror.test.ts` · `api/tests/deletion-replay-registry.test.ts` · opt-in `api/tests/integration/deletion-ledger-postgres.test.ts`, `deletion-erase-postgres.test.ts` (`DELETION_LEDGER_TEST_DATABASE_URL`) and `deletion-replay-drill-postgres.test.ts` (`DELETION_REPLAY_DRILL_TEST_DATABASE_URL`)
 > **Spec:** `docs/superpowers/specs/2026-10-12-deletion-scopes-design.md` §13
@@ -68,7 +68,7 @@ bucket once: a second PUT of an existing key must answer 412.
 ## Replay after a restore
 
 Run in maintenance, with the API scaled to zero or behind the maintenance
-contract in [DEPLOY-PROCEDURE.md](DEPLOY-PROCEDURE.md), before writes reopen.
+contract in `docs/DEPLOY-PROCEDURE.md`, before writes reopen.
 `DATABASE_SESSION_URL` (or `DATABASE_URL`) names the **restored** database.
 The script prints JSON and is dry-run unless told `apply`.
 

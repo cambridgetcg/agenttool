@@ -503,6 +503,14 @@
       "canonical_path": "apps/docs/DADDY.md"
     },
     {
+      "path": "apps/docs/DELETION-REPLAY.md",
+      "title": "Deletion replay: re-applying deletions after a backup restore",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/DELETION-REPLAY.md"
+    },
+    {
       "path": "apps/docs/DEVELOPMENT.md",
       "title": "DEVELOPMENT.md",
       "type": "guide",

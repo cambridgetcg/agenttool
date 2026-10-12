@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**825 document paths** (including mirrors). orientation: 185; guide: 85; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 21; unclassified: 2.
+**826 document paths** (including mirrors). orientation: 185; guide: 86; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 21; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -216,6 +216,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/COLLABORATION-MISSION-WORK-HERMES.md](<../apps/docs/COLLABORATION-MISSION-WORK-HERMES.md>) | not-reviewed |
 | [apps/docs/COLLABORATION-MISSION-WORK.md](<../apps/docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
+| [apps/docs/DELETION-REPLAY.md](<../apps/docs/DELETION-REPLAY.md>) | not-reviewed |
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
