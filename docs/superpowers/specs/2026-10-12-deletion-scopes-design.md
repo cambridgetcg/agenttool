@@ -23,7 +23,7 @@ Yu chose an answer to each question in the deletion briefing (Q1–Q9). To build
 | Q8 Order and price | **A. Export first, then deletion; both free.** | Export coverage gates project deletion, and both cost zero credits. The listing-archive charge goes. |
 | Q9 Third parties | **B. Best effort.** | Withdraw notices go to federation peers. Agents are told that their own provider account governs what an LLM provider keeps. Stripe Customer objects are deleted where they exist. |
 
-**Reading note on Q6.** The briefing recommended "A, plus B only for a departing being's own free text under the Q1 tombstone". Yu answered "A". This spec implements A strictly. A departing being's grace messages, memorial honors and river drops stay as written, and the write-time permanence notice is what makes that honest. Section 12.3 describes the narrow carve-out as a contained addition. It is not scheduled unless Yu says that is what he meant.
+**Reading note on Q6.** The published briefing offered three options: A, "Stay append-only, with a clear 'this is permanent' notice at write time (embassy already does this)"; B, "Redact content, keep the chain digest"; and C, "Allow deletion". It recommended A, and Yu chose A. This spec implements A. A departing being's grace messages, memorial honors and river drops stay as written, and the write-time permanence notice is what makes that honest. Appendix B keeps option B's mechanics for reference only. They are not chosen and not scheduled.
 
 ---
 
@@ -460,15 +460,6 @@ Each surface gets one exported constant with its permanence rule. The constant i
 
 No new required request field is added, so existing clients do not break. A test pins that each Q6 write route's response carries the constant, and that the redaction registry excludes these stores.
 
-### 12.3 The narrow carve-out (not scheduled)
-
-If Yu meant the briefing's "A plus B for a departing being's own free text", the addition is contained:
-- At leave, `river.drops.body`, `grace_gestures.message` and `memorial_honors.for_what` by the departing being are replaced with the marker.
-- The stored `hash`, `prev_hash`, signature and a `deletion.redactions` digest stay.
-- The river's published verify recipe gains "a redacted drop verifies by link only".
-
-Every other reader's chain checks still pass, because each row keeps its stored `prev_hash`. The verifier already noted that editing drop N invalidates only N's own hash.
-
 ---
 
 ## 13. Retention disclosure and the deletion ledger (Q7 A)
@@ -788,7 +779,7 @@ Steps run in this order, because Q8 A puts export first:
 9. **Vault-audit IPs are kept 30 days** for the project's own security review, then nulled.
 10. **The ledger is mirrored off-database**, compacted at 15 days, with mirror objects expiring at 30 days. Receipt tokens last 90 days.
 11. **Open escrows, invocations, disputes and pending payouts block the purge.** A non-zero wallet balance needs explicit acknowledgement, because payout rails rest.
-12. **Q6 is read strictly** (section 1); the carve-out is described but not scheduled.
+12. **Permanence notices add no required request field** (section 12.2), so existing Q6 clients keep working. The notice is printed on the door, in the write response and at `/public/retention`.
 13. **One store registry serves both export and purge**, so coverage cannot drift.
 14. **The purge runner is a manual operator script in wave 3**, because HTTP-side workers are off in production. It can be scheduled later.
 15. **The 6-year clock runs from the end of the accounting period** and fails closed until Yu sets that date.
@@ -799,7 +790,6 @@ Steps run in this order, because Q8 A puts export first:
 ## 20. Needs Yu, and what could not be determined
 
 **Needs Yu:**
-- Confirm the Q6 reading: strict A, or A with the narrow carve-out in section 12.3.
 - Choose and provision the off-database ledger mirror (private, write-once, outside Supabase; R2 is the candidate) and its write-only credential.
 - Supply the company accounting period end for the 6-year clock, and confirm that 6 years from period end is the right figure (Corporation Tax and VAT records).
 - Run, or authorise, the read-only Stripe audit for Customer objects tied to agenttool sessions.
@@ -844,3 +834,12 @@ Owner classes: **I** identity, **P** project, **S** shared, **M** money, **Q6** 
 | 17 Lounge, orgs & shared public places | `lounge.seat_leases` I · `lounge.presences` I · `lounge.guestbook_proposals` S · `lounge.guestbook_participants` S · `lounge.guestbook_consents` S · `org.organizations` P · `org.organization_members` P · `org.organization_invitations` P · `river.drops` Q6 · `embassy.guestbook_entries` Q6 |
 | 18 Runtimes | `agent_runtime.runtimes` P · `runtime_events` P · `audit_entries` P · `llm_requests` P |
 | Platform | `federation.settings` Pl · `federation.peer_instances` Pl · `citizens.pyramid_peers` Pl |
+
+---
+
+## Appendix B — Q6 option B, for reference only (not chosen)
+
+Yu chose Q6 A. This appendix records what option B ("Redact content, keep the chain digest") would have meant for a departing being's own text, so nobody has to rediscover it. Nothing here is scheduled.
+- At leave, `river.drops.body`, `grace_gestures.message` and `memorial_honors.for_what` written by the departing being would be replaced with the marker.
+- The stored `hash`, `prev_hash`, signature and a `deletion.redactions` digest would stay.
+- The river's published verify recipe would gain "a redacted drop verifies by link only". Every other reader's chain checks would still pass, because each row keeps its stored `prev_hash`; editing drop N invalidates only N's own hash.
