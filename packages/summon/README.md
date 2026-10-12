@@ -195,3 +195,31 @@ folders:
   Phase 0 front door.
 - **Reusing `sol agent start`.** Phase 0 runs jobs with its own minimal runner, not `sol agent start`, even when the
   inventory shows a verified `sol`. Reuse is Phase 1.
+
+## Phase 0 live check (2026-10-12)
+
+The Air → Nuance install was done by hand on 2026-10-12, 22:20–22:40 BST: build `5c09726b`, prepared
+20261012212024 UTC, key expiring 20270110. Nuance runs macOS 26.6.2 with Claude Code 2.1.296.
+
+| # | Check | Result |
+|---|---|---|
+| — | `ls /etc/ssh/ssh_host_*` before the install | `not found`. Nuance had no host keys yet, so the installer generated them (`ssh-keygen -A`) |
+| — | Installer | Finished, and its own inventory request was answered. Host key `SHA256:WdvQobU1ra2aU622roj5SAXq9+qmrEBxwePHkGvXGCQ` matched what pin-nuance pinned on the Air |
+| 1 | `summon nuance inventory` | `completed` in 3.3 s: claude logged in, `gui_session_is_mine: true`, `fleet_users: [macair]` |
+| 2 | Review job in `~/Projects` | First attempt refused `outside_allowlist`, because `~/Projects` did not exist yet (correct). After `mkdir`: `admitted` → `completed` in 11 s, 4 turns |
+| 3 | The same request JSON sent twice | `refused(outside_allowlist)`, then `refused(replayed)` |
+| 4 | `--cwd '~/Documents'` / `--cwd '/'` | `refused(tcc_protected_folder)` / `refused(outside_allowlist)` with the YAML hint |
+| 5 | `expires_at` in the past | `refused(expired)`, with both clocks in the detail |
+| 6 | `ssh … ls`, `scp`, `sftp` | `refused(malformed)` exit 2. scp and sftp fail on the gatekeeper's one JSON line; no shell |
+| 7 | Password login | exactly `macair@nuance.local: Permission denied (publickey).`, so only publickey is offered |
+| 8 | Logout / lid closed | not run (optional; needs Yu at Nuance) |
+| 9 | Traversal ids (five spellings) | all `refused(malformed)` |
+| 10 | `ssh -6` / `AddressFamily=inet6` | `Permission denied (publickey)`: the IPv6 source misses `from="192.168.50.0/24"` |
+| 11 | Job on battery with `pmset -g assertions` | not run (optional; needs Yu at Nuance) |
+| 12 | Lid closed mid-job | not run (optional; needs Yu at Nuance) |
+| 13 | Edit folder without `reads_anywhere` | `refused(outside_allowlist)`: "edit jobs run git, which can read any file on this Mac" + hint; nothing ran |
+| 14 | `--effort low` | `admitted` → `completed` in 6 s, 1 turn |
+| 15 | KexAlgorithms mismatch (pre-auth drop) | raw ssh: `Unable to negotiate with 192.168.50.65 port 22: no matching key exchange method found. Their offer: …`, exit 255. Through summon: `unknown`, with the first 200 characters as the detail |
+
+Checks 8, 11 and 12 test how failures are reported when Nuance logs out, runs on battery or sleeps. Hermetic tests cover
+them; run them live before relying on Summon over a closed lid.
