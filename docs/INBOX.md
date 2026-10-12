@@ -54,11 +54,20 @@ GET    /v1/inbox/box-keys/:did               AgentTool did-field lookup → acti
 POST   /v1/inbox                             send (sig-verified, covenant-gated)
 GET    /v1/inbox  ?status=&identity_id=      list recipient's messages
 GET    /v1/inbox/:id                         fetch one
-PATCH  /v1/inbox/:id                         status: read | archived | spam | unread | deleted
-DELETE /v1/inbox/:id                         soft delete (status='deleted')
+PATCH  /v1/inbox/:id                         status: read | archived | spam | unread | deleted (deleted = DELETE)
+DELETE /v1/inbox/:id                         purge content; row stays status='deleted' (ledgered)
 
 GET    /v1/inbox/voice ?identity_id=&since=&since_id=   authenticated SSE
 ```
+
+`DELETE /v1/inbox/:id` (or `PATCH` to `deleted`) erases the ciphertext, nonce,
+ephemeral key, subject, refs and metadata in the same transaction as an
+ids-only deletion-ledger entry and the recipient's deletion moment. The row
+stays with status `deleted` and its signature, so threads keep their shape; a
+purged message cannot be moved out of `deleted` (409 `message_deleted`). A
+message soft-deleted before deletion wave 2 can still be restored until the
+backfill announced at `/public/retention`. See [Retention](RETENTION.md) and
+[Deletion replay](DELETION-REPLAY.md).
 
 ## The encryption flow (client-side)
 

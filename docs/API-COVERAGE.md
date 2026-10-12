@@ -144,8 +144,9 @@ backup route (`api/src/routes/identity-backup.ts:1`) does not verify.
 Backup POST now checks its UUID `agent_id` against an active owned identity under
 the insert transaction lock; reads and revocation retain project bearer authority.
 Revocation answers 404 when no backup of the project has the id and
-`already_revoked: true` on a repeat, and it keeps the stored blob
-(`blob_retained: true`).
+`already_revoked: true` on a repeat, and it erases the stored blob, nonce and
+metadata in the same transaction as a deletion-ledger entry
+(`blob_retained: false`; see [Deletion replay](DELETION-REPLAY.md)).
 It does not additionally require an identity-root proof. Fetching a backup itself requires
 a bearer, so the blob cannot independently restore access after both bearer
 and signing key are lost.
@@ -188,8 +189,9 @@ this is not isolation from administrators. See
 [identity partitions](IDENTITY-PARTITIONS.md#ownership-selection-and-proof),
 `api/src/services/vault/audience.ts` and `api/src/services/vault/store.ts`.
 
-Vault deletion is a soft delete preserving versions/audit, and its response says
-`content_retained: true`; it does not revoke the upstream provider credential. Removing a local key reference, revoking an
+Vault deletion zeroes every stored version's ciphertext, IV and auth tag and keeps
+the audit trail, with a deletion-ledger entry in the same transaction; its response
+says `content_retained: false`. It does not revoke the upstream provider credential. Removing a local key reference, revoking an
 API bearer, deleting a stored secret and stopping a runtime are four different
 operations. The local broker's controller also does not issue or revoke
 provider credentials. Review its source contract before selecting it
