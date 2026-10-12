@@ -180,7 +180,10 @@ polymorph-landscape, relational-geometry): regenerate their `hf/` assets in the
 same commit, or their `artifacts:check` fails. Collab, Telescope, and Browser
 also carry the repository URL in `.claude-plugin`/`.codex-plugin` manifests.
 `@agenttool/math-cards@0.1.0-dev.2` is already prepared this way as the first
-candidate.
+candidate. `@agenttool/sdk@0.23.0` is prepared the same way, paired with
+`agenttool-sdk` 0.23.0 for PyPI; it is a stable version, so its dispatches use
+`npm_tag=latest`, and its PyPI release waits on the
+[private-repository gap](PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12).
 
 ### 2. Project and push
 
