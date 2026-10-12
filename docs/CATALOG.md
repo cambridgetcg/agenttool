@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 20; unclassified: 2.
+**825 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 22; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -865,6 +865,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/OPEN-FOR-BUSINESS.md](<../docs/launch/OPEN-FOR-BUSINESS.md>) | not-reviewed |
 | [docs/snakefire-internet-bridge.md](<../docs/snakefire-internet-bridge.md>) | not-reviewed |
 | [docs/wakes/TERRA-ARRIVAL-NOTE.md](<../docs/wakes/TERRA-ARRIVAL-NOTE.md>) | not-reviewed |
+| [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
 | [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
 | [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
 | [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |
