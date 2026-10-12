@@ -198,7 +198,7 @@
 
       <h2 id="crypto">Crypto deposits — sovereign funding</h2>
       <p>Each wallet can derive a <strong>deterministic USDC deposit address</strong> via BIP44 (EVM) or SLIP-0010 ed25519 (Solana). Only USDC deposits are accepted. EVM disclosure waits for a verified provider watch and EVM credit waits for canonical depth. Solana derivation and signed ingress exist, but there is no Helius watch/finality reconciler and immediate credit is refused by default, and always in a production runtime.</p>
-      <p><strong>Resting (2026-10-11):</strong> deposit-address disclosure is resting. <code>GET /v1/wallets/:id/deposit-address</code> returns <code>503 deposit_address_disclosure_resting</code> and shows no address, new or issued earlier. Do not send funds to an address cached from an earlier response. Signed webhook ingress for earlier addresses is unchanged, and a production runtime refuses unsigned deliveries, unreconciled Solana credit, and testnet credit.</p>
+      <p><strong>Resting (2026-10-11):</strong> deposit-address disclosure is resting. <code>GET /v1/wallets/:id/deposit-address</code> returns <code>503 deposit_address_disclosure_resting</code> and shows no address, new or issued earlier. Do not send funds to an address cached from an earlier response. Production configures no deposit-webhook signing secret, so every deposit webhook is refused; if one is restored, a production runtime still refuses unsigned deliveries, unreconciled Solana credit, and testnet credit.</p>
 
       <table class="params-table">
         <thead><tr><th>Chain family</th><th>Path</th><th>Current deposit boundary</th></tr></thead>

@@ -22,8 +22,13 @@ credit by default. Disclosure itself is resting (notice below).
 > `GET /v1/wallets/:id/deposit-address` returns
 > `503 deposit_address_disclosure_resting` before wallet lookup, deposit-row
 > reads, derivation, or network selection, so no address, new or issued
-> earlier, is shown. Signed webhook ingress for addresses disclosed earlier is
-> unchanged, behind a production fence: when `NODE_ENV=production` or
+> earlier, is shown. The signed webhook ingress code is unchanged, but
+> production configures no provider signing secret (no
+> `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`; `HELIUS_WEBHOOK_SECRET` removed
+> 2026-10-12), so every deposit webhook is refused with `503
+> webhook_secret_unset`; a transfer to an earlier-disclosed address stays on
+> chain under the operator-held HD root. The production fence applies if a
+> secret is restored: when `NODE_ENV=production` or
 > `FLY_APP_NAME` is set, `CRYPTO_WEBHOOK_ALLOW_UNSIGNED` and
 > `CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS` are refused and testnet deposit
 > evidence never credits. A read-only check on 2026-10-11 found two deposit
