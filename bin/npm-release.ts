@@ -7,21 +7,43 @@
  * bootstrap token or GitHub OIDC environment only after the artifact and its
  * receipt already exist. The split keeps package scripts away from write
  * credentials and makes an accepted-but-not-yet-visible publish recoverable.
+ *
+ * Releases run from the public source repository, RELEASE_REPOSITORY. By
+ * default `publish` stages the exact artifact with `npm stage publish`; a
+ * maintainer approves it with 2FA, and a later run takes the verify-existing
+ * path to confirm the public registry bytes.
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { inspectNpmTarball } from "./build-love-packages";
 
+/**
+ * The public source repository. Its tags are the only release tags, its
+ * `main` must contain them, its GitHub Releases mirror the exact bytes, and
+ * it is the only workflow identity that may publish. Package metadata, the
+ * release remote, the GitHub API, and the Actions identity all derive from it.
+ */
+export const RELEASE_REPOSITORY = "cambridgetcg/agenttool-packages" as const;
+export const RELEASE_REPOSITORY_URL = `https://github.com/${RELEASE_REPOSITORY}` as const;
+export const EXPECTED_REPOSITORY = `${RELEASE_REPOSITORY_URL}.git` as const;
 export const RELEASE_RECEIPT_SCHEMA = "agenttool.npm-release/1";
-export const EXPECTED_REPOSITORY = "https://github.com/cambridgetcg/agenttool.git";
+export const STAGE_RECEIPT_SCHEMA = "agenttool.npm-stage/1";
 export const PINNED_BUN = "1.3.5";
 export const PINNED_NPM = "11.17.0";
+/** The fixed identity of projection commits and of the release tags made on them. */
+export const RELEASE_TAGGER_NAME = "AgentTool projection";
+export const RELEASE_TAGGER_EMAIL = "contact@cambridgetcg.com";
+/** Where the private repository keeps its immutable LOVE manifests. The public repository has none. */
+export const LOVE_MIRROR_ROOT = "apps/docs/packages/v1/@agenttool";
 
-type ArtifactKind = "love" | "pack";
+type ArtifactKind = "pack";
 export type AuthenticationMode = "bootstrap" | "trusted";
+/** `stage` defers the final publication to a maintainer's 2FA approval; `publish` publishes directly. */
+export type PublishMode = "stage" | "publish";
+export const DEFAULT_PUBLISH_MODE: PublishMode = "stage";
 
 export interface ReleaseSpec {
   key: string;
@@ -29,6 +51,11 @@ export interface ReleaseSpec {
   packagePath: `packages/${string}`;
   tagPrefix: string;
   artifactKind: ArtifactKind;
+  /**
+   * Scripts run before `npm pack` instead of the package's `prepack`, for a
+   * package whose own release check forbids lifecycle scripts. A historical
+   * LOVE rebuild runs them too (default: `ci`).
+   */
   gateScripts?: readonly string[];
   prerequisites?: readonly {
     packagePath: `packages/${string}`;
@@ -50,7 +77,7 @@ export const RELEASE_SPECS = {
     name: "@agenttool/local-starter",
     packagePath: "packages/local-starter",
     tagPrefix: "local-starter",
-    artifactKind: "love",
+    artifactKind: "pack",
     gateScripts: ["ci", "build", "check:bundle"],
     prerequisites: [
       { packagePath: "packages/local-starter-mcp", scripts: ["ci"] },
@@ -61,14 +88,14 @@ export const RELEASE_SPECS = {
     name: "@agenttool/adds",
     packagePath: "packages/data-protocol",
     tagPrefix: "adds",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   data: {
     key: "data",
     name: "@agenttool/data",
     packagePath: "packages/data",
     tagPrefix: "data",
-    artifactKind: "love",
+    artifactKind: "pack",
     gateScripts: ["ci", "build"],
   },
   "data-sync": {
@@ -76,7 +103,7 @@ export const RELEASE_SPECS = {
     name: "@agenttool/data-sync",
     packagePath: "packages/data-sync",
     tagPrefix: "data-sync",
-    artifactKind: "love",
+    artifactKind: "pack",
     gateScripts: ["ci", "build"],
     prerequisites: [
       { packagePath: "packages/data", scripts: ["ci", "build"] },
@@ -88,14 +115,14 @@ export const RELEASE_SPECS = {
     name: "@agenttool/economic-kernel",
     packagePath: "packages/economic-kernel",
     tagPrefix: "economic-kernel",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "economic-conformance": {
     key: "economic-conformance",
     name: "@agenttool/economic-conformance",
     packagePath: "packages/economic-conformance",
     tagPrefix: "economic-conformance",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "dark-continent-contract": {
     key: "dark-continent-contract",
@@ -137,7 +164,7 @@ export const RELEASE_SPECS = {
     name: "@agenttool/hf-scout",
     packagePath: "packages/hf-scout",
     tagPrefix: "hf-scout",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "living-substrate": {
     key: "living-substrate",
@@ -193,7 +220,7 @@ export const RELEASE_SPECS = {
     name: "@agenttool/principality-geometry",
     packagePath: "packages/principality-geometry",
     tagPrefix: "principality-geometry",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "love-bomb": {
     key: "love-bomb",
@@ -221,28 +248,28 @@ export const RELEASE_SPECS = {
     name: "@agenttool/credential-broker",
     packagePath: "packages/credential-broker",
     tagPrefix: "credential-broker",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   sdk: {
     key: "sdk",
     name: "@agenttool/sdk",
     packagePath: "packages/sdk-ts",
     tagPrefix: "sdk",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   wallet: {
     key: "wallet",
     name: "@agenttool/wallet",
     packagePath: "packages/wallet",
     tagPrefix: "wallet",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "wallet-zerone": {
     key: "wallet-zerone",
     name: "@agenttool/wallet-zerone",
     packagePath: "packages/wallet-zerone",
     tagPrefix: "wallet-zerone",
-    artifactKind: "love",
+    artifactKind: "pack",
     prerequisites: [
       { packagePath: "packages/wallet", scripts: ["ci"] },
     ],
@@ -252,14 +279,14 @@ export const RELEASE_SPECS = {
     name: "@agenttool/telescope",
     packagePath: "packages/telescope",
     tagPrefix: "telescope",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   browser: {
     key: "browser",
     name: "@agenttool/browser",
     packagePath: "packages/browser",
     tagPrefix: "browser",
-    artifactKind: "love",
+    artifactKind: "pack",
   },
   "codex-usage": {
     key: "codex-usage",
@@ -339,7 +366,12 @@ export const RELEASE_SPECS = {
 
 export type ReleaseKey = keyof typeof RELEASE_SPECS;
 
-interface PackageJson {
+/** The `package` choice list of publish-npm.yml, generated from RELEASE_SPECS in declaration order. */
+export function publishWorkflowPackageOptions(): string {
+  return Object.keys(RELEASE_SPECS).map((key) => `          - ${key}\n`).join("");
+}
+
+export interface PackageJson {
   name?: unknown;
   version?: unknown;
   private?: unknown;
@@ -376,6 +408,27 @@ export interface PreparedReceipt {
     registry_observed_at: string;
     registry_tarball: string;
   };
+}
+
+/**
+ * Written as stage.json beside receipt.json when an artifact is staged. The
+ * receipt itself stays unchanged and gains no `result`: a staged version is
+ * not published until a maintainer approves it, and only a later
+ * verify-existing run may record the public registry result.
+ */
+export interface StageReceipt {
+  schema: typeof STAGE_RECEIPT_SCHEMA;
+  package: {
+    key: ReleaseKey;
+    name: string;
+    version: string;
+  };
+  tag: string;
+  tag_commit: string;
+  npm_tag: string;
+  artifact: ArtifactIdentity;
+  stage_id: string;
+  staged_at: string;
 }
 
 interface RegistryVersion {
@@ -429,6 +482,9 @@ const REGISTRY_POLL_DELAY_MS = 5_000;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SAFE_TAG = /^[a-z0-9][a-z0-9._-]*$/;
 const SAFE_NPM_TAG = /^[a-z][a-z0-9._-]*$/;
+const COMMIT = /^[0-9a-f]{40}$/;
+/** npm's own stage-id check (lib/utils/validate-uuid.js in npm 11.17.0). */
+const STAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TEXT_ARCHIVE_ENTRY = /\.(?:cjs|css|html|js|json|jsonl|jsx|map|md|mjs|mts|toml|ts|tsx|txt|yaml|yml)$/i;
 const SENSITIVE_ARCHIVE_PATH = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|credentials(?:\.json)?|id_ed25519|id_rsa)$/i;
 const SECRET_SIGNATURES = [
@@ -571,6 +627,82 @@ export function registryDecision(
   return "publish";
 }
 
+export function parsePublishMode(value: string): PublishMode {
+  if (value !== "stage" && value !== "publish") fail(`publish mode must be stage or publish, not ${value}`);
+  return value;
+}
+
+export function parseAuthentication(value: string): AuthenticationMode {
+  if (value !== "bootstrap" && value !== "trusted") fail("authentication must be bootstrap or trusted");
+  return value;
+}
+
+/**
+ * Refuses the one mode/authentication pairing no release may use: a direct
+ * `npm publish` through trusted (OIDC) authentication. Trusted releases are
+ * always staged for a maintainer's 2FA approval; direct publication is kept
+ * only as a fallback for a bootstrap first publication.
+ */
+export function assertPublishModeAllowed(mode: PublishMode, authentication: AuthenticationMode): void {
+  if (mode === "publish" && authentication !== "bootstrap") {
+    fail("direct publish is reserved for a bootstrap first publication; trusted releases are staged");
+  }
+}
+
+/**
+ * What one publish run does. An exact existing version is only verified.
+ * Otherwise the run stages, or, for a bootstrap first publication only,
+ * publishes directly. npm stages a package that does not yet exist by first
+ * publishing a public `0.0.0-stage` placeholder, so a bootstrap may stage too.
+ */
+export function publishAction(
+  decision: "publish" | "verify-existing",
+  mode: PublishMode,
+  authentication: AuthenticationMode,
+): "verify-existing" | "stage" | "publish" {
+  assertPublishModeAllowed(mode, authentication);
+  if (decision === "verify-existing") return "verify-existing";
+  return mode;
+}
+
+/**
+ * Everything a publish run would decide from its dispatch inputs and the
+ * public registry state, without credentials or mutation: the dist-tag for
+ * this version, the mode/authentication pairing, and bootstrap versus trusted.
+ */
+export function planDispatch(
+  version: string,
+  npmTag: string,
+  authentication: AuthenticationMode,
+  mode: PublishMode,
+  packageStatus: number,
+  versionStatus: number,
+): "verify-existing" | "stage" | "publish" {
+  validateNpmTagForVersion(version, npmTag);
+  assertPublishModeAllowed(mode, authentication);
+  return publishAction(registryDecision(packageStatus, versionStatus, authentication), mode, authentication);
+}
+
+/**
+ * The exact npm arguments, checked against npm 11.17.0. `npm stage publish`
+ * shares `npm publish`'s parameters (lib/commands/stage/publish.js reuses
+ * Publish.params, which lists --provenance). `--access public` is kept on
+ * both paths: without it npm's provenance check first asks the registry for
+ * the package's visibility (libnpmpublish ensureProvenanceGeneration).
+ * `--ignore-scripts` is a global npm option; a tarball spec runs no scripts
+ * anyway. `--json` makes npm print the stage id in a parseable record.
+ */
+export function npmPublishArguments(
+  action: "stage" | "publish",
+  artifactPath: string,
+  npmTag: string,
+): string[] {
+  const shared = ["--access", "public", "--tag", npmTag, "--provenance", "--ignore-scripts"];
+  return action === "stage"
+    ? ["stage", "publish", artifactPath, ...shared, "--json"]
+    : ["publish", artifactPath, ...shared];
+}
+
 function repositoryIdentity(value: unknown): { url: string; directory?: string } {
   const repository = record(value, "package.json repository");
   exactKeys(repository, Object.hasOwn(repository, "directory") ? ["type", "url", "directory"] : ["type", "url"], "package.json repository");
@@ -586,6 +718,11 @@ function repositoryIdentity(value: unknown): { url: string; directory?: string }
 async function packageIdentity(spec: ReleaseSpec): Promise<{ json: PackageJson; version: string }> {
   const path = join(REPO_ROOT, spec.packagePath, "package.json");
   const json = JSON.parse(await readFile(path, "utf8")) as PackageJson;
+  return { json, version: validatePackageManifest(spec, json) };
+}
+
+/** Checks one package.json against its release spec and returns its version. */
+export function validatePackageManifest(spec: ReleaseSpec, json: PackageJson): string {
   if (json.name !== spec.name) fail(`${spec.packagePath}/package.json name must be ${spec.name}`);
   const version = ownString(json.version, `${spec.packagePath}/package.json version`);
   if (!SEMVER.test(version)) fail(`${spec.name} has an invalid semver version: ${version}`);
@@ -599,7 +736,7 @@ async function packageIdentity(spec: ReleaseSpec): Promise<{ json: PackageJson; 
   if (repository.directory !== undefined && repository.directory !== spec.packagePath) {
     fail(`${spec.name} repository.directory must be ${spec.packagePath}`);
   }
-  return { json, version };
+  return version;
 }
 
 async function ensureClean(): Promise<void> {
@@ -609,6 +746,242 @@ async function ensureClean(): Promise<void> {
 
 function releaseRemote(): string {
   return process.env.GITHUB_ACTIONS === "true" ? "origin" : "github";
+}
+
+/** The two remote spellings of RELEASE_REPOSITORY, with or without `.git`. */
+export function isReleaseRemote(url: string): boolean {
+  const normalized = url.endsWith(".git") ? url.slice(0, -4) : url;
+  return normalized === RELEASE_REPOSITORY_URL || normalized === `git@github.com:${RELEASE_REPOSITORY}`;
+}
+
+export interface ReleaseTagFacts {
+  name: string;
+  version: string;
+  packagePath: string;
+  projectionCommit: string;
+  sourceCommit: string;
+  /** The public CI run URL, or "unverified (local dry run)" for a tag that must never be released. */
+  ciRun: string;
+}
+
+export const UNVERIFIED_CI_RUN = "unverified (local dry run)";
+const RELEASE_TAG_TRAILERS = ["Package", "Projection-Commit", "Projection-Source", "Public-CI-Run"] as const;
+
+/** The annotated tag message bin/public-release-tag.ts writes; the publish workflow reads it back. */
+export function releaseTagMessage(facts: ReleaseTagFacts): string {
+  if (!COMMIT.test(facts.projectionCommit) || !COMMIT.test(facts.sourceCommit)) {
+    fail("release tag message requires full projection and source commits");
+  }
+  return [
+    `${facts.name}@${facts.version}`,
+    "",
+    `Release of ${facts.packagePath} from public projection ${facts.projectionCommit}.`,
+    "",
+    `Package: ${facts.name}@${facts.version}`,
+    `Projection-Commit: ${facts.projectionCommit}`,
+    `Projection-Source: ${facts.sourceCommit}`,
+    `Public-CI-Run: ${facts.ciRun}`,
+    "",
+  ].join("\n");
+}
+
+export interface ReleaseTagObject {
+  object: string;
+  type: string;
+  tag: string;
+  tagger: string;
+  message: string;
+  trailers: Record<string, string>;
+}
+
+/** Parses `git cat-file tag` output. A signed tag is refused: release tags carry no signature. */
+export function parseReleaseTagObject(raw: string): ReleaseTagObject {
+  const split = raw.indexOf("\n\n");
+  if (split < 0) fail("release tag object has no message");
+  const headers = new Map<string, string>();
+  for (const line of raw.slice(0, split).split("\n")) {
+    const space = line.indexOf(" ");
+    const key = space < 0 ? line : line.slice(0, space);
+    if (!["object", "type", "tag", "tagger"].includes(key) || headers.has(key)) {
+      fail(`unexpected release tag header ${JSON.stringify(key)}`);
+    }
+    headers.set(key, line.slice(space + 1));
+  }
+  const message = raw.slice(split + 2);
+  if (message.includes("-----BEGIN ")) fail("release tags must not be signed");
+  const trailers: Record<string, string> = {};
+  for (const line of message.split("\n")) {
+    const match = /^([A-Za-z-]+): (.+)$/.exec(line);
+    if (match && (RELEASE_TAG_TRAILERS as readonly string[]).includes(match[1] as string)) {
+      if (Object.hasOwn(trailers, match[1] as string)) fail(`duplicate release tag trailer ${match[1]}`);
+      trailers[match[1] as string] = match[2] as string;
+    }
+  }
+  return {
+    object: headers.get("object") ?? "",
+    type: headers.get("type") ?? "",
+    tag: headers.get("tag") ?? "",
+    tagger: headers.get("tagger") ?? "",
+    message,
+    trailers,
+  };
+}
+
+/**
+ * The form of a tag made by bin/public-release-tag.ts: the fixed tagger, the
+ * expected package, the exact commit, and a Public-CI-Run URL on the release
+ * repository. A local dry-run tag says "unverified" and is refused here. The
+ * URL is only a claim until assertReleaseTagEvidence asks GitHub about it.
+ */
+export function assertReleaseTagObject(
+  raw: string,
+  expected: { tag: string; tagCommit: string; name: string; version: string },
+): ReleaseTagObject {
+  const parsed = parseReleaseTagObject(raw);
+  if (parsed.type !== "commit" || parsed.object !== expected.tagCommit) fail("release tag must point directly at its commit");
+  if (parsed.tag !== expected.tag) fail("release tag object name does not match the tag ref");
+  if (!parsed.tagger.startsWith(`${RELEASE_TAGGER_NAME} <${RELEASE_TAGGER_EMAIL}> `)) {
+    fail("release tag must use the fixed projection tagger");
+  }
+  if (parsed.trailers.Package !== `${expected.name}@${expected.version}`) fail("release tag names a different package");
+  if (parsed.trailers["Projection-Commit"] !== expected.tagCommit) fail("release tag names a different projection commit");
+  if (!COMMIT.test(parsed.trailers["Projection-Source"] ?? "")) fail("release tag must name its projection source commit");
+  const ciRun = parsed.trailers["Public-CI-Run"] ?? "";
+  if (!new RegExp(`^${RELEASE_REPOSITORY_URL.replaceAll(".", "\\.")}/actions/runs/[1-9][0-9]*$`).test(ciRun)) {
+    fail("release tag must name a verified public CI run");
+  }
+  return parsed;
+}
+
+/** A release tag, or the public CI evidence it cites, is refused. */
+export class ReleaseTagRefused extends Error {}
+
+function refuseTag(message: string): never {
+  throw new ReleaseTagRefused(message);
+}
+
+/** The public repository's CI workflow, whose push runs on main gate every release tag. */
+export const PUBLIC_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+
+export interface WorkflowRun {
+  id: number;
+  path: string;
+  event: string;
+  head_branch: string;
+  head_sha: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+  repository: string;
+  created_at: string;
+}
+
+export type FetchJson = (url: string) => Promise<{ status: number; body: unknown }>;
+
+/** An anonymous GitHub API read: the release repository is public, so no token is needed or sent. */
+export async function anonymousGitHubJson(url: string): Promise<{ status: number; body: unknown }> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.hostname !== "api.github.com") refuseTag("refusing an unexpected GitHub API origin");
+  const response = await fetch(url, {
+    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  return { status: response.status, body: response.status === 200 ? await response.json() : undefined };
+}
+
+function parseWorkflowRun(value: unknown): WorkflowRun {
+  const run = value as Record<string, unknown> | null;
+  if (!run || typeof run !== "object") refuseTag("GitHub returned a malformed workflow run");
+  const repository = (run.repository as Record<string, unknown> | undefined)?.full_name;
+  if (!Number.isSafeInteger(run.id) || (run.id as number) < 1) refuseTag("GitHub returned a workflow run without an id");
+  for (const key of ["path", "event", "head_branch", "head_sha", "status", "html_url", "created_at"]) {
+    if (typeof run[key] !== "string") refuseTag(`GitHub workflow run ${String(run.id)} has no ${key}`);
+  }
+  return {
+    id: run.id as number,
+    path: run.path as string,
+    event: run.event as string,
+    head_branch: run.head_branch as string,
+    head_sha: run.head_sha as string,
+    status: run.status as string,
+    conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+    html_url: run.html_url as string,
+    repository: typeof repository === "string" ? repository : "",
+    created_at: run.created_at as string,
+  };
+}
+
+/**
+ * Chooses the public CI evidence for one commit: the pinned run when given,
+ * otherwise the newest push run of ci.yml on main for exactly that commit. It
+ * must have completed with success; anything else refuses.
+ */
+export function selectCiRun(runs: readonly WorkflowRun[], commit: string, pinned?: number): WorkflowRun {
+  const candidates = runs.filter((run) =>
+    run.repository === RELEASE_REPOSITORY &&
+    run.path === PUBLIC_CI_WORKFLOW_PATH &&
+    run.event === "push" &&
+    run.head_branch === "main" &&
+    run.head_sha === commit
+  );
+  const chosen = pinned === undefined
+    ? [...candidates].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id))[0]
+    : candidates.find((run) => run.id === pinned);
+  if (chosen === undefined) {
+    refuseTag(pinned === undefined
+      ? `no public CI push run of ${PUBLIC_CI_WORKFLOW_PATH} on main exists for ${commit}`
+      : `public CI run ${pinned} is not a push run of ${PUBLIC_CI_WORKFLOW_PATH} on main for ${commit}`);
+  }
+  if (chosen.status !== "completed" || chosen.conclusion !== "success") {
+    refuseTag(`public CI run ${chosen.id} for ${commit} is ${chosen.status}/${chosen.conclusion ?? "none"}, not completed/success`);
+  }
+  if (chosen.html_url !== `${RELEASE_REPOSITORY_URL}/actions/runs/${chosen.id}`) refuseTag(`public CI run ${chosen.id} has an unexpected URL`);
+  return chosen;
+}
+
+function githubReadRefusal(status: number, what: string): never {
+  const hint = status === 403 || status === 429 ? " (an anonymous GitHub API rate limit answers this way; dispatch again later)" : "";
+  refuseTag(`GitHub returned HTTP ${status} for ${what}${hint}`);
+}
+
+/** Reads the public CI evidence for one commit from the GitHub API, anonymously, and applies selectCiRun. */
+export async function publicCiRun(commit: string, pinned: number | undefined, fetchJson: FetchJson = anonymousGitHubJson): Promise<WorkflowRun> {
+  if (pinned !== undefined) {
+    const response = await fetchJson(`https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs/${pinned}`);
+    if (response.status !== 200) githubReadRefusal(response.status, `public CI run ${pinned}`);
+    return selectCiRun([parseWorkflowRun(response.body)], commit, pinned);
+  }
+  const response = await fetchJson(
+    `https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs?head_sha=${commit}&event=push&per_page=100`,
+  );
+  if (response.status !== 200) githubReadRefusal(response.status, `the public CI runs of ${commit}`);
+  const runs = (response.body as { workflow_runs?: unknown } | undefined)?.workflow_runs;
+  if (!Array.isArray(runs)) refuseTag("GitHub returned a malformed workflow run list");
+  return selectCiRun(runs.map(parseWorkflowRun), commit);
+}
+
+/**
+ * The publish workflow's whole tag check: the tag's form (assertReleaseTagObject)
+ * and the CI run its Public-CI-Run trailer cites, read from GitHub. That run
+ * must be a completed, successful push run of ci.yml on main for exactly the
+ * tagged commit, so a hand-made tag citing an unrelated, pending, or failed
+ * run is refused. The check runs code from the tagged commit, so it guards
+ * against mistakes and hand-made tags on genuine projection commits; the
+ * environment reviewer, the npm trust binding, and the maintainer's 2FA
+ * approval of every stage remain the barriers against anyone able to push
+ * other commits.
+ */
+export async function assertReleaseTagEvidence(
+  raw: string,
+  expected: { tag: string; tagCommit: string; name: string; version: string },
+  fetchJson: FetchJson = anonymousGitHubJson,
+): Promise<ReleaseTagObject> {
+  const parsed = assertReleaseTagObject(raw, expected);
+  const cited = parsed.trailers["Public-CI-Run"] as string;
+  const run = await publicCiRun(expected.tagCommit, Number(cited.slice(cited.lastIndexOf("/") + 1)), fetchJson);
+  if (run.html_url !== cited) refuseTag(`release tag cites ${cited}, but GitHub reports ${run.html_url}`);
+  return parsed;
 }
 
 async function validateTag(spec: ReleaseSpec, version: string, tag: string): Promise<string> {
@@ -625,17 +998,19 @@ async function validateTag(spec: ReleaseSpec, version: string, tag: string): Pro
     if (process.env.GITHUB_SHA !== tagCommit || process.env.GITHUB_REF !== `refs/tags/${tag}`) {
       fail("workflow_dispatch must run on the exact annotated release tag so provenance binds the artifact commit");
     }
+    // The tag's form, then the cited public CI run as GitHub reports it.
+    await assertReleaseTagEvidence(await captured("git", ["cat-file", "tag", `refs/tags/${tag}`]), {
+      tag,
+      tagCommit,
+      name: spec.name,
+      version,
+    });
   }
 
   const remote = releaseRemote();
   const remoteUrl = await captured("git", ["remote", "get-url", remote]);
-  const normalizedRemote = remoteUrl.endsWith(".git") ? remoteUrl.slice(0, -4) : remoteUrl;
-  if (
-    normalizedRemote !== "https://github.com/cambridgetcg/agenttool" &&
-    normalizedRemote !== "git@github.com:cambridgetcg/agenttool"
-  ) {
-    fail(`${remote} must resolve to the GitHub release repository`);
-  }
+  if (!isReleaseRemote(remoteUrl)) fail(`${remote} must resolve to the GitHub release repository ${RELEASE_REPOSITORY}`);
+  // The release repository is public, so this fetch needs no credentials.
   await command("git", ["fetch", "--no-tags", remote, `+refs/heads/main:refs/remotes/${remote}/main`]);
   const ancestry = await command(
     "git",
@@ -1235,6 +1610,30 @@ export async function assertReleaseSourcesUnchanged(
   if (drift.exitCode !== 0) fail("package or prerequisite bytes drifted after the checked-in LOVE source revision");
 }
 
+/**
+ * Where a checked-in LOVE manifest for this exact version would be. It exists
+ * only in the private repository, and only for versions released before
+ * publication moved to the public repository.
+ */
+export function historicalLoveManifestPath(spec: ReleaseSpec, version: string, repoRoot = REPO_ROOT): string {
+  if (!SEMVER.test(version)) fail(`invalid package version: ${version}`);
+  return join(repoRoot, LOVE_MIRROR_ROOT, spec.key, version, "manifest.json");
+}
+
+async function hasHistoricalLoveManifest(spec: ReleaseSpec, version: string): Promise<boolean> {
+  try {
+    return (await stat(historicalLoveManifestPath(spec, version))).isFile();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/**
+ * Historical LOVE verification: a version with a checked-in LOVE manifest is
+ * prepared from exactly those immutable bytes, after the whole LOVE mirror
+ * verifies, so a recovery run cannot drift from what was already released.
+ */
 async function loveArtifact(
   spec: ReleaseSpec,
   version: string,
@@ -1248,8 +1647,8 @@ async function loveArtifact(
   }
   await command("bun", ["bin/build-love-packages.ts", "verify", "apps/docs"]);
 
-  const root = join(REPO_ROOT, "apps/docs/packages/v1/@agenttool", spec.key, version);
-  const manifestPath = join(root, "manifest.json");
+  const manifestPath = historicalLoveManifestPath(spec, version);
+  const root = dirname(manifestPath);
   const manifest = record(JSON.parse(await readFile(manifestPath, "utf8")), "LOVE manifest");
   const artifact = record(manifest.artifact, "LOVE manifest.artifact");
   const source = record(manifest.source, "LOVE manifest.source");
@@ -1275,6 +1674,23 @@ async function loveArtifact(
   return { path: outputArtifact, sourceRevision };
 }
 
+/**
+ * The gate that runs before `npm pack --ignore-scripts`: the spec's declared
+ * gate scripts when it has them (Local Starter's release check forbids
+ * lifecycle scripts in its manifest), otherwise the package's own `prepack`.
+ */
+export function packGateScripts(spec: ReleaseSpec, json: PackageJson): readonly string[] {
+  if (spec.gateScripts !== undefined) {
+    if (spec.gateScripts.length === 0) fail(`${spec.name} declares an empty release gate`);
+    for (const script of spec.gateScripts) {
+      if (typeof json.scripts?.[script] !== "string") fail(`${spec.name} release gate script ${script} is missing`);
+    }
+    return spec.gateScripts;
+  }
+  if (typeof json.scripts?.prepack !== "string") fail(`${spec.name} pack release requires a prepack gate`);
+  return ["prepack"];
+}
+
 async function packedArtifact(
   spec: ReleaseSpec,
   version: string,
@@ -1284,8 +1700,9 @@ async function packedArtifact(
   const packageRoot = join(REPO_ROOT, spec.packagePath);
   await prepareReleaseWorkspaces(spec);
   const identity = await packageIdentity(spec);
-  if (typeof identity.json.scripts?.prepack !== "string") fail(`${spec.name} pack release requires a prepack gate`);
-  await command("bun", ["run", "prepack"], { cwd: packageRoot });
+  for (const script of packGateScripts(spec, identity.json)) {
+    await command("bun", ["run", script], { cwd: packageRoot });
+  }
   const pack = await command(
     "npm",
     ["pack", "--ignore-scripts", "--pack-destination", outputDirectory],
@@ -1384,7 +1801,7 @@ async function prepare(packageKey: string, tag: string, output: string): Promise
   }
   await mkdir(outputDirectory, { recursive: true });
 
-  const prepared = spec.artifactKind === "love"
+  const prepared = await hasHistoricalLoveManifest(spec, version)
     ? await loveArtifact(spec, version, tagCommit, outputDirectory)
     : await packedArtifact(spec, version, tagCommit, outputDirectory);
   await verifyArchive(prepared.path, spec, version);
@@ -1405,6 +1822,37 @@ async function prepare(packageKey: string, tag: string, output: string): Promise
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
   console.log(JSON.stringify({ receipt: receiptPath, ...receipt }, null, 2));
   return receipt;
+}
+
+/**
+ * The workflow's first step in both jobs: refuse, before anything is prepared
+ * or mirrored, the inputs the publish step would refuse later. A dry run
+ * therefore fails on exactly what the real run would. It reads the checkout's
+ * package version and the public registry, and nothing else; `publish`
+ * repeats every check against the registry as it is then.
+ */
+async function checkInputs(
+  packageKey: string,
+  authentication: AuthenticationMode,
+  npmTag: string,
+  mode: PublishMode,
+): Promise<void> {
+  const spec = releaseSpec(packageKey);
+  const { version } = await packageIdentity(spec);
+  // The input-only refusals come first, so they need no registry answer.
+  validateNpmTagForVersion(version, npmTag);
+  assertPublishModeAllowed(mode, authentication);
+  const state = await registryState(spec.name, version);
+  const action = planDispatch(version, npmTag, authentication, mode, state.packageStatus, state.versionStatus);
+  console.log(JSON.stringify({
+    package: `${spec.name}@${version}`,
+    tag: expectedTag(spec, version),
+    authentication,
+    npm_tag: npmTag,
+    publish_mode: mode,
+    registry: { package: state.packageStatus, version: state.versionStatus },
+    planned_action: action,
+  }, null, 2));
 }
 
 class RegistryPropagationPendingError extends Error {
@@ -1704,7 +2152,7 @@ interface GitHubRelease {
 }
 
 function githubApiUrl(path: string): string {
-  return `https://api.github.com/repos/cambridgetcg/agenttool${path}`;
+  return `https://api.github.com/repos/${RELEASE_REPOSITORY}${path}`;
 }
 
 function githubAsset(value: unknown): GitHubReleaseAsset {
@@ -1801,7 +2249,7 @@ async function uploadGitHubAsset(
   filename: string,
   token: string,
 ): Promise<GitHubReleaseAsset> {
-  const uploadUrl = `https://uploads.github.com/repos/cambridgetcg/agenttool/releases/${release.id}/assets?name=${encodeURIComponent(filename)}`;
+  const uploadUrl = `https://uploads.github.com/repos/${RELEASE_REPOSITORY}/releases/${release.id}/assets?name=${encodeURIComponent(filename)}`;
   const response = await githubRequest(uploadUrl, token, {
     method: "POST",
     headers: {
@@ -1840,7 +2288,7 @@ function ensureWorkflowContext(): void {
   if (process.env.GITHUB_ACTIONS !== "true" || process.env.GITHUB_EVENT_NAME !== "workflow_dispatch") {
     fail("npm publication is restricted to the reviewed GitHub Actions workflow_dispatch path");
   }
-  if (process.env.GITHUB_REPOSITORY !== "cambridgetcg/agenttool") fail("unexpected GitHub repository");
+  if (process.env.GITHUB_REPOSITORY !== RELEASE_REPOSITORY) fail(`npm publication runs only from ${RELEASE_REPOSITORY}`);
 }
 
 function artifactPathForReceipt(receipt: PreparedReceipt, receiptPath: string): string {
@@ -1867,11 +2315,134 @@ async function validateReceiptAgainstCheckout(
   return { artifactPath, spec };
 }
 
+/**
+ * Reads npm's `stage publish --json` record (or, failing that, its plain
+ * "+ name@version (staged with id <uuid>)" line) and checks that npm staged
+ * the prepared bytes before returning the stage id.
+ */
+export function parseStagePublishOutput(stdout: string, receipt: PreparedReceipt): string {
+  const key = receipt.package.name;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed !== undefined) {
+    const root = record(parsed, "npm stage publish output");
+    const staged = record(root[key], `npm stage publish output for ${key}`);
+    if (staged.name !== receipt.package.name || staged.version !== receipt.package.version) {
+      fail("npm staged a different package identity");
+    }
+    if (staged.shasum !== receipt.artifact.sha1 || staged.integrity !== receipt.artifact.integrity) {
+      fail("npm staged bytes different from the prepared artifact");
+    }
+    const stageId = ownString(staged.stageId, "npm stage publish stageId");
+    if (!STAGE_ID.test(stageId)) fail("npm stage publish returned an invalid stage id");
+    return stageId.toLowerCase();
+  }
+  const escaped = `${receipt.package.name}@${receipt.package.version}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`^\\+ ${escaped} \\(staged with id ([0-9A-Fa-f-]{36})\\)$`, "m").exec(stdout);
+  if (!match || !STAGE_ID.test(match[1] as string)) {
+    fail("npm stage publish did not report a stage id; check `npm stage list` before any retry");
+  }
+  return (match[1] as string).toLowerCase();
+}
+
+export function stageReceipt(
+  receipt: PreparedReceipt,
+  npmTag: string,
+  stageId: string,
+  stagedAt: string,
+): StageReceipt {
+  if (!STAGE_ID.test(stageId)) fail("stage receipt requires a valid stage id");
+  return {
+    schema: STAGE_RECEIPT_SCHEMA,
+    package: { key: receipt.package.key, name: receipt.package.name, version: receipt.package.version },
+    tag: receipt.tag,
+    tag_commit: receipt.tag_commit,
+    npm_tag: npmTag,
+    artifact: receipt.artifact,
+    stage_id: stageId.toLowerCase(),
+    staged_at: canonicalIsoTime(stagedAt, "stage receipt staged_at"),
+  };
+}
+
+export async function readStageReceipt(path: string): Promise<StageReceipt> {
+  const root = record(JSON.parse(await readFile(path, "utf8")), "stage receipt");
+  exactKeys(root, ["schema", "package", "tag", "tag_commit", "npm_tag", "artifact", "stage_id", "staged_at"], "stage receipt");
+  if (root.schema !== STAGE_RECEIPT_SCHEMA) fail("unsupported stage receipt schema");
+  const packageRecord = record(root.package, "stage receipt.package");
+  exactKeys(packageRecord, ["key", "name", "version"], "stage receipt.package");
+  const spec = releaseSpec(ownString(packageRecord.key, "stage receipt.package.key"));
+  if (packageRecord.name !== spec.name) fail("stage receipt package does not match allowlist");
+  const version = ownString(packageRecord.version, "stage receipt.package.version");
+  if (!SEMVER.test(version)) fail("stage receipt package version is invalid");
+  const tag = ownString(root.tag, "stage receipt.tag");
+  if (tag !== expectedTag(spec, version)) fail("stage receipt tag does not match its package");
+  const tagCommit = ownString(root.tag_commit, "stage receipt.tag_commit");
+  if (!COMMIT.test(tagCommit)) fail("stage receipt tag commit is invalid");
+  const npmTag = ownString(root.npm_tag, "stage receipt.npm_tag");
+  validateNpmTagForVersion(version, npmTag);
+  const artifact = record(root.artifact, "stage receipt.artifact");
+  exactKeys(artifact, ["filename", "size", "sha1", "sha256", "integrity"], "stage receipt.artifact");
+  if (artifact.filename !== packedFilename(spec.name, version)) fail("stage receipt artifact filename is invalid");
+  const sha1 = ownString(artifact.sha1, "stage receipt.artifact.sha1");
+  const sha256 = ownString(artifact.sha256, "stage receipt.artifact.sha256");
+  const integrity = ownString(artifact.integrity, "stage receipt.artifact.integrity");
+  if (!/^[0-9a-f]{40}$/.test(sha1) || !/^[0-9a-f]{64}$/.test(sha256) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity)) {
+    fail("stage receipt artifact digests are invalid");
+  }
+  const stageId = ownString(root.stage_id, "stage receipt.stage_id");
+  if (!STAGE_ID.test(stageId) || stageId !== stageId.toLowerCase()) fail("stage receipt stage id is invalid");
+  return {
+    schema: STAGE_RECEIPT_SCHEMA,
+    package: { key: spec.key as ReleaseKey, name: spec.name, version },
+    tag,
+    tag_commit: tagCommit,
+    npm_tag: npmTag,
+    artifact: {
+      filename: artifact.filename as string,
+      size: ownInteger(artifact.size, "stage receipt.artifact.size"),
+      sha1,
+      sha256,
+      integrity,
+    },
+    stage_id: stageId,
+    staged_at: canonicalIsoTime(root.staged_at, "stage receipt.staged_at"),
+  };
+}
+
+/** The maintainer's approval steps, written to the workflow summary. Only the stage id and digests vary. */
+export function stageApprovalSummary(staged: StageReceipt): string {
+  const npm = `npx --yes npm@${PINNED_NPM}`;
+  const downloaded = `${staged.package.name.slice(1).replace("/", "-")}-${staged.package.version}-${staged.stage_id}.tgz`;
+  return [
+    `## Staged ${staged.package.name}@${staged.package.version} — awaiting maintainer approval`,
+    "",
+    "This version is not public on npm until it is approved (a package new to npm shows only",
+    "npm's public `0.0.0-stage` placeholder meanwhile). On the device that holds the npm login:",
+    "",
+    "```bash",
+    `${npm} stage view ${staged.stage_id}`,
+    `${npm} stage download ${staged.stage_id}`,
+    `shasum -a 256 ${downloaded}`,
+    `# expect ${staged.artifact.sha256}`,
+    `${npm} stage approve ${staged.stage_id}   # 2FA; or: stage reject ${staged.stage_id}`,
+    "```",
+    "",
+    `Then dispatch this workflow again on \`${staged.tag}\` with the same inputs. It finds the`,
+    "published version and only verifies the public registry bytes against a fresh receipt.",
+    "",
+  ].join("\n");
+}
+
 async function publish(
   receiptPath: string,
   authentication: AuthenticationMode,
   npmTag: string,
-): Promise<PreparedReceipt> {
+  mode: PublishMode,
+): Promise<PreparedReceipt | StageReceipt> {
   ensureWorkflowContext();
   if (authentication !== "bootstrap" && authentication !== "trusted") fail("authentication must be bootstrap or trusted");
   await ensurePinnedTools();
@@ -1881,10 +2452,14 @@ async function publish(
   const { artifactPath } = await validateReceiptAgainstCheckout(receipt, absoluteReceiptPath);
 
   const state = await registryState(receipt.package.name, receipt.package.version);
-  const decision = registryDecision(state.packageStatus, state.versionStatus, authentication);
+  const action = publishAction(
+    registryDecision(state.packageStatus, state.versionStatus, authentication),
+    mode,
+    authentication,
+  );
   let status: "published" | "already_published_exact";
   let tarball: string;
-  if (decision === "verify-existing") {
+  if (action === "verify-existing") {
     if (!state.versionDocument) fail("npm version lookup did not return a document");
     registryTarballUrl(receipt, state.versionDocument);
     tarball = await pollRegistry(receipt, npmTag);
@@ -1899,20 +2474,25 @@ async function publish(
         fail("trusted publication requires the GitHub OIDC request environment");
       }
     }
-    await command(
-      "npm",
-      [
-        "publish",
-        artifactPath,
-        "--access",
-        "public",
-        "--tag",
+    const npmRun = await command("npm", npmPublishArguments(action, artifactPath, npmTag), {
+      env: publishEnvironment,
+      capture: action === "stage",
+    });
+    if (action === "stage") {
+      // Keep npm's own record in the log even if it cannot be parsed below.
+      console.error(npmRun.stdout);
+      // Staged, not published: no registry poll and no receipt result.
+      const staged = stageReceipt(
+        receipt,
         npmTag,
-        "--provenance",
-        "--ignore-scripts",
-      ],
-      { env: publishEnvironment },
-    );
+        parseStagePublishOutput(npmRun.stdout, receipt),
+        new Date().toISOString(),
+      );
+      await writeFile(join(dirname(absoluteReceiptPath), "stage.json"), `${JSON.stringify(staged, null, 2)}\n`, { mode: 0o600 });
+      if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, stageApprovalSummary(staged));
+      console.log(JSON.stringify(staged, null, 2));
+      return staged;
+    }
     tarball = await pollRegistry(receipt, npmTag);
     status = "published";
   }
@@ -1964,7 +2544,7 @@ async function mirror(receiptPath: string): Promise<void> {
 
 function argumentsMap(args: readonly string[]): { command: string; options: Map<string, string> } {
   const [subcommand, ...rest] = args;
-  if (!subcommand) fail("usage: npm-release.ts <resolve|prepare|publish|mirror> [options]");
+  if (!subcommand) fail("usage: npm-release.ts <resolve|check-inputs|prepare|publish|mirror|workflow-options> [options]");
   const options = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
     const flag = rest[index];
@@ -1984,11 +2564,29 @@ function required(options: Map<string, string>, name: string): string {
 
 async function main(args: readonly string[]): Promise<void> {
   const parsed = argumentsMap(args);
+  if (parsed.command === "workflow-options") {
+    if (parsed.options.size !== 0) fail("workflow-options takes no options");
+    process.stdout.write(publishWorkflowPackageOptions());
+    return;
+  }
   if (parsed.command === "resolve") {
     const spec = releaseSpec(required(parsed.options, "--package"));
     if (parsed.options.size !== 1) fail("resolve accepts only --package");
     const { version } = await packageIdentity(spec);
     console.log(JSON.stringify({ ...spec, version, tag: expectedTag(spec, version) }, null, 2));
+    return;
+  }
+  if (parsed.command === "check-inputs") {
+    const allowed = ["--package", "--authentication", "--npm-tag", "--publish-mode"];
+    if ([...parsed.options.keys()].some((flag) => !allowed.includes(flag))) {
+      fail("check-inputs accepts only --package, --authentication, --npm-tag, and optional --publish-mode");
+    }
+    await checkInputs(
+      required(parsed.options, "--package"),
+      parseAuthentication(required(parsed.options, "--authentication")),
+      required(parsed.options, "--npm-tag"),
+      parsePublishMode(parsed.options.get("--publish-mode") ?? DEFAULT_PUBLISH_MODE),
+    );
     return;
   }
   if (parsed.command === "prepare") {
@@ -2001,11 +2599,15 @@ async function main(args: readonly string[]): Promise<void> {
     return;
   }
   if (parsed.command === "publish") {
-    if (parsed.options.size !== 3) fail("publish requires exactly --receipt, --authentication, and --npm-tag");
+    const allowed = ["--receipt", "--authentication", "--npm-tag", "--publish-mode"];
+    if ([...parsed.options.keys()].some((flag) => !allowed.includes(flag))) {
+      fail("publish accepts only --receipt, --authentication, --npm-tag, and optional --publish-mode");
+    }
     await publish(
       required(parsed.options, "--receipt"),
-      required(parsed.options, "--authentication") as AuthenticationMode,
+      parseAuthentication(required(parsed.options, "--authentication")),
       required(parsed.options, "--npm-tag"),
+      parsePublishMode(parsed.options.get("--publish-mode") ?? DEFAULT_PUBLISH_MODE),
     );
     return;
   }

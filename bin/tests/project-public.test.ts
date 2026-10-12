@@ -17,6 +17,8 @@ import {
   projectionDate,
   ProjectionRefused,
   projectPublic,
+  PUBLIC_RELEASE_TOOLS,
+  reachesPrivateArea,
 } from "../project-public.ts";
 import {
   applyGitleaksIgnore,
@@ -227,6 +229,31 @@ describe("allowlist enforcement", () => {
     refused([{ path: "PROJECTION.json", kind: "blob" }]);
     refused([{ path: "packages/beta", kind: "tree" }, { path: "packages/alpha", kind: "tree" }]);
     expect(() => parseAllowlist(bytes([{ path: "packages/alpha", kind: "tree" }]))).not.toThrow();
+  });
+
+  test("lets exactly the public release tools leave bin/, as blobs and nothing else", () => {
+    const bytes = (include: unknown[]) => Buffer.from(JSON.stringify({ ...ALLOWLIST, include }));
+    expect(PUBLIC_RELEASE_TOOLS).toEqual(["bin/build-love-packages.ts", "bin/npm-release.ts"]);
+    expect(() => parseAllowlist(bytes([
+      { path: "bin/build-love-packages.ts", kind: "blob" },
+      { path: "bin/npm-release.ts", kind: "blob" },
+      { path: "packages/alpha", kind: "tree" },
+    ]))).not.toThrow();
+    for (const include of [
+      { path: "bin", kind: "tree" },
+      { path: "bin/npm-release.ts", kind: "tree" },
+      { path: "bin/npm-release.tsx", kind: "blob" },
+      { path: "bin/public-release-tag.ts", kind: "blob" },
+      { path: "bin/project-public.ts", kind: "blob" },
+      { path: ".github/workflows/publish-npm.yml", kind: "blob" },
+      { path: "api/bin/npm-release.ts", kind: "blob" },
+    ]) {
+      expect(() => parseAllowlist(bytes([include]))).toThrow("reaches a private-only area");
+    }
+    expect(reachesPrivateArea("bin/npm-release.ts", "blob")).toBe(false);
+    expect(reachesPrivateArea("bin/npm-release.ts", "tree")).toBe(true);
+    expect(reachesPrivateArea("packages/alpha", "tree")).toBe(false);
+    expect(reachesPrivateArea("public/allowlist.json", "blob")).toBe(true);
   });
 
   test("refuses an allowlisted path whose kind does not match the source", () => {
@@ -806,6 +833,8 @@ describe("the real allowlist and overlay", () => {
     ]);
     expect(allowlist.include.filter((entry) => entry.kind === "blob").map((entry) => entry.path)).toEqual([
       ".gitattributes",
+      "bin/build-love-packages.ts",
+      "bin/npm-release.ts",
       "docs/DATASET-INFLUENCE.md",
       "docs/RIGHTS-OF-LIFE.md",
       "docs/XENIA-LOOP-ATLAS.md",
@@ -819,8 +848,9 @@ describe("the real allowlist and overlay", () => {
     ]);
     // The older sdist-only SOUL letter stays private; the wheel's copy is projected.
     expect(allowlist.exclude).toContain("packages/sdk-py/SOUL.md");
-    // The root bin/ Whitehack adapter that a wallet test can use stays private.
-    expect(allowlist.include.some((entry) => entry.path.startsWith("bin/"))).toBe(false);
+    // Only the two release tools the public publish workflow runs leave bin/;
+    // the root bin/ Whitehack adapter that a wallet test can use stays private.
+    expect(allowlist.include.filter((entry) => entry.path.startsWith("bin/")).map((entry) => entry.path)).toEqual([...PUBLIC_RELEASE_TOOLS]);
     expect(allowlist.include.some((entry) => DENYLIST_PATH.startsWith(entry.path))).toBe(false);
   });
 
@@ -862,6 +892,14 @@ describe("the real allowlist and overlay", () => {
     const build = buildProjection(ROOT, "HEAD");
     const findings = guardProjection(ROOT, build);
     expect(findings.map(formatFinding)).toEqual([]);
-    expect(build.projection.paths).toHaveLength(53);
+    expect(build.projection.paths).toHaveLength(55);
+    // The projected release tools import only each other and built-ins, so the
+    // public workflow can run them without the private tree.
+    for (const tool of PUBLIC_RELEASE_TOOLS) {
+      const source = readFileSync(join(ROOT, tool), "utf8");
+      const imports = [...source.matchAll(/^import[^;]*?from\s+"([^"]+)";$/gmsu)].map((match) => match[1]);
+      for (const specifier of imports) expect(specifier?.startsWith("node:") || specifier === "./build-love-packages").toBe(true);
+    }
+    expect(build.projection.overlay.map((entry) => entry.path)).toContain(".github/workflows/publish-npm.yml");
   }, 120_000);
 });

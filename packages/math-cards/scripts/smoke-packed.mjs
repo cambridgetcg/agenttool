@@ -30,7 +30,7 @@ try {
   ));
   if (
     installedPackage.name !== "@agenttool/math-cards"
-    || installedPackage.version !== "0.1.0-dev.1"
+    || installedPackage.version !== "0.1.0-dev.2"
   ) {
     throw new Error("packed package installed under an unexpected identity");
   }
@@ -53,7 +53,7 @@ try {
     const card = validateMathCard(vectors.cases.ready_proof.card);
     const assessment = assessMathCard(card);
     if (
-      PACKAGE_VERSION !== "0.1.0-dev.1"
+      PACKAGE_VERSION !== "0.1.0-dev.2"
       || assessment.status !== "ready_for_bounded_inquiry"
       || !cardSchema.endsWith("/schema/agenttool-math-card-v0.1.schema.json")
       || !inputSchema.endsWith("/schema/agenttool-math-card-input-v0.1.schema.json")

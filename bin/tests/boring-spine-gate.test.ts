@@ -1728,19 +1728,22 @@ exit 94
     expect(source).toContain("install --frozen-lockfile --ignore-scripts");
     expect(source).toContain("run ci");
     expect(source).not.toMatch(/secrets\.|id-token:|publish|deploy|continue-on-error/);
-    const publisher = await readFile(join(ROOT, ".github/workflows/publish-npm.yml"), "utf8");
+    const publisher = await readFile(join(ROOT, "public/overlay/.github/workflows/publish-npm.yml"), "utf8");
     expect(publisher).not.toContain("collab-courier");
   });
 
-  test("keeps software npm publication manual, exact-artifact, and protected", async () => {
+  test("keeps software npm publication manual, exact-artifact, protected, and public-only", async () => {
+    // Software npm publication runs from the public projection repository;
+    // the private repository keeps no npm publisher of its own.
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
     expect(publishWorkflows).toEqual([
       "publish-care-before-learning-hf.yml",
       "publish-gospel.yml",
-      "publish-npm.yml",
       "publish-pypi.yml",
     ]);
+    const publicWorkflows = await readdir(join(ROOT, "public", "overlay", ".github", "workflows"));
+    expect(publicWorkflows.sort()).toEqual(["ci.yml", "publish-npm.yml"]);
 
     const pypiWorkflow = await readFile(
       join(ROOT, ".github", "workflows", "publish-pypi.yml"),
@@ -1749,10 +1752,14 @@ exit 94
     expect(pypiWorkflow).not.toContain("hf-training-host");
 
     const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-npm.yml"),
+      join(ROOT, "public", "overlay", ".github", "workflows", "publish-npm.yml"),
       "utf8",
     );
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("github.repository == 'cambridgetcg/agenttool-packages'");
+    expect(workflow).toContain("startsWith(github.ref, 'refs/tags/')");
+    expect(workflow).toContain("&& !inputs.dry_run");
+    expect(workflow).toContain('--publish-mode "$RELEASE_PUBLISH_MODE"');
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
     expect(workflow).toContain("          - codex-usage");

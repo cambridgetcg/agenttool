@@ -85,6 +85,19 @@ const REPO_ROOT = resolve(import.meta.dir, "..");
 const GUARD_SOURCE = resolve(import.meta.dir, "..", OVERLAY_ROOT, GUARD_FILE);
 /** No allowlist entry may reach into these top-level areas, whatever the file says. */
 const PRIVATE_ONLY_ROOTS = ["public", "bin", "api", "apps", ".github", ".git", "infra", "supabase"];
+/**
+ * The only exceptions: the release tools that the public repository's
+ * publish workflow runs, each as an exact blob entry. They import nothing
+ * but each other and Node/Bun built-ins.
+ */
+export const PUBLIC_RELEASE_TOOLS: readonly string[] = ["bin/build-love-packages.ts", "bin/npm-release.ts"];
+
+/** Whether an allowlisted path reaches a private-only area (an exact public release tool blob does not). */
+export function reachesPrivateArea(path: string, kind: "tree" | "blob"): boolean {
+  const root = path.split("/")[0] as string;
+  if (!PRIVATE_ONLY_ROOTS.includes(root)) return false;
+  return !(kind === "blob" && PUBLIC_RELEASE_TOOLS.includes(path));
+}
 const OUT_REF_PREFIXES = ["refs/public/", "refs/projection/"];
 
 export class ProjectionRefused extends Error {
@@ -167,8 +180,7 @@ export function parseAllowlist(bytes: Uint8Array): Allowlist {
     }
     if (include.kind !== "tree" && include.kind !== "blob") fail(`include[${index}].kind must be tree or blob`);
     if (!isSafeRelativePath(include.path)) fail(`include[${index}].path is not a safe relative path`);
-    const root = include.path.split("/")[0] as string;
-    if (PRIVATE_ONLY_ROOTS.includes(root)) fail(`include[${index}] ${include.path} reaches a private-only area`);
+    if (reachesPrivateArea(include.path, include.kind)) fail(`include[${index}] ${include.path} reaches a private-only area`);
     if (isWithin(DENYLIST_PATH, include.path) || isWithin(include.path, DENYLIST_PATH)) fail(`include[${index}] would project the private denylist`);
     if (include.path === PROJECTION_FILE) fail(`include[${index}] collides with ${PROJECTION_FILE}`);
     for (const held of heldPaths) {
@@ -511,8 +523,8 @@ export function assertProjectionHistory(repo: string, head: string): Projection 
   const { commits, findings } = projectionHistory(repo, head);
   for (const { commit, projection } of commits) {
     for (const entry of projection?.paths ?? []) {
-      const root = entry.path.split("/")[0] as string;
-      if (PRIVATE_ONLY_ROOTS.includes(root) || isWithin(DENYLIST_PATH, entry.path) || isWithin(entry.path, DENYLIST_PATH)) {
+      const kind = entry.tree !== undefined ? "tree" : "blob";
+      if (reachesPrivateArea(entry.path, kind) || isWithin(DENYLIST_PATH, entry.path) || isWithin(entry.path, DENYLIST_PATH)) {
         findings.push({ layer: "path", rule: "path/private-area", path: `${commit}:${entry.path}` });
       }
     }
