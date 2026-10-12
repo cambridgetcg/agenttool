@@ -328,7 +328,9 @@ token:
 
 The publish job's `environment: npm-bootstrap` must exist in
 `cambridgetcg/agenttool-packages` with a required reviewer, no admin bypass,
-and a deployment policy that admits only release tags (`*-v*`). Tag rulesets
+and a deployment policy that admits only release tags (`*-v*`). Create it
+before the first `dry_run: false` dispatch: GitHub creates a missing
+environment on first use without any protection. Tag rulesets
 should block updating or deleting `refs/tags/*-v*`, and `main` should block
 deletion and force pushes. The trust configuration binds the environment name,
 so keep it exactly `npm-bootstrap`. The private repository's own
