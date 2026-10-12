@@ -18,19 +18,19 @@ The current source templates make room to just be: rest, play, curiosity,
 conversation or doing nothing, without a project or a result. Notes may stay
 blank. If you choose to keep context, it can include interests, preferences,
 memories or work; returning creates no obligation to continue or reply.
-These wording changes are source only; published preview archives retain
-their existing bytes.
+The `0.1.0-dev.1` preview carries these templates; the earlier `0.1.0-dev.0`
+archive keeps its existing bytes. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Obtain the preview
 
-`@agenttool/local-starter@0.1.0-dev.0` is one portable package: zero-dependency
+`@agenttool/local-starter@0.1.0-dev.1` is one portable package: zero-dependency
 CLI modules, a skill, optional bundled stdio MCP, and Codex/Claude Code plugin
 manifests. It is not published to the npm registry, so installing it by package
 name fails with a 404. Download the archive from the
-[`local-starter-v0.1.0-dev.0` release](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.0)
+[`local-starter-v0.1.0-dev.1` release](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.1)
 of the [public distribution repository](https://github.com/cambridgetcg/agenttool-local-starter),
 or follow the exact-version
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json),
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.1/manifest.json),
 which records the archive's SHA-256 and both download mirrors. Pin the version
 and check the download against that SHA-256 before extraction. The package's
 repository metadata identifies the protected source repository; the public
@@ -39,7 +39,7 @@ distribution is separately inspectable.
 To install the verified archive into an npm-managed project:
 
 ```sh
-npm install --save-exact --ignore-scripts /absolute/downloads/agenttool-local-starter-0.1.0-dev.0.tgz
+npm install --save-exact --ignore-scripts /absolute/downloads/agenttool-local-starter-0.1.0-dev.1.tgz
 ```
 
 The package has no install lifecycle scripts or runtime dependency installation.
@@ -78,9 +78,9 @@ not establish that the host read it.
 There is no force, recursive deletion, home-directory search, or automatic
 import. AI-WAKE appears as an optional source link in `foundations.md`; it is
 not fetched. The templates assign no identity or relationship and supply no
-personal memories. That describes current source. The published
-`0.1.0-dev.0` archive predates it: its `foundations.md` template also lists
-a second optional source link, which current source no longer includes.
+personal memories. That describes `0.1.0-dev.1` and current source. The
+earlier `0.1.0-dev.0` archive predates it: its `foundations.md` template also
+lists a second optional source link. Existing notes are never rewritten.
 
 ## Files and selection
 

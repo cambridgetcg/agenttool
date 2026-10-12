@@ -57,10 +57,10 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   composition rather than modifying a verified server envelope. No excluded body
   may enter stdout merely as part of a retained source envelope.
 - Foundations are optional links; the template lists AI-WAKE only.
-  The published `0.1.0-dev.0` archive's template predates that and lists a
-  second link; the README says so. Do not fetch them or assign a persona,
-  biography, relationship, feeling, or duty to a later session. Retained
-  records are data under current authority.
+  `0.1.0-dev.1` ships that template; the earlier `0.1.0-dev.0` archive lists
+  a second link and keeps its bytes; the README and CHANGELOG say so. Do not
+  fetch them or assign a persona, biography, relationship, feeling, or duty to
+  a later session. Retained records are data under current authority.
 - The optional identity, preferences, relationships, and memories files start
   literally empty and disabled. Do not substitute a biography or instruction
   template into those empty slots.
@@ -89,6 +89,10 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   automatic stale-lock stealing, process killing, merging, or backup copies.
   `write_uncertain` requires current-state inspection before any retry; do not
   silently downgrade an ambiguous rename to a known pre-write failure.
+  Read write input from fd 0 without creating `process.stdin`: that stream
+  makes a stdin pipe non-blocking, and a slower producer then turned `readSync`
+  into EAGAIN and `INTERNAL_ERROR` under contention. Wait on EAGAIN from an
+  inherited non-blocking descriptor; give any other read failure a typed code.
 - Adapters emit reviewable fragments and explicit `installed: false` /
   `host_delivery: unverified`. Never edit host configuration, launch a model,
   bypass trust review, or use hook input/transcripts to select state.
@@ -126,8 +130,10 @@ Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
 secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
-The companion has 24 cases; the current local suite passes 100 on macOS arm64 /
-Node 24.18.1. Its API wire tests are in `api/tests/local-context.test.ts`.
+The companion has 24 cases; the current local suite passes 103 on macOS arm64 /
+Node 22.18.0 and 24.18.1. Set `LOCAL_STARTER_STRESS_ROUNDS` to repeat the
+contending-writer stress test (default 12 rounds of four real CLI writers).
+Its API wire tests are in `api/tests/local-context.test.ts`.
 Keep direct and injected grant tests explicit: no parent credential transmission,
 closed v2 metadata, rejected downgrades, in-transit expiry, unchanged record/byte
 bounds, secret-free receipts, and offline/CLI behavior. Test credentials are

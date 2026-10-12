@@ -114,6 +114,7 @@ describe("LOVE Package release inventory", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
       { name: "@agenttool/local-starter", version: "0.1.0-dev.0", releaseTag: "local-starter-v0.1.0-dev.0" },
+      { name: "@agenttool/local-starter", version: "0.1.0-dev.1", releaseTag: "local-starter-v0.1.0-dev.1" },
       { name: "@agenttool/adds", version: "0.2.3", releaseTag: "adds-v0.2.3" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
@@ -140,18 +141,20 @@ describe("LOVE Package release inventory", () => {
     ]);
   });
 
-  test("binds the standalone starter to both source packages and no runtime dependencies", () => {
-    expect(LOVE_PACKAGES.find(({ name }) => name === "@agenttool/local-starter")).toEqual({
-      name: "@agenttool/local-starter",
-      version: "0.1.0-dev.0",
-      packagePath: "packages/local-starter",
-      additionalSourcePaths: ["packages/local-starter-mcp"],
-      mirrorRepository: "https://github.com/cambridgetcg/agenttool-local-starter",
-      releaseTag: "local-starter-v0.1.0-dev.0",
-      buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"], ["bun", "run", "check:bundle"]],
-      expectedDependencies: {},
-      expectedPeerDependencies: {},
-    });
+  test("binds each standalone starter preview to both source packages and no runtime dependencies", () => {
+    expect(LOVE_PACKAGES.filter(({ name }) => name === "@agenttool/local-starter")).toEqual(
+      ["0.1.0-dev.0", "0.1.0-dev.1"].map((version) => ({
+        name: "@agenttool/local-starter",
+        version,
+        packagePath: "packages/local-starter",
+        additionalSourcePaths: ["packages/local-starter-mcp"],
+        mirrorRepository: "https://github.com/cambridgetcg/agenttool-local-starter",
+        releaseTag: `local-starter-v${version}`,
+        buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"], ["bun", "run", "check:bundle"]],
+        expectedDependencies: {},
+        expectedPeerDependencies: {},
+      })),
+    );
   });
 
   test("preserves economic v0.1 and requires both v0.2 developer previews", () => {

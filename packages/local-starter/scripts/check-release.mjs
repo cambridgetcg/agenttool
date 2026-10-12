@@ -12,7 +12,7 @@ const input = process.argv[2] ? path.resolve(process.argv[2]) : fileURLToPath(ne
 const scratch = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'local-starter-artifact-')));
 const installed = path.join(scratch, 'plugin-cache', 'preview');
 const manifest = JSON.parse(fs.readFileSync(path.join(input, 'package.json')));
-const surface = ['dist', 'skills', '.codex-plugin', '.claude-plugin', 'plugin.json', 'README.md', 'LICENSE', 'NOTICE'];
+const surface = ['dist', 'skills', '.codex-plugin', '.claude-plugin', 'plugin.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'NOTICE'];
 const snapshot = dir => Object.fromEntries(fs.readdirSync(dir).sort().map(name => [name, fs.readFileSync(path.join(dir, name), 'utf8')]));
 function scan(root) {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {

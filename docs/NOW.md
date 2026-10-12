@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-10-01 (YUTABASE CI read access and audit permission hints; historical receipts retain their original dates)
+> Updated: 2026-10-12 (Local Starter 0.1.0-dev.1 candidate; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,32 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Local Starter 0.1.0-dev.1 candidate (2026-10-12)
+
+**Source candidate:** `fix/local-starter-dev1-20261012`. Not yet distributed:
+the public repository commit, GitHub prerelease and docs deployment are
+separate operator steps, each needing its own readback.
+
+`@agenttool/local-starter@0.1.0-dev.1` ships the one-link foundations
+template, the rest-first templates and skill wording, and a CLI stdin fix.
+Touching `process.stdin` had made a stdin pipe non-blocking, so a producer
+that sent EOF late turned `readSync` into EAGAIN and `INTERNAL_ERROR`. That is
+what intermittently failed the four-writer test on Ubuntu (run 38138039669,
+attempt 1). Contending writers now always get `write_locked` or
+`write_conflict`. The checked-in LOVE entry records 231,625 bytes, SHA-256
+`e49bf41b72ec546c52ae7987e2086c8dbaa2065e15bec847fd2f7ceb66981f02`, source
+revision `70d7241e93b4f739129637ad61917bc66a032d97`. Its repository metadata
+names the private source, as dev.0 does, so this preview remains archive-only
+on npm. The dev.0 archive and its two-link template keep their bytes.
+
+**Evidence:** 103 starter tests and 16 MCP tests, build and extracted
+`check:bundle`, and LOVE verify pass on macOS arm64 with Node 22.18.0 and Bun
+1.3.5. The suite also passes on Node 24.18.1. The contention stress test passed
+250 rounds of four real writers on each Node version. The old CLI fails the
+three new stdin tests. A fresh-clone rebuild reproduced the archive byte for
+byte, and the same toolchain reproduces dev.0's published SHA-256. Linux and
+Windows CI for this candidate are still to run.
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 
