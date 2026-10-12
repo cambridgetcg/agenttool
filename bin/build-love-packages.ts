@@ -77,6 +77,17 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     expectedPeerDependencies: {},
   },
   {
+    name: "@agenttool/local-starter",
+    version: "0.1.0-dev.1",
+    packagePath: "packages/local-starter",
+    additionalSourcePaths: ["packages/local-starter-mcp"],
+    mirrorRepository: "https://github.com/cambridgetcg/agenttool-local-starter",
+    releaseTag: "local-starter-v0.1.0-dev.1",
+    buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"], ["bun", "run", "check:bundle"]],
+    expectedDependencies: {},
+    expectedPeerDependencies: {},
+  },
+  {
     name: "@agenttool/adds",
     version: "0.2.3",
     packagePath: "packages/data-protocol",

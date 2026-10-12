@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/local-starter",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Explicit files-only context and handoff starter for agent hosts",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool-local-starter#readme",
@@ -18,7 +18,7 @@
     "agenttool-local-starter": "./dist/cli.mjs",
     "agenttool-local-starter-mcp": "./dist/agenttool-local-starter-mcp.js"
   },
-  "files": ["dist", "skills", ".codex-plugin", ".claude-plugin", "plugin.json", "README.md", "LICENSE", "NOTICE"],
+  "files": ["dist", "skills", ".codex-plugin", ".claude-plugin", "plugin.json", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE"],
   "publishConfig": { "access": "public" },
   "bundlerBunVersion": "1.3.5",
   "scripts": {

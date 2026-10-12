@@ -12,7 +12,7 @@ schemas. Both dependencies are pinned to the versions already used by
 `2.0.0-beta.5` and `zod` `4.4.3`.
 
 This component is **private source**, bundled into the public
-`@agenttool/local-starter@0.1.0-dev.0` preview as
+`@agenttool/local-starter@0.1.0-dev.1` preview as
 `dist/agenttool-local-starter-mcp.js`. Use that standalone archive for distribution;
 its runtime needs no repository sibling, SDK install or Bun. This source package
 needs the sibling starter in the checkout; copying this directory alone is insufficient. Node
