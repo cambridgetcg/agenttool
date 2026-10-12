@@ -8,7 +8,7 @@ It reads the same manifest and seven fixed files, without copying a second memor
 store. The starter remains dependency-free; this separate package adds the MCP
 SDK for protocol framing, negotiation and lifecycle, and Zod for closed argument
 schemas. Both dependencies are pinned to the versions already used by
-[`wake-return`](../wake-return/package.json): `@modelcontextprotocol/server`
+`wake-return`: `@modelcontextprotocol/server`
 `2.0.0-beta.5` and `zod` `4.4.3`.
 
 This component is **private source**, bundled into the public

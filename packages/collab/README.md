@@ -1,6 +1,6 @@
 # @agenttool/collab
 
-> **Compass:** [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md).
+> **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source repository).
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
 > **Code:** `src/{store,mcp,protocol}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
@@ -631,7 +631,8 @@ it occurred. Queueing is not sending; transport receipt is not processing,
 agreement, execution, or chain observation. Cross-device report/reply and
 handoff-offer exchange belongs to that separate opt-in courier; Collab itself
 replicates neither journals nor leases, reviews or task authority. See
-[Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) for its private
+Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source
+repository) for its private
 binding, disclosure, pause/revoke and recovery boundaries.
 
 For a source-tree trial, build once and point Claude Code at this package root:
@@ -668,10 +669,10 @@ npm pack --dry-run --ignore-scripts
 
 Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish`. See
-[`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md).
 
 Version 0.4.0 is the recorded public witness-awareness release. The repository's
-[NPM release receipts](../../docs/NPM-RELEASES.md) record its exact 303,376-byte
+[NPM release receipts](https://docs.agenttool.dev/NPM-RELEASES.md) record its exact 303,376-byte
 npm/GitHub artifact with SHA-256
 `1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51`.
 This is a historical receipt, not a fresh registry or deployed-host check.

@@ -70,25 +70,25 @@ authority to change money.
 Version `0.1.0-dev.1` is the current public developer preview. It raises the
 Alchemy peer floor to the corresponding dev.1 release while preserving the
 same seven-standard-method adapter and `agenttool.alchemy-agentcred/0.1` wire.
-Protected trusted [run
-`32755731523`](https://github.com/cambridgetcg/agenttool/actions/runs/32755731523)
-published annotated [tag
-`alchemy-agentcred-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-agentcred-v0.1.0-dev.1)
+Protected trusted run
+`32755731523`
+published annotated tag
+`alchemy-agentcred-v0.1.0-dev.1`
 from exact source `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`, after public
 Alchemy dev.1 readback. Anonymous GitHub/npm readback matched 14,741 bytes and
 SHA-256
 `85c1930a99201cb0b2148aabdc88e160c7ee8b92732299b867f7468ba4d2ee6b`;
 npm `next` resolves to dev.1 while mutable `latest` deliberately remains
 dev.0. The exact tag-object, provenance, signature, integrity, and peer-install
-receipt is in [`docs/ALCHEMY.md`](../../docs/ALCHEMY.md) and
-[`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). This package still has no
+receipt is in `docs/ALCHEMY.md` and
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md). This package still has no
 LOVE inventory entry.
 
 The immutable `0.1.0-dev.0` adapter remains historical release evidence under
 annotated tag `alchemy-agentcred-v0.1.0-dev.0` after requesting npm dist-tag
 `next`. Its GitHub and npm tarballs were independently read back
 byte-identical; the protected run, size, and SHA-256 receipt are recorded in
-[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). Mutable `latest` remains on that
+`docs/ALCHEMY.md`. Mutable `latest` remains on that
 historical version; that fallback is not a maturity signal and does not
 rewrite dev.0. This package has no LOVE inventory entry, hosted route,
 deployment, or live provider proof. Release wiring, package metadata, and

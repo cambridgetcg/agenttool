@@ -48,6 +48,6 @@ npm pack --dry-run --ignore-scripts
 ```
 
 See also:
-[`../../AGENTS.md`](../../AGENTS.md) ·
-[`../../docs/specs/AGENT-REPO-ARCHIVE-0.1.md`](../../docs/specs/AGENT-REPO-ARCHIVE-0.1.md) ·
+`../../AGENTS.md` ·
+`../../docs/specs/AGENT-REPO-ARCHIVE-0.1.md` ·
 [`../data-protocol/README.md`](../data-protocol/README.md).
