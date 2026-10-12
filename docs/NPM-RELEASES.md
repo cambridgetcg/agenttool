@@ -73,28 +73,34 @@ The workflow:
    out, an existing annotated `<package>-v<version>` tag made by
    `bin/public-release-tag.ts` (fixed tagger, a successful public CI run of
    that exact commit);
-2. proves that the workflow identity, tag, `HEAD`, and provenance commit are the
+2. before any package code runs, refuses the inputs the publish step would
+   refuse (`check-inputs`: a prerelease on `latest`, `publish_mode: publish`
+   with `trusted`, bootstrap for an existing package, trusted for a missing
+   one) and prints the planned action, from the checkout and anonymous
+   registry reads;
+3. proves that the workflow identity, tag, `HEAD`, and provenance commit are the
    same commit contained in the public repository's `main` (an anonymous
    fetch);
-3. installs locked dependencies and runs the package's gate (its `prepack`, or
+4. installs locked dependencies and runs the package's gate (its `prepack`, or
    the spec's declared gate scripts) without a publish credential or OIDC
    permission, then `npm pack`s it into runner temp space;
-4. checks package identity, repository, Apache-2.0 terms, archive paths and
+5. checks package identity, repository, Apache-2.0 terms, archive paths and
    entry types, secret-like signatures, size, and hashes, and writes the
    prepared receipt to the run summary;
-5. stops there when `dry_run` is true (the default);
-6. otherwise transfers only that tarball and its path-independent receipt to a
-   second job, which enters the protected `npm-bootstrap` GitHub environment;
-7. rechecks the downloaded bytes, then creates or reuses the tag's GitHub
+6. stops there when `dry_run` is true (the default);
+7. otherwise transfers only that tarball and its path-independent receipt to a
+   second job, which enters the protected `npm-bootstrap` GitHub environment
+   and runs `check-inputs` again against the registry as it is then;
+8. rechecks the downloaded bytes, then creates or reuses the tag's GitHub
    Release in the public repository, uploads the exact tarball if absent,
    re-downloads it, and requires byte identity;
-8. with `publish_mode: stage` (the default) stages the tarball with
+9. with `publish_mode: stage` (the default) stages the tarball with
    `npm stage publish --provenance --ignore-scripts`, checks that npm staged
    the prepared bytes, and writes the stage id, the SHA-256, and the approval
    commands to the summary, leaving the receipt without a result; and
-9. on a later dispatch after the maintainer's `npm stage approve`, finds the
-   published version, requires byte identity and the requested dist-tag, and
-   records `already_published_exact`.
+10. on a later dispatch after the maintainer's `npm stage approve`, finds the
+    published version, requires byte identity and the requested dist-tag, and
+    records `already_published_exact`.
 
 `publish_mode: publish` publishes directly instead, waits for the registry, and
 records `published`. The release tool refuses it with `trusted` authentication,
@@ -214,9 +220,12 @@ sol access run github -- workflow run publish-npm.yml \
   -f npm_tag=<latest|next> -f dry_run=true
 ```
 
-Prereleases require `npm_tag=next`. The run prepares and checks the artifact
-without any credential and puts the receipt (size, SHA-1, SHA-256, integrity)
-in its summary. Nothing is mirrored, staged, or published.
+Prereleases require `npm_tag=next`. Pass the `authentication`, `npm_tag`, and
+`publish_mode` the real run will use: the first step, `check-inputs`, refuses
+what the real run would refuse and logs the planned action (`stage` for a new
+version, `verify-existing` for one already on npm). The run then prepares and
+checks the artifact without any credential and puts the receipt (size, SHA-1,
+SHA-256, integrity) in its summary. Nothing is mirrored, staged, or published.
 
 ### 6. Stage
 

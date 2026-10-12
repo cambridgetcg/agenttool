@@ -124,6 +124,20 @@ jobs:
           package-manager-cache: false
       - name: Pin release npm
         run: npm install --global --ignore-scripts npm@11.17.0
+      - name: Refuse inputs the real run would refuse
+        shell: bash
+        env:
+          RELEASE_PACKAGE: ${{ inputs.package }}
+          RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
+          RELEASE_NPM_TAG: ${{ inputs.npm_tag }}
+          RELEASE_PUBLISH_MODE: ${{ inputs.publish_mode }}
+        run: |
+          set -euo pipefail
+          bun bin/npm-release.ts check-inputs \
+            --package "$RELEASE_PACKAGE" \
+            --authentication "$RELEASE_AUTHENTICATION" \
+            --npm-tag "$RELEASE_NPM_TAG" \
+            --publish-mode "$RELEASE_PUBLISH_MODE"
       - name: Prepare exact artifact without publish credentials
         shell: bash
         env:
@@ -191,6 +205,20 @@ jobs:
         with:
           name: npm-release-${{ github.run_id }}
           path: ${{ runner.temp }}/agenttool-npm-release
+      - name: Recheck the inputs before any mutation
+        shell: bash
+        env:
+          RELEASE_PACKAGE: ${{ inputs.package }}
+          RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
+          RELEASE_NPM_TAG: ${{ inputs.npm_tag }}
+          RELEASE_PUBLISH_MODE: ${{ inputs.publish_mode }}
+        run: |
+          set -euo pipefail
+          bun bin/npm-release.ts check-inputs \
+            --package "$RELEASE_PACKAGE" \
+            --authentication "$RELEASE_AUTHENTICATION" \
+            --npm-tag "$RELEASE_NPM_TAG" \
+            --publish-mode "$RELEASE_PUBLISH_MODE"
       - name: Mirror and re-download the exact artifact from GitHub Releases
         shell: bash
         env:

@@ -22,9 +22,11 @@ import {
   isReleaseRemote,
   npmPublishArguments,
   packGateScripts,
+  parseAuthentication,
   parsePublishMode,
   parseReleaseTagObject,
   parseStagePublishOutput,
+  planDispatch,
   publishAction,
   publishWorkflowPackageOptions,
   readStageReceipt,
@@ -168,6 +170,24 @@ describe("staged publication", () => {
     // A trusted (OIDC) run never publishes directly, whatever npm's trust would allow.
     expect(() => publishAction("publish", "publish", "trusted")).toThrow("direct publish is reserved for a bootstrap first publication");
     expect(() => publishAction("verify-existing", "publish", "trusted")).toThrow("trusted releases are staged");
+  });
+
+  test("plans a dispatch from its inputs and the registry, refusing what publish would refuse", () => {
+    expect(parseAuthentication("trusted")).toBe("trusted");
+    expect(parseAuthentication("bootstrap")).toBe("bootstrap");
+    expect(() => parseAuthentication("token")).toThrow("authentication must be bootstrap or trusted");
+    // An existing package: trusted stages a new version and verifies an existing one.
+    expect(planDispatch("0.1.0-dev.2", "next", "trusted", "stage", 200, 404)).toBe("stage");
+    expect(planDispatch("0.1.0-dev.2", "next", "trusted", "stage", 200, 200)).toBe("verify-existing");
+    // A package new to npm: bootstrap stages by default, publishes only on request.
+    expect(planDispatch("0.1.0-dev.1", "next", "bootstrap", "stage", 404, 404)).toBe("stage");
+    expect(planDispatch("0.1.0-dev.1", "next", "bootstrap", "publish", 404, 404)).toBe("publish");
+    // Each refusal the publish step would otherwise reach only after the GitHub Release mirror.
+    expect(() => planDispatch("0.1.0-dev.2", "latest", "trusted", "stage", 200, 404)).toThrow("prerelease 0.1.0-dev.2 requires npm dist-tag next");
+    expect(() => planDispatch("1.0.0", "latest", "trusted", "publish", 200, 404)).toThrow("direct publish is reserved");
+    expect(() => planDispatch("1.0.0", "latest", "bootstrap", "stage", 200, 404)).toThrow("bootstrap authentication is restricted");
+    expect(() => planDispatch("1.0.0", "latest", "trusted", "stage", 404, 404)).toThrow("first publication requires the reviewed bootstrap path");
+    expect(() => planDispatch("1.0.0", "latest", "trusted", "stage", 503, 404)).toThrow("HTTP 503");
   });
 
   test("passes the npm 11.17.0 flags for each action", () => {
@@ -344,6 +364,23 @@ describe("the public publish workflow", () => {
     for (const job of [prepare, publish]) {
       expect(job.steps[0]?.with).toMatchObject({ ref: "${{ inputs.tag }}", "fetch-depth": 0, "persist-credentials": false });
       for (const step of job.steps.filter((entry) => entry.uses)) expect(step.uses).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/u);
+    }
+    // Both jobs refuse bad inputs first: before package code runs, and before the GitHub Release mirror.
+    const checkIndex = (job: typeof prepare) => job.steps.findIndex((step) => step.run?.includes("bun bin/npm-release.ts check-inputs"));
+    const runIndex = (job: typeof prepare, text: string) => job.steps.findIndex((step) => step.run?.includes(text));
+    expect(checkIndex(prepare)).toBeGreaterThan(0);
+    expect(checkIndex(prepare)).toBeLessThan(runIndex(prepare, "bun bin/npm-release.ts prepare"));
+    expect(checkIndex(publish)).toBeGreaterThan(0);
+    expect(checkIndex(publish)).toBeLessThan(runIndex(publish, "bun bin/npm-release.ts mirror"));
+    for (const job of [prepare, publish]) {
+      const check = job.steps[checkIndex(job)]!;
+      expect(check.env).toEqual({
+        RELEASE_PACKAGE: "${{ inputs.package }}",
+        RELEASE_AUTHENTICATION: "${{ inputs.authentication }}",
+        RELEASE_NPM_TAG: "${{ inputs.npm_tag }}",
+        RELEASE_PUBLISH_MODE: "${{ inputs.publish_mode }}",
+      });
+      expect(check.run).not.toContain("${{");
     }
     const publishStep = publish.steps.find((step) => step.run?.includes("bun bin/npm-release.ts publish"));
     expect(publishStep?.run).toContain('--publish-mode "$RELEASE_PUBLISH_MODE"');

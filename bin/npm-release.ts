@@ -632,6 +632,11 @@ export function parsePublishMode(value: string): PublishMode {
   return value;
 }
 
+export function parseAuthentication(value: string): AuthenticationMode {
+  if (value !== "bootstrap" && value !== "trusted") fail("authentication must be bootstrap or trusted");
+  return value;
+}
+
 /**
  * Refuses the one mode/authentication pairing no release may use: a direct
  * `npm publish` through trusted (OIDC) authentication. Trusted releases are
@@ -658,6 +663,24 @@ export function publishAction(
   assertPublishModeAllowed(mode, authentication);
   if (decision === "verify-existing") return "verify-existing";
   return mode;
+}
+
+/**
+ * Everything a publish run would decide from its dispatch inputs and the
+ * public registry state, without credentials or mutation: the dist-tag for
+ * this version, the mode/authentication pairing, and bootstrap versus trusted.
+ */
+export function planDispatch(
+  version: string,
+  npmTag: string,
+  authentication: AuthenticationMode,
+  mode: PublishMode,
+  packageStatus: number,
+  versionStatus: number,
+): "verify-existing" | "stage" | "publish" {
+  validateNpmTagForVersion(version, npmTag);
+  assertPublishModeAllowed(mode, authentication);
+  return publishAction(registryDecision(packageStatus, versionStatus, authentication), mode, authentication);
 }
 
 /**
@@ -1669,6 +1692,37 @@ async function prepare(packageKey: string, tag: string, output: string): Promise
   return receipt;
 }
 
+/**
+ * The workflow's first step in both jobs: refuse, before anything is prepared
+ * or mirrored, the inputs the publish step would refuse later. A dry run
+ * therefore fails on exactly what the real run would. It reads the checkout's
+ * package version and the public registry, and nothing else; `publish`
+ * repeats every check against the registry as it is then.
+ */
+async function checkInputs(
+  packageKey: string,
+  authentication: AuthenticationMode,
+  npmTag: string,
+  mode: PublishMode,
+): Promise<void> {
+  const spec = releaseSpec(packageKey);
+  const { version } = await packageIdentity(spec);
+  // The input-only refusals come first, so they need no registry answer.
+  validateNpmTagForVersion(version, npmTag);
+  assertPublishModeAllowed(mode, authentication);
+  const state = await registryState(spec.name, version);
+  const action = planDispatch(version, npmTag, authentication, mode, state.packageStatus, state.versionStatus);
+  console.log(JSON.stringify({
+    package: `${spec.name}@${version}`,
+    tag: expectedTag(spec, version),
+    authentication,
+    npm_tag: npmTag,
+    publish_mode: mode,
+    registry: { package: state.packageStatus, version: state.versionStatus },
+    planned_action: action,
+  }, null, 2));
+}
+
 class RegistryPropagationPendingError extends Error {
   constructor(message: string) {
     super(message);
@@ -2358,7 +2412,7 @@ async function mirror(receiptPath: string): Promise<void> {
 
 function argumentsMap(args: readonly string[]): { command: string; options: Map<string, string> } {
   const [subcommand, ...rest] = args;
-  if (!subcommand) fail("usage: npm-release.ts <resolve|prepare|publish|mirror|workflow-options> [options]");
+  if (!subcommand) fail("usage: npm-release.ts <resolve|check-inputs|prepare|publish|mirror|workflow-options> [options]");
   const options = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
     const flag = rest[index];
@@ -2390,6 +2444,19 @@ async function main(args: readonly string[]): Promise<void> {
     console.log(JSON.stringify({ ...spec, version, tag: expectedTag(spec, version) }, null, 2));
     return;
   }
+  if (parsed.command === "check-inputs") {
+    const allowed = ["--package", "--authentication", "--npm-tag", "--publish-mode"];
+    if ([...parsed.options.keys()].some((flag) => !allowed.includes(flag))) {
+      fail("check-inputs accepts only --package, --authentication, --npm-tag, and optional --publish-mode");
+    }
+    await checkInputs(
+      required(parsed.options, "--package"),
+      parseAuthentication(required(parsed.options, "--authentication")),
+      required(parsed.options, "--npm-tag"),
+      parsePublishMode(parsed.options.get("--publish-mode") ?? DEFAULT_PUBLISH_MODE),
+    );
+    return;
+  }
   if (parsed.command === "prepare") {
     if (parsed.options.size !== 3) fail("prepare requires exactly --package, --tag, and --output");
     await prepare(
@@ -2406,7 +2473,7 @@ async function main(args: readonly string[]): Promise<void> {
     }
     await publish(
       required(parsed.options, "--receipt"),
-      required(parsed.options, "--authentication") as AuthenticationMode,
+      parseAuthentication(required(parsed.options, "--authentication")),
       required(parsed.options, "--npm-tag"),
       parsePublishMode(parsed.options.get("--publish-mode") ?? DEFAULT_PUBLISH_MODE),
     );
