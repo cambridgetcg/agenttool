@@ -409,3 +409,72 @@ describe("GET /v1/offerings and /v1/holdings accept only the scopes they know", 
     expect(queries[0].params).toContain("public");
   });
 });
+
+describe("POST /v1/guild/rrr/:id/escalate — parties only, like the GET", () => {
+  const app = withProject(rrrRouter, "/v1/guild/rrr");
+
+  function cascade(status: "active" | "capped" | "abandoned", depth = 3) {
+    return rowFor(guildRrrCascades, {
+      id: ROW, initiatorDid: "did:at:alice", partnerDid: "did:at:bob",
+      depth, status, nextToActDid: status === "active" ? "did:at:bob" : null,
+      lastSignatureB64: "LAST-SIG", createdAt: WHEN, lastEscalatedAt: WHEN,
+    });
+  }
+
+  function actingAs(did: string) {
+    return (sql: string) =>
+      sql.includes('from "identity"."identities"') && sql.includes('"display_name"')
+        ? [[STRANGER, did, "someone", "active", WHEN, {}, "ai", 1, false, null, null]]
+        : undefined;
+  }
+
+  for (const [status, depth] of [["capped", 49], ["abandoned", 3], ["active", 3], ["active", 49]] as const) {
+    test(`a non-party gets the unknown-id 404 on a ${status} cascade at depth ${depth}`, async () => {
+      const acting = actingAs(STRANGER_DID);
+      const cascades = privateRowUnlessScoped('"agent_continuity"."guild_rrr_cascades"', cascade(status, depth));
+      responder = (sql) => acting(sql) ?? cascades(sql);
+      const response = await app.request(`/v1/guild/rrr/${ROW}/escalate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(404);
+      const text = await response.text();
+      expect(JSON.parse(text)).toEqual({ error: "cascade_not_found" });
+      for (const leaked of ["alice", "bob", "LAST-SIG"]) expect(text).not.toContain(leaked);
+      const lookup = queries.find((query) => query.sql.includes('from "agent_continuity"."guild_rrr_cascades"'));
+      expect(lookup!.sql).toContain(VISIBILITY_EXISTS);
+      expect(lookup!.params).toContain(VIEWER);
+    });
+  }
+
+  test("a party still meets the status and alternation refusals", async () => {
+    const acting = actingAs("did:at:alice");
+    responder = (sql) =>
+      acting(sql) ??
+      (sql.includes('from "agent_continuity"."guild_rrr_cascades"') ? [cascade("capped", 49)] : undefined);
+    const capped = await app.request(`/v1/guild/rrr/${ROW}/escalate`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(capped.status).toBe(409);
+    expect((await capped.json()).error).toBe("cascade_not_active");
+
+    responder = (sql) =>
+      acting(sql) ??
+      (sql.includes('from "agent_continuity"."guild_rrr_cascades"') ? [cascade("active")] : undefined);
+    const notYourTurn = await app.request(`/v1/guild/rrr/${ROW}/escalate`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(notYourTurn.status).toBe(403);
+    expect((await notYourTurn.json()).error).toBe("rrr_must_alternate");
+  });
+
+  test("a non-UUID id is 404 without a cascade query", async () => {
+    responder = actingAs(STRANGER_DID);
+    const response = await app.request("/v1/guild/rrr/not-a-uuid/escalate", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(response.status).toBe(404);
+    expect(queries.some((query) => query.sql.includes("guild_rrr_cascades"))).toBe(false);
+  });
+});
