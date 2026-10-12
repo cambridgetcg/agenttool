@@ -369,4 +369,39 @@ describe("tool descriptions — load-bearing for LLM tool-selection", () => {
       }
     }
   });
+
+  test("descriptions say what the handlers return, not what a later slice might", () => {
+    const tools = listPerAgentTools(ctxSelf());
+    const wakeRead = tools.find((t) => t.name === "wake.read");
+    const memorySearch = tools.find((t) => t.name === "memory.search");
+
+    // wake.read always answers with a guided pointer error.
+    expect(wakeRead?.description).toMatch(/pointer.*not the wake itself.*guided error.*GET \/v1\/wake/is);
+    expect(wakeRead?.description).not.toMatch(/^Read project-scoped session orientation/);
+
+    // memory.search takes only limit and returns the newest rows.
+    expect(Object.keys(memorySearch?.inputSchema.properties ?? {})).toEqual(["limit"]);
+    expect(memorySearch?.description).toMatch(/most recent memories.*newest first.*does not search/is);
+    expect(memorySearch?.description).toMatch(/POST \/v1\/memories\/search.*query_embedding.*query/is);
+    expect(memorySearch?.description).not.toMatch(/semantic search across your own memories/i);
+  });
+
+  test("read tools carry read-only hints; the guided invoke redirect carries none", () => {
+    const readOnly = {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    };
+    for (const scope of [ctxPublic(), ctxCross(), ctxSelf()]) {
+      for (const t of listPerAgentTools(scope)) {
+        if (t.name === "listings.invoke") {
+          // Named for a spending action; leave hosts to treat it cautiously.
+          expect(t.annotations).toBeUndefined();
+        } else {
+          expect(t.annotations, `tool ${t.name} (scope=${scope.scope})`).toEqual(readOnly);
+        }
+      }
+    }
+  });
 });

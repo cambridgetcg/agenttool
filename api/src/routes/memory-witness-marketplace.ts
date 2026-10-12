@@ -177,7 +177,7 @@ function nextActionsFor(
       return [
         {
           action:
-            "Inspect an Ethereum USDC deposit address and follow its returned watch/finality instructions; Solana does not credit by default",
+            "Read the resting deposit-address refusal (no address is currently disclosed); Solana does not credit by default",
           method: "GET",
           path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
         },

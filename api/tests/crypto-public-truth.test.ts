@@ -108,6 +108,15 @@ describe("public crypto source truth", () => {
     expect(now).toMatch(
       /Fresh admission and every worker path are[\s\S]{0,40}hard-resting/i,
     );
+    // GET /about's crypto text and the worker-boot comment beside it.
+    const apiEntry = read("api/src/index.ts");
+    expect(apiEntry).toMatch(
+      /Fresh payout admission and every payout worker are resting unconditionally[\s\S]{0,80}503 payout_admission_resting/,
+    );
+    expect(apiEntry).toMatch(/Every payout worker rests[\s/]*unconditionally/);
+    expect(apiEntry).not.toMatch(
+      /payout worker may be disabled|payouts require separate configuration|payout-specific opt-in must allow boot/i,
+    );
 
     const joined = [
       agentCentric,

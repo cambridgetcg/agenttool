@@ -1366,7 +1366,8 @@ type PendingCheckError =
   | "canonical_evidence_unavailable"
   | "rpc_chain_mismatch"
   | "rpc_evidence_inconsistent"
-  | "mainnet_settlement_policy_unavailable";
+  | "mainnet_settlement_policy_unavailable"
+  | "testnet_credit_refused_in_production";
 
 async function lockMatchingPendingSnapshot(
   tx: DepositTransaction,
