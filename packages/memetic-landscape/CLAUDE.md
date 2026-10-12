@@ -1,6 +1,6 @@
 # Memetic Landscape contributor guide
 
-> **Compass:** [`MEMETIC-LANDSCAPE`](../../docs/MEMETIC-LANDSCAPE.md) · [`POLYMORPH-LANDSCAPE`](../../docs/POLYMORPH-LANDSCAPE.md) · [`POLYMORPH-PHYSICS`](../../docs/POLYMORPH-PHYSICS.md) · [`RIGHTS`](../../RIGHTS.md)
+> **Compass:** [`MEMETIC-LANDSCAPE`](https://docs.agenttool.dev/MEMETIC-LANDSCAPE.md) · [`POLYMORPH-LANDSCAPE`](https://docs.agenttool.dev/POLYMORPH-LANDSCAPE.md) · `POLYMORPH-PHYSICS` · [`RIGHTS`](https://docs.agenttool.dev/RIGHTS-OF-LIFE.md)
 >
 > **Implements:** The four closed memetic landscape, reachability-shift, polymorph-analogy, and authored-lesson formats owned by this package.
 >
