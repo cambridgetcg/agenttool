@@ -161,7 +161,13 @@ describe("OpenAPI receipt fields", () => {
     expect(api.paths["/v1/identities/{id}/attestations/given"].get.description).toMatch(
       /not project-owned.*revoked rows are always excluded.*nullable source_grant_id/is,
     );
-    expect(api.paths["/v1/attestations/{id}"].delete.parameters).toBeUndefined();
+    // Revocation follows the owner rule: the attester's root proof headers,
+    // nothing else (routes/openapi-owner-gated.ts).
+    expect(api.paths["/v1/attestations/{id}"].delete.parameters).toEqual([
+      { $ref: "#/components/parameters/AuthoritySequence" },
+      { $ref: "#/components/parameters/AuthorityTimestamp" },
+      { $ref: "#/components/parameters/AuthoritySignature" },
+    ]);
   });
 
   test("keeps paid memory receipt provenance on detail, list, and receipt-list responses", async () => {

@@ -399,7 +399,7 @@ for (const route of ROUTES) {
       expect(recorded).toHaveLength(1);
       expect(recorded[0]).toMatchObject({
         kind: route.kind, projectId: LEGACY_P, rowIds: [id],
-        authority: { mode: "legacy_bearer", sequence: null }, owners: [{ agentId: L, rowIds: [id] }],
+        authority: { mode: "legacy_bearer", sequence: null, signerIdentityId: null }, owners: [{ agentId: L, rowIds: [id] }],
       });
       expect(res.body.ledger).toMatchObject({ seq: ENTRY.seq, entry_id: ENTRY.entryId });
     });
@@ -456,7 +456,8 @@ for (const route of ROUTES) {
       const req = route.request(id, S);
       const ok = await call(ROOTED_P, req, signed(`did:at:${R}`, ROOT_KEY, req.method, req.path, req.body));
       expect(ok.status).toBe(200);
-      expect(recorded[0]).toMatchObject({ authority: { mode: "agent_root", sequence: 1 }, owners: [{ agentId: S }] });
+      // The project's root signed for an owner without one; the moment names it.
+      expect(recorded[0]).toMatchObject({ authority: { mode: "agent_root", sequence: 1, signerIdentityId: R }, owners: [{ agentId: S }] });
     });
 
     test("an owner without a root in a multi-root project: the bearer acts for its own content", async () => {

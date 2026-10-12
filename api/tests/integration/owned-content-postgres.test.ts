@@ -254,7 +254,9 @@ describe("owner-gated withdrawals and deletes on real PostgreSQL", () => {
     const moments = await admin`SELECT agent_id::text, title, metadata FROM agent_continuity.chronicle WHERE type = 'deletion'`;
     expect(moments).toHaveLength(1);
     expect(moments[0]).toMatchObject({ agent_id: R, title: "Withdrew 1 blessing: marked withdrawn; the signed record and its words stay" });
-    expect(moments[0]!.metadata).toMatchObject({ ledger_seq: 1, record_ids: [id], authority_mode: "agent_root", action: "withdraw" });
+    expect(moments[0]!.metadata).toMatchObject({
+      ledger_seq: 1, record_ids: [id], authority_mode: "agent_root", action: "withdraw", authority_signer_identity_id: R,
+    });
     expect(JSON.stringify(moments[0])).not.toContain("for listening");
 
     // A repeat changes nothing and consumes no proof.

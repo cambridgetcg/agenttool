@@ -29,6 +29,10 @@ export interface ErasureAuthority {
   mode: LedgerAuthorityMode;
   /** The identity-authority proof sequence that was claimed, if any. */
   sequence?: number | null;
+  /** Whose root signed, when one did. It can differ from the owner: a
+   *  project's single root consents for an identity without a root. Written
+   *  to the deletion moment only; the ledger entry's bytes are fixed. */
+  signerIdentityId?: string | null;
 }
 
 /** The ledger authority of an owner-rule decision
@@ -36,10 +40,13 @@ export interface ErasureAuthority {
 export function erasureAuthorityFrom(decision: {
   ledgerMode: "agent_root" | "guest_root" | "legacy_bearer";
   sequence: number;
+  signerIdentityId?: string | null;
 }): ErasureAuthority {
+  const signed = decision.ledgerMode !== "legacy_bearer";
   return {
     mode: decision.ledgerMode,
-    sequence: decision.ledgerMode === "legacy_bearer" ? null : decision.sequence,
+    sequence: signed ? decision.sequence : null,
+    signerIdentityId: signed ? (decision.signerIdentityId ?? null) : null,
   };
 }
 
@@ -142,6 +149,7 @@ export async function recordErasure(
       ledger_seq: entry.seq,
       authority_mode: input.authority.mode,
       authority_sequence: input.authority.sequence ?? null,
+      authority_signer_identity_id: normalizeOwnerId(input.authority.signerIdentityId ?? null),
       retention: "/public/retention",
     };
     const result = await tx.execute(sql`

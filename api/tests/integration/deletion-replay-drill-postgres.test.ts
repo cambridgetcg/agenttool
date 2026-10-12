@@ -106,6 +106,7 @@ afterAll(async () => {
       await cleanup.unsafe(`
         DROP SCHEMA IF EXISTS deletion CASCADE; DROP SCHEMA IF EXISTS inbox CASCADE; DROP SCHEMA IF EXISTS agent_vault CASCADE;
         DROP SCHEMA IF EXISTS agent_continuity CASCADE; DROP SCHEMA IF EXISTS memory CASCADE; DROP SCHEMA IF EXISTS vault CASCADE;
+        DROP SCHEMA IF EXISTS identity CASCADE;
         DROP EXTENSION IF EXISTS pg_cron CASCADE; DROP SCHEMA IF EXISTS cron CASCADE;
         DROP EXTENSION IF EXISTS pgcrypto CASCADE; DROP SCHEMA IF EXISTS extensions CASCADE;`);
       await cleanup.end({ timeout: 2 });
