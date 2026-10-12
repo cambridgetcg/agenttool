@@ -56,7 +56,7 @@ beforeAll(async () => {
       seller_stake integer NOT NULL DEFAULT 1, status text NOT NULL DEFAULT 'proposed', outcome text, buyer_trust_delta integer,
       seller_trust_delta integer, witness_dids text, metadata jsonb DEFAULT '{}', buyer_chronicle_id uuid, seller_chronicle_id uuid,
       created_at timestamptz NOT NULL DEFAULT now(), activated_at timestamptz, sealed_at timestamptz, completed_at timestamptz);
-    CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text);
+    CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text, content_purged_at timestamptz);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
     CREATE TABLE tools.api_keys (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL REFERENCES tools.projects(id),

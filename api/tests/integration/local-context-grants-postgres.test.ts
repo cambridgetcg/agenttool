@@ -75,7 +75,7 @@ beforeAll(async () => {
       CREATE TABLE tools.projects (id uuid PRIMARY KEY);
       CREATE TABLE tools.api_keys (id uuid PRIMARY KEY, project_id uuid NOT NULL REFERENCES tools.projects(id), revoked_at timestamptz, expires_at timestamptz);
       CREATE TABLE identity.identities (id uuid PRIMARY KEY, project_id uuid NOT NULL, did text NOT NULL, status text NOT NULL);
-      CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, identity_id text, content text NOT NULL, created_at timestamptz NOT NULL, expires_at timestamptz);`);
+      CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, identity_id text, content text NOT NULL, created_at timestamptz NOT NULL, expires_at timestamptz, content_purged_at timestamptz);`);
   });
   owned = true;
   await admin.unsafe(readFileSync(new URL("../../migrations/20260927T211713_local_context_grants.sql", import.meta.url), "utf8"));
