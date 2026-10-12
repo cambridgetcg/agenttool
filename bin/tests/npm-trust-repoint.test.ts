@@ -35,11 +35,18 @@ state="$STUB_STATE"
 case "$1" in
   --version) echo 11.17.0 ;;
   whoami) echo "$STUB_USER" ;;
+  access)
+    [ "$2" = set ] && [ "$3" = mfa=publish ] || { echo "unexpected access call" >&2; exit 4; }
+    printf 'publish\n' > "$state/$(printf '%s' "$4" | sed 's|^@agenttool/||').mfa" ;;
   trust)
     package="$(printf '%s' "$3" | sed 's|^@agenttool/||')"
     file="$state/$package.json"
     case "$2" in
-      list) [ -f "$file" ] && cat "$file"; exit 0 ;;
+      list)
+        # npm rethrows EOTP when its output is not a terminal; the stub models
+        # an expired 2FA window for the saved (--json) listings only.
+        [ "$4" = --json ] && [ "$STUB_EOTP" = 1 ] && { echo "npm error code EOTP" >&2; exit 1; }
+        [ -f "$file" ] && cat "$file"; exit 0 ;;
       revoke)
         [ "$4" = --id ] || exit 8
         grep -q "\"id\": \"$5\"" "$file" 2>/dev/null || { echo "no such id" >&2; exit 1; }
@@ -69,6 +76,10 @@ esac
 }
 
 let runs = 0;
+
+const PRIME = "trust list @agenttool/adds";
+const savedListings = (calls: string[]) => calls.filter((call) => /^trust list @agenttool\/[a-z-]+ --json$/u.test(call));
+const mfaCalls = (calls: string[]) => calls.filter((call) => call.startsWith("access "));
 
 function setup(extra: Record<string, string> = {}): { state: string; record: string; log: string; env: Record<string, string> } {
   runs += 1;
@@ -130,6 +141,7 @@ describe("the one-time npm trust re-point", () => {
     expect(ON_NPM).toHaveLength(38);
     expect(script).not.toMatch(/^[^#]*--allow-publish/mu);
     expect(script).toContain('--allow-stage-publish --yes');
+    expect(script).toContain('access set mfa=publish "@agenttool/$package"');
     expect(script).toContain("NPM_VERSION=11.17.0");
   });
 
@@ -141,28 +153,41 @@ describe("the one-time npm trust re-point", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("@agenttool/sdk: revoke old-sdk");
     expect(result.stdout).toContain("@agenttool/math-cards: none");
+    expect(result.stdout).toContain("@agenttool/sdk: access set mfa=publish");
     const calls = readFileSync(log, "utf8").trim().split("\n");
     expect(calls.filter((call) => /^trust (?:revoke|github)/u.test(call))).toEqual([]);
-    expect(calls.filter((call) => call.startsWith("trust list"))).toHaveLength(38);
+    expect(mfaCalls(calls)).toEqual([]);
+    // One listing on the terminal opens the 2FA window before the saved listings.
+    expect(calls.slice(0, 3)).toEqual(["--version", "whoami", PRIME]);
+    expect(savedListings(calls)).toHaveLength(38);
+    expect(calls).toHaveLength(3 + 38);
     expect(readdirSync(state).map((name) => readFileSync(join(state, name), "utf8"))).toEqual(before);
   }, SCRIPT_TIMEOUT_MS);
 
-  test("revokes the old trust, creates stage-only trust for all 38, and a re-run changes nothing", () => {
+  test("revokes the old trust, creates stage-only trust, disallows tokens for all 38, and a re-run re-points nothing", () => {
     const { env, log, state, record } = setup();
     const first = runScript(env);
     expect(first.stderr).toBe("");
     expect(first.status).toBe(0);
-    expect(first.stdout).toContain("All 38 packages trust cambridgetcg/agenttool-packages publish-npm.yml (npm-bootstrap) for stage publish only.");
+    expect(first.stdout).toContain("All 38 packages trust cambridgetcg/agenttool-packages publish-npm.yml (npm-bootstrap) for stage publish only and disallow tokens.");
     const calls = readFileSync(log, "utf8").trim().split("\n");
-    expect(calls.slice(0, 2)).toEqual(["--version", "whoami"]);
+    expect(calls.slice(0, 3)).toEqual(["--version", "whoami", PRIME]);
     expect(calls.filter((call) => call.startsWith("trust revoke")).sort()).toEqual(
       OIDC_PUBLISHED.map((key) => `trust revoke @agenttool/${key} --id old-${key}`).sort(),
     );
     expect(calls.filter((call) => call.startsWith("trust github"))).toEqual(ON_NPM.map((key) =>
       `trust github @agenttool/${key} --repo cambridgetcg/agenttool-packages --file publish-npm.yml --env npm-bootstrap --allow-stage-publish --yes`));
-    expect(calls.filter((call) => call.startsWith("trust list"))).toHaveLength(76);
+    expect(mfaCalls(calls)).toEqual(ON_NPM.map((key) => `access set mfa=publish @agenttool/${key}`));
+    expect(savedListings(calls)).toHaveLength(76);
+    // The 2FA window is opened on the terminal again before the saved after-listings.
+    const primes = calls.flatMap((call, index) => (call === PRIME ? [index] : []));
+    expect(primes).toHaveLength(2);
+    const lastMutation = Math.max(...calls.flatMap((call, index) => (/^(?:trust github|access set)/u.test(call) ? [index] : [])));
+    expect(primes[1]).toBeGreaterThan(lastMutation);
+    expect(calls.slice(primes[1]! + 1).every((call) => / --json$/u.test(call))).toBe(true);
     for (const key of ON_NPM) {
       expect(JSON.parse(readFileSync(join(state, `${key}.json`), "utf8"))).toEqual(target(key));
+      expect(readFileSync(join(state, `${key}.mfa`), "utf8")).toBe("publish\n");
       expect(existsSync(join(record, "trust-before", `${key}.json`))).toBe(true);
       expect(JSON.parse(readFileSync(join(record, "trust-after", `${key}.json`), "utf8"))).toEqual(target(key));
     }
@@ -172,7 +197,21 @@ describe("the one-time npm trust re-point", () => {
     const second = runScript({ ...env, RECORD_DIR: `${record}-again` });
     expect(second.status).toBe(0);
     expect(second.stdout).toContain("@agenttool/sdk: already re-pointed");
-    expect(readFileSync(log, "utf8").split("\n").filter((call) => /^trust (?:revoke|github)/u.test(call))).toEqual([]);
+    const again = readFileSync(log, "utf8").trim().split("\n");
+    expect(again.filter((call) => /^trust (?:revoke|github)/u.test(call))).toEqual([]);
+    // Setting the same publishing access again is harmless; npm offers no read-back to skip it.
+    expect(mfaCalls(again)).toHaveLength(38);
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("a lapsed 2FA window fails the saved listings closed, re-points nothing, and says to re-run", () => {
+    const { env, log, state } = setup();
+    const result = runScript({ ...env, STUB_EOTP: "1" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("@agenttool/sdk: trust list FAILED (EOTP means the 2FA window lapsed; re-run)");
+    expect(result.stderr).toContain(`needs attention: ${ON_NPM.join(" ")}`);
+    const calls = readFileSync(log, "utf8").trim().split("\n");
+    expect(calls.filter((call) => /^trust (?:revoke|github)/u.test(call))).toEqual([]);
+    expect(JSON.parse(readFileSync(join(state, "sdk.json"), "utf8")).repository).toBe("cambridgetcg/agenttool");
   }, SCRIPT_TIMEOUT_MS);
 
   test("leaves a foreign configuration untouched, re-points the rest, and reports it", () => {

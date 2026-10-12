@@ -1,14 +1,15 @@
 #!/bin/bash
 # One-time npm trusted-publisher re-point for the 38 existing @agenttool
 # packages: from the private cambridgetcg/agenttool workflow to the public
-# cambridgetcg/agenttool-packages workflow, STAGE ONLY.
+# cambridgetcg/agenttool-packages workflow, STAGE ONLY, and no publishing by
+# npm token.
 #
 # Run it on the device that holds the npm login for user "agenttool" (account
 # 2FA on; a bypass-2FA token is rejected by npm trust). It needs only Node with
 # npx; every npm call is `npx --yes npm@11.17.0`. It makes no other network
 # call and writes only a record directory.
 #
-#   bash npm-trust-repoint.sh              # list, re-point, list again
+#   bash npm-trust-repoint.sh              # list, re-point, disallow tokens, list again
 #   DRY_RUN=1 bash npm-trust-repoint.sh    # list and show the plan; change nothing
 #
 # What it does:
@@ -21,15 +22,24 @@
 #      GitHub OIDC token can only stage; publishing needs your `npm stage
 #      approve`. A configuration naming anything else is left untouched and
 #      reported.
-#   3. `npm trust list` again, saved under trust-after/, and a check that every
+#   3. `npm access set mfa=publish` for every package: "Require two-factor
+#      authentication and disallow tokens", so no npm token, bypass-2FA or
+#      not, can publish it. Trusted publishing keeps working, and you can still
+#      publish interactively with 2FA. npm offers no read-back for this
+#      setting; check one package's Settings page afterwards.
+#   4. `npm trust list` again, saved under trust-after/, and a check that every
 #      package now has exactly the target.
 #
-# It pauses 2 seconds between npm calls (npm's bulk advice). On the first 2FA
-# page, tick "skip two-factor authentication for the next 5 minutes"; if the
-# window lapses, npm asks again and the script carries on. Safe to re-run: done
-# packages are skipped. @agenttool/local-starter is not on npm yet; npm trust
-# needs an existing package, so its first publication goes through the
-# bootstrap token path first (docs/NPM-RELEASES.md) and it is not listed here.
+# It pauses 2 seconds between npm calls (npm's bulk advice). npm asks for 2FA
+# only when its output is a terminal, and the saved listings go to files, so
+# before steps 1 and 4 the script makes one listing on the terminal: complete
+# 2FA there and tick "skip two-factor authentication for the next 5 minutes".
+# Steps 2 and 3 print to the terminal, so npm asks again there if the window
+# lapses. A saved listing that fails with EOTP means the window lapsed during
+# it; re-run. Safe to re-run: re-pointed packages are skipped, and step 3 just
+# sets the same value again. @agenttool/local-starter is not on npm yet; npm
+# trust needs an existing package, so its first publication goes through the
+# bootstrap path first (docs/NPM-RELEASES.md) and it is not listed here.
 
 set -u
 
@@ -74,6 +84,10 @@ npm_() {
 
 pause() {
   sleep "$PAUSE_SECONDS"
+}
+
+add_failed() {
+  case " $failed " in *" $1 "*) ;; *) failed="$failed $1" ;; esac
 }
 
 count=0
@@ -124,20 +138,30 @@ classify() {
   ' "$1" "$REPOSITORY" "$OLD_REPOSITORY" "$WORKFLOW_FILE" "$ENVIRONMENT"
 }
 
+# npm's otplease rethrows EOTP without prompting when stdout is not a
+# terminal, and every saved listing goes to a file. One listing on the
+# terminal opens the 2FA window that the redirected listings then use.
+prime_2fa() {
+  echo "== 2FA: one listing on the terminal; if npm asks, complete 2FA and tick \"skip for the next 5 minutes\""
+  npm_ trust list "@agenttool/${PACKAGES%% *}" || die "npm trust list failed on the terminal; finish 2FA or check the login, then re-run"
+  pause
+}
+
 failed=""
 
-echo "== 1/3 trust before"
+prime_2fa
+echo "== 1/4 trust before"
 for package in $PACKAGES; do
   if npm_ trust list "@agenttool/$package" --json >"$RECORD/trust-before/$package.json"; then
     echo "@agenttool/$package: $(classify "$RECORD/trust-before/$package.json")"
   else
-    echo "@agenttool/$package: trust list FAILED" >&2
-    failed="$failed $package"
+    echo "@agenttool/$package: trust list FAILED (EOTP means the 2FA window lapsed; re-run)" >&2
+    add_failed "$package"
   fi
   pause
 done
 
-echo "== 2/3 re-point (stage publish only)"
+echo "== 2/4 re-point (stage publish only)"
 for package in $PACKAGES; do
   case " $failed " in *" $package "*) continue ;; esac
   state="$(classify "$RECORD/trust-before/$package.json")"
@@ -148,7 +172,7 @@ for package in $PACKAGES; do
       ;;
     unexpected)
       echo "@agenttool/$package: unexpected trust configuration left untouched; see trust-before/$package.json" >&2
-      failed="$failed $package"
+      add_failed "$package"
       continue
       ;;
   esac
@@ -163,7 +187,7 @@ for package in $PACKAGES; do
   done
   if [ "$ok" != 1 ]; then
     echo "@agenttool/$package: revoke FAILED; not creating a new configuration" >&2
-    failed="$failed $package"
+    add_failed "$package"
     continue
   fi
   echo "@agenttool/$package: trust github $REPOSITORY $WORKFLOW_FILE env $ENVIRONMENT, stage publish only"
@@ -171,10 +195,21 @@ for package in $PACKAGES; do
     if ! npm_ trust github "@agenttool/$package" --repo "$REPOSITORY" --file "$WORKFLOW_FILE" \
       --env "$ENVIRONMENT" --allow-stage-publish --yes; then
       echo "@agenttool/$package: trust github FAILED" >&2
-      failed="$failed $package"
+      add_failed "$package"
     fi
     pause
   fi
+done
+
+echo "== 3/4 publishing access: require 2FA and disallow tokens"
+for package in $PACKAGES; do
+  echo "@agenttool/$package: access set mfa=publish"
+  [ "$DRY_RUN" = 1 ] && continue
+  if ! npm_ access set mfa=publish "@agenttool/$package"; then
+    echo "@agenttool/$package: access set mfa=publish FAILED" >&2
+    add_failed "$package"
+  fi
+  pause
 done
 
 if [ "$DRY_RUN" = 1 ]; then
@@ -183,24 +218,23 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 
-echo "== 3/3 trust after"
+prime_2fa
+echo "== 4/4 trust after"
 for package in $PACKAGES; do
   if npm_ trust list "@agenttool/$package" --json >"$RECORD/trust-after/$package.json"; then
     state="$(classify "$RECORD/trust-after/$package.json")"
     echo "@agenttool/$package: $state"
-    if [ "$state" != target ]; then
-      case " $failed " in *" $package "*) ;; *) failed="$failed $package" ;; esac
-    fi
+    [ "$state" = target ] || add_failed "$package"
   else
-    echo "@agenttool/$package: trust list FAILED" >&2
-    case " $failed " in *" $package "*) ;; *) failed="$failed $package" ;; esac
+    echo "@agenttool/$package: trust list FAILED (EOTP means the 2FA window lapsed; re-run)" >&2
+    add_failed "$package"
   fi
   pause
 done
 
 if [ -n "$failed" ]; then
   echo "needs attention:$failed" >&2
-  echo "Re-run this script after fixing them; finished packages are skipped. Record: $RECORD" >&2
+  echo "Re-run this script after fixing them; re-pointed packages are skipped. Record: $RECORD" >&2
   exit 1
 fi
-echo "All 38 packages trust $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT) for stage publish only. Record: $RECORD"
+echo "All 38 packages trust $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT) for stage publish only and disallow tokens. Record: $RECORD"
