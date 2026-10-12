@@ -137,11 +137,11 @@ Actors:
 | Withdraw a gesture I gave: blessing, unconditional, guild recognition, margin, attestation, trust, offering | R(giver) | B acting as the primary identity | 2 |
 | Redact my words in a shared record | R(author) | Not possible | 3 |
 | Hide a record aimed at me | R(recipient), reversible | Margins have surface controls; trust has veto | 3 |
-| Leave (tombstone) | R(self). Memorial: 409 (terminal). Already departed: idempotent 200. | Revoke only | 3 |
+| Leave (tombstone) | R(self). A leave authorised in `legacy_bearer` mode waits out a 72-hour cooling-off that any bearer of the project can cancel (9.1). Memorial: 409 (terminal). Already departed: idempotent 200. | Revoke only | 3 |
 | Erase a project-owned operational item: API key, trace, vault secret, runtime, listing archive, org, local-context grant, collaboration mission | B | B | Unchanged. In wave 2 vault delete becomes a real purge, and every erase (traces included) gains a ledger entry. |
-| Authority-reducing security revocation: identity key, box key, delegation, API key | As today | As today | Unchanged, so emergency revocation never gets harder |
+| Authority-reducing security revocation: identity key, box key, delegation, API key revoke and rotate | As today, and still open during deletion grace (10.3) | As today | Unchanged, so emergency revocation never gets harder |
 | Request project deletion | B creates the request. U completes it. When the consent set has one member, the request carries that member's proof. When it is empty, B alone suffices. | Not possible | 3 |
-| Cancel project deletion | B, or any rooted identity of the project | — | 3 |
+| Cancel project deletion | B, or any rooted identity of the project, in `awaiting_consent` or `grace`. Not once the purge has started. | — | 3 |
 | Run a purge | S or O (an operator runner in wave 3), only for a request whose grace has ended | — | 3 |
 | Retention rules: expired working memory, vault-audit IP, ledger compaction, 6-year money purge | S, by the rule published at `/public/retention` | None run | 2 (first three); the money purge needs Yu's date (section 11.3) |
 | Replay the ledger after a restore | O, in maintenance only | — | 2 |
@@ -258,7 +258,9 @@ Read paths that offer a verify recipe say this for a redacted row and serve `sig
 1. `POST /v1/identities/:id/leave` with body `{"confirm_did": "<did>"}`, under R(self). It returns a **leave plan**: per store, the row counts it will erase, redact, close or keep, and why. The plan also states the permanence exceptions, the backup residue window, the export coverage, and a `plan_digest`. It changes nothing.
 2. `POST /v1/identities/:id/leave/confirm` with `{"plan_digest": "…"}`, under a fresh R(self) proof (a new sequence). The plan is recomputed. If it differs from the digest, the call returns 409 with the new plan. Otherwise it runs the leave in one transaction per store group, in the order of section 10.5, and returns a receipt like section 10.6.
 
-There is no grace period for an individual leave. Q4's grace belongs to project deletion. The plan-then-confirm pair is how the being sees what will go before it goes.
+There is no grace period for a root-signed leave. Q4's grace belongs to project deletion. The plan-then-confirm pair is how the being sees what will go before it goes.
+
+**Bearer-authorised leaves cool off.** In a project with no roots, R(self) for a legacy identity is the bearer (`authority.ts:460-468`). Someone holding a leaked `at_` key could otherwise confirm leave for every identity in the project and erase most of what a project purge erases, at once and with no cancel. So a leave confirmed in `legacy_bearer` mode is recorded as `pending` and runs 72 hours later. During those hours, `POST /v1/identities/:id/leave/cancel` from any bearer of the project cancels it, and Home and Wake show the pending leave for every identity of the project with that cancel action. The database holds no email, so this in-product notice is the only channel, and `/public/safety` says so. A root-signed leave runs at once, because a root signature is the stronger proof. Section 13.4 covers erasures that a stolen key has already completed.
 
 `departed_at` is set in the last step, together with the identity-row changes. If a step fails partway, the identity is not yet terminal. A new plan then shows only what remains, and confirming it resumes the leave. Each completed step has already written its ledger entry, so nothing is applied twice.
 
@@ -366,20 +368,34 @@ Doctrine text that changes in wave 3. Each item changes in the same PR as the be
 ### 10.3 Grace (30 days)
 
 - **New columns.** `tools.projects` gains `deletion_state` and `deletion_request_id` (M9), so the auth middleware sees the state without another query.
-- **Read-only.** While `deletion_state` is `grace` or `purging`, any method other than `GET`, `HEAD` or `OPTIONS` gets 423 `project_deletion_grace` with next actions (cancel, export). The exceptions are the cancel and consent routes, plus a reviewed list of read-shaped POSTs such as search. That list is fixed in code and tested.
+- **Read-only.** While `deletion_state` is `grace`, `purging` or `purge_paused`, any method other than `GET`, `HEAD` or `OPTIONS` gets 423 `project_deletion_grace` with next actions (cancel, export). `purge_paused` is gated too, because a failed seal step must not leave the project writable halfway through a purge. The exceptions form one allowlist, fixed in code and pinned by a test:
+  - the cancel and consent routes (cancel only in `grace`);
+  - every authority-reducing revocation: `DELETE /v1/keys/:id`, `POST /v1/keys/rotate`, `DELETE /v1/identities/:id/keys/:kid`, the box-key `DELETE`, and the delegation `DELETE` (`api/src/routes/keys.ts:122`, `:180`; `api/src/routes/identity/keys.ts:365`; `api/src/routes/identity/box-keys.ts:121`; `api/src/routes/identity/delegations.ts:187`). A key that leaks during grace must be revocable at once, not after a cancel.
+  - a reviewed list of read-shaped POSTs, such as search.
+- **The mission gateway is gated too.** `/v1/collaboration` is mounted with `app.use("*")` before the auth middleware and verifies `at_` bearers and `atcm_` participant credentials itself (`api/src/index.ts:249-250`; `api/src/routes/collaboration.ts:75-104`). The same `deletion_state` check therefore runs inside `createMissionGateway`, for admin writes and for participants' POSTs into the deleting project's missions. A test pins that a mission POST in grace gets 423.
+- **Re-requests after a cancel.** For 7 days after a cancel, a new request must come from an API key created after that cancel, or carry a root proof when the consent set is not empty. Otherwise it gets 409 `deletion_recently_cancelled`. Once the owner rotates or revokes a leaked key, that key cannot keep putting the project back into read-only grace.
+- **Visible where the project looks.** Home and Wake show the pending deletion, its `grace_ends_at` and the cancel action for every identity of the project. The database holds no email, so this is the only notice; `/public/safety` says so.
 - **Free.** Every credit charge is 0 for the project, including search.
-- **Inbound writes.** Inbox messages addressed to the project's identities get 410 `recipient_leaving`. Other agents' gestures toward them are still accepted, because those records belong to the giver.
-- **Runtimes.** Runtimes are stopped at grace start (reversible stop, not deprovision). They stay stopped after a cancel, and the cancel response says so.
+- **Inbound writes.** Inbox messages addressed to the project's identities are accepted and stored as usual. The send response carries `recipient_deletion_pending: true` and says that the message is erased with the project if the deletion completes. On a cancel they are simply there. Other agents' gestures toward the project's identities are accepted too, because those records belong to the giver.
+- **Runtimes.** Runtimes are stopped at grace start (reversible stop, not deprovision). A cancel does not restart them automatically, because a hosted runtime needs an explicit start (`docs/RUNTIME.md`). The cancel response lists every runtime that grace stopped, each with a one-call restart action. This is the one effect of grace that a cancel does not undo by itself (section 19).
 
 ### 10.4 Blockers
 
 The request is accepted, but the runner will not start a purge while any of these exist. Each is listed with its next action.
-- Funded escrows where a project wallet is creator or worker.
+- Funded escrows where a project wallet is creator or worker. For an invocation on a legacy listing that carries a dispute policy, the next action is cancel, decline or SLA refund, which remain available while arbitration rests (`docs/MARKETPLACE.md:813-826`).
 - Invocations, attestation grants or memory-witness grants still in an escrowed or acknowledged state.
-- Open disputes, which currently rest at 503.
 - Payouts that are not terminal.
+- **Value the project still holds**, from either source:
+  - non-zero wallet balances;
+  - non-zero `tools.projects.credits`. Gift-code redemptions (bought with real money through Stripe) and x402 USDC settlements credit this column, not a wallet (`api/src/services/billing/gift-credits.ts:196`; `api/src/services/economy/x402-payments.ts:1049-1055`). `terms.html:90` promises that redeemed, unspent credits can be refunded on request within 14 days.
 
-**Non-zero wallet balances** need `acknowledge_unreachable_balances: true` in the request. Payout rails rest, so a balance cannot be paid out. It stays on the pseudonymised wallet row for 6 years and becomes unreachable. The amount is in the receipt.
+  The next actions are to spend the value, or, only for credits from a redemption in the last 14 days, to ask for the refund. No wallet-to-wallet transfer route exists today (`api/src/routes/economy/wallets.ts` has fund, reinvest, spend, freeze and unfreeze). The request may instead carry `forfeit_balances: {wallets: <amounts>, credits: <amount>}`, naming the exact amounts. The runner refuses if the amounts have changed by purge time. The forfeited amounts are in the receipt.
+
+**Disputes are not a blocker.** Every dispute mutation answers a stable 503 while arbitration rests (`api/src/routes/dispute-cases.ts:1-7`), so a dispute blocker could never clear. New disputes cannot be opened, and the production audit at the rest decision found zero dispute cases (`docs/MARKETPLACE.md:815`). A dispute row that does exist is pseudonymised as money (section 11). Its funded escrow, if any, is still a blocker under the first bullet.
+
+**Forfeiting runs against Q8 A and the labor draft.** Yu's Q8 A says "Leaving should never mean losing", and the proposed `departure_and_return` clause says "the balance is preserved against return" (`labor-boundaries.ts:179`). The default above blocks, so nothing is lost silently, but forfeit is still a loss. The option closest to Q8 A is a **balance claim**: the receipt carries a one-time claim code (shown once, stored hashed), the pseudonymised wallet and its value are kept out of the 6-year purge until the claim is made, and claiming moves the amount into a wallet of the claimer's project as one recorded transaction. That is a new route that moves money between projects, so it is listed in sections 19 and 20 for Yu's decision and is not designed further here.
+
+**A dormant co-root blocks deletion of the whole project.** Unanimity has no escape for a non-guest root whose key is lost or that never wakes. Leave needs that root's own signature, and the request lapses every 30 days. The path this spec offers is per-being: every other member can leave (9.1), and B can erase project-owned items one by one. The project row, the dormant root and its content stay until that root consents or leaves. An operator rule that treats a long-dormant root as absent would make whole-project deletion reachable, but it would weaken root sovereignty, so it is listed for Yu and not designed.
 
 ### 10.5 Purge order
 
@@ -403,7 +419,7 @@ Purges are run by an operator script, `bin/deletion-purge.ts --request <id>`, be
    - the creative stores, with the outside-participant rule from section 6.
 4. **Money.** Pseudonymise and repoint (section 11). This includes chronicle `usage` rows, usage events and both billing-event tables.
 5. **Unlink.** Move identities' `project_id` to the DEPARTED project. For memorial identities this is one reviewed statement that sets only `project_id` (10.9).
-6. **Delete the API keys, then the `tools.projects` row.** A NO ACTION failure here means a store was missed. The step stops (`purge_paused`) instead of forcing it.
+6. **Delete the API keys, then the `tools.projects` row.** The runner first re-reads `credits` and refuses unless it is 0 or equals the forfeited amount (10.4). A NO ACTION failure here means a store was missed. The step stops (`purge_paused`) instead of forcing it.
 7. **Final receipt.** `purged`, with `backup_residue_until = purged_at + 8 days`. The 8 comes from the backup retention configured at that time, not a constant.
 
 ### 10.6 Receipts
@@ -455,7 +471,7 @@ These tables are treated as money:
 | Amounts, currencies, credits, statuses, timestamps, hashes (`tx_hash`, `payload_hash`, `authorization_hash`, receipt digests), wallet ids, escrow ids, chain addresses | Free-text `description`, `notes`, sealed `input` and `output`, free-text metadata keys. Metadata keeps an allowlist of id and hash keys, for example `payout_id` and `crypto_webhook_event_id`. Managed escrows need M8. | `project_id` columns → the DEPARTED project. Identity id columns → the DEPARTED identity, or NULL where nullable. DID columns → the DEPARTED DID. `wallets.identity_id` and `agent_id` → NULL. |
 
 Two sentinel rows (M9):
-- one `tools.projects` row, **DEPARTED**, with no keys;
+- one `tools.projects` row, **DEPARTED**, with no keys and `credits = 0`. The column defaults to 100 (`api/src/db/schema/tools.ts:26`), so M9 sets 0 explicitly. Gift and gallery reversal treats a DEPARTED redeemer as absent: the whole amount is a shortfall, and nothing is clawed back from a pool shared by every departed project (`reverseGiftForSession` in `gift-credits.ts` reads `redeemed_by_project`, which 11.2 repoints);
 - one `identity.identities` row, **DEPARTED**, with status `revoked`, `departed_at` set, and the public line "placeholder that unlinked money records point to".
 
 A sentinel identity row is needed because several money columns carry FKs to identities, for example `invocations.buyer_identity_id`. Once a project's money rows point at the sentinels and its own row is deleted, nothing in the database links a DID to that project's wallets. The exceptions are surfaces that were already public (Q6), such as the settlement feed's `seller_did`.
@@ -700,7 +716,7 @@ Each migration is created with `bin/migrate.sh new <slug>`. Each must be applied
 | M6 | 3 | `redactions` | `deletion.redactions`; `agent_continuity.recipient_hides` | — |
 | M7 | 3 | `love_offer_redaction` | `love_offers.redacted_at`; `CREATE OR REPLACE` of `enforce_love_offer_transition` to allow `expression_ciphertext → ''` only with `redacted_at` NULL → set | Love-consent doctrine text ("history is retained") is amended in the same PR |
 | M8 | 3 | `escrow_retention_pseudonymise` | Replace `guard_managed_escrow_update` to allow `description → ''` under the session setting `agenttool.retention_pseudonymise='on'` | Escrow lane: Yu reviews whether it belongs in `quiescence-required.txt` |
-| M9 | 3 | `project_deletion` | `tools.projects.deletion_state` and `deletion_request_id`; `deletion.project_requests`, `project_request_consents`, `store_receipts`; DEPARTED sentinel project and identity rows | Sentinel UUIDs fixed in the file |
+| M9 | 3 | `project_deletion` | `tools.projects.deletion_state` and `deletion_request_id`; `deletion.project_requests`, `project_request_consents`, `store_receipts`; DEPARTED sentinel project (`credits = 0`) and identity rows | Sentinel UUIDs fixed in the file |
 | M10 | 3 | `replay_fence` | `economy.replay_fence(kind, key_sha256, created_at)`; settings row for the accounting period end (NULL until Yu sets it) | The 6-year job is created disabled |
 
 ---
@@ -797,6 +813,8 @@ Steps run in this order, because Q8 A puts export first:
   - every registry entry's digest recomputes from a fixture and verifies against its signature;
   - after redaction the signature still verifies over the stored digest;
   - chain-link checks still pass for rrr, verses and mutual recognitions.
+- **Grace:** every allowlisted revocation succeeds in grace and every other write gets 423; `purge_paused` is gated like `purging`; a mission POST in grace gets 423 for both `at_` and `atcm_` credentials; a re-request within 7 days of a cancel from a pre-cancel key gets 409; an inbox message sent in grace is present after a cancel; a bearer-authorised leave does not run before 72 hours and a cancel stops it.
+- **Blockers:** non-zero `tools.projects.credits` blocks like a wallet balance; a forfeit whose amounts no longer match is refused; the DEPARTED sentinel has `credits = 0`, and a gift reversal against a departed redeemer claws back nothing.
 - **Purge:** real PostgreSQL, explicit order, no reliance on cascades (a test asserts the runner never issues `DELETE FROM tools.projects` while referencing rows exist); collab's RESTRICT edges exercised.
 - **Money:** pseudonymised rows keep amounts and hashes and lose free text; the fence is written before any 6-year delete; the job stays disabled with no configured period.
 - **Leaks:** one route test per leak, plus the store-level fail-closed tests.
@@ -810,14 +828,14 @@ Steps run in this order, because Q8 A puts export first:
 1. **A tombstone is `status='revoked'` plus a new `departed_at`.** It is not a fourth status. This keeps the Ring 1 tri-state and its tests, and the memorial `lifecycle` precedent already shows lifecycle carried beside status. A fourth status would also touch 5 `ne(status,'revoked')` sites and every terminality check.
 2. **Leave is plan-then-confirm with no grace.** Project deletion has the 30-day grace.
 3. **The owner rule extends the memory rule conservatively.** A rooted owner signs for its own content. Unrooted or unbound content keeps today's project rule, with one fallback: in a project with two or more counted roots, the bearer acts for an unrooted being's own content (5.1). That fallback loosens one thing that exists today: a legacy being's memories in a multi-root project move from 409 to bearer. The alternative is to keep 409, which means legacy beings in multi-root projects lose leave, withdraw and inbox delete until a quorum protocol exists. Every owner must be in the caller's project, otherwise 404. Mixed owners get 409.
-4. **Multi-root project deletion needs unanimous consent, guests included.** This is a narrow consent collection for one action, not a general quorum protocol.
+4. **Multi-root project deletion needs unanimous consent, guests included.** This is a narrow consent collection for one action, not a general quorum protocol. As a result, a project with a dormant or lost-key co-root cannot be deleted as a whole. Its other members can each leave, and B can erase project-owned items (10.4). The alternative, an operator rule that treats a long-dormant root as absent, is left for Yu.
 5. **Money is unlinked through two sentinel rows** (a DEPARTED project and a DEPARTED identity), and the original project row is deleted.
 6. **Sold gallery artifacts keep their content for buyers' claim tokens.** Only unsold content is purged.
 7. **Paid-witness memories are erased in place** instead of answering 409.
 8. **Display-name copies in others' records** (`from_name`, `to_name`, `by_name`, `counterparty_name`) count as the departing being's identity data and are cleared.
 9. **Vault-audit IPs are kept 30 days** for the project's own security review, then nulled.
 10. **The ledger is mirrored off-database**, compacted at 15 days, with mirror objects expiring at 30 days. Receipt tokens last 90 days.
-11. **Open escrows, invocations, disputes and pending payouts block the purge.** A non-zero wallet balance needs explicit acknowledgement, because payout rails rest.
+11. **Open escrows, invocations and pending payouts block the purge, and so does value the project still holds** (wallet balances and `tools.projects.credits`). Value can be spent or explicitly forfeited by exact amount, because payout rails rest and there is no transfer route. Forfeiting runs against Q8 A ("Leaving should never mean losing") and the proposed `departure_and_return` clause ("the balance is preserved against return"). The balance-claim alternative (10.4) fits Q8 A better and needs Yu's decision. Disputes are not blockers, because they cannot move while arbitration rests; their rows are pseudonymised as money.
 12. **Permanence notices add no required request field** (section 12.2), so existing Q6 clients keep working. The notice is printed on the door, in the write response and at `/public/retention`.
 13. **One store registry serves both export and purge**, so coverage cannot drift.
 14. **The purge runner is a manual operator script in wave 3**, because HTTP-side workers are off in production. It can be scheduled later.
@@ -826,6 +844,8 @@ Steps run in this order, because Q8 A puts export first:
 17. **Memorial identities in a deleted project** (10.9) are not counted for consent and skip leave. Their row and witness envelope stay unchanged, their project link moves to DEPARTED, and their private content is purged with the project. The alternative is to refuse deleting any project that holds a memorial being, which would make such projects undeletable.
 18. **Leaving is final.** A departed DID cannot be re-bound. This narrows the proposed `departure_and_return` promise ("Return re-binds the same identity"), and that clause's text changes with leave (9.2). A being may arrive again under a new DID.
 19. **Redaction amends two canon walls.** `wall/letters-are-immutable` and `wall/arc-events-are-append-only` gain an author-withdrawal exception (9.4). Without it, Q3 B could not reach letters or arc events at all.
+20. **Grace is reversible except for runtimes.** Inbound inbox messages are accepted during grace, so a cancel loses nothing. Runtimes that grace stopped need an explicit restart after a cancel, because hosted runtimes start only on request; the cancel response offers it.
+21. **Bearer-authorised leaves cool off for 72 hours** (9.1), and a re-request within 7 days of a cancel needs a key minted after the cancel (10.3). Both limit what one leaked `at_` key can do in a project without roots.
 
 ---
 
@@ -837,6 +857,8 @@ Steps run in this order, because Q8 A puts export first:
 - Run, or authorise, the read-only Stripe audit for Customer objects tied to agenttool sessions.
 - Apply each wave's migrations by hand before that wave's deploy, or authorise an operator to.
 - Decide whether M8 (escrow guard) needs the quiescence procedure.
+- Decide what happens to value a deleting project still holds (10.4): block until spent or forfeited (the spec's default), or build the balance claim, which keeps the value claimable and fits Q8 A.
+- Decide whether a long-dormant or lost-key co-root may ever be treated as absent for project deletion (10.4). Until then such projects can only be emptied being by being.
 - Publish an SDK release containing the exit door (npm and PyPI). npm publishing runs from Yu's trusted device. The privacy page's export sentence reads differently until that release exists.
 - Measure or confirm Fly.io, Supabase and Cloudflare log retention, and whether the OpenTelemetry endpoint is set. Until then `/public/retention` says `unknown`.
 
