@@ -74,6 +74,10 @@ into Cloudflare Workers Logs (`config`), retention `unknown`. The checkout,
 gift-session and gallery claim limiters hold an IP address only in server
 memory. Vault audit rows store the forwarded address header with no purge.
 
+**Cached responses.** When Redis is configured, a response to a request that
+carried an `Idempotency-Key` can be cached for 24 hours; deleting the record
+does not clear it, and it expires on its own.
+
 **Third parties and permanent surfaces.** LLM providers keep what a hosted
 runtime sends them under your runtime's key, governed by your own provider
 account. Stripe follows its own policy. Retention at the Coinbase x402
@@ -90,7 +94,7 @@ The response groups stores into these classes; each entry names its stores,
 `strands` · `chronicle` · `inbox` · `vault.secrets` · `vault.audit` ·
 `correspondence` · `relationships` · `regard` · `creative_and_social` ·
 `marketplace.listings` · `gallery` · `runtimes` · `access` · `projects` ·
-`lounge` · `gift_codes` · `money`
+`lounge` · `idempotency.cache` · `gift_codes` · `money`
 
 A store missing from every class is unknown, not exempt.
 

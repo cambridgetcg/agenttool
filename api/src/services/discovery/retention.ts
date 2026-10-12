@@ -303,6 +303,16 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     evidence: "api/src/routes/public/safety.ts (lounge_receipts); docs/LOUNGE.md",
   },
   {
+    id: "idempotency.cache",
+    stores: ["redis: idempotency response cache"],
+    live:
+      "When Redis is configured, a completed JSON response to a request that carried an Idempotency-Key can be cached for 24 hours under project, path and key. Responses with credential-shaped fields are never stored.",
+    after_delete:
+      "Deleting the underlying record does not clear a cached response; it expires at the end of its 24 hours.",
+    basis: "source",
+    evidence: "api/src/middleware/idempotency.ts (IDEMPOTENCY_TTL_SECONDS); api/src/services/discovery/safety-boundaries.ts (idempotency)",
+  },
+  {
     id: "gift_codes",
     stores: ["economy.gift_credit_codes"],
     live:
