@@ -5623,6 +5623,14 @@
       "canonical_path": "packages/local-starter-mcp/README.md"
     },
     {
+      "path": "packages/local-starter/CHANGELOG.md",
+      "title": "Changelog",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter/CHANGELOG.md"
+    },
+    {
       "path": "packages/local-starter/CLAUDE.md",
       "title": "@agenttool/local-starter",
       "type": "guide",

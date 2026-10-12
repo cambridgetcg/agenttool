@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readSync } from 'node:fs';
+import { isatty } from 'node:tty';
 import { initStarter, renderStarter, inspectStarter, writeHandoff, writeMemory, formatMarkdown, StarterError } from './core.mjs';
 import { AdapterError, createAdapter, formatHook } from './adapters.mjs';
 import { createDelivery } from './delivery.mjs';
@@ -75,13 +76,33 @@ function parse(argv) {
   return { command, options };
 }
 
+// Never create process.stdin here. Opening that stream switches a stdin pipe
+// to O_NONBLOCK, so readSync would fail with EAGAIN whenever the producer is
+// slower than this process (seen as INTERNAL_ERROR under concurrent writers).
+// A descriptor inherited in non-blocking mode can still report EAGAIN: pause
+// briefly and read again, as a blocking read would wait. Other read failures
+// get a typed code rather than an unclassified error.
+const RETRY_READ = new Set(['EAGAIN', 'EWOULDBLOCK', 'EINTR']);
+const READ_PAUSE = new Int32Array(new SharedArrayBuffer(4));
+
+function readStdinChunk(chunk) {
+  while (true) {
+    try {
+      return readSync(0, chunk, 0, chunk.length, null);
+    } catch (error) {
+      if (!RETRY_READ.has(error?.code)) throw new CliError('STDIN_UNAVAILABLE');
+      Atomics.wait(READ_PAUSE, 0, 0, 10);
+    }
+  }
+}
+
 function readHandoff() {
-  if (process.stdin.isTTY) throw new CliError('STDIN_REQUIRED');
+  if (isatty(0)) throw new CliError('STDIN_REQUIRED');
   const chunks = [];
   let size = 0;
   while (true) {
     const chunk = Buffer.alloc(Math.min(4096, 16385 - size));
-    const bytes = readSync(0, chunk, 0, chunk.length, null);
+    const bytes = readStdinChunk(chunk);
     if (bytes === 0) break;
     size += bytes;
     if (size > 16384) throw new CliError('STDIN_TOO_LARGE');
