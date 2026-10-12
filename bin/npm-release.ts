@@ -2282,6 +2282,8 @@ async function publish(
       capture: action === "stage",
     });
     if (action === "stage") {
+      // Keep npm's own record in the log even if it cannot be parsed below.
+      console.error(npmRun.stdout);
       // Staged, not published: no registry poll and no receipt result.
       const staged = stageReceipt(
         receipt,
