@@ -22,6 +22,18 @@ let sql: Sql, database: ReturnType<typeof drizzle>, owned = false;
 mock.module("../../src/db/client", () => ({
   db: new Proxy({}, { get: (_target, property) => Reflect.get(database as object, property) }),
 }));
+// Memory deletes now write a deletion-ledger entry in the erasing
+// transaction. This fixture has no ledger schema, so the writer is a recorder
+// here; its real SQL is proven in integration/deletion-erase-postgres.test.ts.
+const realRecord = await import("../../src/services/deletion/record");
+const recordedErasures: Array<Record<string, unknown>> = [];
+mock.module("../../src/services/deletion/record", () => ({
+  ...realRecord,
+  recordErasure: async (_tx: unknown, input: Record<string, unknown>) => {
+    recordedErasures.push(input);
+    return { entry: { seq: recordedErasures.length, entryId: "abababab-abab-4bab-8bab-abababababab", entryHash: "a".repeat(64), occurredAt: new Date().toISOString() }, momentIds: [] };
+  },
+}));
 type AuthorityModule = typeof import("../../src/services/identity/authority");
 let authority: AuthorityModule, api: Hono;
 function request(overrides: Record<string, unknown> = {}, projectId = P, issuerApiKeyId = A) {
@@ -298,7 +310,7 @@ databaseTest("a keyed delete removes only the memories it authorized", async () 
   const { deleteByKey } = await import("../../src/services/memory/store");
   const authorized = uid(41), arrivedLater = uid(42);
   await sql`INSERT INTO memory.memories (id, project_id, key, identity_id) VALUES (${authorized},${P},'shared',NULL),(${arrivedLater},${P},'shared',${I})`;
-  expect(await deleteByKey(P, "shared", { onlyIds: [authorized] })).toEqual({ deleted: 1 });
+  expect(await deleteByKey(P, "shared", { onlyIds: [authorized] })).toMatchObject({ deleted: 1, rows_removed: 1 });
   expect((await sql`SELECT id FROM memory.memories`).map(row => row.id)).toEqual([arrivedLater]);
 });
 databaseTest("the subject guard stays bounded for very large keyed deletes", async () => {
@@ -322,7 +334,7 @@ databaseTest("the keyed delete route keeps memories written after it was authori
     await lock`COMMIT`;
     const res = await pending;
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deleted: 1 });
+    expect(await res.json()).toMatchObject({ deleted: 1, rows_removed: 1 });
   } finally {
     lock.release();
   }

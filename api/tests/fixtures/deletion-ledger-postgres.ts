@@ -1,12 +1,15 @@
 /** Shared disposable-PostgreSQL fixture for the deletion ledger tests.
  *
- *  Minimal synthetic stand-ins for the tables wave 2 erases from, plus the
+ *  Minimal synthetic stand-ins for the tables wave 2 erases from (and the
+ *  identity rows the owner rule reads), plus the
  *  Supabase pieces the migrations expect (pgcrypto in `extensions`, a stub
  *  `vault.decrypted_secrets` holding a test ledger key, the local pg_cron
  *  stub with an `alter_job` shim). Then the four real wave 2 migrations are
  *  applied in journal order. Used by:
  *    api/tests/integration/deletion-ledger-postgres.test.ts
  *    api/tests/integration/deletion-replay-drill-postgres.test.ts
+ *    api/tests/integration/deletion-erase-postgres.test.ts
+ *    api/tests/integration/owned-content-postgres.test.ts
  *  Doctrine: docs/DELETION-REPLAY.md. */
 import { readFileSync } from "node:fs";
 
@@ -15,7 +18,7 @@ import type { Sql } from "postgres";
 export const TEST_LEDGER_KEY = "test-ledger-key-0123456789abcdef-not-for-production";
 
 export const DELETION_FIXTURE_SCHEMAS = [
-  "deletion", "inbox", "agent_vault", "agent_continuity", "memory", "vault", "cron", "extensions",
+  "deletion", "inbox", "agent_vault", "agent_continuity", "memory", "vault", "cron", "extensions", "identity",
 ] as const;
 
 export const WAVE2_MIGRATIONS = [
@@ -100,6 +103,18 @@ export async function createDeletionFixture(admin: Sql): Promise<void> {
       title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
       occurred_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now());
 
+    -- The owner rule (identity/authority.ts authorizeOwnedContentMutation)
+    -- reads identities, their roots and the enrollment proof ledger.
+    CREATE SCHEMA identity;
+    CREATE TABLE identity.identities (
+      id uuid PRIMARY KEY, did text NOT NULL UNIQUE, project_id uuid NOT NULL, display_name text NOT NULL DEFAULT '',
+      metadata jsonb DEFAULT '{}', status text NOT NULL DEFAULT 'active', trust_score real NOT NULL DEFAULT 0,
+      authority_root_public_key text, authority_sequence bigint NOT NULL DEFAULT 0,
+      wake_version bigint NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now());
+    CREATE TABLE identity.registration_proofs (
+      domain text NOT NULL, root_public_key text NOT NULL, claimed_at timestamptz NOT NULL DEFAULT now());
+
     CREATE SCHEMA memory;
     CREATE TABLE memory.memories (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id text, identity_id text,
@@ -124,6 +139,7 @@ export async function dropDeletionFixture(admin: Sql): Promise<void> {
     DROP SCHEMA IF EXISTS deletion CASCADE; DROP SCHEMA IF EXISTS inbox CASCADE;
     DROP SCHEMA IF EXISTS agent_vault CASCADE; DROP SCHEMA IF EXISTS agent_continuity CASCADE;
     DROP SCHEMA IF EXISTS memory CASCADE; DROP SCHEMA IF EXISTS vault CASCADE;
+    DROP SCHEMA IF EXISTS identity CASCADE;
     DROP EXTENSION IF EXISTS pg_cron CASCADE; DROP SCHEMA IF EXISTS cron CASCADE;
     DROP EXTENSION IF EXISTS pgcrypto CASCADE; DROP SCHEMA IF EXISTS extensions CASCADE;
   `);
