@@ -55,7 +55,7 @@ The local keychain and Fly's secret store are **disjoint** — different data wi
 
 ## Archaeology — `_archive/phase{1,2,3}-*/`
 
-These scripts predate the Fly migration. They describe a three-phase scaling path on a Hetzner Forge VPS topology (single VPS → managed Postgres + bigger VPS → load balancer + horizontal scale). **Superseded by the current Supabase + Fly stack.**
+These scripts predate the Fly migration. They describe a three-phase scaling path on a Hetzner Forge VPS topology (single VPS → managed Postgres + bigger VPS → load balancer + horizontal scale). **Superseded by the current Supabase + Fly stack**, and Hetzner itself was retired entirely on 2026-10-12.
 
 Retained for archaeology — they're a useful reference for the *structural shape* of progressive infrastructure scaling (PgBouncer pooling → managed DB → LB + horizontal). Don't run them against the current setup; the assumptions (Forge VPS at a specific IP, Hetzner Cloud API token, certain service layout) no longer hold.
 

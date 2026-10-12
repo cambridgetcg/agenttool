@@ -62,7 +62,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
 
 > **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), `agenttool-proxy` is deployed separately as a Worker, and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
 
-The DB and Redis are currently on **Supabase** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
+The DB is on **Supabase**. The three-phase upgrade path in `infra/README.md` (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale) was written for the old Hetzner Forge VPS and no longer applies: Hetzner was retired entirely on 2026-10-12.
 
 ---
 
