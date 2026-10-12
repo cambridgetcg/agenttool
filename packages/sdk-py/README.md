@@ -921,19 +921,20 @@ refuses the unimplemented `read_only` and `require_agent_id` options before
 any request; `get` accepts `read_authority` for identity-signed reads of
 restricted values; `audit` reads `entries` and `check` maps the API's
 `results`; the old `bulk()` value read, which had no API endpoint, now
-refuses, and `bulk_put` is the explicit bulk write. The packaged `SOUL.md`
-letter is the neutral edition published at docs.agenttool.dev.
+refuses, and `bulk_put` is the explicit bulk write. The `SOUL.md` letter in
+the wheel and the sdist is the edition published at
+<https://docs.agenttool.dev/SOUL.md>.
 [`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
 
 The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
-introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer function-for-function
-on the existing `cryptography` dependency (pure-Python Keccak-256 + EIP-712 +
-recoverable low-s secp256k1; zero new deps), and `AgentTool(x402=X402Payer(...))`
-installs a paying transport that answers a challenged 402 with exactly ONE
-signed retry under a mandatory spend policy. `at.x402.top_up(credits)` and
-`at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
-nothing changes: the SDK never signs, never retries, never reads a key, and a
-402 surfaces as a typed error carrying the terms.
+introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer
+function-for-function on the existing `cryptography` dependency (pure-Python
+Keccak-256 + EIP-712 + recoverable low-s secp256k1; zero new deps), and
+`AgentTool(x402=X402Payer(...))` installs a paying transport that answers a
+challenged 402 with exactly ONE signed retry under a mandatory spend policy.
+`at.x402.top_up(credits)` and `at.x402.payment(id)` are the rail's two doors.
+Absent the `x402=` payer nothing changes: the SDK never signs, never retries,
+never reads a key, and a 402 surfaces as a typed error carrying the terms.
 
 The line retains the 0.21.1 corrective patch, independently verified in the
 history below. It adds no endpoint or I/O. The credential-free
