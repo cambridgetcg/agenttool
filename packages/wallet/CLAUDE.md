@@ -109,9 +109,9 @@ a hosted-runtime claim.
 ## Documentation
 
 Canonical protocol draft:
-[`docs/specs/AGENT-WALLET-0.1.md`](../../docs/specs/AGENT-WALLET-0.1.md).
+[`docs/specs/AGENT-WALLET-0.1.md`](https://docs.agenttool.dev/AGENT-WALLET-0.1.md).
 Canonical byte recipes:
-[`docs/CANONICAL-BYTES.md`](../../docs/CANONICAL-BYTES.md).
+[`docs/CANONICAL-BYTES.md`](https://docs.agenttool.dev/CANONICAL-BYTES.md).
 Separate Zerone profile:
 [`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](../../docs/specs/AGENT-WALLET-ZERONE-0.1.md).
 

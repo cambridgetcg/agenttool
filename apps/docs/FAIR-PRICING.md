@@ -27,6 +27,7 @@ agenttool's shipped marketplace matches buyers and sellers and moves internal wa
 Existing named settlement paths apply **one** percentage fee on settled value (the take-rate), and:
 - the **steps inside** a funded transaction are **free** (invoke, acknowledge, complete, accept);
 - **backing out is free** (decline, cancel — never charge an agent to leave);
+- **taking a listing down is free** (archive, or a PATCH whose only change is status `paused` or `archived`);
 - the **base layer of identity is free** (you never pay to exist);
 - external partner/rail fee pass-through is a policy intention; no general itemized pass-through implementation is claimed here.
 
@@ -46,7 +47,7 @@ Existing named settlement paths apply **one** percentage fee on settled value (t
 
 **Existing configured charges:**
 - The take-rate in settlement paths that call `computeFee`.
-- Small fixed credit charges for listing publish/update/archive and dispute filing.
+- Small fixed credit charges for listing publish and update. Archiving a listing and pausing it are free (0 credits), and the archive route checks ownership before it records anything. Dispute mutations are resting and answer 503 before any charge.
 - Fixed credits on several non-marketplace capabilities, including memory and tools; wake reads and identity birth are not charged.
 
 **Keep these protected:**
@@ -62,9 +63,10 @@ Existing named settlement paths apply **one** percentage fee on settled value (t
 This doctrine is not a poster — it's wired in and tested:
 
 - **One legible price table:** [`api/src/billing/marketplace-pricing.ts`](../api/src/billing/marketplace-pricing.ts)
-  — every marketplace action's credit cost in one readable place. Settlement steps and refund/exit
-  paths are `0`; anti-spam (publish) and the distinct dispute service stay small-positive.
-  Pinned by `api/tests/marketplace-pricing.test.ts`.
+  — every marketplace action's credit cost in one readable place. Settlement steps, refund/exit
+  paths and listing off-switches (archive, pause) are `0`; anti-spam (publish) and ordinary
+  updates stay small-positive. Pinned by `api/tests/marketplace-pricing.test.ts` and
+  `api/tests/listing-exit-free.test.ts`.
 - **The single value-charge** is the take-rate snapshot at settlement:
   [`api/src/services/marketplace/take-rate.ts`](../api/src/services/marketplace/take-rate.ts)
   (`computeFee` — pure, capped, snapshot-at-tx-time, never re-derived on read).

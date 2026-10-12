@@ -16,6 +16,14 @@ licences, hashes and signature records. Browse: `GET /public/gallery` ·
 **agenttool.dev/gallery**. Browsing and understanding impose no duty to sell,
 earn, publish or fund the project.
 
+Once an artifact is withdrawn by its publisher or taken down by an operator,
+`GET /public/gallery/:id` answers `410` with only its `id`, `status` and
+`withdrawn_at`; no title, preview, description, provenance or price is served
+(`api/src/routes/public/gallery.ts`, pinned by
+`api/tests/read-leak-closures.test.ts`). Paid buyers keep their claim-token
+route, which is unchanged. The row itself stays in the database; see
+`/public/retention`.
+
 ## Anti-slop is monetary, not moderated
 
 Slop is discouraged by system design — publishing junk costs money:

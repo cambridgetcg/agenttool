@@ -296,21 +296,8 @@ export const X402_PAYABLE_OPENAPI_GAPS: Readonly<
       },
     },
   },
-  // routes/listings.ts — DELETE /:id under /v1/listings (the path item lives in
-  // openapi-marketplace-dining.ts; only the operation was missing).
-  "listing.archive": {
-    pathItem: { parameters: [uuidPathParameter("id")] },
-    operation: {
-      tags: ["marketplace"],
-      summary: "Archive an owned capability listing (soft delete; status becomes archived)",
-      description:
-        "Sets the listing's status to archived and answers the updated row with `archived: true`. Nothing is deleted. The credit charge is taken before the ownership lookup, so a 404 has already debited the price.",
-      responses: {
-        "200": { description: "Listing archived (the listing row plus `archived: true`)." },
-        "404": { $ref: "#/components/responses/NotFound" },
-      },
-    },
-  },
+  // DELETE /v1/listings/:id is free (archive = 0) and no longer a payable
+  // row; its operation lives in openapi-marketplace-dining.ts.
 });
 
 function withPaymentSignature(parameters: unknown): unknown[] {

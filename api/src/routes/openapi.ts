@@ -97,6 +97,7 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
+import { RETENTION_OPENAPI_PATHS } from "./openapi-retention";
 import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
@@ -6567,6 +6568,7 @@ function spec() {
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
         },
       },
+      ...RETENTION_OPENAPI_PATHS,
       "/public/labor": {
         get: {
           security: [],

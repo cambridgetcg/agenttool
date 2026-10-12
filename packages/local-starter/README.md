@@ -435,7 +435,7 @@ Local tests passed **70/70** on macOS arm64 with both Node **22.18.0** and
 passed all six jobs on Ubuntu 24.04, macOS 15, and Windows 2025 with Node
 22.18.0 and 24.18.0: Linux/macOS each passed 70 tests; Windows each passed 63
 and skipped seven POSIX-specific checks. Evidence: repository-access-required
-[run 36327872045](https://github.com/cambridgetcg/agenttool/actions/runs/36327872045),
+run 36327872045,
 source `811a7153`, checked 2026-09-27. These are files and adapter fixtures.
 
 **Observed 2026-09-28 (local date), macOS arm64 / Node 24.18.1:**

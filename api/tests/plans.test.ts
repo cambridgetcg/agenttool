@@ -76,6 +76,14 @@ describe("/public/plans", () => {
     expect(b.marketplace.take_rate_percent).toBe(config.platformTakeRateBps / 100);
   });
 
+  test("marketplace note agrees with /public/marketplace/terms: archive and pause are free", async () => {
+    const b = await get();
+    expect(b.marketplace.note).toMatch(/listing publication and updates are listed at \/public\/marketplace\/terms/);
+    expect(b.marketplace.note).toMatch(/Archiving and pausing a listing are free/);
+    expect(b.marketplace.note).toMatch(/dispute mutations are resting/);
+    expect(b.marketplace.note).not.toMatch(/updates, archiving/);
+  });
+
   test("the anti-exploit gate separates enforced PoW from the fail-open IP limiter", async () => {
     const b = await get();
 

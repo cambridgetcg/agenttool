@@ -30,7 +30,8 @@
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "bun run clean && tsc",
     "test": "bun test",
-    "ci": "bun run build && bun test"
+    "ci": "bun run build && bun test",
+    "prepack": "bun run ci"
   },
   "keywords": [
     "agent",

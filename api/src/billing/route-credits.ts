@@ -23,6 +23,8 @@
  *    time, random  — 0 credits and keyless (substrate-honest: WAKE-adjacent);
  *    listing.invoke / invocation.* — 0 by doctrine (charged once, at the
  *                    take-rate; docs/FAIR-PRICING.md);
+ *    listing.archive / listing.pause — 0: taking a listing down is leaving,
+ *                    and leaving is free (billing/marketplace-pricing.ts);
  *    /v1/mcp       — never metered (Yu).
  *
  *  Tests: tests/x402-policy-table.test.ts pins every call site to this map
@@ -61,7 +63,6 @@ export const ROUTE_CREDITS = Object.freeze({
   // Marketplace listing lifecycle (billing/marketplace-pricing.ts).
   "listing.publish": MARKETPLACE_PRICING.publish,
   "listing.update": MARKETPLACE_PRICING.update,
-  "listing.archive": MARKETPLACE_PRICING.archive,
 } as const satisfies Readonly<Record<string, number>>);
 
 export type RouteCreditLabel = keyof typeof ROUTE_CREDITS;
