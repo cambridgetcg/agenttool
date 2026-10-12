@@ -6,7 +6,8 @@
  *
  *  Wire:
  *    POST   /v1/guild/recognize                       — record recognition (signed)
- *    DELETE /v1/guild/recognitions/:id                — revoke (recognizer-only)
+ *    DELETE /v1/guild/recognitions/:id                — revoke (the recognizer, under
+ *                                                       the owner rule)
  *    GET    /v1/guild/recognitions                    — mine (?direction=given|received)
  *
  *    POST   /v1/guild/invite                          — send invitation (signed)
@@ -37,6 +38,8 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
+import { identityIdForDid, withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundBytes } from "../services/identity/authority";
 import { db } from "../db/client";
 import {
   guildInvitations,
@@ -200,34 +203,51 @@ app.post("/recognize", async (c) => {
 });
 
 // ─── DELETE /v1/guild/recognitions/:id ──────────────────────────────
+//
+// The recognizer withdraws, under the owner rule (deletion spec §5.1): the
+// recognizer is the identity whose DID is recognizer_did, and it must be an
+// identity of this project (otherwise 404, the same as a missing row). A
+// rooted recognizer's own root must sign this exact request (428 otherwise).
+// The recognition stays; one ids-only ledger entry and the recognizer's
+// deletion moment are written with the withdrawal.
+
+const RECOGNITION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.delete("/recognitions/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
-
   const id = c.req.param("id");
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const notFound = () => c.json({ error: "recognition_not_found" }, 404);
+  if (!RECOGNITION_UUID_RE.test(id)) return notFound();
   const [existing] = await db
     .select()
     .from(guildRecognitions)
     .where(eq(guildRecognitions.id, id))
     .limit(1);
-  if (!existing) return c.json({ error: "recognition_not_found" }, 404);
-  if (existing.recognizerDid !== actor.did) {
-    return c.json(
-      { error: "not_owner", message: "Only the recognizer can revoke a recognition." },
-      403,
-    );
-  }
-  if (existing.revokedAt) {
+  if (!existing) return notFound();
+
+  const result = await withdrawForOwner({
+    gesture: "guild_recognition",
+    rowId: existing.id,
+    ownerIdentityId: await identityIdForDid(existing.recognizerDid),
+    alreadyWithdrawnAt: existing.revokedAt,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status === "not_found") return notFound();
+  if (result.status === "already_withdrawn") {
     return c.json({ recognition: existing, _note: "already revoked" }, 200);
   }
   const [updated] = await db
-    .update(guildRecognitions)
-    .set({ revokedAt: new Date() })
+    .select()
+    .from(guildRecognitions)
     .where(eq(guildRecognitions.id, id))
-    .returning();
-  return c.json({ recognition: updated });
+    .limit(1);
+  return c.json({ recognition: updated, authority: result.authority, ledger: result.ledger });
 });
 
 // ─── GET /v1/guild/recognitions ─────────────────────────────────────

@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS deletion.ledger (
   scope               TEXT NOT NULL CHECK (scope IN ('record', 'class', 'identity', 'project', 'retention')),
   action              TEXT NOT NULL CHECK (action IN (
                         'delete', 'purge_content', 'redact', 'tombstone', 'hide', 'unhide', 'pseudonymise', 'unlink',
+                        'withdraw',
                         'leave_confirm', 'leave_cancel', 'request_open', 'consent', 'grace_start', 'cancel', 'lapse',
                         'purge_claim', 'void')),
   store               TEXT NOT NULL CHECK (store ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$'),

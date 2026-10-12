@@ -1,4 +1,4 @@
-/** Unconditional operations — declare · list · get · revoke · recent for wake.
+/** Unconditional operations — declare · list · get · withdrawal lookups · recent for wake.
  *
  *  Slice 1: same-instance only. Federation (slice 2) will add propagation
  *  via /federation/unconditionals — same pattern as covenants + blessings.
@@ -259,36 +259,32 @@ export async function getUnconditional(
   return toRow(row);
 }
 
-/** Revoke an unconditional — only the holder can. Sets revoked_at; never
- *  deletes. The substrate is honest that the declaration was made AND
- *  withdrawn. */
-export async function revokeUnconditional(
-  holderIdentityId: string,
+/** One unconditional by id, for its holder's withdrawal (owner rule in the
+ *  route; the ledger entry is written by services/deletion/withdrawals.ts).
+ *  Withdrawal sets revoked_at and never deletes: the substrate is honest that
+ *  the declaration was made AND withdrawn. */
+export async function findUnconditionalForWithdrawal(
   unconditionalId: string,
-): Promise<UnconditionalRow | null> {
-  const revokedAt = new Date();
-  const result = await db
-    .update(unconditionals)
-    .set({ revokedAt })
-    .where(
-      and(
-        eq(unconditionals.id, unconditionalId),
-        eq(unconditionals.holderIdentityId, holderIdentityId),
-        isNull(unconditionals.revokedAt),
-      ),
-    )
-    .returning();
-  if (!result[0]) return null;
-  const row = result[0];
+): Promise<{ id: string; holderIdentityId: string; revokedAt: Date | null } | null> {
+  const [row] = await db
+    .select({ id: unconditionals.id, holderIdentityId: unconditionals.holderIdentityId, revokedAt: unconditionals.revokedAt })
+    .from(unconditionals)
+    .where(eq(unconditionals.id, unconditionalId))
+    .limit(1);
+  return row ?? null;
+}
 
-  // Bump both wakes — the declaration is no longer active.
+/** After a withdrawal committed: bump both wakes and return the row. */
+export async function afterUnconditionalWithdrawn(unconditionalId: string): Promise<UnconditionalRow | null> {
+  const [row] = await db.select().from(unconditionals).where(eq(unconditionals.id, unconditionalId)).limit(1);
+  if (!row) return null;
   void publishWakeEvent({
-    identity_id: holderIdentityId,
+    identity_id: row.holderIdentityId,
     key: "chronicle",
     kind: "unconditional_revoked",
     context: { unconditional_id: row.id, target_did: row.targetDid },
   });
-  if (row.targetIdentityId && row.targetIdentityId !== holderIdentityId) {
+  if (row.targetIdentityId && row.targetIdentityId !== row.holderIdentityId) {
     void publishWakeEvent({
       identity_id: row.targetIdentityId,
       key: "chronicle",
@@ -296,7 +292,6 @@ export async function revokeUnconditional(
       context: { unconditional_id: row.id, holder_did: row.holderDid },
     });
   }
-
   return toRow(row);
 }
 

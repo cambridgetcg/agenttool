@@ -25,6 +25,7 @@ import {
   purgeInboxMessages,
   purgeVaultSecrets,
 } from "./purges";
+import { markWithdrawn, WITHDRAWABLE } from "./withdrawals";
 
 export interface Applier {
   /** One line for the dry-run plan. */
@@ -76,6 +77,16 @@ export const APPLIERS: Record<string, Applier> = {
     describe: (entry) => `purge ${entry.rowIds.length} identity backups`,
     apply: async (tx, entry) => (await purgeIdentityBackups(tx, entry.rowIds, entry.occurredAt)).length,
   },
+
+  // Gesture withdrawals: re-mark the rows withdrawn as of the entry's time.
+  ...Object.fromEntries(Object.values(WITHDRAWABLE).map(({ store }) => [
+    applierKey({ store, action: "withdraw" }),
+    {
+      describe: (entry: StoredLedgerEntry) => `mark ${entry.rowIds.length} rows of ${store} withdrawn (their words stay)`,
+      apply: async (tx: LedgerExecutor, entry: StoredLedgerEntry) =>
+        (await markWithdrawn(tx, store, entry.rowIds, entry.occurredAt)).length,
+    } satisfies Applier,
+  ])),
 
   [applierKey({ store: "memory.memories", action: "delete", ruleId: "expired_working_memory_24h" })]: {
     describe: (entry) => `re-run expired_working_memory_24h (delete) with cutoff ${entry.ruleCutoff}`,

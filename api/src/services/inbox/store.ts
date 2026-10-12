@@ -659,6 +659,25 @@ export interface InboxPurgeResult {
   entry: AppendedLedgerEntry | null;
 }
 
+/** Who owns a message this project holds, and whether it is already purged:
+ *  the recipient identity decides its erase under the owner rule
+ *  (identity/authority.ts authorizeOwnedContentMutation). */
+export async function findMessageForPurge(
+  projectId: string,
+  id: string,
+): Promise<{ id: string; recipientIdentityId: string; contentPurgedAt: Date | null } | null> {
+  const [row] = await db
+    .select({
+      id: inboxMessages.id,
+      recipientIdentityId: inboxMessages.recipientIdentityId,
+      contentPurgedAt: inboxMessages.contentPurgedAt,
+    })
+    .from(inboxMessages)
+    .where(and(eq(inboxMessages.id, id), eq(inboxMessages.recipientProjectId, projectId)))
+    .limit(1);
+  return row ?? null;
+}
+
 /** DELETE: erase the message's content in one transaction with its ledger
  *  entry and the recipient's deletion moment. The row stays (status
  *  'deleted', signature kept) so threads that point at it keep their shape.

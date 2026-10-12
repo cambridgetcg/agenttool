@@ -40,8 +40,14 @@ describe("replay applier registry", () => {
       for (const match of text.matchAll(/recordErasure\([^,]+,\s*\{\s*kind:\s*"([a-z_.]+)"/g)) used.add(match[1]!);
       for (const match of text.matchAll(/LEDGER_KINDS\["([a-z_.]+)"\]/g)) used.add(match[1]!);
       for (const match of text.matchAll(/\{ kind: "(backfill\.[a-z_]+)"/g)) used.add(match[1]!);
+      // Gesture withdrawals name their kind in withdrawals.ts WITHDRAWABLE.
+      for (const match of text.matchAll(/\{ kind: "([a-z_]+\.withdraw)"/g)) used.add(match[1]!);
     }
-    for (const name of ["inbox.purge", "vault.purge", "identity_backup.purge", "memory.delete", "memory.erase_in_place"]) {
+    for (const name of [
+      "inbox.purge", "vault.purge", "identity_backup.purge", "memory.delete", "memory.erase_in_place",
+      "blessing.withdraw", "unconditional.withdraw", "guild_recognition.withdraw", "margin.withdraw",
+      "attestation.withdraw", "trust.withdraw",
+    ]) {
       expect(used.has(name), name).toBe(true);
     }
     for (const name of used) expect(Object.keys(LEDGER_KINDS), name).toContain(name);

@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -24,6 +24,8 @@ import {
   verifyBytes,
 } from "../../services/identity/crypto";
 import { updateTrustScore } from "../../services/identity/trust";
+import { withdrawForOwner } from "../../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundBytes } from "../../services/identity/authority";
 
 const app = new Hono<ProjectContext>();
 
@@ -280,39 +282,41 @@ app.get("/:id", async (c) => {
   });
 });
 
-/** DELETE /v1/attestations/:id — Revoke. */
+/** DELETE /v1/attestations/:id — Revoke, by the attester under the owner
+ *  rule (deletion spec §5.1). The attester must be an identity of this
+ *  project (otherwise 404, the same as a missing row). A rooted attester's
+ *  own root must sign this exact request (428 otherwise); an attester without
+ *  a root follows the project rule. The attestation and its words stay; one
+ *  ids-only ledger entry and the attester's deletion moment are written with
+ *  the revocation, so a backup restore cannot bring it back into force. */
+const ATTESTATION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.delete("/:id", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const notFound = () => c.json({ error: "Attestation not found or already revoked" }, 404);
+  if (!ATTESTATION_UUID_RE.test(id)) return notFound();
 
   const [attestation] = await db
-    .select()
+    .select({ id: attestations.id, attesterId: attestations.attesterId, subjectId: attestations.subjectId, revokedAt: attestations.revokedAt })
     .from(attestations)
-    .where(and(eq(attestations.id, id), isNull(attestations.revokedAt)));
-
-  if (!attestation) {
-    return c.json({ error: "Attestation not found or already revoked" }, 404);
-  }
-
-  // The attester must belong to this project.
-  const [attester] = await db
-    .select()
-    .from(identities)
-    .where(
-      and(
-        eq(identities.id, attestation.attesterId),
-        eq(identities.projectId, project.id),
-      ),
-    );
-
-  if (!attester) {
-    return c.json({ error: "Not authorized to revoke this attestation" }, 403);
-  }
-
-  await db
-    .update(attestations)
-    .set({ revokedAt: new Date() })
     .where(eq(attestations.id, id));
+  if (!attestation) return notFound();
+
+  const result = await withdrawForOwner({
+    gesture: "attestation",
+    rowId: attestation.id,
+    ownerIdentityId: attestation.attesterId,
+    alreadyWithdrawnAt: attestation.revokedAt,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status !== "withdrawn") return notFound();
 
   try {
     await updateTrustScore(attestation.subjectId);
@@ -320,7 +324,7 @@ app.delete("/:id", async (c) => {
     console.warn("[identity attestation revoke] updateTrustScore failed:", error);
   }
 
-  return c.json({ message: "Attestation revoked", id });
+  return c.json({ message: "Attestation revoked", id, revoked_at: result.at, authority: result.authority, ledger: result.ledger });
 });
 
 export default app;

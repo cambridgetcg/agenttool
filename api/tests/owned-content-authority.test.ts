@@ -108,6 +108,26 @@ describe("every owner-gated route uses the owner rule", () => {
     expect(code.split('intent: "erase"').length - 1).toBe(2);
   });
 
+  test("inbox DELETE and PATCH to deleted share one owner-gated purge", () => {
+    const code = source("routes/inbox/messages.ts");
+    expect(code).toContain("authorizeOwnedContentMutation(");
+    expect(code).toContain("owners: [target.recipientIdentityId]");
+    expect(code.split("purgeForOwner(c,").length - 1).toBe(2);
+  });
+
+  test("every gesture withdrawal goes through withdrawForOwner with its giver", () => {
+    for (const [path, gesture] of [
+      ["routes/blessings.ts", "blessing"],
+      ["routes/unconditionals.ts", "unconditional"],
+      ["routes/guild.ts", "guild_recognition"],
+      ["routes/margin.ts", "margin"],
+      ["routes/identity/attestations.ts", "attestation"],
+      ["routes/trust.ts", "trust"],
+    ] as const) {
+      expect({ path, uses: source(path).includes(`gesture: "${gesture}"`) }).toEqual({ path, uses: true });
+    }
+  });
+
   test("elevation and witness flows keep the project constitution rule", () => {
     // Foundational memories compose at project scope: elevation is a
     // constitutional change, not an erase of the owner's own content.

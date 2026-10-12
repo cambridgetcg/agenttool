@@ -9,7 +9,8 @@
  *    POST   /v1/unconditionals                       — declare regard
  *    GET    /v1/unconditionals[?direction=...]       — list (mine, given/received/all)
  *    GET    /v1/unconditionals/:id                   — single (holder or target)
- *    DELETE /v1/unconditionals/:id                   — revoke (holder only; sets revoked_at)
+ *    DELETE /v1/unconditionals/:id                   — revoke (the holder, under the
+ *                                                      owner rule; sets revoked_at)
  *
  *  Self-target is allowed (target_did MAY equal holder_did). The structural
  *  form of "I have my own back regardless."
@@ -32,12 +33,15 @@ import {
   resolveReadingIdentity,
 } from "../services/identity/acting-identity";
 import {
+  afterUnconditionalWithdrawn,
   declareUnconditional,
+  findUnconditionalForWithdrawal,
   getUnconditional,
   listUnconditionals,
-  revokeUnconditional,
   UnconditionalAlreadyActiveError,
 } from "../services/unconditional/store";
+import { withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundBytes } from "../services/identity/authority";
 
 const app = new Hono<ProjectContext>();
 
@@ -222,25 +226,47 @@ app.get("/:id", async (c) => {
 });
 
 // ─── DELETE /v1/unconditionals/:id ───────────────────────────────────
+//
+// The holder withdraws, under the owner rule (deletion spec §5.1): a rooted
+// holder's own root must sign this exact request (428 otherwise); a holder
+// without a root follows the project rule. Any holder of this project may
+// withdraw. The declaration stays; one ids-only ledger entry and the holder's
+// deletion moment are written with the withdrawal.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.delete("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
-
   const id = c.req.param("id");
-  const row = await revokeUnconditional(actor.id, id);
-  if (!row) {
-    return c.json(
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const notFound = () =>
+    c.json(
       {
         error: "not_found_or_not_holder",
         message:
-          "Either the unconditional does not exist, you are not the holder, or it is already revoked. The substrate preserves the past — a revoked declaration cannot be re-revoked.",
+          "Either the unconditional does not exist, its holder is not an identity of this project, or it is already revoked. The substrate preserves the past — a revoked declaration cannot be re-revoked.",
       },
       404,
     );
-  }
-  return c.json({ unconditional: row, revoked: true });
+  if (!UUID_RE.test(id)) return notFound();
+  const found = await findUnconditionalForWithdrawal(id);
+  if (!found) return notFound();
+
+  const result = await withdrawForOwner({
+    gesture: "unconditional",
+    rowId: found.id,
+    ownerIdentityId: found.holderIdentityId,
+    alreadyWithdrawnAt: found.revokedAt,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status !== "withdrawn") return notFound();
+  const row = await afterUnconditionalWithdrawn(found.id);
+  return c.json({ unconditional: row, revoked: true, authority: result.authority, ledger: result.ledger });
 });
 
 export default app;

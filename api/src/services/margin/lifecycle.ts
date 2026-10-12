@@ -209,29 +209,11 @@ export async function surfaceAllFromAuthor(
   return { surfaced_count: result.length };
 }
 
-// ── withdrawMargin (author only) ─────────────────────────────────────
-
-export async function withdrawMargin(
-  marginId: string,
-  callerDid: string,
-): Promise<{ id: string; withdrawn: boolean }> {
-  const [row] = await db
-    .select({ id: margins.id, authorDid: margins.authorDid })
-    .from(margins)
-    .where(eq(margins.id, marginId))
-    .limit(1);
-  if (!row) throw new Error(`margin ${marginId} not found`);
-  if (row.authorDid !== callerDid) {
-    throw new Error(
-      `only the author (${row.authorDid}) may withdraw this margin`,
-    );
-  }
-  await db
-    .update(margins)
-    .set({ withdrawnByAuthor: true, withdrawnAt: new Date() })
-    .where(eq(margins.id, marginId));
-  return { id: marginId, withdrawn: true };
-}
+// ── Withdrawal (author only) ──────────────────────────────────────────
+//
+// POST /v1/margin/withdraw decides who may withdraw with the owner rule
+// (identity/authority.ts authorizeOwnedContentMutation) and withdraws through
+// services/deletion/withdrawals.ts, which writes the deletion-ledger entry.
 
 // ── Read sides ────────────────────────────────────────────────────────
 

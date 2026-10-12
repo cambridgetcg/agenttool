@@ -31,6 +31,17 @@ export const LEDGER_KINDS = {
     scope: "record", action: "purge_content", store: "agent_continuity.identity_backups", writer: "api",
   },
 
+  // Gesture withdrawals by the giver under the owner rule (API). The record
+  // and its words stay; replay re-marks it withdrawn after a restore.
+  "blessing.withdraw": { scope: "record", action: "withdraw", store: "agent_continuity.blessings", writer: "api" },
+  "unconditional.withdraw": { scope: "record", action: "withdraw", store: "agent_continuity.unconditionals", writer: "api" },
+  "guild_recognition.withdraw": {
+    scope: "record", action: "withdraw", store: "agent_continuity.guild_recognitions", writer: "api",
+  },
+  "margin.withdraw": { scope: "record", action: "withdraw", store: "margin.margins", writer: "api" },
+  "attestation.withdraw": { scope: "record", action: "withdraw", store: "identity.attestations", writer: "api" },
+  "trust.withdraw": { scope: "record", action: "withdraw", store: "trust.trusts", writer: "api" },
+
   // Retention rules (pg_cron, M3).
   "rule.expired_working_memory.delete": {
     scope: "retention", action: "delete", store: "memory.memories", rule: "expired_working_memory_24h", writer: "pg_cron",

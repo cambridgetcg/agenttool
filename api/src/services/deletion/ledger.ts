@@ -47,6 +47,9 @@ export const LIFECYCLE_ACTIONS = [
 ] as const;
 export const LEDGER_ACTIONS = [
   "delete", "purge_content", "redact", "tombstone", "hide", "unhide", "pseudonymise", "unlink",
+  // A giver's withdrawal of a gesture it gave (deletion spec §5.2): no content
+  // is erased, but a restore must not bring the gesture back into force.
+  "withdraw",
   ...LIFECYCLE_ACTIONS,
 ] as const;
 export type LedgerAction = (typeof LEDGER_ACTIONS)[number];

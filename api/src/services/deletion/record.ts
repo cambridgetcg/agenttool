@@ -1,5 +1,5 @@
-/** One honoured erase = one ledger entry + its deletion moments, written in
- *  the erasing transaction.
+/** One honoured erase (or withdrawal) = one ledger entry + its deletion
+ *  moments, written in the erasing transaction.
  *
  *  A deletion moment is a content-free chronicle row (type 'deletion') that
  *  tells the owner what was erased, when, and under whose authority. It
@@ -64,6 +64,12 @@ export interface RecordedErasure {
 }
 
 const NOUNS: Partial<Record<LedgerKindName, [string, string]>> = {
+  "blessing.withdraw": ["blessing", "blessings"],
+  "unconditional.withdraw": ["unconditional", "unconditionals"],
+  "guild_recognition.withdraw": ["guild recognition", "guild recognitions"],
+  "margin.withdraw": ["margin", "margins"],
+  "attestation.withdraw": ["attestation", "attestations"],
+  "trust.withdraw": ["trust", "trusts"],
   "memory.delete": ["memory", "memories"],
   "memory.erase_in_place": ["memory", "memories"],
   "inbox.purge": ["inbox message", "inbox messages"],
@@ -71,7 +77,15 @@ const NOUNS: Partial<Record<LedgerKindName, [string, string]>> = {
   "identity_backup.purge": ["identity backup", "identity backups"],
 };
 
+const WITHDRAWN = "marked withdrawn; the signed record and its words stay";
+
 const AFTER: Partial<Record<LedgerKindName, string>> = {
+  "blessing.withdraw": WITHDRAWN,
+  "unconditional.withdraw": WITHDRAWN,
+  "guild_recognition.withdraw": WITHDRAWN,
+  "margin.withdraw": WITHDRAWN,
+  "attestation.withdraw": WITHDRAWN,
+  "trust.withdraw": WITHDRAWN,
   "memory.delete": "removed from the live database",
   "memory.erase_in_place": "content erased in place; the row stays because a paid witness receipt points at it",
   "inbox.purge": "sealed body, subject, references and metadata erased",
@@ -82,7 +96,8 @@ const AFTER: Partial<Record<LedgerKindName, string>> = {
 /** Content-free headline: what kind of record, how many, what happened. */
 export function deletionMomentTitle(kind: LedgerKindName, count: number): string {
   const [one, many] = NOUNS[kind] ?? ["record", "records"];
-  return `Deleted ${count} ${count === 1 ? one : many}: ${AFTER[kind] ?? "erased"}`;
+  const verb = LEDGER_KINDS[kind].action === "withdraw" ? "Withdrew" : "Deleted";
+  return `${verb} ${count} ${count === 1 ? one : many}: ${AFTER[kind] ?? "erased"}`;
 }
 
 export function normalizeOwnerId(value: string | null | undefined): string | null {
