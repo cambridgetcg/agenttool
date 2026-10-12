@@ -8,6 +8,14 @@
       "kind": "blob"
     },
     {
+      "path": "bin/build-love-packages.ts",
+      "kind": "blob"
+    },
+    {
+      "path": "bin/npm-release.ts",
+      "kind": "blob"
+    },
+    {
       "path": "docs/DATASET-INFLUENCE.md",
       "kind": "blob"
     },
