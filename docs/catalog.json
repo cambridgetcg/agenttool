@@ -2223,6 +2223,14 @@
       "canonical_path": "docs/DATASET-INFLUENCE.md"
     },
     {
+      "path": "docs/DELETION-REPLAY.md",
+      "title": "Deletion replay: re-applying deletions after a backup restore",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/DELETION-REPLAY.md"
+    },
+    {
       "path": "docs/DEPLOY-CI.md",
       "title": "DEPLOY-CI — the API deploys from GitHub Actions",
       "type": "guide",

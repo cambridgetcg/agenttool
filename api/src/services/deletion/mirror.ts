@@ -531,3 +531,54 @@ export async function pushLedgerMirrorAfterCommit(
     if (timer) clearTimeout(timer);
   }
 }
+
+// ─── The sweep (bin/deletion-ledger-mirror.ts) ─────────────────────────────
+
+export interface SweepReport {
+  mode: "dry-run" | "push";
+  mirror: string;
+  unmirrored: number;
+  oldestSeq: number | null;
+  oldestAt: string | null;
+  pushed: number;
+  existed: number;
+  failure: { seq: number; error: string } | null;
+}
+
+/** Report the oldest unmirrored entry and, unless dry-run, push everything
+ *  unmirrored in seq order. Refuses while a restore is being replayed. */
+export async function sweepLedgerMirror(
+  executor: LedgerExecutor,
+  mirror: LedgerMirror,
+  options: { dryRun: boolean },
+): Promise<SweepReport> {
+  const list = (result: unknown) => (Array.isArray(result) ? result : ((result as { rows?: unknown[] })?.rows ?? []));
+  const [settings] = list(await executor.execute(sql`SELECT replay_required FROM deletion.settings WHERE id`)) as Array<{ replay_required: boolean }>;
+  if (settings?.replay_required) throw new Error("a restore is being replayed; the sweep is paused until replay finishes");
+  const [waiting] = list(await executor.execute(sql`
+    SELECT count(*)::int AS count, min(seq)::text AS oldest_seq,
+           to_char(min(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS oldest_at
+      FROM deletion.ledger WHERE mirrored_at IS NULL`)) as Array<{ count: number; oldest_seq: string | null; oldest_at: string | null }>;
+  const report: SweepReport = {
+    mode: options.dryRun ? "dry-run" : "push",
+    mirror: mirror.kind,
+    unmirrored: Number(waiting?.count ?? 0),
+    oldestSeq: waiting?.oldest_seq ? Number(waiting.oldest_seq) : null,
+    oldestAt: waiting?.oldest_at ?? null,
+    pushed: 0,
+    existed: 0,
+    failure: null,
+  };
+  if (options.dryRun) return report;
+  for (;;) {
+    const result = await pushUnmirroredEntries(executor, mirror, { limit: 500 });
+    report.pushed += result.pushed;
+    report.existed += result.existed;
+    if (result.failure) {
+      report.failure = result.failure;
+      break;
+    }
+    if (result.pushed + result.existed === 0) break;
+  }
+  return report;
+}

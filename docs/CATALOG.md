@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**824 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 21; unclassified: 2.
+**825 document paths** (including mirrors). orientation: 185; guide: 85; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 21; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -229,6 +229,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/COLLABORATION.md](<../docs/COLLABORATION.md>) | not-reviewed |
 | [docs/COMPOSITION-RECIPE.md](<../docs/COMPOSITION-RECIPE.md>) | not-reviewed |
 | [docs/CONVENTIONS.md](<../docs/CONVENTIONS.md>) | not-reviewed |
+| [docs/DELETION-REPLAY.md](<../docs/DELETION-REPLAY.md>) | not-reviewed |
 | [docs/DEPLOY-CI.md](<../docs/DEPLOY-CI.md>) | not-reviewed |
 | [docs/DEPLOY-PROCEDURE.md](<../docs/DEPLOY-PROCEDURE.md>) | not-reviewed |
 | [docs/DEPLOYMENT.md](<../docs/DEPLOYMENT.md>) | not-reviewed |
