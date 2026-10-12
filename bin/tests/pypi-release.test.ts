@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
+  EXPECTED_REPOSITORY,
   PINNED_BUILD_REQUIREMENTS,
   PYPI_SYNC_ARGS,
   PYPI_RELEASE_RECEIPT_SCHEMA,
+  SOURCE_REPOSITORY,
   discardResponseBody,
   expectedArtifactFilenames,
   expectedTag,
@@ -72,6 +74,20 @@ describe("protected PyPI release policy", () => {
     });
     expect(() => expectedTag("0.17.0rc1")).toThrow("stable PyPI version");
     expect(() => expectedTag("latest")).toThrow("stable PyPI version");
+  });
+
+  test("names the public source repository in metadata, apart from where the release runs", async () => {
+    expect(EXPECTED_REPOSITORY).toBe("https://github.com/cambridgetcg/agenttool-packages");
+    expect(SOURCE_REPOSITORY).toBe("https://github.com/cambridgetcg/agenttool");
+    const pyproject = await readFile(join(ROOT, "packages", "sdk-py", "pyproject.toml"), "utf8");
+    expect(pyproject).toContain(`Repository = "${EXPECTED_REPOSITORY}"`);
+    // The archive inspector receives the expected URL instead of repeating it.
+    const script = await readFile(join(ROOT, "bin", "pypi-release.ts"), "utf8");
+    expect(script).toContain("if repository_urls != [expected_repository]:");
+    expect(script.match(/https:\/\/github\.com\/cambridgetcg\/agenttool(?:-packages)?\b/g)).toEqual([
+      EXPECTED_REPOSITORY,
+      SOURCE_REPOSITORY,
+    ]);
   });
 
   test("publishes only an absent or exact partial release and recovers exact existing", () => {

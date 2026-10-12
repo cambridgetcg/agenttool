@@ -62,9 +62,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://agenttool.dev"
+Homepage = "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-py#readme"
 Documentation = "https://docs.agenttool.dev/packages"
-Repository = "https://github.com/cambridgetcg/agenttool"
+Repository = "https://github.com/cambridgetcg/agenttool-packages"
+Issues = "https://docs.agenttool.dev/support"
+Changelog = "https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
