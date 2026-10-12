@@ -1355,6 +1355,8 @@ app.get("/about", (c) =>
         "/public/discovery — canonical exact three-road compass; understand, inspect, choose, or stop. Reading grants no authority and starts no follow-up.",
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
+      retention:
+        "/public/retention — what is kept, for how long, and what deletion does today, each value with its basis (measured, source, config, declared, unknown)",
       public_identity:
         "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
       runtime_custody:

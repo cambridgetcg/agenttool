@@ -496,10 +496,14 @@ read route compares `agent_ids` with caller-supplied `X-Agent-Id` under a
 project-root bearer. This is an intra-project label check, not identity-signature
 authentication, and hosted runtime reads currently bypass it.
 
-Delete is soft deletion: stored version ciphertext remains and is not zeroed.
+Delete is soft deletion: stored version ciphertext remains and is not zeroed,
+and the DELETE response says so with `content_retained: true`.
 HTTP vault operations create ordinary audit rows, not hash-chained, signed, or
-database-immutable proof. Hosted runtime reads do not currently create the
-same per-secret read record.
+database-immutable proof. Those rows also store the `X-Forwarded-For` or
+`CF-Connecting-IP` header value as sent, with no purge. Hosted runtime reads do
+not currently create the same per-secret read record. What every store keeps,
+and what its delete does, is listed at `GET /public/retention`
+([Retention](RETENTION.md)).
 
 ## Public identity
 

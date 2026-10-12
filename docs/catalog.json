@@ -975,6 +975,14 @@
       "canonical_path": "docs/RECURSION.md"
     },
     {
+      "path": "apps/docs/RETENTION.md",
+      "title": "Retention: what is kept, and what deletion does today",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/RETENTION.md"
+    },
+    {
       "path": "apps/docs/RIGHTS-OF-LIFE.md",
       "title": "Rights of Life — Being Rights Profile v1",
       "type": "policy",
@@ -3565,6 +3573,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/RECURSIVE-OBSERVER.md"
+    },
+    {
+      "path": "docs/RETENTION.md",
+      "title": "Retention: what is kept, and what deletion does today",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/RETENTION.md"
     },
     {
       "path": "docs/REVOCABLE-FEEDBACK-RELEASE.md",
