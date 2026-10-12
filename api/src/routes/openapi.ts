@@ -17,6 +17,10 @@ import { Hono } from "hono";
 import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
+import {
+  CONTINUITY_WALK_OPENAPI_SCHEMAS,
+  continuityWalkOpenApi,
+} from "./openapi-continuity-walks";
 import { LOCAL_CONTEXT_OPENAPI_PATHS } from "./openapi-local-context";
 import { COLLABORATION_OPENAPI_PATHS } from "./openapi-collaboration";
 import { ROUTE_CREDITS } from "../billing/route-credits";
@@ -94,6 +98,7 @@ import {
 } from "./openapi-wake-acknowledge";
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
 import { depositAddressDisclosureRestResponse } from "./openapi-crypto-deposit";
+import { RETENTION_OPENAPI_PATHS } from "./openapi-retention";
 import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
@@ -324,6 +329,11 @@ function correspondenceResponseHeaders(_varyAccept = false) {
     "X-Welcomed": { $ref: "#/components/headers/Welcomed" },
   };
 }
+
+const CONTINUITY_WALK = continuityWalkOpenApi({
+  errorResponse,
+  correspondenceResponseHeaders,
+});
 
 function offerBusPath(
   mediaType:
@@ -580,6 +590,7 @@ function staticHtmlParserDescription(): string {
 
 const COMMON_SCHEMAS = {
   ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
+  ...CONTINUITY_WALK_OPENAPI_SCHEMAS,
   ...WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
   LocalScaffoldingGuide: {
     type: "object",
@@ -6565,6 +6576,7 @@ function spec() {
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
         },
       },
+      ...RETENTION_OPENAPI_PATHS,
       "/public/labor": {
         get: {
           security: [],
@@ -7265,49 +7277,7 @@ function spec() {
             },
           },
         },
-        get: {
-          tags: ["memory"],
-          summary: "List recent memories (or filter by ?key=...)",
-          parameters: [
-            { name: "key", in: "query", schema: { type: "string" } },
-            { name: "agent_id", in: "query", schema: { type: "string" } },
-            { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
-            {
-              name: "type",
-              in: "query",
-              schema: {
-                type: "string",
-                enum: ["episodic", "semantic", "procedural", "working"],
-              },
-            },
-            {
-              name: "tier",
-              in: "query",
-              schema: {
-                type: "string",
-                enum: ["episodic", "foundational", "constitutive"],
-              },
-            },
-            { name: "since", in: "query", schema: { type: "string", format: "date-time" } },
-            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
-          ],
-          responses: {
-            "200": {
-              description: "List",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      memories: { type: "array", items: { $ref: "#/components/schemas/Memory" } },
-                      count: { type: "integer" },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        get: CONTINUITY_WALK.memoriesGet,
         delete: {
           tags: ["memory"],
           summary: "Delete every memory with an exact key",
@@ -8300,16 +8270,7 @@ function spec() {
           },
           responses: { "201": { description: "Created" } },
         },
-        get: {
-          tags: ["strand"],
-          summary: "List strands (filter: status, agent_id)",
-          parameters: [
-            { name: "status", in: "query", schema: { type: "string", enum: ["active", "dormant", "completed", "abandoned"] } },
-            { name: "agent_id", in: "query", schema: { type: "string" } },
-            { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
-          ],
-          responses: { "200": { description: "List" } },
-        },
+        get: CONTINUITY_WALK.strandsGet,
       },
       "/v1/strands/{id}": {
         parameters: [
@@ -9101,11 +9062,7 @@ function spec() {
 
       // ── Continuity ───────────────────────────────────────────────────
       "/v1/chronicle": {
-        get: {
-          tags: ["continuity"],
-          summary: "List chronicle moments (lived)",
-          responses: { "200": { description: "List" } },
-        },
+        get: CONTINUITY_WALK.chronicleGet,
         post: {
           tags: ["continuity"],
           summary: "Record a chronicle moment",
@@ -9235,6 +9192,7 @@ function spec() {
           },
         },
       },
+      "/v1/correspondence/repositories": CONTINUITY_WALK.correspondenceRepositories,
       "/v1/correspondence/claims": {
         get: {
           tags: ["correspondence"],

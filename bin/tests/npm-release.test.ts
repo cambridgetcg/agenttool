@@ -25,6 +25,11 @@ import {
   type PreparedReceipt,
 } from "../npm-release";
 
+/** The publish workflow lives in the public overlay; the public repository runs it. */
+const PUBLISH_WORKFLOW = join(
+  import.meta.dir, "..", "..", "public", "overlay", ".github", "workflows", "publish-npm.yml",
+);
+
 function registryFixture(): {
   bytes: Uint8Array;
   receipt: PreparedReceipt;
@@ -102,7 +107,7 @@ describe("standard npm release policy", () => {
 
   test("keeps the LOVE BOMB prerelease on the protected pack lane", async () => {
     const workflow = await readFile(
-      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      PUBLISH_WORKFLOW,
       "utf8",
     );
     expect(workflow.match(/^\s+- love-bomb$/gm)).toEqual(["          - love-bomb"]);
@@ -130,7 +135,7 @@ describe("standard npm release policy", () => {
 
   test("keeps the HF Scout source candidate on the protected prerelease lane", async () => {
     const workflow = await readFile(
-      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      PUBLISH_WORKFLOW,
       "utf8",
     );
     expect(workflow.match(/^\s+- hf-scout$/gm)).toEqual(["          - hf-scout"]);
@@ -167,7 +172,7 @@ describe("standard npm release policy", () => {
 
   test("keeps Dataset Influence on the protected pack prerelease lane", async () => {
     const workflow = await readFile(
-      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      PUBLISH_WORKFLOW,
       "utf8",
     );
     expect(workflow.match(/^\s+- dataset-influence$/gm)).toEqual([
@@ -207,9 +212,9 @@ describe("standard npm release policy", () => {
     });
   });
 
-  test("keeps both economic packages on the protected LOVE prerelease lane", async () => {
+  test("keeps both economic packages on the protected pack prerelease lane", async () => {
     const workflow = await readFile(
-      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      PUBLISH_WORKFLOW,
       "utf8",
     );
     for (const key of ["economic-kernel", "economic-conformance"] as const) {
@@ -251,7 +256,7 @@ describe("standard npm release policy", () => {
         name: `@agenttool/${key}`,
         packagePath: `packages/${key}`,
         tagPrefix: key,
-        artifactKind: "love",
+        artifactKind: "pack",
       });
     }
   });
@@ -316,14 +321,14 @@ describe("standard npm release policy", () => {
     expect(releaseSpec("browser")).toMatchObject({
       name: "@agenttool/browser",
       packagePath: "packages/browser",
-      artifactKind: "love",
+      artifactKind: "pack",
     });
     expect(releaseSpec("hf-scout")).toEqual({
       key: "hf-scout",
       name: "@agenttool/hf-scout",
       packagePath: "packages/hf-scout",
       tagPrefix: "hf-scout",
-      artifactKind: "love",
+      artifactKind: "pack",
     });
     expect(releaseSpec("codex-usage")).toMatchObject({
       name: "@agenttool/codex-usage",
@@ -441,7 +446,7 @@ describe("standard npm release policy", () => {
       name: "@agenttool/principality-geometry",
       packagePath: "packages/principality-geometry",
       tagPrefix: "principality-geometry",
-      artifactKind: "love",
+      artifactKind: "pack",
     });
     expect(releaseSpec("love-bomb")).toEqual({
       key: "love-bomb",
@@ -471,7 +476,7 @@ describe("standard npm release policy", () => {
       name: "@agenttool/wallet-zerone",
       packagePath: "packages/wallet-zerone",
       tagPrefix: "wallet-zerone",
-      artifactKind: "love",
+      artifactKind: "pack",
       prerequisites: [
         { packagePath: "packages/wallet", scripts: ["ci"] },
       ],
@@ -1301,7 +1306,7 @@ describe("standard npm release policy", () => {
       name: "@agenttool/local-starter",
       packagePath: "packages/local-starter",
       tagPrefix: "local-starter",
-      artifactKind: "love",
+      artifactKind: "pack",
       gateScripts: ["ci", "build", "check:bundle"],
       prerequisites: [{ packagePath: "packages/local-starter-mcp", scripts: ["ci"] }],
     });
@@ -1318,7 +1323,7 @@ describe("standard npm release policy", () => {
       "package/.codex-plugin/plugin.json", "package/.claude-plugin/plugin.json",
       "package/plugin.json",
     ]);
-    const workflow = await readFile(join(import.meta.dir, "../../.github/workflows/publish-npm.yml"), "utf8");
+    const workflow = await readFile(PUBLISH_WORKFLOW, "utf8");
     expect(workflow.match(/^\s+- local-starter$/gm)).toEqual(["          - local-starter"]);
     const calls: string[] = [];
     await prepareReleaseWorkspaces(spec, {

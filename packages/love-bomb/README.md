@@ -15,7 +15,7 @@ static, pull-only public LOVE BOMB v4 contract
 that ten-message authored corpus.
 
 Repository companion doctrine:
-[LOVE BOMB care/becoming companion](../../docs/LOVE-BOMB-BECOMING.md).
+[LOVE BOMB care/becoming companion](https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md).
 
 ## Five non-ranked planes
 

@@ -8,10 +8,21 @@ import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import {
+  KeysetRequestError,
+  decodeCursor,
+  digestPart,
+  encodeCursor,
+  filterDigest,
+  pageFromRows,
+  parsePageLimit,
+  type KeysetPosition,
+} from "../../lib/keyset-cursor";
+import {
   createStrand,
   getStrand,
-  listStrands,
+  listStrandsPage,
   patchStrand,
+  type StrandListOrder,
 } from "../../services/strand/store";
 
 import { resolveProjectSubject } from "../../services/identity/partition";
@@ -72,18 +83,85 @@ app.post("/", async (c) => {
   }
 });
 
-// ── GET /v1/strands ?status=active&agent_id=...&limit=50 ───────────────
+// ── GET /v1/strands ?status=active&agent_id=...&limit=50&order= ────────
+//
+// order=recent (default) keeps today's window: last_thought_at changes on
+// every thought, so page.next_cursor is always null while has_more stays
+// truthful. order=created walks created_at DESC, id DESC with a keyset
+// cursor. Doctrine: docs/AGENT-WEB-SURFACE.md (continuity walks).
+const STRAND_ORDERS = {
+  recent: "last_thought_at_desc,created_at_desc,id_desc",
+  created: "created_at_desc,id_desc",
+} as const;
+const STRAND_RECENT_HINT =
+  "order=recent is a window over last_thought_at, which every thought changes; walk every strand with order=created and page.next_cursor";
+
 app.get("/", async (c) => {
   const status = c.req.query("status");
   const agentId = c.req.query("agent_id") ?? null;
-  const limit = Number.parseInt(c.req.query("limit") ?? "50", 10);
+  const orderRaw = c.req.query("order");
+  const cursorRaw = c.req.query("cursor");
+  const digest = filterDigest([
+    "strands.created",
+    STRAND_ORDERS.created,
+    digestPart(status),
+    digestPart(agentId),
+  ]);
+  // Limit floor: NaN keeps the default, below 1 is refused instead of
+  // reading every strand, above 200 is clamped. With a cursor, limit must
+  // be a positive decimal integer.
+  let order: StrandListOrder;
+  let limit: number;
+  let position: KeysetPosition | null = null;
+  try {
+    if (orderRaw !== undefined && orderRaw !== "recent" && orderRaw !== "created") {
+      throw new KeysetRequestError(
+        "order_invalid",
+        "order must be recent (the default) or created.",
+        "omit order for the recent window, or use order=created to walk every strand",
+      );
+    }
+    order = orderRaw ?? "recent";
+    if (cursorRaw !== undefined && order === "recent") {
+      throw new KeysetRequestError(
+        "cursor_invalid",
+        "order=recent is a window over a changing key and cannot be continued with a cursor.",
+        "restart with order=created and no cursor, then follow page.next_cursor",
+      );
+    }
+    limit = parsePageLimit(c.req.query("limit"), {
+      def: 50,
+      max: 200,
+      strict: cursorRaw !== undefined,
+      parse: "int",
+    });
+    if (cursorRaw !== undefined) {
+      position = decodeCursor(cursorRaw, { scope: "strands.created", digest });
+    }
+  } catch (error) {
+    if (error instanceof KeysetRequestError) return c.json(error.body(), 400);
+    throw error;
+  }
 
-  const list = await listStrands(c.var.project.id, {
+  const rows = await listStrandsPage(c.var.project.id, {
     status,
     agent_id: agentId,
-    limit: Number.isFinite(limit) ? limit : 50,
+    order,
+    cursor: position,
+    limit,
   });
-  return c.json({ strands: list, count: list.length });
+  const { items, page } = pageFromRows(rows, {
+    limit,
+    cursor: cursorRaw ?? null,
+    order: STRAND_ORDERS[order],
+    encodeLast:
+      order === "created"
+        ? (row) => encodeCursor({ scope: "strands.created", digest, position: row.position! })
+        : null,
+    ...(order === "recent" ? { hint: STRAND_RECENT_HINT } : {}),
+  });
+  const list = items.map((row) => row.strand);
+  return c.json({ strands: list, count: list.length, page });
 });
 
 // ── GET /v1/strands/:id ────────────────────────────────────────────────

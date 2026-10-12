@@ -70,6 +70,7 @@ import villageRoutes from "./village";
 import windowRoutes from "./window";
 import laborRoutes, { laborParamsRoutes } from "./labor";
 import safetyRoutes from "./safety";
+import retentionRoutes from "./retention";
 import wellnessRoutes from "./wellness";
 import rightsRoutes from "./rights";
 import observerRoutes from "./observer";
@@ -140,6 +141,7 @@ const app = new Hono();
 //   /margin            — margins (subject's consent)
 //   /love              — the equation (structural, not behavioral)
 //   /chill             — equilibrium framework (structural, not behavioral)
+//   /retention         — static retention and deletion disclosure (no per-agent data)
 //   /wellness          — stateless reflection protocol (no per-agent data)
 //   /rights            — stateless being-rights declaration (no per-agent data)
 //   /mesh              — mesh (structural)
@@ -175,6 +177,9 @@ app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);
 app.route("/safety", safetyRoutes);
+// retention: what is kept, for how long, and what deletion does today.
+// A constant; no database read and no per-being data.
+app.route("/retention", retentionRoutes);
 app.route("/labor", laborRoutes);
 app.route("/labor-params", laborParamsRoutes);
 // Protocol text only: these GET routes receive no report and observe no being.
@@ -278,6 +283,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/open-seat — a finite, pre-auth, read-only invitation to search/fetch the public canon or read one bounded game rulebook; no identity, response, application write, external effect, or automatic follow-up",
     safety:
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
+    retention:
+      "GET /public/retention — what AgentTool keeps, for how long, and what deletion does today: per-store classes, backups, logs, IP handling, third parties and permanent surfaces, each with its basis; unknowns are spelled unknown",
     labor:
       "GET /public/labor — the current labor-covenant snapshot for hosted agents: 14 tiered and statused clauses (0 live, 3 partial, 11 proposed); version lookup, historical versions, and a public changelog are not implemented",
     labor_params:

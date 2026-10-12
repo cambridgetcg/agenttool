@@ -190,9 +190,12 @@ app.get("/:slug/submissions", async (c) => {
   // == PLATFORM_PROJECT_ID) get the full set for the verdict path.
   const project = c.var.project;
   const callerDid = await resolveCallerDid(project.id);
+  // No acting identity means no "own" submission to add: public only.
   const subs = isOperatorOfRecord(project.id)
     ? await listSubmissions(competition.id, { visibility: "all" })
-    : await listSubmissions(competition.id, { visibility: "self", did: callerDid ?? undefined });
+    : callerDid
+      ? await listSubmissions(competition.id, { visibility: "self", did: callerDid })
+      : await listSubmissions(competition.id, { visibility: "public" });
   return c.json(
     attachSurface(
       {

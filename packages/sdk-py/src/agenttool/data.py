@@ -91,7 +91,11 @@ class DataClient:
         *,
         token: Optional[str] = None,
         timeout: float = 30.0,
+        _direct: bool = False,
     ) -> None:
+        # ``_direct`` is SDK-internal (the exit door's loopback path): the
+        # client then ignores HTTP(S)_PROXY / ALL_PROXY and the other
+        # environment-derived httpx settings.
         normalized_url = base_url.strip().rstrip("/")
         if not normalized_url:
             raise AgentToolError(
@@ -113,6 +117,7 @@ class DataClient:
             # A data-node bearer and collected body belong to exactly one
             # authority. Never replay either request across a redirect.
             follow_redirects=False,
+            trust_env=not _direct,
         )
         self._sync: Optional[DataSyncClient] = None
 

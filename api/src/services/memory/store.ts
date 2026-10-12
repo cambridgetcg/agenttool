@@ -2,11 +2,16 @@
  *  them, run cosine similarity, and serve results. No LLM compute on our
  *  side. See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
+import {
+  cursorTimestampSql,
+  keysetBeforeSql,
+  type KeysetPosition,
+} from "../../lib/keyset-cursor";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
 
@@ -374,10 +379,104 @@ export async function listRecent(
     .select()
     .from(memories)
     .where(and(...filters))
-    .orderBy(desc(memories.createdAt))
+    .orderBy(desc(memories.createdAt), desc(memories.id))
     .limit(Math.min(opts.limit ?? 20, 100));
 
   return rows.map(rowToOut);
+}
+
+/** Explicit list-page columns. The 1,536-dimension vector stays in the
+ *  database; only its presence crosses the wire, which is all `MemoryOut`
+ *  ever exposed. `cursor_at` is the database's own microsecond text for the
+ *  walk key (docs/AGENT-WEB-SURFACE.md continuity walks). */
+const memoryPageColumns = {
+  id: memories.id,
+  type: memories.type,
+  tier: memories.tier,
+  visibility: memories.visibility,
+  key: memories.key,
+  content: memories.content,
+  agentId: memories.agentId,
+  identityId: memories.identityId,
+  metadata: memories.metadata,
+  importance: memories.importance,
+  hasEmbedding: sql<boolean>`(${memories.embedding} IS NOT NULL)`.as("has_embedding"),
+  createdAt: memories.createdAt,
+  accessedAt: memories.accessedAt,
+  expiresAt: memories.expiresAt,
+  cursorAt: cursorTimestampSql(memories.createdAt).as("cursor_at"),
+};
+
+export interface MemoryPageRow {
+  memory: MemoryOut;
+  /** Walk position of this row: exact created_at text and id. */
+  position: KeysetPosition;
+}
+
+export interface MemoryPageOptions {
+  /** `key` reads one exact key (type/tier do not apply, as before). */
+  mode: "list" | "key";
+  key?: string | null;
+  agent_id?: string | null;
+  identity_id?: string | null;
+  type?: string | null;
+  tier?: string | null;
+  /** Exclusive lower bound on created_at (the `since` delta read). */
+  since?: Date | null;
+  /** Last row the caller already holds; the page starts strictly below it. */
+  cursor?: KeysetPosition | null;
+  /** Rows the caller will see. One more row is read as the has_more sentinel. */
+  limit: number;
+  database?: Pick<typeof db, "select">;
+}
+
+/** One newest-first page of a project's live memories, ordered
+ *  `created_at DESC, id DESC`. Read-only: unlike readById it never touches
+ *  accessed_at. Every predicate is scoped to the bearer's project. */
+export async function listMemoriesPage(
+  projectId: string,
+  options: MemoryPageOptions,
+): Promise<MemoryPageRow[]> {
+  const filters = [eq(memories.projectId, projectId)];
+  if (options.mode === "key") filters.push(eq(memories.key, options.key ?? ""));
+  filters.push(or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!);
+  if (options.agent_id) filters.push(eq(memories.agentId, options.agent_id));
+  if (options.identity_id) filters.push(eq(memories.identityId, options.identity_id));
+  if (options.mode === "list") {
+    if (options.type) filters.push(eq(memories.type, options.type));
+    if (options.tier) filters.push(eq(memories.tier, options.tier));
+  }
+  if (options.since) filters.push(gt(memories.createdAt, options.since));
+  if (options.cursor) {
+    filters.push(keysetBeforeSql(memories.createdAt, memories.id, options.cursor));
+  }
+
+  const rows = await (options.database ?? db)
+    .select(memoryPageColumns)
+    .from(memories)
+    .where(and(...filters))
+    .orderBy(desc(memories.createdAt), desc(memories.id))
+    .limit(options.limit + 1);
+
+  return rows.map((row) => ({
+    memory: {
+      id: row.id,
+      type: row.type,
+      tier: row.tier,
+      visibility: row.visibility,
+      key: row.key,
+      content: row.content,
+      agent_id: row.agentId,
+      identity_id: row.identityId,
+      metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      importance: row.importance,
+      has_embedding: row.hasEmbedding === true,
+      created_at: row.createdAt.toISOString(),
+      accessed_at: row.accessedAt?.toISOString() ?? null,
+      expires_at: row.expiresAt?.toISOString() ?? null,
+    },
+    position: { t: row.cursorAt, i: row.id },
+  }));
 }
 
 /** Rank a candidate pool for the wake surface: tier-aware rerankScore

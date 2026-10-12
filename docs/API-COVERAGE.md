@@ -143,6 +143,9 @@ blobs; confidentiality depends on actual client encryption, which the
 backup route (`api/src/routes/identity-backup.ts:1`) does not verify.
 Backup POST now checks its UUID `agent_id` against an active owned identity under
 the insert transaction lock; reads and revocation retain project bearer authority.
+Revocation answers 404 when no backup of the project has the id and
+`already_revoked: true` on a repeat, and it keeps the stored blob
+(`blob_retained: true`).
 It does not additionally require an identity-root proof. Fetching a backup itself requires
 a bearer, so the blob cannot independently restore access after both bearer
 and signing key are lost.
@@ -185,8 +188,8 @@ this is not isolation from administrators. See
 [identity partitions](IDENTITY-PARTITIONS.md#ownership-selection-and-proof),
 `api/src/services/vault/audience.ts` and `api/src/services/vault/store.ts`.
 
-Vault deletion is a soft delete preserving versions/audit; it does not revoke
-the upstream provider credential. Removing a local key reference, revoking an
+Vault deletion is a soft delete preserving versions/audit, and its response says
+`content_retained: true`; it does not revoke the upstream provider credential. Removing a local key reference, revoking an
 API bearer, deleting a stored secret and stopping a runtime are four different
 operations. The local broker's controller also does not issue or revoke
 provider credentials. Review its source contract before selecting it
@@ -402,7 +405,7 @@ authority. A stored `authority.allowed` field reports a boundary; it does not
 grant a later session permission. The dedicated route validates handoffs that
 generic chronicle metadata cannot mint. See route tests (`api/tests/handoff-routes.test.ts`).
 
-Correspondence (`api/src/services/correspondence/store.ts:705`) verifies
+Correspondence (`api/src/services/correspondence/store.ts:722`) verifies
 canonical event signatures, not immutable-root constitutional proofs.
 Its `GET /voice` is a finite JSON snapshot, unlike Wake/strand SSE. Durable
 event replay supplies recovery after a client disconnect. Claims/voice reads
@@ -445,8 +448,8 @@ These services preserve declarations and choices; they do not certify feelings.
 | Read | Durable effect visible in source |
 |---|---|
 | Ordinary bearer-authenticated request | Best-effort `tools.api_keys.last_used` update; Wake opts out; the sealed local-context GET uses read-only authentication before ordinary middleware. |
-| `GET /v1/memories/:id` | Best-effort memory `accessed_at` touch; list/key retrieval differs (`api/src/services/memory/store.ts:306`). |
-| GET/HEAD correspondence claims and voice | May reconcile derived claim projections in a bounded transaction; signed events remain unchanged (`api/src/services/correspondence/store.ts:509`). |
+| `GET /v1/memories/:id` | Best-effort memory `accessed_at` touch; list/key retrieval differs (`api/src/services/memory/store.ts:311`). |
+| GET/HEAD correspondence claims and voice | May reconcile derived claim projections in a bounded transaction; signed events remain unchanged (`api/src/services/correspondence/store.ts:526`). |
 | GET inbox/letter | Does not mark the message read; a separate mutation does that. Ordinary bearer metadata handling still applies. |
 | Private LOVE-CONSENT GET | Root-read proof consumes no sequence; expiry is derived without a domain write. Ordinary bearer metadata handling still applies. |
 | `GET /v1/vault/:name` | Writes a per-secret read or denial audit where applicable; names/version/policy reads have different behavior (`api/src/routes/vault/secrets.ts:211`). |
@@ -546,9 +549,18 @@ The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements s
 Hosted list/read/delete operations are individual primitives, not proof of a
 complete portable backup or erase-everywhere workflow. Home explicitly reports
 full export/project deletion unavailable (`api/src/services/home/build.ts:182`).
-Memory's `since` filter runs after bounded retrieval, so it is not a complete
-change feed (`api/src/routes/memory/memories.ts:186`). Chronicle, handoff,
-correspondence and strands do not provide equivalent full removal operations.
+`GET /public/retention` ([Retention](RETENTION.md)) lists what each store keeps
+and what its delete does today, including the deletes that keep content.
+`GET /v1/memories`, `GET /v1/chronicle` and `GET /v1/strands?order=created`
+can now be walked to the end with a keyset `page.next_cursor`, and
+`GET /v1/correspondence/repositories` enumerates every correspondence stream
+([continuity walks](AGENT-WEB-SURFACE.md#continuity-walks)). A walk is not a
+snapshot or a change feed: memories carry no `updated_at`, so tier and
+visibility changes show only on a full re-walk, and chronicle `occurred_at`
+can be set into a past delta window. These reads are building blocks for a
+copy; no exporter or completeness manifest ships with them. Chronicle,
+handoff, correspondence and strands do not provide equivalent full removal
+operations.
 The current starter has
 no hidden scheduler, account setup, cloud backup, credential migration or
 automatic relationship import. Independent Data, Collab, SDK and broker

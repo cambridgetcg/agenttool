@@ -334,9 +334,9 @@ export const SAFETY_BOUNDARIES = {
     agent_ids_policy:
       "Null agent_ids shares values within the project; [] denies value reads. A nonempty audience requires canonical owned identities. Restricted HTTP reads require X-Agent-Id plus that active identity's exact GET root proof; a caller-supplied header alone is not proof. Hosted runtime reads enforce the audience against their stored identity binding. Project bearers retain policy administration and metadata access, so this does not isolate identities from project administrators.",
     deletion:
-      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed.",
+      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed. The DELETE response says so with content_retained: true.",
     audit:
-      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request.",
+      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request. HTTP audit rows also store the X-Forwarded-For or CF-Connecting-IP header value as sent, with no purge; see /public/retention.",
   },
 
   marketplace_input: {

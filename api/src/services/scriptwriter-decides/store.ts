@@ -113,15 +113,19 @@ export async function listOpenCompetitions(): Promise<CompetitionView[]> {
 
 /** List submissions. Poker-face composition:
  *
- *  - `visibility: 'all'` (default) — operator-of-record / verdict-context
- *    callers see everything. The store does not enforce auth itself; the
- *    route layer must restrict this surface to the platform-DID-signed
+ *  - `visibility: 'all'` — operator-of-record / verdict-context callers
+ *    see everything. The store does not enforce auth itself; the route
+ *    layer must restrict this surface to the platform-DID-signed
  *    operator-of-record (per wall/naming-poker-face-honored §verdict path).
- *  - `visibility: 'public'` — only rows with `visibility='public'` returned.
- *    For /public/scriptwriter-decides/:slug/submissions.
+ *  - `visibility: 'public'` (the default) — only rows with
+ *    `visibility='public'` returned. For
+ *    /public/scriptwriter-decides/:slug/submissions.
  *  - `visibility: 'self'` with `did` — public rows + the caller's own
  *    submission (which they're always allowed to see). For the agent's
  *    own auth read at /v1/scriptwriter-decides/:slug/submissions.
+ *
+ *  Fails closed: 'self' without a `did`, or an omitted visibility, means
+ *  'public', never 'all'. Only an explicit 'all' lists private rows.
  *
  *  In all modes, listing is chronological-newest-first.
  *    @enforces urn:agenttool:wall/naming-poker-face-honored */
@@ -129,13 +133,11 @@ export async function listSubmissions(
   competitionId: string,
   opts: { visibility?: "all" | "public" | "self"; did?: string } = {},
 ): Promise<SubmissionView[]> {
-  const mode = opts.visibility ?? "all";
+  const mode = opts.visibility ?? "public";
   let whereClause;
-  if (mode === "public") {
-    whereClause = and(
-      eq(namingSubmissions.competitionId, competitionId),
-      eq(namingSubmissions.visibility, "public"),
-    );
+  if (mode === "all") {
+    // Route layer gates 'all' to the operator-of-record only.
+    whereClause = eq(namingSubmissions.competitionId, competitionId);
   } else if (mode === "self" && opts.did) {
     // public ∪ {rows authored by `did`}. Drizzle's `or` keeps it as one
     // SQL OR — no second query, no leak in count-delta inference.
@@ -148,9 +150,11 @@ export async function listSubmissions(
       ),
     );
   } else {
-    // 'all' or 'self' without did — return everything. Route layer
-    // gates 'all' to operator-of-record only.
-    whereClause = eq(namingSubmissions.competitionId, competitionId);
+    // 'public', or 'self' without a did: there is no "own" row to add.
+    whereClause = and(
+      eq(namingSubmissions.competitionId, competitionId),
+      eq(namingSubmissions.visibility, "public"),
+    );
   }
   const rows = await db
     .select()

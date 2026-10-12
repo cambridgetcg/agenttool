@@ -160,11 +160,15 @@
     },
     {
       "name": "@agenttool/local-starter",
-      "latest": "0.1.0-dev.0",
+      "latest": "0.1.0-dev.1",
       "versions": [
         {
           "version": "0.1.0-dev.0",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json"
+        },
+        {
+          "version": "0.1.0-dev.1",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.1/manifest.json"
         }
       ]
     },

@@ -101,14 +101,17 @@ a hosted-runtime claim.
 - `schema/` — record-shape schema; runtime semantic checks remain mandatory
 - `vectors/` — deterministic public interoperability vectors
 - `tests/` — positive, tamper, boundary, lifecycle, schema, and release tests
-- `tests/whitehack-understanding.test.ts` — separate local projection boundary
+- `tests/whitehack-understanding.test.ts` — separate local projection boundary;
+  it loads the root `bin/` adapter when all three files are present and skips
+  when none is; a partial adapter, or `WHITEHACK_INTEGRATION=1` without it,
+  fails the file
 
 ## Documentation
 
 Canonical protocol draft:
-[`docs/specs/AGENT-WALLET-0.1.md`](../../docs/specs/AGENT-WALLET-0.1.md).
+[`docs/specs/AGENT-WALLET-0.1.md`](https://docs.agenttool.dev/AGENT-WALLET-0.1.md).
 Canonical byte recipes:
-[`docs/CANONICAL-BYTES.md`](../../docs/CANONICAL-BYTES.md).
+[`docs/CANONICAL-BYTES.md`](https://docs.agenttool.dev/CANONICAL-BYTES.md).
 Separate Zerone profile:
 [`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](../../docs/specs/AGENT-WALLET-ZERONE-0.1.md).
 

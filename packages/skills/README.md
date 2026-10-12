@@ -23,10 +23,10 @@ safety.
 
 For the checksum-pinned archive recipe below,
 the last public artifact verified while preparing
-it was the 0.3.2 GitHub Release. Its npm counterpart was public and npm
-`latest` resolved to 0.3.2 at that readback. These are preparation-time
-observations, not claims about the future 0.3.3 publication or the mutable
-current registry state.
+it was the 0.3.2 npm registry tarball. On 2026-10-11 its bytes still matched
+the SHA-256 pinned below, the same digest as the earlier 0.3.2 release
+archive. These are preparation-time observations, not claims about a 0.3.3
+publication or the mutable current registry state.
 Pin and verify the exact artifact before installation:
 
 ```sh
@@ -51,7 +51,7 @@ Pin and verify the exact artifact before installation:
   expected_sha256='22a3868d8e14460901bc61c8764bcf35bcfa2acdd7bb805529b29a6917edad40'
   curl -q --fail --location \
     --output "$archive" \
-    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.2/agenttool-skills-0.3.2.tgz' &&
+    'https://registry.npmjs.org/@agenttool/skills/-/skills-0.3.2.tgz' &&
     verify_sha256 "$archive" "$expected_sha256" &&
     npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
     [ -x ./node_modules/.bin/agenttool-skill ] &&
@@ -202,7 +202,7 @@ function and registers no tools, hooks, commands, environment variables,
 network access, persistence, or automatic prompt injection. The package has no
 installer: installing the package alone does not register these skills with
 Codex, OpenClaw, Hermes,
-Claude, or any other host. The historical 0.3.2 GitHub Release archive has no
+Claude, or any other host. The historical 0.3.2 archive pinned above has no
 `harnesses/` directory or ISness workflow.
 
 - [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md) helps an agent

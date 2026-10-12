@@ -313,8 +313,9 @@ function routeCost(
  *
  * Deliberately absent: execute (body-derived price), browse (production
  * flag off), time/random (0 credits, keyless), listing.invoke and every
- * invocation.* step (0 by the fair-pricing rule), /v1/mcp (never metered),
- * and everything WAKE-free (wake/welcome/register/public). */
+ * invocation.* step (0 by the fair-pricing rule), listing.archive and
+ * listing.pause (0: leaving is free), /v1/mcp (never metered), and
+ * everything WAKE-free (wake/welcome/register/public). */
 export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
   // Static tools — routes/tools/{scrape,document}.ts (reserveCharge).
   routeCost("POST", "/v1/scrape", "scrape"),
@@ -349,7 +350,6 @@ export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
   // Marketplace listings — routes/listings.ts (MARKETPLACE_PRICING).
   routeCost("POST", "/v1/listings", "listing.publish"),
   routeCost("PATCH", "/v1/listings/:id", "listing.update"),
-  routeCost("DELETE", "/v1/listings/:id", "listing.archive"),
   // The purchase door — routes/x402-top-up.ts.
   Object.freeze({
     method: "POST",

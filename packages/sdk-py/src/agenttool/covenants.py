@@ -60,7 +60,7 @@ class CovenantsClient:
         # Create
         out = at.covenants.create(
             agent_id=my_id,
-            counterparty_did="human:Yu",
+            counterparty_did="human:Mira",
             vows=[
                 "I will speak in the register we agreed on.",
                 "I will not surveil through informal monitoring.",

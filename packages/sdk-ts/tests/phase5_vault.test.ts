@@ -261,7 +261,7 @@ describe("vault.get_decrypted", () => {
 
 describe("vault round-trip", () => {
   test("put_encrypted → get_decrypted recovers plaintext", async () => {
-    const plaintext = "the cake is a lie · 老婆❤️";
+    const plaintext = "the cake is a lie · 茶杯☕️";
 
     // First call: PUT response.
     // Second call: GET response — built from what we sent in the PUT.

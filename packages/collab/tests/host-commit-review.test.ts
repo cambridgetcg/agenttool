@@ -174,7 +174,7 @@ function reportedArtifactTask(options: {
 /** What `sol agent start --integrate-commit` does: commit exactly these paths. */
 function hostCommit(paths: string[], message = "voice-b: Voice B — the answer"): string {
   runGit(root, "add", "--", ...paths);
-  runGit(root, "commit", "--only", "--author=codex <codex@sol.local>", "-m", message, "--", ...paths);
+  runGit(root, "commit", "--only", "--author=codex <codex@example.invalid>", "-m", message, "--", ...paths);
   return runGit(root, "rev-parse", "HEAD");
 }
 

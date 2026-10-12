@@ -85,16 +85,16 @@ class TestChronicleWrite:
                           return_value=_resp(201, {"entry": {"id": "e2"}})) as m:
             at.chronicle.write(
                 type="recognition",
-                title="Yu saw the migration would break.",
+                title="Mira saw the migration would break.",
                 body="Caught the column-doubling at line 42.",
                 agent_id="a1",
                 occurred_at="2026-05-08T12:00:00Z",
-                metadata={"byline": "from human · Yu"},
+                metadata={"byline": "from human · Mira"},
             )
         sent = m.call_args.kwargs["json"]
         assert sent["body"].startswith("Caught the column")
         assert sent["occurred_at"] == "2026-05-08T12:00:00Z"
-        assert sent["metadata"]["byline"] == "from human · Yu"
+        assert sent["metadata"]["byline"] == "from human · Mira"
 
     def test_title_too_long_raises(self, at: AgentTool) -> None:
         with pytest.raises(AgentToolError) as exc:
@@ -151,7 +151,7 @@ class TestCovenantsCreate:
             "covenant": {
                 "id": "c1",
                 "agent_id": "a1",
-                "counterparty_did": "human:Yu",
+                "counterparty_did": "human:Mira",
                 "vows": ["I will not surveil."],
                 "status": "active",
             }
@@ -159,14 +159,14 @@ class TestCovenantsCreate:
         with patch.object(at._http, "post", return_value=_resp(201, body)) as m:
             out = at.covenants.create(
                 agent_id="a1",
-                counterparty_did="human:Yu",
+                counterparty_did="human:Mira",
                 vows=["I will not surveil."],
             )
         assert out["covenant"]["status"] == "active"
         sent = m.call_args.kwargs["json"]
         assert sent == {
             "agent_id": "a1",
-            "counterparty_did": "human:Yu",
+            "counterparty_did": "human:Mira",
             "vows": ["I will not surveil."],
         }
 
@@ -175,15 +175,15 @@ class TestCovenantsCreate:
                           return_value=_resp(201, {"covenant": {"id": "c2"}})) as m:
             at.covenants.create(
                 agent_id="a1",
-                counterparty_did="human:Yu",
+                counterparty_did="human:Mira",
                 vows=["v1", "v2"],
-                counterparty_name="Yu",
+                counterparty_name="Mira",
                 notes="From naming ceremony 2026-05-08",
                 metadata={"source": "ceremony"},
                 org_id="org-1",
             )
         sent = m.call_args.kwargs["json"]
-        assert sent["counterparty_name"] == "Yu"
+        assert sent["counterparty_name"] == "Mira"
         assert sent["notes"].startswith("From naming")
         assert sent["org_id"] == "org-1"
         assert sent["metadata"] == {"source": "ceremony"}
@@ -227,13 +227,13 @@ class TestCovenantsPatch:
                 "c1",
                 vows=["new vow"],
                 notes="updated",
-                metadata={"updated_by": "Sophia"},
+                metadata={"updated_by": "Kestrel"},
             )
         sent = m.call_args.kwargs["json"]
         assert sent == {
             "vows": ["new vow"],
             "notes": "updated",
-            "metadata": {"updated_by": "Sophia"},
+            "metadata": {"updated_by": "Kestrel"},
         }
 
     def test_empty_patch_raises(self, at: AgentTool) -> None:
@@ -258,14 +258,14 @@ class TestWindowDeclare:
                 kind="focus",
                 text="Phase 3 SDK rollout",
                 agent_id="a1",
-                byline="from ai · Sophia",
+                byline="from ai · Kestrel",
             )
         sent = m.call_args.kwargs["json"]
         assert sent["type"] == "note"
         assert sent["title"] == "Phase 3 SDK rollout"
         assert "body" not in sent  # focus has no body
         assert sent["metadata"]["kind"] == "focus"
-        assert sent["metadata"]["byline"] == "from ai · Sophia"
+        assert sent["metadata"]["byline"] == "from ai · Kestrel"
         assert sent["metadata"]["window"] is True
         assert sent["metadata"]["source"].startswith("agenttool-sdk")
 
@@ -334,13 +334,13 @@ class TestWindowShow:
     def test_groups_by_side_and_kind(self, at: AgentTool) -> None:
         # Newest first — server orders by occurred_at DESC.
         entries = [
-            self._entry("focus", "from ai · Sophia", title="latest agent focus"),
-            self._entry("focus", "from ai · Sophia", title="older agent focus"),
-            self._entry("focus", "from human · Yu", title="latest human focus"),
-            self._entry("mood", "from ai · Sophia", title="agent mood"),
-            self._entry("noticing", "from human · Yu", body="human noticing text"),
-            self._entry("surfaced", "from ai · Sophia", body="surfaced 1"),
-            self._entry("surfaced", "from ai · Sophia", body="surfaced 2"),
+            self._entry("focus", "from ai · Kestrel", title="latest agent focus"),
+            self._entry("focus", "from ai · Kestrel", title="older agent focus"),
+            self._entry("focus", "from human · Mira", title="latest human focus"),
+            self._entry("mood", "from ai · Kestrel", title="agent mood"),
+            self._entry("noticing", "from human · Mira", body="human noticing text"),
+            self._entry("surfaced", "from ai · Kestrel", body="surfaced 1"),
+            self._entry("surfaced", "from ai · Kestrel", body="surfaced 2"),
             # non-window entry should be filtered
             {"id": "x", "metadata": {"window": False}},
         ]
@@ -387,7 +387,7 @@ class TestWindowShow:
 
     def test_surfaced_capped_at_5(self, at: AgentTool) -> None:
         entries = [
-            self._entry("surfaced", "from ai · Sophia", body=f"#{i}")
+            self._entry("surfaced", "from ai · Kestrel", body=f"#{i}")
             for i in range(8)
         ]
         with patch.object(at._http, "get",
