@@ -19,7 +19,7 @@ import { inspectLocalSkills } from "../src/index.js";
 const SKILLS_RELEASE_SHA256 =
   "22a3868d8e14460901bc61c8764bcf35bcfa2acdd7bb805529b29a6917edad40";
 const SKILLS_RELEASE_URL =
-  "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.2/agenttool-skills-0.3.2.tgz";
+  "https://registry.npmjs.org/@agenttool/skills/-/skills-0.3.2.tgz";
 
 const NEN_SKILL_NAMES = [
   "nen-common-ground",
@@ -540,11 +540,12 @@ test("documents non-activating installation and literal inspector path arguments
 
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
+  expect(readme).not.toContain("github.com/cambridgetcg/agenttool/releases");
   expect(readme).toContain(
     "Version 0.3.3 is the current source identity.",
   );
   expect(readme).toMatch(
-    /the last public artifact verified while preparing\s+it was the 0\.3\.2 GitHub Release/,
+    /the last public artifact verified while preparing\s+it was the 0\.3\.2 npm registry tarball/,
   );
   expect(readme).toMatch(
     /last public exact npm release and npm\s+`latest` both resolved to 0\.3\.2/,

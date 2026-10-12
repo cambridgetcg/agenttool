@@ -44,7 +44,7 @@ const AGENT_ID = "550e8400-e29b-41d4-a716-446655440000";
 const SEAL_ID = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 const ALPHA_DID = "did:at:example/alpha-9b3a";
 const BETA_DID = "did:at:example/beta-7c1f";
-const ROOT_DID = "did:at:test/sophia";
+const ROOT_DID = "did:at:test/kestrel";
 const STAMP = "2026-07-24T12:00:00.000Z";
 
 interface CapturedRequest {

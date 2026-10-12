@@ -183,7 +183,7 @@ describe("research passport", () => {
     })).toThrow("namespace/name identifier");
     expect(() => createResearchPassport({
       ...passportInput(),
-      subject: { ...passportInput().subject, id: "C:/Users/yu/.npmrc" },
+      subject: { ...passportInput().subject, id: "C:/Users/example/.npmrc" },
     })).toThrow("namespace/name identifier");
     expect(() => createResearchPassport({
       ...passportInput(),

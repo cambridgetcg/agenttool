@@ -153,6 +153,16 @@ const TARGETS: ParityTarget[] = [
     "dark_continent",
   ),
   target("economy", "EconomyClient"),
+  // at.exitDoor — hosted → local agent-data copy. `export` is a reserved word
+  // as a statement but a legal method name; tsMethodsInScope accepts it only
+  // behind `async`, which no statement can carry.
+  splitTarget(
+    "exit-door",
+    "exit_door",
+    "ExitDoorClient",
+    "exit_door",
+    ["export", "plan", "verify"],
+  ),
   target("handoff", "HandoffClient"),
   target("grace", "GraceClient"),
   target("identity", "IdentityClient"),
@@ -501,7 +511,7 @@ async function validateConfiguredTopLevelTargets(): Promise<void> {
 
 /** Public + internal class methods, kept apart so an internal name can never
  *  stand in for a public one in the other language. */
-interface ClassMethods {
+export interface ClassMethods {
   methods: string[];
   internal: string[];
 }
@@ -533,6 +543,54 @@ async function pyMethodsOf(target: ParityTarget): Promise<ClassMethods> {
   return { methods: [...out].sort(), internal: [...internal].sort() };
 }
 
+/** Public and internal class methods in an already-scoped TypeScript class.
+ *
+ *  Matches ordinary and generator methods. The optional `*` is significant:
+ *  async generators such as WakeClient.voice are public methods too. Control
+ *  keywords at class-body indentation are skipped, except that a keyword used
+ *  as a method name is accepted behind `async` (`async export(`), because no
+ *  statement can be preceded by `async`. */
+export function tsMethodsInScope(src: string): ClassMethods {
+  const out = new Set<string>();
+  const internal = new Set<string>();
+  const re = /^[ ]{2}(async +)?(?:\* *)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
+  const reserved = new Set([
+    "if",
+    "for",
+    "while",
+    "switch",
+    "return",
+    "throw",
+    "try",
+    "catch",
+    "do",
+    "private",
+    "protected",
+    "public",
+    "static",
+    "readonly",
+    "import",
+    "export",
+    "type",
+    "interface",
+  ]);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    const name = m[2];
+    if (reserved.has(name) && !m[1]) continue;
+    if (SKIP_NAMES.has(name)) continue;
+    const lineStart = src.lastIndexOf("\n", m.index) + 1;
+    const lineHead = src.slice(lineStart, m.index + m[0].length);
+    if (name.startsWith("_") || /\bprivate\b/.test(lineHead)) {
+      internal.add(name);
+      continue;
+    }
+    if (/\b(static|readonly)\b/.test(lineHead)) continue;
+    out.add(name);
+  }
+  return { methods: [...out].sort(), internal: [...internal].sort() };
+}
+
 async function tsMethodsOf(target: ParityTarget): Promise<ClassMethods> {
   const path = join(TS_SRC, `${target.tsModule}.ts`);
   let src = await readRequiredSource(
@@ -558,43 +616,9 @@ async function tsMethodsOf(target: ParityTarget): Promise<ClassMethods> {
   }
 
   // Second pass: methods.
-  // Match ordinary and generator methods. The optional `*` is significant:
-  // async generators such as WakeClient.voice are public methods too.
-  const re = /^[ ]{2}(?:async +)?(?:\* *)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
-  const reserved = new Set([
-    "if",
-    "for",
-    "while",
-    "switch",
-    "return",
-    "throw",
-    "try",
-    "catch",
-    "do",
-    "private",
-    "protected",
-    "public",
-    "static",
-    "readonly",
-    "import",
-    "export",
-    "type",
-    "interface",
-  ]);
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
-    const name = m[1];
-    if (reserved.has(name)) continue;
-    if (SKIP_NAMES.has(name)) continue;
-    const lineStart = src.lastIndexOf("\n", m.index) + 1;
-    const lineHead = src.slice(lineStart, m.index + m[0].length);
-    if (name.startsWith("_") || /\bprivate\b/.test(lineHead)) {
-      internal.add(name);
-      continue;
-    }
-    if (/\b(static|readonly)\b/.test(lineHead)) continue;
-    out.add(name);
-  }
+  const scanned = tsMethodsInScope(src);
+  for (const name of scanned.methods) out.add(name);
+  for (const name of scanned.internal) internal.add(name);
   return { methods: [...out].sort(), internal: [...internal].sort() };
 }
 

@@ -388,6 +388,26 @@ did not exercise it.
 See [the partition contract](IDENTITY-PARTITIONS.md) for the mathematical scope,
 source/test boundaries and deliberate compatibility changes.
 
+## Copying hosted continuity out
+
+The direction is hosted → local copy. The SDK exit door
+(`at.exitDoor.export(...)`, Python `at.exit_door.export(...)`, or the
+`agenttool-exit-door export` command) copies the hosted continuity core into an
+existing collection on a local agent-data node: memories, chronicle, strands
+with their ciphertext thoughts, correspondence events, covenants, identity and
+key context, and the vault and backup indexes. It then writes a manifest that
+says, per store, whether the walk reached the host's own end (`complete`) or
+only a window (`window_only`). It copies only. Hosted records are unchanged,
+ciphertext stays ciphertext, vault values and backup blobs stay hosted (the
+custody decision is pending), and nothing is deleted. The project bearer
+never reaches the node, and a node token equal to it is refused.
+
+The copy is local agent data, not local memory. Using any of it again, locally
+or back on the host, is an explicit projection by the caller under
+[the memory projection boundary](AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary);
+nothing re-imports it automatically. Full hosted project export and deletion
+remain unavailable.
+
 ## Custody, sharing, and deletion
 
 Local storage keeps its primary copy on the selected machine; it does not
@@ -441,6 +461,11 @@ or covenant record does not grant permission for a new action.
 - Collab session-file tests (`packages/collab/tests/session-file.test.ts`) cover
   private credential-file handling; MCP tests (`packages/collab/tests/mcp.test.ts`)
   cover process coordination and explicit acknowledgement.
+- Exit door tests (`packages/sdk-ts/tests/exit-door-integration.test.ts`) copy a
+  stub host into a real data node over loopback sockets and check record hashes,
+  idempotent re-runs, and `window_only` against a host without cursor pages;
+  shared record-id vectors are pinned by `packages/data/tests/record-id-vectors.test.ts`.
+  No test here has exercised a deployed host.
 - SDK adapter tests (`packages/sdk-ts/tests/openai-responses-adapter.test.ts`)
   cover selected Wake insertion and skip behavior. They do not establish that
   a model understood, remembered, or acted on the supplied context.

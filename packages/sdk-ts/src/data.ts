@@ -25,6 +25,14 @@ export interface DataNodeOptions {
   timeout?: number;
 }
 
+/** @internal How a `DataClient` sends one request. */
+export type DataNodeFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/** @internal SDK-internal construction seams; not a public option. */
+export interface DataClientInternals {
+  fetch?: DataNodeFetch;
+}
+
 /** Forward-compatible manifest returned by `GET /v1/data/manifest`. */
 export interface DataManifest {
   protocol?: string;
@@ -206,8 +214,14 @@ export class DataClient {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
+  private readonly fetchImpl: DataNodeFetch;
 
-  constructor(options: DataNodeOptions) {
+  /**
+   * @param internals SDK-internal only. `fetch` pins how the node is
+   *   reached (the exit door's direct loopback path); the default resolves
+   *   `globalThis.fetch` on every request.
+   */
+  constructor(options: DataNodeOptions, internals: DataClientInternals = {}) {
     const baseUrl = options.baseUrl.trim().replace(/\/+$/, "");
     if (!baseUrl) {
       throw new AgentToolError("No agent data node URL provided.", {
@@ -218,6 +232,7 @@ export class DataClient {
     }
 
     this.baseUrl = baseUrl;
+    this.fetchImpl = internals.fetch ?? ((url, init) => globalThis.fetch(url, init));
     this.timeoutMs = (options.timeout ?? 30) * 1000;
     this.headers = {
       Accept: "application/json",
@@ -301,7 +316,7 @@ export class DataClient {
 
     let response: Response;
     try {
-      response = await globalThis.fetch(`${this.baseUrl}${path}`, init);
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
     } catch (error) {
       throw new AgentToolError("Agent data node request failed.", {
         code: "data_node_unreachable",
