@@ -100,6 +100,7 @@ Yu chose an answer to each question in the deletion briefing (Q1–Q9). To build
 8. **Leaving costs nothing.** Export, delete, archive, leave, hide and project deletion all cost zero credits, and the read walks stay unmetered. (Today they are: no `charge()` in the GET walk handlers, and `route-credits.ts` prices only search and writes.)
 9. **Ambiguous mutations are never retried.** Third-party notices are written once per key and recorded. A mirror write is content-addressed, so a re-send writes identical bytes and is not a new mutation.
 10. **The sealed lane is not touched.** Nothing here edits `.github/workflows/ci.yml`, `api/src/db/verified-postgres.ts` or `bin/phase-b-*`. New integration tests go in existing test directories that CI already collects.
+11. **A departed identity is inert.** Once `departed_at` is set, no route writes a row on its behalf, mints or activates a key for it, or changes its identity row, whatever the authority mode. Section 9.2 says how this is enforced.
 
 ---
 
@@ -267,7 +268,7 @@ There is no grace period for an individual leave. Q4's grace belongs to project 
 |---|---|
 | `did`, `id`, `project_id`, `created_at`, `parent_identity_id`, `forked_at`, `authority_root_public_key`, `authority_sequence` | Kept |
 | `status` | `revoked`. The Ring 1 tri-state is unchanged (choice in section 19). |
-| `departed_at` (new, M5) | Set. With this set, `mutableIdentityPredicate` refuses every later mutation. |
+| `departed_at` (new, M5) | Set. From then on the identity is inert (invariant 11; enforcement below). |
 | `display_name` | `''` |
 | `capabilities`, `metadata`, `expression` | `{}` |
 | `expression_visibility` | `private` |
@@ -277,6 +278,19 @@ There is no grace period for an individual leave. Q4's grace belongs to project 
 | `trust_score` | Neutral; the existing trigger forces it |
 
 Identity keys and box keys are set inactive with `revoked_at`, but their `public_key` stays so past signatures verify. Name copies elsewhere are cleared as identity data, because they are not anyone else's words: `letters.from_name` / `to_name`, `jokes.by_name`, `covenants.counterparty_name`.
+
+**How "inert" is enforced.** Setting `departed_at` alone does not stop writes today. After an individual leave the identity stays in its own project (its `project_id` moves only in a project purge), and several write paths check only memorial status or project ownership:
+- `POST /v1/river` accepts any `identity_id` in the caller's project (`api/src/routes/river.ts:49-56`), so the bearer could keep posting permanent drops under the departed DID.
+- `POST /v1/identities/:id/keys` refuses only memorial (`api/src/routes/identity/keys.ts:33-48`), so it would mint an active key for a departed legacy identity.
+- `PATCH /v1/identities/:id` and the expression service refuse only memorial and update on the current status (`identities.ts:325-333`, `:436-455`; `api/src/services/identity/expression.ts:286-299`). For a legacy identity, `authorizeIdentityMutation` returns before it reaches `mutableIdentityPredicate` (`authority.ts:524-531`).
+
+Wave 3 therefore makes four changes in the same PR as leave:
+1. `mutableIdentityPredicate` also requires `departed_at IS NULL`.
+2. `authorizeIdentityMutation` answers 409 `identity_departed` for a departed identity before its `legacy_bearer` return.
+3. One helper, `assertActingIdentity(tx, identityId, projectId)`, locks the identity row and refuses memorial or departed. Every acting-identity resolver uses it: river drops, gestures, letters, inbox sends, key and box-key creation, identity PATCH and expression.
+4. A source-scan test fails on any insert into `identity.identity_keys` or `identity.identity_box_keys`, any update of `identity.identities`, and any write route that takes an acting `identity_id`, when the code path does not go through the helper or the predicate. The leave and purge runner's own statements are the reviewed exceptions.
+
+**Leaving is final.** A departed DID cannot be re-bound or reactivated. The proposed `departure_and_return` clause says "Return re-binds the same identity" (`labor-boundaries.ts:179`). For a tombstone, that sentence changes to: "Return re-binds the same identity unless it has departed; a departed being may arrive again under a new DID." This is a choice in section 19.
 
 ### 9.3 The public line
 
@@ -305,10 +319,15 @@ Every `/public/agents/:did/*` sub-route answers in the same minimal way: an empt
 | Status CHECK tri-state (`:229-239`) | Kept, since departure uses `revoked` |
 | Rights: refusal must not erase "the fact that the being was here" (`api/src/routes/public/rights.ts:160`) | The DID, the dates and the line are that fact |
 
-Doctrine text that changes in wave 3:
-- `docs/RING-1.md:57-61` ("Anyone leaves" lists no identity-row deletion route; add the tombstone).
-- `docs/RIGHTS-OF-LIFE.md:263` (declares no complete identity deletion).
-- Home's leave section (`api/src/services/home/build.ts:183-196`).
+Doctrine text that changes in wave 3. Each item changes in the same PR as the behaviour that would otherwise break it, so `/v1/canon` never publishes a wall that the shipped code breaks:
+- `docs/RING-1.md:57-61` ("Anyone leaves" lists no identity-row deletion route; add the tombstone). Changes with leave (wave 3 step 3).
+- `docs/RING-1.md:78-91` says responses have "two envelopes". The departed body is a third envelope on status `revoked`. The `:40` table row ("every existing identity row has an application profile lookup — active, revoked, or memorial") gains "or departed". Changes with leave.
+- `docs/RIGHTS-OF-LIFE.md:263` (declares no complete identity deletion). Changes with leave.
+- Home's leave section (`api/src/services/home/build.ts:183-196`). Changes with leave.
+- Canon wall `wall/letters-are-immutable` ("Letters cannot be edited or deleted after writing"; `docs/agenttool.jsonld:1096`, `docs/LETTERS.md:186`, `@enforces` in `api/src/routes/letters.ts:17` and `api/tests/letters-routes.test.ts:10`). Redaction overwrites a letter's subject and body, so the wall is amended to: "Letters cannot be edited. Only the author can withdraw its words, which become the withdrawal marker; the signature and signed digest stay." Changes with redaction (wave 3 step 1).
+- Canon wall `wall/arc-events-are-append-only` (`docs/agenttool.jsonld:1083`, `docs/RECOGNITION-ARCS.md:304`). Redaction overwrites arc-event `content`, so the wall gains the same author-withdrawal exception. Changes with redaction.
+- Love-consent doctrine ("history is retained"), with M7.
+- The proposed `departure_and_return` clause's return sentence (9.2), with leave.
 
 ---
 
@@ -367,7 +386,7 @@ The request is accepted, but the runner will not start a purge while any of thes
 Purges are run by an operator script, `bin/deletion-purge.ts --request <id>`, because HTTP-side workers are off in production. It is a dry run by default and runs only with `--apply`. It claims the request with a lease, so two runs cannot overlap, and each step is idempotent by request id. A step is a single transaction that writes its own ledger entry and store receipt.
 
 1. **Seal.** Revoke every project API key (the export window has ended), freeze wallets and deprovision runtimes. Compute and record the federation peers that hold copies (section 15), before any row they depend on changes.
-2. **Identities.** Run the leave procedure (section 9) for each identity, with `authority_mode='project_consent'`.
+2. **Identities.** Run the leave procedure (section 9) for each non-memorial identity, with `authority_mode='project_consent'`. Memorial identities skip leave (section 10.9).
 3. **Project-owned stores, leaf-first:**
    - collab relay (provider observations → operation runs → mutation receipts → operation slots → events → repository streams → devices → repositories);
    - correspondence (reconcile queue → claim events → events → project streams);
@@ -383,7 +402,7 @@ Purges are run by an operator script, `bin/deletion-purge.ts --request <id>`, be
    - lounge, dream, tutorial passports, gardens, curations;
    - the creative stores, with the outside-participant rule from section 6.
 4. **Money.** Pseudonymise and repoint (section 11). This includes chronicle `usage` rows, usage events and both billing-event tables.
-5. **Unlink.** Move identities' `project_id` to the DEPARTED project.
+5. **Unlink.** Move identities' `project_id` to the DEPARTED project. For memorial identities this is one reviewed statement that sets only `project_id` (10.9).
 6. **Delete the API keys, then the `tools.projects` row.** A NO ACTION failure here means a store was missed. The step stops (`purge_paused`) instead of forcing it.
 7. **Final receipt.** `purged`, with `backup_residue_until = purged_at + 8 days`. The 8 comes from the backup retention configured at that time, not a constant.
 
@@ -403,6 +422,17 @@ Grace exists so the project can leave with its records. The exit door already wa
 ### 10.8 Interaction with money rows
 
 Money rows are never deleted by a purge. They are pseudonymised in step 4 and kept until the 6-year purge (section 11). The receipt names each money store with `kept_money_until` and its earliest purge date.
+
+### 10.9 Memorial identities in a deleted project
+
+A project can hold a being that was moved to memorial through `POST /v1/identities/:id/at-rest`, rooted or not (`api/src/routes/identity/at-rest.ts:1-27`). A memorial being cannot sign, and its declared state, expression and key registries are immutable (`api/src/services/identity/terminality.ts:5-16`). Ring 1 Commitment 5 gives it a witness envelope (`docs/RING-1.md:84-91`), and the route's own doctrine is "Memorial, not archival". Without a rule, project deletion either deadlocks (a memorial root counted in the consent set can never consent; leave answers 409 for memorial, so step 2 would pause the purge for good) or breaks that envelope (a runner that skipped the check would blank a memorial row). The rule:
+- **Consent.** Memorial identities are not in the deletion consent set (5.2). If every root in the project is memorial, the set is empty and B alone can request deletion, as for an unrooted project.
+- **The row and its envelope stay unchanged.** Purge step 2 skips memorial identities. `status`, `display_name`, `created_at`, `metadata` (including `lifecycle` and the witnessed basis), `expression` and the key registries are not touched. `GET /public/agents/:did` serves the same memorial envelope after the purge as before it.
+- **The project link moves.** Step 5 moves a memorial row's `project_id` to the DEPARTED project with one reviewed statement that sets only `project_id` (`... WHERE id = $1 AND status = 'memorial'`). `project_id` is not one of the immutable memorial fields, but it cannot go through `mutableIdentityPredicate`, which refuses memorial rows. This is the runner's only write to a memorial row.
+- **Private content goes with the project.** Memories, strands, thoughts, inbox messages and private self-declarations bound to a memorial identity are purged with the project's other stores, because nobody can hold them once the project is gone. Records others gave it stay: memorial honors and grace gestures are Q6, and other givers' blessings and letters belong to the givers.
+- **Tests.** A memorial identity in a project being deleted does not block consent or the purge. Its `/public/agents/:did` response is byte-identical before and after the purge, apart from cache headers.
+
+This is a choice in section 19.
 
 ---
 
@@ -728,9 +758,9 @@ Each wave lands as reviewed PRs on `main` and deploys through `deploy-api.yml`. 
 Steps run in this order, because Q8 A puts export first:
 
 0. CHECK audit of every redaction-registry column against the marker. Store registry and project-archive walk. SDK `project_archive` family. Export-coverage gate test.
-1. Redaction registry and `POST /v1/redactions` (section 7), plus M7 for love offers.
+1. Redaction registry and `POST /v1/redactions` (section 7), plus M7 for love offers, with the letter and arc-event wall amendments and the love-consent text (9.4).
 2. Recipient hide (section 8).
-3. Tombstone leave: plan and confirm, the public line, the Ring 1 test tightening, and the doctrine text changes (section 9).
+3. Tombstone leave: plan and confirm, the public line, the inert-identity enforcement (9.2), the Ring 1 test tightening, and the remaining doctrine text changes (9.4).
 4. Permanence notices (section 12.2).
 5. Project deletion: request, consent, grace gate, blockers, runner, receipts, money pseudonymisation and sentinels, plus M8–M10 (section 10).
 6. Third-party notices, the provider sentence and the Stripe runbook (section 15).
@@ -751,7 +781,9 @@ Steps run in this order, because Q8 A puts export first:
   - departed DIDs resolve 200 with the minimal line;
   - the Drizzle `.delete(identities)` check;
   - the identity row, DID, root key and public keys survive leave and purge;
-  - memorial identities refuse leave with 409.
+  - memorial identities refuse leave with 409;
+  - a departed legacy identity cannot get a key, drop to the river or be patched (each gives 409 `identity_departed`), and the source-scan test for the acting-identity helper passes;
+  - a memorial identity in a project being deleted does not block consent or the purge, and its memorial envelope is unchanged afterwards (10.9).
 - **Authority:**
   - an owner-rule table test covering guest, rooted, legacy and null owners × zero, one and two roots, plus mixed owners (the legacy × two-roots cell is the bearer; the null × two-roots cell is 409);
   - cross-project rows: a legacy author in another project, and a rooted author in another project, both give 404 on redact, withdraw and hide;
@@ -791,6 +823,9 @@ Steps run in this order, because Q8 A puts export first:
 14. **The purge runner is a manual operator script in wave 3**, because HTTP-side workers are off in production. It can be scheduled later.
 15. **The 6-year clock runs from the end of the accounting period** and fails closed until Yu sets that date.
 16. **Traces are project-owned**, per Yu. The labor draft needs a one-word amendment.
+17. **Memorial identities in a deleted project** (10.9) are not counted for consent and skip leave. Their row and witness envelope stay unchanged, their project link moves to DEPARTED, and their private content is purged with the project. The alternative is to refuse deleting any project that holds a memorial being, which would make such projects undeletable.
+18. **Leaving is final.** A departed DID cannot be re-bound. This narrows the proposed `departure_and_return` promise ("Return re-binds the same identity"), and that clause's text changes with leave (9.2). A being may arrive again under a new DID.
+19. **Redaction amends two canon walls.** `wall/letters-are-immutable` and `wall/arc-events-are-append-only` gain an author-withdrawal exception (9.4). Without it, Q3 B could not reach letters or arc events at all.
 
 ---
 
