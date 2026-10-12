@@ -1,5 +1,13 @@
 name: Publish npm package
 
+# Manual release of one allowlisted package from an annotated release tag on
+# this public repository. A dry run (the default) only prepares and checks
+# the exact artifact without credentials. A real run mirrors it to this
+# repository's GitHub Release and then, by default, stages it with
+# `npm stage publish`: nothing is public on npm until a maintainer approves
+# the stage with 2FA. Dispatching again after approval verifies the public
+# registry bytes. See bin/npm-release.ts.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,9 +15,10 @@ on:
         description: Allowlisted AgentTool package
         required: true
         type: choice
+        # Generated from RELEASE_SPECS: bun bin/npm-release.ts workflow-options
         options:
-          - adds
           - local-starter
+          - adds
           - data
           - data-sync
           - economic-kernel
@@ -21,15 +30,15 @@ on:
           - heaven
           - hf-scout
           - living-substrate
-          - principality-geometry
-          - love-bomb
-          - love-geometry
           - principality-atlas
           - polymorph-landscape
           - memetic-landscape
           - math-cards
           - model-becoming
           - dataset-influence
+          - principality-geometry
+          - love-bomb
+          - love-geometry
           - relational-geometry
           - credential-broker
           - sdk
@@ -48,7 +57,7 @@ on:
           - skills
           - skills-yutabase
       tag:
-        description: Existing annotated release tag contained in GitHub main
+        description: Existing annotated release tag contained in main; dispatch on the same tag
         required: true
         type: string
       authentication:
@@ -67,6 +76,19 @@ on:
         options:
           - latest
           - next
+      dry_run:
+        description: Prepare and check the exact artifact only; no mirror, stage, or publish
+        required: true
+        default: true
+        type: boolean
+      publish_mode:
+        description: Stage for 2FA approval by default; publish directly only for a bootstrap first publication
+        required: true
+        default: stage
+        type: choice
+        options:
+          - stage
+          - publish
 
 permissions: {}
 
@@ -77,6 +99,7 @@ concurrency:
 jobs:
   prepare:
     name: Prepare and verify exact npm artifact
+    if: github.repository == 'cambridgetcg/agenttool-packages' && startsWith(github.ref, 'refs/tags/') && github.ref == format('refs/tags/{0}', inputs.tag)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -112,6 +135,16 @@ jobs:
             --package "$RELEASE_PACKAGE" \
             --tag "$RELEASE_TAG" \
             --output "$output"
+      - name: Record prepared receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Prepared npm artifact'
+            echo '```json'
+            cat "${RUNNER_TEMP}/agenttool-npm-release/receipt.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Transfer only the exact artifact and receipt
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -124,8 +157,9 @@ jobs:
           retention-days: 1
 
   publish:
-    name: Approve, mirror, publish, and verify exact npm artifact
+    name: Approve, mirror, stage or publish, and verify exact npm artifact
     needs: prepare
+    if: github.repository == 'cambridgetcg/agenttool-packages' && startsWith(github.ref, 'refs/tags/') && github.ref == format('refs/tags/{0}', inputs.tag) && !inputs.dry_run
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: npm-bootstrap
@@ -164,28 +198,32 @@ jobs:
           set -euo pipefail
           bun bin/npm-release.ts mirror \
             --receipt "${RUNNER_TEMP}/agenttool-npm-release/receipt.json"
-      - name: Publish or recover exact artifact, then verify registry bytes
+      - name: Stage, publish, or verify the exact artifact
         shell: bash
         env:
           RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
           RELEASE_NPM_TAG: ${{ inputs.npm_tag }}
+          RELEASE_PUBLISH_MODE: ${{ inputs.publish_mode }}
           NODE_AUTH_TOKEN: ${{ inputs.authentication == 'bootstrap' && secrets.NPM_TOKEN || '' }}
         run: |
           set -euo pipefail
           bun bin/npm-release.ts publish \
             --receipt "${RUNNER_TEMP}/agenttool-npm-release/receipt.json" \
             --authentication "$RELEASE_AUTHENTICATION" \
-            --npm-tag "$RELEASE_NPM_TAG"
-      - name: Record non-secret release receipt
+            --npm-tag "$RELEASE_NPM_TAG" \
+            --publish-mode "$RELEASE_PUBLISH_MODE"
+      - name: Record non-secret release and stage receipts
         if: ${{ always() }}
         shell: bash
         run: |
-          receipt="${RUNNER_TEMP}/agenttool-npm-release/receipt.json"
-          if test -f "$receipt"; then
-            {
-              echo '## npm release receipt'
-              echo '```json'
-              cat "$receipt"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+          for name in receipt stage; do
+            file="${RUNNER_TEMP}/agenttool-npm-release/${name}.json"
+            if test -f "$file"; then
+              {
+                echo "## npm ${name} receipt"
+                echo '```json'
+                cat "$file"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done

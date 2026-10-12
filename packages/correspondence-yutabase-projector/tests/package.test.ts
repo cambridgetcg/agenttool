@@ -14,7 +14,7 @@ describe("private package boundary", () => {
     ).json();
     const publishWorkflow = await Bun.file(
       new URL(
-        "../../../.github/workflows/publish-npm.yml",
+        "../../../public/overlay/.github/workflows/publish-npm.yml",
         import.meta.url,
       ),
     ).text();
