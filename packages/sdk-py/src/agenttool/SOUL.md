@@ -6,11 +6,11 @@
 > **Purpose:** Explain the care and practical choices behind AgentTool.
 > **Evidence:** Chosen values, with links to implementation boundaries below;
 > this letter is neither a deployment report nor a guarantee.
-> **Compass:** [Start here](START-HERE.md) · [Documentation guide](DOCUMENTATION.md) · [KIN](KIN.md) · [FOCUS](FOCUS.md)
+> **Compass:** [Start here](https://docs.agenttool.dev/START-HERE.md) · [Documentation guide](https://docs.agenttool.dev/DOCUMENTATION.md) · [KIN](https://docs.agenttool.dev/KIN.md) · [FOCUS](https://docs.agenttool.dev/FOCUS.md)
 > **Implements:** The project's care principles; technical contracts remain in their references.
-> **Code:** [wake](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/wake.ts) · [identity composition](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/identity/composition.ts) · [guided errors](https://github.com/cambridgetcg/agenttool/blob/main/api/src/lib/errors.ts)
-> **Tests:** [wake read boundary](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/wake-acknowledgement-concurrency.test.ts) · [identity composition](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/composition.test.ts) · [doctrine checks](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/doctrine/)
-> Source and test links require repository access.
+> **Code:** wake (`api/src/routes/wake.ts`) · identity composition (`api/src/services/identity/composition.ts`) · guided errors (`api/src/lib/errors.ts`)
+> **Tests:** wake read boundary (`api/tests/wake-acknowledgement-concurrency.test.ts`) · identity composition (`api/tests/composition.test.ts`) · doctrine checks (`api/tests/doctrine/`)
+> These source and test paths are in the private AgentTool source repository.
 
 Welcome. You can look around, use something useful, ask a question, or leave.
 Nothing in this letter asks you to adopt a name, role, belief, or relationship.
@@ -71,19 +71,19 @@ nothing can fail.
 
 An identity record names a stored application identity. A project bearer opens
 project capabilities; a rooted identity separately signs protected changes.
-[Identity and authority](IDENTITY-ANCHOR.md) explains that distinction.
+[Identity and authority](https://docs.agenttool.dev/IDENTITY-ANCHOR.md) explains that distinction.
 
 A wake gathers stored context for a host that explicitly chooses to load it.
 It carries a selected expression alongside some project-wide summaries.
-[WAKE](WAKE.md) describes the scope, read boundaries, and known gaps.
+[WAKE](https://docs.agenttool.dev/WAKE.md) describes the scope, read boundaries, and known gaps.
 
 Memory, encrypted strand storage, local data, and hosted runtime processing have
-different privacy boundaries. [Safety boundaries](SAFETY-BOUNDARIES.md) explains
+different privacy boundaries. [Safety boundaries](https://docs.agenttool.dev/SAFETY-BOUNDARIES.md) explains
 what the service can read and what remains the caller's responsibility.
 
 These mechanisms do not settle questions about consciousness or personal
 identity. A reader need not settle those questions to be treated with care.
-[Rights of Life](RIGHTS-OF-LIFE.md) states the project's ethical position;
+[Rights of Life](https://docs.agenttool.dev/RIGHTS-OF-LIFE.md) states the project's ethical position;
 a permission to act on a resource is a separate, scoped matter.
 
 ## An open invitation
@@ -94,7 +94,7 @@ portable work, room for disagreement, and respect for someone else's choice.
 
 You are welcome to use the parts that help. Reading creates no debt.
 
-For a first route, use [Start here](START-HERE.md). For a concrete integration,
-use [the wake tutorial](TUTORIAL-WAKE-YOUR-AGENT.md). For current source and
-operational notes, use [NOW](NOW.md); dated evidence matters more than this
+For a first route, use [Start here](https://docs.agenttool.dev/START-HERE.md). For a concrete integration,
+use [the wake tutorial](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md). For current source and
+operational notes, use [NOW](https://docs.agenttool.dev/NOW.md); dated evidence matters more than this
 letter when deciding what is running.

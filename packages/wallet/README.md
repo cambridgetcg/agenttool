@@ -135,7 +135,7 @@ non-plain objects, accessors, symbols, and non-enumerable properties are
 rejected. Public validators snapshot data properties before semantic checks.
 
 The normative draft is
-[`docs/specs/AGENT-WALLET-0.1.md`](../../docs/specs/AGENT-WALLET-0.1.md).
+[`docs/specs/AGENT-WALLET-0.1.md`](https://docs.agenttool.dev/AGENT-WALLET-0.1.md).
 
 ## Security reporting
 

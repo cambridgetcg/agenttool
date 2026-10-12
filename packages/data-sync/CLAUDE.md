@@ -49,7 +49,7 @@ local/admin bearer. Checkpoints bind node id, publisher, and persisted feed_id.
 `resetCheckpoint()` is the explicit in-process recovery seam after the operator
 has verified an intentional replacement; it never deletes imported data.
 
-See also: [`../../AGENTS.md`](../../AGENTS.md) ·
-[`../../CLAUDE.md`](../../CLAUDE.md) ·
-[`../../docs/AGENT-DATA-PROTOCOL.md`](../../docs/AGENT-DATA-PROTOCOL.md) ·
-[`../../docs/NOW.md`](../../docs/NOW.md)
+See also: `../../AGENTS.md` ·
+`../../CLAUDE.md` ·
+[`../../docs/AGENT-DATA-PROTOCOL.md`](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md) ·
+[`../../docs/NOW.md`](https://docs.agenttool.dev/NOW.md)

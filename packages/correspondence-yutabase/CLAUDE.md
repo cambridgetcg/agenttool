@@ -55,21 +55,23 @@ thread intentions.
 
 ## Source Contracts
 
-- [Agent Correspondence specification](https://github.com/cambridgetcg/agenttool/blob/main/docs/specs/AGENT-CORRESPONDENCE-0.1.md)
-- [Doctrine and authority boundary](https://github.com/cambridgetcg/agenttool/blob/main/docs/AGENT-CORRESPONDENCE.md)
+- [Agent Correspondence specification](https://docs.agenttool.dev/specs/AGENT-CORRESPONDENCE-0.1.md)
+  and its public
+  [conformance vectors](https://github.com/cambridgetcg/agenttool-packages/blob/main/docs/specs/agent-correspondence-0.1-vectors.json)
+- [Doctrine and authority boundary](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md)
 - YUTABASE projection design currently lives in the separate YUTABASE
   repository and is not AgentTool API conformance.
 - The private
-  [`correspondence-yutabase-projector`](https://github.com/cambridgetcg/agenttool/tree/main/packages/correspondence-yutabase-projector)
+  `correspondence-yutabase-projector`
   sibling implements one loopback-only durable profile. It is not part of this
   public package.
 
 ## Release State
 
 This source and public npm developer preview are `0.1.0-dev.1`. Protected
-[workflow run `30468784750`](https://github.com/cambridgetcg/agenttool/actions/runs/30468784750)
+workflow run `30468784750`
 published it with provenance from the annotated
-[GitHub prerelease](https://github.com/cambridgetcg/agenttool/releases/tag/correspondence-yutabase-v0.1.0-dev.1).
+GitHub prerelease.
 Anonymous readback confirmed the 26,694-byte npm and GitHub tarballs are
 byte-identical
 (`sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
