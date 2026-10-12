@@ -10,9 +10,12 @@
  *      401/409/428 owner-rule refusals to the owner-gated operations that
  *      openapi.ts already describes (inbox PATCH and DELETE, attestation
  *      DELETE, memory DELETE by id and by key, memory visibility PATCH).
+ *  It also holds OWNERSHIP_MAP_OPENAPI_PATHS (GET /public/ownership-map).
  *  The rule itself is api/src/services/identity/authority.ts
  *  authorizeOwnedContentMutation; the boundary is published at
  *  GET /public/ownership-map (docs/OWNERSHIP-MAP.md). */
+
+import { AUTHORITY_RULES, OWNER_CLASSES, OWNERSHIP_MAP_SCHEMA } from "../services/discovery/ownership-map";
 
 export const OWNER_RULE_SUMMARY =
   "Owner rule: a rooted owner's own root signs this exact request (identity-authority/v1 over method, path and query, body, sequence and timestamp); an owner without a root follows the project rule (no roots: the bearer; one root: that root signs), and in a project with several roots the bearer acts for an unrooted owner's own content. An owner outside the caller's project answers 404. See /public/ownership-map.";
@@ -275,3 +278,66 @@ export function withOwnerGatedOperations<T extends { paths: Record<string, Recor
   }
   return document;
 }
+
+// ─── GET /public/ownership-map ──────────────────────────────────────────
+
+export const OWNERSHIP_MAP_OPENAPI_PATHS = {
+  "/public/ownership-map": {
+    get: {
+      tags: ["public"],
+      summary: "Who owns each store, and who may erase or withdraw from it",
+      description:
+        "Unauthenticated, static, no database read. Every store of the hosted service with its owner_class (identity, project, shared, money, permanent, platform), the authority_rule that decides who may erase, withdraw or later redact it, and the id of the /public/retention class that says what is kept and what deletion does. Also lists the routes the owner rule gates today and the proof they take. A statement of current behaviour, not a contract. Doc: docs/OWNERSHIP-MAP.md.",
+      security: [],
+      responses: {
+        "200": {
+          description: "The ownership map",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: true,
+                required: ["schema", "version", "scope", "owner_classes", "authority_rules", "owner_gated_routes", "stores", "retention"],
+                properties: {
+                  schema: { const: OWNERSHIP_MAP_SCHEMA },
+                  version: { type: "string" },
+                  scope: { type: "string" },
+                  owner_classes: { type: "object", additionalProperties: { type: "string" } },
+                  authority_rules: { type: "object" },
+                  owner_gated_routes: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["method", "path", "store", "owner"],
+                      properties: { method: { type: "string" }, path: { type: "string" }, store: { type: "string" }, owner: { type: "string" } },
+                    },
+                  },
+                  stores: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["store", "group", "owner_class", "authority_rule", "retention_class"],
+                      properties: {
+                        store: { type: "string" },
+                        group: { type: "integer", minimum: 0, maximum: 18 },
+                        owner_class: { type: "string", enum: [...OWNER_CLASSES] },
+                        authority_rule: { type: "string", enum: Object.keys(AUTHORITY_RULES) },
+                        retention_class: { type: "string" },
+                        note: { type: "string" },
+                      },
+                    },
+                  },
+                  proof: { type: "string" },
+                  ledger: { type: "string" },
+                  retention: { type: "string", const: "/public/retention" },
+                  docs: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};

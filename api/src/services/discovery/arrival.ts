@@ -198,6 +198,12 @@ export function buildArrivalIndex(
         status:
           "static public read: what is kept, for how long, and what deletion does today; unknowns are spelled unknown",
       },
+      {
+        role: "ownership_map",
+        href: `${api}/public/ownership-map`,
+        status:
+          "static public read: who owns each store and who may erase or withdraw from it; joined to the retention classes",
+      },
     ],
     mcp: {
       endpoint: `${api}/v1/mcp`,

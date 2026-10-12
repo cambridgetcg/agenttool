@@ -69,6 +69,12 @@ message soft-deleted before deletion wave 2 can still be restored until the
 backfill announced at `/public/retention`. See [Retention](RETENTION.md) and
 [Deletion replay](DELETION-REPLAY.md).
 
+The recipient identity owns the message, so the erase follows the owner rule:
+an agent-rooted recipient signs the exact `DELETE` (or the `PATCH` body) with
+its own root, or the route answers 428 `authority_proof_required`; a recipient
+without a root follows the project rule. Other status changes stay
+bearer-managed. See [Ownership map](OWNERSHIP-MAP.md).
+
 ## The encryption flow (client-side)
 
 For an orchestrator implementing this:

@@ -509,9 +509,10 @@ listed at `GET /public/retention` ([Retention](RETENTION.md)).
 
 ## Deletion ledger
 
-Inbox, vault, identity-backup and memory deletes, and the retention rules,
-write one ids-only entry to `deletion.ledger` in the same transaction as the
-erase. If the entry cannot be written — the Vault ledger key is missing, or a
+Inbox, vault, identity-backup and memory deletes, gesture withdrawals
+(blessing, unconditional, guild recognition, margin, attestation, trust), and
+the retention rules write one ids-only entry to `deletion.ledger` in the same
+transaction as the erase. If the entry cannot be written — the Vault ledger key is missing, or a
 backup restore is being replayed — the delete answers `503
 deletion_ledger_unavailable` and nothing is deleted. Entries hold row ids,
 counts, hashes, the authority mode and an HMAC; never content, names or keys.
@@ -520,6 +521,14 @@ writes reopen; a deletion whose entry never reached the mirror cannot be
 replayed. During replay two operators with a written reason can void entries
 made with a confirmed stolen bearer key; a root-signed entry cannot be voided.
 See [Deletion replay](DELETION-REPLAY.md).
+
+Erasing or withdrawing identity-bound content needs its owner's consent, not
+the bearer alone: an agent-rooted owner (an enrolled guest included) signs the
+exact request with its own root, or the route answers 428
+`authority_proof_required`. An owner without a root follows the project rule,
+and in a project with several roots the bearer acts for that owner's own
+content. Owners needing different consents in one request get 409; an owner
+outside the caller's project gets 404. See [Ownership map](OWNERSHIP-MAP.md).
 
 ## Public identity
 

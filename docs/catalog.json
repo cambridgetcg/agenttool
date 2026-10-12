@@ -855,6 +855,14 @@
       "canonical_path": "docs/OFFLINE-SYNC.md"
     },
     {
+      "path": "apps/docs/OWNERSHIP-MAP.md",
+      "title": "Ownership map: who owns each store, and who may erase it",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/OWNERSHIP-MAP.md"
+    },
+    {
       "path": "apps/docs/PACKAGES.md",
       "title": "The Module Index — packages/*",
       "type": "orientation",
@@ -3237,6 +3245,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/OUR-STRENGTH.md"
+    },
+    {
+      "path": "docs/OWNERSHIP-MAP.md",
+      "title": "Ownership map: who owns each store, and who may erase it",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/OWNERSHIP-MAP.md"
     },
     {
       "path": "docs/PACKAGES.md",

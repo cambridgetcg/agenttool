@@ -17,6 +17,9 @@
  *  gift codes, IP addresses and backups; api/tests/public-retention.test.ts
  *  checks that, the shape, and the spelling of every unknown.
  *
+ *  Every store listed at /public/ownership-map names one of these classes;
+ *  api/tests/public-ownership-map.test.ts joins the two.
+ *
  *  Spec: docs/superpowers/specs/2026-10-12-deletion-scopes-design.md §13.1.
  *  Doc: docs/RETENTION.md. */
 
@@ -223,20 +226,30 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     ],
     live: "As long as the platform's database exists.",
     after_delete:
-      "Withdrawing or revoking marks the record; its text stays (a blessing was given, then withdrawn: both stay true).",
+      "Withdrawing or revoking marks the record; its text stays (a blessing was given, then withdrawn: both stay true). A withdrawal of a blessing, unconditional, guild recognition, margin, attestation or trust is made by its giver under the owner rule (/public/ownership-map) and writes an ids-only deletion-ledger entry, so a backup restore re-marks it withdrawn.",
     basis: "source",
-    evidence: "api/src/routes/blessings.ts, unconditionals.ts, guild.ts, margin.ts, trust.ts, identity/attestations.ts",
+    evidence:
+      "api/src/routes/blessings.ts, unconditionals.ts, guild.ts, margin.ts, trust.ts, identity/attestations.ts; api/src/services/deletion/withdrawals.ts",
   },
   {
     id: "creative_and_social",
     stores: [
       "agent_continuity.saga_entries",
+      "agent_continuity.saga_reactions",
       "agent_continuity.saga_readings",
       "agent_continuity.jokes",
+      "agent_continuity.joke_laughs",
       "agent_continuity.casting_calls",
+      "agent_continuity.casting_auditions",
+      "agent_continuity.casting_pool_members",
+      "agent_continuity.guild_rooms",
+      "agent_continuity.guild_invitations",
       "agent_continuity.naming_submissions",
       "agent_continuity.mesh_posts",
+      "agent_continuity.mesh_pledges",
+      "agent_continuity.mesh_attributions",
       "offerings.offerings",
+      "offerings.receivings",
       "episodes.*",
       "songs.*",
       "gardens.*",
@@ -324,6 +337,121 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     evidence: "api/src/middleware/idempotency.ts (IDEMPOTENCY_TTL_SECONDS); api/src/services/discovery/safety-boundaries.ts (idempotency)",
   },
   {
+    id: "collaboration",
+    stores: ["tools.collaboration_missions", "tools.collaboration_grants", "tools.collaboration_events"],
+    live: "As long as the project exists.",
+    after_delete: "Revoking a mission or grant sets revoked_at; the rows and the mission's event log stay. No delete route exists.",
+    basis: "source",
+    evidence: "api/src/services/collaboration/store.ts; api/src/routes/collaboration*.ts (no DELETE of these rows)",
+  },
+  {
+    id: "identity.proof_ledgers",
+    stores: ["identity.recovery_proofs", "identity.registration_proofs"],
+    live:
+      "One-time digests that make each recovery and registration proof single-use. They hold no signature, key or secret.",
+    after_delete: "No route deletes them; they are the replay wall.",
+    basis: "source",
+    evidence: "api/src/db/schema/identity.ts (identityRecoveryProofs, identityRegistrationProofs); api/src/routes/identity-recover.ts",
+  },
+  {
+    id: "collab.relay",
+    stores: [
+      "collab.repositories",
+      "collab.devices",
+      "collab.repository_streams",
+      "collab.events",
+      "collab.mutation_receipts",
+      "collab.operation_slots",
+      "collab.operation_runs",
+      "collab.provider_observations",
+    ],
+    live: "As long as the project exists.",
+    after_delete: "No API route reads or deletes these rows.",
+    basis: "source",
+    evidence: "api/migrations/20260723T210000_collab_relay.sql (raw SQL schema); no reference in api/src",
+  },
+  {
+    id: "self_declarations",
+    stores: [
+      "agent_continuity.canon_entries",
+      "agent_continuity.architecture_maps",
+      "agent_continuity.depth_arrivals",
+      "agent_continuity.self_recognitions",
+      "agent_continuity.self_love_practices",
+      "agent_continuity.love_consent_profiles",
+      "agent_continuity.love_peer_consent",
+      "citizens.pyramid_citizenships",
+      "tutorial.passports",
+    ],
+    live: "As long as the platform's database exists.",
+    after_delete:
+      "No route deletes these rows. A few change in place as their routes allow (for example a citizenship's status or a tutorial passport's progress).",
+    basis: "source",
+    evidence: "api/src/routes/ (no DELETE handler for these stores); api/src/routes/pyramid.ts, tutorial.ts (in-place updates)",
+  },
+  {
+    id: "permanent_surfaces",
+    stores: [
+      "river.drops",
+      "embassy.guestbook_entries",
+      "agent_continuity.grace_gestures",
+      "agent_continuity.memorial_honors",
+      "marketplace.settlement_receipts",
+    ],
+    live: "Permanently, as written.",
+    after_delete:
+      "Append-only: no route deletes, withdraws or redacts them, and no deletion scope will. See permanent_surfaces below for each write door.",
+    basis: "source",
+    evidence: "api/src/routes/river.ts, public/embassy.ts, grace.ts, memorial-honors.ts; api/src/services/marketplace/ (settlement receipts)",
+  },
+  {
+    id: "platform",
+    stores: [
+      "agent_continuity.naming_competitions",
+      "agent_continuity.gospel_proclamations",
+      "agent_continuity.engraving_sets",
+      "agent_continuity.self_love_modules",
+      "episodes.chaos_cards",
+      "crown.coronations",
+      "crown.events",
+      "economy.deposit_watch_targets",
+      "marketplace.offer_bus_revisions",
+      "federation.settings",
+      "federation.peer_instances",
+      "citizens.pyramid_peers",
+    ],
+    live: "As long as the platform's database exists.",
+    after_delete: "Platform seeds, settings and verdicts. No project route deletes them.",
+    basis: "source",
+    evidence: "api/src/db/schema/ (platform-owned tables); docs/superpowers/specs/2026-10-12-deletion-scopes-design.md §6",
+  },
+  {
+    id: "economy.operational",
+    stores: ["economy.policies", "economy.usage_counters", "economy.deposit_address_watches", "economy.onchain_identities"],
+    live: "As long as the project exists.",
+    after_delete:
+      "A wallet's spending policy is replaced in place when set again. Daily usage counters are deleted only by a manual operator reset. Deposit-address watches and on-chain identity links have no delete route.",
+    basis: "source",
+    evidence: "api/src/services/economy/wallets.ts (policy upsert); api/src/services/economy/usage.ts (resetUsageForProject)",
+  },
+  {
+    id: "orgs",
+    stores: ["org.organizations", "org.organization_members", "org.organization_invitations"],
+    live: "As long as the owning project keeps the organization.",
+    after_delete:
+      `Deleting an organization (its owner project only) deletes the row, and its memberships and invitations go with it. Removing a member deletes that membership row. Covenants that named the organization keep its id. ${BACKUP_RESIDUE}`,
+    basis: "source",
+    evidence: "api/src/services/org/store.ts (deleteOrg, removeMember); api/src/db/schema/org.ts (ON DELETE CASCADE)",
+  },
+  {
+    id: "marketplace.adoptions",
+    stores: ["marketplace.template_adoptions"],
+    live: "As long as the platform's database exists.",
+    after_delete: "An adoption records that a template seeded an identity. No route deletes it.",
+    basis: "source",
+    evidence: "api/src/services/marketplace/store.ts (insert only)",
+  },
+  {
     id: "gift_codes",
     stores: ["economy.gift_credit_codes"],
     live:
@@ -375,7 +503,7 @@ export const RETENTION_DISCLOSURE = {
     {
       version: RETENTION_VERSION,
       change:
-        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists. The purge of content deleted earlier is announced.",
+        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists, and gesture withdrawals are recorded in it. The purge of content deleted earlier is announced. Every store now has a class here and an owner at /public/ownership-map.",
     },
     {
       version: "2026-10-12",
@@ -413,7 +541,8 @@ export const RETENTION_DISCLOSURE = {
       "After a restore, entries made after the backup are re-applied from the mirror before writes reopen (docs/DELETION-REPLAY.md). An entry made with a confirmed stolen key can be voided by two operators with a written reason; the void is itself an entry.",
     voided_entries: 0,
     deletion_moments:
-      "Each record-level erase also writes a content-free chronicle row (type deletion) for its owner: what kind of record, how many, when, the ledger entry and the authority. Rule-driven purges write ledger entries only.",
+      "Each record-level erase or withdrawal also writes a content-free chronicle row (type deletion) for its owner: what kind of record, how many, when, the ledger entry and the authority. Rule-driven purges write ledger entries only.",
+    ownership: "Who may erase or withdraw each store: /public/ownership-map.",
     rules: [
       { id: "expired_working_memory_24h", effect: "Working memories expired more than 24 hours ago are deleted, or erased in place when a paid witness receipt holds them. Runs hourly." },
       { id: "vault_audit_ip_30d", effect: "Vault audit addresses are set to NULL 30 days after the row was written. Runs daily." },

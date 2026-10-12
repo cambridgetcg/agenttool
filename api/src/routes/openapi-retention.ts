@@ -24,7 +24,8 @@ const RETENTION_SCHEMA_V1 = {
   ],
   properties: {
     schema: { const: RETENTION_SCHEMA },
-    version: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    // A same-day revision carries a suffix (2026-10-12.2).
+    version: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}(\\.\\d+)?$" },
     versions: {
       type: "array",
       minItems: 1,
@@ -87,6 +88,7 @@ const RETENTION_SCHEMA_V1 = {
         replay: { type: "string" },
         voided_entries: { type: "integer", minimum: 0 },
         deletion_moments: { type: "string" },
+        ownership: { type: "string" },
         rules: {
           type: "array",
           items: {

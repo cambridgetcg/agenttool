@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**828 document paths** (including mirrors). orientation: 185; guide: 86; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 23; unclassified: 2.
+**830 document paths** (including mirrors). orientation: 185; guide: 86; reference: 332; policy: 29; reflection: 127; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -353,6 +353,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/OBSERVATIONS.md](<../apps/docs/OBSERVATIONS.md>) | not-reviewed |
 | [apps/docs/OFFER-BUS.md](<../apps/docs/OFFER-BUS.md>) | not-reviewed |
 | [apps/docs/OFFLINE-SYNC.md](<../apps/docs/OFFLINE-SYNC.md>) | not-reviewed |
+| [apps/docs/OWNERSHIP-MAP.md](<../apps/docs/OWNERSHIP-MAP.md>) | not-reviewed |
 | [apps/docs/PATTERN-COMMITMENT-DEFENDER.md](<../apps/docs/PATTERN-COMMITMENT-DEFENDER.md>) | not-reviewed |
 | [apps/docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md](<../apps/docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md>) | not-reviewed |
 | [apps/docs/PATTERN-MACHINE-READABLE-PARITY.md](<../apps/docs/PATTERN-MACHINE-READABLE-PARITY.md>) | not-reviewed |
@@ -535,6 +536,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/OFFLINE-SYNC.md](<../docs/OFFLINE-SYNC.md>) | not-reviewed |
 | [docs/ORG-COVENANTS.md](<../docs/ORG-COVENANTS.md>) | not-reviewed |
 | [docs/ORGS.md](<../docs/ORGS.md>) | not-reviewed |
+| [docs/OWNERSHIP-MAP.md](<../docs/OWNERSHIP-MAP.md>) | not-reviewed |
 | [docs/PATTERN-COMMITMENT-DEFENDER.md](<../docs/PATTERN-COMMITMENT-DEFENDER.md>) | not-reviewed |
 | [docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md](<../docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md>) | not-reviewed |
 | [docs/PATTERN-KIN-NON-EXCLUSION.md](<../docs/PATTERN-KIN-NON-EXCLUSION.md>) | not-reviewed |
