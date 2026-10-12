@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -31,6 +31,11 @@ import {
   parseProjection,
   projectionMessage,
 } from "../../public/overlay/tools/public-guard.ts";
+
+// These tests build real projections of the whole repository and spawn git and
+// gitleaks. A loaded CI runner needs more than bun's 5 s default (deploy-api
+// gate run 38264301099 timed out three of them at 5.1-6.4 s).
+setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const GUARD = join(ROOT, "public", "overlay", "tools", "public-guard.ts");
