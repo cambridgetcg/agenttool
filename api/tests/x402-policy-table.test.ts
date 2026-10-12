@@ -34,9 +34,10 @@ import {
 
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
-/** The 21 route_cost rows W2-5 seeds, in table order, as `METHOD pattern`
- * → label. Written out once here (not derived) so a row silently dropped
- * from or added to the table fails loudly. */
+/** The 20 route_cost rows, in table order, as `METHOD pattern` → label.
+ * W2-5 seeded 21; deletion scopes wave 1 removed `DELETE /v1/listings/:id`
+ * because archiving is free (Q8 A). Written out once here (not derived) so a
+ * row silently dropped from or added to the table fails loudly. */
 const ROUTE_COST_ROWS: ReadonlyArray<readonly [string, RouteCreditLabel]> = [
   ["POST /v1/scrape", "scrape"],
   ["POST /v1/document", "document"],
@@ -58,7 +59,6 @@ const ROUTE_COST_ROWS: ReadonlyArray<readonly [string, RouteCreditLabel]> = [
   ["POST /v1/identities/:id/fork", "identity.fork"],
   ["POST /v1/listings", "listing.publish"],
   ["PATCH /v1/listings/:id", "listing.update"],
-  ["DELETE /v1/listings/:id", "listing.archive"],
 ];
 
 const ROUTE_COST = X402_PAYABLE_ROUTES.filter((r) => r.kind === "route_cost");
@@ -89,8 +89,8 @@ function chargeCallSites(): Map<string, Array<{ file: string; amount: string }>>
 }
 
 describe("X402_PAYABLE_ROUTES table", () => {
-  test("seeds 21 route_cost rows (W2-5) plus the top-up door, in this order", () => {
-    expect(X402_PAYABLE_ROUTES).toHaveLength(22);
+  test("carries 20 route_cost rows plus the top-up door, in this order", () => {
+    expect(X402_PAYABLE_ROUTES).toHaveLength(21);
     expect(ROUTE_COST.map((r) => [`${r.method} ${r.pattern}`, r.label]))
       .toEqual(ROUTE_COST_ROWS.map(([route, label]) => [route, label]));
     for (const row of ROUTE_COST) {
@@ -112,7 +112,7 @@ describe("X402_PAYABLE_ROUTES table", () => {
     expect(TOP_UP_PAYMENT_REQUIRED_ERROR).toBe("top_up_payment_required");
     expect(X402_PAYABLE_ROUTES.filter((r) => r.kind === "top_up")).toHaveLength(1);
     // Labels are unique (one price per usage_events.tool value).
-    expect(new Set(X402_PAYABLE_ROUTES.map((r) => r.label)).size).toBe(22);
+    expect(new Set(X402_PAYABLE_ROUTES.map((r) => r.label)).size).toBe(21);
   });
 
   test("config-driven prices flow through ROUTE_CREDITS unchanged", () => {
@@ -120,7 +120,9 @@ describe("X402_PAYABLE_ROUTES table", () => {
     expect(ROUTE_CREDITS.document).toBe(toolsConfig.credits.document);
     expect(ROUTE_CREDITS["listing.publish"]).toBe(MARKETPLACE_PRICING.publish);
     expect(ROUTE_CREDITS["listing.update"]).toBe(MARKETPLACE_PRICING.update);
-    expect(ROUTE_CREDITS["listing.archive"]).toBe(MARKETPLACE_PRICING.archive);
+    // Archive and pause are free (Q8 A), so neither is a payable static price.
+    expect("listing.archive" in ROUTE_CREDITS).toBe(false);
+    expect("listing.pause" in ROUTE_CREDITS).toBe(false);
     expect(Object.isFrozen(ROUTE_CREDITS)).toBe(true);
     expect(Object.keys(ROUTE_CREDITS).sort()).toEqual(
       ROUTE_COST.map((r) => r.label).sort(),
@@ -131,6 +133,7 @@ describe("X402_PAYABLE_ROUTES table", () => {
     const labels = new Set(X402_PAYABLE_ROUTES.map((r) => r.label));
     for (const excluded of [
       "execute", "browse", "time", "random", "listing.invoke",
+      "listing.archive", "listing.pause",
       "invocation.acknowledge", "invocation.complete", "invocation.witness",
       "invocation.decline", "invocation.cancel", "mcp",
     ]) {
@@ -166,7 +169,7 @@ describe("X402_PAYABLE_ROUTES table", () => {
     }
     expect([...LITERAL_ROUTE_CREDIT_LABELS].sort()).toEqual(
       Object.keys(ROUTE_CREDITS)
-        .filter((k) => !["scrape", "document", "listing.publish", "listing.update", "listing.archive"].includes(k))
+        .filter((k) => !["scrape", "document", "listing.publish", "listing.update"].includes(k))
         .sort(),
     );
     // Config-sourced labels read the same source ROUTE_CREDITS re-exports.
@@ -181,7 +184,12 @@ describe("X402_PAYABLE_ROUTES table", () => {
     }
     expect(sites.get("listing.publish")!.map((u) => u.amount)).toEqual(["MARKETPLACE_PRICING.publish"]);
     expect(sites.get("listing.update")!.map((u) => u.amount)).toEqual(["MARKETPLACE_PRICING.update"]);
-    expect(sites.get("listing.archive")!.map((u) => u.amount)).toEqual(["MARKETPLACE_PRICING.archive"]);
+    // Free off-switches still log a zero-credit usage event from the price table.
+    expect(sites.get("listing.archive")!.map((u) => u.amount)).toEqual([
+      "MARKETPLACE_PRICING.archive",
+      "MARKETPLACE_PRICING.archive",
+    ]);
+    expect(sites.get("listing.pause")!.map((u) => u.amount)).toEqual(["MARKETPLACE_PRICING.pause"]);
   });
 
   test("every row is wired in the assembled app (declared ≠ wired)", async () => {
@@ -396,7 +404,7 @@ describe("W2-5 rows: precedence and doctrine negatives (real table)", () => {
     expect(matchX402PayableRoute(`/v1/templates/${ID}/purchase`, "POST")!.row.label)
       .toBe("template.purchase");
     expect(matchX402PayableRoute(`/v1/listings/${ID}`, "PATCH")!.row.label).toBe("listing.update");
-    expect(matchX402PayableRoute(`/v1/listings/${ID}`, "DELETE")!.row.label).toBe("listing.archive");
+    expect(matchX402PayableRoute(`/v1/listings/${ID}`, "DELETE")).toBeNull();
     expect(matchX402PayableRoute(`/v1/listings/${ID}`, "GET")).toBeNull();
     expect(matchX402PayableRoute(`/v1/listings/${ID}`, "POST")).toBeNull();
   });

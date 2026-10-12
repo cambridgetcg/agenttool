@@ -39,6 +39,7 @@ const previewColumns = {
   salesCount: galleryArtifacts.salesCount,
   status: galleryArtifacts.status,
   createdAt: galleryArtifacts.createdAt,
+  withdrawnAt: galleryArtifacts.withdrawnAt,
 };
 
 function shape(a: Record<string, unknown> & { createdAt: Date; sellerDid: string; id: string }) {
@@ -134,6 +135,23 @@ app.get("/:id", async (c) => {
       message: "No artifact with that id.",
       hint: "Browse: GET /public/gallery.",
     }, 404);
+  }
+  // Off the shelf (withdrawn by its publisher or taken down by an operator):
+  // say so, and serve nothing else from the row — no title, preview,
+  // description, provenance or price. Paid buyers keep their own recovery
+  // route (GET /v1/billing/session/:id/gallery-claim), which is unchanged.
+  if (row.status !== "on_shelf") {
+    c.header("cache-control", "public, max-age=60");
+    return c.json(
+      {
+        error: "artifact_withdrawn",
+        message: "This artifact is no longer on the shelf.",
+        id: row.id,
+        status: row.status,
+        withdrawn_at: row.withdrawnAt?.toISOString() ?? null,
+      },
+      410,
+    );
   }
   c.header("cache-control", "public, max-age=60");
   return c.json(

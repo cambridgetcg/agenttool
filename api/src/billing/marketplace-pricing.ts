@@ -22,11 +22,18 @@
  *  usage_events signal (abuse-rate visibility) survives and the price is a
  *  one-number change if a step ever earns a fee.
  *
+ *  Taking a listing down is leaving, and leaving costs nothing (deletion
+ *  scopes Q8 A, docs/superpowers/specs/2026-10-12-deletion-scopes-design.md
+ *  §14): archive (DELETE /v1/listings/:id, or a PATCH whose only change is
+ *  status "archived") and pause (a PATCH whose only change is status
+ *  "paused") are 0.
+ *
  *    action       | credits | why
  *    -------------|---------|---------------------------------------------
  *    publish      |    5    | anti-spam at listing CREATION (a new object)
  *    update       |    1    | trivial anti-abuse on mutation
- *    archive      |    1    | trivial anti-abuse on mutation
+ *    archive      |    0    | the seller's exit — never charge to leave
+ *    pause        |    0    | the seller's off-switch — never charge to stop
  *    invoke       |    0    | a STEP in a funded txn the take-rate prices
  *    acknowledge  |    0    | a STEP in a funded txn
  *    complete     |    0    | the value-charge IS the take-rate at release
@@ -44,7 +51,9 @@ export const MARKETPLACE_PRICING = {
   // Listing lifecycle — creation/mutation, anti-spam metering (kept).
   publish: 5,
   update: 1,
-  archive: 1,
+  // Off-switches — archive and pause. Leaving is free (Q8 A).
+  archive: 0,
+  pause: 0,
   // Settlement path — steps inside a funded transaction the take-rate
   // already prices. Free, so the platform charges once, on value.
   invoke: 0,

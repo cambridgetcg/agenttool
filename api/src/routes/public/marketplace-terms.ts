@@ -72,8 +72,8 @@ app.get("/", (c) => {
           "recorded when settlement code calls computeFee and is intended to price matching, internal ledger " +
           "escrow states and validation of signed completion. Release follows implemented " +
           "state-transition conditions; this route does not guarantee availability or outcome. Invoke, " +
-          "acknowledge, complete, decline, and cancel have zero flat credit price; publishing, updating, and " +
-          "archiving are metered. Buyer review and dispute arbitration are excluded from both lists because " +
+          "acknowledge, complete, decline, and cancel have zero flat credit price, as do archiving and pausing " +
+          "a listing; publishing and updating are metered. Buyer review and dispute arbitration are excluded from both lists because " +
           "they rest fail-closed before charging. Specific quote and transaction responses govern; this route does not " +
           "itemize external rail fees.",
         ranking: {
