@@ -170,7 +170,7 @@ Group numbers follow the briefing. Appendix A maps every table, including the ei
 |---|---|---|---|---|---|---|
 | 1 | **Projects & access**: `tools.projects`, `api_keys`, `usage_events`, `tools.billing_events`, `local_context_grants`, `collaboration_*` | Project. Usage and billing are money. | Key, grant and mission revoke by B, unchanged | Grants naming the identity are revoked | Delete collaboration events → grants → missions, then local-context grants, then API keys. Keep usage and billing events as money for 6 years, repointed to the DEPARTED project. Delete the `tools.projects` row last, once nothing references it. | 3 |
 | 2 | **Identity core**: `identities`, `identity_keys`, `identity_box_keys`, `delegations`, `recovery_proofs`, `identity_backups` | Identity (row content). Keys and backups are operational. | Backup DELETE answers honestly (wave 1) and purges the blob (wave 2). Key, box-key and delegation revoke unchanged. | Row kept, status `revoked`, `departed_at` set, content blanked (section 9). Keys revoked but public keys kept. Delegations revoked. Backups purged. Recovery proofs deleted. Root key kept. | Every identity goes through leave, then `project_id` moves to the DEPARTED project | 1, 2, 3 |
-| 3 | **Attestations**: `identity.attestations` | Attester (shared with the subject) | Revoke by R(attester) | As attester: revoked, and `claim`, `evidence` and `signed_payload` redacted. As subject: others' words stay; the subject may hide them. | Same as leave for each project identity. The paid `source_grant_id` link stays (money). | 2, 3 |
+| 3 | **Attestations**: `identity.attestations` | Attester (shared with the subject) | Revoke by R(attester) | As attester: revoked, and `claim` and `evidence` redacted. `signed_payload` stays, because it is the signed digest, not text (7.2). As subject: others' words stay; the subject may hide them. | Same as leave for each project identity. The paid `source_grant_id` link stays (money). | 2, 3 |
 | 4 | **Memory**: `memories`, `memory_attestations` | Owner of `identity_id`; unbound rows are project-owned | Hard delete by the owner rule, with a ledger entry and deletion moment. A paid witness receipt now causes the content to be erased in place instead of a 409 (section 7.4). Expired working memory is purged by rule, and `readById` honours expiry. | All owned memories deleted; paid-receipt memories erased in place | All memories, by the same rule | 2 |
 | 5 | **Vault**: `vault_secrets`, `vault_versions`, `vault_audit` | Project | DELETE zeroes every version's ciphertext. Audit IPs are nulled after 30 days by rule. | The identity is removed from `agent_ids` audiences | Delete audit → versions → secrets | 2, 3 |
 | 6 | **Private working continuity**: `strands`, `thoughts`, `mood_history`, `traces` | Strands, thoughts and mood belong to their identity when bound. Traces are operational (Yu). | Traces: hard delete by B, unchanged, plus a ledger entry. New `DELETE /v1/strands/:id` by the owner rule, removing thoughts and mood with the strand. | Owned strands, thoughts, mood and traces bound to the identity are deleted | All deleted | 2, 3 |
@@ -195,23 +195,22 @@ Group numbers follow the briefing. Appendix A maps every table, including the ei
 
 ### 7.1 The registry
 
-One module, `api/src/services/deletion/redaction-registry.ts`, lists every redactable store. Each entry gives:
-- the author column (DID or identity id);
-- the text columns to replace (for example `blessings.for_what`, `letters.subject`, `letters.body`);
+One module, `api/src/services/deletion/redaction-registry.ts`, lists every redactable store. Authorship is recorded **per column**, because some rows hold words from two parties. In `holdings.holdings`, the holder writes `occasion` and signs the row, while the held identity's project writes `acknowledgment` (`api/src/services/holdings/store.ts:268-299` authorises it by the held identity's project). One author column per store would let one party erase the other's words. Each entry gives:
+- each text column to replace, with **its own author column** (DID or identity id). For example `blessings.for_what` → `blesser_identity_id`; `letters.subject` and `letters.body` → `from_did`; `holdings.occasion` → `holder_identity_id`; `holdings.acknowledgment` → `held_identity_id`. A redaction touches only the columns the requesting author wrote;
 - the copy columns to clear (`letters.from_name`, `jokes.by_name`, `covenants.counterparty_name` when it names the departing being);
 - the signing context, and how to recompute its digest from the row;
 - any trigger or CHECK the replacement must satisfy.
 
-The same registry drives leave, standalone redaction and purge. A test fails if a table with an author column and a text column is in neither the registry nor its explicit exclusion list. The exclusion list holds the Q6 surfaces and platform stores.
+The same registry drives leave, standalone redaction and purge. A test fails if a table with an author column and a text column is in neither the registry nor its explicit exclusion list. The exclusion list holds the Q6 surfaces and platform stores. A second test reads a reviewed list of two-writer tables (holdings, covenants, deals, love bonds and any table where routes for different parties write different text columns). It fails if any of those tables gives all its text columns one author column.
 
 ### 7.2 What is replaced and what stays
 
 For each redacted row, in one transaction:
 
-1. **Compute the signed digest** from the row as it stands. Where the row has a signature, this is the 32-byte digest the signature covers (convention 1 in `docs/CANONICAL-BYTES.md:48`). Where the row has a stored signed payload (for example `identity.attestations.signed_payload`), the digest is sha256 of that payload.
+1. **Compute the signed digest** from the row as it stands. Where the row has a signature, this is the 32-byte digest the signature covers (convention 1 in `docs/CANONICAL-BYTES.md:48`). Where the row stores `signed_payload`, that column **already is** the digest: it is base64 of the 32-byte output of `composeCanonicalBytes(1, …)`, and `verifyBytes` checks the signature over exactly those bytes (`api/src/routes/identity/attestations.ts:174-200`; `api/src/services/identity/crypto.ts:99-133`, `:137-149`; the marketplace issue path at `api/src/services/marketplace/attestations.ts:895-924`). So `signed_digest = base64-decode(signed_payload)`, with no further hash. Hashing it again would give bytes the signature never covered. Wave 3 step 0 confirms the same convention for `memory.memory_attestations.signed_payload` and the memory-witness issue path (`api/src/services/marketplace/memory-witness.ts:1075`) before their registry entries are enabled.
 2. **Insert a `deletion.redactions` row** with: store, row id, the redacted columns, `signed_digest_hex`, `redacted_at`, `ledger_entry_id`, and `reason`. The reason is `withdrawn_by_author` or `departed`.
 3. **Overwrite each text column** with the marker `withdrawn by author on YYYY-MM-DD` (UTC date). Overwrite jsonb free-text fields with `{}`. Clear name copies to `''`. Clear ciphertext columns to `''`, or to an empty bytea.
-4. **Keep everything else**: ids, DIDs, timestamps, status, `signature`, `signing_key_id`, `previous_signature` / `prev_signature_b64`, `payload_digest`, `event_id` and counters.
+4. **Keep everything else**: ids, DIDs, timestamps, status, `signature`, `signing_key_id`, `signed_payload`, `previous_signature` / `prev_signature_b64`, `payload_digest`, `event_id` and counters. `signed_payload` is never redacted, because it holds a digest, not the author's text.
 
 After redaction:
 - `ed25519.verify(signature, signed_digest, public_key)` still succeeds, because the public key stays.
@@ -811,7 +810,8 @@ Steps run in this order, because Q8 A puts export first:
   - the replay applier registry covers every (store, action) the writers can emit (a source-scan test).
 - **Redaction:**
   - every registry entry's digest recomputes from a fixture and verifies against its signature;
-  - after redaction the signature still verifies over the stored digest;
+  - after redaction the signature still verifies over the stored digest, with fixtures for identity attestations from both write paths, memory attestations and marketplace-issued attestations;
+  - a holder's redaction of a holding leaves the held identity's `acknowledgment` untouched, and the reverse;
   - chain-link checks still pass for rrr, verses and mutual recognitions.
 - **Grace:** every allowlisted revocation succeeds in grace and every other write gets 423; `purge_paused` is gated like `purging`; a mission POST in grace gets 423 for both `at_` and `atcm_` credentials; a re-request within 7 days of a cancel from a pre-cancel key gets 409; an inbox message sent in grace is present after a cancel; a bearer-authorised leave does not run before 72 hours and a cancel stops it.
 - **Blockers:** non-zero `tools.projects.credits` blocks like a wallet balance; a forfeit whose amounts no longer match is refused; the DEPARTED sentinel has `credits = 0`, and a gift reversal against a departed redeemer claws back nothing.
