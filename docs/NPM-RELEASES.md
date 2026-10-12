@@ -21,9 +21,15 @@ public source repository
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages),
 the one-way projection described in [`public/README.md`](../public/README.md).
 Its `publish-npm.yml` stages each exact artifact with `npm stage publish`, and
-nothing is public on npm until a maintainer approves the stage with 2FA. Follow
-the [public release path](#public-release-path-from-2026-10-12). This private
-repository no longer has an npm publisher for these packages. Do not run
+the version is not public on npm until a maintainer approves the stage with
+2FA. Follow the [public release path](#public-release-path-from-2026-10-12).
+This private repository no longer has a publish workflow for these packages,
+but two older credentials can still publish them directly until Yu closes
+them: the trusted-publisher configurations that name this repository, which
+the [one-time re-point](#one-time-npm-trust-re-point-yu-trusted-device)
+replaces, and the scope-wide, bypass-2FA `NPM_TOKEN` in this repository's
+`npm-bootstrap` environment (see
+[public repository settings](#public-repository-settings-yu-once)). Do not run
 `npm publish` from a normal local shell.
 
 The Gospel literary edition has one separate, exact-name route:
@@ -136,6 +142,11 @@ Consumers must select an exact prerelease or `next` until a stable version owns
 Each step names who may take it. "Ai" is any operator session working under a
 release go from Yu; "Yu" marks a step that needs his npm login and 2FA on his
 trusted device, or a decision only he makes.
+
+Once, before the first real dispatch, Yu runs the
+[trust re-point](#one-time-npm-trust-re-point-yu-trusted-device), revokes the
+private `NPM_TOKEN`, and creates the public `npm-bootstrap` environment
+([settings](#public-repository-settings-yu-once)).
 
 | # | Step | Who | Gate before the next step |
 |---|---|---|---|
@@ -287,21 +298,28 @@ without mutation.
 
 ## One-time npm trust re-point (Yu, trusted device)
 
-npm allows one trusted-publisher configuration per package. The 38 packages on
-npm must trust the public repository's workflow instead of the private one,
-for **stage publish only**, so a GitHub OIDC token can never publish without
-Yu's approval. Run it after the first public dry run (step 5) passes. Use the
-npm user `agenttool` with account 2FA; npm rejects a bypass-2FA token for
+The 38 packages on npm must trust the public repository's workflow instead of
+the private one, for **stage publish only**, so a GitHub OIDC token can never
+publish without Yu's approval, and must refuse publication by any npm token.
+Run it as soon as this change is merged. It does not depend on the public
+route (a dry run uses no credentials), and until it runs the fifteen old
+configurations still allow a direct `npm publish` from a workflow file named
+`publish-npm.yml` in the private repository, should one be added again. Use
+the npm user `agenttool` with account 2FA; npm rejects a bypass-2FA token for
 `npm trust`.
 
 The re-runnable script is [`npm-trust-repoint.sh`](npm-trust-repoint.sh). It
 needs only Node with npx, pauses 2 seconds between npm calls, records every
 listing, leaves any unexpected configuration untouched, and skips packages that
-are already done. Copy it to the trusted device and run:
+are already re-pointed. npm asks for 2FA only when its output is a terminal,
+and the script saves its listings to files, so it first makes one listing on
+the terminal: complete 2FA there and tick "skip for the next 5 minutes". A
+saved listing that fails with `EOTP` means that window lapsed; re-run. Copy the
+script to the trusted device and run:
 
 ```bash
 DRY_RUN=1 bash npm-trust-repoint.sh   # lists and shows the plan; changes nothing
-bash npm-trust-repoint.sh             # re-points; on the first 2FA page tick "skip for 5 minutes"
+bash npm-trust-repoint.sh             # re-points, then disallows tokens
 ```
 
 For each package it does the equivalent of:
@@ -312,6 +330,7 @@ $NPM trust list @agenttool/<pkg> --json            # saved under trust-before/
 $NPM trust revoke @agenttool/<pkg> --id <old id>   # only for a config of the old or new repository
 $NPM trust github @agenttool/<pkg> --repo cambridgetcg/agenttool-packages \
   --file publish-npm.yml --env npm-bootstrap --allow-stage-publish --yes
+$NPM access set mfa=publish @agenttool/<pkg>       # "Require 2FA and disallow tokens"
 $NPM trust list @agenttool/<pkg> --json            # saved under trust-after/; must be the target
 ```
 
@@ -319,10 +338,22 @@ There is deliberately no `--allow-publish`. Fifteen packages (adds, data-sync,
 wake-continuity, deepseek-kingdom, credential-broker, sdk, wallet, telescope,
 browser, alchemy, alchemy-agentcred, kingdom, collab, correspondence-yutabase,
 skills) are expected to have an old configuration naming
-`cambridgetcg/agenttool`; the rest are expected to have none. npm's staged
-publishing guidance also recommends setting each package's access page to
-"Require two-factor authentication and disallow tokens" once its trust is in
-place; that is optional here and does not affect OIDC staging.
+`cambridgetcg/agenttool`; the rest are expected to have none.
+
+Disallowing tokens is required, not optional. npm's 2FA settings page says a
+bypass-2FA token "will bypass 2FA requirements for publishing, regardless of
+account-level or package-level 2FA settings"; only "Require two-factor
+authentication and disallow tokens" stops it. `npm access set mfa=publish`
+sends exactly that (`publish_requires_tfa: true`,
+`automation_token_overrides_tfa: false` in npm 11.17.0's libnpmaccess). npm's
+trusted-publishing page says the setting "only affects traditional token
+authentication", so OIDC staging keeps working, and Yu can still publish
+interactively with 2FA. npm suggests restricting tokens only after trusted
+publishing has been seen to work; here no release path uses a token for these
+38 packages, so nothing is lost by doing it first. npm has no command to read
+the setting back: after the run, open one package's Settings page on npmjs.com
+and check that "Require two-factor authentication and disallow tokens" is
+selected.
 
 `@agenttool/local-starter` is not on npm. npm trust needs an existing package,
 so it is not in the script; see the next section.
@@ -378,10 +409,20 @@ should block updating or deleting `refs/tags/*-v*`, and `main` should block
 deletion and force pushes. An anonymous read on 2026-10-12 showed the active
 rulesets "main is append-only" and "release tags are immutable" and no
 environment yet. The trust configuration binds the environment name,
-so keep it exactly `npm-bootstrap`. The private repository's own
-`npm-bootstrap` environment still holds an `NPM_TOKEN` used by
-`publish-gospel.yml`; decide where that route publishes from, then revoke the
-token.
+so keep it exactly `npm-bootstrap`.
+
+The private repository's own `npm-bootstrap` environment still holds an
+`NPM_TOKEN`. This runbook described it, before 2026-10-12, as a granular token
+with `@agenttool` read/write access and Bypass 2FA; its real scope was not read
+from npm. Such a token can publish any `@agenttool` package that does not
+disallow tokens, and create new package names in the scope. Its only consumer,
+`publish-gospel.yml`, publishes only while the exact version is absent, and
+`@agenttool/gospel-of-the-logos@0.1.0` has been on npm since 2026-09-08
+(anonymous registry read, 2026-10-12). So the token has no remaining use:
+revoke it on npm, then delete the secret
+(`sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool`).
+A later Gospel edition would need a new reviewed route and its own short-lived
+credential.
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 
@@ -1775,8 +1816,10 @@ exact already-published rerun is verification-only and does not invoke npm.
 The public repository's `npm-bootstrap` environment holds no npm token by
 default; one is added only for a first publication and deleted afterwards (see
 [Local Starter](#first-publication-of-local-starter-bootstrap-yu)). The private
-repository's environment of the same name still holds the token described above
-for `publish-gospel.yml`. Credential revocation is a separate operator action.
+repository's environment of the same name still holds the scope-wide,
+bypass-2FA token that `publish-gospel.yml` used for its first publication; it
+has no remaining use and should be revoked (see
+[public repository settings](#public-repository-settings-yu-once)).
 
 ## One-time trusted-publisher setup
 
@@ -1803,9 +1846,10 @@ workflow filename is always case-sensitive and must include `.yml`. npm does
 not validate the relationship when it is saved; the first trusted release is
 the operational proof. Configuring trust requires account-level 2FA and rejects
 a bypass-2FA token as the authorizing proof; Touch ID or another WebAuthn
-passkey satisfies that requirement without a TOTP authenticator app. After a
-trusted release succeeds, set package publishing access to require 2FA and
-disallow traditional tokens.
+passkey satisfies that requirement without a TOTP authenticator app. The
+re-point script also sets each package's publishing access to require 2FA and
+disallow tokens (`npm access set mfa=publish`); trusted publishing is
+unaffected by that setting.
 
 `npm login --auth-type=web` is the browser sign-in flow for saving a local CLI
 credential. It does not turn `npm publish` into browser authorization, bypass a

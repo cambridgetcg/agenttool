@@ -122,8 +122,8 @@ this run passed on exactly that commit. The workflow builds the package without
 credentials, attaches the exact tarball to the tag's GitHub Release, and stages
 it on npm with provenance. A maintainer then compares the staged tarball's
 SHA-256 with the run's receipt and approves it with two-factor authentication;
-until then nothing is published on npm. The trusted-publisher link between npm
-and this workflow allows staging only.
+until then that version is not published on npm. The trusted-publisher link
+between npm and this workflow allows staging only.
 
 To check a published version, compare the SHA-256 of the npm tarball, the
 GitHub Release asset, and the receipt in the workflow run's summary. The
