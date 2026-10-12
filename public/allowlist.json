@@ -227,8 +227,7 @@
   "exclude": [
     "**/.DS_Store",
     "**/node_modules/**",
-    "**/test-results/**",
-    "packages/sdk-py/SOUL.md"
+    "**/test-results/**"
   ],
   "held": []
 }

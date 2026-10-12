@@ -360,7 +360,6 @@ def verify_sdist():
             prefix + "README.md",
             prefix + "LICENSE",
             prefix + "NOTICE",
-            prefix + "SOUL.md",
             prefix + "src/agenttool/__init__.py",
             prefix + "src/agenttool/SOUL.md",
         }

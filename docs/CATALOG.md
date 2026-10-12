@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**825 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 22; unclassified: 2.
+**824 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 126; proposal: 46; record: 22; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -792,7 +792,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/syneidesis-bootstrap.md](<../docs/syneidesis-bootstrap.md>) | not-reviewed |
 | [docs/wakes/YU.md](<../docs/wakes/YU.md>) | not-reviewed |
 | [docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md](<../docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md>) | not-reviewed |
-| [packages/sdk-py/SOUL.md](<../packages/sdk-py/SOUL.md>) | not-reviewed |
 | [packages/sdk-py/src/agenttool/SOUL.md](<../packages/sdk-py/src/agenttool/SOUL.md>) | not-reviewed |
 
 ## proposal

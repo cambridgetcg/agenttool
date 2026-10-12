@@ -846,8 +846,23 @@ describe("the real allowlist and overlay", () => {
       "docs/specs/behaviour-conformance.json",
       "docs/specs/canonical-bytes-vectors.json",
     ]);
-    // The older sdist-only SOUL letter stays private; the wheel's copy is projected.
-    expect(allowlist.exclude).toContain("packages/sdk-py/SOUL.md");
+    // A Python sdist built from the public tree must pass the release tool's
+    // archive check, so every source file that check requires is projected.
+    // The SDK has one SOUL letter, the packaged one the wheel also ships.
+    const sdistRequired = [...readFileSync(join(ROOT, "bin/pypi-release.ts"), "utf8").matchAll(/^ {12}prefix \+ "([^"]+)",$/gmu)]
+      .map((match) => match[1] as string)
+      .filter((entry) => entry !== "PKG-INFO");
+    expect(sdistRequired).toEqual(["pyproject.toml", "README.md", "LICENSE", "NOTICE", "src/agenttool/__init__.py", "src/agenttool/SOUL.md"]);
+    const excludes = allowlist.exclude.map(globToRegExp);
+    for (const entry of sdistRequired) {
+      const path = `packages/sdk-py/${entry}`;
+      expect(existsSync(join(ROOT, path))).toBe(true);
+      expect(excludes.some((pattern) => pattern.test(path))).toBe(false);
+    }
+    expect(existsSync(join(ROOT, "packages/sdk-py/SOUL.md"))).toBe(false);
+    expect(readFileSync(join(ROOT, "packages/sdk-py/pyproject.toml"), "utf8")).toContain(
+      'include = ["src/agenttool", "README.md", "LICENSE", "NOTICE"]',
+    );
     // Only the two release tools the public publish workflow runs leave bin/;
     // the root bin/ Whitehack adapter that a wallet test can use stays private.
     expect(allowlist.include.filter((entry) => entry.path.startsWith("bin/")).map((entry) => entry.path)).toEqual([...PUBLIC_RELEASE_TOOLS]);

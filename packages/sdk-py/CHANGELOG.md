@@ -65,3 +65,6 @@ by PyPI (`https://pypi.org/project/agenttool-sdk/`).
   the public source repository
   [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
   and the support page `https://docs.agenttool.dev/support`.
+- The sdist no longer carries a second copy of `SOUL.md` at its root. Its
+  letter is `src/agenttool/SOUL.md`, the one the wheel ships, so an sdist
+  built from the public source repository has the same contents.

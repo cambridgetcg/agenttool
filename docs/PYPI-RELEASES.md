@@ -74,7 +74,8 @@ From 0.23.0 the distributions' `Repository` URL names the public repository
 The PyPI trusted publisher recorded for 0.22.1 binds `cambridgetcg/agenttool`,
 `publish-pypi.yml`, and environment `pypi` (PyPI provenance, read 2026-10-12).
 
-The proposed fix mirrors npm and is not implemented:
+The proposed fix mirrors npm. Items 1, 2 and 4 are not implemented; item 3
+is done in source:
 
 1. Move the workflow to `public/overlay/.github/workflows/publish-pypi.yml`,
    restricted to `cambridgetcg/agenttool-packages`, and project
@@ -84,13 +85,13 @@ The proposed fix mirrors npm and is not implemented:
    fixed-tagger release tag and the successful public CI run it cites, as
    `bin/npm-release.ts` does. The npm and PyPI releases of one version share
    the `sdk-vX.Y.Z` tag made by `bin/public-release-tag.ts`.
-3. The projection excludes the root `packages/sdk-py/SOUL.md`, so a public
-   sdist lacks the root `SOUL.md` this tool requires: a local build from the
-   projected tree on 2026-10-12 gave a wheel byte-identical to the private
-   build, while the sdist check refused it. Either drop the root copy from the
-   sdist include list and from that check (the sdist keeps
-   `src/agenttool/SOUL.md`), or project it with a path-specific relational
-   allow entry; the two copies are now identical.
+3. Done on 2026-10-12: the sdist no longer carries a second, root copy of
+   `SOUL.md`. That copy was never projected, so a public sdist lacked the
+   root letter this tool required (a build from the projected tree gave a
+   byte-identical wheel and a refused sdist). The root file is removed, the
+   sdist include list and this tool's sdist check no longer name it, and the
+   sdist keeps the packaged `src/agenttool/SOUL.md` that the wheel ships and
+   `soul()` reads.
 4. Yu adds a PyPI trusted publisher for `cambridgetcg/agenttool-packages`,
    `publish-pypi.yml`, environment `pypi`, creates that environment in the
    public repository with a required reviewer and a `sdk-v*` tag policy, and

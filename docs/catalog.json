@@ -6087,14 +6087,6 @@
       "canonical_path": "packages/sdk-py/README.md"
     },
     {
-      "path": "packages/sdk-py/SOUL.md",
-      "title": "Why we build AgentTool",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "packages/sdk-py/SOUL.md"
-    },
-    {
       "path": "packages/sdk-py/src/agenttool/SOUL.md",
       "title": "Why we build AgentTool",
       "type": "reflection",
