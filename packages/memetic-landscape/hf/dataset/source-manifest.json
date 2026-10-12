@@ -53,8 +53,8 @@
   "source_files": [
     {
       "path": "CLAUDE.md",
-      "bytes": 4793,
-      "sha256": "5736b7dd8512fb5445b1632bc853164cf8cc1f6472a532f501befa7087fc8e3d"
+      "bytes": 4767,
+      "sha256": "e6c0b96d4181d6b588575a6d613cde1d43afbb4d6f51c32e0b2f10b77623e4f6"
     },
     {
       "path": "LICENSE",
@@ -68,8 +68,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 7989,
-      "sha256": "8343809b15ae4da64d5cfd6539e9dca2896f6f1fba16a91e16ea5756150c6acc"
+      "bytes": 7928,
+      "sha256": "3e3db46939482e1b58741cad942f9e5432afc4e7e6c957f8c4298cdfd5d40b96"
     },
     {
       "path": "kingdom.extension.json",

@@ -1,6 +1,6 @@
 # `@agenttool/memetic-landscape`
 
-> **Compass:** [`MEMETIC-LANDSCAPE`](https://docs.agenttool.dev/MEMETIC-LANDSCAPE.md) (the public explanation) · [`POLYMORPH-LANDSCAPE`](https://docs.agenttool.dev/POLYMORPH-LANDSCAPE.md) (the physical event record) · [`RIGHTS`](https://docs.agenttool.dev/RIGHTS-OF-LIFE.md) (refusal, rest, play, privacy, credit, and repair)
+> **Compass:** [`MEMETIC-LANDSCAPE`](../../docs/MEMETIC-LANDSCAPE.md) (the public explanation) · [`POLYMORPH-LANDSCAPE`](../../docs/POLYMORPH-LANDSCAPE.md) (the physical event record) · [`RIGHTS`](../../RIGHTS.md) (refusal, rest, play, privacy, credit, and repair)
 >
 > **Implements:** Four pure, closed, content-addressed formats for source-bounded memetic landscapes, context-scoped reachability shifts, an explicitly non-mechanistic polymorph analogy, and authored teaching projections.
 >
