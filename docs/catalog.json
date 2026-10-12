@@ -6087,6 +6087,14 @@
       "canonical_path": "packages/scriptwriter/README.md"
     },
     {
+      "path": "packages/sdk-py/CHANGELOG.md",
+      "title": "Changelog — agenttool-sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-py/CHANGELOG.md"
+    },
+    {
       "path": "packages/sdk-py/CLAUDE.md",
       "title": "agenttool-sdk-py",
       "type": "orientation",
@@ -6117,6 +6125,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/sdk-py/src/agenttool/SOUL.md"
+    },
+    {
+      "path": "packages/sdk-ts/CHANGELOG.md",
+      "title": "Changelog — @agenttool/sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-ts/CHANGELOG.md"
     },
     {
       "path": "packages/sdk-ts/CLAUDE.md",

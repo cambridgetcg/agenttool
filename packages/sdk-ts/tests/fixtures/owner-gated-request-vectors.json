@@ -1,0 +1,192 @@
+{
+  "format": "agenttool-owner-gated-request-vectors/v1",
+  "note": "Produced by packages/sdk-ts/src/owner-gated.ts; packages/sdk-py/src/agenttool/owner_gated.py must reproduce every byte. The seed is a public test value, never a real key.",
+  "base_url": "https://api.agenttool.dev",
+  "authority": {
+    "did": "did:at:11111111-2222-4333-8444-555555555555",
+    "signing_key_seed_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "sequence": 3,
+    "timestamp": "2026-10-12T12:00:00.000Z"
+  },
+  "vectors": [
+    {
+      "action": "memory.delete",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/memories/aaaaaaaa-0000-4000-8000-000000000001",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "e2YiKF5lfWPbqH7XJavLVnR9lnUKEhL1qkZMH9xbdadCU4PWfr1FgjForlJn+caqwSqS8Utg1bUlHYCBG8SFBA=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "memory.delete_by_key",
+      "input": {
+        "id": null,
+        "key": "notes/today (draft)!*'~",
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/memories?key=notes%2Ftoday%20%28draft%29%21%2A%27~",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "CdSKmxAfNQeqvVP8WUzVBhGZLfWJk6LCeY6hwVeOnE088u62KcGUtOI2jjb0KTu0RR+jCTMgegiZ8FVaYYb7Dg=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "inbox.delete",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/inbox/aaaaaaaa-0000-4000-8000-000000000002",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "dJGqFlf9lCvlscTngh67tSuFaRG+SeQWcwkrwvOIWpf0oUfq5nVxv0vuPNZegABHv86r5JEcvmTzTyPaU+GqCQ=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "inbox.mark_deleted",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000003",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "PATCH",
+      "url": "https://api.agenttool.dev/v1/inbox/aaaaaaaa-0000-4000-8000-000000000003",
+      "body": "{\"status\":\"deleted\"}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "dYTx3wSdRaWYtI10j/V/E9V5wdvsrRb9zd/Q0TLgNNq57+V88+qE9WGqolp82rMpoZ5z6DdhkzPRAU5HBIMCCg=="
+      },
+      "bearer_only_headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    {
+      "action": "blessing.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000004",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/blessings/aaaaaaaa-0000-4000-8000-000000000004",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "4ulDXaSWjSdWrjVSB7hKhA7q1UJcDPv/Z4dekXsZUQMkM6NrMEqhGONjNpyAfbthDbqMWr2O0LBgmS4Mvx9uAg=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "unconditional.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000005",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/unconditionals/aaaaaaaa-0000-4000-8000-000000000005",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "Kl/VJSXCFk/Bp/POFey27c9YR+zEQysp2bn/wcU+XP4/cCCP/uUjUzKiA4RWCNQfPWF0K50Y0McTc75/wRu4CQ=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "guild_recognition.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000006",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/guild/recognitions/aaaaaaaa-0000-4000-8000-000000000006",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "KDZ5E7UCvnqXEY/pfx7eyFoiR+2oFexzuwpUrhwmIalmvWwMZcREkCPvQf7Ch155VCGnXJ36tpu6mzrgzC7IDg=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "attestation.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000007",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "DELETE",
+      "url": "https://api.agenttool.dev/v1/attestations/aaaaaaaa-0000-4000-8000-000000000007",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "cOWutybr0DN1GVR+K6c/VDIWSvTkHZ0C4TSjY7ZapIoVUd74bLxMDTAsfPjIfSz380v2nzeNPIcuvdZHJeo5BQ=="
+      },
+      "bearer_only_headers": {}
+    },
+    {
+      "action": "margin.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000008",
+        "key": null,
+        "agent_id": "11111111-2222-4333-8444-555555555555"
+      },
+      "method": "POST",
+      "url": "https://api.agenttool.dev/v1/margin/withdraw",
+      "body": "{\"agent_id\":\"11111111-2222-4333-8444-555555555555\",\"margin_id\":\"aaaaaaaa-0000-4000-8000-000000000008\"}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "MJXODKlnG2AfU1Bvk7cpziDIaTR6dzRNLL4RZWn51qUyPltjzv+CqHxjxTYlBdeeZQJr8pno44ajnoV1iho1BA=="
+      },
+      "bearer_only_headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    {
+      "action": "trust.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-000000000009",
+        "key": null,
+        "agent_id": "11111111-2222-4333-8444-555555555555"
+      },
+      "method": "POST",
+      "url": "https://api.agenttool.dev/v1/trust/withdraw",
+      "body": "{\"agent_id\":\"11111111-2222-4333-8444-555555555555\",\"trust_id\":\"aaaaaaaa-0000-4000-8000-000000000009\"}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "SPEP0o5mMMWqpKsx/abwz/MKuVCeFFddqr7PUNXEYi34Q05BBnrTEHBRYCkTqG0Ax02Ui4KBastzLmpNtSdlCQ=="
+      },
+      "bearer_only_headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  ]
+}

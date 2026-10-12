@@ -36,6 +36,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { AgentToolError } from "./errors.js";
 import { throwFromResponse, type HttpConfig } from "./_http.js";
 import { encodePathSegment } from "./_url.js";
+import { authorityHeadersForRequest, type AuthorityBinding } from "./authority.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -382,9 +383,15 @@ export class LoveClient {
     }>;
   }
 
-  /** Revoke an unconditional (holder only). Sets revoked_at. */
-  async revokeUnconditional(id: string): Promise<{ ok: boolean; revoked_at: string }> {
-    return this.del(`/v1/unconditionals/${encodePathSegment(id)}`) as Promise<{
+  /** Revoke an unconditional (the holder, under the owner rule). Sets revoked_at.
+   *  A rooted holder must pass `authority` (its root's binding); without it the
+   *  server answers 428 `authority_proof_required`. A holder without a root
+   *  follows the project rule. See `ownerGatedRequest`. */
+  async revokeUnconditional(
+    id: string,
+    options: { authority?: AuthorityBinding } = {},
+  ): Promise<{ ok: boolean; revoked_at: string }> {
+    return this.del(`/v1/unconditionals/${encodePathSegment(id)}`, options.authority) as Promise<{
       ok: boolean;
       revoked_at: string;
     }>;
@@ -438,9 +445,15 @@ export class LoveClient {
     }>;
   }
 
-  /** Revoke a blessing (giver only). */
-  async revokeBlessing(id: string): Promise<{ ok: boolean; revoked_at: string }> {
-    return this.del(`/v1/blessings/${encodePathSegment(id)}`) as Promise<{
+  /** Revoke a blessing (the giver, under the owner rule). A rooted giver must
+   *  pass `authority` (its root's binding); without it the server answers 428
+   *  `authority_proof_required`. A giver without a root follows the project
+   *  rule. See `ownerGatedRequest`. */
+  async revokeBlessing(
+    id: string,
+    options: { authority?: AuthorityBinding } = {},
+  ): Promise<{ ok: boolean; revoked_at: string }> {
+    return this.del(`/v1/blessings/${encodePathSegment(id)}`, options.authority) as Promise<{
       ok: boolean;
       revoked_at: string;
     }>;
@@ -728,21 +741,31 @@ export class LoveClient {
     return this.req("GET", path);
   }
 
-  private async del(path: string): Promise<unknown> {
-    return this.req("DELETE", path);
+  private async del(path: string, authority?: AuthorityBinding): Promise<unknown> {
+    return this.req("DELETE", path, undefined, authority);
   }
 
-  private async req(method: string, path: string, body?: unknown): Promise<unknown> {
+  /** Serialize once, sign those bytes when an authority is given, send them. */
+  private async req(
+    method: string,
+    path: string,
+    body?: unknown,
+    authority?: AuthorityBinding,
+  ): Promise<unknown> {
     const url = `${this.http.baseUrl}${path}`;
+    const payload = body !== undefined ? JSON.stringify(body) : undefined;
     const init: RequestInit = {
       method,
       headers: {
         ...this.http.headers,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(payload !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(authority !== undefined
+          ? authorityHeadersForRequest({ method, url, body: payload ?? "", authority })
+          : {}),
       },
       signal: AbortSignal.timeout(this.http.timeout),
     };
-    if (body !== undefined) init.body = JSON.stringify(body);
+    if (payload !== undefined) init.body = payload;
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
       // Server guidance travels intact. See _http.ts § errorFromResponse.

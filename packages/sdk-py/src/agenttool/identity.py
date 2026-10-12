@@ -756,9 +756,25 @@ class IdentityClient:
         data = resp.json()
         return data.get("attestations", data)
 
-    def revoke_attestation(self, attestation_id: str) -> Dict[str, Any]:
-        """Revoke an attestation."""
-        resp = self._http.delete(self._url(f"/v1/attestations/{_path_segment(attestation_id)}"))
+    def revoke_attestation(
+        self,
+        attestation_id: str,
+        *,
+        authority: Optional[IdentityAuthority] = None,
+    ) -> Dict[str, Any]:
+        """Revoke an attestation (the attester, under the owner rule).
+
+        A rooted attester must pass ``authority`` (its root's binding);
+        without it the server answers 428 ``authority_proof_required``. An
+        attester without a root follows the project rule. See
+        :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_bound(
+            self._http,
+            "DELETE",
+            self._url(f"/v1/attestations/{_path_segment(attestation_id)}"),
+            authority=authority,
+        )
         if resp.status_code != 200:
             # Server guidance travels intact. See exceptions.py
             # § _error_from_response.

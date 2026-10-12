@@ -616,6 +616,8 @@ export type {
   CanonicalIdentityAuthorityOpts,
   CanonicalIdentityReadAuthorityOpts,
 } from "./authority.js";
+export { OWNER_GATED_ROUTES, ownerGatedRequest } from "./owner-gated.js";
+export type { OwnerGatedAction, OwnerGatedRequest, OwnerGatedRequestOptions } from "./owner-gated.js";
 export type {
   CanonicalAtRestInput,
   SignAtRestOpts,

@@ -80,6 +80,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 
 from .exceptions import AgentToolError, raise_from_response
 from ._url import _path_segment
+from .owner_gated import _send_signed
 
 HKDF_INFO = b"agenttool-inbox-v1"
 SEP = b"\x00"
@@ -563,18 +564,50 @@ class InboxClient:
         self._check(resp, "inbox.cosign")
         return resp.json()
 
-    def patch(self, id: str, status: str) -> Dict[str, Any]:
-        """Update message status — one of unread/read/archived/spam/deleted."""
-        resp = self._http.patch(
+    def patch(
+        self,
+        id: str,
+        status: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Update message status — one of unread/read/archived/spam/deleted.
+
+        ``deleted`` erases the content, like :meth:`delete`, and is
+        owner-gated the same way: pass the recipient's ``authority`` when it
+        is agent-rooted.
+        """
+        resp = _send_signed(
+            self._http,
+            "PATCH",
             self._url(f"/v1/inbox/{_path_segment(id)}"),
-            json={"status": status},
+            payload={"status": status},
+            authority=authority,
         )
         self._check(resp, "inbox.patch")
         return resp.json()
 
-    def delete(self, id: str) -> Dict[str, Any]:
-        """Soft delete (status='deleted')."""
-        resp = self._http.delete(self._url(f"/v1/inbox/{_path_segment(id)}"))
+    def delete(
+        self,
+        id: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Delete a message and erase its content.
+
+        The sealed body, nonce, ephemeral key, subject, refs and metadata are
+        erased; the row stays with its signature and cannot be restored. The
+        recipient owns the message: a rooted recipient must pass
+        ``authority`` (its root's binding), or the server answers 428
+        ``authority_proof_required``. See
+        :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_signed(
+            self._http,
+            "DELETE",
+            self._url(f"/v1/inbox/{_path_segment(id)}"),
+            authority=authority,
+        )
         self._check(resp, "inbox.delete")
         return resp.json()
 
