@@ -73,7 +73,10 @@ A few files outside `packages/` are here because package tests or builds read
 them: the specification and vector files under [`docs/specs/`](docs/specs),
 three documents under [`docs/`](docs), the provider-adapter review packet
 under [`review/provider-adapters/v1/`](review/provider-adapters/v1), and
-[`.gitattributes`](.gitattributes).
+[`.gitattributes`](.gitattributes). The npm release tool
+[`bin/npm-release.ts`](bin/npm-release.ts) and its archive inspector
+[`bin/build-love-packages.ts`](bin/build-love-packages.ts) are here because
+this repository's release workflow runs them.
 
 ## Working on a package
 
@@ -107,6 +110,24 @@ python -m pytest -q
 `PROJECTION.json`). The wheel's letter, `src/agenttool/SOUL.md`, is here, so
 `agenttool.soul()` works the same, and a source distribution built here
 carries only that letter.
+
+## Releases
+
+npm packages are released from this repository by
+[`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml), a
+manual workflow that runs only on an annotated `<package>-v<version>` tag. A
+tag is made only on a projection commit whose CI passed; its message names the
+private source commit and the CI run. The workflow builds the package without
+credentials, attaches the exact tarball to the tag's GitHub Release, and stages
+it on npm with provenance. A maintainer then compares the staged tarball's
+SHA-256 with the run's receipt and approves it with two-factor authentication;
+until then nothing is published on npm. The trusted-publisher link between npm
+and this workflow allows staging only.
+
+To check a published version, compare the SHA-256 of the npm tarball, the
+GitHub Release asset, and the receipt in the workflow run's summary. The
+workflow also asks npm for a provenance statement, which names this
+repository, the workflow, and the tag commit.
 
 ## Checking a projection
 

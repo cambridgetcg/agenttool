@@ -9,8 +9,17 @@ publishes anything by itself.
 | Path | Projected? | Role |
 |---|---|---|
 | [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. |
-| [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, and the public guard with its allow entries. |
+| [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the public guard with its allow entries. |
 | [`private-guard/`](private-guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |
+
+Top-level areas such as `bin/`, `api/`, `apps/`, and `.github/` never leave
+this repository, whatever the allowlist says. The one exception is
+`PUBLIC_RELEASE_TOOLS` in [`bin/project-public.ts`](../bin/project-public.ts):
+`bin/npm-release.ts` and `bin/build-love-packages.ts`, each as an exact file
+entry, because the public repository's publish workflow runs them. They import
+nothing but each other and Node or Bun built-ins. npm releases now run from the
+public repository; see [NPM-RELEASES](../docs/NPM-RELEASES.md#public-release-path-from-2026-10-12)
+and `bin/public-release-tag.ts`, which tags a green projection commit.
 
 ## Projecting
 
