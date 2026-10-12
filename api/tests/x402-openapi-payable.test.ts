@@ -62,8 +62,8 @@ describe("x402PayablePathTemplate", () => {
 });
 
 describe("OpenAPI carries every payable row", () => {
-  test("the table has 21 route_cost rows and the fragment enumerates all of them", () => {
-    expect(ROUTE_COST).toHaveLength(21);
+  test("the table has 20 route_cost rows and the fragment enumerates all of them", () => {
+    expect(ROUTE_COST).toHaveLength(20);
     expect(X402_PAYABLE_ROUTES.filter((r) => r.kind === "top_up")).toHaveLength(1);
   });
 

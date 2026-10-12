@@ -98,6 +98,18 @@ const patchSchema = z.object({
   dispute_policy: z.record(z.unknown()).nullable().optional(),
 }).strict();
 
+/** "archived" or "paused" when a PATCH changes nothing but the status to an
+ *  off-switch; otherwise null. Off-switches are free (Q8 A: leaving costs
+ *  nothing); every other change keeps the update price. */
+export function statusOnlyOffSwitch(
+  patch: z.infer<typeof patchSchema>,
+): "archived" | "paused" | null {
+  const changed = Object.entries(patch).filter(([, value]) => value !== undefined);
+  if (changed.length !== 1 || changed[0]![0] !== "status") return null;
+  const status = changed[0]![1];
+  return status === "archived" || status === "paused" ? status : null;
+}
+
 const sealedSchema = z.object({
   ct: z.string().min(1),
   nonce: z.string().min(1),
@@ -485,7 +497,17 @@ app.patch("/:id", async (c) => {
     return credentialRefusal(c, mergedViolation);
   }
 
-  await charge(c, MARKETPLACE_PRICING.update, "listing.update");
+  // Pausing or archiving is the seller's off-switch, and leaving is free
+  // (billing/marketplace-pricing.ts). Any other field in the same patch is
+  // an ordinary update and keeps the update price.
+  const offSwitch = statusOnlyOffSwitch(parsed.data);
+  if (offSwitch === "archived") {
+    await charge(c, MARKETPLACE_PRICING.archive, "listing.archive");
+  } else if (offSwitch === "paused") {
+    await charge(c, MARKETPLACE_PRICING.pause, "listing.pause");
+  } else {
+    await charge(c, MARKETPLACE_PRICING.update, "listing.update");
+  }
 
   try {
     const updated = await patchListing(c.var.project.id, id, parsed.data);
@@ -498,8 +520,15 @@ app.patch("/:id", async (c) => {
 });
 
 // ── DELETE /v1/listings/:id (archive) ─────────────────────────────────
+//  Free (MARKETPLACE_PRICING.archive = 0). Ownership is resolved before the
+//  zero-credit usage event is written, so an unknown or foreign id is a plain
+//  404 that records nothing.
 app.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const existing = await getListing(id);
+  if (!existing || existing.project_id !== c.var.project.id) {
+    throw new HTTPException(404, { message: "listing_not_found" });
+  }
   await charge(c, MARKETPLACE_PRICING.archive, "listing.archive");
   try {
     const updated = await patchListing(c.var.project.id, id, { status: "archived" });
