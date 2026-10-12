@@ -144,7 +144,7 @@ Actors:
 | Cancel project deletion | B, or any rooted identity of the project, in `awaiting_consent` or `grace`. Not once the purge has started. | — | 3 |
 | Run a purge | S or O (an operator runner in wave 3), only for a request whose grace has ended | — | 3 |
 | Retention rules: expired working memory, vault-audit IP, ledger compaction, 6-year money purge | S, by the rule published at `/public/retention` | None run | 2 (first three); the money purge needs Yu's date (section 11.3) |
-| Replay the ledger after a restore | O, in maintenance only | — | 2 |
+| Replay the ledger after a restore | O, in maintenance only. Voiding an entry needs two operators and a written reason (13.4). | — | 2 |
 | Platform takedown (gallery) | O | O | Unchanged |
 | Third-party notices | S, as a side effect of leave, redaction or purge | — | 3 |
 | Read a project-deletion receipt | Holder of the receipt token | — | 3 |
@@ -362,6 +362,7 @@ Doctrine text that changes in wave 3. Each item changes in the same PR as the be
 - `POST /v1/project/deletion/consents` takes one root's proof over `project-deletion/v1 ‖ project_id ‖ request_id ‖ requested_at`, through `authorizeIdentityMutation`. Enrolled guests are included: their content is theirs, so a project cannot be deleted under them. A guest that does not consent can leave first, and the request then stops waiting for it.
 - **The set is recomputed at the transition.** The transaction that would move the request to `grace` recomputes the consent set under a row lock on the request. Any member added since the request also has to consent before grace starts. While a request is in `awaiting_consent` or `grace`, guest enrollment and new rooted registrations into the project get 409 `project_deletion_pending`, so the set cannot grow behind the request.
 - `GET /v1/project/deletion` (B) reports state, timers, consents, blockers and coverage.
+- Every state change here (request, each consent, grace start, cancel, lapse) writes a lifecycle ledger entry in the same transaction (13.2), so a backup restore replays it.
 - `POST /v1/project/deletion/cancel` (B or any rooted identity) works in `awaiting_consent` and `grace`.
 
 ### 10.3 Grace (30 days)
@@ -427,6 +428,8 @@ Each step writes a `deletion.store_receipts` row with these fields:
 - `request_id`, `store`;
 - `action`: `deleted`, `purged_content`, `redacted`, `pseudonymised`, `kept_permanent` or `kept_money_until`;
 - `row_count`, `row_ids_sha256`, `ledger_entry_id`, `completed_at`.
+
+For money stores, `row_ids_sha256` is an HMAC under a random **receipt hash key** created with the request and kept in `deletion.project_requests`. The receipt response includes the key, so the holder can check its own ids. The key is destroyed when receipts compact at 90 days. After that, nobody can hash candidate wallet ids and match them against a receipt, so the receipt cannot re-link a DID to its pseudonymised wallets (11.2).
 
 The whole set is fetched with the receipt token at `GET /public/deletion-receipts/:token` for 90 days after purge. It holds no content and no names. Where a platform receipt key is configured, the set is signed with it. Where none is, the signature is null and the response says so, following the embassy receipt pattern. After 90 days the receipts compact to counts.
 
@@ -605,10 +608,18 @@ CREATE TABLE deletion.ledger (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   scope               TEXT NOT NULL CHECK (scope IN ('record','class','identity','project','retention')),
   action              TEXT NOT NULL CHECK (action IN
-                        ('delete','purge_content','redact','tombstone','hide','unhide','pseudonymise','unlink')),
-  store               TEXT NOT NULL,                -- registry key, e.g. 'memory.memories'
-  row_ids             TEXT[] NOT NULL DEFAULT '{}', -- primary keys only; '{}' for rule entries and after compaction
-  row_ids_sha256      TEXT NOT NULL,                -- sha256 of sorted NUL-joined row_ids; kept after compaction
+                        ('delete','purge_content','redact','tombstone','hide','unhide','pseudonymise','unlink',
+                         -- lifecycle (no erase; replayed so a restore cannot undo a request, consent or cancel)
+                         'leave_confirm','leave_cancel','request_open','consent','grace_start','cancel','lapse',
+                         'purge_claim','void')),
+  store               TEXT NOT NULL,                -- registry key, e.g. 'memory.memories'; 'lifecycle' for lifecycle rows
+  predicate           JSONB,                        -- scope predicate for project-scope purges, e.g. {"project_id": …}
+  row_ids             TEXT[] NOT NULL DEFAULT '{}', -- UUID keys as they are; non-UUID keys as HMAC(row_key_salt, key);
+                                                    -- always '{}' for money stores, rule entries, predicate entries
+                                                    -- and after compaction
+  row_key_salt        TEXT,                         -- per-entry random salt, when any key is non-UUID
+  row_ids_sha256      TEXT NOT NULL,                -- sha256 of sorted NUL-joined row_ids; for money stores an HMAC
+                                                    -- under the request's receipt hash key (10.6); kept after compaction
   row_count           INTEGER NOT NULL CHECK (row_count >= 0),
   rule_id             TEXT,                         -- scope='retention': e.g. 'vault_audit_ip_30d'
   rule_cutoff         TIMESTAMPTZ,                  -- the predicate's cutoff, so replay re-runs the same rule
@@ -620,15 +631,18 @@ CREATE TABLE deletion.ledger (
   authority_sequence  BIGINT,
   prev_hash           TEXT NOT NULL,                -- entry_hash of seq-1; '' for seq 1
   entry_hash          TEXT NOT NULL UNIQUE,         -- sha256('agenttool-deletion-ledger/v1' 0x00 seq 0x00 entry_id 0x00 … 0x00 prev_hash)
+  entry_mac           TEXT NOT NULL,                -- HMAC-SHA256(ledger key, entry_hash); see Writes
   mirrored_at         TIMESTAMPTZ,
   replayed_at         TIMESTAMPTZ,
   compacted_at        TIMESTAMPTZ
 );
 ```
 
-- **Writes.** One writer helper, `appendLedgerEntry(tx, …)`, runs inside the erasing transaction. It takes `pg_advisory_xact_lock(<ledger key>)`, reads the head, and inserts `seq = head + 1` with the chained hash. Deletes are low-volume, so serialising them is acceptable. A pg_cron rule writes its entry through a SQL function with the same canonical bytes, using `pgcrypto` `digest()`. A parity test checks the TypeScript and SQL hashes match.
-- **Guard trigger.** It refuses every DELETE. It refuses every UPDATE except: `mirrored_at` from NULL; `replayed_at` from NULL; and compaction (`row_ids → '{}'` with `compacted_at` set) for entries older than the replay horizon.
-- **No content.** No names, text, keys or memory keys. Entries hold primary keys, identity ids and project ids. For a tombstone, that is the same fact the public line already states. The table has no public route.
+- **Writes.** One writer helper, `appendLedgerEntry(tx, …)`, runs inside the erasing transaction. It takes `pg_advisory_xact_lock(<ledger key>)`, reads the head, and inserts `seq = head + 1` with the chained hash. Deletes are low-volume, so serialising them is acceptable. A pg_cron rule writes its entry through a SQL function with the same canonical bytes, using `pgcrypto` `digest()` and `hmac()`. A parity test checks the TypeScript and SQL hashes and MACs match.
+- **Entries are authenticated.** `entry_mac` is an HMAC under a ledger key held in Supabase Vault, readable by the SQL append function and by the API. The mirror credential and the sweep never hold it, so neither can forge an entry that replay will accept (13.4).
+- **Lifecycle is ledgered.** Each step of a leave (confirm, cancel) and of a project deletion (request, each consent, grace start, cancel, lapse, the runner's claim) writes a lifecycle entry in the same transaction as its state change. Replay re-applies them (13.4). Without them, a restore could bring back a cancelled request in `grace` and let the runner purge against the owner's cancel, or lose a request made after the backup while its erasures replay.
+- **Guard trigger.** It refuses every DELETE except one maintenance case (13.4 step 0). It refuses every UPDATE except: `mirrored_at` from NULL; `replayed_at` from NULL; and compaction (13.5) for entries older than the replay horizon.
+- **No content.** No names, text, keys or memory keys. Entries hold UUID primary keys, identity ids and project ids. Some purged stores have caller-chosen or content-derived keys: `episodes.series` uses a slug (`api/src/db/schema/episodes-participation.ts:24`); `collab.mutation_receipts` includes a free-text `idempotency_key` and `collab.operation_slots` uses free-text `(operation, environment)` (`api/migrations/20260723T210000_collab_relay.sql`, the two `PRIMARY KEY` clauses); and `virality.vibes.vibe_id` is a content sha256 (`api/src/db/schema/virality.ts:41`). Such keys are stored only as `HMAC(row_key_salt, key)`, and the replay applier matches by recomputing that HMAC within the scoped project. Project-scope purge steps record their `predicate` instead of row ids. Money-store entries never hold row ids, so nothing in the ledger can re-link a pseudonymised money row (11.2). For a tombstone, the entry states the same fact the public line already states. The table has no public route.
 
 ### 13.3 The off-database mirror
 
@@ -638,34 +652,39 @@ A restore rolls the ledger back with everything else, so entries must also live 
   - private;
   - write-once objects (object lock, or a credential that cannot overwrite);
   - a lifecycle deletion at 30 days.
-- **What.** `ledger/v1/<seq, 12 digits>-<entry_id>.json`, holding the entry's canonical JSON. That is ids and hashes only.
+- **What.** `ledger/v1/<seq, 12 digits>-<entry_id>.json`, holding the entry's canonical JSON with its `entry_mac`. That is ids, hashes and the MAC only.
 - **When.**
   1. In-request, after the erasing transaction commits, the API pushes every unmirrored entry in seq order (not only its own) and sets `mirrored_at`.
-  2. A scheduled sweep catches failures. That is either a GitHub Actions workflow with a write-only credential, or `bin/deletion-ledger-mirror.ts` run by an operator.
+  2. A scheduled sweep catches failures. That is either a GitHub Actions workflow with a write-only credential, or `bin/deletion-ledger-mirror.ts` run by an operator. The sweep copies entries it reads; it holds no ledger key.
 
   The object key is the entry's identity and the bytes are fixed, so re-sending is safe.
+- **The purge waits for the mirror.** The purge runner does not claim a request, or start its next step, while any ledger entry is unmirrored. Every lifecycle and erase entry before a step is therefore already off-database when that step runs.
 - **Lag.** The operator readback reports the oldest unmirrored entry. `/public/retention` states the mirror's purpose and window, but not the lag.
 
 ### 13.4 Replay after a restore
 
 Run in maintenance, with the API scaled to zero or behind the maintenance contract in `docs/DEPLOY-PROCEDURE.md`, before writes reopen:
 
+0. **Stop in-database writers first.** pg_cron starts with the restored database, and scaling the API down does not stop it. The first post-restore action sets `deletion.settings.replay_required = true`. `append_ledger_entry()` and every deletion cron rule refuse while it is set. The procedure then deactivates the deletion-writing cron jobs (`cron.alter_job(job_id, active := false)`) and pauses the mirror sweep. A rule could still fire in the minutes before the flag is set. If so, its entry sits at `seq > head`, is unmirrored, and has `occurred_at` after the restore point. In maintenance mode only, the guard trigger lets the operator role delete exactly such entries. The rule re-runs as a fresh entry after step 6, because rule entries are idempotent re-runs. `docs/STACK.md` ("Lost a database") and `docs/DEPLOY-PROCEDURE.md` gain this step.
 1. Read the restored database's ledger head (`seq`, `entry_hash`).
-2. List mirror objects with `seq` greater than the head. Check continuity: the first one's `prev_hash` must equal the head's `entry_hash`, and each must chain to the next. A break stops the procedure and is reported. Nothing is guessed.
-3. Dry run: for each gap entry in seq order, resolve its applier from the fixed registry, keyed by (`store`, `action`). Print what would change.
+2. List mirror objects with `seq` greater than the head. Check continuity: the first one's `prev_hash` must equal the head's `entry_hash`, and each must chain to the next. Check every `entry_mac` with the ledger key. Check that every erase entry belonging to a leave or a project purge (its `request_id` names a leave plan or a deletion request) follows a matching lifecycle entry (`leave_confirm`, or `grace_start` and `purge_claim`) with the same `request_id` and subject, either in the gap or in the restored ledger. Record-level erases carry their own authority and need no lifecycle entry. A break, a bad MAC or an orphan erase stops the procedure and is reported. Nothing is guessed.
+3. Dry run: for each gap entry in seq order, resolve its applier from the fixed registry, keyed by (`store`, `action`). Print what would change. Lifecycle entries restore request and consent state: a replayed `cancel` leaves the request `cancelled`.
 4. Apply: re-run each applier. Every applier is idempotent:
    - deleting an absent id is a no-op;
    - a redaction recomputes its digest from the restored row, which holds the original text again;
    - a retention entry re-runs its rule with the recorded `rule_cutoff`;
+   - a predicate entry re-runs its scoped step;
    - a tombstone or purge step re-runs its procedure.
-5. Insert each replayed entry with its original `seq`, `entry_id` and hashes, plus `replayed_at`. No sequence needs resetting, because the writer assigns `seq` rather than a database sequence.
-6. Write a replay report: entries replayed, counts per store, any applier that found nothing to do. Then reopen.
+5. Insert each replayed entry with its original `seq`, `entry_id`, hashes and MAC, plus `replayed_at`. No sequence needs resetting, because the writer assigns `seq` rather than a database sequence.
+6. Write a replay report: entries replayed, counts per store, any applier that found nothing to do. Clear `replay_required`, reactivate the cron jobs and the sweep, then reopen.
 
-This procedure becomes `docs/DELETION-REPLAY.md` (wave 2) and an operator script, `bin/deletion-replay.ts`. The script is dry-run by default and refuses unless the maintenance flag is set.
+**Voiding erasures made with a stolen key.** Today an operator could undo a wipe done with a leaked bearer by restoring a backup. Replay would re-apply that wipe. So `bin/deletion-replay.ts` accepts `--void <seq>…`: entries named there are skipped. A void needs two operators, each recorded by operator id, and a written reason. After step 5, the script appends one `void` lifecycle entry naming the skipped seqs, their reason and both operators. `/public/retention` publishes the running count of voided entries. A void restores content that a key holder erased, so it is for confirmed key compromise only, never for a being's own signed leave.
+
+This procedure becomes `docs/DELETION-REPLAY.md` (wave 2) and an operator script, `bin/deletion-replay.ts`. The script is dry-run by default and refuses unless the maintenance flag is set. The wave 2 restore drill runs with pg_cron active, so step 0 is tested.
 
 ### 13.5 Compaction
 
-Daily, pg_cron compacts entries older than **15 days**: 8 days of backups plus a 7-day margin. Their `row_ids` become `'{}'`, while `row_ids_sha256` and `row_count` stay. Mirror objects expire at 30 days. After compaction an entry still proves that something was erased, how much, when and under what authority. It can no longer name the rows.
+Daily, pg_cron compacts entries older than **15 days**: 8 days of backups plus a 7-day margin. Their `row_ids` become `'{}'`, while `row_ids_sha256` and `row_count` stay. For money-store entries, `project_id` and `subject_identity_id` also become NULL. Mirror objects expire at 30 days. After compaction an entry still proves that something was erased, how much, when and under what authority. It can no longer name the rows.
 
 ### 13.6 Privacy page corrections (wave 1)
 
@@ -829,7 +848,13 @@ Steps run in this order, because Q8 A puts export first:
 - **Ledger:**
   - hash-chain parity between TypeScript and SQL;
   - the guard trigger refuses DELETE and other UPDATEs;
-  - compaction keeps the sha256;
+  - compaction keeps the sha256 and, for money stores, nulls `project_id` and `subject_identity_id`;
+  - no entry holds a non-UUID key in clear (fixtures for `episodes.series`, collab mutation receipts and operation slots, `virality.vibes`), and no money-store entry holds row ids;
+  - replay refuses a mirror object with a bad `entry_mac`, and an erase entry from a leave or purge with no matching lifecycle entry;
+  - a replayed `cancel` leaves the request `cancelled`, and the runner will not claim it;
+  - the restore drill runs with pg_cron active: step 0 stops the rules, and a stray post-restore rule entry is removed in maintenance and re-run after replay;
+  - `--void` skips only the named entries, needs two operator ids, and appends one `void` entry;
+  - the runner does not claim a request or start a step while any entry is unmirrored;
   - the replay applier registry covers every (store, action) the writers can emit (a source-scan test).
 - **Redaction:**
   - every registry entry's digest recomputes from a fixture and verifies against its signature;
@@ -877,13 +902,14 @@ Steps run in this order, because Q8 A puts export first:
 22. **The 6-year purge reaches only purged projects' rows** (11.3), aggregate by aggregate from last activity, and never deletes settlement receipts, unredeemed gift codes or non-zero wallets. A live project's money history is kept while the project lives. Yu's Q5 text could also be read as a rolling purge of live projects' history. That would need an opening-balance carry-forward and is not designed here.
 23. **Q5's kept set is slightly wider than Yu's list.** Chain addresses are kept for 6 years: each kept `tx_hash` reveals them on a public chain anyway, so dropping the column would hide nothing from an observer. Yu may narrow this by dropping stored addresses at pseudonymisation. The replay fence keeps hashes indefinitely, beyond the 6-year purge, so no transfer is credited twice. A sha256 of a public `(chain, tx_hash, log_index)` can be reversed by enumerating the chain, so the fence permanently shows that agenttool received that transfer, though not for whom.
 24. **The Q6 settlement feed keeps one link** between a seller's DID and its wallet id, through the receipt's `listing_id` and the listing's kept `seller_wallet_id`, until the 6-year purge removes the wallet (11.2). Removing it would mean editing a published receipt (against Q6) or dropping the wallet id (against Q5).
+25. **Replay can void entries** made with a confirmed stolen key (13.4), with two operators, a written reason, a ledger entry and a public count. Without it, the deletion ledger would remove the backup-restore recovery path that exists today for a bearer-key wipe.
 
 ---
 
 ## 20. Needs Yu, and what could not be determined
 
 **Needs Yu:**
-- Choose and provision the off-database ledger mirror (private, write-once, outside Supabase; R2 is the candidate) and its write-only credential.
+- Choose and provision the off-database ledger mirror (private, write-once, outside Supabase; R2 is the candidate) and its write-only credential. Also create the ledger HMAC key in Supabase Vault (13.2), which the mirror credential and the sweep must never hold.
 - Supply the company accounting period end for the 6-year clock, and confirm that 6 years from period end is the right figure (Corporation Tax and VAT records).
 - Run, or authorise, the read-only Stripe audit for Customer objects tied to agenttool sessions.
 - Apply each wave's migrations by hand before that wave's deploy, or authorise an operator to.
