@@ -31,6 +31,18 @@ export interface ErasureAuthority {
   sequence?: number | null;
 }
 
+/** The ledger authority of an owner-rule decision
+ *  (identity/authority.ts authorizeOwnedContentMutation). */
+export function erasureAuthorityFrom(decision: {
+  ledgerMode: "agent_root" | "guest_root" | "legacy_bearer";
+  sequence: number;
+}): ErasureAuthority {
+  return {
+    mode: decision.ledgerMode,
+    sequence: decision.ledgerMode === "legacy_bearer" ? null : decision.sequence,
+  };
+}
+
 export interface ErasureOwner {
   /** Identity the erased rows belonged to; null for project-level rows. */
   agentId: string | null;

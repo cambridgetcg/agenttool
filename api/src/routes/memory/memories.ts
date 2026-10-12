@@ -30,7 +30,7 @@ import {
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
-  authorizeProjectConstitutionMutation,
+  authorizeOwnedContentMutation,
   authorityRequestTarget,
   readAuthorityBoundJson,
   readEmptyAuthorityBody,
@@ -52,17 +52,13 @@ import {
   type MemoryAttestationReceiptOut,
 } from "../../services/memory/tiers";
 import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
-import { ledgerResponse, type ErasureAuthority } from "../../services/deletion/record";
+import { erasureAuthorityFrom, ledgerResponse } from "../../services/deletion/record";
 
 const app = new Hono<ProjectContext>();
 
 /** Why a deleted memory can leave a row behind (spec §7.4). */
 export const ERASED_IN_PLACE_REASON =
   "A paid witness receipt points at this memory, so the row stays for the receipt. Its content became the withdrawal marker; its key, embedding and identity patch were cleared and its metadata emptied. It no longer appears in any read.";
-
-function erasureAuthority(decision: { mode: "agent_root" | "legacy_bearer"; sequence: number }): ErasureAuthority {
-  return { mode: decision.mode, sequence: decision.mode === "agent_root" ? decision.sequence : null };
-}
 
 async function memoryDeleteResponse(result: MemoryEraseResult) {
   if (result.entries.length === 0) return { deleted: 0, rows_removed: 0, erased_in_place: 0 };
@@ -423,9 +419,15 @@ app.patch("/:id", async (c) => {
     .limit(1);
   if (!existing) throw new HTTPException(404, { message: "memory_not_found" });
 
-  const authority = await authorizeProjectConstitutionMutation({
+  // The owner rule (authority.ts authorizeOwnedContentMutation): the memory's
+  // own rooted identity consents for it; other memories keep the project rule.
+  // A visibility change is not an erase, so the multi-root bearer fallback for
+  // unrooted owners does not apply.
+  const authority = await authorizeOwnedContentMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: [existing.identityId],
+    owners: [existing.identityId],
+    intent: "change",
+    heldByProject: true,
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes: bound.bodyBytes,
@@ -484,9 +486,11 @@ app.delete("/:id", async (c) => {
     )
     .limit(1);
   if (!existing) return c.json({ deleted: 0 });
-  const authority = await authorizeProjectConstitutionMutation({
+  const authority = await authorizeOwnedContentMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: [existing.identityId],
+    owners: [existing.identityId],
+    intent: "erase",
+    heldByProject: true,
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes,
@@ -494,7 +498,7 @@ app.delete("/:id", async (c) => {
   });
   if (!authority.ok) return c.json(authority.body, authority.status);
   const result = await deleteById(c.var.project.id, c.req.param("id"), {
-    authority: erasureAuthority(authority),
+    authority: erasureAuthorityFrom(authority),
   });
   return c.json(await memoryDeleteResponse(result));
 });
@@ -522,8 +526,9 @@ app.delete("/", async (c) => {
       400,
     );
   }
-  // A keyed delete can span several memories; every owner is a subject, and
-  // only these authorized rows are deleted.
+  // A keyed delete can span several memories; every owner is named, owners
+  // needing different consents get 409 (one request per owner), and only
+  // these authorized rows are deleted.
   const affected = await db
     .select({ id: memories.id, identityId: memories.identityId })
     .from(memories)
@@ -533,9 +538,11 @@ app.delete("/", async (c) => {
       isNull(memories.contentPurgedAt),
     ));
   if (affected.length === 0) return c.json({ deleted: 0 });
-  const authority = await authorizeProjectConstitutionMutation({
+  const authority = await authorizeOwnedContentMutation({
     projectId: c.var.project.id,
-    subjectIdentityIds: affected.map((row) => row.identityId),
+    owners: affected.map((row) => row.identityId),
+    intent: "erase",
+    heldByProject: true,
     method: c.req.method,
     requestTarget: authorityRequestTarget(c.req.url),
     bodyBytes,
@@ -544,7 +551,7 @@ app.delete("/", async (c) => {
   if (!authority.ok) return c.json(authority.body, authority.status);
   const result = await deleteByKey(c.var.project.id, key, {
     onlyIds: affected.map((row) => row.id),
-    authority: erasureAuthority(authority),
+    authority: erasureAuthorityFrom(authority),
   });
   return c.json(await memoryDeleteResponse(result));
 });
