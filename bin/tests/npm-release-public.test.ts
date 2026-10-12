@@ -368,7 +368,8 @@ describe("the publish workflow checks the CI run a tag cites", () => {
     const urls: string[] = [];
     const fetchJson: FetchJson = async (url) => {
       urls.push(url);
-      return answers[url] ?? { status: 404, body: undefined };
+      const answer = answers[url] ?? { status: 404 };
+      return { status: answer.status, body: answer.body };
     };
     return { fetchJson, urls };
   };
