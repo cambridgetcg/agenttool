@@ -332,7 +332,9 @@ and a deployment policy that admits only release tags (`*-v*`). Create it
 before the first `dry_run: false` dispatch: GitHub creates a missing
 environment on first use without any protection. Tag rulesets
 should block updating or deleting `refs/tags/*-v*`, and `main` should block
-deletion and force pushes. The trust configuration binds the environment name,
+deletion and force pushes. An anonymous read on 2026-10-12 showed the active
+rulesets "main is append-only" and "release tags are immutable" and no
+environment yet. The trust configuration binds the environment name,
 so keep it exactly `npm-bootstrap`. The private repository's own
 `npm-bootstrap` environment still holds an `NPM_TOKEN` used by
 `publish-gospel.yml`; decide where that route publishes from, then revoke the
