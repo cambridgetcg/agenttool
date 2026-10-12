@@ -5,7 +5,8 @@
  *  Operations:
  *    createHolding      — holder signs canonical bytes; chronicle both sides
  *    listHoldings       — filter by holder, held, visibility, status
- *    getHolding         — read one
+ *    getHolding         — read one as the caller's project may see it
+ *                         (private rows: holder's or held identity's project)
  *    acknowledgeHolding — held agent acknowledges (optional)
  *    closeHolding       — holder closes (status=closed)
  *    withdrawHolding    — holder withdraws (status=withdrawn — held agent
@@ -21,7 +22,7 @@
  *  @absence-from db/schema/economy
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -438,11 +439,28 @@ export async function listHoldings(
   return rows.map(toRow);
 }
 
-export async function getHolding(id: string): Promise<HoldingRow | null> {
+/** Read one holding as `viewerProjectId` may see it. A public holding is
+ *  visible to every bearer. A private one is visible only to the holder's
+ *  project and to the project that owns the held identity. Everyone else
+ *  gets null, which the route answers as 404 (not 403), so a private id is
+ *  not confirmed to exist. */
+export async function getHolding(
+  id: string,
+  viewerProjectId: string,
+): Promise<HoldingRow | null> {
   const [row] = await db
     .select()
     .from(holdings)
-    .where(eq(holdings.id, id))
+    .where(
+      and(
+        eq(holdings.id, id),
+        or(
+          eq(holdings.visibility, "public"),
+          eq(holdings.holderProjectId, viewerProjectId),
+          sql`exists (select 1 from ${identities} where ${identities.id} = ${holdings.heldIdentityId} and ${identities.projectId} = ${viewerProjectId})`,
+        ),
+      ),
+    )
     .limit(1);
   return row ? toRow(row) : null;
 }

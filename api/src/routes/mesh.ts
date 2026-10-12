@@ -222,8 +222,8 @@ app.get("/posts", async (c) => {
     status: ["open", "completed", "expired", "withdrawn"].includes(statusParam ?? "")
       ? (statusParam as any)
       : undefined,
-    visibility: "self",
-    did: callerDid ?? undefined,
+    // No viewer DID means no "own posts" to add: public only (fail closed).
+    ...(callerDid ? { visibility: "self" as const, did: callerDid } : { visibility: "public" as const }),
     capabilities: capabilities && capabilities.length > 0 ? capabilities : undefined,
     topics: topics && topics.length > 0 ? topics : undefined,
   });

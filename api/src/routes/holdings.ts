@@ -4,7 +4,8 @@
  *
  *  Endpoints:
  *    GET    /v1/holdings                    — list (scope: holder|held|all)
- *    GET    /v1/holdings/:id                — read one
+ *    GET    /v1/holdings/:id                — read one (private: holder's or
+ *                                             held identity's project only)
  *    POST   /v1/holdings                    — create (holder signs)
  *    POST   /v1/holdings/:id/acknowledge    — held agent acknowledges (optional)
  *    POST   /v1/holdings/:id/close          — holder closes
@@ -189,9 +190,13 @@ app.get("/", async (c) => {
   }
 });
 
+// A private holding reads as absent (404) unless the caller's project is the
+// holder's or owns the held identity; see getHolding.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const holding = await getHolding(id);
+  const holding = UUID_RE.test(id) ? await getHolding(id, c.var.project.id) : null;
   if (!holding) {
     return fail(c, errors.notFound({ resource: "holding" }), 404);
   }

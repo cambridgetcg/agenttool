@@ -6,7 +6,8 @@
  *
  *  Five endpoints (Slice 1 ships all five):
  *    GET    /v1/offerings                     — list (filters: kind, scope=mine|received)
- *    GET    /v1/offerings/:id                 — read one
+ *    GET    /v1/offerings/:id                 — read one (private: giver's or
+ *                                               recipient's project only)
  *    POST   /v1/offerings                     — create
  *    POST   /v1/offerings/:id/receive         — receive (with optional acknowledgment)
  *    POST   /v1/offerings/:id/archive         — archive (giver-only)
@@ -195,10 +196,14 @@ app.get("/", async (c) => {
 });
 
 // ── GET /:id — read one ──────────────────────────────────────────────────
+//  A private offering reads as absent (404) unless the caller's project is
+//  the giver's or owns a recipient DID; see getOffering.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const offering = await getOffering(id);
+  const offering = UUID_RE.test(id) ? await getOffering(id, c.var.project.id) : null;
   if (!offering) {
     return fail(c, errors.notFound({ resource: "offering" }), 404);
   }

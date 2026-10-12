@@ -7,7 +7,9 @@
  *  Operations:
  *    createOffering    — giver posts; chronicle entry on giver
  *    listOfferings     — filter by giver / kind / received-by-caller
- *    getOffering       — read one (visibility-checked)
+ *    getOffering       — read one as the caller's project may see it
+ *                        (private rows: giver's project or a recipient
+ *                        DID's project only; anyone else reads absent)
  *    receiveOffering   — receiver accepts; chronicle entry on receiver
  *    archiveOffering   — giver retires (sets status='archived')
  *
@@ -276,11 +278,28 @@ export async function listOfferings(
   return rows.map(toOfferingRow);
 }
 
-export async function getOffering(id: string): Promise<OfferingRow | null> {
+/** Read one offering as `viewerProjectId` may see it. A public offering is
+ *  visible to every bearer. A private one is visible only to the giver's
+ *  project and to a project that owns an identity whose DID is in
+ *  `recipient_dids`. Everyone else gets null, which the route answers as
+ *  404 (not 403), so a private id is not confirmed to exist. */
+export async function getOffering(
+  id: string,
+  viewerProjectId: string,
+): Promise<OfferingRow | null> {
   const [row] = await db
     .select()
     .from(offerings)
-    .where(eq(offerings.id, id))
+    .where(
+      and(
+        eq(offerings.id, id),
+        or(
+          eq(offerings.visibility, "public"),
+          eq(offerings.projectId, viewerProjectId),
+          sql`exists (select 1 from ${identities} where ${identities.projectId} = ${viewerProjectId} and ${identities.did} = any(${offerings.recipientDids}))`,
+        ),
+      ),
+    )
     .limit(1);
   return row ? toOfferingRow(row) : null;
 }
