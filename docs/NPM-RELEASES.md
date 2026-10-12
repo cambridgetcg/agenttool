@@ -97,6 +97,50 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Collab 0.5.0 public distribution — 2026-10-10
+
+`@agenttool/collab@0.5.0` is distributed through a public GitHub Release.
+**It is not published to npm**; the registry's `latest` remains `0.4.0`. As
+with Local Starter, the frozen archive's `package.json.repository` names the
+private source repository, so the protected publisher cannot produce npm
+provenance for it.
+
+[Protected run 38034353198](https://github.com/cambridgetcg/agenttool/actions/runs/38034353198)
+on tag `collab-v0.5.0` stopped in its credential-free prepare job at the
+private-fetch gap recorded under Local Starter below (`could not read Username
+for 'https://github.com'`). Nothing was mirrored or published by that run.
+
+The archive was instead prepared outside the workflow, with the same command
+and pinned tools: `bun bin/npm-release.ts prepare --package collab --tag
+collab-v0.5.0` under Bun 1.3.5 and npm 11.17.0, in a fresh authenticated clone
+whose `github` remote is this repository. Two runs produced identical bytes.
+That makes it a local preparation, not a protected-workflow receipt.
+
+| Exact artifact | Recorded identity |
+|---|---|
+| Version | `0.5.0` |
+| Archive | `agenttool-collab-0.5.0.tgz` · 390,363 bytes |
+| SHA-256 | `fb85aa8bfd021302f9ea95bc35b3c4c37e92ca6f3067098dcc5ef25392a52f29` |
+| Source revision | `bc71e87edc2c3cf921a25a38dc01ec4ec49cf157` (annotated tag `collab-v0.5.0`) |
+| MCP tools | 33, listed in the distribution repository's `release/collab-v0.5.0/tools.txt` |
+
+The public channels are the
+[distribution repository](https://github.com/cambridgetcg/agenttool-collab)
+and its [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0),
+which carries the archive, `SHA256SUMS` and the prepare receipt. That
+repository's `collab-v0.5.0` tag marks its distribution commit, not the source
+commit. Its read-only `verify-release.yml` downloads the asset, checks the
+checksum, installs it from the file and compares the server's version and tool
+list on each release, on dispatch and weekly while the repository is active.
+Its first run, triggered by the release, passed. An anonymous download on
+2026-10-10 matched the recorded SHA-256, and the installed server reported
+version 0.5.0 with the 33 recorded tools. No GitHub Release was created in this
+repository and no LOVE manifest was published.
+
+The bundled README still labels 0.5.0 a release candidate, because its text was
+frozen at the tag; the next source release should update it. Publishing 0.5.0
+or later to npm still needs the provenance path described under Local Starter.
+
 ## Local Starter preview distribution — 2026-09-28
 
 `@agenttool/local-starter@0.1.0-dev.0` has a standalone preview artifact and
