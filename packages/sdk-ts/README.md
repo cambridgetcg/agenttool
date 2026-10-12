@@ -1173,9 +1173,9 @@ and what a registry serves right now is answered by its own dist-tags.
 
 Source changes dated 2026-10-11, with no version bump. The published 0.22.1
 npm, PyPI and LOVE packages are unchanged; nothing below reaches them until a
-new release. npm and PyPI releases stay frozen while the repository is
-private, until a required human reviewer returns to the `npm-bootstrap` and
-`pypi` release environments (owner decision, 2026-10-11).
+new release. A npm or PyPI release runs when Yu and Ai agree to it in
+conversation (owner decision, 2026-10-12), and the release lanes also need
+their private-repository fetch fixed first.
 
 - **Model-written `<trace>` markup needs explicit consent.**
   `AnthropicAdapter` writes a `<trace>` from the model's response only when
