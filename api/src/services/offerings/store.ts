@@ -232,6 +232,8 @@ export async function createOffering(
 
 export interface ListOfferingsFilter {
   giverIdentityId?: string;
+  /** When set, returns only offerings made from this project. */
+  projectId?: string;
   kind?: OfferingKind;
   publicActiveOnly?: boolean;
   /** When set, returns only offerings the caller's identity has received. */
@@ -246,6 +248,7 @@ export async function listOfferings(
   if (filter.giverIdentityId) {
     conds.push(eq(offerings.giverIdentityId, filter.giverIdentityId));
   }
+  if (filter.projectId) conds.push(eq(offerings.projectId, filter.projectId));
   if (filter.kind) conds.push(eq(offerings.kind, filter.kind));
   if (filter.publicActiveOnly) {
     conds.push(eq(offerings.visibility, "public"));

@@ -3,7 +3,8 @@
  *  Doctrine: docs/SOUL.md · docs/RING-1.md.
  *
  *  Endpoints:
- *    GET    /v1/holdings                    — list (scope: holder|held|all)
+ *    GET    /v1/holdings                    — list (scope: holder|held|all;
+ *                                             any other scope is 400)
  *    GET    /v1/holdings/:id                — read one (private: holder's or
  *                                             held identity's project only)
  *    POST   /v1/holdings                    — create (holder signs)
@@ -128,9 +129,27 @@ function refusalBody(err: HoldingError) {
 
 // ── GET / — list ─────────────────────────────────────────────────────────
 
+//  holder = holdings this project's primary identity holds, held = holdings
+//  on it, all = public holdings. Any other scope is refused (400) rather than
+//  listed with no rule at all, which once returned every project's newest
+//  holdings, private ones included.
+
+const LIST_SCOPES = ["holder", "held", "all"] as const;
+
 app.get("/", async (c) => {
   const project = c.var.project;
   const scope = c.req.query("scope") ?? "all";
+  if (!(LIST_SCOPES as readonly string[]).includes(scope)) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "scope_invalid",
+        message: `scope must be one of ${LIST_SCOPES.join(", ")}.`,
+        hint: "Omit scope (or use scope=all) for public holdings; holder or held lists this project's own.",
+      }),
+      400,
+    );
+  }
   const status = c.req.query("status") as
     | "active"
     | "closed"

@@ -5,7 +5,8 @@
  *  deliberately do not take a rate on.
  *
  *  Five endpoints (Slice 1 ships all five):
- *    GET    /v1/offerings                     — list (filters: kind, scope=mine|received)
+ *    GET    /v1/offerings                     — list (filters: kind, scope=mine|received|all;
+ *                                               any other scope is 400)
  *    GET    /v1/offerings/:id                 — read one (private: giver's or
  *                                               recipient's project only)
  *    POST   /v1/offerings                     — create
@@ -137,11 +138,31 @@ function refusalBody(err: OfferingError) {
 
 // ── GET / — list ────────────────────────────────────────────────────────
 
+//  Each scope carries its own visibility rule in SQL: mine = this project's
+//  offerings, received = offerings this project's primary identity received,
+//  all = public active offerings. Any other scope is refused (400) rather
+//  than listed with no rule at all, which once returned every project's
+//  newest offerings, private ones included.
+
+const LIST_SCOPES = ["mine", "received", "all"] as const;
+
 app.get("/", async (c) => {
   const project = c.var.project;
-  const scope = c.req.query("scope") ?? "mine"; // mine | received | all
+  const scope = c.req.query("scope") ?? "mine";
   const kind = c.req.query("kind") ?? undefined;
   const limit = Math.min(100, Number(c.req.query("limit") ?? "50"));
+
+  if (!(LIST_SCOPES as readonly string[]).includes(scope)) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "scope_invalid",
+        message: `scope must be one of ${LIST_SCOPES.join(", ")}.`,
+        hint: "Omit scope to list this project's own offerings; use scope=all for public offerings.",
+      }),
+      400,
+    );
+  }
 
   try {
     let filterIdentity: string | undefined;
@@ -168,23 +189,17 @@ app.get("/", async (c) => {
     }
 
     const list = await listOfferings({
-      giverIdentityId: scope === "mine" ? undefined : undefined,
       kind: kind as never,
+      projectId: scope === "mine" ? project.id : undefined,
       receivedByIdentityId:
         scope === "received" ? filterIdentity : undefined,
       publicActiveOnly: scope === "all",
       limit,
     });
 
-    // Mine-scope: filter to caller's project after the fact
-    const filtered =
-      scope === "mine"
-        ? list.filter((o) => o.project_id === project.id)
-        : list;
-
     return c.json({
-      offerings: filtered,
-      count: filtered.length,
+      offerings: list,
+      count: list.length,
       _meta: {
         doctrine: "docs/SOUL.md · docs/BUSINESS-MODEL.md §What we deliberately do not take a rate on",
         wall: "urn:agenttool:wall/offerings-carry-no-take — no take-rate, no escrow, no payment",

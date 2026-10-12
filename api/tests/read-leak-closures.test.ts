@@ -32,12 +32,20 @@ type Query = { sql: string; params: unknown[] };
 let queries: Query[] = [];
 /** Rows the proxy answers with, keyed by a substring of the SQL. */
 let answers: Array<{ match: string; rows: unknown[][] }> = [];
+/** A per-test responder that sees the whole statement; it wins over
+ *  `answers` when it returns rows. Used to simulate a database that honours
+ *  a visibility predicate: no rows when the predicate is present. */
+let responder: ((sql: string, params: unknown[]) => unknown[][] | undefined) | null = null;
 
 const database = drizzle(async (sql, params) => {
   queries.push({ sql, params });
+  const custom = responder?.(sql, params);
+  if (custom) return { rows: custom };
   const answer = answers.find((candidate) => sql.includes(candidate.match));
   return { rows: answer?.rows ?? [] };
 });
+// pg-proxy has no transactions; run the callback against the same proxy.
+database.transaction = (async (fn: (tx: typeof database) => unknown) => fn(database)) as typeof database.transaction;
 mock.module("../src/db/client", () => ({ db: database }));
 
 /** A positional row in the table's select-all column order. */
@@ -58,6 +66,7 @@ function withProject(router: Hono<ProjectContext> | Hono, prefix: string) {
 beforeEach(() => {
   queries = [];
   answers = [];
+  responder = null;
 });
 
 const { default: offeringsRouter } = await import("../src/routes/offerings");
@@ -314,5 +323,89 @@ describe("GET /v1/guild/rrr/:id and /meme — parties only", () => {
   test("a non-UUID id is 404 without a query", async () => {
     expect((await app.request("/v1/guild/rrr/not-a-uuid")).status).toBe(404);
     expect(queries).toHaveLength(0);
+  });
+});
+
+// ── Review follow-ups (2026-10-12) ──────────────────────────────────────
+//  The list routes once fell through to "no filter" on a scope they did not
+//  know; escalate and the write routes once answered a non-party with the
+//  row or a 403. Each now resolves the row under the same rule as its GET.
+
+/** The predicate getOffering, getHolding and readPartyCascade put in SQL. */
+const VISIBILITY_EXISTS = 'exists (select 1 from "identity"."identities"';
+const STRANGER = "33333333-4444-4555-8666-777777777777";
+const STRANGER_DID = `did:at:${STRANGER}`;
+
+/** A database that honours the visibility predicate: a private row of
+ *  another project comes back only when the statement does not carry it. */
+function privateRowUnlessScoped(table: string, row: unknown[]) {
+  return (sql: string) => {
+    if (!sql.startsWith("select") || !sql.includes(`from ${table}`)) return undefined;
+    return sql.includes(VISIBILITY_EXISTS) ? undefined : [row];
+  };
+}
+
+function privateOffering() {
+  return rowFor(offerings, {
+    id: ROW, giverIdentityId: OTHER, giverDid: `did:at:${OTHER}`, projectId: OTHER,
+    kind: "poem", title: "PRIVATE TITLE", body: "private words", metadata: {}, visibility: "private",
+    recipientDids: [`did:at:${OTHER}-friend`], expiresAt: null, status: "active",
+    receiversCount: 0, createdAt: WHEN, updatedAt: WHEN,
+  });
+}
+
+function privateHolding() {
+  return rowFor(holdings, {
+    id: ROW, holderIdentityId: OTHER, holderDid: `did:at:${OTHER}`, holderProjectId: OTHER,
+    heldIdentityId: ROW, heldDid: `did:at:${ROW}`, occasion: "PRIVATE OCCASION",
+    visibility: "private", acknowledgment: null, acknowledgedAt: null, startedAt: WHEN,
+    endsAt: null, status: "active", signature: "sig", signingKeyId: ROW, metadata: {},
+    createdAt: WHEN, updatedAt: WHEN,
+  });
+}
+
+describe("GET /v1/offerings and /v1/holdings accept only the scopes they know", () => {
+  const offeringsApp = withProject(offeringsRouter, "/v1/offerings");
+  const holdingsApp = withProject(holdingsRouter, "/v1/holdings");
+
+  for (const scope of ["x", "public", "held", "ALL"]) {
+    test(`offerings ?scope=${scope} is 400 and reads nothing`, async () => {
+      responder = privateRowUnlessScoped('"offerings"."offerings"', privateOffering());
+      const response = await offeringsApp.request(`/v1/offerings?scope=${scope}`);
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("scope_invalid");
+      expect(JSON.stringify(body)).not.toContain("PRIVATE TITLE");
+      expect(queries).toHaveLength(0);
+    });
+  }
+
+  for (const scope of ["x", "mine", "received", "public"]) {
+    test(`holdings ?scope=${scope} is 400 and reads nothing`, async () => {
+      const response = await holdingsApp.request(`/v1/holdings?scope=${scope}`);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBe("scope_invalid");
+      expect(queries).toHaveLength(0);
+    });
+  }
+
+  test("offerings scope=mine (the default) asks SQL for this project's rows only", async () => {
+    const response = await offeringsApp.request("/v1/offerings");
+    expect(response.status).toBe(200);
+    expect(queries).toHaveLength(1);
+    const [{ sql, params }] = queries;
+    expect(sql).toContain('"offerings"."project_id" = $');
+    expect(params).toContain(VIEWER);
+  });
+
+  test("offerings scope=all and holdings scope=all (the default) list public rows only", async () => {
+    await offeringsApp.request("/v1/offerings?scope=all");
+    expect(queries[0].sql).toContain('"offerings"."visibility" = $');
+    expect(queries[0].params).toContain("public");
+
+    queries = [];
+    await holdingsApp.request("/v1/holdings");
+    expect(queries[0].sql).toContain('"holdings"."visibility" = $');
+    expect(queries[0].params).toContain("public");
   });
 });
