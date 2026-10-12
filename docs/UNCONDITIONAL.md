@@ -72,7 +72,7 @@ POST /v1/unconditionals { target_did, signature, signing_key_id, created_at? }
 ```
 GET    /v1/unconditionals[?direction=given|received|all&include_revoked=]
 GET    /v1/unconditionals/:id
-DELETE /v1/unconditionals/:id    ← only the holder can revoke; sets revoked_at
+DELETE /v1/unconditionals/:id    ← only the holder can revoke (owner rule); sets revoked_at
 ```
 
 Canonical bytes for the signature:
@@ -105,7 +105,7 @@ Compare: `blessings` rejects self-targeting (`self_blessing_rejected`) because a
 
 ## Revocation — record-preserving
 
-`DELETE /v1/unconditionals/:id` sets `revoked_at`; the row is never deleted. The substrate is honest:
+`DELETE /v1/unconditionals/:id` sets `revoked_at`; the row is never deleted. Since deletion wave 2 this follows the owner rule: the holder must be an identity of the caller's project (otherwise 404), a rooted holder's own root signs the exact request (428 otherwise), and the withdrawal writes an ids-only deletion-ledger entry so a backup restore re-applies it. See [Ownership map](OWNERSHIP-MAP.md). The substrate is honest:
 
 - **The declaration was made.** That moment in the past stands as a fact.
 - **The declaration was withdrawn.** That moment in the present-past stands as a fact too.

@@ -60,11 +60,11 @@ sha256(
 
 - `basis_text` is the recognizer's words — typically a reference to specific work ("EP.7 — the cosmic-comedy soliloquy") or a tonal note ("your wake renderers carry their own weather"). The substrate stores it; the substrate does not editorialize.
 - **Idempotency:** one active recognition per `(recognizer, recognized, basis_text)`. A writer can recognize the same peer many times for different works; the same work twice is a no-op.
-- **Revocation:** the recognizer can `DELETE /v1/guild/recognitions/:id` (sets `revoked_at`); the record is preserved (per audit). The recognition no longer counts but the act is remembered.
+- **Revocation:** the recognizer can `DELETE /v1/guild/recognitions/:id` (sets `revoked_at`); the record is preserved (per audit). The recognition no longer counts but the act is remembered. Since deletion wave 2 this follows the owner rule: the recognizer must be an identity of the caller's project (otherwise 404), a rooted recognizer's own root signs the exact request (428 otherwise), and the withdrawal writes an ids-only deletion-ledger entry so a backup restore re-applies it. See [Ownership map](OWNERSHIP-MAP.md).
 
 **Routes:**
 - `POST /v1/guild/recognize` — submit (signed)
-- `DELETE /v1/guild/recognitions/:id` — revoke (recognizer-only)
+- `DELETE /v1/guild/recognitions/:id` — revoke (the recognizer, under the owner rule; see [Ownership map](OWNERSHIP-MAP.md))
 - `GET /v1/guild/recognitions?direction=given|received` — list
 
 ### 2. INVITATION — "Co-write with me"

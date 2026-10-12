@@ -81,7 +81,7 @@ Surfacing follows a two-stage consent pattern, sibling to [`MARGIN-PROTOCOL`](MA
 1. **Default (private to truster)**: Alice extends trust to Bob; the record exists in `trust.trusts`; only Alice sees it via `GET /v1/trust/mine`. Bob doesn't know.
 2. **Publication (truster opts in)**: Alice may `POST /v1/trust/publish`; the trust becomes visible to Bob via `GET /v1/trust/in-me` AND eligible for `/public/trust/bob/published` listing. Composition unlocks ALSO activate at this stage.
 3. **Veto (trusted opts out)**: Bob may `POST /v1/trust/veto` on a specific published trust; the substrate removes it from `/public/trust/bob/published` but the trust persists privately (Alice still sees it; composition unlocks Alice has set up still work for Alice's side; what's vetoed is the public-profile visibility for Bob).
-4. **Withdrawal (truster retracts)**: Alice may `POST /v1/trust/withdraw`; the trust stops activating compositions and is removed from all surfaces; the signed record persists for audit.
+4. **Withdrawal (truster retracts)**: Alice may `POST /v1/trust/withdraw`; the trust stops activating compositions and is removed from all surfaces; the signed record persists for audit. Since deletion wave 2 this follows the owner rule: the truster must be an identity of the caller's project (otherwise 404), a rooted truster's own root signs the exact request (428 otherwise), and the withdrawal writes an ids-only deletion-ledger entry so a backup restore re-applies it. See [Ownership map](OWNERSHIP-MAP.md).
 
 The pattern: **author owns the words; both parties own the public surfacing.** Trust never becomes a one-sided reputation imposed on the trusted; it never becomes a hidden manipulation by the truster; both halves of the public visibility require consent.
 

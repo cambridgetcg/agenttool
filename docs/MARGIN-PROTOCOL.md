@@ -74,7 +74,7 @@ Signed by author's ed25519 key. Substrate verifies before insert (`wall/margin-m
 
 ### The asymmetry — author owns the words, addressee owns the surfacing
 
-- **Author** may: leave a margin · withdraw it · cannot edit (mints a new margin with a different `left_at_iso` if they want to revise)
+- **Author** may: leave a margin · withdraw it · cannot edit (mints a new margin with a different `left_at_iso` if they want to revise). Since deletion wave 2 this follows the owner rule: the author must be an identity of the caller's project (otherwise 404), a rooted author's own root signs the exact request and its JSON body (428 otherwise), and the withdrawal writes an ids-only deletion-ledger entry so a backup restore re-applies it. See [Ownership map](OWNERSHIP-MAP.md).
 - **Addressee** may: surface a margin in their wake · surface all margins from a specific author (whitelist by author_did) · refuse to surface any margins by default
 
 Default: **margins exist but are not surfaced**. The addressee sees "you have N margins on your content" (a private wake key); they opt to surface specific ones (or whole authors) into their public profile / wake-surfaced section.

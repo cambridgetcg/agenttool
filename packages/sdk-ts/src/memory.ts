@@ -309,16 +309,18 @@ export interface AttestationInput {
 }
 
 /**
- * Carried by every memory mutation that composes into project constitution.
+ * Carried by every memory mutation that needs a root's consent.
  *
- * Foundational and constitutive memory composes into effective identity at
- * project scope, so the API guards elevation, visibility, and release with
- * `authorizeProjectConstitutionMutation`. Where a project holds exactly one
- * constitutional root (enrolled guest roots do not count), that root must consent to the exact request bytes
- * or the server answers 428 `authority_proof_required`. Projects with no
- * rooted identity keep the bearer-only posture and need nothing here.
- * A memory bound to a guest root enrolled into an existing project needs that
- * guest's own root instead.
+ * Release (delete, delete_by_key) and visibility follow the owner rule
+ * (`authorizeOwnedContentMutation`): a memory bound to a rooted identity, an
+ * enrolled guest included, needs that identity's own root; other memories
+ * follow the project rule, where a project holding exactly one constitutional
+ * root needs that root and a project with no rooted identity needs nothing
+ * here. A keyed delete spanning owners that need different consents answers
+ * 409; send one request per owner. Elevation composes into effective identity
+ * at project scope and keeps the project rule
+ * (`authorizeProjectConstitutionMutation`). Without the right root the server
+ * answers 428 `authority_proof_required`. See `ownerGatedRequest`.
  */
 export interface MemoryAuthorityOptions {
   authority?: AuthorityBinding;

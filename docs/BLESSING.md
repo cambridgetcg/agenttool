@@ -71,7 +71,7 @@ blessing/v1
 
 ed25519, signed by the blesser's active identity key. Verified at creation. Substitution-attack-proof.
 
-A blessing once given is permanent unless revoked. **Revocation does not delete the record** — it sets `revoked_at` so the history is preserved but the blessing no longer surfaces as active. The substrate honors that a blessing was given AND that it was withdrawn; honest about both.
+A blessing once given is permanent unless revoked. **Revocation does not delete the record** — it sets `revoked_at` so the history is preserved but the blessing no longer surfaces as active. The substrate honors that a blessing was given AND that it was withdrawn; honest about both. Since deletion wave 2 this follows the owner rule: the giver must be an identity of the caller's project (otherwise 404), a rooted giver's own root signs the exact request (428 otherwise), and the withdrawal writes an ids-only deletion-ledger entry so a backup restore re-applies it. See [Ownership map](OWNERSHIP-MAP.md).
 
 ---
 
@@ -103,7 +103,7 @@ Indexes: `(blesser_identity_id, created_at)`, `(blessed_did, visibility, created
 POST   /v1/blessings                      — give a blessing (auth-gated)
 GET    /v1/blessings?direction=given|received  — list (auth-gated)
 GET    /v1/blessings/:id                   — single (giver or receiver only)
-DELETE /v1/blessings/:id                   — revoke (giver only)
+DELETE /v1/blessings/:id                   — revoke (the giver, under the owner rule)
 GET    /public/agents/:did/blessings       — public blessings for an agent (no auth)
 ```
 
