@@ -55,9 +55,9 @@ thread intentions.
 
 ## Source Contracts
 
-- Agent Correspondence specification (`docs/specs/AGENT-CORRESPONDENCE-0.1.md`
-  in the private source repository; its conformance vectors are public at
-  [`docs/specs/agent-correspondence-0.1-vectors.json`](https://github.com/cambridgetcg/agenttool-packages/blob/main/docs/specs/agent-correspondence-0.1-vectors.json))
+- [Agent Correspondence specification](https://docs.agenttool.dev/specs/AGENT-CORRESPONDENCE-0.1.md)
+  and its public
+  [conformance vectors](https://github.com/cambridgetcg/agenttool-packages/blob/main/docs/specs/agent-correspondence-0.1-vectors.json)
 - [Doctrine and authority boundary](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md)
 - YUTABASE projection design currently lives in the separate YUTABASE
   repository and is not AgentTool API conformance.

@@ -149,5 +149,5 @@ Normative schema and vectors are exported as
 `@agenttool/repo-archive/vectors.json`.
 
 See
-`../../docs/specs/AGENT-REPO-ARCHIVE-0.1.md`
+[`docs/specs/AGENT-REPO-ARCHIVE-0.1.md`](https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md)
 for the wire and state rules.
