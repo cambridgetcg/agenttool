@@ -117,7 +117,8 @@ npm packages are released from this repository by
 [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml), a
 manual workflow that runs only on an annotated `<package>-v<version>` tag. A
 tag is made only on a projection commit whose CI passed; its message names the
-private source commit and the CI run. The workflow builds the package without
+private source commit and the CI run, and the workflow checks with GitHub that
+this run passed on exactly that commit. The workflow builds the package without
 credentials, attaches the exact tarball to the tag's GitHub Release, and stages
 it on npm with provenance. A maintainer then compares the staged tarball's
 SHA-256 with the run's receipt and approves it with two-factor authentication;

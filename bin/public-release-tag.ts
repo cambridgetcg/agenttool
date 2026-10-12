@@ -28,14 +28,15 @@
 import { resolve } from "node:path";
 
 import {
+  type FetchJson,
   type PackageJson,
-  RELEASE_REPOSITORY,
-  RELEASE_REPOSITORY_URL,
   RELEASE_TAGGER_EMAIL,
   RELEASE_TAGGER_NAME,
+  ReleaseTagRefused,
   UNVERIFIED_CI_RUN,
   expectedTag,
   parseReleaseTagObject,
+  publicCiRun,
   releaseSpec,
   releaseTagMessage,
   validatePackageManifest,
@@ -50,104 +51,21 @@ import {
   projectionHistory,
 } from "../public/overlay/tools/public-guard.ts";
 
-export const DEFAULT_MAIN_REF = "refs/remotes/origin/main";
-export const PUBLIC_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+// The CI-run evidence lives in the projected npm-release.ts, so the public
+// publish workflow checks a tag's cited run with the same code as this tool.
+export {
+  type FetchJson,
+  PUBLIC_CI_WORKFLOW_PATH,
+  ReleaseTagRefused,
+  publicCiRun,
+  selectCiRun,
+  type WorkflowRun,
+} from "./npm-release";
 
-export class ReleaseTagRefused extends Error {}
+export const DEFAULT_MAIN_REF = "refs/remotes/origin/main";
 
 function refuse(message: string): never {
   throw new ReleaseTagRefused(message);
-}
-
-export interface WorkflowRun {
-  id: number;
-  path: string;
-  event: string;
-  head_branch: string;
-  head_sha: string;
-  status: string;
-  conclusion: string | null;
-  html_url: string;
-  repository: string;
-  created_at: string;
-}
-
-export type FetchJson = (url: string) => Promise<{ status: number; body: unknown }>;
-
-async function anonymousGitHubJson(url: string): Promise<{ status: number; body: unknown }> {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.hostname !== "api.github.com") refuse("refusing an unexpected GitHub API origin");
-  const response = await fetch(url, {
-    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
-    redirect: "error",
-    signal: AbortSignal.timeout(30_000),
-  });
-  return { status: response.status, body: response.status === 200 ? await response.json() : undefined };
-}
-
-function workflowRun(value: unknown): WorkflowRun {
-  const run = value as Record<string, unknown> | null;
-  if (!run || typeof run !== "object") refuse("GitHub returned a malformed workflow run");
-  const repository = (run.repository as Record<string, unknown> | undefined)?.full_name;
-  if (!Number.isSafeInteger(run.id) || (run.id as number) < 1) refuse("GitHub returned a workflow run without an id");
-  for (const key of ["path", "event", "head_branch", "head_sha", "status", "html_url", "created_at"]) {
-    if (typeof run[key] !== "string") refuse(`GitHub workflow run ${String(run.id)} has no ${key}`);
-  }
-  return {
-    id: run.id as number,
-    path: run.path as string,
-    event: run.event as string,
-    head_branch: run.head_branch as string,
-    head_sha: run.head_sha as string,
-    status: run.status as string,
-    conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
-    html_url: run.html_url as string,
-    repository: typeof repository === "string" ? repository : "",
-    created_at: run.created_at as string,
-  };
-}
-
-/**
- * Chooses the public CI evidence for one commit: the pinned run when given,
- * otherwise the newest push run of ci.yml on main for exactly that commit. It
- * must have completed with success; anything else refuses.
- */
-export function selectCiRun(runs: readonly WorkflowRun[], commit: string, pinned?: number): WorkflowRun {
-  const candidates = runs.filter((run) =>
-    run.repository === RELEASE_REPOSITORY &&
-    run.path === PUBLIC_CI_WORKFLOW_PATH &&
-    run.event === "push" &&
-    run.head_branch === "main" &&
-    run.head_sha === commit
-  );
-  const chosen = pinned === undefined
-    ? [...candidates].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id))[0]
-    : candidates.find((run) => run.id === pinned);
-  if (chosen === undefined) {
-    refuse(pinned === undefined
-      ? `no public CI push run of ${PUBLIC_CI_WORKFLOW_PATH} on main exists for ${commit}`
-      : `public CI run ${pinned} is not a push run of ${PUBLIC_CI_WORKFLOW_PATH} on main for ${commit}`);
-  }
-  if (chosen.status !== "completed" || chosen.conclusion !== "success") {
-    refuse(`public CI run ${chosen.id} for ${commit} is ${chosen.status}/${chosen.conclusion ?? "none"}, not completed/success`);
-  }
-  if (chosen.html_url !== `${RELEASE_REPOSITORY_URL}/actions/runs/${chosen.id}`) refuse(`public CI run ${chosen.id} has an unexpected URL`);
-  return chosen;
-}
-
-export async function publicCiRun(commit: string, pinned: number | undefined, fetchJson: FetchJson = anonymousGitHubJson): Promise<WorkflowRun> {
-  if (pinned !== undefined) {
-    const response = await fetchJson(`https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs/${pinned}`);
-    if (response.status !== 200) refuse(`GitHub returned HTTP ${response.status} for public CI run ${pinned}`);
-    return selectCiRun([workflowRun(response.body)], commit, pinned);
-  }
-  const response = await fetchJson(
-    `https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs?head_sha=${commit}&event=push&per_page=100`,
-  );
-  if (response.status !== 200) refuse(`GitHub returned HTTP ${response.status} for the public CI runs of ${commit}`);
-  const runs = (response.body as { workflow_runs?: unknown } | undefined)?.workflow_runs;
-  if (!Array.isArray(runs)) refuse("GitHub returned a malformed workflow run list");
-  return selectCiRun(runs.map(workflowRun), commit);
 }
 
 /** Git's environment without inherited repository, identity, or date overrides. */

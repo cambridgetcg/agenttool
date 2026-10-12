@@ -72,7 +72,7 @@ The workflow:
 1. runs only in `cambridgetcg/agenttool-packages`, dispatched on, and checking
    out, an existing annotated `<package>-v<version>` tag made by
    `bin/public-release-tag.ts` (fixed tagger, a successful public CI run of
-   that exact commit);
+   that exact commit, which the workflow reads back from the GitHub API);
 2. before any package code runs, refuses the inputs the publish step would
    refuse (`check-inputs`: a prerelease on `latest`, `publish_mode: publish`
    with `trusted`, bootstrap for an existing package, trusted for a missing
@@ -210,6 +210,16 @@ the GitHub API; `--ci-run <id>` pins one). It writes an annotated
 commit, its private source commit, and the CI run. It never pushes and never
 moves an existing tag. `--skip-ci-check` exists for local dry runs only; the
 publish workflow refuses such a tag.
+
+The workflow repeats the CI check with the same code: it asks the GitHub API,
+anonymously, whether the run the tag cites is a completed, successful push run
+of `ci.yml` on `main` for exactly the tagged commit, so a hand-made tag citing
+any other run, or a run that failed, is refused. That check runs code from the
+tagged commit. It catches mistakes and hand-made tags on genuine projection
+commits; against anyone able to push other commits to the public `main`, the
+barriers are the environment reviewer, the npm trust binding, and Yu's 2FA
+approval of each stage. An anonymous GitHub API rate limit refuses with HTTP
+403 or 429; dispatch again later.
 
 ### 5. Dry run
 

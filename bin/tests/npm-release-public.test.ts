@@ -16,7 +16,9 @@ import {
   RELEASE_TAGGER_EMAIL,
   RELEASE_TAGGER_NAME,
   STAGE_RECEIPT_SCHEMA,
+  ReleaseTagRefused,
   UNVERIFIED_CI_RUN,
+  assertReleaseTagEvidence,
   assertReleaseTagObject,
   historicalLoveManifestPath,
   isReleaseRemote,
@@ -35,6 +37,7 @@ import {
   stageApprovalSummary,
   stageReceipt,
   validatePackageManifest,
+  type FetchJson,
   type PackageJson,
   type PreparedReceipt,
 } from "../npm-release";
@@ -324,6 +327,96 @@ describe("release tag messages", () => {
       .toThrow("must not be signed");
     expect(() => assertReleaseTagObject(raw(`${message}Package: @agenttool/other@1.0.0\n`), expected)).toThrow("duplicate release tag trailer");
     expect(() => parseReleaseTagObject(`object ${"1".repeat(40)}\ngpgsig x\n\nmessage`)).toThrow("unexpected release tag header");
+  });
+});
+
+describe("the publish workflow checks the CI run a tag cites", () => {
+  const commit = "1".repeat(40);
+  const runId = 38140965681;
+  const facts = {
+    name: "@agenttool/math-cards",
+    version: "0.1.0-dev.2",
+    packagePath: "packages/math-cards",
+    projectionCommit: commit,
+    sourceCommit: "2".repeat(40),
+    ciRun: `${RELEASE_REPOSITORY_URL}/actions/runs/${runId}`,
+  };
+  const expected = { tag: "math-cards-v0.1.0-dev.2", tagCommit: commit, name: facts.name, version: facts.version };
+  const raw = (ciRun = facts.ciRun) => [
+    `object ${commit}`,
+    "type commit",
+    "tag math-cards-v0.1.0-dev.2",
+    `tagger ${RELEASE_TAGGER_NAME} <${RELEASE_TAGGER_EMAIL}> 1760000000 +0100`,
+    "",
+    releaseTagMessage({ ...facts, ciRun }),
+  ].join("\n");
+  /** The shape GitHub's GET /repos/{repo}/actions/runs/{id} returns, trimmed to the fields read. */
+  const githubRun = (overrides: Record<string, unknown> = {}) => ({
+    id: runId,
+    path: ".github/workflows/ci.yml",
+    event: "push",
+    head_branch: "main",
+    head_sha: commit,
+    status: "completed",
+    conclusion: "success",
+    html_url: `${RELEASE_REPOSITORY_URL}/actions/runs/${runId}`,
+    repository: { full_name: RELEASE_REPOSITORY },
+    created_at: "2026-10-11T20:00:00Z",
+    ...overrides,
+  });
+  const github = (answers: Record<string, { status: number; body?: unknown }>) => {
+    const urls: string[] = [];
+    const fetchJson: FetchJson = async (url) => {
+      urls.push(url);
+      return answers[url] ?? { status: 404, body: undefined };
+    };
+    return { fetchJson, urls };
+  };
+  const runUrl = (id: number) => `https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs/${id}`;
+
+  test("accepts a tag whose cited run is a successful push run of ci.yml on main for the tagged commit", async () => {
+    const { fetchJson, urls } = github({ [runUrl(runId)]: { status: 200, body: githubRun() } });
+    const parsed = await assertReleaseTagEvidence(raw(), expected, fetchJson);
+    expect(parsed.trailers["Public-CI-Run"]).toBe(facts.ciRun);
+    expect(urls).toEqual([runUrl(runId)]);
+  });
+
+  test("refuses a well-formed tag whose cited run does not vouch for this commit", async () => {
+    // A hand-made tag citing a run that does not exist.
+    const handMade = github({});
+    await expect(assertReleaseTagEvidence(raw(`${RELEASE_REPOSITORY_URL}/actions/runs/1`), expected, handMade.fetchJson))
+      .rejects.toThrow("GitHub returned HTTP 404 for public CI run 1");
+    expect(handMade.urls).toEqual([runUrl(1)]);
+    for (const [overrides, message] of [
+      [{ head_sha: "3".repeat(40) }, "is not a push run"],
+      [{ path: ".github/workflows/publish-npm.yml" }, "is not a push run"],
+      [{ event: "workflow_dispatch" }, "is not a push run"],
+      [{ head_branch: "feature" }, "is not a push run"],
+      [{ repository: { full_name: "someone/fork" } }, "is not a push run"],
+      [{ status: "in_progress", conclusion: null }, "not completed/success"],
+      [{ conclusion: "failure" }, "not completed/success"],
+      [{ html_url: "https://github.com/someone/fork/actions/runs/38140965681" }, "unexpected URL"],
+    ] as const) {
+      const { fetchJson } = github({ [runUrl(runId)]: { status: 200, body: githubRun(overrides) } });
+      const attempt = assertReleaseTagEvidence(raw(), expected, fetchJson);
+      await expect(attempt).rejects.toThrow(message);
+      await expect(attempt).rejects.toBeInstanceOf(ReleaseTagRefused);
+    }
+    const limited = github({ [runUrl(runId)]: { status: 403 } });
+    await expect(assertReleaseTagEvidence(raw(), expected, limited.fetchJson)).rejects.toThrow("rate limit");
+  });
+
+  test("refuses an unverified or foreign tag before asking GitHub anything", async () => {
+    const { fetchJson, urls } = github({});
+    await expect(assertReleaseTagEvidence(raw(UNVERIFIED_CI_RUN), expected, fetchJson)).rejects.toThrow("verified public CI run");
+    await expect(assertReleaseTagEvidence(raw("https://github.com/cambridgetcg/agenttool/actions/runs/1"), expected, fetchJson))
+      .rejects.toThrow("verified public CI run");
+    expect(urls).toEqual([]);
+  });
+
+  test("the workflow's tag check reads the cited run in Actions", () => {
+    const script = readFileSync(join(ROOT, "bin", "npm-release.ts"), "utf8");
+    expect(script).toContain("await assertReleaseTagEvidence(await captured(\"git\", [\"cat-file\", \"tag\", `refs/tags/${tag}`]), {");
   });
 });
 

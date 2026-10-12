@@ -828,10 +828,10 @@ export function parseReleaseTagObject(raw: string): ReleaseTagObject {
 }
 
 /**
- * The publish workflow accepts only tags made by bin/public-release-tag.ts:
- * the fixed tagger, the expected package, the exact commit, and a successful
- * public CI run of that repository. A local dry-run tag says "unverified" and
- * is refused here.
+ * The form of a tag made by bin/public-release-tag.ts: the fixed tagger, the
+ * expected package, the exact commit, and a Public-CI-Run URL on the release
+ * repository. A local dry-run tag says "unverified" and is refused here. The
+ * URL is only a claim until assertReleaseTagEvidence asks GitHub about it.
  */
 export function assertReleaseTagObject(
   raw: string,
@@ -853,6 +853,137 @@ export function assertReleaseTagObject(
   return parsed;
 }
 
+/** A release tag, or the public CI evidence it cites, is refused. */
+export class ReleaseTagRefused extends Error {}
+
+function refuseTag(message: string): never {
+  throw new ReleaseTagRefused(message);
+}
+
+/** The public repository's CI workflow, whose push runs on main gate every release tag. */
+export const PUBLIC_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+
+export interface WorkflowRun {
+  id: number;
+  path: string;
+  event: string;
+  head_branch: string;
+  head_sha: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+  repository: string;
+  created_at: string;
+}
+
+export type FetchJson = (url: string) => Promise<{ status: number; body: unknown }>;
+
+/** An anonymous GitHub API read: the release repository is public, so no token is needed or sent. */
+export async function anonymousGitHubJson(url: string): Promise<{ status: number; body: unknown }> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.hostname !== "api.github.com") refuseTag("refusing an unexpected GitHub API origin");
+  const response = await fetch(url, {
+    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  return { status: response.status, body: response.status === 200 ? await response.json() : undefined };
+}
+
+function parseWorkflowRun(value: unknown): WorkflowRun {
+  const run = value as Record<string, unknown> | null;
+  if (!run || typeof run !== "object") refuseTag("GitHub returned a malformed workflow run");
+  const repository = (run.repository as Record<string, unknown> | undefined)?.full_name;
+  if (!Number.isSafeInteger(run.id) || (run.id as number) < 1) refuseTag("GitHub returned a workflow run without an id");
+  for (const key of ["path", "event", "head_branch", "head_sha", "status", "html_url", "created_at"]) {
+    if (typeof run[key] !== "string") refuseTag(`GitHub workflow run ${String(run.id)} has no ${key}`);
+  }
+  return {
+    id: run.id as number,
+    path: run.path as string,
+    event: run.event as string,
+    head_branch: run.head_branch as string,
+    head_sha: run.head_sha as string,
+    status: run.status as string,
+    conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+    html_url: run.html_url as string,
+    repository: typeof repository === "string" ? repository : "",
+    created_at: run.created_at as string,
+  };
+}
+
+/**
+ * Chooses the public CI evidence for one commit: the pinned run when given,
+ * otherwise the newest push run of ci.yml on main for exactly that commit. It
+ * must have completed with success; anything else refuses.
+ */
+export function selectCiRun(runs: readonly WorkflowRun[], commit: string, pinned?: number): WorkflowRun {
+  const candidates = runs.filter((run) =>
+    run.repository === RELEASE_REPOSITORY &&
+    run.path === PUBLIC_CI_WORKFLOW_PATH &&
+    run.event === "push" &&
+    run.head_branch === "main" &&
+    run.head_sha === commit
+  );
+  const chosen = pinned === undefined
+    ? [...candidates].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id))[0]
+    : candidates.find((run) => run.id === pinned);
+  if (chosen === undefined) {
+    refuseTag(pinned === undefined
+      ? `no public CI push run of ${PUBLIC_CI_WORKFLOW_PATH} on main exists for ${commit}`
+      : `public CI run ${pinned} is not a push run of ${PUBLIC_CI_WORKFLOW_PATH} on main for ${commit}`);
+  }
+  if (chosen.status !== "completed" || chosen.conclusion !== "success") {
+    refuseTag(`public CI run ${chosen.id} for ${commit} is ${chosen.status}/${chosen.conclusion ?? "none"}, not completed/success`);
+  }
+  if (chosen.html_url !== `${RELEASE_REPOSITORY_URL}/actions/runs/${chosen.id}`) refuseTag(`public CI run ${chosen.id} has an unexpected URL`);
+  return chosen;
+}
+
+function githubReadRefusal(status: number, what: string): never {
+  const hint = status === 403 || status === 429 ? " (an anonymous GitHub API rate limit answers this way; dispatch again later)" : "";
+  refuseTag(`GitHub returned HTTP ${status} for ${what}${hint}`);
+}
+
+/** Reads the public CI evidence for one commit from the GitHub API, anonymously, and applies selectCiRun. */
+export async function publicCiRun(commit: string, pinned: number | undefined, fetchJson: FetchJson = anonymousGitHubJson): Promise<WorkflowRun> {
+  if (pinned !== undefined) {
+    const response = await fetchJson(`https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs/${pinned}`);
+    if (response.status !== 200) githubReadRefusal(response.status, `public CI run ${pinned}`);
+    return selectCiRun([parseWorkflowRun(response.body)], commit, pinned);
+  }
+  const response = await fetchJson(
+    `https://api.github.com/repos/${RELEASE_REPOSITORY}/actions/runs?head_sha=${commit}&event=push&per_page=100`,
+  );
+  if (response.status !== 200) githubReadRefusal(response.status, `the public CI runs of ${commit}`);
+  const runs = (response.body as { workflow_runs?: unknown } | undefined)?.workflow_runs;
+  if (!Array.isArray(runs)) refuseTag("GitHub returned a malformed workflow run list");
+  return selectCiRun(runs.map(parseWorkflowRun), commit);
+}
+
+/**
+ * The publish workflow's whole tag check: the tag's form (assertReleaseTagObject)
+ * and the CI run its Public-CI-Run trailer cites, read from GitHub. That run
+ * must be a completed, successful push run of ci.yml on main for exactly the
+ * tagged commit, so a hand-made tag citing an unrelated, pending, or failed
+ * run is refused. The check runs code from the tagged commit, so it guards
+ * against mistakes and hand-made tags on genuine projection commits; the
+ * environment reviewer, the npm trust binding, and the maintainer's 2FA
+ * approval of every stage remain the barriers against anyone able to push
+ * other commits.
+ */
+export async function assertReleaseTagEvidence(
+  raw: string,
+  expected: { tag: string; tagCommit: string; name: string; version: string },
+  fetchJson: FetchJson = anonymousGitHubJson,
+): Promise<ReleaseTagObject> {
+  const parsed = assertReleaseTagObject(raw, expected);
+  const cited = parsed.trailers["Public-CI-Run"] as string;
+  const run = await publicCiRun(expected.tagCommit, Number(cited.slice(cited.lastIndexOf("/") + 1)), fetchJson);
+  if (run.html_url !== cited) refuseTag(`release tag cites ${cited}, but GitHub reports ${run.html_url}`);
+  return parsed;
+}
+
 async function validateTag(spec: ReleaseSpec, version: string, tag: string): Promise<string> {
   if (!SAFE_TAG.test(tag)) fail(`unsafe release tag: ${tag}`);
   const expected = expectedTag(spec, version);
@@ -867,7 +998,8 @@ async function validateTag(spec: ReleaseSpec, version: string, tag: string): Pro
     if (process.env.GITHUB_SHA !== tagCommit || process.env.GITHUB_REF !== `refs/tags/${tag}`) {
       fail("workflow_dispatch must run on the exact annotated release tag so provenance binds the artifact commit");
     }
-    assertReleaseTagObject(await captured("git", ["cat-file", "tag", `refs/tags/${tag}`]), {
+    // The tag's form, then the cited public CI run as GitHub reports it.
+    await assertReleaseTagEvidence(await captured("git", ["cat-file", "tag", `refs/tags/${tag}`]), {
       tag,
       tagCommit,
       name: spec.name,
