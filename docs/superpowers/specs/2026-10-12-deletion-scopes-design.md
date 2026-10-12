@@ -724,7 +724,11 @@ These are text-only edits. If any inline `<script>` changes, its sha256 in `apps
    - money and permanence flags.
 
    The purge runner and a generic project-archive walk, `GET /v1/project/archive/:store?cursor=` (keyset on `(created_at, id)`, bearer, free), both read it.
-3. **Export coverage gates purge.** Every store the purge erases must report `complete` in the registry before the runner may be enabled in production. The exception is a store marked `not_exported` with a stated reason, for example "vault values: read each with `GET /v1/vault/:name`". This is a test, not a promise. It applies the `departure_and_return` join to the ownership map (`labor-boundaries.ts:175-196`).
+3. **Export coverage gates purge.** Every store the purge erases must report `complete` in the registry before the runner may be enabled in production. A store may instead be marked `not_exported` only in one of two ways:
+   - it names a free read route that returns the same content, and the coverage test calls that route against a fixture and checks that every erased column is readable through it (for example "vault values: read each with `GET /v1/vault/:name`");
+   - or it carries Yu's explicit sign-off, recorded in the registry entry with his name, the date and the reason.
+
+   A stated reason alone does not pass. This is a test, not a promise. It applies the `departure_and_return` join to the ownership map (`labor-boundaries.ts:175-196`).
 4. **The exit door follows.** The SDK gains a `project_archive` store family over the generic walk. Its manifest keeps the existing `complete` / `window_only` statuses. An SDK release is needed before the privacy page can say "published" (section 13.6).
 
 ---
@@ -800,7 +804,7 @@ Each wave lands as reviewed PRs on `main` and deploys through `deploy-api.yml`. 
    - expired working memory is purged by rule, and `readById` honours expiry;
    - vault-audit IPs go to NULL after 30 days.
 
-   A one-time operator backfill purges rows already soft-deleted. Each backfill is a `retention`-scope ledger entry, dry-run first.
+   A one-time operator backfill purges rows already soft-deleted. Some of those rows can still be restored today: an inbox message soft-deleted last month comes back with `PATCH /v1/inbox/:id` `{"status":"unread"}`, because `updateStatus` has no guard against leaving `deleted` (`api/src/services/inbox/store.ts:604-621`; `api/src/routes/inbox/messages.ts:155-158`). So the backfill is announced before it runs: wave 1's `content_retained: true` responses and `/public/retention` state the date from which already-deleted content will be purged. The backfill runs no earlier than 30 days after wave 2 deploys, and a row restored before then is not touched. Each backfill is a `retention`-scope ledger entry, dry-run first.
 4. **The paid-witness memory case** becomes erase-in-place instead of 409.
 5. `GET /public/ownership-map`, and the join test against `/public/retention`.
 
@@ -903,6 +907,8 @@ Steps run in this order, because Q8 A puts export first:
 23. **Q5's kept set is slightly wider than Yu's list.** Chain addresses are kept for 6 years: each kept `tx_hash` reveals them on a public chain anyway, so dropping the column would hide nothing from an observer. Yu may narrow this by dropping stored addresses at pseudonymisation. The replay fence keeps hashes indefinitely, beyond the 6-year purge, so no transfer is credited twice. A sha256 of a public `(chain, tx_hash, log_index)` can be reversed by enumerating the chain, so the fence permanently shows that agenttool received that transfer, though not for whom.
 24. **The Q6 settlement feed keeps one link** between a seller's DID and its wallet id, through the receipt's `listing_id` and the listing's kept `seller_wallet_id`, until the 6-year purge removes the wallet (11.2). Removing it would mean editing a published receipt (against Q6) or dropping the wallet id (against Q5).
 25. **Replay can void entries** made with a confirmed stolen key (13.4), with two operators, a written reason, a ledger entry and a public count. Without it, the deletion ledger would remove the backup-restore recovery path that exists today for a bearer-key wipe.
+26. **The wave 2 backfill purges content that is already soft-deleted**, after a public notice and no earlier than 30 days after wave 2 deploys (17, wave 2 step 3). The alternative is to purge only rows soft-deleted after the announcement.
+27. **`not_exported` needs a tested free read route or Yu's recorded sign-off** (14.3), so a stated reason alone cannot pass the export-first gate.
 
 ---
 
