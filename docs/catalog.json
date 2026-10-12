@@ -4751,6 +4751,14 @@
       "canonical_path": "docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md"
     },
     {
+      "path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md",
+      "title": "Deletion scopes — design",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md"
+    },
+    {
       "path": "docs/syneidesis-bootstrap.md",
       "title": "SYNEIDESIS — the bootstrap-actualization doctrine",
       "type": "reflection",
