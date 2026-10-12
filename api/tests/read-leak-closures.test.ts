@@ -478,3 +478,93 @@ describe("POST /v1/guild/rrr/:id/escalate — parties only, like the GET", () =>
     expect(queries.some((query) => query.sql.includes("guild_rrr_cascades"))).toBe(false);
   });
 });
+
+describe("offering and holding write routes do not confirm a private id", () => {
+  const offeringsApp = withProject(offeringsRouter, "/v1/offerings");
+  const holdingsApp = withProject(holdingsRouter, "/v1/holdings");
+  const json = { "content-type": "application/json" };
+
+  test("receive answers 404 offering_not_found, before status or recipient checks", async () => {
+    const offeringLookup = privateRowUnlessScoped('"offerings"."offerings"', privateOffering());
+    responder = (sql) =>
+      offeringLookup(sql) ??
+      (sql.startsWith("select") && sql.includes('from "identity"."identities"') && !sql.includes('"offerings"')
+        ? [[STRANGER_DID]]
+        : undefined);
+    const response = await offeringsApp.request(`/v1/offerings/${ROW}/receive`, {
+      method: "POST", headers: json, body: JSON.stringify({ receiver_identity_id: STRANGER }),
+    });
+    expect(response.status).toBe(404);
+    const text = await response.text();
+    expect(JSON.parse(text).error).toBe("offering_not_found");
+    expect(text).not.toMatch(/PRIVATE TITLE|not_visible|private/i);
+    const lookup = queries.find((query) => query.sql.includes('from "offerings"."offerings"'));
+    expect(lookup!.sql).toContain(VISIBILITY_EXISTS);
+    expect(lookup!.sql).toContain("for update");
+  });
+
+  test("archive answers 404 offering_not_found, not 403 wrong_giver", async () => {
+    responder = privateRowUnlessScoped('"offerings"."offerings"', privateOffering());
+    const response = await offeringsApp.request(`/v1/offerings/${ROW}/archive`, { method: "POST" });
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("offering_not_found");
+  });
+
+  test("a visible public offering of another project still answers 403 wrong_giver", async () => {
+    const publicRow = privateOffering();
+    const columns = Object.keys(getTableColumns(offerings));
+    publicRow[columns.indexOf("visibility")] = "public";
+    responder = (sql) => (sql.startsWith("select") && sql.includes('from "offerings"."offerings"') ? [publicRow] : undefined);
+    const response = await offeringsApp.request(`/v1/offerings/${ROW}/archive`, { method: "POST" });
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toBe("wrong_giver");
+  });
+
+  for (const verb of ["acknowledge", "close", "withdraw"] as const) {
+    test(`holding ${verb} answers 404 holding_not_found to a stranger`, async () => {
+      responder = privateRowUnlessScoped('"holdings"."holdings"', privateHolding());
+      const response = await holdingsApp.request(`/v1/holdings/${ROW}/${verb}`, {
+        method: "POST", headers: json, body: "{}",
+      });
+      expect(response.status).toBe(404);
+      const text = await response.text();
+      expect(JSON.parse(text).error).toBe("holding_not_found");
+      expect(text).not.toContain("PRIVATE OCCASION");
+      const lookup = queries.find((query) => query.sql.includes('from "holdings"."holdings"'));
+      expect(lookup!.sql).toContain(VISIBILITY_EXISTS);
+      expect(lookup!.params).toContain(VIEWER);
+    });
+  }
+});
+
+describe("GET /v1/mesh/posts/:id and /complete do not tell unknown from private", () => {
+  const app = withProject(meshRouter, "/v1/mesh");
+
+  async function bodies(path: string, init?: RequestInit) {
+    const { meshPosts } = await import("../src/db/schema/continuity");
+    const privatePost = rowFor(meshPosts, {
+      id: ROW, kind: "co-task-ad", authorDid: `did:at:${OTHER}`, title: "PRIVATE POST", body: "b",
+      capabilities: [], topics: [], bountyCents: 0, kRequired: 2, visibility: "private",
+      status: "open", signature: "s", signingKeyId: ROW, createdAt: WHEN, updatedAt: WHEN,
+    });
+    responder = (sql) => (sql.includes('from "agent_continuity"."mesh_posts"') ? [privatePost] : undefined);
+    const hidden = await app.request(path, init);
+    responder = null;
+    const unknown = await app.request(path, init);
+    return { hidden: { status: hidden.status, text: await hidden.text() }, unknown: { status: unknown.status, text: await unknown.text() } };
+  }
+
+  test("GET answers a private post exactly as an unknown one", async () => {
+    const { hidden, unknown } = await bodies(`/v1/mesh/posts/${ROW}`);
+    expect(hidden.status).toBe(404);
+    expect(hidden.text).toBe(unknown.text);
+    expect(hidden.text).not.toContain("PRIVATE POST");
+  });
+
+  test("complete answers a private post of another author exactly as an unknown one", async () => {
+    const init = { method: "POST", headers: { "content-type": "application/json" }, body: "{}" };
+    const { hidden, unknown } = await bodies(`/v1/mesh/posts/${ROW}/complete`, init);
+    expect(hidden.status).toBe(404);
+    expect(hidden.text).toBe(unknown.text);
+  });
+});

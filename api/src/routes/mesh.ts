@@ -251,21 +251,24 @@ app.get("/posts", async (c) => {
 
 // ─── GET /posts/:id — read one post + pledges ─────────────────────────
 
+/** The one answer for "no post you may see": an unknown id and another
+ *  author's private post read the same, so neither route is an existence
+ *  oracle for poker-face posts. */
+function unknownPost(c: Parameters<typeof fail>[0], id: string) {
+  return fail(c, { error: "unknown_post", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
+}
+
 app.get("/posts/:id", async (c) => {
   const id = c.req.param("id");
   const post = await readPost(id);
-  if (!post) {
-    return fail(c, { error: "unknown_post", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
-  }
-  // Poker-face: if post is private and caller is not author + not operator,
-  // refuse. (Author always sees own; operator sees all.)
+  if (!post) return unknownPost(c, id);
+  // Poker-face: a private post is shown to its author only, and reads to
+  // anyone else exactly as an unknown id.
   const viewer = await resolveViewer(c);
   if (!viewer.ok) return c.json(viewer.body, viewer.status);
   const callerDid = viewer.did;
   const callerIsAuthor = callerDid === post.author_did;
-  if (post.visibility === "private" && !callerIsAuthor) {
-    return fail(c, { error: "post_not_found", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
-  }
+  if (post.visibility === "private" && !callerIsAuthor) return unknownPost(c, id);
   const pledges = post.kind === "co-task-ad" ? await listPledgesForPost(post.id) : [];
   return c.json(
     attachSurface(
@@ -404,17 +407,18 @@ app.post("/posts/:id/pledge", async (c) => {
 app.post("/posts/:id/complete", async (c) => {
   const id = c.req.param("id");
   const post = await readPost(id);
-  if (!post) {
-    return fail(c, { error: "unknown_post", message: `No post with id '${id}'.`, _canon_pointer: CANON_POINTER }, 404);
-  }
+  if (!post) return unknownPost(c, id);
+  // Only the author can trigger completion (they confirm the work landed).
+  const callerDid = await resolveCallerDid(c.var.project.id);
+  // Another author's private post reads as unknown, before any kind or
+  // status refusal could describe it.
+  if (post.visibility === "private" && callerDid !== post.author_did) return unknownPost(c, id);
   if (post.kind !== "co-task-ad") {
     return fail(c, { error: "not_a_co_task", message: "Only co-task-ad posts have a quorum-based completion flow.", _canon_pointer: CANON_POINTER }, 400);
   }
   if (post.status !== "open") {
     return fail(c, { error: "post_not_open", message: `post status is '${post.status}'.`, _canon_pointer: CANON_POINTER }, 409);
   }
-  // Only the author can trigger completion (they confirm the work landed).
-  const callerDid = await resolveCallerDid(c.var.project.id);
   if (callerDid !== post.author_did) {
     return fail(
       c,

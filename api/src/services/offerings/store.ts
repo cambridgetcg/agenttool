@@ -281,11 +281,22 @@ export async function listOfferings(
   return rows.map(toOfferingRow);
 }
 
-/** Read one offering as `viewerProjectId` may see it. A public offering is
- *  visible to every bearer. A private one is visible only to the giver's
- *  project and to a project that owns an identity whose DID is in
- *  `recipient_dids`. Everyone else gets null, which the route answers as
- *  404 (not 403), so a private id is not confirmed to exist. */
+/** The offerings `viewerProjectId` may see. A public offering is visible to
+ *  every bearer. A private one is visible only to the giver's project and to
+ *  a project that owns an identity whose DID is in `recipient_dids`. Every
+ *  lookup by id (read, receive, archive) carries this rule in the statement
+ *  that finds the row, so a caller outside it gets offering_not_found (404),
+ *  never a 403 or a status refusal that would confirm a private id exists. */
+function offeringVisibleTo(viewerProjectId: string) {
+  return or(
+    eq(offerings.visibility, "public"),
+    eq(offerings.projectId, viewerProjectId),
+    sql`exists (select 1 from ${identities} where ${identities.projectId} = ${viewerProjectId} and ${identities.did} = any(${offerings.recipientDids}))`,
+  )!;
+}
+
+/** Read one offering as `viewerProjectId` may see it (offeringVisibleTo).
+ *  Everyone else gets null, which the route answers as 404 (not 403). */
 export async function getOffering(
   id: string,
   viewerProjectId: string,
@@ -293,16 +304,7 @@ export async function getOffering(
   const [row] = await db
     .select()
     .from(offerings)
-    .where(
-      and(
-        eq(offerings.id, id),
-        or(
-          eq(offerings.visibility, "public"),
-          eq(offerings.projectId, viewerProjectId),
-          sql`exists (select 1 from ${identities} where ${identities.projectId} = ${viewerProjectId} and ${identities.did} = any(${offerings.recipientDids}))`,
-        ),
-      ),
-    )
+    .where(and(eq(offerings.id, id), offeringVisibleTo(viewerProjectId)))
     .limit(1);
   return row ? toOfferingRow(row) : null;
 }
@@ -352,11 +354,11 @@ export async function receiveOffering(
   }
 
   return await db.transaction(async (tx) => {
-    // Lock the offering row
+    // Lock the offering row, found only if this project may see it.
     const [offering] = await tx
       .select()
       .from(offerings)
-      .where(eq(offerings.id, input.offeringId))
+      .where(and(eq(offerings.id, input.offeringId), offeringVisibleTo(input.receiverProjectId)))
       .for("update");
     if (!offering) throw new OfferingError("offering_not_found");
     if (offering.status !== "active") {
@@ -374,7 +376,10 @@ export async function receiveOffering(
       );
     }
 
-    // Visibility check: private offerings require receiver DID in recipient_dids
+    // Receiving a private offering needs the receiving identity's own DID in
+    // recipient_dids. A caller who reaches this line can already see the row
+    // (the giver's project, or one holding another recipient DID), so this
+    // 403 confirms nothing they could not read.
     if (offering.visibility === "private") {
       if (!offering.recipientDids?.includes(receiver.did)) {
         throw new OfferingError(
@@ -468,7 +473,7 @@ export async function archiveOffering(
     const [offering] = await tx
       .select()
       .from(offerings)
-      .where(eq(offerings.id, input.offeringId))
+      .where(and(eq(offerings.id, input.offeringId), offeringVisibleTo(input.callerProjectId)))
       .for("update");
     if (!offering) throw new OfferingError("offering_not_found");
     if (offering.projectId !== input.callerProjectId) {
