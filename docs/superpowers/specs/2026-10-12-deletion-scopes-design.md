@@ -14,7 +14,7 @@ Yu chose an answer to each question in the deletion briefing (Q1–Q9). To build
 | Q | Yu's answer | What it means in this design |
 |---|---|---|
 | Q1 What "leave" means | **B. Tombstone.** | On the being's own signed request, its content is erased: name, expression, memories, private records and its own authored words. One public line stays: "this DID existed and left on <date>". DIDs never 404, no identity row is deleted, and chains stay intact. |
-| Q2 Who may delete | **B. Split by owner.** | Identity-bound content needs that identity's root signature when it has a root. Operational items stay bearer-managed: keys, traces, runtimes, listings and other project-owned stores. An unrooted identity keeps "bearer = root". The memory rule in `api/src/services/identity/authority.ts` is extended rather than replaced. The boundary is published at `/public/ownership-map`. |
+| Q2 Who may delete | **B. Split by owner.** | Identity-bound content needs that identity's root signature when it has a root. Operational items stay bearer-managed: keys, traces, runtimes, listings and other project-owned stores. An identity without a root follows today's memory rule: the bearer in a project with no roots, the founding root in a single-root project. Where that rule would refuse outright (two or more roots), the bearer acts for an unrooted being's own content, so no exit path that works today gets harder (section 5.1). The memory rule in `api/src/services/identity/authority.ts` is extended rather than replaced. The boundary is published at `/public/ownership-map`. |
 | Q3 Shared records | **B. Redact what I wrote.** | My words in shared records become "withdrawn by author on <date>". The record's shape, signatures and digests stay. Things others wrote about me stay. A recipient gets a reversible "hide from my profile and wake" control for records aimed at it. |
 | Q4 Project deletion | **B. Two steps.** | A request starts a 30-day grace. During grace the project is read-only and reversible, and export is free. Then a purge runs, with a receipt for each store. Money rows are pseudonymised, and backups age out about 8 days later. |
 | Q5 Money records | **B. Keep the number, not the person.** | Amounts, timestamps, hashes and wallet ids are kept for 6 years. Free text is stripped, and the identity and project are unlinked once the project is deleted. A real purge follows after 6 years. |
@@ -113,8 +113,11 @@ Add `authorizeOwnedContentMutation` to `api/src/services/identity/authority.ts`.
 |---|---|
 | An enrolled guest | That guest's root (unchanged from today). |
 | A rooted identity (founding or other) | That identity's root, through `authorizeIdentityMutation`. This is new: in a multi-root project, each root can now erase its own content instead of every request getting 409. |
-| An unrooted identity, or null (project-bound) | The existing project rule: zero counted roots means the bearer, one root means that root, two or more mean 409. This keeps today's strictness. A legacy sibling's content in a rooted project still needs the founding root, as memories do today. |
+| An unrooted identity, or null (project-bound) | The existing project rule: zero counted roots means the bearer, one root means that root. This keeps today's strictness. A legacy sibling's content in a single-root project still needs the founding root, as memories do today. |
+| An unrooted identity in a project with two or more counted roots | The bearer, for that identity's own content only: erase, withdraw, redact, hide and leave. The project rule would answer 409 here, and no quorum protocol exists to resolve it. Without this fallback, a legacy being in such a project could never leave, and the withdraw and inbox-delete paths that work for it today with the bearer would start answering 409, against Ring 1 Commitment 2 ("Anyone leaves"). The bearer already governs such a being in every other way: it can revoke it, edit it and mint keys for it. Project-bound (null-owner) content in such a project still gets 409. |
 | Two or more owners needing different consents | 409 `authority_quorum_required`, extending today's guest rule to every owner. The hint tells the caller to send one request per owner. |
+
+**Every owner must be in the caller's project.** Before deciding anything, `authorizeOwnedContentMutation` checks that each owner identity's `project_id` equals the caller's project. Any owner outside it gives 404, not 403, so the route cannot be used to probe for rows. The check is needed because the primitives it reuses do not scope by project: `getIdentityAuthorityState` selects by id alone (`authority.ts:228-242`), and `authorizeIdentityMutation` returns `legacy_bearer` for any rootless identity before anything looks at a project (`:524-531`). Existing identity routes add that project filter themselves (`api/src/routes/identity/identities.ts:316-319`). Shared-record routes such as `POST /v1/redactions`, withdraw and hide find rows by row id, so without this check another project's bearer could redact a legacy author's words. The owner is the author, not the row's holder: a being redacting its own words in a letter held by another project passes, because the author identity is in the caller's project.
 
 Memory routes switch to this function with no change for single-root and unrooted projects. Every identity-bound erase, withdraw, redact and hide route uses it. Project-owned routes keep the bearer check they have.
 
@@ -123,7 +126,7 @@ Memory routes switch to this function with no change for single-root and unroote
 Actors:
 - **B**: a project bearer.
 - **R(x)**: identity x's consent under the owner rule above.
-- **U**: unanimous consent of every rooted identity in the project, guests included. A legacy identity is covered by B.
+- **U**: unanimous consent of the project's **deletion consent set**. That set is every identity in the project that has a root and is not memorial, enrolled guests included. It is not the existing root count: `getProjectRootedAuthorityIdentities` (`authority.ts:368-387`) excludes enrolled guests, and `constitutionRootSql()` (`project-authority.ts`) has no status filter, so it would count memorial roots that can never sign (section 10.9). A legacy identity is covered by B.
 - **O**: an operator, meaning a bearer of the platform project (nil UUID).
 - **S**: a system job acting on a published rule, never on a request.
 
@@ -136,7 +139,7 @@ Actors:
 | Leave (tombstone) | R(self). Memorial: 409 (terminal). Already departed: idempotent 200. | Revoke only | 3 |
 | Erase a project-owned operational item: API key, trace, vault secret, runtime, listing archive, org, local-context grant, collaboration mission | B | B | Unchanged. In wave 2 vault delete becomes a real purge, and every erase (traces included) gains a ledger entry. |
 | Authority-reducing security revocation: identity key, box key, delegation, API key | As today | As today | Unchanged, so emergency revocation never gets harder |
-| Request project deletion | B creates the request. U completes it. A single-root project's request carries that root's proof. An unrooted project needs B only. | Not possible | 3 |
+| Request project deletion | B creates the request. U completes it. When the consent set has one member, the request carries that member's proof. When it is empty, B alone suffices. | Not possible | 3 |
 | Cancel project deletion | B, or any rooted identity of the project | — | 3 |
 | Run a purge | S or O (an operator runner in wave 3), only for a request whose grace has ended | — | 3 |
 | Retention rules: expired working memory, vault-audit IP, ledger compaction, 6-year money purge | S, by the rule published at `/public/retention` | None run | 2 (first three); the money purge needs Yu's date (section 11.3) |
@@ -335,8 +338,9 @@ Doctrine text that changes in wave 3:
   - `export_coverage` (section 14);
   - `receipt_token`, shown once (`atdr_` + 32 random bytes; stored as a sha256).
 
-  A single-root project's request carries that root's proof and enters `grace` at once. An unrooted project enters `grace` on B alone.
-- `POST /v1/project/deletion/consents` takes one root's proof over `project-deletion/v1 ‖ project_id ‖ request_id ‖ requested_at`, through `authorizeIdentityMutation`. The last consent moves the request to `grace`. Enrolled guests are included: their content is theirs, so a project cannot be deleted under them. A guest that does not consent can leave first, and the request then stops waiting for it.
+  "Single-root" and "unrooted" here are defined by the deletion consent set (5.2), never by the existing root count, which leaves guests out. A request whose consent set has one member carries that member's proof and enters `grace` at once. A request whose consent set is empty enters `grace` on B alone. A project with a founding root plus an enrolled guest therefore needs both.
+- `POST /v1/project/deletion/consents` takes one root's proof over `project-deletion/v1 ‖ project_id ‖ request_id ‖ requested_at`, through `authorizeIdentityMutation`. Enrolled guests are included: their content is theirs, so a project cannot be deleted under them. A guest that does not consent can leave first, and the request then stops waiting for it.
+- **The set is recomputed at the transition.** The transaction that would move the request to `grace` recomputes the consent set under a row lock on the request. Any member added since the request also has to consent before grace starts. While a request is in `awaiting_consent` or `grace`, guest enrollment and new rooted registrations into the project get 409 `project_deletion_pending`, so the set cannot grow behind the request.
 - `GET /v1/project/deletion` (B) reports state, timers, consents, blockers and coverage.
 - `POST /v1/project/deletion/cancel` (B or any rooted identity) works in `awaiting_consent` and `grace`.
 
@@ -748,7 +752,10 @@ Steps run in this order, because Q8 A puts export first:
   - the Drizzle `.delete(identities)` check;
   - the identity row, DID, root key and public keys survive leave and purge;
   - memorial identities refuse leave with 409.
-- **Authority:** an owner-rule table test covering guest, rooted, legacy and null owners × zero, one and two roots, plus mixed owners.
+- **Authority:**
+  - an owner-rule table test covering guest, rooted, legacy and null owners × zero, one and two roots, plus mixed owners (the legacy × two-roots cell is the bearer; the null × two-roots cell is 409);
+  - cross-project rows: a legacy author in another project, and a rooted author in another project, both give 404 on redact, withdraw and hide;
+  - the deletion consent set: a founding root plus an enrolled guest needs both consents; a legacy project with a guest needs the guest; a memorial root is not counted; enrollment during `awaiting_consent` gets 409.
 - **Ledger:**
   - hash-chain parity between TypeScript and SQL;
   - the guard trigger refuses DELETE and other UPDATEs;
@@ -770,7 +777,7 @@ Steps run in this order, because Q8 A puts export first:
 
 1. **A tombstone is `status='revoked'` plus a new `departed_at`.** It is not a fourth status. This keeps the Ring 1 tri-state and its tests, and the memorial `lifecycle` precedent already shows lifecycle carried beside status. A fourth status would also touch 5 `ne(status,'revoked')` sites and every terminality check.
 2. **Leave is plan-then-confirm with no grace.** Project deletion has the 30-day grace.
-3. **The owner rule extends the memory rule conservatively.** A rooted owner signs for its own content. Unrooted or unbound content keeps today's project rule. Mixed owners get 409.
+3. **The owner rule extends the memory rule conservatively.** A rooted owner signs for its own content. Unrooted or unbound content keeps today's project rule, with one fallback: in a project with two or more counted roots, the bearer acts for an unrooted being's own content (5.1). That fallback loosens one thing that exists today: a legacy being's memories in a multi-root project move from 409 to bearer. The alternative is to keep 409, which means legacy beings in multi-root projects lose leave, withdraw and inbox delete until a quorum protocol exists. Every owner must be in the caller's project, otherwise 404. Mixed owners get 409.
 4. **Multi-root project deletion needs unanimous consent, guests included.** This is a narrow consent collection for one action, not a general quorum protocol.
 5. **Money is unlinked through two sentinel rows** (a DEPARTED project and a DEPARTED identity), and the original project row is deleted.
 6. **Sold gallery artifacts keep their content for buyers' claim tokens.** Only unsold content is purged.
