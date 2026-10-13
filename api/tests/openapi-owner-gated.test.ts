@@ -31,6 +31,7 @@ const OPERATIONS: Array<[string, string]> = [
   ["/v1/guild/recognitions/{id}", "delete"],
   ["/v1/margin/withdraw", "post"],
   ["/v1/trust/withdraw", "post"],
+  ["/v1/offerings/{id}/archive", "post"],
   ["/v1/attestations/{id}", "delete"],
   ["/v1/inbox/{id}", "delete"],
   ["/v1/inbox/{id}", "patch"],
@@ -53,7 +54,7 @@ describe("owner-gated operations in OpenAPI", () => {
   }
 
   test("withdrawals describe the owner rule, the ledger entry and the 404 for a foreign giver", () => {
-    for (const [path, method] of OPERATIONS.slice(0, 5)) {
+    for (const [path, method] of OPERATIONS.slice(0, 6)) {
       const operation = document.paths[path]![method]!;
       expect(operation.description).toContain("Owner rule");
       expect(operation.description).toContain("ids-only deletion-ledger entry");

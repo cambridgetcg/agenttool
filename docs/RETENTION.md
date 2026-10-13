@@ -54,7 +54,8 @@ deletion_ledger_unavailable` and nothing is deleted.
   row of type `deletion` telling the owner what kind of record was erased,
   how many, when, the ledger entry and the authority.
 - Withdrawing a blessing, unconditional, guild recognition, margin,
-  attestation or trust keeps the record and its words, marked withdrawn, but
+  attestation or trust, or archiving an offering, keeps the record and its
+  words, marked withdrawn (archived), but
   now also writes a ledger entry and a deletion moment, so a backup restore
   re-marks it withdrawn.
 

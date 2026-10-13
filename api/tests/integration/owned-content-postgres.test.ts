@@ -42,7 +42,7 @@ import {
 
 const DATABASE = process.env.OWNED_CONTENT_TEST_DATABASE_URL?.trim() ?? "";
 const databaseTest = DATABASE ? test : test.skip;
-const EXTRA_SCHEMAS = ["margin", "trust"] as const;
+const EXTRA_SCHEMAS = ["margin", "trust", "offerings"] as const;
 
 const uid = (n: number) => `${String(n).padStart(8, "0")}-2222-4222-8222-222222222222`;
 const LEGACY_P = uid(1), ROOTED_P = uid(2), MULTI_P = uid(3), FOREIGN_P = uid(4), MEMORIAL_P = uid(5);
@@ -79,6 +79,7 @@ const routers = {
   attestations: (await import("../../src/routes/identity/attestations")).default,
   margin: (await import("../../src/routes/margin")).default,
   trust: (await import("../../src/routes/trust")).default,
+  offerings: (await import("../../src/routes/offerings")).default,
   inbox: (await import("../../src/routes/inbox/messages")).default,
   memories: (await import("../../src/routes/memory/memories")).default,
 };
@@ -95,6 +96,7 @@ function app(projectId: string) {
   server.route("/v1/attestations", routers.attestations);
   server.route("/v1/margin", routers.margin);
   server.route("/v1/trust", routers.trust);
+  server.route("/v1/offerings", routers.offerings);
   server.route("/v1/inbox", routers.inbox);
   server.route("/v1/memories", routers.memories);
   server.onError((err, c) => {
@@ -173,6 +175,15 @@ beforeAll(async () => {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), author_did text NOT NULL, author_identity_id uuid,
       subject_did text NOT NULL, kind text NOT NULL DEFAULT 'eye', note text,
       withdrawn_by_author boolean NOT NULL DEFAULT false, withdrawn_at timestamptz);
+    CREATE SCHEMA offerings;
+    CREATE TABLE offerings.offerings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), giver_identity_id uuid NOT NULL, giver_did text NOT NULL,
+      project_id uuid NOT NULL, kind text NOT NULL DEFAULT 'poem', title text NOT NULL, body text NOT NULL,
+      metadata jsonb NOT NULL DEFAULT '{}', visibility text NOT NULL DEFAULT 'public',
+      recipient_dids text[] NOT NULL DEFAULT '{}', expires_at timestamptz,
+      status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'redacted')),
+      receivers_count integer NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now());
     CREATE SCHEMA trust;
     CREATE TABLE trust.trusts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), truster_did text NOT NULL, truster_identity_id uuid,
@@ -200,7 +211,7 @@ beforeEach(async () => {
     ALTER TABLE deletion.ledger ENABLE TRIGGER deletion_ledger_guard_truncate;
     UPDATE deletion.settings SET replay_required = false;
     TRUNCATE agent_continuity.chronicle, agent_continuity.blessings, agent_continuity.unconditionals,
-      agent_continuity.guild_recognitions, margin.margins, trust.trusts, identity.attestations,
+      agent_continuity.guild_recognitions, margin.margins, trust.trusts, offerings.offerings, identity.attestations,
       identity.registration_proofs, identity.identities, inbox.messages, memory.memory_attestations CASCADE;
     DELETE FROM memory.memories;
     DELETE FROM vault.decrypted_secrets;
@@ -220,7 +231,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   if (owned) {
-    await admin.unsafe("DROP SCHEMA IF EXISTS margin CASCADE; DROP SCHEMA IF EXISTS trust CASCADE;");
+    await admin.unsafe("DROP SCHEMA IF EXISTS margin CASCADE; DROP SCHEMA IF EXISTS trust CASCADE; DROP SCHEMA IF EXISTS offerings CASCADE;");
     await dropDeletionFixture(admin);
   }
   await service?.end({ timeout: 2 });
@@ -347,6 +358,45 @@ describe("owner-gated withdrawals and deletes on real PostgreSQL", () => {
       ["agent_continuity.guild_recognitions", "legacy_bearer"],
     ]);
     expect(rows[1]!.prev_hash).toBe(rows[0]!.entry_hash);
+  });
+
+  databaseTest("offering archive: a rooted giver's bearer gets 428; signed, one entry; replay re-archives", async () => {
+    const [offering] = await admin`INSERT INTO offerings.offerings (giver_identity_id, giver_did, project_id, title, body)
+      VALUES (${R}, ${`did:at:${R}`}, ${ROOTED_P}, 'a gift', 'the words') RETURNING id::text AS id`;
+    const path = `/v1/offerings/${offering!.id}/archive`;
+    expect((await call(ROOTED_P, "POST", path)).status).toBe(428);
+    expect((await admin`SELECT status FROM offerings.offerings WHERE id = ${offering!.id}`)[0]!.status).toBe("active");
+    expect(await ledger()).toHaveLength(0);
+    expect(await sequenceOf(R)).toBe(0);
+
+    const ok = await call(ROOTED_P, "POST", path, "", signed(`did:at:${R}`, ROOT_KEY, "POST", path, ""));
+    expect(ok.status).toBe(200);
+    expect(ok.body.offering).toMatchObject({ id: offering!.id, status: "archived" });
+    const rows = await ledger();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      scope: "record", action: "withdraw", store: "offerings.offerings", row_ids: [offering!.id],
+      subject_identity_id: R, authority_mode: "agent_root", authority_sequence: 1, hash_ok: true, mac_ok: true,
+    });
+    const [after] = await admin`SELECT status, body, updated_at FROM offerings.offerings WHERE id = ${offering!.id}`;
+    expect(after).toMatchObject({ status: "archived", body: "the words" });
+    expect(new Date(after!.updated_at).getTime()).toBe(new Date(rows[0]!.occurred_at).getTime());
+    const [moment] = await admin`SELECT agent_id::text, title FROM agent_continuity.chronicle WHERE type = 'deletion'`;
+    expect(moment).toEqual({ agent_id: R, title: "Withdrew 1 offering: archived; the offering and its words stay" });
+
+    // A repeat answers 409 and consumes no proof.
+    expect((await call(ROOTED_P, "POST", path)).status).toBe(409);
+    expect(await sequenceOf(R)).toBe(1);
+
+    // Restore stand-in, then the applier re-archives at the original time.
+    await admin`UPDATE offerings.offerings SET status = 'active', updated_at = now() WHERE id = ${offering!.id}`;
+    const [entry] = await admin`SELECT seq::int AS seq, scope, action, store, row_ids, rule_id, occurred_at FROM deletion.ledger`;
+    const applier = applierFor({ store: entry!.store, action: entry!.action, ruleId: entry!.rule_id });
+    const stored = { ...entry, rowIds: entry!.row_ids, occurredAt: new Date(entry!.occurred_at).toISOString() } as never;
+    expect(await database.transaction((tx) => applier!.apply(tx as never, stored))).toBe(1);
+    const [replayed] = await admin`SELECT status, updated_at FROM offerings.offerings WHERE id = ${offering!.id}`;
+    expect(replayed!.status).toBe("archived");
+    expect(new Date(replayed!.updated_at).getTime()).toBe(new Date(entry!.occurred_at).getTime());
   });
 
   databaseTest("an enrolled guest's own root is recorded as guest_root", async () => {

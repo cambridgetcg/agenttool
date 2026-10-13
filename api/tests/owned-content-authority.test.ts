@@ -123,6 +123,7 @@ describe("every owner-gated route uses the owner rule", () => {
       ["routes/margin.ts", "margin"],
       ["routes/identity/attestations.ts", "attestation"],
       ["routes/trust.ts", "trust"],
+      ["routes/offerings.ts", "offering"],
     ] as const) {
       expect({ path, uses: source(path).includes(`gesture: "${gesture}"`) }).toEqual({ path, uses: true });
     }

@@ -46,7 +46,7 @@ describe("replay applier registry", () => {
     for (const name of [
       "inbox.purge", "vault.purge", "identity_backup.purge", "memory.delete", "memory.erase_in_place",
       "blessing.withdraw", "unconditional.withdraw", "guild_recognition.withdraw", "margin.withdraw",
-      "attestation.withdraw", "trust.withdraw", "trace.delete", "org.delete", "org_member.delete",
+      "attestation.withdraw", "trust.withdraw", "offering.withdraw", "trace.delete", "org.delete", "org_member.delete",
     ]) {
       expect(used.has(name), name).toBe(true);
     }

@@ -121,7 +121,7 @@ describe("GET /public/ownership-map", () => {
   test("owner_gated_routes match the routes that call the owner rule and the SDK helper", () => {
     const sources = [
       "routes/memory/memories.ts", "routes/inbox/messages.ts", "routes/blessings.ts", "routes/unconditionals.ts",
-      "routes/guild.ts", "routes/identity/attestations.ts", "routes/margin.ts", "routes/trust.ts",
+      "routes/guild.ts", "routes/identity/attestations.ts", "routes/margin.ts", "routes/trust.ts", "routes/offerings.ts",
     ].map((path) => readFileSync(join(API_ROOT, "src", path), "utf8"));
     for (const source of sources) {
       expect(source.includes("authorizeOwnedContentMutation(") || source.includes("withdrawForOwner(")).toBe(true);
@@ -129,7 +129,7 @@ describe("GET /public/ownership-map", () => {
     const published = new Set(OWNER_GATED_ROUTES.map((route) => `${route.method} ${route.path.replace(/:id/, "{id}").replace("?key=", "?key={key}")}`));
     const sdk = readFileSync(join(REPO_ROOT, "packages/sdk-ts/src/owner-gated.ts"), "utf8");
     const sdkRoutes = [...sdk.matchAll(/method: "([A-Z]+)", path: "([^"]+)"/g)].map((match) => `${match[1]} ${match[2]}`);
-    expect(sdkRoutes.length).toBe(10);
+    expect(sdkRoutes.length).toBe(11);
     for (const route of sdkRoutes) expect({ route, published: published.has(route) }).toEqual({ route, published: true });
   });
 

@@ -48,6 +48,7 @@ OWNER_GATED_ROUTES: Mapping[str, Mapping[str, str]] = MappingProxyType({
     "attestation.withdraw": MappingProxyType({"method": "DELETE", "path": "/v1/attestations/{id}", "body": "none"}),
     "margin.withdraw": MappingProxyType({"method": "POST", "path": "/v1/margin/withdraw", "body": "margin_id"}),
     "trust.withdraw": MappingProxyType({"method": "POST", "path": "/v1/trust/withdraw", "body": "trust_id"}),
+    "offering.withdraw": MappingProxyType({"method": "POST", "path": "/v1/offerings/{id}/archive", "body": "none"}),
 })
 
 
@@ -77,7 +78,7 @@ def owner_gated_request(
         base_url: API origin, e.g. ``https://api.agenttool.dev``.
         action: One of :data:`OWNER_GATED_ROUTES`.
         id: The row (memory, message, blessing, unconditional, recognition,
-            attestation, margin or trust id).
+            attestation, margin, trust or offering id).
         key: ``memory.delete_by_key`` only: the exact memory key.
         agent_id: ``margin.withdraw`` / ``trust.withdraw`` only: the giver.
         authority: The owner's (or the project root's) consent, an

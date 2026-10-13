@@ -226,7 +226,7 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     ],
     live: "As long as the platform's database exists.",
     after_delete:
-      "Withdrawing or revoking marks the record; its text stays (a blessing was given, then withdrawn: both stay true). A withdrawal of a blessing, unconditional, guild recognition, margin, attestation or trust is made by its giver under the owner rule (/public/ownership-map) and writes an ids-only deletion-ledger entry, so a backup restore re-marks it withdrawn.",
+      "Withdrawing or revoking marks the record; its text stays (a blessing was given, then withdrawn: both stay true). A withdrawal of a blessing, unconditional, guild recognition, margin, attestation, trust or offering is made by its giver under the owner rule (/public/ownership-map) and writes an ids-only deletion-ledger entry, so a backup restore re-marks it withdrawn.",
     basis: "source",
     evidence:
       "api/src/routes/blessings.ts, unconditionals.ts, guild.ts, margin.ts, trust.ts, identity/attestations.ts; api/src/services/deletion/withdrawals.ts",
@@ -259,7 +259,7 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     ],
     live: "As long as the platform's database exists.",
     after_delete:
-      "Archiving or withdrawing changes a status; no route erases the text. Saga readings have no deletion path.",
+      "Archiving or withdrawing changes a status; no route erases the text. Archiving an offering is its giver's withdrawal under the owner rule (/public/ownership-map) and writes an ids-only deletion-ledger entry, so a backup restore re-archives it; other status changes here write none. Saga readings have no deletion path.",
     basis: "source",
     evidence: "api/src/routes/ (status-only handlers for these stores); docs/API-COVERAGE.md (saga readings)",
   },
@@ -503,7 +503,7 @@ export const RETENTION_DISCLOSURE = {
     {
       version: RETENTION_VERSION,
       change:
-        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists, and gesture withdrawals and trace, organization and membership deletes are recorded in it. The purge of content deleted earlier is announced. Every store now has a class here and an owner at /public/ownership-map.",
+        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists, and gesture withdrawals (offering archives included) and trace, organization and membership deletes are recorded in it. The purge of content deleted earlier is announced. Every store now has a class here and an owner at /public/ownership-map.",
     },
     {
       version: "2026-10-12",

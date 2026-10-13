@@ -335,6 +335,7 @@ export const OWNER_GATED_ROUTES = [
   { method: "DELETE", path: "/v1/attestations/:id", store: "identity.attestations", owner: "attester_id" },
   { method: "POST", path: "/v1/margin/withdraw", store: "margin.margins", owner: "author_identity_id (or the identity whose DID is author_did)" },
   { method: "POST", path: "/v1/trust/withdraw", store: "trust.trusts", owner: "truster_identity_id (or the identity whose DID is truster_did)" },
+  { method: "POST", path: "/v1/offerings/:id/archive", store: "offerings.offerings", owner: "giver_identity_id" },
 ] as const;
 
 export const OWNERSHIP_MAP = {

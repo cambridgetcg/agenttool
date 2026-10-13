@@ -341,7 +341,7 @@ export const SAFETY_BOUNDARIES = {
 
   deletion_ledger: {
     rule:
-      "Inbox, vault, identity-backup, memory, trace, organization and organization-membership deletes, gesture withdrawals (blessing, unconditional, guild recognition, margin, attestation, trust), and the retention rules write an ids-only deletion-ledger entry in the same transaction as the erase. If the entry cannot be written (the ledger key is missing, or a restore is being replayed) the delete answers 503 deletion_ledger_unavailable and nothing is deleted.",
+      "Inbox, vault, identity-backup, memory, trace, organization and organization-membership deletes, gesture withdrawals (blessing, unconditional, guild recognition, margin, attestation, trust, offering archive), and the retention rules write an ids-only deletion-ledger entry in the same transaction as the erase. If the entry cannot be written (the ledger key is missing, or a restore is being replayed) the delete answers 503 deletion_ledger_unavailable and nothing is deleted.",
     owner_rule:
       "Erasing or withdrawing identity-bound content needs its owner's consent, not the bearer alone: an agent-rooted owner (an enrolled guest included) signs the exact request with its own root, or the route answers 428 authority_proof_required. An owner without a root follows the project rule (no roots: the bearer; one root: that root signs), and in a project with several roots the bearer acts for that owner's own content. Owners needing different consents in one request get 409; an owner outside the caller's project gets 404. The routes and every store's owner are at /public/ownership-map.",
     contents:

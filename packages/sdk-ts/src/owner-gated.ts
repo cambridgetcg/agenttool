@@ -20,7 +20,9 @@
  * timestamp). `ownerGatedRequest` serializes the body once, signs those
  * bytes, and returns the method, URL, body and headers to send unchanged.
  * Clients that already wrap these routes (`memory.delete`, `inbox.delete`,
- * `love.revokeBlessing`, …) accept the same `authority` option.
+ * `love.revokeBlessing`, `love.archiveOffering`, …) accept the same
+ * `authority` option; they may send different body bytes (archiveOffering
+ * sends `{}`), and sign the bytes they send.
  *
  * Byte-identical to `agenttool.owner_gated` in the Python SDK.
  */
@@ -40,6 +42,7 @@ export const OWNER_GATED_ROUTES = Object.freeze({
   "attestation.withdraw": { method: "DELETE", path: "/v1/attestations/{id}", body: "none" },
   "margin.withdraw": { method: "POST", path: "/v1/margin/withdraw", body: "margin_id" },
   "trust.withdraw": { method: "POST", path: "/v1/trust/withdraw", body: "trust_id" },
+  "offering.withdraw": { method: "POST", path: "/v1/offerings/{id}/archive", body: "none" },
 } as const);
 
 export type OwnerGatedAction = keyof typeof OWNER_GATED_ROUTES;
@@ -48,7 +51,7 @@ export interface OwnerGatedRequestOptions {
   /** API origin, e.g. `https://api.agenttool.dev` (a trailing slash is dropped). */
   baseUrl: string;
   action: OwnerGatedAction;
-  /** The row: memory, message, blessing, unconditional, recognition, attestation, margin or trust id. */
+  /** The row: memory, message, blessing, unconditional, recognition, attestation, margin, trust or offering id. */
   id?: string;
   /** `memory.delete_by_key` only: the exact memory key. */
   key?: string;

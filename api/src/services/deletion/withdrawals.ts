@@ -1,6 +1,7 @@
 /** Gesture withdrawals by the giver, under the owner rule (deletion spec §5.2,
  *  wave 2): blessings, unconditionals, guild recognitions, margins,
- *  attestations and trusts.
+ *  attestations, trusts and offerings (an offering is withdrawn by archiving
+ *  it).
  *
  *  A withdrawal erases no words. The record stays with its signature and is
  *  marked withdrawn (revoked_at, or the withdrawn flag and withdrawn_at). It
@@ -34,6 +35,7 @@ export const WITHDRAWABLE = {
   margin: { kind: "margin.withdraw", store: "margin.margins" },
   attestation: { kind: "attestation.withdraw", store: "identity.attestations" },
   trust: { kind: "trust.withdraw", store: "trust.trusts" },
+  offering: { kind: "offering.withdraw", store: "offerings.offerings" },
 } as const;
 
 export type WithdrawableGesture = keyof typeof WITHDRAWABLE;
@@ -101,6 +103,12 @@ export async function markWithdrawn(
         UPDATE trust.trusts SET withdrawn_by_truster = true, withdrawn_at = ${when}::text::timestamptz
          WHERE id = ANY(string_to_array(${csv}, ',')::uuid[]) AND withdrawn_by_truster = false
         RETURNING id::text AS id`));
+    case "offerings.offerings":
+      // Archived is the giver's withdrawal; a redacted offering stays redacted.
+      return idsOf(await tx.execute(sql`
+        UPDATE offerings.offerings SET status = 'archived', updated_at = ${when}::text::timestamptz
+         WHERE id = ANY(string_to_array(${csv}, ',')::uuid[]) AND status = 'active'
+        RETURNING id::text AS id`));
   }
 }
 
@@ -136,6 +144,10 @@ async function lockWithdrawState(
     case "trust.trusts":
       result = await tx.execute(sql`SELECT withdrawn_at::text AS at, withdrawn_by_truster AS done
         FROM trust.trusts WHERE id = ANY(string_to_array(${csv}, ',')::uuid[]) FOR UPDATE`);
+      break;
+    case "offerings.offerings":
+      result = await tx.execute(sql`SELECT updated_at::text AS at, status <> 'active' AS done
+        FROM offerings.offerings WHERE id = ANY(string_to_array(${csv}, ',')::uuid[]) FOR UPDATE`);
       break;
   }
   const [row] = rows<{ at: string | null; done: boolean | string }>(result);

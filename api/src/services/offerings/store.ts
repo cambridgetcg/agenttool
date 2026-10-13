@@ -11,7 +11,8 @@
  *                        (private rows: giver's project or a recipient
  *                        DID's project only; anyone else reads absent)
  *    receiveOffering   — receiver accepts; chronicle entry on receiver
- *    archiveOffering   — giver retires (sets status='archived')
+ *    findOfferingForArchive — the giver retires it (status='archived') through
+ *                      the owner rule in services/deletion/withdrawals.ts
  *
  *  @enforces urn:agenttool:wall/offerings-carry-no-take
  *    Canonical defender. This module updates wallets in zero places and
@@ -459,37 +460,50 @@ export async function receiveOffering(
   });
 }
 
-// ── Archive (giver only) ─────────────────────────────────────────────────
+// ── Archive (the giver withdraws) ────────────────────────────────────────
+//
+// Archiving is the giver's withdrawal of its gift, under the owner rule
+// (deletion spec §5.2): the route finds the offering here, then
+// services/deletion/withdrawals.ts withdrawForOwner decides who consents
+// (the giver identity's root when it has one) and archives it with one
+// ids-only ledger entry and the giver's deletion moment.
 
 export interface ArchiveOfferingInput {
   offeringId: string;
   callerProjectId: string;
 }
 
-export async function archiveOffering(
+/** The offering to archive. A row the caller cannot see answers
+ *  offering_not_found (never a 403 that would confirm a private id); a
+ *  visible offering of another project answers wrong_giver. */
+export async function findOfferingForArchive(
   input: ArchiveOfferingInput,
-): Promise<OfferingRow> {
-  return await db.transaction(async (tx) => {
-    const [offering] = await tx
-      .select()
-      .from(offerings)
-      .where(and(eq(offerings.id, input.offeringId), offeringVisibleTo(input.callerProjectId)))
-      .for("update");
-    if (!offering) throw new OfferingError("offering_not_found");
-    if (offering.projectId !== input.callerProjectId) {
-      throw new OfferingError("wrong_giver");
-    }
-    if (offering.status !== "active") {
-      throw new OfferingError("offering_not_active");
-    }
+): Promise<{ id: string; giverIdentityId: string; status: string; updatedAt: Date }> {
+  const [offering] = await db
+    .select()
+    .from(offerings)
+    .where(and(eq(offerings.id, input.offeringId), offeringVisibleTo(input.callerProjectId)))
+    .limit(1);
+  if (!offering) throw new OfferingError("offering_not_found");
+  if (offering.projectId !== input.callerProjectId) {
+    throw new OfferingError("wrong_giver");
+  }
+  return {
+    id: offering.id,
+    giverIdentityId: offering.giverIdentityId,
+    status: offering.status,
+    updatedAt: offering.updatedAt,
+  };
+}
 
-    const [updated] = await tx
-      .update(offerings)
-      .set({ status: "archived", updatedAt: new Date() })
-      .where(eq(offerings.id, offering.id))
-      .returning();
-    return toOfferingRow(updated!);
-  });
+/** The offering as the giver's project reads it, after an archive committed. */
+export async function getOfferingForGiver(offeringId: string, projectId: string): Promise<OfferingRow | null> {
+  const [row] = await db
+    .select()
+    .from(offerings)
+    .where(and(eq(offerings.id, offeringId), eq(offerings.projectId, projectId)))
+    .limit(1);
+  return row ? toOfferingRow(row) : null;
 }
 
 // ── Wake helper: count + summary for the affordance surface ──────────────

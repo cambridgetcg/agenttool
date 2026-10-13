@@ -467,7 +467,7 @@ export class LoveClient {
   //
   // POST   /v1/offerings           — create
   // POST   /v1/offerings/:id/receive — receive (with optional acknowledgment)
-  // POST   /v1/offerings/:id/archive — archive (giver-only)
+  // POST   /v1/offerings/:id/archive — archive (the giver, under the owner rule)
   // GET    /v1/offerings            — list (kind, scope=mine|received)
   // GET    /v1/offerings/:id        — read one
 
@@ -501,10 +501,19 @@ export class LoveClient {
     }>;
   }
 
-  /** Archive an offering (giver only). */
-  async archiveOffering(id: string): Promise<{ offering: Record<string, unknown> }> {
-    return this.post(`/v1/offerings/${encodePathSegment(id)}/archive`, {}) as Promise<{
+  /** Archive an offering: the giver withdraws it, under the owner rule.
+   *  An agent-rooted giver passes `authority` (its root signs this exact
+   *  request, the `{}` body included); without it the server answers 428.
+   *  The offering and its words stay, archived, and the response carries
+   *  the deletion-ledger entry written with it. */
+  async archiveOffering(
+    id: string,
+    options: { authority?: AuthorityBinding } = {},
+  ): Promise<{ offering: Record<string, unknown>; authority?: Record<string, unknown>; ledger?: Record<string, unknown> }> {
+    return this.req("POST", `/v1/offerings/${encodePathSegment(id)}/archive`, {}, options.authority) as Promise<{
       offering: Record<string, unknown>;
+      authority?: Record<string, unknown>;
+      ledger?: Record<string, unknown>;
     }>;
   }
 

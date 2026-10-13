@@ -4,8 +4,8 @@
  *  ceiling (api/tests/dining-openapi.test.ts). Holds:
  *    - the gesture withdrawals that had no OpenAPI entry until they moved to
  *      R(owner): DELETE /v1/blessings/{id}, /v1/unconditionals/{id},
- *      /v1/guild/recognitions/{id}, POST /v1/margin/withdraw and
- *      /v1/trust/withdraw;
+ *      /v1/guild/recognitions/{id}, POST /v1/margin/withdraw,
+ *      /v1/trust/withdraw and /v1/offerings/{id}/archive;
  *    - withOwnerGatedOperations, which adds the authority headers and the
  *      401/409/428 owner-rule refusals to the owner-gated operations that
  *      openapi.ts already describes (inbox PATCH and DELETE, attestation
@@ -210,6 +210,24 @@ export const OWNER_GATED_OPENAPI_PATHS = {
           ledger: ledgerBlock,
         },
         required: ["id", "withdrawn"],
+      },
+    }),
+  },
+  "/v1/offerings/{id}/archive": {
+    parameters: idParameter,
+    post: withdrawOperation({
+      tag: "love",
+      summary: "Archive an offering (the giver withdraws it, under the owner rule)",
+      who: "The giver is giver_identity_id. The proof signs the exact body bytes sent, if any (the SDK clients send {}). An offering no longer active answers 409 offering_not_active without consuming a proof; another project's offering the caller can see answers 403 wrong_giver.",
+      notFound: "offering_not_found: not found, or not visible to this project",
+      success: {
+        type: "object",
+        properties: {
+          offering: { type: "object" },
+          authority: ownerAuthorityBlock,
+          ledger: ledgerBlock,
+        },
+        required: ["offering", "authority", "ledger"],
       },
     }),
   },

@@ -509,9 +509,10 @@ listed at `GET /public/retention` ([Retention](RETENTION.md)).
 
 ## Deletion ledger
 
-Inbox, vault, identity-backup and memory deletes, gesture withdrawals
-(blessing, unconditional, guild recognition, margin, attestation, trust), and
-the retention rules write one ids-only entry to `deletion.ledger` in the same
+Inbox, vault, identity-backup, memory, trace, organization and
+organization-membership deletes, gesture withdrawals (blessing, unconditional,
+guild recognition, margin, attestation, trust, offering archive), and the
+retention rules write one ids-only entry to `deletion.ledger` in the same
 transaction as the erase. If the entry cannot be written — the Vault ledger key is missing, or a
 backup restore is being replayed — the delete answers `503
 deletion_ledger_unavailable` and nothing is deleted. Entries hold row ids,

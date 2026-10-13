@@ -491,9 +491,27 @@ class LoveClient:
             raise_from_response(resp, "love.receive_offering")
         return resp.json()
 
-    def archive_offering(self, offering_id: str) -> Dict[str, Any]:
-        """Archive an offering (giver only)."""
-        resp = self._http.post(f"{self._base}/v1/offerings/{_path_segment(offering_id)}/archive", json={})
+    def archive_offering(
+        self,
+        offering_id: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Archive an offering: the giver withdraws it, under the owner rule.
+
+        An agent-rooted giver must pass ``authority`` (its root signs this
+        exact request, the ``{}`` body included); without it the server
+        answers 428 ``authority_proof_required``. The offering and its words
+        stay, archived, and the response carries the deletion-ledger entry
+        written with it. See :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_signed(
+            self._http,
+            "POST",
+            f"{self._base}/v1/offerings/{_path_segment(offering_id)}/archive",
+            payload={},
+            authority=authority,
+        )
         if resp.status_code >= 400:
             # Server guidance travels intact. See exceptions.py
             # § _error_from_response.

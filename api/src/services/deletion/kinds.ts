@@ -47,6 +47,7 @@ export const LEDGER_KINDS = {
   "margin.withdraw": { scope: "record", action: "withdraw", store: "margin.margins", writer: "api" },
   "attestation.withdraw": { scope: "record", action: "withdraw", store: "identity.attestations", writer: "api" },
   "trust.withdraw": { scope: "record", action: "withdraw", store: "trust.trusts", writer: "api" },
+  "offering.withdraw": { scope: "record", action: "withdraw", store: "offerings.offerings", writer: "api" },
 
   // Retention rules (pg_cron, M3).
   "rule.expired_working_memory.delete": {

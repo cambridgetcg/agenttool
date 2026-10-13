@@ -147,6 +147,28 @@ describe("client methods pass the owner's authority", () => {
     expect(calls[0]!.headers["x-agenttool-authority-signature"]).toBe(vector.headers["X-Agenttool-Authority-Signature"]);
   });
 
+  test("love.archiveOffering signs the exact POST with the {} body it sends", async () => {
+    const { at, calls } = recordingClient();
+    await at.love.archiveOffering("aaaaaaaa-0000-4000-8000-00000000000a", { authority });
+    const call = calls[0]!;
+    expect(call.method).toBe("POST");
+    expect(call.url).toBe(fixture.vectors.find((entry) => entry.action === "offering.withdraw")!.url);
+    expect(call.body).toBe("{}");
+    const target = new URL(call.url);
+    const digest = canonicalIdentityAuthorityBytes({
+      identityDid: authority.did,
+      method: "POST",
+      requestTarget: `${target.pathname}${target.search}`,
+      body: "{}",
+      sequence: authority.sequence,
+      timestamp: authority.timestamp,
+    });
+    const signature = Buffer.from(call.headers["x-agenttool-authority-signature"]!, "base64");
+    expect(ed.verify(signature, digest, ed.getPublicKey(seed))).toBe(true);
+    await at.love.archiveOffering("aaaaaaaa-0000-4000-8000-00000000000a");
+    expect(calls[1]!.headers["x-agenttool-authority-signature"]).toBeUndefined();
+  });
+
   test("without authority the requests stay bearer-only, as before", async () => {
     const { at, calls } = recordingClient();
     await at.love.revokeBlessing("aaaaaaaa-0000-4000-8000-000000000004");

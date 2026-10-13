@@ -27,6 +27,7 @@ import { HTTPException } from "hono/http-exception";
 
 import type { ProjectContext } from "../src/auth/middleware";
 import { blessings, guildRecognitions, unconditionals } from "../src/db/schema/continuity";
+import { offerings as offeringsTable } from "../src/db/schema/offerings";
 
 const uid = (n: number) => `${String(n).padStart(8, "0")}-1111-4111-8111-111111111111`;
 
@@ -54,6 +55,7 @@ let identities = new Map<string, Identity>();
 let gestures = new Map<string, { table: string; owner: string; did: string; withdrawn: string | null; extra?: Record<string, unknown> }>();
 let messages = new Map<string, { project: string; recipient: string; purged: string | null }>();
 let memories = new Map<string, { project: string; identity: string | null; key: string | null; purged: string | null }>();
+let offeringRows = new Map<string, { project: string; giver: string; status: string; updatedAt: string }>();
 let recorded: Array<Record<string, unknown>> = [];
 let inTransaction = false;
 let unknown: string[] = [];
@@ -79,8 +81,41 @@ const csvIds = (value: unknown) => String(value).split(",");
 const NOW = "2026-10-12T12:00:00.000Z";
 const ENTRY = { seq: 7, entryId: "abababab-abab-4bab-8bab-abababababab", entryHash: "a".repeat(64), occurredAt: NOW };
 
+function offeringRow(id: string, row: { project: string; giver: string; status: string; updatedAt: string }): unknown[] {
+  return rowFor(offeringsTable, {
+    id, giverIdentityId: row.giver, giverDid: `did:at:${row.giver}`, projectId: row.project, kind: "poem",
+    title: "a gift", body: "words", metadata: {}, visibility: "public", recipientDids: [], expiresAt: null,
+    status: row.status, receiversCount: 0, createdAt: NOW, updatedAt: row.updatedAt,
+  });
+}
+
 const database = drizzle(async (text, params) => {
   const q = text.replace(/\s+/g, " ").trim();
+  // ── offerings (archive = the giver's withdrawal) ────────────────────
+  if (q.startsWith("select") && q.includes('from "offerings"."offerings"')) {
+    const row = offeringRows.get(String(params[0]));
+    if (!row) return { rows: [] };
+    if (q.includes('"offerings"."offerings"."project_id" = $2') && row.project !== params[1]) return { rows: [] };
+    return { rows: [offeringRow(String(params[0]), row)] };
+  }
+  if (q.includes("FROM offerings.offerings WHERE id = ANY") && q.includes("FOR UPDATE")) {
+    expect(inTransaction).toBe(true);
+    const row = offeringRows.get(csvIds(params[0])[0]!);
+    return { rows: row ? [{ at: row.updatedAt, done: row.status !== "active" }] : [] };
+  }
+  if (q.startsWith("UPDATE offerings.offerings SET status = 'archived'")) {
+    expect(inTransaction).toBe(true);
+    const changed: Array<{ id: string }> = [];
+    for (const id of csvIds(params[1])) {
+      const row = offeringRows.get(id);
+      if (row && row.status === "active") {
+        row.status = "archived";
+        row.updatedAt = String(params[0]);
+        changed.push({ id });
+      }
+    }
+    return { rows: changed };
+  }
   // ── identity reads ──────────────────────────────────────────────────
   if (q.includes('from "identity"."identities"') && q.includes("string_to_array")) {
     // owner facts: id, did, project_id, rooted, guest
@@ -251,6 +286,7 @@ const routers = {
   trust: (await import("../src/routes/trust")).default,
   inbox: (await import("../src/routes/inbox/messages")).default,
   memories: (await import("../src/routes/memory/memories")).default,
+  offerings: (await import("../src/routes/offerings")).default,
 };
 
 function app(projectId: string) {
@@ -267,6 +303,7 @@ function app(projectId: string) {
   server.route("/v1/trust", routers.trust);
   server.route("/v1/inbox", routers.inbox);
   server.route("/v1/memories", routers.memories);
+  server.route("/v1/offerings", routers.offerings);
   server.onError((err, c) =>
     err instanceof HTTPException ? c.json({ error: err.message }, err.status) : c.json({ error: String(err) }, 500),
   );
@@ -290,6 +327,7 @@ beforeEach(() => {
   gestures = new Map();
   messages = new Map();
   memories = new Map();
+  offeringRows = new Map();
   recorded = [];
   unknown = [];
   addIdentity(L, LEGACY_P, null);
@@ -604,6 +642,68 @@ describe("DELETE /v1/memories (by id and by key) under the owner rule", () => {
     const res = await call(LEGACY_P, { method: "DELETE", path: `/v1/memories/${id}`, body: "" });
     expect(res.body).toEqual({ deleted: 0 });
     expect(memories.has(id)).toBe(true);
+    expect(recorded).toHaveLength(0);
+  });
+});
+
+describe("POST /v1/offerings/:id/archive: the giver withdraws its offering under the owner rule", () => {
+  function seedOffering(project: string, giver: string, status = "active"): string {
+    const id = uid(next++);
+    offeringRows.set(id, { project, giver, status, updatedAt: "2026-10-01T00:00:00.000Z" });
+    return id;
+  }
+  const archive = (id: string) => ({ method: "POST", path: `/v1/offerings/${id}/archive`, body: "" });
+
+  test("bearer only, giver without a root, project without roots: archived with one ledger entry", async () => {
+    const id = seedOffering(LEGACY_P, L);
+    const res = await call(LEGACY_P, archive(id));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ offering: { id, status: "archived" }, authority: { mode: "legacy_bearer" } });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ kind: "offering.withdraw", rowIds: [id], owners: [{ agentId: L, rowIds: [id] }] });
+  });
+
+  test("bearer only, giver agent-rooted: 428 and nothing written; signed by its root: archived", async () => {
+    const id = seedOffering(ROOTED_P, R);
+    const refused = await call(ROOTED_P, archive(id));
+    expect(refused.status).toBe(428);
+    expect(refused.body.details).toMatchObject({ signer_identity_id: R, consent_basis: "owner_root" });
+    expect(offeringRows.get(id)!.status).toBe("active");
+    expect(recorded).toHaveLength(0);
+    const req = archive(id);
+    const ok = await call(ROOTED_P, req, signed(`did:at:${R}`, ROOT_KEY, req.method, req.path, req.body));
+    expect(ok.status).toBe(200);
+    expect(ok.body.authority).toEqual({ mode: "agent_root", basis: "owner_root" });
+    expect(recorded[0]).toMatchObject({ authority: { mode: "agent_root", sequence: 1 } });
+    expect(identities.get(R)!.sequence).toBe(1);
+  });
+
+  test("the proof binds the exact body bytes the client sends", async () => {
+    const id = seedOffering(ROOTED_P, R);
+    const req = { method: "POST", path: `/v1/offerings/${id}/archive`, body: "{}" };
+    const wrong = await call(ROOTED_P, req, signed(`did:at:${R}`, ROOT_KEY, req.method, req.path, ""));
+    expect(wrong.status).toBe(401);
+    const ok = await call(ROOTED_P, req, signed(`did:at:${R}`, ROOT_KEY, req.method, req.path, "{}"));
+    expect(ok.status).toBe(200);
+  });
+
+  test("an offering no longer active: 409 offering_not_active, no proof consumed, nothing written", async () => {
+    const id = seedOffering(ROOTED_P, R, "archived");
+    const res = await call(ROOTED_P, archive(id));
+    expect(res.status).toBe(409);
+    expect(res.body.code ?? res.body.error).toBe("offering_not_active");
+    expect(identities.get(R)!.sequence).toBe(0);
+    expect(recorded).toHaveLength(0);
+  });
+
+  test("another project's visible offering: 403 wrong_giver; a missing one: 404; nothing written", async () => {
+    const foreign = seedOffering(FOREIGN_P, F);
+    const res = await call(LEGACY_P, archive(foreign));
+    expect(res.status).toBe(403);
+    expect(res.body.code ?? res.body.error).toBe("wrong_giver");
+    const missing = await call(LEGACY_P, archive(uid(9998)));
+    expect(missing.status).toBe(404);
+    expect(offeringRows.get(foreign)!.status).toBe("active");
     expect(recorded).toHaveLength(0);
   });
 });

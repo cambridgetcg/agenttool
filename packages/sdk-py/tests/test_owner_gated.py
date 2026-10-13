@@ -144,6 +144,29 @@ def test_inbox_patch_to_deleted_signs_the_exact_json_body_it_sends():
     assert calls[0].headers["x-agenttool-authority-signature"] == vector["headers"]["X-Agenttool-Authority-Signature"]
 
 
+def test_archive_offering_signs_the_exact_post_with_its_empty_object_body():
+    at, calls = recording_client()
+    at.love.archive_offering("aaaaaaaa-0000-4000-8000-00000000000a", authority=AUTHORITY)
+    call = calls[0]
+    assert call.method == "POST"
+    assert str(call.url) == VECTORS["offering.withdraw"]["url"]
+    assert call.content == b"{}"
+    target = urlsplit(str(call.url))
+    digest = canonical_identity_authority_bytes(
+        identity_did=AUTHORITY["did"],
+        method="POST",
+        request_target=target.path + (f"?{target.query}" if target.query else ""),
+        body=b"{}",
+        sequence=AUTHORITY["sequence"],
+        timestamp=AUTHORITY["timestamp"],
+    )
+    signature = base64.b64decode(call.headers["x-agenttool-authority-signature"])
+    Ed25519PrivateKey.from_private_bytes(SEED).public_key().verify(signature, digest)
+    at.love.archive_offering("aaaaaaaa-0000-4000-8000-00000000000a")
+    assert "x-agenttool-authority-signature" not in calls[1].headers
+    assert calls[1].content == b"{}"
+
+
 def test_without_authority_requests_stay_bearer_only():
     at, calls = recording_client()
     at.love.revoke_blessing("aaaaaaaa-0000-4000-8000-000000000004")

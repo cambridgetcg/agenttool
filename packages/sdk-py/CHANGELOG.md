@@ -21,13 +21,15 @@ rule, and one request may not mix owners that need different consents (409
   authority=...)` builds the exact method, URL, body and headers for every
   owner-gated route (`OWNER_GATED_ROUTES`): memory delete by id and by key,
   inbox delete and PATCH to `deleted`, blessing, unconditional,
-  guild-recognition and attestation revocation, margin and trust withdrawal.
-  With `authority` it adds the existing `identity-authority/v1` exact-request
+  guild-recognition and attestation revocation, margin and trust withdrawal,
+  and offering archive. With `authority` it adds the existing `identity-authority/v1` exact-request
   proof headers. It reproduces the TypeScript helper's shared vectors byte for
   byte.
 - An optional `authority=` keyword on `love.revoke_blessing`,
-  `love.revoke_unconditional`, `identity.revoke_attestation`, `inbox.delete`
-  and `inbox.patch`. Without it the requests are bearer-only, as before.
+  `love.revoke_unconditional`, `love.archive_offering`,
+  `identity.revoke_attestation`, `inbox.delete` and `inbox.patch`. Without it
+  the requests are bearer-only, as before. `love.archive_offering` keeps
+  sending a `{}` body and signs those bytes.
 
 ### Changed
 

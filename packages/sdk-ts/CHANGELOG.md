@@ -22,13 +22,15 @@ rule, and one request may not mix owners that need different consents (409
   builds the exact method, URL, body and headers for every owner-gated route
   (`OWNER_GATED_ROUTES`): memory delete by id and by key, inbox delete and
   PATCH to `deleted`, blessing, unconditional, guild-recognition and
-  attestation revocation, margin and trust withdrawal. With `authority` it
+  attestation revocation, margin and trust withdrawal, and offering archive.
+  With `authority` it
   adds the existing `identity-authority/v1` exact-request proof headers. Shared
   vectors (`tests/fixtures/owner-gated-request-vectors.json`) pin every byte,
   and the Python helper reproduces them.
 - An optional `authority` on `love.revokeBlessing`, `love.revokeUnconditional`,
-  `identity.revoke_attestation`, `inbox.delete` and `inbox.patch`. Without it
-  the requests are bearer-only, as before.
+  `love.archiveOffering`, `identity.revoke_attestation`, `inbox.delete` and
+  `inbox.patch`. Without it the requests are bearer-only, as before.
+  `love.archiveOffering` keeps sending a `{}` body and signs those bytes.
 
 ### Changed
 

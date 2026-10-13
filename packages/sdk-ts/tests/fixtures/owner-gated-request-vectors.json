@@ -187,6 +187,23 @@
       "bearer_only_headers": {
         "Content-Type": "application/json"
       }
+    },
+    {
+      "action": "offering.withdraw",
+      "input": {
+        "id": "aaaaaaaa-0000-4000-8000-00000000000a",
+        "key": null,
+        "agent_id": null
+      },
+      "method": "POST",
+      "url": "https://api.agenttool.dev/v1/offerings/aaaaaaaa-0000-4000-8000-00000000000a/archive",
+      "body": "",
+      "headers": {
+        "X-Agenttool-Authority-Sequence": "3",
+        "X-Agenttool-Authority-Timestamp": "2026-10-12T12:00:00.000Z",
+        "X-Agenttool-Authority-Signature": "Dc4BHYFIh81VPDqQDysfcmb/hXhMV7EiGPqF8mSSTmE6azJFGnlWzsQjlRItGgOdpGXvIqnAXfjVL+kQdcpzCQ=="
+      },
+      "bearer_only_headers": {}
     }
   ]
 }

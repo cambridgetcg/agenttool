@@ -60,6 +60,7 @@ client methods that wrap these routes take the same `authority`.
 | `DELETE /v1/attestations/:id` | the attester |
 | `POST /v1/margin/withdraw` | the author (`agent_id` must name it) |
 | `POST /v1/trust/withdraw` | the truster (`agent_id` must name it) |
+| `POST /v1/offerings/:id/archive` | the giver (`giver_identity_id`); the proof signs the exact body sent |
 
 Before wave 2 the gesture withdrawals acted as the project's primary identity
 with the bearer alone, and inbox delete was bearer-only. Now any giver of the

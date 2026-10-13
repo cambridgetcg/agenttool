@@ -11,7 +11,8 @@
  *                                               recipient's project only)
  *    POST   /v1/offerings                     — create
  *    POST   /v1/offerings/:id/receive         — receive (with optional acknowledgment)
- *    POST   /v1/offerings/:id/archive         — archive (giver-only)
+ *    POST   /v1/offerings/:id/archive         — archive: the giver withdraws, under
+ *                                               the owner rule (deletion spec §5.2)
  *
  *  Public unauth discovery surface ships at /public/offerings.
  *
@@ -34,8 +35,11 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { errors, fail, type NextAction } from "../lib/errors";
+import { withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundBytes } from "../services/identity/authority";
 import {
-  archiveOffering,
+  findOfferingForArchive,
+  getOfferingForGiver,
   createOffering,
   getOffering,
   listOfferings,
@@ -285,17 +289,42 @@ app.post("/:id/receive", async (c) => {
   }
 });
 
-// ── POST /:id/archive — giver retires the offering ──────────────────────
+// ── POST /:id/archive — the giver withdraws the offering ────────────────
+//
+// Under the owner rule (deletion spec §5.1, §5.2 "withdraw a gesture I
+// gave"): a rooted giver's own root signs this exact request, body bytes
+// included (428 otherwise); a giver without a root follows the project rule.
+// The offering and its words stay, archived; one ids-only ledger entry and
+// the giver's deletion moment are written with it, so a backup restore
+// re-archives it. An offering no longer active answers 409
+// offering_not_active without consuming a proof.
 
 app.post("/:id/archive", async (c) => {
   const id = c.req.param("id");
   const project = c.var.project;
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const refuse = (code: OfferingError["code"]) => {
+    const err = new OfferingError(code);
+    return fail(c, refusalBody(err), statusFor(err.code) as ContentfulStatusCode);
+  };
   try {
-    const offering = await archiveOffering({
-      offeringId: id,
-      callerProjectId: project.id,
+    const found = await findOfferingForArchive({ offeringId: id, callerProjectId: project.id });
+    const result = await withdrawForOwner({
+      gesture: "offering",
+      rowId: found.id,
+      ownerIdentityId: found.giverIdentityId,
+      alreadyWithdrawnAt: found.status === "active" ? null : found.updatedAt,
+      projectId: project.id,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
     });
-    return c.json({ offering });
+    if (result.status === "refused") return c.json(result.body, result.httpStatus);
+    if (result.status === "not_found") return refuse("offering_not_found");
+    if (result.status === "already_withdrawn") return refuse("offering_not_active");
+    const offering = await getOfferingForGiver(found.id, project.id);
+    return c.json({ offering, authority: result.authority, ledger: result.ledger });
   } catch (err) {
     if (err instanceof OfferingError) {
       return fail(c, refusalBody(err), statusFor(err.code) as ContentfulStatusCode);
