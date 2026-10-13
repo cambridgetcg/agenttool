@@ -172,12 +172,19 @@ export async function recordErasure(
   return { entry, momentIds };
 }
 
-/** The `ledger` block every erasing response carries. */
+export const LEDGER_NOTE_MIRRORED =
+  "An ids-only entry recording this deletion was written with it and copied to the off-database mirror, so a backup restore replays the deletion. See /public/retention.";
+export const LEDGER_NOTE_UNMIRRORED =
+  "An ids-only entry recording this deletion was written with it, but it is not yet in the off-database mirror (none may be configured). Until it is copied there, a backup restore cannot replay this deletion. See /public/retention.";
+
+/** The `ledger` block every erasing response carries. Its note promises
+ *  replay only when the entry reached the mirror (spec §13.3): an entry
+ *  held only in the database is lost with it. */
 export function ledgerResponse(entry: AppendedLedgerEntry, mirrored: boolean) {
   return {
     entry_id: entry.entryId,
     seq: entry.seq,
     mirrored,
-    note: "An ids-only entry recording this deletion was written with it, so a backup restore replays the deletion. See /public/retention.",
+    note: mirrored ? LEDGER_NOTE_MIRRORED : LEDGER_NOTE_UNMIRRORED,
   };
 }

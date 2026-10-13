@@ -20,6 +20,7 @@ import {
   rowIdsDigest,
   type StoredLedgerEntry,
 } from "../src/services/deletion/ledger";
+import { ledgerResponse } from "../src/services/deletion/record";
 import {
   FileLedgerMirror,
   MIRROR_ENV,
@@ -209,6 +210,17 @@ describe("configuration and pushing", () => {
     const executor = { execute: async () => { throw new Error("must not query"); } };
     expect(await pushLedgerMirrorAfterCommit(executor as never, 1, { env: {} }))
       .toEqual({ mirrored: false, status: "unconfigured" });
+  });
+
+  test("an erase response promises replay only for an entry that reached the mirror", () => {
+    const entry = { entryId: "e", seq: 4 } as never;
+    const mirrored = ledgerResponse(entry, true);
+    const held = ledgerResponse(entry, false);
+    expect(mirrored).toMatchObject({ seq: 4, mirrored: true });
+    expect(mirrored.note).toContain("so a backup restore replays the deletion");
+    expect(held).toMatchObject({ seq: 4, mirrored: false });
+    expect(held.note).toContain("a backup restore cannot replay this deletion");
+    expect(held.note).not.toContain("replays the deletion");
   });
 
   test("a push stops at the first failure and marks only what reached the mirror", async () => {
