@@ -20,7 +20,8 @@ After the source pin and tooling are reviewed and merged to GitHub `main`,
 dispatch `publish-gospel.yml` on `main`. The first job tests the boundary and
 downloads/verifies the frozen artifact without publication credentials. Only
 its archive and receipt cross to the protected `npm-bootstrap` job. That job
-retains the existing environment reviewer, repeats archive verification, and
+has no required reviewer (owner decision, 2026-10-12; a release runs when Yu
+and Ai agree to it in conversation), repeats archive verification, and
 permits bootstrap only if both npm package and exact version are absent.
 
 The `NPM_TOKEN` is exposed only to the final `npm publish --ignore-scripts

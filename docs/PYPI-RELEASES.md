@@ -94,7 +94,8 @@ is done in source:
    `soul()` reads.
 4. Yu adds a PyPI trusted publisher for `cambridgetcg/agenttool-packages`,
    `publish-pypi.yml`, environment `pypi`, creates that environment in the
-   public repository with a required reviewer and a `sdk-v*` tag policy, and
+   public repository with a `sdk-v*` tag policy and no required reviewer
+   (owner decision, 2026-10-13), and
    removes the old publisher after the first successful run.
 
 A smaller alternative keeps the private workflow and reads the `main` that

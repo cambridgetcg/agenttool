@@ -37,7 +37,8 @@ The Gospel literary edition has one separate, exact-name route:
 [`bin/gospel-release/README.md`](../bin/gospel-release/README.md). Its custom
 source permission is preserved; the software publisher's Apache-2.0 policy
 is unchanged. The route pins the reviewed external artifact and source edition,
-transfers only verified bytes, retains the protected `npm-bootstrap` reviewer,
+transfers only verified bytes, runs its publish job in the `npm-bootstrap`
+environment (no required reviewer; see the correction below),
 permits first-publication bootstrap only, and verifies the public npm tarball.
 
 **Release gate correction — 2026-10-11.** In this private repository, the
@@ -47,7 +48,9 @@ each carried only a branch policy, with no required reviewer and
 `can_admins_bypass: true`. Run 33736822237 on 2026-09-03 still recorded a
 reviewer approval for `npm-bootstrap`; the repository has been private since
 2026-09-25. Owner decision, 2026-10-12, on these private environments: no
-required-reviewer rule is wanted. A release runs when Yu and Ai agree to it in
+required-reviewer rule is wanted. On 2026-10-13 Yu extended the decision to the
+public repository, and the required reviewer on its `npm-bootstrap` environment
+was removed that day. A release runs when Yu and Ai agree to it in
 conversation, and a release can be reverted or changed the same way. The
 private npm prepare job also stopped at an unauthenticated fetch of the
 private `main` branch:
@@ -173,9 +176,9 @@ private `NPM_TOKEN`, and creates the public `npm-bootstrap` environment
 | 3 | Public CI on that exact commit | GitHub | guard, every package gate, and pack smokes green |
 | 4 | Create and push the release tag | Ai | `public-release-tag.ts` found a successful CI run |
 | 5 | Dispatch with `dry_run: true` | Ai | prepared receipt in the run summary |
-| 6 | Dispatch with `dry_run: false` (stages by default) | Ai; environment reviewer approves | stage id and SHA-256 in the summary |
+| 6 | Dispatch with `dry_run: false` (stages by default) | Ai | stage id and SHA-256 in the summary |
 | 7 | Inspect and approve the stage | **Yu**, trusted device, 2FA | `npm stage approve` succeeded |
-| 8 | Dispatch with `dry_run: false` again | Ai; environment reviewer approves | receipt result `already_published_exact` |
+| 8 | Dispatch with `dry_run: false` again | Ai | receipt result `already_published_exact` |
 | 9 | Record the release in this file | Ai | — |
 
 ### 1. Private release PR
@@ -249,8 +252,8 @@ of `ci.yml` on `main` for exactly the tagged commit, so a hand-made tag citing
 any other run, or a run that failed, is refused. That check runs code from the
 tagged commit. It catches mistakes and hand-made tags on genuine projection
 commits; against anyone able to push other commits to the public `main`, the
-barriers are the environment reviewer, the npm trust binding, and Yu's 2FA
-approval of each stage. An anonymous GitHub API rate limit refuses with HTTP
+barriers are the npm trust binding and Yu's 2FA approval of each stage; the
+environment has had no required reviewer since 2026-10-13. An anonymous GitHub API rate limit refuses with HTTP
 403 or 429; dispatch again later.
 
 ### 5. Dry run
@@ -272,7 +275,8 @@ SHA-256, integrity) in its summary. Nothing is mirrored, staged, or published.
 ### 6. Stage
 
 Dispatch the same inputs with `-f dry_run=false` (`publish_mode` defaults to
-`stage`). The `npm-bootstrap` environment's reviewer approves the deployment.
+`stage`). The `npm-bootstrap` environment admits only release tags and has no
+required reviewer (owner decision, 2026-10-13).
 The job re-checks the bytes, creates or reuses the tag's GitHub Release in the
 public repository with the exact tarball, then runs `npm stage publish`. Its
 summary shows the stage id, the SHA-256 to expect, and the commands below;
@@ -397,7 +401,7 @@ token that cannot publish:
 2. `sol access run github -- secret set NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`
    and paste the token yourself.
 3. Dispatch with `-f authentication=bootstrap -f npm_tag=next -f dry_run=false`
-   (`publish_mode` stays `stage`) and approve the environment deployment.
+   (`publish_mode` stays `stage`).
    Bootstrap is refused for any package that already exists.
 4. Once the stage id is in the summary:
    `sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`,
@@ -422,8 +426,12 @@ any `trusted` run.
 ## Public repository settings (Yu, once)
 
 The publish job's `environment: npm-bootstrap` must exist in
-`cambridgetcg/agenttool-packages` with a required reviewer, no admin bypass,
-and a deployment policy that admits only release tags (`*-v*`). Create it
+`cambridgetcg/agenttool-packages` with a deployment policy that admits only
+release tags (`*-v*`). Owner decision, 2026-10-13: no required reviewer. Yu's
+2FA approval of each npm stage is the publication gate, and a release runs when
+Yu and Ai agree to it in conversation. Read on 2026-10-13: the environment
+exists with the `*-v*` tag policy and admin bypass off; its required reviewer
+was removed that day. Create it
 before the first `dry_run: false` dispatch: GitHub creates a missing
 environment on first use without any protection. Tag rulesets
 should block updating or deleting `refs/tags/*-v*`, and `main` should block
