@@ -20,7 +20,11 @@
  *                              at it, erased in place: content → the marker;
  *                              key, embedding, expression_patch → NULL;
  *                              metadata → {}.
- *  Each sets content_purged_at (except a deleted memory, which is gone). */
+ *    trace.traces              deleted (project-owned, spec §6 group 6).
+ *    org.organizations         deleted; its memberships and invitations go
+ *                              with it through their ON DELETE CASCADE.
+ *    org.organization_members  deleted (one membership).
+ *  Each purge sets content_purged_at; a deleted row is simply gone. */
 
 import { sql } from "drizzle-orm";
 
@@ -157,6 +161,29 @@ export async function deleteOrEraseMemories(
   const erasedInPlace = await eraseMemoriesInPlace(tx, ids.filter((id) => paid.has(id.toLowerCase())), at);
   const deleted = await deleteMemoriesWithoutReceipts(tx, ids.filter((id) => !paid.has(id.toLowerCase())));
   return { deleted, erasedInPlace };
+}
+
+// ─── Project-owned operational rows (spec §5.2: B erases, with an entry) ────
+
+export async function deleteTraceRows(tx: LedgerExecutor, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  return idsOf(await tx.execute(sql`
+    DELETE FROM trace.traces WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
+    RETURNING id::text AS id`));
+}
+
+export async function deleteOrganizationRows(tx: LedgerExecutor, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  return idsOf(await tx.execute(sql`
+    DELETE FROM org.organizations WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
+    RETURNING id::text AS id`));
+}
+
+export async function deleteOrganizationMemberRows(tx: LedgerExecutor, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  return idsOf(await tx.execute(sql`
+    DELETE FROM org.organization_members WHERE id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
+    RETURNING id::text AS id`));
 }
 
 // ─── Backfill of content deleted before wave 2 ─────────────────────────────

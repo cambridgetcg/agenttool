@@ -20,6 +20,9 @@ import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
 import { traces } from "../../db/schema/trace";
+import type { AppendedLedgerEntry } from "../deletion/ledger";
+import { deleteTraceRows } from "../deletion/purges";
+import { recordErasure } from "../deletion/record";
 import { identityKeys } from "../../db/schema/identity";
 import { canonicalIdentityId, requireActiveProjectIdentity, resolveProjectSubject, type PartitionOptions } from "../identity/partition";
 import { publishWakeEvent } from "../wake/push";
@@ -341,15 +344,34 @@ export async function getTrace(
   return rowToOut(rows[0] as typeof traces.$inferSelect);
 }
 
+/** DELETE /v1/traces/:id — the bearer deletes a project-owned trace
+ *  (deletion spec §5.2, §6 group 6). In one transaction the rows carrying
+ *  this trace_id are locked, one ids-only ledger entry (trace.delete, keyed
+ *  on each row's UUID) and the project's deletion moment are written, and
+ *  the rows are deleted. If the entry cannot be written the transaction
+ *  rolls back and nothing is deleted (503 deletion_ledger_unavailable). */
 export async function deleteTrace(
   projectId: string,
   traceId: string,
-): Promise<{ deleted: number }> {
-  const out = await db
-    .delete(traces)
-    .where(and(eq(traces.traceId, traceId), eq(traces.projectId, projectId)))
-    .returning({ id: traces.id });
-  return { deleted: out.length };
+): Promise<{ deleted: number; entry: AppendedLedgerEntry | null }> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: traces.id })
+      .from(traces)
+      .where(and(eq(traces.traceId, traceId), eq(traces.projectId, projectId)))
+      .for("update");
+    if (rows.length === 0) return { deleted: 0, entry: null };
+    const ids = rows.map((row) => row.id);
+    const { entry } = await recordErasure(tx, {
+      kind: "trace.delete",
+      projectId,
+      rowIds: ids,
+      authority: { mode: "legacy_bearer" },
+      owners: [{ agentId: null, rowIds: ids }],
+    });
+    const deleted = await deleteTraceRows(tx, ids);
+    return { deleted: deleted.length, entry };
+  });
 }
 
 export async function listTraces(

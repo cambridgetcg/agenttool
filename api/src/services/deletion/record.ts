@@ -82,6 +82,9 @@ const NOUNS: Partial<Record<LedgerKindName, [string, string]>> = {
   "inbox.purge": ["inbox message", "inbox messages"],
   "vault.purge": ["vault secret", "vault secrets"],
   "identity_backup.purge": ["identity backup", "identity backups"],
+  "trace.delete": ["trace", "traces"],
+  "org.delete": ["organization", "organizations"],
+  "org_member.delete": ["organization membership", "organization memberships"],
 };
 
 const WITHDRAWN = "marked withdrawn; the signed record and its words stay";
@@ -98,6 +101,9 @@ const AFTER: Partial<Record<LedgerKindName, string>> = {
   "inbox.purge": "sealed body, subject, references and metadata erased",
   "vault.purge": "every stored version zeroed",
   "identity_backup.purge": "blob, nonce and metadata erased",
+  "trace.delete": "removed from the live database",
+  "org.delete": "removed from the live database with its memberships and invitations",
+  "org_member.delete": "membership removed from the live database",
 };
 
 /** Content-free headline: what kind of record, how many, what happened. */

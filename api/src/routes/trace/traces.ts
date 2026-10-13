@@ -28,6 +28,9 @@ import {
   validateTracePartition,
 } from "../../services/trace/store";
 import { verifyStoredTrace } from "../../services/trace/verify";
+import { db } from "../../db/client";
+import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
+import { ledgerResponse } from "../../services/deletion/record";
 
 const app = new Hono<ProjectContext>();
 
@@ -247,9 +250,12 @@ app.get("/:id/verify", async (c) => {
 });
 
 // ── DELETE /v1/traces/:id ──────────────────────────────────────────────
+// The bearer deletes; the delete writes one ids-only ledger entry in its
+// transaction, so a backup restore replays it (services/trace/store.ts).
 app.delete("/:id", async (c) => {
-  const result = await deleteTrace(c.var.project.id, c.req.param("id"));
-  return c.json(result);
+  const { deleted, entry } = await deleteTrace(c.var.project.id, c.req.param("id"));
+  const mirrored = entry ? (await pushLedgerMirrorAfterCommit(db, entry.seq)).mirrored : false;
+  return c.json({ deleted, ledger: entry ? ledgerResponse(entry, mirrored) : null });
 });
 
 export default app;

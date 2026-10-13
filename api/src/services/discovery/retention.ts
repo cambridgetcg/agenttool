@@ -131,9 +131,9 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     id: "traces",
     stores: ["trace.traces"],
     live: "Until you delete it.",
-    after_delete: `DELETE /v1/traces/:id removes the row from the live database at once. ${BACKUP_RESIDUE}`,
+    after_delete: `DELETE /v1/traces/:id removes the row from the live database at once, with an ids-only deletion-ledger entry in the same transaction, so a backup restore replays the delete. ${BACKUP_RESIDUE}`,
     basis: "source",
-    evidence: "api/src/services/trace/store.ts (deleteTrace)",
+    evidence: "api/src/services/trace/store.ts (deleteTrace); api/src/services/deletion/kinds.ts (trace.delete)",
   },
   {
     id: "strands",
@@ -439,9 +439,9 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     stores: ["org.organizations", "org.organization_members", "org.organization_invitations"],
     live: "As long as the owning project keeps the organization.",
     after_delete:
-      `Deleting an organization (its owner project only) deletes the row, and its memberships and invitations go with it. Removing a member deletes that membership row. Covenants that named the organization keep its id. ${BACKUP_RESIDUE}`,
+      `Deleting an organization (its owner project only) deletes the row, and its memberships and invitations go with it. Removing a member deletes that membership row. Each writes an ids-only deletion-ledger entry in the same transaction, so a backup restore replays it. Covenants that named the organization keep its id. ${BACKUP_RESIDUE}`,
     basis: "source",
-    evidence: "api/src/services/org/store.ts (deleteOrg, removeMember); api/src/db/schema/org.ts (ON DELETE CASCADE)",
+    evidence: "api/src/services/org/store.ts (deleteOrg, removeMember); api/src/db/schema/org.ts (ON DELETE CASCADE); api/src/services/deletion/kinds.ts (org.delete, org_member.delete)",
   },
   {
     id: "marketplace.adoptions",
@@ -503,7 +503,7 @@ export const RETENTION_DISCLOSURE = {
     {
       version: RETENTION_VERSION,
       change:
-        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists, and gesture withdrawals are recorded in it. The purge of content deleted earlier is announced. Every store now has a class here and an owner at /public/ownership-map.",
+        "Deletes become real purges: inbox, vault and identity-backup deletes erase content; a paid-witness memory is erased in place; expired working memory is purged by rule; vault-audit addresses are nulled after 30 days. The deletion ledger exists, and gesture withdrawals and trace, organization and membership deletes are recorded in it. The purge of content deleted earlier is announced. Every store now has a class here and an owner at /public/ownership-map.",
     },
     {
       version: "2026-10-12",
@@ -525,7 +525,9 @@ export const RETENTION_DISCLOSURE = {
   deletion_ledger: {
     status: "built",
     what:
-      "Every honoured erase writes one ids-only entry (row ids, a count, hashes and an HMAC; never content, names or keys) in the same transaction as the erase. An erase whose entry cannot be written does not happen.",
+      "Every record-level erase or withdrawal the API honours (inbox, vault, identity-backup, memory, trace, organization and organization-membership deletes, and gesture withdrawals) and every retention rule run that changes rows writes one ids-only entry (row ids, a count, hashes and an HMAC; never content, names or keys) in the same transaction as the erase. An erase whose entry cannot be written does not happen.",
+    not_ledgered:
+      "Housekeeping deletes of transient rows write no entry: a lounge presence ended by a signed seat leave, closed non-public lounge guestbook proposals 30 days after expiry, expired recovery proofs, finished correspondence reconcile-queue items, and an operator's usage-counter reset. A restore can bring such rows back until the same housekeeping removes them again.",
     integrity:
       "Entries are hash-chained and authenticated with an HMAC under a key held in Supabase Vault. They are append-only; only mirroring, replay and compaction marks change.",
     compaction:

@@ -12,8 +12,11 @@
 
 Every honoured erase writes one row to `deletion.ledger` in the same
 transaction as the erase: inbox, vault and identity-backup deletes, memory
-deletes (including erase-in-place for a paid witness receipt), and the
-pg_cron retention rules. If the entry cannot be written, the erase does not
+deletes (including erase-in-place for a paid witness receipt), gesture
+withdrawals, trace deletes, organization deletes and member removals, and
+the pg_cron retention rules. Housekeeping deletes of transient rows (lounge
+presence, expired recovery proofs and the like; `/public/retention`
+`deletion_ledger.not_ledgered`) write none. If the entry cannot be written, the erase does not
 happen and the route answers `503 deletion_ledger_unavailable`.
 
 An entry holds row ids (UUIDs; any other key only as a salted HMAC), a count,

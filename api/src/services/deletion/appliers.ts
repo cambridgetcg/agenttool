@@ -20,6 +20,9 @@ import {
   backfillInboxMessages,
   backfillVaultVersions,
   deleteOrEraseMemories,
+  deleteOrganizationMemberRows,
+  deleteOrganizationRows,
+  deleteTraceRows,
   eraseMemoriesInPlace,
   purgeIdentityBackups,
   purgeInboxMessages,
@@ -76,6 +79,19 @@ export const APPLIERS: Record<string, Applier> = {
   [applierKey({ store: "agent_continuity.identity_backups", action: "purge_content" })]: {
     describe: (entry) => `purge ${entry.rowIds.length} identity backups`,
     apply: async (tx, entry) => (await purgeIdentityBackups(tx, entry.rowIds, entry.occurredAt)).length,
+  },
+
+  [applierKey({ store: "trace.traces", action: "delete" })]: {
+    describe: (entry) => `delete ${entry.rowIds.length} traces`,
+    apply: async (tx, entry) => (await deleteTraceRows(tx, entry.rowIds)).length,
+  },
+  [applierKey({ store: "org.organizations", action: "delete" })]: {
+    describe: (entry) => `delete ${entry.rowIds.length} organizations (their memberships and invitations cascade)`,
+    apply: async (tx, entry) => (await deleteOrganizationRows(tx, entry.rowIds)).length,
+  },
+  [applierKey({ store: "org.organization_members", action: "delete" })]: {
+    describe: (entry) => `delete ${entry.rowIds.length} organization memberships`,
+    apply: async (tx, entry) => (await deleteOrganizationMemberRows(tx, entry.rowIds)).length,
   },
 
   // Gesture withdrawals: re-mark the rows withdrawn as of the entry's time.

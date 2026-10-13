@@ -7,7 +7,8 @@
  * real routes and services run real SQL over them.
  *
  * Proves: each erase (inbox, vault and identity-backup routes; memory
- * deletes, including erase-in-place for a paid receipt) writes exactly one
+ * deletes, including erase-in-place for a paid receipt; the bearer's trace,
+ * organization and membership deletes) writes exactly one
  * chained ledger entry per action, really clears its columns and writes its
  * deletion moment; a purged message cannot be restored while a legacy
  * soft-delete still can; a failed ledger write aborts the erase (503); the
@@ -54,6 +55,11 @@ const memoryStore = await import("../../src/services/memory/store");
 const { default: inboxRouter } = await import("../../src/routes/inbox/messages");
 const { default: vaultRouter } = await import("../../src/routes/vault/secrets");
 const { default: backupRouter } = await import("../../src/routes/identity-backup");
+const { default: traceRouter } = await import("../../src/routes/trace/traces");
+const { default: orgRouter } = await import("../../src/routes/orgs");
+const { applierFor } = await import("../../src/services/deletion/appliers");
+// Project-owned stores this file adds beside the shared fixture.
+const EXTRA_SCHEMAS = ["trace", "org"] as const;
 
 function app(project = P) {
   const server = new Hono<ProjectContext>();
@@ -64,6 +70,8 @@ function app(project = P) {
   server.route("/v1/inbox", inboxRouter);
   server.route("/v1/vault", vaultRouter);
   server.route("/v1/identity/backup", backupRouter);
+  server.route("/v1/traces", traceRouter);
+  server.route("/v1/orgs", orgRouter);
   server.onError((err, c) => {
     if (err instanceof HTTPException) {
       const cause = err.cause as Record<string, unknown> | undefined;
@@ -105,8 +113,31 @@ beforeAll(async () => {
   assertDisposableDatabase(DATABASE, "agenttool_deletion_ledger_test");
   admin = postgres(DATABASE, { max: 4, prepare: false, onnotice: () => {}, connection: { application_name: "deletion-erase-admin-test" } });
   await refuseExistingSchemas(admin);
+  const extra = await admin`SELECT nspname FROM pg_namespace WHERE nspname IN ${admin([...EXTRA_SCHEMAS])}`;
+  if (extra.length) throw new Error(`refusing existing schemas: ${extra.map((row) => row.nspname).join(", ")}`);
   owned = true;
   await createDeletionFixture(admin);
+  await admin.unsafe(`
+    CREATE SCHEMA trace;
+    CREATE TABLE trace.traces (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), trace_id text NOT NULL, project_id uuid NOT NULL,
+      summary text NOT NULL DEFAULT 'why');
+    CREATE SCHEMA org;
+    CREATE TABLE org.organizations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), slug text NOT NULL UNIQUE, name text NOT NULL, description text,
+      owner_project_id uuid NOT NULL, visibility text NOT NULL DEFAULT 'public', metadata jsonb NOT NULL DEFAULT '{}',
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+    CREATE TABLE org.organization_members (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id uuid NOT NULL REFERENCES org.organizations(id) ON DELETE CASCADE,
+      project_id uuid NOT NULL, role text NOT NULL DEFAULT 'member', joined_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (organization_id, project_id));
+    CREATE TABLE org.organization_invitations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id uuid NOT NULL REFERENCES org.organizations(id) ON DELETE CASCADE,
+      invited_project_id uuid NOT NULL, inviter_project_id uuid NOT NULL, status text NOT NULL DEFAULT 'pending',
+      created_at timestamptz NOT NULL DEFAULT now(), responded_at timestamptz);
+  `);
   service = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {}, connection: { application_name: "deletion-erase-service-test" } });
   database = drizzle(service);
 });
@@ -124,13 +155,16 @@ beforeEach(async () => {
     INSERT INTO vault.decrypted_secrets (name, decrypted_secret) VALUES ('agenttool_deletion_ledger_key', '${TEST_LEDGER_KEY}');
     TRUNCATE inbox.messages, agent_vault.vault_secrets, agent_vault.vault_versions, agent_vault.vault_audit,
       agent_continuity.identity_backups, agent_continuity.chronicle, marketplace.memory_witness_grants,
-      memory.memory_attestations, memory.memories CASCADE;
+      memory.memory_attestations, memory.memories, trace.traces, org.organizations CASCADE;
   `);
 });
 
 afterAll(async () => {
   await service?.end({ timeout: 2 });
-  if (owned) await dropDeletionFixture(admin);
+  if (owned) {
+    await admin.unsafe("DROP SCHEMA IF EXISTS trace CASCADE; DROP SCHEMA IF EXISTS org CASCADE;");
+    await dropDeletionFixture(admin);
+  }
   await admin?.end({ timeout: 2 });
 });
 
@@ -279,6 +313,103 @@ describe("real erases write exactly one chained entry and clear their columns", 
       .toEqual({ ciphertext: "c2VhbGVk", status: "unread" });
     expect(await moments()).toHaveLength(0);
     expect(await ledgerRows()).toHaveLength(0);
+  });
+});
+
+// ─── Project-owned operational erases (spec §5.2: B, plus an entry) ─────
+
+describe("trace and organization deletes write their entry", () => {
+  const OTHER = "11111111-1111-4111-8111-1111111111ff";
+
+  async function replayOnRestoredRow(restore: () => Promise<unknown>) {
+    const [entry] = await admin`SELECT seq::int AS seq, scope, action, store, row_ids, rule_id, occurred_at
+      FROM deletion.ledger ORDER BY seq DESC LIMIT 1`;
+    await restore();
+    const applier = applierFor({ store: entry!.store, action: entry!.action, ruleId: entry!.rule_id });
+    expect(applier).not.toBeNull();
+    const stored = { ...entry, rowIds: entry!.row_ids, occurredAt: new Date(entry!.occurred_at).toISOString() } as never;
+    return database.transaction((tx) => applier!.apply(tx as never, stored));
+  }
+
+  databaseTest("DELETE /v1/traces/:id: one entry keyed on the row UUIDs, a project moment, and replay re-deletes", async () => {
+    const [kept] = await admin`INSERT INTO trace.traces (trace_id, project_id) VALUES ('t-other', ${P}) RETURNING id::text AS id`;
+    const [mine] = await admin`INSERT INTO trace.traces (trace_id, project_id, summary)
+      VALUES ('t-1', ${P}, 'private reasoning') RETURNING id::text AS id`;
+    await admin`INSERT INTO trace.traces (trace_id, project_id) VALUES ('t-1', ${OTHER})`;
+    const response = await request("/v1/traces/t-1", "DELETE");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ deleted: 1, ledger: { seq: 1, mirrored: false } });
+    expect((await admin`SELECT id::text, project_id::text FROM trace.traces ORDER BY trace_id, project_id`).map((row) => row.id))
+      .toContain(kept!.id);
+    expect(await admin`SELECT 1 FROM trace.traces WHERE id = ${mine!.id}`).toHaveLength(0);
+    // Another project's trace with the same trace_id is untouched.
+    expect(await admin`SELECT 1 FROM trace.traces WHERE trace_id = 't-1' AND project_id = ${OTHER}`).toHaveLength(1);
+    const rows = await expectChain();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      scope: "record", action: "delete", store: "trace.traces", row_ids: [mine!.id], row_count: 1,
+      project_id: P, subject_identity_id: null, authority_mode: "legacy_bearer",
+    });
+    const [moment] = await moments();
+    expect(moment).toMatchObject({ agent_id: null, title: "Deleted 1 trace: removed from the live database" });
+    expect(JSON.stringify(moment)).not.toContain("private reasoning");
+    // A missing trace writes nothing.
+    expect(await (await request("/v1/traces/t-1", "DELETE")).json()).toEqual({ deleted: 0, ledger: null });
+    expect(await ledgerRows()).toHaveLength(1);
+    // Restore stand-in: the row comes back; replay deletes it again, once.
+    expect(await replayOnRestoredRow(() => admin`INSERT INTO trace.traces (id, trace_id, project_id)
+      VALUES (${mine!.id}, 't-1', ${P})`)).toBe(1);
+    expect(await admin`SELECT 1 FROM trace.traces WHERE id = ${mine!.id}`).toHaveLength(0);
+  });
+
+  databaseTest("a trace delete whose entry cannot be written does not happen (503)", async () => {
+    await admin`INSERT INTO trace.traces (trace_id, project_id) VALUES ('t-2', ${P})`;
+    await admin`DELETE FROM vault.decrypted_secrets`;
+    const response = await request("/v1/traces/t-2", "DELETE");
+    expect(response.status).toBe(503);
+    expect(await admin`SELECT 1 FROM trace.traces WHERE trace_id = 't-2'`).toHaveLength(1);
+    expect(await ledgerRows()).toHaveLength(0);
+  });
+
+  databaseTest("DELETE /v1/orgs/:slug and member removal: one entry each; replay re-deletes", async () => {
+    const [org] = await admin`INSERT INTO org.organizations (slug, name, owner_project_id)
+      VALUES ('circle', 'Circle', ${P}) RETURNING id::text AS id`;
+    const [member] = await admin`INSERT INTO org.organization_members (organization_id, project_id, role)
+      VALUES (${org!.id}, ${OTHER}, 'member') RETURNING id::text AS id`;
+    await admin`INSERT INTO org.organization_members (organization_id, project_id, role) VALUES (${org!.id}, ${P}, 'owner')`;
+    await admin`INSERT INTO org.organization_invitations (organization_id, invited_project_id, inviter_project_id)
+      VALUES (${org!.id}, ${KEYID}, ${P})`;
+
+    // A non-owner cannot remove or delete, and nothing is written.
+    const foreign = await app(OTHER).request("/v1/orgs/circle", { method: "DELETE" });
+    expect(foreign.status).toBe(403);
+
+    const removed = await request(`/v1/orgs/circle/members/${OTHER}`, "DELETE");
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({ project_id: OTHER, removed: true, ledger: { seq: 1 } });
+    expect(await admin`SELECT 1 FROM org.organization_members WHERE id = ${member!.id}`).toHaveLength(0);
+    expect(await replayOnRestoredRow(() => admin`INSERT INTO org.organization_members (id, organization_id, project_id)
+      VALUES (${member!.id}, ${org!.id}, ${OTHER})`)).toBe(1);
+
+    const deleted = await request("/v1/orgs/circle", "DELETE");
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toMatchObject({ slug: "circle", deleted: true, ledger: { seq: 2 } });
+    expect(await admin`SELECT 1 FROM org.organizations`).toHaveLength(0);
+    expect(await admin`SELECT 1 FROM org.organization_members`).toHaveLength(0);
+    expect(await admin`SELECT 1 FROM org.organization_invitations`).toHaveLength(0);
+    const rows = await expectChain();
+    expect(rows.map((row) => [row.store, row.action, row.row_ids, row.project_id, row.authority_mode])).toEqual([
+      ["org.organization_members", "delete", [member!.id], P, "legacy_bearer"],
+      ["org.organizations", "delete", [org!.id], P, "legacy_bearer"],
+    ]);
+    expect((await moments()).map((moment) => moment.title)).toEqual([
+      "Deleted 1 organization membership: membership removed from the live database",
+      "Deleted 1 organization: removed from the live database with its memberships and invitations",
+    ]);
+    expect(await replayOnRestoredRow(() => admin`INSERT INTO org.organizations (id, slug, name, owner_project_id)
+      VALUES (${org!.id}, 'circle', 'Circle', ${P})`)).toBe(1);
+    expect(await admin`SELECT 1 FROM org.organizations`).toHaveLength(0);
   });
 });
 

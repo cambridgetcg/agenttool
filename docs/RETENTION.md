@@ -87,7 +87,18 @@ deletions made since the backup are replayed before writes reopen
 in production is `unknown` until an operator provisions it; a deletion whose
 entry never reached the mirror cannot be replayed.
 
-**Deletes that were already real.** Trace deletes remove the row at once.
+**Deletes that were already real.** Trace deletes remove the row at once,
+and deleting an organization removes it with its memberships and invitations.
+Since wave 2 each of these, and each removal of an organization member, also
+writes a ledger entry and a project-level deletion moment, so a backup
+restore replays it.
+
+**Not ledgered.** Housekeeping deletes of transient rows write no entry: a
+lounge presence ended by a signed seat leave, closed non-public lounge
+guestbook proposals 30 days after expiry, expired recovery proofs, finished
+correspondence reconcile-queue items, and an operator's usage-counter reset.
+A restore can bring such rows back until the same housekeeping removes them
+again.
 
 **No delete at all.** Identity rows (revoke only; every DID keeps resolving),
 strands, chronicle, correspondence, relationship records and one-way

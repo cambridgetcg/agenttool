@@ -31,6 +31,12 @@ export const LEDGER_KINDS = {
     scope: "record", action: "purge_content", store: "agent_continuity.identity_backups", writer: "api",
   },
 
+  // Project-owned operational erases by the bearer (spec §5.2 "every erase
+  // (traces included) gains a ledger entry"; §6 groups 6 and 17).
+  "trace.delete": { scope: "record", action: "delete", store: "trace.traces", writer: "api" },
+  "org.delete": { scope: "record", action: "delete", store: "org.organizations", writer: "api" },
+  "org_member.delete": { scope: "record", action: "delete", store: "org.organization_members", writer: "api" },
+
   // Gesture withdrawals by the giver under the owner rule (API). The record
   // and its words stay; replay re-marks it withdrawn after a restore.
   "blessing.withdraw": { scope: "record", action: "withdraw", store: "agent_continuity.blessings", writer: "api" },

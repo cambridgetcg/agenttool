@@ -73,6 +73,7 @@ const RETENTION_SCHEMA_V1 = {
       properties: {
         status: { type: "string" },
         what: { type: "string" },
+        not_ledgered: { type: "string" },
         integrity: { type: "string" },
         compaction: { type: "string" },
         mirror: {

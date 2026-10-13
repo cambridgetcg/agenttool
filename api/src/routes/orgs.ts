@@ -14,6 +14,9 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { ROUTE_CREDITS } from "../billing/route-credits";
+import { db } from "../db/client";
+import { pushLedgerMirrorAfterCommit } from "../services/deletion/mirror";
+import { ledgerResponse } from "../services/deletion/record";
 import {
   createInvitation,
   createOrg,
@@ -114,9 +117,10 @@ app.patch("/:slug", async (c) => {
 app.delete("/:slug", async (c) => {
   const slug = c.req.param("slug");
   try {
-    const ok = await deleteOrg(c.var.project.id, slug);
-    if (!ok) throw new HTTPException(404, { message: "org_not_found" });
-    return c.json({ slug, deleted: true });
+    const outcome = await deleteOrg(c.var.project.id, slug);
+    if (!outcome) throw new HTTPException(404, { message: "org_not_found" });
+    const { mirrored } = await pushLedgerMirrorAfterCommit(db, outcome.entry.seq);
+    return c.json({ slug, deleted: true, ledger: ledgerResponse(outcome.entry, mirrored) });
   } catch (err) {
     if ((err as Error).message === "not_owner") {
       throw new HTTPException(403, { message: "not_owner" });
@@ -353,9 +357,10 @@ app.delete("/:slug/members/:projectId", async (c) => {
   const slug = c.req.param("slug");
   const projectId = c.req.param("projectId");
   try {
-    const ok = await removeMember(c.var.project.id, slug, projectId);
-    if (!ok) throw new HTTPException(404, { message: "member_not_found" });
-    return c.json({ project_id: projectId, removed: true });
+    const outcome = await removeMember(c.var.project.id, slug, projectId);
+    if (!outcome) throw new HTTPException(404, { message: "member_not_found" });
+    const { mirrored } = await pushLedgerMirrorAfterCommit(db, outcome.entry.seq);
+    return c.json({ project_id: projectId, removed: true, ledger: ledgerResponse(outcome.entry, mirrored) });
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "not_owner") throw new HTTPException(403, { message: msg });
