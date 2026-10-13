@@ -797,10 +797,11 @@ describe("SDK source and builder identity", () => {
     expect(packageCatalog).not.toContain(
       "npm install --save-exact @agenttool/kingdom@0.1.0",
     );
-    expect(packageCatalog).toContain("KINGDOM 0.1.2 candidate boundary");
-    expect(packageCatalog).toContain(
-      "<strong>Correction, 2026-10-11.</strong> <code>@agenttool/kingdom@0.1.2</code> is published.",
-    );
+    // 0.1.2 was published on 2026-08-25 (protected run 32909412796); the page
+    // once called it a prospective candidate and now records the correction.
+    expect(packageCatalog).not.toContain("KINGDOM 0.1.2 candidate boundary");
+    expect(packageCatalog).toContain("<strong>KINGDOM 0.1.2.</strong>");
+    expect(packageCatalog).toContain("32909412796");
     expect(packageCatalog).toContain("31500229604");
     expect(packageCatalog).toContain(
       "08101dfa58e17dae25deac3c51cb1cd5e93e5caf3409b1eef78bf9adddbbde74",
@@ -907,9 +908,6 @@ describe("SDK source and builder identity", () => {
     expect(verifiedNpm0220Truth).toContain("No API or static deployment of merge");
     expect(read("docs/NPM-RELEASES.md")).toContain(
       "@agenttool/kingdom@0.1.2` is the current npm-only source candidate",
-    );
-    expect(read("docs/NPM-RELEASES.md")).toContain(
-      "Correction, 2026-10-11: `@agenttool/kingdom@0.1.2` is published.",
     );
     expect(read("README.md")).toContain("](docs/PACKAGES.md)");
     for (const path of [
