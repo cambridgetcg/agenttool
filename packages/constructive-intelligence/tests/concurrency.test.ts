@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -566,6 +567,65 @@ test.each(Array.from({ length: 10 }, (_, index) => index + 1))(
   expect(store.listReceipts(pin.pin_id)).toHaveLength(1);
   expect(store.verify().receipt_count).toBe(1);
   store.close();
+}, TEST_TIMEOUT_MS);
+
+// POSIX advisory locks belong to a process and inode: closing any descriptor
+// for the ledger or its -shm index releases every lock SQLite holds there.
+// While this store stays open after its own private-mode maintenance, another
+// process must still be refused an EXCLUSIVE database-file lock. A plain
+// connection on the same platform is the control for that expectation.
+test("an open ledger keeps its SQLite locks through private-mode maintenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "constructive-lock-retention-"));
+  const contender = (path: string) => Bun.spawnSync(
+    [
+      process.execPath,
+      "-e",
+      `import { Database } from "bun:sqlite";
+       const db = new Database(${JSON.stringify(path)});
+       db.exec("PRAGMA busy_timeout = 0");
+       db.exec("PRAGMA locking_mode = EXCLUSIVE");
+       let outcome = "acquired";
+       try { db.query("SELECT COUNT(*) AS count FROM pins").get(); }
+       catch (error) { outcome = error?.code === "SQLITE_BUSY" ? "busy" : "other"; }
+       db.close(false);
+       process.stdout.write(outcome);`,
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: CHILD_EMERGENCY_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+    },
+  );
+
+  const controlPath = join(directory, "control.sqlite");
+  const control = new Database(controlPath, { create: true, strict: true });
+  control.exec("PRAGMA journal_mode = WAL");
+  control.exec("CREATE TABLE pins (pin_id TEXT PRIMARY KEY)");
+  const controlRun = contender(controlPath);
+  control.close(false);
+  expect(controlRun.exitCode).toBe(0);
+  expect(controlRun.stderr.toString()).toBe("");
+  expect(controlRun.stdout.toString()).toBe("busy");
+
+  const database = join(directory, "pilot.sqlite");
+  const pin = makePin();
+  const store = new ConstructiveStore(database, { create: true });
+  try {
+    store.initialize();
+    store.putPin(pin);
+    expect(store.record(makeBody(pin, "E0")).status).toBe("inserted");
+    const storeRun = contender(database);
+    expect(storeRun.exitCode).toBe(0);
+    expect(storeRun.stderr.toString()).toBe("");
+    expect(storeRun.stdout.toString()).toBe("busy");
+    expect(existsSync(`${database}-wal`)).toBe(true);
+    expect(existsSync(`${database}-shm`)).toBe(true);
+    expect(store.verify().receipt_count).toBe(1);
+  } finally {
+    store.close();
+  }
 }, TEST_TIMEOUT_MS);
 
 test("post-results settlement cannot publish a timeout as success", () => {
