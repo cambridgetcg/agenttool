@@ -36,7 +36,8 @@ function ensureDir(dir: string): void {
   chmodSync(dir, 0o700) // a dir that already existed keeps its old mode otherwise
 }
 
-function isRecord(v: unknown): v is InflightRecord {
+/** Whether the read path would keep `v` as an in-flight record: addInflight checks the same thing before it writes one. */
+export function isRecord(v: unknown): v is InflightRecord {
   return isObj(v) && typeof v.call_ref === 'string' && CALL_REF_RE.test(v.call_ref) && typeof v.tool === 'string' && v.tool !== ''
     && (v.idempotency_key === null || typeof v.idempotency_key === 'string') && typeof v.args_hash === 'string'
     && HASH_RE.test(v.args_hash) && typeof v.at === 'string'
@@ -54,10 +55,19 @@ function parseLineageFile(text: string): LineageFile | null {
   return { v: 1, lineage: v.lineage, host_pid: v.host_pid as number, host_lstart: v.host_lstart, created_at: v.created_at, inflight }
 }
 
-/** The lineage file of `key`, or null when it is missing or does not parse. */
+/**
+ * The lineage file of `key`, or null when it is missing (ENOENT) or does not parse. Any other read error (EACCES, EMFILE,
+ * EIO) is thrown, never taken for a missing file: that would fork the lineage, delete a live host's file or hide the
+ * unresolved calls. Callers sit before anything is written to the link, so they can answer a throw as not sent.
+ */
 export function readLineageFile(paths: NuancePaths, key: string): LineageFile | null {
   if (!KEY_RE.test(key)) return null
-  try { return parseLineageFile(readFileSync(paths.lineageFile(key), 'utf8')) } catch { return null }
+  let text: string
+  try { text = readFileSync(paths.lineageFile(key), 'utf8') } catch (e) {
+    if ((e as { code?: unknown }).code === 'ENOENT') return null
+    throw e
+  }
+  return parseLineageFile(text)
 }
 
 /** Replaces the lineage file whole (0600, in 0700 dirs). Callers hold withLineageLock. */
@@ -81,7 +91,7 @@ export function openLineage(paths: NuancePaths, host: HostInfo, now: () => Date)
   return withLineageLock(paths, key, () => {
     const found = readLineageFile(paths, key)
     if (found && found.host_pid === host.pid && found.host_lstart === host.lstart) return { key, file: found }
-    // None yet, or a file that no longer parses: a new lineage. The old one's Collab session, if any, is the hub's to
+    // None yet, or a file that no longer parses (a read error was thrown above): a new lineage. The old one's Collab session, if any, is the hub's to
     // retire after 7 days detached (§6.2); the agent's next call answers session_required and it starts a new session.
     const file: LineageFile = { v: 1, lineage: newLineage(), host_pid: host.pid, host_lstart: host.lstart, created_at: now().toISOString(), inflight: [] }
     writeLineageFile(paths, key, file)
@@ -92,7 +102,8 @@ export function openLineage(paths: NuancePaths, host: HostInfo, now: () => Date)
 /**
  * Removes the lineage files whose host process is gone (no process in `table` with that pid and lstart) and that were
  * last written more than `maxAgeMs` ago (§6.2: 7 days). A file whose host still runs, the caller's own included, always
- * stays; one that no longer parses has no host to ask about and goes at the same age. Returns how many were removed.
+ * stays; one that no longer parses has no host to ask about and goes at the same age. A file that cannot be read at all
+ * stays too, and the rest are still swept. Returns how many were removed.
  */
 export function sweepLineages(paths: NuancePaths, table: ProcTable, nowMs: number, maxAgeMs: number = TIMING.lineageSweepMs): number {
   let names: string[]
@@ -106,7 +117,8 @@ export function sweepLineages(paths: NuancePaths, table: ProcTable, nowMs: numbe
     let mtimeMs: number
     try { mtimeMs = statSync(path).mtimeMs } catch { continue }
     if (nowMs - mtimeMs <= maxAgeMs) continue
-    const file = readLineageFile(paths, key)
+    let file: LineageFile | null
+    try { file = readLineageFile(paths, key) } catch { continue } // unreadable is not unparsable: it may be a live host's file
     if (file) {
       const host = table.get(file.host_pid)
       if (host && host.started_at === file.host_lstart) continue

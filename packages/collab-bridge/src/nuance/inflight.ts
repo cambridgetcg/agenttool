@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import { canonicalJson } from '../json.ts'
 import type { NuancePaths } from '../paths.ts'
-import { readLineageFile, withLineageLock, writeLineageFile } from './lineage.ts'
+import { isRecord, readLineageFile, withLineageLock, writeLineageFile } from './lineage.ts'
 
 /** session_id: the Collab session the pipe believed was bound when it wrote the record, or null when it knew none (P66). */
 export interface InflightRecord { call_ref: string; tool: string; idempotency_key: string | null; args_hash: string; at: string; session_id: string | null }
@@ -42,8 +42,13 @@ function update(paths: NuancePaths, key: string, fn: (records: InflightRecord[])
   })
 }
 
-/** Records one call before it is sent; false when 64 are still unresolved (the caller refuses the call, not sent). */
+/**
+ * Records one call before it is sent; false when 64 are still unresolved (the caller refuses the call, not sent). A record
+ * the read path would drop (a bad call_ref, tool, args_hash or session_id) throws before anything is written, so a call
+ * is never sent on the strength of a record that would vanish on the next read; the caller answers that as not sent too.
+ */
 export function addInflight(paths: NuancePaths, key: string, rec: InflightRecord): boolean {
+  if (!isRecord(rec)) throw new Error('inflight: malformed record')
   return update(paths, key, (records) => (records.length >= MAX_INFLIGHT ? null : [...records, { ...rec }]))
 }
 
@@ -67,7 +72,7 @@ export function clearByTool(paths: NuancePaths, key: string, tool: string): void
   update(paths, key, (records) => (records.some((r) => r.tool === tool) ? records.filter((r) => r.tool !== tool) : null))
 }
 
-/** The unresolved records, oldest first; none for a missing lineage file. */
+/** The unresolved records, oldest first; none for a missing lineage file. A file that cannot be read throws rather than read as none. */
 export function unresolved(paths: NuancePaths, key: string): InflightRecord[] {
   return readLineageFile(paths, key)?.inflight ?? []
 }

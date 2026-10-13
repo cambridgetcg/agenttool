@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanupTmps, modeOf, PS_STUB_HOST, temp, writePsStub } from './helpers.ts'
 import { nuancePaths } from '../src/paths.ts'
 import { lineageKey, readPs, type ProcTable } from '../src/proc.ts'
-import { findHost, interactiveCheck, openLineage, readLineageFile, sweepLineages, type HostInfo } from '../src/nuance/lineage.ts'
+import { findHost, interactiveCheck, openLineage, readLineageFile, sweepLineages, writeLineageFile, type HostInfo } from '../src/nuance/lineage.ts'
 
 afterEach(cleanupTmps)
 
@@ -98,6 +98,61 @@ describe('lineage files', () => {
   test('a missing lineages dir sweeps nothing', () => {
     const paths = nuancePaths(temp('cb-lin-'))
     expect(sweepLineages(paths, table(), NOW_MS)).toBe(0)
+  })
+})
+
+// A read error that is not "missing" or "unparsable" must never look like either: openLineage would fork the Collab session
+// and drop the unresolved records, the sweep would delete a live host's file, and unresolved would hide prior_unknown.
+// Mode 000 makes the open fail with EACCES; root would read it anyway, so these tests skip there.
+const unprivileged = process.getuid?.() !== 0
+const unreadable = test.skipIf(!unprivileged)
+
+describe('a lineage file that cannot be read', () => {
+  const REC = { call_ref: `lin_${'0'.repeat(32)}:0000000a:1`, tool: 'collab_report_append', idempotency_key: 'k1',
+    args_hash: 'a'.repeat(64), at: '2026-10-13T12:00:00.000Z', session_id: 'ses_1' }
+
+  /** A lineage file for HOST holding one unresolved record. */
+  function withRecord() {
+    const paths = nuancePaths(temp('cb-lin-'))
+    const { key, file } = openLineage(paths, HOST, NOW)
+    const held = { ...file, inflight: [REC] }
+    writeLineageFile(paths, key, held)
+    return { paths, key, held, path: paths.lineageFile(key), bytes: readFileSync(paths.lineageFile(key), 'utf8') }
+  }
+
+  unreadable('readLineageFile: null for a missing or unparsable file, a throw for any other error', () => {
+    const { paths, key, held, path } = withRecord()
+    expect(readLineageFile(paths, lineageKey(4101, HOST.lstart))).toBeNull() // ENOENT
+    expect(readLineageFile(paths, 'not-a-key')).toBeNull()
+    chmodSync(path, 0o000)
+    try { expect(() => readLineageFile(paths, key)).toThrow('EACCES') } finally { chmodSync(path, 0o600) }
+    expect(readLineageFile(paths, key)).toEqual(held)
+    writeFileSync(path, '{"v":1,"lineage":')
+    expect(readLineageFile(paths, key)).toBeNull() // a parse failure
+  })
+
+  unreadable('openLineage throws and leaves the file, its lineage and its records alone', () => {
+    const { paths, key, held, path, bytes } = withRecord()
+    chmodSync(path, 0o000)
+    try { expect(() => openLineage(paths, HOST, () => new Date('2026-10-14T12:00:00.000Z'))).toThrow('EACCES') } finally { chmodSync(path, 0o600) }
+    expect(readFileSync(path, 'utf8')).toBe(bytes) // no new lineage was written over it
+    expect(openLineage(paths, HOST, NOW)).toEqual({ key, file: held })
+    expect(readdirSync(paths.lineages)).toEqual([`${key}.json`]) // and the lock was released
+  })
+
+  unreadable('the sweep never deletes a file it cannot read, and still sweeps the rest', () => {
+    const { paths, key, path } = withRecord()
+    const gone = openLineage(paths, { pid: 4200, lstart: 'Mon Oct 5 09:00:00 2026', comm: 'claude' }, NOW)
+    aged(path, 8 * DAY)
+    aged(paths.lineageFile(gone.key), 8 * DAY)
+    chmodSync(path, 0o000)
+    const running = table([4100, 1, 'Wed Oct 7 16:22:59 2026', 'claude']) // HOST is alive: its file must stay
+    let removed = -1
+    try { removed = sweepLineages(paths, running, NOW_MS) } finally { if (existsSync(path)) chmodSync(path, 0o600) }
+    expect(removed).toBe(1)
+    expect(existsSync(path)).toBe(true)
+    expect(existsSync(paths.lineageFile(gone.key))).toBe(false)
+    expect(readLineageFile(paths, key)?.inflight).toEqual([REC])
   })
 })
 

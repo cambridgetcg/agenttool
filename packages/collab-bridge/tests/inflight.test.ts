@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { chmodSync, readFileSync } from 'node:fs'
 import { cleanupTmps, temp } from './helpers.ts'
 import { nuancePaths, type NuancePaths } from '../src/paths.ts'
 import { openLineage, type HostInfo } from '../src/nuance/lineage.ts'
@@ -138,5 +139,45 @@ describe('in-flight records', () => {
     const paths = nuancePaths(temp('cb-inf-'))
     expect(unresolved(paths, 'a'.repeat(32))).toEqual([])
     expect(() => addInflight(paths, 'a'.repeat(32), rec('lin_' + '0'.repeat(32), 1))).toThrow('missing or damaged')
+  })
+
+  test.skipIf(process.getuid?.() === 0)('an unreadable lineage file is an error, never "no unresolved calls"', () => {
+    const { paths, key, lineage } = fresh()
+    addInflight(paths, key, rec(lineage, 1))
+    const path = paths.lineageFile(key)
+    const bytes = readFileSync(path, 'utf8')
+    chmodSync(path, 0o000) // EACCES: the open fails, which is not the same as a missing file
+    try {
+      expect(() => unresolved(paths, key)).toThrow('EACCES')
+      expect(() => addInflight(paths, key, rec(lineage, 2))).toThrow('EACCES')
+    } finally { chmodSync(path, 0o600) }
+    expect(readFileSync(path, 'utf8')).toBe(bytes)
+    expect(unresolved(paths, key)).toEqual([rec(lineage, 1)])
+  })
+
+  test('a record the read path would drop is refused before anything is written', () => {
+    const { paths, key, lineage } = fresh()
+    expect(addInflight(paths, key, rec(lineage, 1))).toBe(true)
+    const path = paths.lineageFile(key)
+    const bytes = readFileSync(path, 'utf8')
+    const bad: Array<Partial<InflightRecord>> = [
+      { session_id: 'ses 3' }, { session_id: '' }, { session_id: undefined as unknown as null },
+      { call_ref: 'not-a-call-ref' }, { call_ref: `lin_${'0'.repeat(32)}:xyz:1` },
+      { tool: '' }, { tool: undefined as unknown as string },
+      { args_hash: 'abc' }, { args_hash: 'A'.repeat(64) },
+      { idempotency_key: undefined as unknown as null }, { at: undefined as unknown as string },
+    ]
+    for (const o of bad) expect(() => addInflight(paths, key, rec(lineage, 2, o))).toThrow('malformed')
+    expect(readFileSync(path, 'utf8')).toBe(bytes) // nothing written, and the lock is gone
+    expect(unresolved(paths, key)).toEqual([rec(lineage, 1)])
+    // A refusal is checked first: it is not mistaken for "full" when 64 are unresolved.
+    for (let i = 2; i < 65; i++) addInflight(paths, key, rec(lineage, i))
+    expect(() => addInflight(paths, key, rec(lineage, 99, { tool: '' }))).toThrow('malformed')
+    expect(addInflight(paths, key, rec(lineage, 99))).toBe(false)
+    // Every record that was accepted is read back, the null session and the null key included.
+    const keyless = rec(lineage, 100, { session_id: null, idempotency_key: null })
+    clearInflight(paths, key, rec(lineage, 1).call_ref)
+    expect(addInflight(paths, key, keyless)).toBe(true)
+    expect(unresolved(paths, key).at(-1)).toEqual(keyless)
   })
 })
