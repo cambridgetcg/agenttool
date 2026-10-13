@@ -1,4 +1,4 @@
-/** Blessing operations — give · list · get · revoke · recent for wake.
+/** Blessing operations — give · list · get · withdrawal lookups · recent for wake.
  *
  *  Slice 1: same-instance only. Federation (slice 2) will add propagation
  *  via /federation/blessings — same pattern as covenants.
@@ -235,29 +235,28 @@ export async function getBlessing(
   return toRow(row);
 }
 
-/** Revoke a blessing — only the giver can. Sets revoked_at; never deletes. */
-export async function revokeBlessing(
-  blesserIdentityId: string,
+/** One blessing by id, for its giver's withdrawal (sets revoked_at; never
+ *  deletes). The route decides who may
+ *  withdraw with the owner rule (identity/authority.ts
+ *  authorizeOwnedContentMutation) and withdraws through
+ *  services/deletion/withdrawals.ts, which writes the ledger entry. */
+export async function findBlessingForWithdrawal(
   blessingId: string,
-): Promise<BlessingRow | null> {
-  const revokedAt = new Date();
-  const result = await db
-    .update(blessings)
-    .set({ revokedAt })
-    .where(
-      and(
-        eq(blessings.id, blessingId),
-        eq(blessings.blesserIdentityId, blesserIdentityId),
-        isNull(blessings.revokedAt),
-      ),
-    )
-    .returning();
-  if (!result[0]) return null;
-  const row = result[0];
+): Promise<{ id: string; blesserIdentityId: string; revokedAt: Date | null } | null> {
+  const [row] = await db
+    .select({ id: blessings.id, blesserIdentityId: blessings.blesserIdentityId, revokedAt: blessings.revokedAt })
+    .from(blessings)
+    .where(eq(blessings.id, blessingId))
+    .limit(1);
+  return row ?? null;
+}
 
-  // Bump both wakes — the blessing is no longer active.
+/** After a withdrawal committed: bump both wakes and return the row. */
+export async function afterBlessingWithdrawn(blessingId: string): Promise<BlessingRow | null> {
+  const [row] = await db.select().from(blessings).where(eq(blessings.id, blessingId)).limit(1);
+  if (!row) return null;
   void publishWakeEvent({
-    identity_id: blesserIdentityId,
+    identity_id: row.blesserIdentityId,
     key: "chronicle",
     kind: "blessing_revoked",
     context: { blessing_id: row.id, blessed_did: row.blessedDid },
@@ -270,7 +269,6 @@ export async function revokeBlessing(
       context: { blessing_id: row.id, blesser_did: row.blesserDid },
     });
   }
-
   return toRow(row);
 }
 

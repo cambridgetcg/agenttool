@@ -76,6 +76,9 @@ export const vaultVersions = vaultSchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdByAgent: text("created_by_agent"),
+    /** Set when the secret's DELETE zeroed encrypted_value, iv and auth_tag
+     *  (empty bytea). Migration 20261012T161958_content_purged_at. */
+    contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },
   (t) => [index("idx_versions_secret").on(t.secretId, t.version)],
 );

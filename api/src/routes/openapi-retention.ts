@@ -24,7 +24,8 @@ const RETENTION_SCHEMA_V1 = {
   ],
   properties: {
     schema: { const: RETENTION_SCHEMA },
-    version: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    // A same-day revision carries a suffix (2026-10-12.2).
+    version: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}(\\.\\d+)?$" },
     versions: {
       type: "array",
       minItems: 1,
@@ -68,13 +69,48 @@ const RETENTION_SCHEMA_V1 = {
     },
     deletion_ledger: {
       type: "object",
-      required: ["status", "effect"],
-      properties: { status: { type: "string" }, effect: { type: "string" } },
+      required: ["status", "what", "compaction", "mirror", "replay", "voided_entries", "deletion_moments", "rules", "effect", "basis"],
+      properties: {
+        status: { type: "string" },
+        what: { type: "string" },
+        not_ledgered: { type: "string" },
+        integrity: { type: "string" },
+        compaction: { type: "string" },
+        mirror: {
+          type: "object",
+          required: ["purpose", "window", "basis"],
+          properties: { purpose: { type: "string" }, window: { type: "string" }, basis },
+        },
+        mirror_configured: {
+          type: "object",
+          required: ["value", "basis"],
+          properties: { value: { type: "string" }, basis },
+        },
+        replay: { type: "string" },
+        voided_entries: { type: "integer", minimum: 0 },
+        deletion_moments: { type: "string" },
+        ownership: { type: "string" },
+        rules: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "effect"],
+            properties: { id: { type: "string" }, effect: { type: "string" } },
+          },
+        },
+        effect: { type: "string" },
+        basis,
+      },
     },
     already_deleted_content: {
       type: "object",
-      required: ["status", "notice"],
-      properties: { status: { type: "string" }, notice: { type: "string" } },
+      required: ["status", "purge_not_before", "min_days_after_announcement", "notice"],
+      properties: {
+        status: { type: "string" },
+        purge_not_before: { type: "string", format: "date" },
+        min_days_after_announcement: { type: "integer", minimum: 30 },
+        notice: { type: "string" },
+      },
     },
     logs: { type: "array", items: whereValue },
     ip_addresses: { type: "array", items: whereValue },

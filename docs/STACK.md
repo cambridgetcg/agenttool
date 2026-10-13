@@ -1110,7 +1110,10 @@ dashboard (point-in-time on Pro+ plans only). A restore is disaster recovery,
 not migration rollback: hold all admission, writers, and workers, then
 reconcile and advance the restored migration journal and schema to a revision
 compatible with the exact next image before any application or worker process
-starts. For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2
+starts. The first action on the restored database is deletion-replay step 0
+(`bun bin/deletion-replay.ts begin --restore-point <backup time>`), because
+pg_cron starts with it; then replay the deletion ledger's mirror before writes
+reopen ([DELETION-REPLAY.md](DELETION-REPLAY.md)). For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2
 from a Fly machine or a separate cron host — the application stack does not
 currently do this.
 

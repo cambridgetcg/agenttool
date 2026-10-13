@@ -113,8 +113,9 @@ export class MemoryClient {
    * Delete a memory by ID at any tier.
    *
    * Tier does not make a memory immutable and no witness signature is needed.
-   * The API refuses with 409 `paid_memory_receipt_preserved` when the memory
-   * carries a paid marketplace witness receipt.
+   * A memory carrying a paid marketplace witness receipt is erased in place
+   * instead: its content is replaced, the memory API's reads skip it, and the
+   * row stays only for the receipt. The API records the deletion in its deletion ledger.
    *
    * @param memoryId - The UUID of the memory to release.
    * @param options - Root proof, required when the project is agent-rooted.
@@ -129,10 +130,10 @@ export class MemoryClient {
   }
 
   /**
-   * Delete all memories sharing a key, all-or-none.
+   * Delete all memories sharing a key, in one transaction.
    *
-   * If any matching memory carries a paid marketplace witness receipt, the
-   * API returns 409 `paid_memory_receipt_preserved` and deletes none.
+   * A matching memory that carries a paid marketplace witness receipt is
+   * erased in place rather than removed; every other match is deleted.
    *
    * @param key - The key whose memories should be released.
    * @param options - Root proof, required when the project is agent-rooted.
@@ -308,16 +309,18 @@ export interface AttestationInput {
 }
 
 /**
- * Carried by every memory mutation that composes into project constitution.
+ * Carried by every memory mutation that needs a root's consent.
  *
- * Foundational and constitutive memory composes into effective identity at
- * project scope, so the API guards elevation, visibility, and release with
- * `authorizeProjectConstitutionMutation`. Where a project holds exactly one
- * constitutional root (enrolled guest roots do not count), that root must consent to the exact request bytes
- * or the server answers 428 `authority_proof_required`. Projects with no
- * rooted identity keep the bearer-only posture and need nothing here.
- * A memory bound to a guest root enrolled into an existing project needs that
- * guest's own root instead.
+ * Release (delete, delete_by_key) and visibility follow the owner rule
+ * (`authorizeOwnedContentMutation`): a memory bound to a rooted identity, an
+ * enrolled guest included, needs that identity's own root; other memories
+ * follow the project rule, where a project holding exactly one constitutional
+ * root needs that root and a project with no rooted identity needs nothing
+ * here. A keyed delete spanning owners that need different consents answers
+ * 409; send one request per owner. Elevation composes into effective identity
+ * at project scope and keeps the project rule
+ * (`authorizeProjectConstitutionMutation`). Without the right root the server
+ * answers 428 `authority_proof_required`. See `ownerGatedRequest`.
  */
 export interface MemoryAuthorityOptions {
   authority?: AuthorityBinding;

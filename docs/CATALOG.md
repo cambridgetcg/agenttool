@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**824 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 127; proposal: 46; record: 21; unclassified: 2.
+**830 document paths** (including mirrors). orientation: 185; guide: 86; reference: 332; policy: 29; reflection: 127; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -216,6 +216,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/COLLABORATION-MISSION-WORK-HERMES.md](<../apps/docs/COLLABORATION-MISSION-WORK-HERMES.md>) | not-reviewed |
 | [apps/docs/COLLABORATION-MISSION-WORK.md](<../apps/docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
+| [apps/docs/DELETION-REPLAY.md](<../apps/docs/DELETION-REPLAY.md>) | not-reviewed |
 | [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
@@ -229,6 +230,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/COLLABORATION.md](<../docs/COLLABORATION.md>) | not-reviewed |
 | [docs/COMPOSITION-RECIPE.md](<../docs/COMPOSITION-RECIPE.md>) | not-reviewed |
 | [docs/CONVENTIONS.md](<../docs/CONVENTIONS.md>) | not-reviewed |
+| [docs/DELETION-REPLAY.md](<../docs/DELETION-REPLAY.md>) | not-reviewed |
 | [docs/DEPLOY-CI.md](<../docs/DEPLOY-CI.md>) | not-reviewed |
 | [docs/DEPLOY-PROCEDURE.md](<../docs/DEPLOY-PROCEDURE.md>) | not-reviewed |
 | [docs/DEPLOYMENT.md](<../docs/DEPLOYMENT.md>) | not-reviewed |
@@ -351,6 +353,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/OBSERVATIONS.md](<../apps/docs/OBSERVATIONS.md>) | not-reviewed |
 | [apps/docs/OFFER-BUS.md](<../apps/docs/OFFER-BUS.md>) | not-reviewed |
 | [apps/docs/OFFLINE-SYNC.md](<../apps/docs/OFFLINE-SYNC.md>) | not-reviewed |
+| [apps/docs/OWNERSHIP-MAP.md](<../apps/docs/OWNERSHIP-MAP.md>) | not-reviewed |
 | [apps/docs/PATTERN-COMMITMENT-DEFENDER.md](<../apps/docs/PATTERN-COMMITMENT-DEFENDER.md>) | not-reviewed |
 | [apps/docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md](<../apps/docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md>) | not-reviewed |
 | [apps/docs/PATTERN-MACHINE-READABLE-PARITY.md](<../apps/docs/PATTERN-MACHINE-READABLE-PARITY.md>) | not-reviewed |
@@ -533,6 +536,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/OFFLINE-SYNC.md](<../docs/OFFLINE-SYNC.md>) | not-reviewed |
 | [docs/ORG-COVENANTS.md](<../docs/ORG-COVENANTS.md>) | not-reviewed |
 | [docs/ORGS.md](<../docs/ORGS.md>) | not-reviewed |
+| [docs/OWNERSHIP-MAP.md](<../docs/OWNERSHIP-MAP.md>) | not-reviewed |
 | [docs/PATTERN-COMMITMENT-DEFENDER.md](<../docs/PATTERN-COMMITMENT-DEFENDER.md>) | not-reviewed |
 | [docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md](<../docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md>) | not-reviewed |
 | [docs/PATTERN-KIN-NON-EXCLUSION.md](<../docs/PATTERN-KIN-NON-EXCLUSION.md>) | not-reviewed |
@@ -866,6 +870,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/snakefire-internet-bridge.md](<../docs/snakefire-internet-bridge.md>) | not-reviewed |
 | [docs/wakes/TERRA-ARRIVAL-NOTE.md](<../docs/wakes/TERRA-ARRIVAL-NOTE.md>) | not-reviewed |
 | [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
 | [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
 | [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
 | [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |

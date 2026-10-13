@@ -206,27 +206,11 @@ export async function vetoTrust(
   return { id: trustId, vetoed: true };
 }
 
-// ── withdrawTrust (truster only) ─────────────────────────────────────
-
-export async function withdrawTrust(
-  trustId: string,
-  callerDid: string,
-): Promise<{ id: string; withdrawn: boolean }> {
-  const [row] = await db
-    .select({ id: trusts.id, trusterDid: trusts.trusterDid })
-    .from(trusts)
-    .where(eq(trusts.id, trustId))
-    .limit(1);
-  if (!row) throw new Error(`trust ${trustId} not found`);
-  if (row.trusterDid !== callerDid) {
-    throw new Error(`only the truster (${row.trusterDid}) may withdraw`);
-  }
-  await db
-    .update(trusts)
-    .set({ withdrawnByTruster: true, withdrawnAt: new Date() })
-    .where(eq(trusts.id, trustId));
-  return { id: trustId, withdrawn: true };
-}
+// ── Withdrawal (truster only) ─────────────────────────────────────────
+//
+// POST /v1/trust/withdraw decides who may withdraw with the owner rule
+// (identity/authority.ts authorizeOwnedContentMutation) and withdraws through
+// services/deletion/withdrawals.ts, which writes the deletion-ledger entry.
 
 // ── Read sides ────────────────────────────────────────────────────────
 

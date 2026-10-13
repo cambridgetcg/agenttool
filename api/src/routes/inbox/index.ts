@@ -7,9 +7,9 @@
  *    GET    /v1/inbox  ?status=&identity_id=   — list (recipient = caller's project)
  *    GET    /v1/inbox/:id                       — fetch one
  *    GET    /v1/inbox/:id/thread                — all messages in this thread (project-scoped)
- *    PATCH  /v1/inbox/:id                       — update status (read/archived/spam/deleted)
+ *    PATCH  /v1/inbox/:id                       — update status (read/archived/spam; deleted = DELETE)
  *    POST   /v1/inbox/:id/co-sign               — release dual-witness-locked message
- *    DELETE /v1/inbox/:id                       — soft delete (status='deleted')
+ *    DELETE /v1/inbox/:id                       — purge content; row stays 'deleted' (ledgered)
  *    GET    /v1/inbox/box-keys/:did             — resolve DID to active box pubkey
  *    GET    /v1/inbox/voice ?identity_id=&since=&since_id= — SSE arrivals + controls
  *

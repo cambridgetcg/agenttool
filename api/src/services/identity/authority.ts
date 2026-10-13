@@ -16,7 +16,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -387,6 +387,24 @@ export async function getProjectRootedAuthorityIdentities(
     );
 }
 
+/** Roots the owner rule counts (deletion spec §5.1): the constitutional
+ * roots above that can still sign. A memorial root can never claim a
+ * sequence (terminality.ts mutableIdentityPredicate), so counting it would
+ * leave an unrooted sibling's content erasable by nobody; the deletion
+ * consent set leaves memorial roots out for the same reason (§5.2, §10.9).
+ * The constitution rule above keeps counting them. */
+async function getOwnerRuleCountedRoots(projectId: string): Promise<IdentityAuthorityState[]> {
+  return db
+    .select({
+      identityId: identities.id,
+      did: identities.did,
+      rootPublicKey: identities.authorityRootPublicKey,
+      sequence: identities.authoritySequence,
+    })
+    .from(identities)
+    .where(and(eq(identities.projectId, projectId), constitutionRootSql(), ne(identities.status, "memorial")));
+}
+
 /** Normalise a memory's identity/agent reference (UUID or `did:at:` DID). */
 function subjectReference(value: string): string {
   const trimmed = value.trim();
@@ -488,6 +506,290 @@ export async function authorizeProjectConstitutionMutation(input: {
     headers: input.headers,
     now: input.now,
   });
+}
+
+// ─── The owner rule (deletion spec §5.1) ──────────────────────────────────
+//
+// authorizeOwnedContentMutation extends the memory rule above to every
+// identity-bound erase, withdraw (and, later, redact and hide). It decides per
+// owner of the touched content:
+//
+//   enrolled guest            → that guest's root (unchanged)
+//   rooted identity           → that identity's root (new: in a multi-root
+//                               project each root can erase its own content)
+//   unrooted identity, or
+//   null (project-bound)      → the project rule: zero counted roots means the
+//                               bearer, one root means that root signs. A
+//                               memorial root is not counted: it can never
+//                               sign again.
+//   unrooted identity in a
+//   project with 2+ roots     → the bearer, for that identity's own content and
+//                               only when the intent is "erase" (erase,
+//                               withdraw, redact, hide, leave). Project-bound
+//                               content there still gets 409.
+//   owners needing different
+//   consents                  → 409 authority_quorum_required: one request
+//                               per owner.
+//
+// Every owner must be an identity of the caller's project; any other owner
+// answers 404, so a route that finds rows by id cannot be used to probe.
+// Routes whose rows are already scoped to the caller's project (memories,
+// inbox) pass heldByProject: an owner reference there that does not resolve
+// to an identity of this project is read as project-bound content, which is
+// what the memory rule did with it.
+
+export type OwnedContentIntent = "erase" | "change";
+
+export type OwnerConsentBasis =
+  | "owner_root"
+  | "guest_root"
+  | "project_root"
+  | "project_bearer"
+  | "unrooted_owner_fallback";
+
+export type OwnerConsent =
+  | { kind: "bearer"; basis: "project_bearer" | "unrooted_owner_fallback" }
+  | { kind: "root"; identityId: string; basis: "owner_root" | "guest_root" | "project_root" };
+
+export interface OwnerFacts {
+  /** Identity UUID, or null for project-bound content. */
+  id: string | null;
+  rooted: boolean;
+  guest: boolean;
+}
+
+export type OwnedContentConsentDecision =
+  | { ok: true; consent: OwnerConsent }
+  | { ok: false; reason: "mixed_owners" | "project_quorum" };
+
+function consentKey(consent: OwnerConsent): string {
+  return consent.kind === "bearer" ? "bearer" : `root:${consent.identityId}`;
+}
+
+/** The consent one owner's content needs, or null when only a quorum
+ *  protocol (which does not exist) could give it. Pure. */
+export function ownerConsentFor(
+  owner: OwnerFacts,
+  countedRoots: ReadonlyArray<string>,
+  intent: OwnedContentIntent,
+): OwnerConsent | null {
+  if (owner.id !== null && owner.rooted) {
+    return { kind: "root", identityId: owner.id, basis: owner.guest ? "guest_root" : "owner_root" };
+  }
+  if (countedRoots.length === 0) return { kind: "bearer", basis: "project_bearer" };
+  if (countedRoots.length === 1) return { kind: "root", identityId: countedRoots[0]!, basis: "project_root" };
+  if (owner.id !== null && intent === "erase") return { kind: "bearer", basis: "unrooted_owner_fallback" };
+  return null;
+}
+
+/** Combine every owner's consent: one consent for all, or a refusal. Pure. */
+export function decideOwnedContentConsent(input: {
+  owners: ReadonlyArray<OwnerFacts>;
+  countedRoots: ReadonlyArray<string>;
+  intent: OwnedContentIntent;
+}): OwnedContentConsentDecision {
+  const owners = input.owners.length > 0 ? input.owners : [{ id: null, rooted: false, guest: false }];
+  const consents = owners.map((owner) => ownerConsentFor(owner, input.countedRoots, input.intent));
+  if (consents.some((consent) => consent === null)) return { ok: false, reason: "project_quorum" };
+  const keys = new Set(consents.map((consent) => consentKey(consent!)));
+  if (keys.size > 1) return { ok: false, reason: "mixed_owners" };
+  return { ok: true, consent: consents[0]! };
+}
+
+export type OwnedContentAuthorityDecision =
+  | {
+      ok: true;
+      mode: "agent_root" | "legacy_bearer";
+      /** The authority_mode a deletion-ledger entry records. */
+      ledgerMode: "agent_root" | "guest_root" | "legacy_bearer";
+      basis: OwnerConsentBasis;
+      /** Whose root signed; null when the bearer decided. */
+      signerIdentityId: string | null;
+      sequence: number;
+      nextSequence: number;
+    }
+  | {
+      ok: false;
+      status: 401 | 404 | 409 | 428;
+      reason?: "owner_outside_project";
+      body: GuidedErrorBody & { docs: string };
+    };
+
+const UUID_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const AUTHORITY_DOCS = "https://docs.agenttool.dev/AGENT-HOME.md";
+
+interface LoadedOwner {
+  id: string;
+  did: string;
+  projectId: string;
+  rooted: boolean;
+  guest: boolean;
+}
+
+/** One query for every named owner, bound as a single text parameter so the
+ *  statement never grows with the number of owners. */
+async function loadOwners(ids: ReadonlyArray<string>): Promise<Map<string, LoadedOwner>> {
+  const found = new Map<string, LoadedOwner>();
+  if (ids.length === 0) return found;
+  const rows = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      projectId: identities.projectId,
+      rooted: sql<boolean>`(${identities.authorityRootPublicKey} is not null)`,
+      guest: enrolledGuestSql(),
+    })
+    .from(identities)
+    .where(sql`${identities.id} = ANY(string_to_array(${ids.join(",")}, ',')::uuid[])`);
+  for (const row of rows) {
+    found.set(String(row.id).toLowerCase(), {
+      id: String(row.id).toLowerCase(),
+      did: String(row.did),
+      projectId: String(row.projectId).toLowerCase(),
+      rooted: row.rooted === true || (row.rooted as unknown) === "t",
+      guest: row.guest === true || (row.guest as unknown) === "t",
+    });
+  }
+  return found;
+}
+
+function ownerNotFound(): OwnedContentAuthorityDecision {
+  return {
+    ok: false,
+    status: 404,
+    reason: "owner_outside_project",
+    body: {
+      error: "not_found",
+      message: "No record with this id belongs to an identity of this project.",
+      docs: AUTHORITY_DOCS,
+    },
+  };
+}
+
+/** Authorize an erase, withdraw (or other change) of identity-bound content
+ *  under the owner rule above. `owners` names the identity each touched row
+ *  belongs to (UUID or did:at:), or null for project-bound rows. */
+export async function authorizeOwnedContentMutation(input: {
+  projectId: string;
+  owners: ReadonlyArray<string | null | undefined>;
+  intent: OwnedContentIntent;
+  heldByProject?: boolean;
+  method: string;
+  requestTarget: string;
+  bodyBytes: Uint8Array;
+  headers: Headers;
+  now?: Date;
+}): Promise<OwnedContentAuthorityDecision> {
+  const projectId = input.projectId.toLowerCase();
+  const references = input.owners.map((owner) =>
+    typeof owner === "string" && owner.trim() !== "" ? subjectReference(owner) : null,
+  );
+  const named = [...new Set(references.filter((ref): ref is string => ref !== null && UUID_REFERENCE.test(ref)))];
+  const loaded = await loadOwners(named);
+
+  const facts: OwnerFacts[] = [];
+  const seen = new Set<string>();
+  for (const ref of references) {
+    const owner = ref === null ? undefined : loaded.get(ref);
+    const inProject = owner !== undefined && owner.projectId === projectId;
+    if (ref !== null && !inProject) {
+      if (!input.heldByProject) return ownerNotFound();
+      // A dangling or foreign binding on a row this project holds: the memory
+      // rule treated it as the project's own content, and so does this one.
+    }
+    const key = inProject ? owner!.id : "";
+    if (seen.has(key)) continue;
+    seen.add(key);
+    facts.push(inProject ? { id: owner!.id, rooted: owner!.rooted, guest: owner!.guest } : { id: null, rooted: false, guest: false });
+  }
+
+  const needsProjectRoots = facts.some((owner) => owner.id === null || !owner.rooted);
+  const projectRoots = needsProjectRoots ? await getOwnerRuleCountedRoots(input.projectId) : [];
+  const decision = decideOwnedContentConsent({
+    owners: facts,
+    countedRoots: projectRoots.map((root) => root.identityId.toLowerCase()),
+    intent: input.intent,
+  });
+
+  if (!decision.ok) {
+    return {
+      ok: false,
+      status: 409,
+      body: decision.reason === "mixed_owners"
+        ? {
+            error: "authority_quorum_required",
+            message:
+              "This request touches content owned by identities that need different consents. No single signature can consent for all of them.",
+            hint: "Send one request per owner, each carrying that owner's consent (its root's signature, or the bearer for an identity without a root).",
+            docs: AUTHORITY_DOCS,
+          }
+        : {
+            error: "authority_quorum_required",
+            message:
+              "This project contains multiple agent-rooted identities, and this content belongs to no single identity. A single root cannot consent for all of them.",
+            hint: "Use an identity-scoped operation, or wait for the multi-root quorum protocol.",
+            docs: AUTHORITY_DOCS,
+          },
+    };
+  }
+
+  const consent = decision.consent;
+  if (consent.kind === "bearer") {
+    return {
+      ok: true,
+      mode: "legacy_bearer",
+      ledgerMode: "legacy_bearer",
+      basis: consent.basis,
+      signerIdentityId: null,
+      sequence: 0,
+      nextSequence: 1,
+    };
+  }
+
+  const checked = await authorizeIdentityMutation({
+    identityId: consent.identityId,
+    method: input.method,
+    requestTarget: input.requestTarget,
+    bodyBytes: input.bodyBytes,
+    headers: input.headers,
+    now: input.now,
+  });
+  if (!checked.ok) {
+    if (checked.status !== 428) return checked;
+    const signer = loaded.get(consent.identityId)
+      ?? projectRoots.map((root) => ({ id: root.identityId.toLowerCase(), did: root.did })).find((root) => root.id === consent.identityId);
+    const ownerIds = facts.map((owner) => owner.id).filter((id): id is string => id !== null);
+    const forOwn = consent.basis !== "project_root";
+    return {
+      ...checked,
+      body: {
+        ...checked.body,
+        message: forOwn
+          ? checked.body.message
+          : "This content belongs to an identity without a root of its own, in a project whose single agent root consents for it. The project bearer can carry the request, but only that root can consent to it.",
+        hint: `${forOwn
+          ? `This content belongs to the agent-rooted identity ${signer?.did ?? consent.identityId}. Its project bearer can carry the request, but only that identity's root can consent to it.`
+          : `This project's agent root ${signer?.did ?? consent.identityId} consents for content whose identity has no root of its own.`
+        } Sign identity-authority/v1 over this exact method, path-and-query and body with that root (SDK: ownerGatedRequest / owner_gated_request, or the client method's authority option), then send ${Object.values(AUTHORITY_HEADERS).join(", ")}.`,
+        details: {
+          ...(checked.body.details as Record<string, unknown> | undefined),
+          owner_identity_ids: ownerIds,
+          signer_identity_id: consent.identityId,
+          signer_did: signer?.did ?? null,
+          consent_basis: consent.basis,
+        },
+      },
+    };
+  }
+  return {
+    ok: true,
+    mode: checked.mode,
+    ledgerMode: consent.basis === "guest_root" ? "guest_root" : "agent_root",
+    basis: consent.basis,
+    signerIdentityId: consent.identityId,
+    sequence: checked.sequence,
+    nextSequence: checked.nextSequence,
+  };
 }
 
 /** Verify and atomically claim the next proof sequence.

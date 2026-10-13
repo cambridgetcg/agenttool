@@ -354,6 +354,7 @@ from .authority import (
     identity_authority_headers,
     identity_read_authority_headers,
 )
+from .owner_gated import OWNER_GATED_ROUTES, owner_gated_request
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .handoff import (
     HandoffAuthority,
@@ -782,6 +783,8 @@ __all__ = [
     "authority_request_target",
     "authority_headers_for_request",
     "AuthorityBinding",
+    "OWNER_GATED_ROUTES",
+    "owner_gated_request",
     "GraceClient",
     "canonical_grace_bytes",
     "sign_grace",

@@ -106,6 +106,7 @@ readonly TEST_SUPPORT_FILES=(
   tests/fixtures/provider-directory-canon-evaluations-v1.schema.json
   tests/fixtures/static-parser-noncooperative.ts
   tests/fixtures/crown-vectors.json
+  tests/fixtures/deletion-ledger-postgres.ts
 )
 
 die() {

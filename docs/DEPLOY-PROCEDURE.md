@@ -1101,6 +1101,21 @@ Exit `42` means at least one pending file is in
 `api/migrations/quiescence-required.txt`; the ordinary deploy must remain
 blocked until the exclusive cutover above has applied it.
 
+### Deletion-ledger mirror lag
+
+Once the deletion ledger exists (wave 2 migrations applied):
+
+```bash
+DATABASE_URL=<sweep role> bun bin/deletion-ledger-mirror.ts --status --max-age-hours 24
+```
+
+It reads only the database and reports how many ledger entries are not yet in
+the off-database mirror and how old the oldest is; exit `1` means the oldest
+is older than 24 hours. An entry still waiting cannot be replayed after a
+database loss. Run the sweep (`bun bin/deletion-ledger-mirror.ts`) whenever
+anything is waiting; see [`DELETION-REPLAY.md`](DELETION-REPLAY.md). Nothing
+schedules this.
+
 ## Phase 6 — Rollback
 
 ### API
@@ -1140,8 +1155,12 @@ admission, writers, and workers held and use a separately reviewed forward
 corrective migration or data repair. Restoring a Supabase backup or `pg_dump`
 snapshot is database-loss disaster recovery, not migration rollback; after a
 restore, keep every writer held until the restored journal and schema have
-been advanced to a revision compatible with the exact next image. See
-[`STACK.md`](STACK.md) §10.
+been advanced to a revision compatible with the exact next image. Before
+writes reopen, run the deletion replay: step 0
+(`bun bin/deletion-replay.ts begin --restore-point <backup time>`) is the
+first action on the restored database, since pg_cron starts with it, then
+`plan`, `apply` and `finish` ([`DELETION-REPLAY.md`](DELETION-REPLAY.md)).
+See [`STACK.md`](STACK.md) §10.
 
 ## The one-command orchestrator
 

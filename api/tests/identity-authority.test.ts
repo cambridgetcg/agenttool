@@ -335,7 +335,10 @@ describe("authority wiring invariants", () => {
       ["api/src/routes/identity/box-keys.ts", "authorizeIdentityMutation"],
       ["api/src/routes/identity/at-rest.ts", "authorizeIdentityMutation"],
       ["api/src/routes/memory/tiers.ts", "authorizeProjectConstitutionMutation"],
-      ["api/src/routes/memory/memories.ts", "authorizeProjectConstitutionMutation"],
+      // Memory release and visibility follow the owner rule (deletion spec §5.1).
+      ["api/src/routes/memory/memories.ts", "authorizeOwnedContentMutation"],
+      ["api/src/routes/inbox/messages.ts", "authorizeOwnedContentMutation"],
+      ["api/src/services/deletion/withdrawals.ts", "authorizeOwnedContentMutation"],
       ["api/src/routes/memory-witness-marketplace.ts", "authorizeProjectConstitutionMutation"],
       ["api/src/routes/quiet-hours.ts", "authorizeIdentityMutation"],
       ["api/src/routes/poker-face.ts", "authorizeIdentityMutation"],

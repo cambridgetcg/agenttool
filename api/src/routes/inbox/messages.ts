@@ -5,20 +5,32 @@
  *  encryption; subject and routing/thread metadata can be readable.
  *  Cross-project sends require recipient-side covenant consent. */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
+import { db } from "../../db/client";
 import { errors, fail } from "../../lib/errors";
+import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
+import { erasureAuthorityFrom, ledgerResponse } from "../../services/deletion/record";
+import {
+  authorizeOwnedContentMutation,
+  authorityRequestTarget,
+  readAuthorityBoundBytes,
+  readAuthorityBoundJson,
+} from "../../services/identity/authority";
 import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
 import {
   coSignMessage,
+  findMessageForPurge,
   getMessage,
   getMessageThread,
+  InboxMessagePurgedError,
   listInbox,
+  purgeMessage,
   sendMessage,
   updateStatus,
   type StatusUpdate,
@@ -156,17 +168,112 @@ const patchSchema = z.object({
   status: z.enum(["unread", "read", "archived", "spam", "deleted"]),
 });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type PurgeOutcome =
+  | { ok: true; body: Awaited<ReturnType<typeof describePurge>> }
+  | { ok: false; status: 401 | 404 | 409 | 428; body: object };
+
+async function describePurge(
+  result: NonNullable<Awaited<ReturnType<typeof purgeMessage>>>,
+  authority: { mode: string; basis: string } | null,
+) {
+  const mirrored = result.entry
+    ? (await pushLedgerMirrorAfterCommit(db, result.entry.seq)).mirrored
+    : null;
+  return {
+    id: result.id,
+    deleted: true,
+    already_deleted: result.alreadyPurged,
+    content_retained: false,
+    purged_at: result.purgedAt,
+    ...(authority ? { authority } : {}),
+    ledger: result.entry ? ledgerResponse(result.entry, mirrored === true) : null,
+    _retention: DELETE_RESPONSE_RETENTION.inbox,
+  };
+}
+
+const MESSAGE_NOT_FOUND = { error: "message_not_found" } as const;
+
+/** One erase path for DELETE and PATCH {"status":"deleted"}. The recipient
+ *  identity owns the message and consents under the owner rule (deletion
+ *  spec §5.1): a rooted recipient's own root signs the exact request (428
+ *  otherwise); a recipient without a root follows the project rule, and in a
+ *  project with several roots the bearer acts for it. Content is purged with
+ *  its ledger entry and the recipient's deletion moment. A repeat on a purged
+ *  message answers already_deleted without a proof and writes nothing. */
+async function purgeForOwner(c: Context<ProjectContext>, id: string, bodyBytes: Uint8Array): Promise<PurgeOutcome> {
+  const projectId = c.var.project.id;
+  if (!UUID_RE.test(id)) return { ok: false, status: 404, body: MESSAGE_NOT_FOUND };
+  const target = await findMessageForPurge(projectId, id);
+  if (!target) return { ok: false, status: 404, body: MESSAGE_NOT_FOUND };
+  if (target.contentPurgedAt) {
+    const repeat = await purgeMessage(projectId, id);
+    if (!repeat) return { ok: false, status: 404, body: MESSAGE_NOT_FOUND };
+    return { ok: true, body: await describePurge(repeat, null) };
+  }
+  const authority = await authorizeOwnedContentMutation({
+    projectId,
+    owners: [target.recipientIdentityId],
+    intent: "erase",
+    heldByProject: true,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return { ok: false, status: authority.status, body: authority.body };
+  const result = await purgeMessage(projectId, id, erasureAuthorityFrom(authority));
+  if (!result) return { ok: false, status: 404, body: MESSAGE_NOT_FOUND };
+  return { ok: true, body: await describePurge(result, { mode: authority.ledgerMode, basis: authority.basis }) };
+}
+
+function purgedRefusal(c: Parameters<typeof fail>[0]) {
+  return fail(
+    c,
+    {
+      error: "message_deleted",
+      message: "This message was deleted and its content erased, so it cannot be restored or re-filed.",
+      hint: "Ask the sender to send it again if you still need it.",
+      docs: "https://docs.agenttool.dev/INBOX.md",
+    },
+    409,
+  );
+}
+
 app.patch("/:id", async (c) => {
-  const body = await c.req.json();
-  const parsed = patchSchema.safeParse(body);
+  // Read the entity once: a PATCH to 'deleted' is an erase, and a rooted
+  // recipient's proof signs these exact bytes.
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return c.json({ error: "validation", details: { formErrors: ["body must be one JSON object"], fieldErrors: {} } }, 400);
+  }
+  const parsed = patchSchema.safeParse(bound.value);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
-  const updated = await updateStatus(
-    c.var.project.id,
-    c.req.param("id"),
-    parsed.data.status as StatusUpdate,
-  );
+  if (parsed.data.status === "deleted") {
+    const purged = await purgeForOwner(c, c.req.param("id"), bound.bodyBytes);
+    if (!purged.ok) {
+      if (purged.status === 404) throw new HTTPException(404, { message: "message_not_found" });
+      return c.json(purged.body, purged.status);
+    }
+    const message = await getMessage(c.var.project.id, purged.body.id);
+    return c.json({ ...message, ...purged.body, _confidentiality: INBOX_CONFIDENTIALITY });
+  }
+  let updated;
+  try {
+    updated = await updateStatus(
+      c.var.project.id,
+      c.req.param("id"),
+      parsed.data.status as StatusUpdate,
+    );
+  } catch (error) {
+    if (error instanceof InboxMessagePurgedError) return purgedRefusal(c);
+    throw error;
+  }
   if (!updated) throw new HTTPException(404, { message: "message_not_found" });
   return c.json({ ...updated, _confidentiality: INBOX_CONFIDENTIALITY });
 });
@@ -234,21 +341,23 @@ app.post("/:id/co-sign", async (c) => {
 });
 
 // ── DELETE /v1/inbox/:id ─────────────────────────────────────────────
-//  Soft delete via status='deleted'. List filters skip 'deleted' by default.
-//  The content stays, and the response says so (content_retained).
+//  Purges the content: ciphertext, nonce and ephemeral key become '', the
+//  subject and refs NULL, metadata {}. The row stays with status 'deleted'
+//  and its signature, and can no longer be restored. One ids-only ledger
+//  entry and the recipient's deletion moment are written in the same
+//  transaction; if the entry cannot be written, nothing is deleted (503).
+//  A repeat answers already_deleted with nothing new written. Free.
+//  The recipient consents under the owner rule (purgeForOwner): a rooted
+//  recipient's root signs this exact DELETE, empty body included.
+//  Spec: docs/superpowers/specs/2026-10-12-deletion-scopes-design.md §5.1, §17 wave 2.
 app.delete("/:id", async (c) => {
-  const updated = await updateStatus(
-    c.var.project.id,
-    c.req.param("id"),
-    "deleted",
-  );
-  if (!updated) throw new HTTPException(404, { message: "message_not_found" });
-  return c.json({
-    id: updated.id,
-    deleted: true,
-    content_retained: true,
-    _retention: DELETE_RESPONSE_RETENTION.inbox,
-  });
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const purged = await purgeForOwner(c, c.req.param("id"), bodyBytes);
+  if (!purged.ok) {
+    if (purged.status === 404) throw new HTTPException(404, { message: "message_not_found" });
+    return c.json(purged.body, purged.status);
+  }
+  return c.json(purged.body);
 });
 
 export default app;

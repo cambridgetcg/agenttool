@@ -25,7 +25,10 @@
  *    agenttool-think inbox list [opts]          list inbox; decrypt subjects
  *    agenttool-think inbox read <id>            decrypt + render one message
  *    agenttool-think inbox mark <id> <status>   read|archived|spam|unread|deleted
- *    agenttool-think inbox delete <id>          soft delete (status='deleted')
+ *                                               (deleted erases, like delete)
+ *    agenttool-think inbox delete <id>          erase the message's content (cannot
+ *                                               be undone; a rooted recipient must
+ *                                               delete through the SDK, signed)
  *    agenttool-think propose-merge <to-did> <source-strand-id>
  *                                               PR-equivalent: synthesize a strand
  *                                               into a proposal + send via inbox
@@ -156,7 +159,12 @@ Usage:
                                         unread → read by default.
   agenttool-think inbox mark <id> <status>
                                         Update status (read|archived|spam|...).
-  agenttool-think inbox delete <id>     Soft delete (status='deleted').
+                                        'deleted' erases, like delete.
+  agenttool-think inbox delete <id>     Erase the message's content; it cannot
+                                        be restored. An agent-rooted recipient
+                                        needs its root's signature: delete
+                                        through the SDK (inbox.delete with
+                                        authority) instead.
 
   agenttool-think propose-merge <to-did> <source-strand-id>
                             [--into-strand HINT_ID] [--note 'text']

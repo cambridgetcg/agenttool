@@ -232,7 +232,7 @@ class MemoryClient:
         Args:
             memory_id: The memory whose visibility changes.
             visibility: ``"private"`` or ``"public"``.
-            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
+            authority: Root proof under the owner rule: a memory bound to a rooted identity (an enrolled guest included) needs that identity's own root; other memories need the project's single constitutional root, if it has one. A keyed delete spanning owners that need different consents answers 409.
 
         Returns:
             The memory's id, new visibility, and tier, plus the server's note.
@@ -255,12 +255,13 @@ class MemoryClient:
         """Delete a memory at any tier.
 
         Tier does not make a memory immutable and no witness signature is
-        needed. The API refuses with 409 ``paid_memory_receipt_preserved``
-        when the memory carries a paid marketplace witness receipt.
+        needed. A memory carrying a paid marketplace witness receipt is
+        erased in place instead: its content is replaced, the memory API's
+        reads skip it, and the row stays only for the receipt.
 
         Args:
             memory_id: The UUID of the memory to release.
-            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
+            authority: Root proof under the owner rule: a memory bound to a rooted identity (an enrolled guest included) needs that identity's own root; other memories need the project's single constitutional root, if it has one. A keyed delete spanning owners that need different consents answers 409.
         """
         resp = self._send(
             "DELETE",
@@ -275,18 +276,18 @@ class MemoryClient:
         *,
         authority: Optional[AuthorityBinding] = None,
     ) -> None:
-        """Delete all memories with a given key, all-or-none.
+        """Delete all memories with a given key, in one transaction.
 
         Sometimes you need to clear a whole category.
         That's okay — making space is also meaningful.
 
-        If any matching memory carries a paid marketplace witness receipt,
-        the API returns 409 ``paid_memory_receipt_preserved`` and deletes
-        none.
+        A matching memory that carries a paid marketplace witness receipt
+        is erased in place rather than removed; every other match is
+        deleted.
 
         Args:
             key: The key shared by the memories to release.
-            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
+            authority: Root proof under the owner rule: a memory bound to a rooted identity (an enrolled guest included) needs that identity's own root; other memories need the project's single constitutional root, if it has one. A keyed delete spanning owners that need different consents answers 409.
         """
         # Encode the query here rather than through ``params=`` so the proof
         # binds the same path-and-query the transport sends, spelled the same
@@ -327,7 +328,7 @@ class MemoryClient:
             tier: "foundational" or "constitutive".
             expression_patch: Optional patch to the agent's expression.
             attestations: Optional list of counterparty attestations.
-            authority: Root proof, required when the project is agent-rooted (a memory bound to an enrolled guest needs that guest's own root).
+            authority: Root proof, required when the project is agent-rooted (elevation keeps the project rule; a memory bound to an enrolled guest needs that guest's own root).
 
         Returns:
             Elevation result with tier, patch, attestation count.

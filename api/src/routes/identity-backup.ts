@@ -20,6 +20,9 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identityBackups } from "../db/schema/continuity";
 import { requireActiveProjectIdentity } from "../services/identity/partition";
+import { eraseIdentityBackup } from "../services/identity/backup-erase";
+import { pushLedgerMirrorAfterCommit } from "../services/deletion/mirror";
+import { ledgerResponse } from "../services/deletion/record";
 import { DELETE_RESPONSE_RETENTION } from "../services/discovery/retention";
 
 const app = new Hono<ProjectContext>();
@@ -150,11 +153,13 @@ app.get("/:id", async (c) => {
   });
 });
 
-// ─── DELETE /v1/identity/backup/:id — revoke a backup ───────────────────────
-//  Honest about what happened: 404 when no backup of this project has the id;
-//  `already_revoked: true` with the original revoked_at when it was revoked
-//  before; and `blob_retained: true`, because revocation hides the backup but
-//  keeps the stored blob (see /public/retention).
+// ─── DELETE /v1/identity/backup/:id — revoke and purge a backup ─────────────
+//  404 when no backup of this project has the id. Otherwise revokes it (an
+//  earlier revoked_at is kept, already_revoked: true) and erases the blob,
+//  nonce and metadata, with one ids-only ledger entry and a deletion moment
+//  in the same transaction (services/identity/backup-erase.ts). A repeat
+//  after the purge writes nothing and answers already_purged: true. 503
+//  deletion_ledger_unavailable changes nothing.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -163,43 +168,21 @@ app.delete("/:id", async (c) => {
   const id = c.req.param("id");
   if (!UUID_RE.test(id)) return c.json({ error: "Backup not found" }, 404);
 
-  const outcome = await db.transaction(async (tx) => {
-    const [backup] = await tx
-      .select({ id: identityBackups.id, revokedAt: identityBackups.revokedAt })
-      .from(identityBackups)
-      .where(
-        and(
-          eq(identityBackups.id, id),
-          eq(identityBackups.projectId, project.id),
-        ),
-      )
-      .for("update")
-      .limit(1);
-    if (!backup) return null;
-    if (backup.revokedAt) return { revokedAt: backup.revokedAt, alreadyRevoked: true };
-
-    const [revoked] = await tx
-      .update(identityBackups)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(identityBackups.id, backup.id),
-          eq(identityBackups.projectId, project.id),
-          isNull(identityBackups.revokedAt),
-        ),
-      )
-      .returning({ revokedAt: identityBackups.revokedAt });
-    return { revokedAt: revoked!.revokedAt!, alreadyRevoked: false };
-  });
-
+  const outcome = await eraseIdentityBackup(project.id, id);
   if (!outcome) return c.json({ error: "Backup not found" }, 404);
+  const mirrored = outcome.entry
+    ? (await pushLedgerMirrorAfterCommit(db, outcome.entry.seq)).mirrored
+    : null;
 
   return c.json({
     id,
     revoked: true,
     already_revoked: outcome.alreadyRevoked,
-    revoked_at: outcome.revokedAt.toISOString(),
-    blob_retained: true,
+    revoked_at: outcome.revokedAt,
+    blob_retained: false,
+    already_purged: outcome.alreadyPurged,
+    purged_at: outcome.purgedAt,
+    ledger: outcome.entry ? ledgerResponse(outcome.entry, mirrored === true) : null,
     _retention: DELETE_RESPONSE_RETENTION.identity_backup,
   });
 });

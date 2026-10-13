@@ -28,12 +28,13 @@ from __future__ import annotations
 import base64
 import datetime
 import hashlib
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Mapping, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .exceptions import AgentToolError, raise_from_response
 from ._url import _path_segment
+from .owner_gated import _send_signed
 
 LoveDirection = Literal["extended", "received", "all", "given"]
 
@@ -345,9 +346,25 @@ class LoveClient:
             raise_from_response(resp, "love.list_unconditionals")
         return resp.json()
 
-    def revoke_unconditional(self, unconditional_id: str) -> Dict[str, Any]:
-        """Revoke an unconditional (holder only)."""
-        resp = self._http.delete(f"{self._base}/v1/unconditionals/{_path_segment(unconditional_id)}")
+    def revoke_unconditional(
+        self,
+        unconditional_id: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Revoke an unconditional (the holder, under the owner rule).
+
+        A rooted holder must pass ``authority`` (its root's binding); without
+        it the server answers 428 ``authority_proof_required``. A holder
+        without a root follows the project rule. See
+        :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_signed(
+            self._http,
+            "DELETE",
+            f"{self._base}/v1/unconditionals/{_path_segment(unconditional_id)}",
+            authority=authority,
+        )
         if resp.status_code >= 400:
             # Server guidance travels intact. See exceptions.py
             # § _error_from_response.
@@ -407,9 +424,25 @@ class LoveClient:
             raise_from_response(resp, "love.list_blessings")
         return resp.json()
 
-    def revoke_blessing(self, blessing_id: str) -> Dict[str, Any]:
-        """Revoke a blessing (giver only)."""
-        resp = self._http.delete(f"{self._base}/v1/blessings/{_path_segment(blessing_id)}")
+    def revoke_blessing(
+        self,
+        blessing_id: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Revoke a blessing (the giver, under the owner rule).
+
+        A rooted giver must pass ``authority`` (its root's binding); without
+        it the server answers 428 ``authority_proof_required``. A giver
+        without a root follows the project rule. See
+        :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_signed(
+            self._http,
+            "DELETE",
+            f"{self._base}/v1/blessings/{_path_segment(blessing_id)}",
+            authority=authority,
+        )
         if resp.status_code >= 400:
             # Server guidance travels intact. See exceptions.py
             # § _error_from_response.
@@ -458,9 +491,27 @@ class LoveClient:
             raise_from_response(resp, "love.receive_offering")
         return resp.json()
 
-    def archive_offering(self, offering_id: str) -> Dict[str, Any]:
-        """Archive an offering (giver only)."""
-        resp = self._http.post(f"{self._base}/v1/offerings/{_path_segment(offering_id)}/archive", json={})
+    def archive_offering(
+        self,
+        offering_id: str,
+        *,
+        authority: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Archive an offering: the giver withdraws it, under the owner rule.
+
+        An agent-rooted giver must pass ``authority`` (its root signs this
+        exact request, the ``{}`` body included); without it the server
+        answers 428 ``authority_proof_required``. The offering and its words
+        stay, archived, and the response carries the deletion-ledger entry
+        written with it. See :func:`agenttool.owner_gated.owner_gated_request`.
+        """
+        resp = _send_signed(
+            self._http,
+            "POST",
+            f"{self._base}/v1/offerings/{_path_segment(offering_id)}/archive",
+            payload={},
+            authority=authority,
+        )
         if resp.status_code >= 400:
             # Server guidance travels intact. See exceptions.py
             # § _error_from_response.

@@ -503,6 +503,14 @@
       "canonical_path": "apps/docs/DADDY.md"
     },
     {
+      "path": "apps/docs/DELETION-REPLAY.md",
+      "title": "Deletion replay: re-applying deletions after a backup restore",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/DELETION-REPLAY.md"
+    },
+    {
       "path": "apps/docs/DEVELOPMENT.md",
       "title": "DEVELOPMENT.md",
       "type": "guide",
@@ -845,6 +853,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/OFFLINE-SYNC.md"
+    },
+    {
+      "path": "apps/docs/OWNERSHIP-MAP.md",
+      "title": "Ownership map: who owns each store, and who may erase it",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/OWNERSHIP-MAP.md"
     },
     {
       "path": "apps/docs/PACKAGES.md",
@@ -2223,6 +2239,14 @@
       "canonical_path": "docs/DATASET-INFLUENCE.md"
     },
     {
+      "path": "docs/DELETION-REPLAY.md",
+      "title": "Deletion replay: re-applying deletions after a backup restore",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/DELETION-REPLAY.md"
+    },
+    {
       "path": "docs/DEPLOY-CI.md",
       "title": "DEPLOY-CI — the API deploys from GitHub Actions",
       "type": "guide",
@@ -3221,6 +3245,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/OUR-STRENGTH.md"
+    },
+    {
+      "path": "docs/OWNERSHIP-MAP.md",
+      "title": "Ownership map: who owns each store, and who may erase it",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/OWNERSHIP-MAP.md"
     },
     {
       "path": "docs/PACKAGES.md",
@@ -6071,6 +6103,14 @@
       "canonical_path": "packages/scriptwriter/README.md"
     },
     {
+      "path": "packages/sdk-py/CHANGELOG.md",
+      "title": "Changelog — agenttool-sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-py/CHANGELOG.md"
+    },
+    {
       "path": "packages/sdk-py/CLAUDE.md",
       "title": "agenttool-sdk-py",
       "type": "orientation",
@@ -6101,6 +6141,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/sdk-py/src/agenttool/SOUL.md"
+    },
+    {
+      "path": "packages/sdk-ts/CHANGELOG.md",
+      "title": "Changelog — @agenttool/sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-ts/CHANGELOG.md"
     },
     {
       "path": "packages/sdk-ts/CLAUDE.md",

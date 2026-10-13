@@ -129,7 +129,7 @@ beforeAll(async () => {
         type text NOT NULL, key text, content text NOT NULL, embedding real[], metadata jsonb DEFAULT '{}',
         importance double precision NOT NULL DEFAULT 0.5, tier text NOT NULL DEFAULT 'episodic',
         visibility text NOT NULL DEFAULT 'private', accessed_at timestamptz,
-        created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz);
+        created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz, content_purged_at timestamptz);
       CREATE TABLE memory.memory_attestations (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(), memory_id uuid NOT NULL, attester_did text NOT NULL,
         signing_key_id uuid NOT NULL, signature text NOT NULL, signature_context text, signed_payload text,

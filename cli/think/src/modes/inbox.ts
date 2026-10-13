@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { AgenttoolClient, type InboxMessage } from "../api";
+import { AgenttoolClient, AuthorityProofRequiredError, type InboxMessage } from "../api";
 import { sealForRecipient, signInboxEnvelope, unsealForSelf } from "../box";
 import type { ThinkConfig } from "../config";
 import { requireBoxKey, type KeyMaterial } from "../keys";
@@ -283,14 +283,31 @@ export async function inboxRead(
 
 // ── Mark / delete ──────────────────────────────────────────────────────
 
+/** Deleting an inbox message erases its content for good (deletion wave 2)
+ *  and follows the owner rule: an agent-rooted recipient's root must sign the
+ *  exact request. This CLI cannot sign with the root, so it says how to. */
+const ROOT_SIGNED_DELETE_HINT =
+  "This recipient is agent-rooted (or its project's single root consents for it): deleting needs that root's " +
+  "signature over the exact request, which this CLI does not hold. Delete with the SDK instead: " +
+  "ownerGatedRequest({ action: \"inbox.delete\", id, authority }) or inbox.delete(id, { authority }) in TypeScript, " +
+  "owner_gated_request(action=\"inbox.delete\", ...) or inbox.delete(id, authority=...) in Python. " +
+  "See /public/ownership-map.";
+
+function rootSignatureNeeded(err: unknown): never {
+  if (err instanceof AuthorityProofRequiredError) throw new Error(`${ROOT_SIGNED_DELETE_HINT}\n${err.message}`);
+  throw err;
+}
+
 export async function inboxMark(
   config: ThinkConfig,
   messageId: string,
   status: "unread" | "read" | "archived" | "spam" | "deleted",
 ): Promise<void> {
   const client = new AgenttoolClient(config);
-  await client.patchInboxStatus(messageId, status);
-  console.log(C.green(`✓ ${messageId} → ${status}`));
+  await client.patchInboxStatus(messageId, status).catch(rootSignatureNeeded);
+  console.log(C.green(status === "deleted"
+    ? `✓ ${messageId} deleted: its content is erased and cannot be restored`
+    : `✓ ${messageId} → ${status}`));
 }
 
 export async function inboxDelete(
@@ -298,6 +315,6 @@ export async function inboxDelete(
   messageId: string,
 ): Promise<void> {
   const client = new AgenttoolClient(config);
-  await client.deleteInboxMessage(messageId);
-  console.log(C.green(`✓ ${messageId} deleted (status=deleted)`));
+  await client.deleteInboxMessage(messageId).catch(rootSignatureNeeded);
+  console.log(C.green(`✓ ${messageId} deleted: its content is erased and cannot be restored`));
 }

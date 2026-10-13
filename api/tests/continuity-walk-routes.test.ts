@@ -176,7 +176,7 @@ describe("GET /v1/memories walk", () => {
     const { status, body } = await get("/v1/memories?limit=5");
     expect(status).toBe(200);
     const [read] = reads('"memory"."memories"');
-    expect(read!.sql).toContain('from "memory"."memories" where ("memory"."memories"."project_id" = $1 and ("memory"."memories"."expires_at" is null or "memory"."memories"."expires_at" > now()))');
+    expect(read!.sql).toContain('from "memory"."memories" where ("memory"."memories"."project_id" = $1 and ("memory"."memories"."expires_at" is null or "memory"."memories"."expires_at" > now()) and "memory"."memories"."content_purged_at" is null)');
     expect(read!.sql).toMatch(/ order by "memory"\."memories"\."created_at" desc, "memory"\."memories"\."id" desc limit \$\d+$/);
     expect(read!.params[0]).toBe(PROJECT);
     expect(read!.params.at(-1)).toBe(6);
@@ -247,7 +247,7 @@ describe("GET /v1/memories walk", () => {
     memoryRows = [memoryRow(1), memoryRow(2)];
     const { body } = await get("/v1/memories?key=handoff&limit=1&type=semantic&tier=episodic");
     const [read] = reads('"memory"."memories"');
-    expect(read!.sql).toContain('where ("memory"."memories"."project_id" = $1 and "memory"."memories"."key" = $2 and ("memory"."memories"."expires_at" is null or "memory"."memories"."expires_at" > now()))');
+    expect(read!.sql).toContain('where ("memory"."memories"."project_id" = $1 and "memory"."memories"."key" = $2 and ("memory"."memories"."expires_at" is null or "memory"."memories"."expires_at" > now()) and "memory"."memories"."content_purged_at" is null)');
     expect(read!.sql).not.toContain('"memory"."memories"."type" =');
     expect(read!.sql).not.toContain('"memory"."memories"."tier" =');
     expect(decode(body.page.next_cursor).s).toBe("memories.key");

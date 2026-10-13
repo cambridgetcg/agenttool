@@ -2,11 +2,11 @@
  *  them, run cosine similarity, and serve results. No LLM compute on our
  *  side. See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
-import { memories, memoryAttestations } from "../../db/schema/memory";
+import { memories } from "../../db/schema/memory";
 import {
   cursorTimestampSql,
   keysetBeforeSql,
@@ -14,6 +14,18 @@ import {
 } from "../../lib/keyset-cursor";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
+import type { AppendedLedgerEntry, LedgerExecutor } from "../deletion/ledger";
+import {
+  deleteMemoriesWithoutReceipts,
+  eraseMemoriesInPlace,
+  paidReceiptMemoryIds,
+} from "../deletion/purges";
+import {
+  normalizeOwnerId,
+  recordErasure,
+  type ErasureAuthority,
+  type ErasureOwner,
+} from "../deletion/record";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -89,11 +101,63 @@ export interface MemorySearchResult extends MemoryOut {
   score: number;
 }
 
-export class PaidMemoryReceiptProtectedError extends Error {
-  constructor() {
-    super("paid_memory_receipt_preserved");
-    this.name = "PaidMemoryReceiptProtectedError";
+/** What a memory delete did. `deleted` counts every memory that left the
+ *  owner's reads: rows removed plus rows erased in place because a paid
+ *  witness receipt points at them (deletion spec §7.4). */
+export interface MemoryEraseResult {
+  deleted: number;
+  rows_removed: number;
+  erased_in_place: number;
+  entries: AppendedLedgerEntry[];
+}
+
+export interface MemoryEraseOptions {
+  /** Who consented; recorded on the ledger entry. Defaults to the bearer. */
+  authority?: ErasureAuthority;
+  /** Key delete only: rows authorized earlier; later rows stay untouched. */
+  onlyIds?: readonly string[];
+}
+
+function ownerGroups(rows: ReadonlyArray<{ id: string; identityId: string | null }>): ErasureOwner[] {
+  const groups = new Map<string | null, string[]>();
+  for (const row of rows) {
+    const owner = normalizeOwnerId(row.identityId);
+    groups.set(owner, [...(groups.get(owner) ?? []), row.id]);
   }
+  return [...groups].map(([agentId, rowIds]) => ({ agentId, rowIds }));
+}
+
+/** Erase locked rows: delete each memory, except that a memory a paid
+ *  witness receipt holds is erased in place so the receipt still points at
+ *  a row. One ledger entry per action taken, plus deletion moments, all in
+ *  the caller's transaction. */
+async function eraseLockedMemories(
+  tx: LedgerExecutor,
+  projectId: string,
+  rows: ReadonlyArray<{ id: string; identityId: string | null }>,
+  authority: ErasureAuthority,
+): Promise<MemoryEraseResult> {
+  const result: MemoryEraseResult = { deleted: 0, rows_removed: 0, erased_in_place: 0, entries: [] };
+  if (rows.length === 0) return result;
+  const paid = new Set(await paidReceiptMemoryIds(tx, rows.map((row) => row.id)));
+  const remove = rows.filter((row) => !paid.has(row.id.toLowerCase()));
+  const keep = rows.filter((row) => paid.has(row.id.toLowerCase()));
+  if (remove.length > 0) {
+    const { entry } = await recordErasure(tx, {
+      kind: "memory.delete", projectId, rowIds: remove.map((row) => row.id), authority, owners: ownerGroups(remove),
+    });
+    result.rows_removed = (await deleteMemoriesWithoutReceipts(tx, remove.map((row) => row.id))).length;
+    result.entries.push(entry);
+  }
+  if (keep.length > 0) {
+    const { entry } = await recordErasure(tx, {
+      kind: "memory.erase_in_place", projectId, rowIds: keep.map((row) => row.id), authority, owners: ownerGroups(keep),
+    });
+    result.erased_in_place = (await eraseMemoriesInPlace(tx, keep.map((row) => row.id), entry.occurredAt)).length;
+    result.entries.push(entry);
+  }
+  result.deleted = result.rows_removed + result.erased_in_place;
+  return result;
 }
 
 /** Refuses caller-selected identity bindings outside the bearer project. */
@@ -308,6 +372,9 @@ export async function write(
   return { id: row.id, created_at: row.createdAt.toISOString() };
 }
 
+/** One live memory by id. Like list, key and search reads, it honours
+ *  expiry: an expired working memory is not served (the retention rule
+ *  purges it 24 hours later). A memory erased in place is not served. */
 export async function readById(
   projectId: string,
   memoryId: string,
@@ -315,7 +382,14 @@ export async function readById(
   const rows = await db
     .select()
     .from(memories)
-    .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
+    .where(
+      and(
+        eq(memories.id, memoryId),
+        eq(memories.projectId, projectId),
+        or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!,
+        isNull(memories.contentPurgedAt),
+      ),
+    )
     .limit(1);
 
   const row = rows[0];
@@ -340,6 +414,7 @@ export async function readByKey(
   const filters = [
     eq(memories.projectId, projectId), eq(memories.key, key),
     or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!,
+    isNull(memories.contentPurgedAt),
   ];
   if (agentId) filters.push(eq(memories.agentId, agentId));
   if (options.identity_id) filters.push(eq(memories.identityId, options.identity_id));
@@ -369,6 +444,7 @@ export async function listRecent(
   const filters = [
     eq(memories.projectId, projectId),
     or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!,
+    isNull(memories.contentPurgedAt),
   ];
   if (opts.agent_id) filters.push(eq(memories.agentId, opts.agent_id));
   if (opts.identity_id) filters.push(eq(memories.identityId, opts.identity_id));
@@ -440,6 +516,7 @@ export async function listMemoriesPage(
   const filters = [eq(memories.projectId, projectId)];
   if (options.mode === "key") filters.push(eq(memories.key, options.key ?? ""));
   filters.push(or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!);
+  filters.push(isNull(memories.contentPurgedAt));
   if (options.agent_id) filters.push(eq(memories.agentId, options.agent_id));
   if (options.identity_id) filters.push(eq(memories.identityId, options.identity_id));
   if (options.mode === "list") {
@@ -583,6 +660,7 @@ export async function search(
     WHERE project_id = ${projectId}
       AND embedding IS NOT NULL
       AND (expires_at IS NULL OR expires_at > now())
+      AND content_purged_at IS NULL
       ${params.type ? sql`AND type = ${params.type}` : sql``}
       ${params.agent_id ? sql`AND agent_id = ${params.agent_id}` : sql``}
       ${params.identity_id ? sql`AND identity_id = ${params.identity_id}` : sql``}
@@ -694,6 +772,7 @@ export async function searchByText(
     FROM memory.memories, q
     WHERE project_id = ${projectId}
       AND (expires_at IS NULL OR expires_at > now())
+      AND content_purged_at IS NULL
       AND (
         content ILIKE ${like} OR key ILIKE ${like}
         OR to_tsvector('english', coalesce(key, '') || ' ' || content) @@ q.tsq_or
@@ -742,70 +821,48 @@ export async function searchByText(
 export async function deleteById(
   projectId: string,
   memoryId: string,
-): Promise<{ deleted: number }> {
+  options: MemoryEraseOptions = {},
+): Promise<MemoryEraseResult> {
   return db.transaction(async (tx) => {
-    const [memory] = await tx
-      .select({ id: memories.id })
+    const rows = await tx
+      .select({ id: memories.id, identityId: memories.identityId })
       .from(memories)
-      .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
-      .for("update")
-      .limit(1);
-    if (!memory) return { deleted: 0 };
-
-    const [paidReceipt] = await tx
-      .select({ id: memoryAttestations.id })
-      .from(memoryAttestations)
       .where(
         and(
-          eq(memoryAttestations.memoryId, memory.id),
-          isNotNull(memoryAttestations.sourceGrantId),
+          eq(memories.id, memoryId),
+          eq(memories.projectId, projectId),
+          isNull(memories.contentPurgedAt),
         ),
       )
+      .for("update")
       .limit(1);
-    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
-
-    const result = await tx
-      .delete(memories)
-      .where(eq(memories.id, memory.id))
-      .returning({ id: memories.id });
-    return { deleted: result.length };
+    return eraseLockedMemories(tx, projectId, rows, options.authority ?? { mode: "legacy_bearer" });
   });
 }
 
 export async function deleteByKey(
   projectId: string,
   key: string,
-  options: { onlyIds?: readonly string[] } = {},
-): Promise<{ deleted: number }> {
+  options: MemoryEraseOptions = {},
+): Promise<MemoryEraseResult> {
   return db.transaction(async (tx) => {
     const rows = await tx
-      .select({ id: memories.id })
+      .select({ id: memories.id, identityId: memories.identityId })
       .from(memories)
-      .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
+      .where(
+        and(
+          eq(memories.projectId, projectId),
+          eq(memories.key, key),
+          isNull(memories.contentPurgedAt),
+        ),
+      )
       .orderBy(memories.id)
       .for("update");
     // When the caller authorized a specific set of rows, rows that appeared
     // after that authorization are not part of it and stay untouched.
     const authorized = options.onlyIds ? new Set(options.onlyIds) : null;
-    const ids = rows.map((row) => row.id).filter((id) => authorized === null || authorized.has(id));
-    if (ids.length === 0) return { deleted: 0 };
-    const [paidReceipt] = await tx
-      .select({ id: memoryAttestations.id })
-      .from(memoryAttestations)
-      .where(
-        and(
-          inArray(memoryAttestations.memoryId, ids),
-          isNotNull(memoryAttestations.sourceGrantId),
-        ),
-      )
-      .limit(1);
-    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
-
-    const result = await tx
-      .delete(memories)
-      .where(inArray(memories.id, ids))
-      .returning({ id: memories.id });
-    return { deleted: result.length };
+    const chosen = rows.filter((row) => authorized === null || authorized.has(row.id));
+    return eraseLockedMemories(tx, projectId, chosen, options.authority ?? { mode: "legacy_bearer" });
   });
 }
 
@@ -815,6 +872,7 @@ export async function countMemories(projectId: string): Promise<number> {
     FROM memory.memories
     WHERE project_id = ${projectId}
       AND (expires_at IS NULL OR expires_at > now())
+      AND content_purged_at IS NULL
   `);
   return rows[0]?.count ?? 0;
 }

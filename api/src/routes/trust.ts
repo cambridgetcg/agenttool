@@ -4,7 +4,7 @@
  *    POST /v1/trust/extend    — sign + extend trust (private by default)
  *    POST /v1/trust/publish   — truster opts to surface (activates composition)
  *    POST /v1/trust/veto      — trusted opts out of public visibility
- *    POST /v1/trust/withdraw  — truster retracts (unlocks deactivate)
+ *    POST /v1/trust/withdraw  — truster retracts (unlocks deactivate; owner rule)
  *    GET  /v1/trust/mine      — trusts YOU extended
  *    GET  /v1/trust/in-me     — trusts directed AT you (published only)
  *    GET  /v1/trust/evidence  — chronicle facts for your reasoning (NEVER recommends strength)
@@ -26,7 +26,10 @@ import { identities } from "../db/schema/identity";
 import {
   TRUST_KINDS,
   TRUST_STRENGTHS,
+  trusts,
 } from "../db/schema/trust";
+import { identityIdForDid, identityInProject, withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundJson } from "../services/identity/authority";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -36,7 +39,6 @@ import {
   listMyExtensions,
   publishTrust,
   vetoTrust,
-  withdrawTrust,
 } from "../services/trust/lifecycle";
 import { COMPOSITION_UNLOCKS } from "../services/trust/composition";
 
@@ -245,7 +247,106 @@ async function trustAction(
 
 app.post("/publish", (c) => trustAction(c, publishTrust, "publish"));
 app.post("/veto", (c) => trustAction(c, vetoTrust, "veto"));
-app.post("/withdraw", (c) => trustAction(c, withdrawTrust, "withdraw"));
+
+// ── POST /withdraw ────────────────────────────────────────────────────
+//
+// The truster withdraws, under the owner rule (deletion spec §5.1). The
+// truster must be an identity of this project (otherwise 404, the same as a
+// missing trust) and agent_id must name it (403 otherwise). A rooted
+// truster's own root must sign this exact request, body bytes included (428
+// otherwise); a truster without a root follows the project rule. The signed
+// record stays; one ids-only ledger entry and the truster's deletion moment
+// are written with the withdrawal. A repeat answers already_withdrawn.
+
+app.post("/withdraw", async (c) => {
+  const project = c.var.project;
+  let bodyBytes: Uint8Array;
+  let body: z.infer<typeof actionSchema>;
+  try {
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = actionSchema.parse(bound.value);
+  } catch (err) {
+    return fail(
+      c,
+      {
+        error: "validation",
+        message: "trust/withdraw requires { agent_id, trust_id }.",
+        details: err instanceof Error ? err.message : String(err),
+        _canon_pointer: CANON_POINTER,
+      },
+      400,
+    );
+  }
+  const agent = await resolveAgent(body.agent_id, project.id);
+  if (!agent) {
+    return fail(
+      c,
+      {
+        error: "agent_not_found_or_not_in_project",
+        message: `Agent ${body.agent_id} not found.`,
+        _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
+      },
+      403,
+    );
+  }
+  const notFound = () =>
+    fail(
+      c,
+      { error: "withdraw_failed", message: `trust ${body.trust_id} not found`, _canon_pointer: CANON_POINTER },
+      404,
+    );
+  const [trust] = await db
+    .select({
+      id: trusts.id,
+      trusterDid: trusts.trusterDid,
+      trusterIdentityId: trusts.trusterIdentityId,
+      withdrawnByTruster: trusts.withdrawnByTruster,
+      withdrawnAt: trusts.withdrawnAt,
+    })
+    .from(trusts)
+    .where(eq(trusts.id, body.trust_id))
+    .limit(1);
+  if (!trust) return notFound();
+  const owner = trust.trusterIdentityId ?? (await identityIdForDid(trust.trusterDid));
+  if (!(await identityInProject(owner, project.id))) return notFound();
+  if (owner!.toLowerCase() !== agent.id.toLowerCase()) {
+    return fail(
+      c,
+      {
+        error: "withdraw_failed",
+        message: `only the truster (${trust.trusterDid}) may withdraw`,
+        _canon_pointer: CANON_POINTER,
+      },
+      403,
+    );
+  }
+
+  const result = await withdrawForOwner({
+    gesture: "trust",
+    rowId: trust.id,
+    ownerIdentityId: owner,
+    alreadyWithdrawnAt: trust.withdrawnByTruster ? (trust.withdrawnAt ?? new Date(0)) : null,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status === "not_found") return notFound();
+  const already = result.status === "already_withdrawn";
+  return c.json(
+    attachSurface(
+      {
+        id: trust.id,
+        withdrawn: true,
+        ...(already ? { already_withdrawn: true } : { authority: result.authority, ledger: result.ledger }),
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
+  );
+});
 
 // ── GET /mine ─────────────────────────────────────────────────────────
 

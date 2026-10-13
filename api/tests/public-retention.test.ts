@@ -15,6 +15,8 @@ import publicRouter from "../src/routes/public";
 import openapiRouter from "../src/routes/openapi";
 import { buildArrivalIndex } from "../src/services/discovery/arrival";
 import {
+  ALREADY_DELETED_CONTENT,
+  ALREADY_DELETED_PURGE,
   BACKUP_DAYS_KEPT,
   DELETE_RESPONSE_RETENTION,
   RETENTION_BASES,
@@ -78,7 +80,10 @@ describe("GET /public/retention", () => {
 
 describe("shape and vocabulary", () => {
   test("is versioned, and the current version is listed", () => {
-    expect(RETENTION_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(RETENTION_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}(\.\d+)?$/);
+    const versions = RETENTION_DISCLOSURE.versions.map((entry) => entry.version);
+    expect(new Set(versions).size).toBe(versions.length);
+    expect(versions).toContain("2026-10-12");
     expect(RETENTION_DISCLOSURE.versions.map((entry) => entry.version)).toContain(RETENTION_VERSION);
     expect(RETENTION_DISCLOSURE.controller).toBe("Cambridge TCG Limited (ICO ZB838338)");
   });
@@ -119,35 +124,46 @@ describe("shape and vocabulary", () => {
   });
 });
 
-describe("wave 1 publishes today's truth", () => {
-  test("inbox and vault deletes keep their content", () => {
-    expect(byId("inbox").after_delete).toMatch(/only sets status 'deleted'.*stay.*PATCH can restore/s);
-    expect(byId("vault.secrets").after_delete).toMatch(/ciphertext stays.*not zeroed/s);
-    expect(DELETE_RESPONSE_RETENTION.inbox.content_retained).toBe(true);
-    expect(DELETE_RESPONSE_RETENTION.vault.content_retained).toBe(true);
+describe("wave 2 publishes today's truth", () => {
+  test("inbox and vault deletes erase their content", () => {
+    expect(byId("inbox").after_delete).toMatch(/erases the sealed body.*cannot be restored/s);
+    expect(byId("vault.secrets").after_delete).toMatch(/zeroes every stored version/);
+    expect(DELETE_RESPONSE_RETENTION.inbox.content_retained).toBe(false);
+    expect(DELETE_RESPONSE_RETENTION.vault.content_retained).toBe(false);
   });
 
-  test("identity backup blobs are kept after revocation", () => {
-    expect(byId("identity.backups").after_delete).toMatch(/blob and nonce stay/);
-    expect(DELETE_RESPONSE_RETENTION.identity_backup.blob_retained).toBe(true);
+  test("identity backup blobs are erased on delete", () => {
+    expect(byId("identity.backups").after_delete).toMatch(/erases its blob, nonce and metadata/);
+    expect(DELETE_RESPONSE_RETENTION.identity_backup.blob_retained).toBe(false);
   });
 
-  test("expired working memory is not purged and still reads by id", () => {
-    expect(byId("memory.content").live).toMatch(/not purged.*read by id still returns them/s);
+  test("expired working memory leaves the memory service's reads and is purged by rule; paid-witness memory is erased in place", () => {
+    const memory = byId("memory.content");
+    expect(memory.live).toMatch(/memory service's reads stop returning it \(by id, by key, list/);
+    expect(memory.live).toMatch(/24 hours after expiry/);
+    // Surfaces that read memory rows directly are named, not hidden behind "every read".
+    for (const text of [memory.live, memory.after_delete]) {
+      expect(text).toContain("per-agent MCP memory list and fork carry-over");
+      expect(text).not.toMatch(/every read|any read/);
+    }
+    expect(memory.after_delete).toMatch(/paid witness receipt points at is erased in place/);
+    expect(memory.after_delete).not.toMatch(/409/);
   });
 
-  test("vault-audit addresses have no purge", () => {
-    expect(byId("vault.audit").after_delete).toMatch(/^No purge/);
+  test("vault-audit addresses are nulled after 30 days", () => {
+    expect(byId("vault.audit").after_delete).toMatch(/vault_audit_ip_30d.*30 days/s);
+    const vaultIp = RETENTION_DISCLOSURE.ip_addresses.find((entry) => entry.where === "Vault audit rows");
+    expect(vaultIp?.value).toMatch(/NULL 30 days later/);
   });
 
-  test("money records say 6 years declared with no purge job", () => {
+  test("money records still say 6 years declared with no purge job", () => {
     const money = byId("money");
     expect(money.basis).toBe("declared");
     expect(money.after_delete).toMatch(/6 years.*No purge job/s);
     expect(byId("gift_codes").after_delete).toMatch(/6 years declared, no purge job/);
   });
 
-  test("backups, the missing ledger and already-deleted content are stated", () => {
+  test("backups, the ledger and the announced purge of already-deleted content are stated", () => {
     expect(RETENTION_DISCLOSURE.backups).toMatchObject({
       kind: "daily physical",
       kept: BACKUP_DAYS_KEPT,
@@ -156,9 +172,24 @@ describe("wave 1 publishes today's truth", () => {
       basis: "measured",
     });
     expect(BACKUP_DAYS_KEPT).toBe(8);
-    expect(RETENTION_DISCLOSURE.deletion_ledger.status).toBe("not built");
-    expect(RETENTION_DISCLOSURE.deletion_ledger.effect).toMatch(/restoring a backup would bring back/);
-    expect(RETENTION_DISCLOSURE.already_deleted_content.notice).toMatch(/No purge of it is scheduled/);
+    const ledger = RETENTION_DISCLOSURE.deletion_ledger;
+    expect(ledger.status).toBe("built");
+    expect(ledger.what).toMatch(/does not happen/);
+    expect(ledger.compaction).toMatch(/15 days/);
+    expect(ledger.mirror.window).toMatch(/^30 days/);
+    expect(ledger.mirror_configured).toMatchObject({ basis: "unknown" });
+    expect(ledger.voided_entries).toBe(0);
+    expect(ledger.rules.map((rule) => rule.id)).toEqual([
+      "expired_working_memory_24h", "vault_audit_ip_30d", "ledger_compaction_15d",
+    ]);
+    const already = RETENTION_DISCLOSURE.already_deleted_content;
+    expect(already.purge_not_before).toBe(ALREADY_DELETED_PURGE.not_before);
+    expect(already.min_days_after_announcement).toBeGreaterThanOrEqual(30);
+    expect(already.notice).toContain(`on or after ${ALREADY_DELETED_PURGE.not_before}`);
+    expect(already.notice).toMatch(/restored message is not purged/);
+    for (const note of Object.values(DELETE_RESPONSE_RETENTION)) {
+      expect(note.already_deleted).toBe(ALREADY_DELETED_CONTENT);
+    }
   });
 
   test("logs, IP handling, third parties and permanent surfaces are listed", () => {

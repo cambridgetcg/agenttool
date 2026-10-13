@@ -29,7 +29,10 @@ import { vaultAudit, vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { decrypt, encrypt } from "../../services/vault/crypto";
 import { authorizeVaultHttpRead, validateVaultAudience, vaultAudienceSchema } from "../../services/vault/audience";
 import { abort } from "../../lib/errors";
+import { pushLedgerMirrorAfterCommit } from "../../services/deletion/mirror";
+import { ledgerResponse } from "../../services/deletion/record";
 import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
+import { eraseVaultSecret } from "../../services/vault/erase";
 
 const app = new Hono<ProjectContext>();
 
@@ -303,46 +306,30 @@ app.get("/:name", async (c) => {
   });
 });
 
-// ─── DELETE /:name — soft delete (audit row preserved) ──────────────────────
+// ─── DELETE /:name — purge (audit row preserved) ────────────────────────────
+//  Zeroes every stored version and marks the secret deleted, with one
+//  ids-only ledger entry and a deletion moment in the same transaction
+//  (services/vault/erase.ts). 503 deletion_ledger_unavailable deletes
+//  nothing. The upstream credential is not revoked by this.
 
 app.delete("/:name", async (c) => {
   const project = c.var.project;
   const name = c.req.param("name");
   const { agentId, ip } = reqMeta(c);
 
-  const [secret] = await db
-    .select()
-    .from(vaultSecrets)
-    .where(
-      and(
-        eq(vaultSecrets.projectId, project.id),
-        eq(vaultSecrets.name, name),
-        isNull(vaultSecrets.deletedAt),
-      ),
-    );
-
-  if (!secret) {
+  const erased = await eraseVaultSecret(project.id, name, { agentId, ip });
+  if (!erased) {
     return c.json({ error: "Secret not found" }, 404);
   }
+  const { mirrored } = await pushLedgerMirrorAfterCommit(db, erased.entry.seq);
 
-  await db
-    .update(vaultSecrets)
-    .set({ deletedAt: new Date() })
-    .where(eq(vaultSecrets.id, secret.id));
-
-  await db.insert(vaultAudit).values({
-    projectId: project.id,
-    secretName: name,
-    action: "delete",
-    agentId,
-    ipAddress: ip,
-  });
-
-  // Soft delete: the version ciphertext stays, and the response says so.
   return c.json({
     name,
     deleted: true,
-    content_retained: true,
+    content_retained: false,
+    versions_zeroed: erased.versionsZeroed,
+    purged_at: erased.deletedAt,
+    ledger: ledgerResponse(erased.entry, mirrored),
     _retention: DELETE_RESPONSE_RETENTION.vault,
   });
 });

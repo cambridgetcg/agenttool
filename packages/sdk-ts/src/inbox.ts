@@ -50,6 +50,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { AgentToolError } from "./errors.js";
 import { throwFromResponse, type HttpConfig } from "./_http.js";
 import { encodePathSegment } from "./_url.js";
+import { authorityHeadersForRequest, type AuthorityBinding } from "./authority.js";
 
 // Wire sha512 sync into @noble/ed25519 for sign() — mirrors crypto.ts.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -654,20 +655,36 @@ export class InboxClient {
     )) as InboxMessage;
   }
 
-  /** Update the message's status (unread / read / archived / spam / deleted). */
-  async patch(id: string, status: InboxStatus): Promise<InboxMessage> {
+  /** Update the message's status (unread / read / archived / spam / deleted).
+   *  `deleted` erases the content, like `delete`, and is owner-gated the same
+   *  way: pass the recipient's `authority` when it is agent-rooted. */
+  async patch(
+    id: string,
+    status: InboxStatus,
+    options: { authority?: AuthorityBinding } = {},
+  ): Promise<InboxMessage> {
     return (await this.req(
       "PATCH",
       `/v1/inbox/${encodePathSegment(id)}`,
       { status },
+      options.authority,
     )) as InboxMessage;
   }
 
-  /** Soft-delete (status='deleted'). */
-  async delete(id: string): Promise<{ id: string; deleted: true }> {
+  /** Delete a message and erase its content (sealed body, nonce, ephemeral
+   *  key, subject, refs and metadata); the row stays with its signature and
+   *  cannot be restored. The recipient owns the message: a rooted recipient
+   *  must pass `authority` (its root's binding), or the server answers 428
+   *  `authority_proof_required`. See `ownerGatedRequest`. */
+  async delete(
+    id: string,
+    options: { authority?: AuthorityBinding } = {},
+  ): Promise<{ id: string; deleted: true }> {
     return (await this.req(
       "DELETE",
       `/v1/inbox/${encodePathSegment(id)}`,
+      undefined,
+      options.authority,
     )) as { id: string; deleted: true };
   }
 
@@ -821,14 +838,24 @@ export class InboxClient {
   }
 
   // ── Internal HTTP ─────────────────────────────────────────────────────
-  private async req(method: string, path: string, body?: unknown): Promise<unknown> {
+  /** Serialize once, sign those bytes when an authority is given, send them. */
+  private async req(
+    method: string,
+    path: string,
+    body?: unknown,
+    authority?: AuthorityBinding,
+  ): Promise<unknown> {
+    const url = `${this.http.baseUrl}${path}`;
+    const payload = body !== undefined ? JSON.stringify(body) : undefined;
     const init: RequestInit = {
       method,
-      headers: this.http.headers,
+      headers: authority !== undefined
+        ? { ...this.http.headers, ...authorityHeadersForRequest({ method, url, body: payload ?? "", authority }) }
+        : this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     };
-    if (body !== undefined) init.body = JSON.stringify(body);
-    const res = await this.http.request(`${this.http.baseUrl}${path}`, init);
+    if (payload !== undefined) init.body = payload;
+    const res = await this.http.request(url, init);
     if (res.status >= 400) {
       // Server guidance travels intact. See _http.ts § errorFromResponse.
       await throwFromResponse(res, `inbox ${method.toLowerCase()}`, {

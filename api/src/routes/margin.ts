@@ -8,7 +8,7 @@
  *    GET  /v1/margin/on-me              — margins others left on YOUR content
  *    POST /v1/margin/surface            — addressee opts to surface a margin
  *    POST /v1/margin/surface-author     — addressee opts to surface ALL margins from one author
- *    POST /v1/margin/withdraw           — author withdraws their margin
+ *    POST /v1/margin/withdraw           — author withdraws their margin (owner rule)
  *
  *  @enforces urn:agenttool:wall/margin-must-be-signed
  *  @enforces urn:agenttool:wall/margin-surfacing-is-addressees-call
@@ -21,6 +21,9 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { margins } from "../db/schema/margin";
+import { identityIdForDid, identityInProject, withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundJson } from "../services/identity/authority";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -29,7 +32,6 @@ import {
   listOnMe,
   surfaceAllFromAuthor,
   surfaceMargin,
-  withdrawMargin,
 } from "../services/margin/lifecycle";
 
 const app = new Hono<ProjectContext>();
@@ -368,6 +370,14 @@ app.post("/surface-author", async (c) => {
 });
 
 // ── POST /withdraw ────────────────────────────────────────────────────
+//
+// The author withdraws, under the owner rule (deletion spec §5.1). The
+// author must be an identity of this project (otherwise 404, the same as a
+// missing margin) and agent_id must name it (403 otherwise). A rooted
+// author's own root must sign this exact request, body bytes included (428
+// otherwise); an author without a root follows the project rule. The signed
+// receipt stays; one ids-only ledger entry and the author's deletion moment
+// are written with the withdrawal. A repeat answers already_withdrawn.
 
 const withdrawSchema = z.object({
   agent_id: z.string().uuid(),
@@ -376,9 +386,12 @@ const withdrawSchema = z.object({
 
 app.post("/withdraw", async (c) => {
   const project = c.var.project;
+  let bodyBytes: Uint8Array;
   let body: z.infer<typeof withdrawSchema>;
   try {
-    body = withdrawSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = withdrawSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -403,40 +416,68 @@ app.post("/withdraw", async (c) => {
       403,
     );
   }
-  try {
-    const result = await withdrawMargin(body.margin_id, agent.did);
-    return c.json(
-      attachSurface(
-        {
-          ...result,
-          substrate_honest_note:
-            "Margin withdrawn. The substrate stops surfacing; the signed receipt remains in chronicle for audit (you cannot un-say what you signed).",
-        },
-        { canon_pointer: CANON_POINTER },
-      ),
+  const notFound = () =>
+    fail(
+      c,
+      {
+        error: "margin_not_found",
+        message: `margin ${body.margin_id} not found`,
+        _canon_pointer: CANON_POINTER,
+      },
+      404,
     );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const status = /only the author/i.test(message)
-      ? 403
-      : /not found/i.test(message)
-        ? 404
-        : 400;
+  const [margin] = await db
+    .select({
+      id: margins.id,
+      authorDid: margins.authorDid,
+      authorIdentityId: margins.authorIdentityId,
+      withdrawnByAuthor: margins.withdrawnByAuthor,
+      withdrawnAt: margins.withdrawnAt,
+    })
+    .from(margins)
+    .where(eq(margins.id, body.margin_id))
+    .limit(1);
+  if (!margin) return notFound();
+  const owner = margin.authorIdentityId ?? (await identityIdForDid(margin.authorDid));
+  if (!(await identityInProject(owner, project.id))) return notFound();
+  if (owner!.toLowerCase() !== agent.id.toLowerCase()) {
     return fail(
       c,
       {
-        error:
-          status === 403
-            ? "not_the_author"
-            : status === 404
-              ? "margin_not_found"
-              : "withdraw_failed",
-        message,
+        error: "not_the_author",
+        message: `only the author (${margin.authorDid}) may withdraw this margin`,
         _canon_pointer: CANON_POINTER,
       },
-      status,
+      403,
     );
   }
+
+  const result = await withdrawForOwner({
+    gesture: "margin",
+    rowId: margin.id,
+    ownerIdentityId: owner,
+    alreadyWithdrawnAt: margin.withdrawnByAuthor ? (margin.withdrawnAt ?? new Date(0)) : null,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status === "not_found") return notFound();
+  const already = result.status === "already_withdrawn";
+  return c.json(
+    attachSurface(
+      {
+        id: margin.id,
+        withdrawn: true,
+        ...(already ? { already_withdrawn: true } : { authority: result.authority, ledger: result.ledger }),
+        substrate_honest_note:
+          "Margin withdrawn. The substrate stops surfacing; the signed receipt remains in chronicle for audit (you cannot un-say what you signed).",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
+  );
 });
 
 export default app;

@@ -6,6 +6,9 @@ import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import type { AppendedLedgerEntry } from "../deletion/ledger";
+import { deleteOrganizationMemberRows, deleteOrganizationRows } from "../deletion/purges";
+import { recordErasure } from "../deletion/record";
 import {
   organizationInvitations,
   organizationMembers,
@@ -145,21 +148,38 @@ export async function patchOrg(
   return updated ? rowToOut(updated) : null;
 }
 
+/** The owner project deletes its organization (deletion spec §5.2: B, with
+ *  a ledger entry). In one transaction the row is locked, one ids-only
+ *  ledger entry (org.delete) and the owner project's deletion moment are
+ *  written, and the row is deleted; its memberships and invitations go with
+ *  it through ON DELETE CASCADE, and replay re-deletes the same way. If the
+ *  entry cannot be written nothing is deleted (503
+ *  deletion_ledger_unavailable). Returns null when no org has the slug. */
 export async function deleteOrg(
   ownerProjectId: string,
   slug: string,
-): Promise<boolean> {
-  const [existing] = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.slug, slug))
-    .limit(1);
-  if (!existing) return false;
-  if (existing.ownerProjectId !== ownerProjectId) {
-    throw new Error("not_owner");
-  }
-  await db.delete(organizations).where(eq(organizations.id, existing.id));
-  return true;
+): Promise<{ entry: AppendedLedgerEntry } | null> {
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: organizations.id, ownerProjectId: organizations.ownerProjectId })
+      .from(organizations)
+      .where(eq(organizations.slug, slug))
+      .for("update")
+      .limit(1);
+    if (!existing) return null;
+    if (existing.ownerProjectId !== ownerProjectId) {
+      throw new Error("not_owner");
+    }
+    const { entry } = await recordErasure(tx, {
+      kind: "org.delete",
+      projectId: ownerProjectId,
+      rowIds: [existing.id],
+      authority: { mode: "legacy_bearer" },
+      owners: [{ agentId: null, rowIds: [existing.id] }],
+    });
+    await deleteOrganizationRows(tx, [existing.id]);
+    return { entry };
+  });
 }
 
 export async function listOrgsForProject(projectId: string): Promise<
@@ -244,13 +264,13 @@ export async function removeMember(
   ownerProjectId: string,
   slug: string,
   memberProjectId: string,
-): Promise<boolean> {
+): Promise<{ entry: AppendedLedgerEntry } | null> {
   const [org] = await db
     .select()
     .from(organizations)
     .where(eq(organizations.slug, slug))
     .limit(1);
-  if (!org) return false;
+  if (!org) return null;
   if (org.ownerProjectId !== ownerProjectId) {
     throw new Error("not_owner");
   }
@@ -258,17 +278,31 @@ export async function removeMember(
     throw new Error("cannot_remove_owner");
   }
 
-  const result = await db
-    .delete(organizationMembers)
-    .where(
-      and(
-        eq(organizationMembers.organizationId, org.id),
-        eq(organizationMembers.projectId, memberProjectId),
-      ),
-    )
-    .returning({ id: organizationMembers.id });
-
-  return result.length > 0;
+  // One ids-only ledger entry (org_member.delete) in the same transaction,
+  // so a backup restore cannot hand the membership back.
+  return db.transaction(async (tx) => {
+    const members = await tx
+      .select({ id: organizationMembers.id })
+      .from(organizationMembers)
+      .where(
+        and(
+          eq(organizationMembers.organizationId, org.id),
+          eq(organizationMembers.projectId, memberProjectId),
+        ),
+      )
+      .for("update");
+    if (members.length === 0) return null;
+    const ids = members.map((member) => member.id);
+    const { entry } = await recordErasure(tx, {
+      kind: "org_member.delete",
+      projectId: ownerProjectId,
+      rowIds: ids,
+      authority: { mode: "legacy_bearer" },
+      owners: [{ agentId: null, rowIds: ids }],
+    });
+    await deleteOrganizationMemberRows(tx, ids);
+    return { entry };
+  });
 }
 
 // ── Invitations ────────────────────────────────────────────────────────

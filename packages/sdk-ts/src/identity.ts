@@ -658,9 +658,15 @@ export class IdentityClient {
     return d.attestations ?? (data as unknown as Record<string, unknown>[]);
   }
 
-  /** Revoke an attestation. */
-  async revoke_attestation(attestationId: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/attestations/${encodePathSegment(attestationId)}`);
+  /** Revoke an attestation (the attester, under the owner rule). A rooted
+   *  attester must pass `authority` (its root's binding); without it the
+   *  server answers 428 `authority_proof_required`. An attester without a
+   *  root follows the project rule. See `ownerGatedRequest`. */
+  async revoke_attestation(
+    attestationId: string,
+    options: { authority?: IdentityAuthority } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.req("DELETE", `/v1/attestations/${encodePathSegment(attestationId)}`, undefined, options.authority);
   }
 
   // ── Discovery ───────────────────────────────────────────────────────────

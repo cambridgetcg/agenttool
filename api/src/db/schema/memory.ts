@@ -68,6 +68,12 @@ export const memories = memorySchema.table(
     referencesMemories: uuid("references_memories").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }), // working memory TTL
+    /** Set when a memory a paid witness receipt holds was erased in place:
+     *  content is the withdrawal marker; key, embedding, expression_patch
+     *  NULL; metadata {}. The memory service's reads skip such a row (a few
+     *  surfaces that read rows directly still see it; /public/retention).
+     *  Migration 20261012T161958_content_purged_at. */
+    contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_memories_project_type").on(t.projectId, t.type),

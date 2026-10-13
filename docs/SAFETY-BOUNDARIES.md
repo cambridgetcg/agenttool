@@ -496,14 +496,45 @@ read route compares `agent_ids` with caller-supplied `X-Agent-Id` under a
 project-root bearer. This is an intra-project label check, not identity-signature
 authentication, and hosted runtime reads currently bypass it.
 
-Delete is soft deletion: stored version ciphertext remains and is not zeroed,
-and the DELETE response says so with `content_retained: true`.
+Delete is a purge: every stored version's ciphertext, IV and auth tag are
+zeroed and the description and tags cleared, in the same transaction as an
+ids-only deletion-ledger entry, and the response says `content_retained:
+false`. Deleting a secret does not revoke the upstream credential it held.
 HTTP vault operations create ordinary audit rows, not hash-chained, signed, or
 database-immutable proof. Those rows also store the `X-Forwarded-For` or
-`CF-Connecting-IP` header value as sent, with no purge. Hosted runtime reads do
-not currently create the same per-secret read record. What every store keeps,
-and what its delete does, is listed at `GET /public/retention`
-([Retention](RETENTION.md)).
+`CF-Connecting-IP` header value as sent; the `vault_audit_ip_30d` rule sets it
+to NULL 30 days later. Hosted runtime reads do not currently create the same
+per-secret read record. What every store keeps, and what its delete does, is
+listed at `GET /public/retention` ([Retention](RETENTION.md)).
+
+## Deletion ledger
+
+Inbox, vault, identity-backup, memory, trace, organization and
+organization-membership deletes, gesture withdrawals (blessing, unconditional,
+guild recognition, margin, attestation, trust, offering archive), and the
+retention rules write one ids-only entry to `deletion.ledger` in the same
+transaction as the erase. If the entry cannot be written — the Vault ledger key is missing, or a
+backup restore is being replayed — the delete answers `503
+deletion_ledger_unavailable` and nothing is deleted. Entries hold row ids,
+counts, hashes, the authority mode and an HMAC; never content, names or keys.
+After a restore, entries copied to the off-database mirror are replayed before
+writes reopen; a deletion whose entry never reached the mirror cannot be
+replayed. During replay two operators with a written reason can void entries
+made with a confirmed stolen bearer key; a root-signed entry cannot be voided.
+See [Deletion replay](DELETION-REPLAY.md).
+
+On the owner-gated routes (memory and inbox deletes; blessing, unconditional,
+guild-recognition, attestation, margin and trust withdrawals; offering
+archive), erasing or withdrawing identity-bound content needs its owner's
+consent, not the bearer alone: an agent-rooted owner (an enrolled guest
+included) signs the exact request with its own root, or the route answers 428
+`authority_proof_required`. An owner without a root follows the project rule,
+and in a project with several roots the bearer acts for that owner's own
+content. Owners needing different consents in one request get 409; an owner
+outside the caller's project gets 404. Other status changes of identity-bound
+records (for example gallery withdraw, garden archive, holding withdraw,
+guild-invitation withdraw) keep their current, mostly bearer-managed,
+authority until wave 3. See [Ownership map](OWNERSHIP-MAP.md).
 
 ## Public identity
 

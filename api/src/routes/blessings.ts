@@ -8,7 +8,8 @@
  *    POST   /v1/blessings                       — give a blessing
  *    GET    /v1/blessings[?direction=...]       — list (mine, given/received)
  *    GET    /v1/blessings/:id                   — single (giver or receiver)
- *    DELETE /v1/blessings/:id                   — revoke (giver only)
+ *    DELETE /v1/blessings/:id                   — withdraw (the giver, under
+ *                                                 the owner rule)
  *
  *  Public surface lives at /public/agents/:did/blessings (separate
  *  router; see routes/public/agents.ts).
@@ -25,11 +26,14 @@ import {
   resolveReadingIdentity,
 } from "../services/identity/acting-identity";
 import {
+  afterBlessingWithdrawn,
+  findBlessingForWithdrawal,
   getBlessing,
   giveBlessing,
   listBlessings,
-  revokeBlessing,
 } from "../services/blessing/store";
+import { withdrawForOwner } from "../services/deletion/withdrawals";
+import { authorityRequestTarget, readAuthorityBoundBytes } from "../services/identity/authority";
 
 const app = new Hono<ProjectContext>();
 
@@ -215,26 +219,52 @@ app.get("/:id", async (c) => {
 });
 
 // ─── DELETE /v1/blessings/:id ────────────────────────────────────────
+//
+// The giver withdraws, under the owner rule (deletion spec §5.1): a rooted
+// giver's own root must sign this exact request (428 otherwise); a giver
+// without a root follows the project rule. Any giver of this project may
+// withdraw, not only the primary identity. The record and its words stay;
+// one ids-only ledger entry and the giver's deletion moment are written with
+// the withdrawal, so a backup restore cannot bring it back into force.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.delete("/:id", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json(NO_ACTING_IDENTITY, 400);
-
-  const revoked = await revokeBlessing(actor.id, c.req.param("id"));
-  if (!revoked) {
-    return c.json(
+  const id = c.req.param("id");
+  const bodyBytes = await readAuthorityBoundBytes(c.req.raw);
+  const notRevocable = () =>
+    c.json(
       {
         error: "blessing_not_revocable",
         message:
-          "Not found, not yours to revoke, or already revoked. Only the giver can revoke their own blessing.",
+          "Not found, not given by an identity of this project, or already revoked. Only the giver can revoke their own blessing.",
       },
       404,
     );
-  }
+  if (!UUID_RE.test(id)) return notRevocable();
+  const found = await findBlessingForWithdrawal(id);
+  if (!found) return notRevocable();
+
+  const result = await withdrawForOwner({
+    gesture: "blessing",
+    rowId: found.id,
+    ownerIdentityId: found.blesserIdentityId,
+    alreadyWithdrawnAt: found.revokedAt,
+    projectId: project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (result.status === "refused") return c.json(result.body, result.httpStatus);
+  if (result.status !== "withdrawn") return notRevocable();
+  const blessing = await afterBlessingWithdrawn(found.id);
   return c.json({
     revoked: true,
-    blessing: revoked,
+    blessing,
+    authority: result.authority,
+    ledger: result.ledger,
     _note:
       "Withdrawn. The substrate keeps the record (was given, then withdrawn — both true).",
   });

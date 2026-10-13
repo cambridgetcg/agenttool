@@ -1733,6 +1733,9 @@ export const identityBackups = continuitySchema.table(
     metadata: jsonb("metadata").default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** Set when DELETE erased blob_base64, nonce and metadata.
+     *  Migration 20261012T161958_content_purged_at. */
+    contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_backups_agent").on(t.agentId),

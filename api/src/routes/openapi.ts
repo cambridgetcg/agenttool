@@ -99,6 +99,8 @@ import {
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
 import { depositAddressDisclosureRestResponse } from "./openapi-crypto-deposit";
 import { RETENTION_OPENAPI_PATHS } from "./openapi-retention";
+import { deletionLedgerBlock, deletionLedgerUnavailableResponse, OWNER_GATED_OPENAPI_PATHS, OWNERSHIP_MAP_OPENAPI_PATHS, withOwnerGatedOperations } from "./openapi-owner-gated";
+import { TRACES_OPENAPI_PATHS } from "./openapi-traces";
 import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 import { withX402PayableOperations } from "./openapi-x402-payable";
@@ -457,25 +459,29 @@ function escrowListResponse(description: string) {
 
 const authorityQuorumRefusal = { type: "object", properties: { error: { type: "string", const: "authority_quorum_required" }, message: { type: "string" }, hint: { type: "string" }, docs: { type: "string" } }, required: ["error", "message"] };
 const authoritySequenceConflict = { type: "object", properties: { error: { type: "string", const: "authority_sequence_conflict" }, message: { type: "string" }, hint: { type: "string" }, details: { type: "object" }, next_actions: { type: "array" }, docs: { type: "string" } }, required: ["error", "message"] };
-function paidMemoryReceiptPreservedResponse(description: string) {
+function memoryDeleteConflictResponse(description: string) {
   return {
     description,
     content: {
       "application/json": {
-        schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict, {
-          type: "object",
-          properties: {
-            error: { type: "string", const: "conflict" },
-            message: {
-              type: "string",
-              const: "paid_memory_receipt_preserved",
-            },
-          },
-          required: ["error", "message"],
-          additionalProperties: false,
-        }] },
+        schema: { oneOf: [authorityQuorumRefusal, authoritySequenceConflict] },
       },
     },
+  };
+}
+
+function memoryDeleteResult(maximum?: number) {
+  return {
+    type: "object",
+    properties: {
+      deleted: { type: "integer", minimum: 0, ...(maximum === undefined ? {} : { maximum }) },
+      rows_removed: { type: "integer", minimum: 0 },
+      erased_in_place: { type: "integer", minimum: 0 },
+      erased_in_place_reason: { type: "string" },
+      ledger: { type: "array", items: deletionLedgerBlock },
+    },
+    required: ["deleted"],
+    additionalProperties: false,
   };
 }
 
@@ -4592,14 +4598,46 @@ function spec() {
         patch: {
           tags: ["inbox"],
           summary: "Update status (read/archived/spam/unread/deleted)",
+          description:
+            "status deleted takes the same purge path as DELETE, under the same owner rule (the recipient identity owns the message; a rooted recipient's root signs these exact JSON bytes, 428 otherwise). Other statuses stay bearer-managed. A message whose content a delete erased cannot leave status deleted (409 message_deleted). A message soft-deleted before purges existed can still be restored until the announced backfill (/public/retention).",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Updated" } },
+          responses: {
+            "200": { description: "Updated" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse("message_deleted: the content was erased; the message cannot be restored"),
+            "503": deletionLedgerUnavailableResponse,
+          },
         },
         delete: {
           tags: ["inbox"],
-          summary: "Soft delete (status='deleted')",
+          summary: "Delete a message and erase its content",
+          description:
+            "Erases the sealed body, nonce, ephemeral key, subject, refs and metadata in one transaction with an ids-only deletion-ledger entry and the recipient's deletion moment. The recipient identity owns the message and consents under the owner rule: a rooted recipient's root signs this exact DELETE (428 otherwise); a recipient without a root follows the project rule, and in a project with several roots the bearer acts for it. The response's authority block says which consent was accepted. The row stays with status deleted and its signature, so threads keep their shape. A repeat answers already_deleted: true, needs no proof and writes nothing. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Deleted" } },
+          responses: {
+            "200": {
+              description: "Deleted; content_retained is false",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      deleted: { type: "boolean", const: true },
+                      already_deleted: { type: "boolean" },
+                      content_retained: { type: "boolean", const: false },
+                      purged_at: { type: "string" },
+                      ledger: { oneOf: [deletionLedgerBlock, { type: "null" }] },
+                      _retention: { type: "object" },
+                    },
+                    required: ["id", "deleted", "already_deleted", "content_retained", "purged_at", "ledger"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "503": deletionLedgerUnavailableResponse,
+          },
         },
       },
       "/v1/inbox/box-keys/{did}": {
@@ -4875,9 +4913,9 @@ function spec() {
         },
         delete: {
           tags: ["identity"],
-          summary: "Revoke an attestation issued by this project",
+          summary: "Revoke an attestation (the attester, under the owner rule)",
           description:
-            "Only the project that owns the attester identity may revoke an active receipt. Already-revoked and unknown receipts both return 404; a receipt issued by another project returns 403.",
+            "The attester identity must belong to the caller's project, and consents under the owner rule: a rooted attester's root signs this exact DELETE (428 otherwise); an attester without a root follows the project rule. Already-revoked, unknown and other projects' receipts all return 404. The receipt stays, marked revoked, and one ids-only deletion-ledger entry and the attester's deletion moment are written with it (503 and nothing changes if the entry cannot be written).",
           responses: {
             "200": {
               description: "Attestation revoked",
@@ -4886,16 +4924,15 @@ function spec() {
                   schema: {
                     type: "object",
                     properties: {
-                      message: { type: "string", const: "Attestation revoked" },
-                      id: { type: "string", format: "uuid" },
+                      message: { type: "string", const: "Attestation revoked" }, id: { type: "string", format: "uuid" },
+                      revoked_at: { type: "string" }, authority: { type: "object" }, ledger: deletionLedgerBlock,
                     },
                     required: ["message", "id"],
                   },
                 },
               },
             },
-            "403": { description: "Bearer project does not own the attester identity" },
-            "404": { description: "Attestation not found or already revoked" },
+            "404": { description: "Attestation not found, already revoked, or its attester is not an identity of this project" },
           },
         },
       },
@@ -6576,7 +6613,7 @@ function spec() {
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
         },
       },
-      ...RETENTION_OPENAPI_PATHS,
+      ...RETENTION_OPENAPI_PATHS, ...OWNER_GATED_OPENAPI_PATHS, ...OWNERSHIP_MAP_OPENAPI_PATHS,
       "/public/labor": {
         get: {
           security: [],
@@ -7282,7 +7319,7 @@ function spec() {
           tags: ["memory"],
           summary: "Delete every memory with an exact key",
           description:
-            "All-or-none project-scoped deletion. The service locks every memory matching the exact key. If any matching row carries a paid marketplace witness receipt, it returns 409 paid_memory_receipt_preserved and deletes none; otherwise it deletes the matches that existed when the request was authorized (memories written concurrently after that are kept). Memories bound to an enrolled guest need that guest's root; a key spanning a guest's memories and others returns 409 authority_quorum_required. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0.",
+            "Project-scoped deletion of every memory with the exact key that existed when the request was authorized (memories written concurrently after that are kept). The service locks the matches and erases them in one transaction: each is deleted, except that a memory a paid marketplace witness receipt points at is erased in place (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves the memory API's reads). deleted counts both; rows_removed and erased_in_place split them. One ids-only deletion-ledger entry per action and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Owner rule: every match's owner is named; memories bound to a rooted identity (an enrolled guest included) need that identity's root, and a key spanning owners that need different consents returns 409 authority_quorum_required (send one request per owner). Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0. Free.",
           parameters: [
             { $ref: "#/components/parameters/IdempotencyKey" },
             {
@@ -7295,22 +7332,12 @@ function spec() {
           ],
           responses: {
             "200": {
-              description: "Every match that existed when the request was authorized deleted, or no matches found",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { deleted: { type: "integer", minimum: 0 } },
-                    required: ["deleted"],
-                    additionalProperties: false,
-                  },
-                },
-              },
+              description: "Every match that existed when the request was authorized erased, or no matches found",
+              content: { "application/json": { schema: memoryDeleteResult() } },
             },
             "400": errorResponse("Missing or empty key query parameter"),
-            "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved (a matching memory has a paid witness receipt, so none were deleted), authority_quorum_required or authority_sequence_conflict",
-            ),
+            "409": memoryDeleteConflictResponse("authority_quorum_required or authority_sequence_conflict"),
+            "503": deletionLedgerUnavailableResponse,
           },
         },
       },
@@ -7333,7 +7360,7 @@ function spec() {
           tags: ["memory"],
           summary: "Change one memory's visibility",
           description:
-            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts. This does not change the separate paid-receipt deletion guard. Public observer routes for memory content are not currently mounted.",
+            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts, under the owner rule for a change: a memory bound to a rooted identity needs that identity's root; other memories follow the project rule (409 with several roots). Visibility does not affect deletion; a paid-receipt memory is erased in place when deleted. Public observer routes for memory content are not currently mounted.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -7380,25 +7407,15 @@ function spec() {
           tags: ["memory"],
           summary: "Delete one memory at any tier",
           description:
-            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If the row carries a paid marketplace witness receipt, deletion returns 409 paid_memory_receipt_preserved instead. A memory bound to an enrolled guest needs that guest's root. A missing memory returns deleted=0.",
+            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If a paid marketplace witness receipt points at it, the memory is erased in place instead (content becomes \"withdrawn by author on <date>\", key, embedding and identity patch cleared, metadata emptied; the row stays for the receipt and leaves the memory API's reads), and erased_in_place_reason says so. An ids-only deletion-ledger entry and a deletion moment are written in the same transaction; if the entry cannot be written, nothing is deleted (503). Owner rule: a memory bound to a rooted identity (an enrolled guest included) needs that identity's root; an unbound memory, or one bound to an identity without a root, follows the project rule, and in a project with several roots the bearer erases an unrooted identity's own memory. A missing, expired or already erased memory returns deleted=0. Free.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
             "200": {
-              description: "Memory deleted, or no project-owned memory matched",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { deleted: { type: "integer", minimum: 0, maximum: 1 } },
-                    required: ["deleted"],
-                    additionalProperties: false,
-                  },
-                },
-              },
+              description: "Memory erased (removed, or erased in place for a paid receipt), or no project-owned memory matched",
+              content: { "application/json": { schema: memoryDeleteResult(1) } },
             },
-            "409": paidMemoryReceiptPreservedResponse(
-              "paid_memory_receipt_preserved (this memory has a paid witness receipt and was not deleted), authority_quorum_required or authority_sequence_conflict",
-            ),
+            "409": memoryDeleteConflictResponse("authority_quorum_required or authority_sequence_conflict"),
+            "503": deletionLedgerUnavailableResponse,
           },
         },
       },
@@ -8097,142 +8114,7 @@ function spec() {
       },
 
       // ── Trace ──────────────────────────────────────────────────────
-      "/v1/traces": {
-        post: {
-          tags: ["trace"],
-          summary: "Record a reasoning trace (with optional ed25519 signature)",
-          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    decision: {
-                      type: "object",
-                      properties: {
-                        type: { type: "string", maxLength: 64 },
-                        summary: { type: "string", maxLength: 2000 },
-                        output_ref: { type: "string", maxLength: 2000 },
-                      },
-                      required: ["type", "summary"],
-                    },
-                    reasoning: {
-                      type: "object",
-                      properties: {
-                        observations: { type: "array", items: { type: "string" } },
-                        hypothesis: { type: "string" },
-                        conclusion: { type: "string" },
-                        confidence: { type: "number", minimum: 0, maximum: 1 },
-                        alternatives: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              option: { type: "string" },
-                              why_not: { type: "string" },
-                            },
-                          },
-                        },
-                        signals: { type: "object", additionalProperties: true },
-                      },
-                      required: ["conclusion"],
-                    },
-                    context: {
-                      type: "object",
-                      properties: {
-                        files_read: { type: "array", items: { type: "string" } },
-                        key_facts: { type: "array", items: { type: "string" } },
-                        external_signals: { type: "object", additionalProperties: true },
-                      },
-                    },
-                    parent_trace_id: { type: "string", pattern: "^tr_[a-f0-9]+$" },
-                    agent_id: { type: "string" },
-                    identity_id: { type: "string", format: "uuid" },
-                    session_id: { type: "string" },
-                    tags: { type: "array", items: { type: "string" } },
-                    metadata: { type: "object", additionalProperties: true },
-                    signature: {
-                      type: "string",
-                      description: "ed25519 signature over canonical bytes (optional, for verifiability)",
-                    },
-                    signing_key_id: { type: "string", format: "uuid" },
-                  },
-                  required: ["decision", "reasoning"],
-                },
-              },
-            },
-          },
-          responses: { "201": { description: "Recorded" } },
-        },
-        get: {
-          tags: ["trace"],
-          summary: "List recent traces (filter: agent_id, session_id, decision_type, parent)",
-          parameters: [
-            { name: "agent_id", in: "query", schema: { type: "string" } },
-            { name: "session_id", in: "query", schema: { type: "string" } },
-            { name: "decision_type", in: "query", schema: { type: "string" } },
-            { name: "parent_trace_id", in: "query", schema: { type: "string" } },
-            { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
-          ],
-          responses: { "200": { description: "List" } },
-        },
-      },
-      "/v1/traces/{id}": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", pattern: "^tr_[a-f0-9]+$" } },
-        ],
-        get: {
-          tags: ["trace"],
-          summary: "Fetch a single trace",
-          responses: {
-            "200": { description: "Trace" },
-            "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-        delete: {
-          tags: ["trace"],
-          summary: "Delete a trace",
-          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Deleted" } },
-        },
-      },
-      "/v1/traces/search": {
-        post: {
-          tags: ["trace"],
-          summary: "Postgres full-text search over reasoning surface (no LLM compute)",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    query: { type: "string", minLength: 1, maxLength: 500 },
-                    agent_id: { type: "string" },
-                    session_id: { type: "string" },
-                    decision_type: { type: "string" },
-                    limit: { type: "integer", minimum: 1, maximum: 100 },
-                  },
-                  required: ["query"],
-                },
-              },
-            },
-          },
-          responses: { "200": { description: "Ranked results with ts_rank score" } },
-        },
-      },
-      "/v1/traces/chain/{id}": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", pattern: "^tr_[a-f0-9]+$" } },
-        ],
-        get: {
-          tags: ["trace"],
-          summary: "Recursive lineage — root + ancestors + descendants",
-          responses: { "200": { description: "Lineage tree" } },
-        },
-      },
+      ...TRACES_OPENAPI_PATHS,
 
       // ── Strands ────────────────────────────────────────────────────
       "/v1/strands": {
@@ -9905,7 +9787,7 @@ function spec() {
 }
 
 function renderSpec() {
-  const body = JSON.stringify(spec());
+  const body = JSON.stringify(withOwnerGatedOperations(spec()));
   const digest = createHash("sha256").update(body).digest("hex");
   return {
     body,

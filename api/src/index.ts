@@ -1361,6 +1361,8 @@ app.get("/about", (c) =>
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
       retention:
         "/public/retention — what is kept, for how long, and what deletion does today, each value with its basis (measured, source, config, declared, unknown)",
+      ownership_map:
+        "/public/ownership-map — every store's owner class, the authority rule for erasing or withdrawing from it (a rooted owner's own root signs), and its /public/retention class",
       public_identity:
         "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
       runtime_custody:
