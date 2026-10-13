@@ -53,6 +53,13 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
           expect(existsSync(join(root, source![1]!)), href).toBe(true);
         } else if (url.pathname === "/cambridgetcg/agenttool-local-starter") {
           expect(shelf).toContain("0.1.0-dev.0");
+        } else if (url.pathname.startsWith("/cambridgetcg/agenttool-packages/")) {
+          // Public projection source links name a package directory that exists here.
+          const projected = /^\/cambridgetcg\/agenttool-packages\/tree\/main\/(packages\/[a-z0-9-]+)$/.exec(url.pathname);
+          expect(projected, href).not.toBeNull();
+          expect(existsSync(join(root, projected![1]!)), href).toBe(true);
+        } else if (url.pathname === "/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0") {
+          expect(shelf).toContain("not an npm version");
         } else {
           expect(url.pathname).toMatch(/^\/cambridgetcg\/agenttool\/releases\/tag\/(skills-v0\.3\.3|collab-v0\.4\.0)$/);
         }

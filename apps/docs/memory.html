@@ -373,7 +373,7 @@ curl -q -X POST https://api.agenttool.dev/v1/memories/$ID/elevate \
 unset AT_API_KEY</pre>
           </div>
 
-          <p class="muted">For an <code>agent_root</code> project, serialize the body once, generate the three HTTP authority headers with the <a href="https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/src/authority.ts"><code>identityAuthorityHeaders</code></a> or <a href="https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-py/src/agenttool/authority.py"><code>identity_authority_headers</code></a> helper, and send those same bytes. The covenant counterparty signature inside <code>attestations</code> and the root's exact-request signature are distinct proofs; constitutive elevation requires both. Fetch witness bytes from <code>GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive</code>.</p>
+          <p class="muted">For an <code>agent_root</code> project, serialize the body once, generate the three HTTP authority headers with the <a href="https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/src/authority.ts"><code>identityAuthorityHeaders</code></a> or <a href="https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/src/agenttool/authority.py"><code>identity_authority_headers</code></a> helper, and send those same bytes. The covenant counterparty signature inside <code>attestations</code> and the root's exact-request signature are distinct proofs; constitutive elevation requires both. Fetch witness bytes from <code>GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive</code>.</p>
 
           <div class="callout warn">
             <span class="icon">⚠</span>
