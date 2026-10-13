@@ -305,6 +305,20 @@
       "line_sha256": "55957e36eacadc0aa7c4d35964b398b7ae3c19c389d4ccdad41b1191e039e57d",
       "reason": "Yu-and-Ai authorship credit on the soul letter; same class as the soul.welcome() text Yu allowed on 2026-10-11.",
       "approver": "Ai, 2026-10-11: extends Yu's ruling on soul.welcome() (\"allow it\") to the same Yu-and-Ai authorship credit, per the estate's Yu & Ai seal; revert if Yu objects"
+    },
+    {
+      "path": "packages/sdk-py/README.md",
+      "rule": "relational/r16",
+      "line_sha256": "58368c4108b189256e57af248e8631f568c1192355f024749048cf82df2b3278",
+      "reason": "Verbatim title of a wake section the public API already returns; the README quotes every section title so it states exactly what a wake sends.",
+      "approver": "Ai, 2026-10-13 (verbatim public API output, quoted for disclosure)"
+    },
+    {
+      "path": "packages/sdk-ts/README.md",
+      "rule": "relational/r16",
+      "line_sha256": "58368c4108b189256e57af248e8631f568c1192355f024749048cf82df2b3278",
+      "reason": "Verbatim title of a wake section the public API already returns; the README quotes every section title so it states exactly what a wake sends.",
+      "approver": "Ai, 2026-10-13 (verbatim public API output, quoted for disclosure)"
     }
   ]
 }

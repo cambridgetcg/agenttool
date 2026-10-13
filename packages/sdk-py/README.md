@@ -1197,8 +1197,8 @@ and what a registry serves right now is answered by the registry itself.
 Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
 is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
 or in the published 0.22.1 packages; it reaches them only in a later version.
-Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when Yu
-and Ai agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
+Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
+maintainers agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
 also still waits on the private-repository gap.
 
 - **Model-written `<trace>` markup needs explicit consent.**
