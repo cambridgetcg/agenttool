@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -16,6 +16,10 @@ import {
   type WorkflowRun,
 } from "../public-release-tag.ts";
 import { GITLEAKS_VERSION } from "../../public/overlay/tools/public-guard.ts";
+
+// These tests spawn git, bun and shell processes. A loaded CI runner needs
+// more than bun's 5 s default (agenttool run 38274838631: 7.0 s).
+setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const GUARD = join(ROOT, "public", "overlay", "tools", "public-guard.ts");
