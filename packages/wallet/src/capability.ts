@@ -1,3 +1,4 @@
+import { snapshotJsonData } from "./canonical.js";
 import { WalletProtocolError, invalid } from "./errors.js";
 import {
   assertAmount,
@@ -85,6 +86,35 @@ function assertReferences(
   }
 }
 
+function closedKeys(value: object, keys: readonly string[], label: string): void {
+  const actual = Object.keys(value).sort();
+  if (actual.length !== keys.length || actual.some((key, index) => key !== keys[index])) {
+    invalid(`${label} must contain exactly: ${keys.join(", ")}.`, label);
+  }
+}
+
+/**
+ * Copies the host-supplied context once as plain data, rejecting accessors
+ * and custom iterators without invoking them, so every later check reads the
+ * same validated values.
+ */
+function snapshotContext(value: unknown): AuthorizationContext {
+  const snapshot = snapshotJsonData(value);
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    invalid("authorization context must be a plain object.", "authorization");
+  }
+  closedKeys(snapshot, ["now", "usage"], "authorization");
+  const context = snapshot as unknown as AuthorizationContext;
+  validateContext(context);
+  closedKeys(context.usage, [
+    "host_verified_approval_ids", "intent_count", "revocation_nonce", "spent",
+  ], "authorization.usage");
+  for (const [index, entry] of context.usage.spent.entries()) {
+    closedKeys(entry, ["amount_atomic", "asset_id"], `authorization.usage.spent[${index}]`);
+  }
+  return context;
+}
+
 function validateContext(context: AuthorizationContext): void {
   assertTimestamp(context.now, "authorization.now");
   if (!context.usage || typeof context.usage !== "object") invalid("authorization.usage is required.");
@@ -119,12 +149,16 @@ function validateContext(context: AuthorizationContext): void {
   }
 }
 
-function findRule(capability: WalletCapability, effect: {
+/**
+ * Every rule covering the target, action and method. Overlapping rules combine
+ * most-restrictively: any match allowlists, any matching requires_approval gates.
+ */
+function matchingRules(capability: WalletCapability, effect: {
   target_account: string;
   action: string;
   method: string | null;
-}): CallRule | undefined {
-  return capability.call_rules.find((rule) =>
+}): CallRule[] {
+  return capability.call_rules.filter((rule) =>
     rule.target_account === effect.target_account
     && rule.actions.includes(effect.action as CallRule["actions"][number])
     && (effect.action === "transfer" || (effect.method !== null && rule.methods.includes(effect.method))));
@@ -157,16 +191,16 @@ function checkRules(
   approvalCount: number,
 ): void {
   for (const call of intent.calls) {
-    const rule = findRule(capability, call);
-    if (!rule) throw new WalletProtocolError("CAPABILITY_DENIED", "Intent call is outside the target/action/method allowlist.");
-    if (rule.requires_approval && approvalCount < capability.approval_threshold) {
+    const rules = matchingRules(capability, call);
+    if (rules.length === 0) throw new WalletProtocolError("CAPABILITY_DENIED", "Intent call is outside the target/action/method allowlist.");
+    if (rules.some(({ requires_approval }) => requires_approval) && approvalCount < capability.approval_threshold) {
       throw new WalletProtocolError("CAPABILITY_DENIED", "Intent call requires more distinct host-verified approval IDs.");
     }
   }
   for (const effect of simulation.effects) {
-    const rule = findRule(capability, effect);
-    if (!rule) throw new WalletProtocolError("CAPABILITY_DENIED", "Simulation revealed an effect outside the allowlist.");
-    if (rule.requires_approval && approvalCount < capability.approval_threshold) {
+    const rules = matchingRules(capability, effect);
+    if (rules.length === 0) throw new WalletProtocolError("CAPABILITY_DENIED", "Simulation revealed an effect outside the allowlist.");
+    if (rules.some(({ requires_approval }) => requires_approval) && approvalCount < capability.approval_threshold) {
       throw new WalletProtocolError("CAPABILITY_DENIED", "Simulation effect requires more distinct host-verified approval IDs.");
     }
   }
@@ -230,18 +264,20 @@ function checkFee(capability: WalletCapability, intent: TransactionIntent, simul
  * database. Callers must do those things and repeat this check atomically at
  * sign time.
  */
-export function assertIntentWithinCapabilityStatic(options: {
+export function assertIntentWithinCapabilityStatic(input: {
   descriptor: Verified<WalletDescriptor>;
   capability: Verified<WalletCapability>;
   intent: Verified<TransactionIntent>;
   simulation: Verified<SimulationReceipt>;
   context: AuthorizationContext;
 }): Readonly<AuthorizedIntent> {
-  assertVerifiedRecord(options.descriptor);
-  assertVerifiedRecord(options.capability);
-  assertVerifiedRecord(options.intent);
-  assertVerifiedRecord(options.simulation);
-  validateContext(options.context);
+  // Read each input once; a getter or proxy cannot hand later checks other values.
+  const { descriptor, capability, intent, simulation, context } = input;
+  assertVerifiedRecord(descriptor);
+  assertVerifiedRecord(capability);
+  assertVerifiedRecord(intent);
+  assertVerifiedRecord(simulation);
+  const options = { descriptor, capability, intent, simulation, context: snapshotContext(context) };
   assertReferences(options.descriptor, options.capability, options.intent, options.simulation);
 
   if (options.descriptor.custody_mode === "watch_only") {
