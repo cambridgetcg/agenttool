@@ -909,6 +909,9 @@ describe("SDK source and builder identity", () => {
     expect(read("docs/NPM-RELEASES.md")).toContain(
       "@agenttool/kingdom@0.1.2` is the current npm-only source candidate",
     );
+    expect(read("docs/NPM-RELEASES.md")).toContain(
+      "Correction, 2026-10-11: `@agenttool/kingdom@0.1.2` is published.",
+    );
     expect(read("README.md")).toContain("](docs/PACKAGES.md)");
     for (const path of [
       "docs/NOW.md",
