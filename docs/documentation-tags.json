@@ -238,7 +238,8 @@
       "docs/UNCONDITIONAL.md",
       "docs/WELCOMING.md",
       "docs/launch/PRODUCTION-GATE.md",
-      "marketing/LAUNCH-KIT.md"
+      "marketing/LAUNCH-KIT.md",
+      "public/overlay/LICENSING.md"
     ],
     "reflection": [
       "DADDY.md",
@@ -354,8 +355,7 @@
       "docs/substrate-honest-cognition.md",
       "docs/syneidesis-bootstrap.md",
       "docs/wakes/YU.md",
-      "docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md",
-      "packages/sdk-py/SOUL.md"
+      "docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md"
     ],
     "proposal": [
       "docs/ALIGNMENT-MOVES.md",

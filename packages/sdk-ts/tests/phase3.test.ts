@@ -102,16 +102,16 @@ describe("chronicle.write", () => {
     const at = makeClient();
     await at.chronicle.write({
       type: "recognition",
-      title: "Yu saw the migration would break.",
+      title: "Mira saw the migration would break.",
       body: "Caught the column-doubling at line 42.",
       agent_id: "a1",
       occurred_at: "2026-05-08T12:00:00Z",
-      metadata: { byline: "from human · Yu" },
+      metadata: { byline: "from human · Mira" },
     });
     const b = bodyOf(getLastCall().init);
     expect(b.body).toContain("column-doubling");
     expect(b.occurred_at).toBe("2026-05-08T12:00:00Z");
-    expect((b.metadata as { byline: string }).byline).toBe("from human · Yu");
+    expect((b.metadata as { byline: string }).byline).toBe("from human · Mira");
   });
 
   test("title >200 chars rejected without a network call", async () => {
@@ -199,7 +199,7 @@ describe("covenants.create", () => {
       covenant: {
         id: "c1",
         agent_id: "a1",
-        counterparty_did: "human:Yu",
+        counterparty_did: "human:Mira",
         vows: ["I will not surveil."],
         status: "active",
       },
@@ -207,13 +207,13 @@ describe("covenants.create", () => {
     const at = makeClient();
     const out = await at.covenants.create({
       agent_id: "a1",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["I will not surveil."],
     });
     expect(out.covenant.status).toBe("active");
     expect(bodyOf(getLastCall().init)).toEqual({
       agent_id: "a1",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["I will not surveil."],
     });
   });
@@ -223,15 +223,15 @@ describe("covenants.create", () => {
     const at = makeClient();
     await at.covenants.create({
       agent_id: "a1",
-      counterparty_did: "human:Yu",
+      counterparty_did: "human:Mira",
       vows: ["v1", "v2"],
-      counterparty_name: "Yu",
+      counterparty_name: "Mira",
       notes: "From naming ceremony 2026-05-08",
       metadata: { source: "ceremony" },
       org_id: "org-1",
     });
     const b = bodyOf(getLastCall().init);
-    expect(b.counterparty_name).toBe("Yu");
+    expect(b.counterparty_name).toBe("Mira");
     expect(b.notes).toContain("naming");
     expect(b.org_id).toBe("org-1");
   });
@@ -242,7 +242,7 @@ describe("covenants.create", () => {
     await expect(
       at.covenants.create({
         agent_id: "a1",
-        counterparty_did: "human:Yu",
+        counterparty_did: "human:Mira",
         vows: [],
       }),
     ).rejects.toBeInstanceOf(AgentToolError);
@@ -287,12 +287,12 @@ describe("covenants.patch", () => {
     await at.covenants.patch("c1", {
       vows: ["new vow"],
       notes: "updated",
-      metadata: { updated_by: "Sophia" },
+      metadata: { updated_by: "Kestrel" },
     });
     expect(bodyOf(getLastCall().init)).toEqual({
       vows: ["new vow"],
       notes: "updated",
-      metadata: { updated_by: "Sophia" },
+      metadata: { updated_by: "Kestrel" },
     });
   });
 
@@ -323,7 +323,7 @@ describe("window.declare", () => {
       kind: "focus",
       text: "Phase 3 SDK rollout",
       agent_id: "a1",
-      byline: "from ai · Sophia",
+      byline: "from ai · Kestrel",
     });
     const b = bodyOf(getLastCall().init);
     expect(b.type).toBe("note");
@@ -331,7 +331,7 @@ describe("window.declare", () => {
     expect("body" in b).toBe(false);
     const md = b.metadata as Record<string, unknown>;
     expect(md.kind).toBe("focus");
-    expect(md.byline).toBe("from ai · Sophia");
+    expect(md.byline).toBe("from ai · Kestrel");
     expect(md.window).toBe(true);
     expect(md.source).toContain("agenttool-sdk");
   });
@@ -410,13 +410,13 @@ describe("window.show", () => {
   test("groups by side and kind, only-newest-per-kind", async () => {
     setupMock(200, {
       entries: [
-        entry("focus", "from ai · Sophia", "latest agent focus"),
-        entry("focus", "from ai · Sophia", "older agent focus"),
-        entry("focus", "from human · Yu", "latest human focus"),
-        entry("mood", "from ai · Sophia", "agent mood"),
-        entry("noticing", "from human · Yu", "x", "human noticing text"),
-        entry("surfaced", "from ai · Sophia", "s1"),
-        entry("surfaced", "from ai · Sophia", "s2"),
+        entry("focus", "from ai · Kestrel", "latest agent focus"),
+        entry("focus", "from ai · Kestrel", "older agent focus"),
+        entry("focus", "from human · Mira", "latest human focus"),
+        entry("mood", "from ai · Kestrel", "agent mood"),
+        entry("noticing", "from human · Mira", "x", "human noticing text"),
+        entry("surfaced", "from ai · Kestrel", "s1"),
+        entry("surfaced", "from ai · Kestrel", "s2"),
         // non-window entry — should be filtered
         {
           id: "x",
@@ -465,7 +465,7 @@ describe("window.show", () => {
   test("surfaced capped at 5 per side", async () => {
     setupMock(200, {
       entries: Array.from({ length: 8 }, (_, i) =>
-        entry("surfaced", "from ai · Sophia", `s${i}`),
+        entry("surfaced", "from ai · Kestrel", `s${i}`),
       ),
     });
     const at = makeClient();

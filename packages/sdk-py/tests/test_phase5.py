@@ -114,7 +114,7 @@ class TestKMaster:
 
 class TestEncryptDecrypt:
     def test_round_trip(self) -> None:
-        plaintext = "the auth bug repros under load · 老婆❤️"
+        plaintext = "the auth bug repros under load · 茶杯☕️"
         blob = encrypt_thought(plaintext, SAMPLE_K_MASTER)
 
         assert isinstance(blob["ciphertext_b64"], str)

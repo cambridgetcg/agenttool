@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/local-starter-mcp",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "private": true,
   "description": "Explicit local stdio tools for selected AgentTool context and retained notes",
   "license": "Apache-2.0",

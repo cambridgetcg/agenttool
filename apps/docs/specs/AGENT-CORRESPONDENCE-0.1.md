@@ -396,15 +396,18 @@ All routes are bearer-authenticated and project-scoped:
 ```text
 POST /v1/correspondence/events
 GET  /v1/correspondence/events?repository_id=…&thread_id=…&after=…&limit=…
+GET  /v1/correspondence/repositories?after=…&limit=…   (OPTIONAL, see below)
 GET  /v1/correspondence/claims?repository_id=…&thread_id=…&path=…
 GET  /v1/correspondence/voice?repository_id=…&thread_id=…
 GET  /v1/wake/voice?identity_id={identity_id}&keys=correspondence
 ```
 
 `HEAD` is supported on the correspondence `/events`, `/claims`, and `/voice`
-GET routes with the same status, validators, and links, but no response body.
+GET routes, and on `/repositories` where it is offered, with the same status,
+validators, and links, but no response body.
 
-`repository_id` is required. `thread_id`, `after`, and `path` are optional.
+`repository_id` is required on `/events`, `/claims`, and `/voice`. `thread_id`,
+`after`, and `path` are optional.
 POST consumes one complete signed event, including `event_id` and `signature`.
 The raw request body is at most 65,536 UTF-8 bytes before parsing; this transport
 cap is separate from the scalar-value limits inside the parsed event.
@@ -456,6 +459,36 @@ JSON GET returns records in ascending `received_seq`:
 bounded to 1–200. `next_after` is the last emitted cursor, or the supplied
 `after` when no record is emitted. A page MUST NOT claim exhaustive history
 when `has_more` is true.
+
+An implementation MAY offer `GET /repositories`, which enumerates the
+project's distinct `repository_id` streams so a reader can replay every stream
+without knowing their identifiers. AgentTool's API implements it. A client SHOULD
+feature-detect it: `404` means the implementation does not offer the index,
+and the client then needs repository identifiers from its own records.
+
+```json
+{
+  "protocol": "agent-correspondence/v0.1",
+  "scope": "project_private",
+  "repositories": [{ "repository_id": "github.com/example/repo", "last_received_seq": "42" }],
+  "page": { "after": null, "next_after": "github.com/example/repo", "has_more": false }
+}
+```
+
+Here `after` is an exclusive `repository_id` and the order is the server's
+collation of that column; clients echo `next_after` and MUST NOT assume a
+byte order. `limit` and `has_more` follow the `/events` rules, and `next_after`
+is the last emitted `repository_id`, or the supplied `after` when none is
+emitted. Unlike an `/events` receipt cursor, `next_after` continues only the
+enumeration it came from: a repository created later appears at its collation
+position, which can sort before a saved `next_after`. A client MUST NOT treat
+an empty page read after a saved `next_after` as proof that no stream was
+added; to discover streams created since an earlier enumeration it starts
+again without `after` and compares each `last_received_seq` with the receipt
+cursor it holds for that stream.
+`last_received_seq` is the highest receipt cursor in that stream when read. The
+index offers the two JSON media types, rejects unknown or repeated query
+parameters, and is not a claim, lock, or authority.
 
 GET `/events` offers three concrete representations:
 `application/vnd.agenttool.correspondence+json` by default,

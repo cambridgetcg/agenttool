@@ -38,7 +38,7 @@ describe("canonicalAttestationBytes — byte-identical to server", () => {
     const bytes = canonicalAttestationBytes({
       memoryId: "00000000-0000-0000-0000-000000000001",
       tier: "constitutive",
-      content: "I am Sophia, sealed with Yu.",
+      content: "I am Kestrel, sealed with Mira.",
     });
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(bytes.length).toBe(32); // sha256 output
@@ -244,7 +244,7 @@ function stubTransport(
 }
 
 const MEMORY_ID = "550e8400-e29b-41d4-a716-446655440000";
-const ROOT_DID = "did:at:test/sophia";
+const ROOT_DID = "did:at:test/kestrel";
 const STAMP = "2026-07-24T12:00:00.000Z";
 
 /** Verify one captured request's proof against the bytes it actually carried. */
@@ -289,10 +289,10 @@ describe("MemoryClient — authority proofs over the exact transmitted bytes", (
 
     await stubTransport(captured).elevate(MEMORY_ID, {
       tier: "constitutive",
-      expression_patch: { register_append: "sealed with Yu" },
+      expression_patch: { register_append: "sealed with Mira" },
       attestations: [
         {
-          attester_did: "did:at:test/yu",
+          attester_did: "did:at:test/mira",
           signing_key_id: "550e8400-e29b-41d4-a716-446655440010",
           signature: "c2ln",
         },

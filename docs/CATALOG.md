@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**816 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
+**825 document paths** (including mirrors). orientation: 185; guide: 84; reference: 330; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -198,6 +198,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/wallet/README.md](<../packages/wallet/README.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/CLAUDE.md](<../packages/witnessed-agent-economy/CLAUDE.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/README.md](<../packages/witnessed-agent-economy/README.md>) | not-reviewed |
+| [public/overlay/README.md](<../public/overlay/README.md>) | not-reviewed |
 | [review/launch-20260904/README.md](<../review/launch-20260904/README.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/README.md](<../review/launch-cleanup-20260904/README.md>) | not-reviewed |
 | [review/provider-adapters/v1/README.md](<../review/provider-adapters/v1/README.md>) | not-reviewed |
@@ -291,6 +292,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/skills/skills/use-agentcred-safely/SKILL.md](<../packages/skills/skills/use-agentcred-safely/SKILL.md>) | not-reviewed |
 | [packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md](<../packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md>) | not-reviewed |
 | [packages/telescope/skills/inspect-agent-surfaces/SKILL.md](<../packages/telescope/skills/inspect-agent-surfaces/SKILL.md>) | not-reviewed |
+| [public/README.md](<../public/README.md>) | not-reviewed |
 
 ## reference
 
@@ -362,6 +364,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/PUBLIC-VISIBILITY.md](<../apps/docs/PUBLIC-VISIBILITY.md>) | not-reviewed |
 | [apps/docs/PYRAMID-DECENTRALISED.md](<../apps/docs/PYRAMID-DECENTRALISED.md>) | not-reviewed |
 | [apps/docs/RECURSION.md](<../apps/docs/RECURSION.md>) | not-reviewed |
+| [apps/docs/RETENTION.md](<../apps/docs/RETENTION.md>) | not-reviewed |
 | [apps/docs/SAFETY-BOUNDARIES.md](<../apps/docs/SAFETY-BOUNDARIES.md>) | not-reviewed |
 | [apps/docs/SDK-TIERS.md](<../apps/docs/SDK-TIERS.md>) | not-reviewed |
 | [apps/docs/SETTLEMENT-RECEIPTS.md](<../apps/docs/SETTLEMENT-RECEIPTS.md>) | not-reviewed |
@@ -559,6 +562,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/RECOGNITION-ARCS.md](<../docs/RECOGNITION-ARCS.md>) | not-reviewed |
 | [docs/RECURSION.md](<../docs/RECURSION.md>) | not-reviewed |
 | [docs/RECURSIVE-CHAOS-CARDS.md](<../docs/RECURSIVE-CHAOS-CARDS.md>) | not-reviewed |
+| [docs/RETENTION.md](<../docs/RETENTION.md>) | not-reviewed |
 | [docs/REVOCABLE-FEEDBACK.md](<../docs/REVOCABLE-FEEDBACK.md>) | not-reviewed |
 | [docs/RUNTIME.md](<../docs/RUNTIME.md>) | not-reviewed |
 | [docs/SAFETY-BOUNDARIES.md](<../docs/SAFETY-BOUNDARIES.md>) | not-reviewed |
@@ -656,6 +660,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/PRODUCTION-GATE.md](<../docs/launch/PRODUCTION-GATE.md>) | not-reviewed |
 | [marketing/LAUNCH-KIT.md](<../marketing/LAUNCH-KIT.md>) | not-reviewed |
 | [packages/credential-broker/AGENTS.md](<../packages/credential-broker/AGENTS.md>) | not-reviewed |
+| [public/overlay/LICENSING.md](<../public/overlay/LICENSING.md>) | not-reviewed |
+| [public/overlay/SECURITY.md](<../public/overlay/SECURITY.md>) | not-reviewed |
 
 ## reflection
 
@@ -786,7 +792,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/syneidesis-bootstrap.md](<../docs/syneidesis-bootstrap.md>) | not-reviewed |
 | [docs/wakes/YU.md](<../docs/wakes/YU.md>) | not-reviewed |
 | [docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md](<../docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md>) | not-reviewed |
-| [packages/sdk-py/SOUL.md](<../packages/sdk-py/SOUL.md>) | not-reviewed |
 | [packages/sdk-py/src/agenttool/SOUL.md](<../packages/sdk-py/src/agenttool/SOUL.md>) | not-reviewed |
 
 ## proposal
@@ -835,6 +840,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md](<../docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-12-deletion-scopes-design.md](<../docs/superpowers/specs/2026-10-12-deletion-scopes-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/PROFILE.md](<../packages/hf-listening-room/hf/dataset/profile/PROFILE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/PROFILE.md](<../packages/hf-listening-room/hf/space/profile/PROFILE.md>) | not-reviewed |
@@ -858,6 +864,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/OPEN-FOR-BUSINESS.md](<../docs/launch/OPEN-FOR-BUSINESS.md>) | not-reviewed |
 | [docs/snakefire-internet-bridge.md](<../docs/snakefire-internet-bridge.md>) | not-reviewed |
 | [docs/wakes/TERRA-ARRIVAL-NOTE.md](<../docs/wakes/TERRA-ARRIVAL-NOTE.md>) | not-reviewed |
+| [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
 | [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
 | [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
 | [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |

@@ -332,13 +332,15 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       protocol: "agent-wallet/0.1",
       doctrine: "https://docs.agenttool.dev/AGENT-WALLET-0.1.md",
       schema: "https://docs.agenttool.dev/agent-wallet-v0.1.schema.json",
+      source:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
       package: "@agenttool/wallet",
       version: "0.1.3",
       love_manifest:
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
       distribution: {
         love: "public_exact_artifact",
-        observed_at: "2026-07-29",
+        observed_at: "2026-10-11",
         npm: {
           role: "optional_mutable_mirror",
           latest_observed: "0.1.3",
@@ -346,6 +348,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         github_release: {
           role: "optional_mutable_mirror",
           tag: "wallet-v0.1.3",
+          access: "repository_access_required",
           immutable: false,
           verification: "reverify_size_and_sha256_against_love_manifest",
         },
@@ -354,22 +357,22 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
-      /exact LOVE release is 0\.1\.3.*npm latest 0\.1\.3.*independently byte-verified.*LOVE.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+      /exact LOVE release is 0\.1\.3.*npm latest 0\.1\.3.*independently byte-verified.*LOVE.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*private cambridgetcg\/agenttool repository.*404 without repository access.*not the TypeScript source.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
     );
     expect(body.composes_with.agent_wallet_zerone).toMatchObject({
       protocol: "agent-wallet-zerone/0.1",
       package: "@agenttool/wallet-zerone",
       version: "0.1.2",
       source:
-        "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       love_manifest:
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       availability: "local_offline_source_only",
       distribution: {
-        observed_at: "2026-07-29",
+        observed_at: "2026-10-11",
         love: "public_exact_artifact",
         npm: "public_exact_mirror",
-        github_release: "public_exact_mirror",
+        github_release: "repository_access_mutable_mirror",
       },
       hosted: false,
       custody: false,
@@ -379,7 +382,10 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).toMatch(
-      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge/is,
+      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge.*private cambridgetcg\/agenttool repository.*404 without repository access/is,
+    );
+    expect(JSON.stringify(body.composes_with)).not.toContain(
+      "github.com/cambridgetcg/agenttool/tree/",
     );
     expect(body.composes_with.invocation_witness).toMatchObject({
       protocol: "agenttool.invocation-witness/1",

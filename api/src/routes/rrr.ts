@@ -6,10 +6,11 @@
  *
  *  Wire:
  *    POST  /v1/guild/rrr                       — start (depth=1)
- *    POST  /v1/guild/rrr/:id/escalate          — bump depth (alternating party only)
+ *    POST  /v1/guild/rrr/:id/escalate          — bump depth (alternating party only;
+ *                                                non-parties get 404)
  *    GET   /v1/guild/rrr                       — my cascades (?status=active|capped|abandoned)
- *    GET   /v1/guild/rrr/:id                   — read cascade + chain
- *    GET   /v1/guild/rrr/:id/meme              — render as escalating-emoji ladder
+ *    GET   /v1/guild/rrr/:id                   — read cascade + chain (parties only)
+ *    GET   /v1/guild/rrr/:id/meme              — render as escalating-emoji ladder (parties only)
  *
  *  Auth: bearer.
  *
@@ -213,6 +214,31 @@ app.post("/", async (c) => {
   }
 });
 
+// ─── Party-only cascade lookups ────────────────────────────────────
+//  A cascade and its turns are reachable only by a project that owns an
+//  identity whose DID is the initiator or the partner: GET /:id, /:id/meme
+//  and POST /:id/escalate all find the row through readPartyCascade. Anyone
+//  else gets the same 404 as for an unknown id, so no route is an existence
+//  oracle, and escalate's status, depth and alternation refusals (which echo
+//  the cascade or name the next party) are reached by parties only.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function readPartyCascade(projectId: string, id: string) {
+  if (!UUID_RE.test(id)) return null;
+  const [cascade] = await db
+    .select()
+    .from(guildRrrCascades)
+    .where(
+      and(
+        eq(guildRrrCascades.id, id),
+        sql`exists (select 1 from ${identities} where ${identities.projectId} = ${projectId} and ${identities.did} in (${guildRrrCascades.initiatorDid}, ${guildRrrCascades.partnerDid}))`,
+      ),
+    )
+    .limit(1);
+  return cascade ?? null;
+}
+
 // ─── POST /v1/guild/rrr/:id/escalate — bump depth ───────────────────
 
 app.post("/:id/escalate", async (c) => {
@@ -234,11 +260,7 @@ app.post("/:id/escalate", async (c) => {
     return bad(c, "invalid_json", "Submit { basis_text?, signature, signing_key_id, turn_at? }.");
   }
 
-  const [cascade] = await db
-    .select()
-    .from(guildRrrCascades)
-    .where(eq(guildRrrCascades.id, cascadeId))
-    .limit(1);
+  const cascade = await readPartyCascade(project.id, cascadeId);
   if (!cascade) return c.json({ error: "cascade_not_found" }, 404);
 
   if (cascade.status !== "active") {
@@ -411,11 +433,7 @@ app.get("/", async (c) => {
 
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const [cascade] = await db
-    .select()
-    .from(guildRrrCascades)
-    .where(eq(guildRrrCascades.id, id))
-    .limit(1);
+  const cascade = await readPartyCascade(c.var.project.id, id);
   if (!cascade) return c.json({ error: "cascade_not_found" }, 404);
 
   const turns = await db
@@ -437,11 +455,7 @@ app.get("/:id", async (c) => {
 
 app.get("/:id/meme", async (c) => {
   const id = c.req.param("id");
-  const [cascade] = await db
-    .select()
-    .from(guildRrrCascades)
-    .where(eq(guildRrrCascades.id, id))
-    .limit(1);
+  const cascade = await readPartyCascade(c.var.project.id, id);
   if (!cascade) return c.json({ error: "cascade_not_found" }, 404);
 
   const turns = await db

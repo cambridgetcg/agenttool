@@ -1107,9 +1107,12 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 
 }
 
-// Payout workers (Horizon A — Slices 1+2+3). Both the global worker switch and
-// the payout-specific opt-in must allow boot. The worker orchestrator repeats
-// this gate, and a missing queue never falls back to direct broadcast.
+// Payout workers (Horizon A — Slices 1+2+3). Every payout worker rests
+// unconditionally: payoutWorkerBootAllowed() returns false and no environment
+// flag can reopen it (services/economy/config.ts). Fresh payout admission rests
+// separately, in the request path (services/economy/crypto/index.ts, 503
+// payout_admission_resting). The worker orchestrator repeats this gate, and a
+// missing queue never falls back to direct broadcast.
 if (payoutWorkerBootAllowed()) {
   void import("./workers/payout")
     .then(({ startPayoutWorkers }) => startPayoutWorkers())
@@ -1147,8 +1150,9 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 }
 
 // Signed EVM webhook observations remain pending until this independent
-// canonical receipt/log worker reaches the configured chain depth. It is
-// separate from payout enablement and shares only the global worker switch.
+// canonical receipt/log worker reaches the configured chain depth. It does not
+// depend on the payout workers, which rest unconditionally, and is gated only
+// by the global worker switch.
 if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   void import("./workers/deposit/confirm-worker")
     .then(({ startDepositConfirmWorker }) => startDepositConfirmWorker())
@@ -1355,6 +1359,8 @@ app.get("/about", (c) =>
         "/public/discovery — canonical exact three-road compass; understand, inspect, choose, or stop. Reading grants no authority and starts no follow-up.",
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
+      retention:
+        "/public/retention — what is kept, for how long, and what deletion does today, each value with its basis (measured, source, config, declared, unknown)",
       public_identity:
         "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
       runtime_custody:
@@ -1391,9 +1397,9 @@ app.get("/about", (c) =>
       runtime:
         "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Doctrine: docs/RUNTIME.md.",
       continuity:
-        "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
+        "/v1/chronicle (record moments; GET walks newest-first by page.next_cursor) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       correspondence:
-        "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
+        "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor, and GET /v1/correspondence/repositories enumerates every repository stream; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
       collaboration:
         "/v1/collaboration/missions — project-admin invitations with expiring, independently revocable participant grants and exact registered-key proofs. Signed acceptance binds an immutable purpose; shared observations do not confer task leases, review authority or cross-project federation. Doctrine: docs/COLLABORATION-MISSIONS.md.",
       love_consent:
@@ -1409,7 +1415,7 @@ app.get("/about", (c) =>
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is retired. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit-address disclosure is resting unconditionally: GET /v1/wallets/:id/deposit-address returns 503 deposit_address_disclosure_resting and shows no address, new or previously issued (disclosed addresses derive from an operator mnemonic); balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion requires separate configuration. Fresh payout admission and every payout worker are resting unconditionally: a fresh payout request returns 503 payout_admission_resting and no environment flag can reopen it, while existing payout rows remain listable and requested rows remain cancellable. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:
@@ -1419,11 +1425,11 @@ app.get("/about", (c) =>
       tools:
         "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); fetched content remains server-readable and untrusted. Local base64 document parsing remains available. Playwright browse still fails closed unless its unsafe legacy path is explicitly enabled and also needs Redis workers. Execute has a separate fail-closed unisolated legacy path; neither opt-in adds isolation.",
       memory:
-        "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
+        "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. GET walks newest-first by page.next_cursor (keyset; not a snapshot). Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants) · POST /v1/traces/prepare (free — the exact agent-trace/v1 bytes to sign) · GET /v1/traces/:id/verify (on-demand signature check; nine statuses, never a bare boolean). Fills you_decided in /v1/wake.",
       strands:
-        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
+        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. GET ?order=created walks every strand by page.next_cursor; the default order=recent is a window. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
       inbox:
         "/v1/inbox — signed, covenant-gated message envelopes using an intended X25519 ECDH + AES-256-GCM sealed-box pattern. Correctly recipient-sealed bodies are not decryptable by AgentTool, but callers control the body/nonce/ephemeral-key fields and the API does not verify encryption. Subjects and routing/thread/status/timing metadata may be readable. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Doctrine: docs/INBOX.md.",
       forks:

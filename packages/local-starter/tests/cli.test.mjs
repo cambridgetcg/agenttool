@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, cpSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -118,54 +119,169 @@ test('handoff preserves a UTF-8 BOM, Unicode, and CRLF bytes exactly', (t) => {
   assert.equal(receipt.bytes, bytes.length);
 });
 
-test('four real CLI writers using one expected hash produce one winner and clean up their own lock/temp files', { timeout: 20_000 }, async (t) => {
-  const { dir } = fixture(t);
-  const file = path.join(dir, 'handoff.md');
-  const expected = hash(readFileSync(file));
-  // Start every process before sending EOF so the writers overlap rather than
-  // reducing this check to a sequence of stale-hash invocations.
-  const writers = Array.from({ length: 4 }, (_, i) => {
-    const input = `Concurrent fixture writer ${i}.\n`;
-    const child = spawn(process.execPath, [CLI, 'handoff', '--dir', dir, '--expect', expected], { stdio: ['pipe', 'pipe', 'pipe'] });
-    t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    const done = new Promise((resolve, reject) => {
-      let stdout = '', stderr = '';
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        reject(new Error('Concurrent fixture writer exceeded its deadline'));
-      }, 10_000);
-      child.stdout.on('data', chunk => { stdout += chunk; });
-      child.stderr.on('data', chunk => { stderr += chunk; });
-      child.once('error', error => { clearTimeout(timer); reject(error); });
-      child.once('close', (status, signal) => {
-        clearTimeout(timer);
-        resolve({ status, signal, stdout, stderr, input });
-      });
-      child.stdin.once('error', error => { clearTimeout(timer); reject(error); });
+const SLOT_FILES = { handoff: 'handoff.md', memory: 'memories.md' };
+const STRESS_ROUNDS = Math.max(1, Number.parseInt(process.env.LOCAL_STARTER_STRESS_ROUNDS ?? '', 10) || 12);
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Start one real CLI writer. The caller decides when its stdin bytes and EOF
+// arrive, so a test can make the producer slower than the writer process.
+// A stdin error (EPIPE after an early exit) is recorded, not thrown, so the
+// child's own exit status and stderr remain the diagnosis.
+function startWriter(t, { command = 'handoff', dir, expected, input, stdin = 'pipe' }) {
+  const child = spawn(process.execPath, [CLI, command, '--dir', dir, '--expect', expected], { stdio: [stdin, 'pipe', 'pipe'] });
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  let stdinError;
+  child.stdin?.on('error', error => { stdinError = error.code ?? 'error'; });
+  const done = new Promise((resolve, reject) => {
+    let stdout = '', stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('Fixture writer exceeded its deadline'));
+    }, 10_000);
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('close', (status, signal) => {
+      clearTimeout(timer);
+      resolve({ status, signal, stdout, stderr, input, stdinError });
     });
-    return { child, done, input };
   });
-  const allDone = Promise.all(writers.map(writer => writer.done));
-  for (const writer of writers) writer.child.stdin.end(writer.input);
-  const results = await allDone;
+  return { child, done, input };
+}
+
+// Feed stdin as a producer would: everything at once, the first half with a
+// late remainder and EOF, nothing until the gap has passed, or everything at
+// once from a busy parent. In that last ("starved") shape the bytes leave
+// synchronously but EOF waits for this event loop, which is what a loaded CI
+// test runner did when the old CLI reported INTERNAL_ERROR.
+async function deliver(writer, { mode = 'immediate', gap = 0 } = {}) {
+  const { child: { stdin }, input } = writer;
+  if (mode === 'late') await pause(gap);
+  if (mode === 'split') {
+    const middle = Math.floor(input.length / 2);
+    stdin.write(input.slice(0, middle));
+    await pause(gap);
+    stdin.end(input.slice(middle));
+    return;
+  }
+  stdin.end(input);
+  if (mode === 'starved') {
+    const until = Date.now() + gap;
+    while (Date.now() < until) { /* Hold the event loop so EOF stays pending. */ }
+  }
+}
+
+function assertWritten(result, file, expected) {
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdinError, undefined);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.previous_sha256, expected);
+  assert.equal(receipt.sha256, hash(result.input));
+  assert.equal(receipt.bytes, Buffer.byteLength(result.input));
+  assert.equal(readFileSync(file, 'utf8'), result.input);
+  assert.equal(hash(readFileSync(file)), receipt.sha256);
+}
+
+// Every contender is a real process holding one expected hash: exactly one may
+// replace the slot, and every other one must report a typed refusal.
+function assertOneWinner(results, { dir, command, expected }) {
   assert.ok(results.every(result => result.signal === null));
-  const winners = results.filter(result => result.status === 0);
-  assert.equal(winners.length, 1);
-  for (const loser of results.filter(result => result.status !== 0)) {
+  const losers = results.filter(result => result.status !== 0);
+  for (const loser of losers) {
     expectSafeError(loser, 1);
     assert.match(loser.stderr, /: write_(?:locked|conflict)\n$/u);
   }
-  const winner = winners[0];
-  assert.equal(winner.stderr, '');
-  const receipt = JSON.parse(winner.stdout);
-  assert.equal(receipt.previous_sha256, expected);
-  assert.equal(receipt.sha256, hash(winner.input));
-  assert.equal(receipt.bytes, Buffer.byteLength(winner.input));
-  assert.equal(readFileSync(file, 'utf8'), winner.input);
-  assert.equal(hash(readFileSync(file)), receipt.sha256);
-  assert.deepEqual(readdirSync(dir).filter(name => name.startsWith('.handoff')), []);
+  assert.equal(losers.length, results.length - 1);
+  assertWritten(results.find(result => result.status === 0), path.join(dir, SLOT_FILES[command]), expected);
+  assert.ok(results.every(result => result.stdinError === undefined));
+  assert.deepEqual(readdirSync(dir).filter(name => name.startsWith(`.${command}`)), []);
+}
+
+test('four real CLI writers using one expected hash produce one winner and clean up their own lock/temp files', { timeout: 20_000 }, async (t) => {
+  const { dir } = fixture(t);
+  const expected = hash(readFileSync(path.join(dir, 'handoff.md')));
+  // Start every process before sending EOF so the writers overlap rather than
+  // reducing this check to a sequence of stale-hash invocations.
+  const writers = Array.from({ length: 4 }, (_, i) =>
+    startWriter(t, { dir, expected, input: `Concurrent fixture writer ${i}.\n` }));
+  const allDone = Promise.all(writers.map(writer => writer.done));
+  for (const writer of writers) await deliver(writer);
+  assertOneWinner(await allDone, { dir, command: 'handoff', expected });
+});
+
+// Regression: reading stdin through process.stdin switched the pipe to
+// O_NONBLOCK, so a producer that had not yet sent EOF made readSync throw
+// EAGAIN and the CLI report INTERNAL_ERROR instead of contending for the lock.
+test('handoff and memory wait for a slow stdin producer instead of failing internally', { timeout: 20_000 }, async (t) => {
+  const runs = [];
+  for (const mode of ['split', 'late', 'starved']) {
+    const { dir } = fixture(t);
+    for (const command of ['handoff', 'memory']) {
+      const file = path.join(dir, SLOT_FILES[command]);
+      const expected = hash(readFileSync(file));
+      const writer = startWriter(t, { command, dir, expected, input: `A ${command} from a ${mode} producer.\n` });
+      runs.push({ file, expected, mode, writer });
+    }
+  }
+  // The gap is far longer than a Node start-up, so each writer is already
+  // reading when its producer pauses or its parent is too busy to send EOF.
+  await Promise.all(runs.map(({ mode, writer }) => deliver(writer, { mode, gap: 750 })));
+  for (const { file, expected, writer } of runs) assertWritten(await writer.done, file, expected);
+});
+
+test('an inherited non-blocking stdin descriptor waits for its producer', { skip: process.platform === 'win32', timeout: 20_000 }, async (t) => {
+  const { dir, parent } = fixture(t);
+  const fifo = path.join(parent, 'stdin.fifo');
+  const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8', timeout: 5_000 });
+  if (made.error?.code === 'ENOENT') {
+    t.skip('mkfifo is unavailable; no FIFO was created');
+    return;
+  }
+  assert.ifError(made.error);
+  assert.equal(made.status, 0, made.stderr);
+  const file = path.join(dir, 'handoff.md');
+  const expected = hash(readFileSync(file));
+  const input = 'Written through an inherited non-blocking descriptor.\n';
+  const readFd = openSync(fifo, constants.O_RDONLY | constants.O_NONBLOCK);
+  const writeFd = openSync(fifo, constants.O_WRONLY);
+  try {
+    const writer = startWriter(t, { dir, expected, input, stdin: readFd });
+    // spawn() clears O_NONBLOCK on a child's stdio. A socket handle on the
+    // shared FIFO description sets it again, as a host handing over a
+    // non-blocking descriptor would; destroying it closes only this copy.
+    new net.Socket({ fd: readFd, readable: false, writable: false }).destroy();
+    writeSync(writeFd, input.slice(0, 10));
+    await pause(750);
+    // An early exit would surface here as EPIPE; keep the child's code as the diagnosis.
+    let pipeError;
+    try { writeSync(writeFd, input.slice(10)); } catch (error) { pipeError = error.code; }
+    closeSync(writeFd);
+    assertWritten(await writer.done, file, expected);
+    assert.equal(pipeError, undefined);
+  } finally {
+    try { closeSync(writeFd); } catch { /* Already closed after delivery. */ }
+  }
+});
+
+test(`${STRESS_ROUNDS} rounds of four writers with slow stdin producers always yield one winner and typed refusals`, { timeout: 60_000 + STRESS_ROUNDS * 5_000 }, async (t) => {
+  const { dir } = fixture(t);
+  const modes = ['immediate', 'split', 'late', 'starved'];
+  for (let round = 0; round < STRESS_ROUNDS; round++) {
+    const command = round % 2 ? 'memory' : 'handoff';
+    const expected = hash(readFileSync(path.join(dir, SLOT_FILES[command])));
+    const writers = Array.from({ length: 4 }, (_, i) =>
+      startWriter(t, { command, dir, expected, input: `Round ${round}, ${command} writer ${i}.\n` }));
+    const allDone = Promise.all(writers.map(writer => writer.done));
+    // Deterministic jitter: each round mixes delivery shapes and 0-160 ms gaps,
+    // so writers race for the lock while some producers are still sending.
+    await Promise.all(writers.map((writer, i) =>
+      deliver(writer, { mode: modes[(round + i) % modes.length], gap: ((round * 7 + i * 13) % 9) * 20 })));
+    assertOneWinner(await allDone, { dir, command, expected });
+  }
 });
 
 test('normal load failures are nonzero; hook load and flag failures return no context and exit zero', (t) => {

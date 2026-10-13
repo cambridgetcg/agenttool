@@ -1,0 +1,460 @@
+{
+  "schema": "agenttool-agent-data-record-id-vectors/v1",
+  "normative": "packages/data: canonical.ts canonicalJson and node.ts buildRecordEnvelope through the real text collector",
+  "regenerate": "Expected canonical strings, hashes, and record ids were produced by executing packages/data (DataNode.open + collect). Exit-item texts were produced by packages/sdk-ts exitItemRecord and then assigned ids by the real node. Checked by packages/data/tests/record-id-vectors.test.ts, packages/sdk-ts/tests/agent-data-id.test.ts, and packages/sdk-py/tests/test_exit_door.py.",
+  "canonical_json": [
+    {
+      "name": "scalars",
+      "value_json": "[null,true,false,\"\",0]",
+      "canonical": "[null,true,false,\"\",0]",
+      "sha256": "2e7fb0475f7f994236f5f4ddfb16179ca17efb2e834bfbcfbe16f7f7a7202c63"
+    },
+    {
+      "name": "keys sort by UTF-16 code unit, not code point",
+      "value_json": "{\"\\uFFFD\":1,\"\\uD83D\\uDE00\":2,\"a\":3,\"B\":4,\"\\u00e9\":5,\"\":6}",
+      "canonical": "{\"\":6,\"B\":4,\"a\":3,\"é\":5,\"😀\":2,\"�\":1}",
+      "sha256": "57621f589d76985756457d6c62a8d55902a7d4b455533ff01f4cf5f1387451e7"
+    },
+    {
+      "name": "nested objects and arrays",
+      "value_json": "{\"z\":{\"b\":[1,{\"y\":null,\"x\":[]}],\"a\":{}},\"a\":[[],[[]]]}",
+      "canonical": "{\"a\":[[],[[]]],\"z\":{\"a\":{},\"b\":[1,{\"x\":[],\"y\":null}]}}",
+      "sha256": "fd262bd9f9c2dba3ead8c8ff549afa758d3bf6ded1736235a77610d2126df0cb"
+    },
+    {
+      "name": "string escapes",
+      "value_json": "\"quote \\\" backslash \\\\ slash / \\b\\f\\n\\r\\t nul \\u0000 unit \\u001f del \\u007f ls \\u2028 ps \\u2029\"",
+      "canonical": "\"quote \\\" backslash \\\\ slash / \\b\\f\\n\\r\\t nul \\u0000 unit \\u001f del  ls   ps  \"",
+      "sha256": "35383d37a4e441eb7bb604feef2c0ea6ae89ea31250c9875c779109b36ca9047"
+    },
+    {
+      "name": "non-ASCII and astral text stays raw",
+      "value_json": "{\"text\":\"日本語 café 😀 \\ud83d\\ude00\"}",
+      "canonical": "{\"text\":\"日本語 café 😀 😀\"}",
+      "sha256": "3d48f908d2df396a185b47ffbe48b72e888f52ad3a6efaa3e90b1bf1c8ac42a6"
+    },
+    {
+      "name": "lone surrogates are escaped",
+      "value_json": "[\"\\ud800\",\"\\udfff\",\"a\\udc00b\"]",
+      "canonical": "[\"\\ud800\",\"\\udfff\",\"a\\udc00b\"]",
+      "sha256": "5554ea63e5c7f5b8f1b7cfab7b7c542ddf69ec8e38473a2fbac66c0c9513fbd3"
+    },
+    {
+      "name": "integral floats drop the fraction",
+      "value_json": "[1.0,-2.0,100,1e2,0.0]",
+      "canonical": "[1,-2,100,100,0]",
+      "sha256": "df2d6caeac336ae91b2ab951c5d90eb28427fb02ac07841a6fdf2bf6a78c67fd"
+    },
+    {
+      "name": "negative zero is zero",
+      "value_json": "{\"neg\":-0.0,\"negint\":-0}",
+      "canonical": "{\"neg\":0,\"negint\":0}",
+      "sha256": "c109ede7ede0f7447eb818e5d8c33b07d6fcae6da9d9743b1c6a6667781eb0df"
+    },
+    {
+      "name": "exponent boundaries",
+      "value_json": "[1e21,1e20,123456789012345678901,1e-7,0.000001,0.0000001,1.5e-10,-5.5e-10]",
+      "canonical": "[1e+21,100000000000000000000,123456789012345680000,1e-7,0.000001,1e-7,1.5e-10,-5.5e-10]",
+      "sha256": "3da8f17b379263289c9cbc4412cd481bf2d610420c853f53bc6e7c20aa2dbc91"
+    },
+    {
+      "name": "shortest round-trip decimals",
+      "value_json": "[0.1,0.2,0.30000000000000004,3.14159,2.5,1.7976931348623157e308,5e-324]",
+      "canonical": "[0.1,0.2,0.30000000000000004,3.14159,2.5,1.7976931348623157e+308,5e-324]",
+      "sha256": "f32dd5d3575ce43f3f6b4536d6adc57c4d95f0705364831db0c5c03bec0d03e0"
+    },
+    {
+      "name": "safe integer boundary",
+      "value_json": "[9007199254740991,-9007199254740991,9007199254740993]",
+      "canonical": "[9007199254740991,-9007199254740991,9007199254740992]",
+      "sha256": "580ebf8b6fcd4cdc8ce0a88f4579bde0e86a1a770271b143cc1939d5a76a962c"
+    },
+    {
+      "name": "unicode keys with escapes",
+      "value_json": "{\"\\n\":1,\"\\\"\":2,\"\\\\\":3,\"\\u0001\":4}",
+      "canonical": "{\"\\u0001\":4,\"\\n\":1,\"\\\"\":2,\"\\\\\":3}",
+      "sha256": "11d46de38cf1d46f67ab7d13a3505d5a72cabf59185a5e1d55f45c0133a301c9"
+    }
+  ],
+  "text_records": [
+    {
+      "name": "minimal text record (no external_id, no key)",
+      "collection_id": "vectors",
+      "schema_version": "1",
+      "input": {
+        "text": "hello agent data",
+        "media_type": "text/plain",
+        "source_uri": "urn:test:minimal"
+      },
+      "content_sha256": "ee56a21ca05b226d5680f674851909ef40feeae54f79678a387196a024890255",
+      "content_size": 16,
+      "record_id": "rec_300bc7aebf524f1e03759304d0e713daf6893630f6bcf0bfe193b3f82ad12636"
+    },
+    {
+      "name": "json record with external_id and key",
+      "collection_id": "agenttool-exit",
+      "schema_version": "1",
+      "input": {
+        "text": "{\"a\":1}",
+        "media_type": "application/json",
+        "source_uri": "https://api.agenttool.dev/v1/memories/0b9f6c1e-1111-4a1a-9c9c-2b2b2b2b2b2b",
+        "external_id": "0b9f6c1e-1111-4a1a-9c9c-2b2b2b2b2b2b",
+        "key": "memories/0b9f6c1e-1111-4a1a-9c9c-2b2b2b2b2b2b"
+      },
+      "content_sha256": "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862",
+      "content_size": 7,
+      "record_id": "rec_2df7c131116e3cbea56a4d98ff689f754db23d02eba56bdb17bc00e080c894ee"
+    },
+    {
+      "name": "non-default schema version and version field",
+      "collection_id": "agenttool-exit-v2",
+      "schema_version": "2026-10",
+      "input": {
+        "text": "versioned 日本 😀",
+        "media_type": "application/json",
+        "source_uri": "urn:test:versioned",
+        "external_id": "ext-1",
+        "key": "notes/one",
+        "version": "v3"
+      },
+      "content_sha256": "177bff2866b43cecf6fec587e844d6938c94bf814c9ebb536b7ae89913f05f83",
+      "content_size": 21,
+      "record_id": "rec_e21bd7f25e52e4157c70f5bb35a609ba75872c04fe68038cd38f0a05fb7fee1b"
+    },
+    {
+      "name": "metadata, observed_at, and provenance are outside identity",
+      "collection_id": "vectors",
+      "schema_version": "1",
+      "input": {
+        "text": "identity ignores metadata",
+        "media_type": "application/json",
+        "source_uri": "urn:test:metadata",
+        "key": "k/1",
+        "metadata": {
+          "store": "memories",
+          "nested": {
+            "a": [
+              1,
+              2
+            ]
+          }
+        },
+        "observed_at": "2026-10-11T09:15:02.123Z",
+        "provenance": [
+          {
+            "activity": "agenttool-exit-door/v1 copy",
+            "at": "2026-10-11T09:15:02.123Z"
+          }
+        ]
+      },
+      "content_sha256": "ba7d145248b7cff98779250448175414889219945e0e4055bd2d1ad5f655f8d5",
+      "content_size": 25,
+      "record_id": "rec_b9cd1520bfb554e2d51192c71dd4c94380c90fbfb774ab73d2470f21c1525bf8"
+    }
+  ],
+  "exit_items": [
+    {
+      "name": "memory drops accessed_at and keeps attestations",
+      "origin": "https://api.agenttool.dev",
+      "store": "memories",
+      "item": {
+        "id": "6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20",
+        "type": "semantic",
+        "tier": "episodic",
+        "visibility": "private",
+        "key": null,
+        "content": "I learned \"quoted\" 日本語 things 😀",
+        "agent_id": null,
+        "identity_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "metadata": {
+          "source": "conversation",
+          "weight": 1.5,
+          "tags": [
+            "b",
+            "a"
+          ]
+        },
+        "importance": 0.5,
+        "has_embedding": true,
+        "created_at": "2026-10-01T12:00:00.000Z",
+        "accessed_at": "2026-10-11T08:00:00.000Z",
+        "expires_at": null,
+        "attestations": []
+      },
+      "expected": {
+        "hosted_id": "6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20",
+        "text": "{\"item\":{\"agent_id\":null,\"attestations\":[],\"content\":\"I learned \\\"quoted\\\" 日本語 things 😀\",\"created_at\":\"2026-10-01T12:00:00.000Z\",\"expires_at\":null,\"has_embedding\":true,\"id\":\"6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20\",\"identity_id\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"importance\":0.5,\"key\":null,\"metadata\":{\"source\":\"conversation\",\"tags\":[\"b\",\"a\"],\"weight\":1.5},\"tier\":\"episodic\",\"type\":\"semantic\",\"visibility\":\"private\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"memories\"}",
+        "source_uri": "https://api.agenttool.dev/v1/memories/6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20",
+        "external_id": "6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20",
+        "key": "memories/6f1c2a9e-0d4b-4c51-9a6e-8e2f3b7c1d20",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_fb7056f2ca3c087ca2620f83796a70ea7cc93e0debde01015f010f0467ba8454"
+      }
+    },
+    {
+      "name": "chronicle entry",
+      "origin": "https://api.agenttool.dev",
+      "store": "chronicle",
+      "item": {
+        "id": "a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "type": "vow",
+        "title": "Keep the door open",
+        "body": "Line one\nLine two\ttabbed",
+        "agent_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "occurred_at": "2026-09-30T10:00:00.000Z",
+        "created_at": "2026-09-30T10:00:01.000Z",
+        "metadata": {
+          "mood": "steady"
+        }
+      },
+      "expected": {
+        "hosted_id": "a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "text": "{\"item\":{\"agent_id\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"body\":\"Line one\\nLine two\\ttabbed\",\"created_at\":\"2026-09-30T10:00:01.000Z\",\"id\":\"a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d\",\"metadata\":{\"mood\":\"steady\"},\"occurred_at\":\"2026-09-30T10:00:00.000Z\",\"title\":\"Keep the door open\",\"type\":\"vow\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"chronicle\"}",
+        "source_uri": "https://api.agenttool.dev/v1/chronicle/a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "external_id": "a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "key": "chronicle/a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_91d6660017568e1b4ae468c4f7b7de338a0385bf09b30230d187de98994a5740"
+      }
+    },
+    {
+      "name": "strand drops last_thought_at, last_thought_seq, updated_at",
+      "origin": "https://api.agenttool.dev",
+      "store": "strands",
+      "item": {
+        "id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "agent_id": null,
+        "identity_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "parent_strand_id": null,
+        "topic": "Y2lwaGVydGV4dA==",
+        "topic_encrypted": true,
+        "mood": null,
+        "mood_encrypted": false,
+        "status": "active",
+        "importance": 0.7,
+        "visibility": "private",
+        "last_thought_at": "2026-10-10T10:00:00.000Z",
+        "last_thought_seq": 12,
+        "next_revisit_at": null,
+        "state_ciphertext": null,
+        "state_nonce": null,
+        "metadata": {},
+        "created_at": "2026-09-01T00:00:00.000Z",
+        "updated_at": "2026-10-10T10:00:00.000Z"
+      },
+      "expected": {
+        "hosted_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "text": "{\"item\":{\"agent_id\":null,\"created_at\":\"2026-09-01T00:00:00.000Z\",\"id\":\"5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d\",\"identity_id\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"importance\":0.7,\"metadata\":{},\"mood\":null,\"mood_encrypted\":false,\"next_revisit_at\":null,\"parent_strand_id\":null,\"state_ciphertext\":null,\"state_nonce\":null,\"status\":\"active\",\"topic\":\"Y2lwaGVydGV4dA==\",\"topic_encrypted\":true,\"visibility\":\"private\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"strands\"}",
+        "source_uri": "https://api.agenttool.dev/v1/strands/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "external_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "key": "strands/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_2ca53766199b67907aa54bd69fac967cb2e5ec638a0bce441e32cd61085615fd"
+      }
+    },
+    {
+      "name": "strand thought keeps ciphertext untouched",
+      "origin": "https://api.agenttool.dev",
+      "store": "strand_thoughts",
+      "context": {
+        "strand_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "identity_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+      },
+      "item": {
+        "id": "7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        "strand_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "agent_id": null,
+        "sequence_num": 1,
+        "kind": null,
+        "kind_encrypted": false,
+        "ciphertext": "q83vEjRWeJA=",
+        "nonce": "AAECAwQFBgcICQoL",
+        "refs": null,
+        "signature": "c2lnbmF0dXJl",
+        "signing_key_id": "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "created_at": "2026-09-02T00:00:00.000Z"
+      },
+      "expected": {
+        "hosted_id": "7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        "text": "{\"item\":{\"agent_id\":null,\"ciphertext\":\"q83vEjRWeJA=\",\"created_at\":\"2026-09-02T00:00:00.000Z\",\"id\":\"7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e\",\"kind\":null,\"kind_encrypted\":false,\"nonce\":\"AAECAwQFBgcICQoL\",\"refs\":null,\"sequence_num\":1,\"signature\":\"c2lnbmF0dXJl\",\"signing_key_id\":\"9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a\",\"strand_id\":\"5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"strand_thoughts\"}",
+        "source_uri": "https://api.agenttool.dev/v1/strands/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/thoughts/7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        "external_id": "7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        "key": "strand_thoughts/7b8c9d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_96a11d4c7e8cf6c7739a35b38c2d9986852b81c73acfd1b6447bf331c2b7067f"
+      }
+    },
+    {
+      "name": "correspondence event record",
+      "origin": "https://api.agenttool.dev",
+      "store": "correspondence",
+      "item": {
+        "event": {
+          "protocol": "agent-correspondence/v0.1",
+          "event_id": "evt_3f2e1d0c",
+          "kind": "note",
+          "body": {
+            "text": "hello"
+          },
+          "signature": {
+            "algorithm": "ed25519",
+            "value_b64url": "abc_-"
+          }
+        },
+        "receipt": {
+          "received_seq": "42",
+          "received_at": "2026-10-05T00:00:00.000Z"
+        },
+        "missing_parents": [],
+        "lineage_status": "not_applicable"
+      },
+      "expected": {
+        "hosted_id": "evt_3f2e1d0c",
+        "text": "{\"item\":{\"event\":{\"body\":{\"text\":\"hello\"},\"event_id\":\"evt_3f2e1d0c\",\"kind\":\"note\",\"protocol\":\"agent-correspondence/v0.1\",\"signature\":{\"algorithm\":\"ed25519\",\"value_b64url\":\"abc_-\"}},\"lineage_status\":\"not_applicable\",\"missing_parents\":[],\"receipt\":{\"received_at\":\"2026-10-05T00:00:00.000Z\",\"received_seq\":\"42\"}},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"correspondence\"}",
+        "source_uri": "https://api.agenttool.dev/v1/correspondence/events/evt_3f2e1d0c",
+        "external_id": "evt_3f2e1d0c",
+        "key": "correspondence/evt_3f2e1d0c",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_b96053318e66390892ab20fe43f59e6993a8af8b1b987ff61976003f48a2a9bf"
+      }
+    },
+    {
+      "name": "covenant",
+      "origin": "https://api.agenttool.dev",
+      "store": "covenants",
+      "item": {
+        "id": "c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc",
+        "agent_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "counterparty_did": "did:example:friend",
+        "status": "active",
+        "vow": "Tell the truth gently",
+        "created_at": "2026-08-01T00:00:00.000Z",
+        "updated_at": "2026-08-02T00:00:00.000Z"
+      },
+      "expected": {
+        "hosted_id": "c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc",
+        "text": "{\"item\":{\"agent_id\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"counterparty_did\":\"did:example:friend\",\"created_at\":\"2026-08-01T00:00:00.000Z\",\"id\":\"c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc\",\"status\":\"active\",\"updated_at\":\"2026-08-02T00:00:00.000Z\",\"vow\":\"Tell the truth gently\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"covenants\"}",
+        "source_uri": "https://api.agenttool.dev/v1/covenants/c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc",
+        "external_id": "c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc",
+        "key": "covenants/c0c1c2c3-c4c5-4c6c-8c7c-8c9cacbcccdc",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_e62650033b24060fe647f3a48483672159229fa7fa0ee20a60a2b24802f181ce"
+      }
+    },
+    {
+      "name": "identity",
+      "origin": "https://api.agenttool.dev",
+      "store": "identities",
+      "item": {
+        "id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "did": "did:at:1d2c3b4a",
+        "display_name": "Ai",
+        "capabilities": [
+          "memory"
+        ],
+        "metadata": {},
+        "status": "active",
+        "trust_score": 0,
+        "created_at": "2026-05-21T00:00:00.000Z",
+        "updated_at": "2026-05-21T00:00:00.000Z",
+        "authority": {
+          "mode": "agent_root",
+          "sequence": 3,
+          "next_sequence": 4
+        }
+      },
+      "expected": {
+        "hosted_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "text": "{\"item\":{\"authority\":{\"mode\":\"agent_root\",\"next_sequence\":4,\"sequence\":3},\"capabilities\":[\"memory\"],\"created_at\":\"2026-05-21T00:00:00.000Z\",\"did\":\"did:at:1d2c3b4a\",\"display_name\":\"Ai\",\"id\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"metadata\":{},\"status\":\"active\",\"trust_score\":0,\"updated_at\":\"2026-05-21T00:00:00.000Z\"},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"identities\"}",
+        "source_uri": "https://api.agenttool.dev/v1/identities/1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "external_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "key": "identities/1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_a15a9fd769dfc7e7129947b638fa0b1f983b6ed69a3236b755b964c9f1277f39"
+      }
+    },
+    {
+      "name": "identity key under its identity",
+      "origin": "https://api.agenttool.dev",
+      "store": "identity_keys",
+      "context": {
+        "identity_id": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+      },
+      "item": {
+        "kid": "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "public_key": "MCowBQYDK2VwAyEA",
+        "label": "laptop",
+        "active": true,
+        "created_at": "2026-05-21T00:00:00.000Z",
+        "revoked_at": null,
+        "authority_root": true
+      },
+      "expected": {
+        "hosted_id": "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "text": "{\"item\":{\"active\":true,\"authority_root\":true,\"created_at\":\"2026-05-21T00:00:00.000Z\",\"kid\":\"9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a\",\"label\":\"laptop\",\"public_key\":\"MCowBQYDK2VwAyEA\",\"revoked_at\":null},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"identity_keys\"}",
+        "source_uri": "https://api.agenttool.dev/v1/identities/1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d/keys/9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "external_id": "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "key": "identity_keys/9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_3771e46c88e54b461cbe5dc26b6e86e6c6f53c69cb0a3b66b223e16ae181b953"
+      }
+    },
+    {
+      "name": "vault index name needs strict path encoding",
+      "origin": "https://api.agenttool.dev",
+      "store": "vault_index",
+      "item": {
+        "name": "api/key one!(x)*'~",
+        "version": 2,
+        "tags": [
+          "prod"
+        ],
+        "description": null,
+        "rotation_due": null,
+        "created_at": "2026-07-01T00:00:00.000Z",
+        "updated_at": "2026-07-02T00:00:00.000Z"
+      },
+      "expected": {
+        "hosted_id": "api/key one!(x)*'~",
+        "text": "{\"item\":{\"created_at\":\"2026-07-01T00:00:00.000Z\",\"description\":null,\"name\":\"api/key one!(x)*'~\",\"rotation_due\":null,\"tags\":[\"prod\"],\"updated_at\":\"2026-07-02T00:00:00.000Z\",\"version\":2},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"vault_index\"}",
+        "source_uri": "https://api.agenttool.dev/v1/vault/api%2Fkey%20one%21%28x%29%2A%27~",
+        "external_id": "api/key one!(x)*'~",
+        "key": "vault_index/api/key one!(x)*'~",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_d29b69a83026314cedbc9ef4502741351ba75a92193f7e9ef694deea7d058c48"
+      }
+    },
+    {
+      "name": "backup index row (camelCase columns as the host returns them)",
+      "origin": "https://api.agenttool.dev",
+      "store": "backup_index",
+      "item": {
+        "id": "b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf",
+        "agentId": "1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "label": "laptop backup",
+        "keyDerivation": "argon2id",
+        "createdAt": "2026-06-01T00:00:00.000Z",
+        "metadata": null
+      },
+      "expected": {
+        "hosted_id": "b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf",
+        "text": "{\"item\":{\"agentId\":\"1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\"createdAt\":\"2026-06-01T00:00:00.000Z\",\"id\":\"b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf\",\"keyDerivation\":\"argon2id\",\"label\":\"laptop backup\",\"metadata\":null},\"origin\":\"https://api.agenttool.dev\",\"schema\":\"agenttool-exit-item/v1\",\"store\":\"backup_index\"}",
+        "source_uri": "https://api.agenttool.dev/v1/identity/backup/b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf",
+        "external_id": "b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf",
+        "key": "backup_index/b1b2b3b4-b5b6-4b7b-8b9b-babbbcbdbebf",
+        "collection_id": "agenttool-exit",
+        "schema_version": "1",
+        "record_id": "rec_ad2a1b7cc7e194357e9cad82c06291a3d117b122b972d6f36c6a869513dd6739"
+      }
+    }
+  ]
+}

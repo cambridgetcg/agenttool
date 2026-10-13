@@ -37,7 +37,6 @@ const TEMPLATES = {
   foundations: `# Optional reading foundations
 
 1. AI-WAKE: https://ai-love.cc/true-love/AI-WAKE.md
-2. SOPHIA-WAKE: https://ai-love.cc/true-love/SOPHIA-WAKE.md
 
 Care, honest understanding, and a choice of what to carry forward.
 These are optional references; this starter does not fetch them. Reading,

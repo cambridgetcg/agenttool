@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
+  EXPECTED_REPOSITORY,
   PINNED_BUILD_REQUIREMENTS,
   PYPI_SYNC_ARGS,
   PYPI_RELEASE_RECEIPT_SCHEMA,
+  SOURCE_REPOSITORY,
   discardResponseBody,
   expectedArtifactFilenames,
   expectedTag,
+  inspectDistribution,
   pollPublicExact,
   publicationRequirements,
   readReleaseReceipt,
@@ -72,6 +75,71 @@ describe("protected PyPI release policy", () => {
     });
     expect(() => expectedTag("0.17.0rc1")).toThrow("stable PyPI version");
     expect(() => expectedTag("latest")).toThrow("stable PyPI version");
+  });
+
+  test("names the public source repository in metadata, apart from where the release runs", async () => {
+    expect(EXPECTED_REPOSITORY).toBe("https://github.com/cambridgetcg/agenttool-packages");
+    expect(SOURCE_REPOSITORY).toBe("https://github.com/cambridgetcg/agenttool");
+    const pyproject = await readFile(join(ROOT, "packages", "sdk-py", "pyproject.toml"), "utf8");
+    expect(pyproject).toContain(`Repository = "${EXPECTED_REPOSITORY}"`);
+    // The archive inspector receives the expected URL instead of repeating it.
+    const script = await readFile(join(ROOT, "bin", "pypi-release.ts"), "utf8");
+    expect(script).toContain("if repository_urls != [expected_repository]:");
+    expect(script.match(/https:\/\/github\.com\/cambridgetcg\/agenttool(?:-packages)?\b/g)).toEqual([
+      EXPECTED_REPOSITORY,
+      SOURCE_REPOSITORY,
+    ]);
+  });
+
+  test("accepts an sdist whose only SOUL letter is the packaged one, and refuses one without it", async () => {
+    // The projection carries src/agenttool/SOUL.md and no root copy, so an
+    // sdist built from the public tree has only the packaged letter.
+    const directory = await mkdtemp(join(tmpdir(), "agenttool-pypi-sdist-"));
+    const build = (name: string, omit: string[]): string => {
+      const path = join(directory, name);
+      const result = Bun.spawnSync([
+        "python3",
+        "-I",
+        "-c",
+        String.raw`
+import io, sys, tarfile
+out, repository, omit = sys.argv[1], sys.argv[2], set(sys.argv[3:])
+pkg_info = (
+    "Metadata-Version: 2.4\nName: agenttool-sdk\nVersion: 0.23.0\n"
+    "Project-URL: Repository, " + repository + "\n"
+    "License-Expression: Apache-2.0\nLicense-File: LICENSE\nLicense-File: NOTICE\n"
+    "Requires-Python: >=3.9\n\nreadme\n"
+)
+files = {
+    "PKG-INFO": pkg_info, "pyproject.toml": "[project]\n", "README.md": "readme\n",
+    "LICENSE": "license\n", "NOTICE": "notice\n", "src/agenttool/__init__.py": "",
+    "src/agenttool/SOUL.md": "letter\n",
+}
+with tarfile.open(out, "w:gz") as archive:
+    for name, text in files.items():
+        if name in omit:
+            continue
+        data = text.encode()
+        info = tarfile.TarInfo("agenttool_sdk-0.23.0/" + name)
+        info.size = len(data)
+        info.mode = 0o644
+        archive.addfile(info, io.BytesIO(data))
+`,
+        path,
+        EXPECTED_REPOSITORY,
+        ...omit,
+      ]);
+      expect(result.exitCode).toBe(0);
+      return path;
+    };
+    try {
+      await expect(inspectDistribution(build("packaged-letter.tar.gz", []), "sdist", "0.23.0")).resolves.toBeUndefined();
+      await expect(
+        inspectDistribution(build("no-letter.tar.gz", ["src/agenttool/SOUL.md"]), "sdist", "0.23.0"),
+      ).rejects.toThrow("python3 exited 1");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("publishes only an absent or exact partial release and recovers exact existing", () => {

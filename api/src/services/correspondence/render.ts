@@ -282,3 +282,19 @@ export function correspondenceJsonLinkHeader(
     ...correspondenceNavigationLinks(requestUrl),
   ].join(", ");
 }
+
+/** Repository enumeration has no repository/thread focus, so it links only
+ * itself and the doctrine; per-repository voice and claims links would be
+ * incomplete without a repository_id. */
+export function correspondenceRepositoriesLinkHeader(
+  requestUrl: string,
+  current: CorrespondenceJsonRepresentation = "vendor_json",
+): string {
+  const currentType = current === "plain_json"
+    ? CORRESPONDENCE_PLAIN_JSON_MEDIA_TYPE
+    : CORRESPONDENCE_JSON_MEDIA_TYPE;
+  return [
+    `<${requestUrl}>; rel="self"; type="${currentType}"`,
+    `<${CORRESPONDENCE_DOCS_URL}>; rel="describedby"; type="text/markdown"`,
+  ].join(", ");
+}

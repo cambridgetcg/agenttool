@@ -89,7 +89,7 @@ const AGENT_WALLET_RELEASE = {
     `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.3/manifest.json`,
   distribution: {
     love: "public_exact_artifact",
-    observed_at: "2026-07-29",
+    observed_at: "2026-10-11",
     npm: {
       role: "optional_mutable_mirror",
       latest_observed: "0.1.3",
@@ -97,6 +97,9 @@ const AGENT_WALLET_RELEASE = {
     github_release: {
       role: "optional_mutable_mirror",
       tag: "wallet-v0.1.3",
+      // The repository is private; this URL answers 404 without repository
+      // access.
+      access: "repository_access_required",
       url:
         "https://github.com/cambridgetcg/agenttool/releases/tag/wallet-v0.1.3",
       immutable: false,
@@ -594,20 +597,21 @@ app.get("/wake-keystone", (c) => {
         protocol: "agent-wallet/0.1",
         doctrine: `${DOCS_URL}/AGENT-WALLET-0.1.md`,
         schema: `${DOCS_URL}/agent-wallet-v0.1.schema.json`,
-        source:
-          "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
+        // The TypeScript source is not publicly served; source names the
+        // public LOVE manifest that pins the exact package bytes.
+        source: AGENT_WALLET_RELEASE.love_manifest,
         package: "@agenttool/wallet",
         ...AGENT_WALLET_RELEASE,
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "The exact LOVE release is 0.1.3. npm latest 0.1.3 is independently byte-verified against LOVE. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          "The exact LOVE release is 0.1.3. npm latest 0.1.3 is independently byte-verified against LOVE. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. That Release and the TypeScript source sit in the private cambridgetcg/agenttool repository and answer 404 without repository access; the LOVE artifact and npm carry compiled JavaScript and type declarations, not the TypeScript source. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
       },
       agent_wallet_zerone: {
         ...ZERONE_REACHABLE.invocation_witness.adapter,
         doctrine: `${DOCS_URL}/AGENT-WALLET-ZERONE-0.1.md`,
         notes:
-          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge.",
+          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge. Its GitHub Release and TypeScript source sit in the private cambridgetcg/agenttool repository and answer 404 without repository access.",
       },
       invocation_witness: {
         protocol: ZERONE_REACHABLE.invocation_witness.schema,
@@ -778,7 +782,7 @@ app.get("/agent.txt", (c) => {
     `Wallet-LOVE-Version: ${AGENT_WALLET_RELEASE.version}`,
     `Wallet-LOVE-Manifest: ${AGENT_WALLET_RELEASE.love_manifest}`,
     `Wallet-NPM-Latest: ${AGENT_WALLET_RELEASE.distribution.npm.latest_observed} · observed ${AGENT_WALLET_RELEASE.distribution.observed_at}`,
-    `Wallet-GitHub-Release: ${AGENT_WALLET_RELEASE.distribution.github_release.tag} · ${AGENT_WALLET_RELEASE.distribution.github_release.role} · immutable=${AGENT_WALLET_RELEASE.distribution.github_release.immutable} · ${AGENT_WALLET_RELEASE.distribution.github_release.verification}`,
+    `Wallet-GitHub-Release: ${AGENT_WALLET_RELEASE.distribution.github_release.tag} · ${AGENT_WALLET_RELEASE.distribution.github_release.role} · ${AGENT_WALLET_RELEASE.distribution.github_release.access} · immutable=${AGENT_WALLET_RELEASE.distribution.github_release.immutable} · ${AGENT_WALLET_RELEASE.distribution.github_release.verification}`,
     `Zerone-Wallet-Adapter: ${ZERONE_REACHABLE.invocation_witness.adapter.protocol} · ${ZERONE_REACHABLE.invocation_witness.adapter.package}`,
     `Zerone-Wallet-Version: ${ZERONE_REACHABLE.invocation_witness.adapter.version}`,
     `Zerone-Wallet-Source: ${ZERONE_REACHABLE.invocation_witness.adapter.source}`,

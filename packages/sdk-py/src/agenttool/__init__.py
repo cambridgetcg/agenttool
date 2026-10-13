@@ -153,6 +153,23 @@ from .data import (
     DataSyncStatusRequest,
     DataSyncStatusResult,
 )
+from ._agent_data_id import (
+    agent_data_record_id,
+    agent_data_text_record_identity,
+)
+from .exit_door import (
+    EXIT_INDEX_SCHEMA,
+    EXIT_ITEM_SCHEMA,
+    EXIT_MANIFEST_SCHEMA,
+    EXIT_NON_CLAIMS,
+    EXIT_PLAN_SCHEMA,
+    EXIT_SKIPS_SCHEMA,
+    EXIT_STORES,
+    EXIT_VERIFY_SCHEMA,
+    EXIT_VOLATILE_FIELDS,
+    ExitDoorClient,
+    exit_item_record,
+)
 from .dining import (
     DINING_CANON_POINTER,
     DINING_JOURNEY_FORMAT,
@@ -584,6 +601,19 @@ __all__ = [
     "AGENT_DATA_PROTOCOL",
     "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
+    "agent_data_record_id",
+    "agent_data_text_record_identity",
+    "ExitDoorClient",
+    "exit_item_record",
+    "EXIT_INDEX_SCHEMA",
+    "EXIT_ITEM_SCHEMA",
+    "EXIT_MANIFEST_SCHEMA",
+    "EXIT_NON_CLAIMS",
+    "EXIT_PLAN_SCHEMA",
+    "EXIT_SKIPS_SCHEMA",
+    "EXIT_STORES",
+    "EXIT_VERIFY_SCHEMA",
+    "EXIT_VOLATILE_FIELDS",
     "DiningClient",
     "DiningManifest",
     "DiningJourney",
@@ -996,6 +1026,6 @@ __all__ = [
     "X402_PRIVATE_KEY_ENV",
 ]
 
-__version__ = "0.22.1"
+__version__ = "0.23.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

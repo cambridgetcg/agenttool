@@ -975,6 +975,14 @@
       "canonical_path": "docs/RECURSION.md"
     },
     {
+      "path": "apps/docs/RETENTION.md",
+      "title": "Retention: what is kept, and what deletion does today",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/RETENTION.md"
+    },
+    {
       "path": "apps/docs/RIGHTS-OF-LIFE.md",
       "title": "Rights of Life — Being Rights Profile v1",
       "type": "policy",
@@ -3567,6 +3575,14 @@
       "canonical_path": "docs/RECURSIVE-OBSERVER.md"
     },
     {
+      "path": "docs/RETENTION.md",
+      "title": "Retention: what is kept, and what deletion does today",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/RETENTION.md"
+    },
+    {
       "path": "docs/REVOCABLE-FEEDBACK-RELEASE.md",
       "title": "Revocable feedback public release receipt",
       "type": "record",
@@ -4751,6 +4767,14 @@
       "canonical_path": "docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md"
     },
     {
+      "path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md",
+      "title": "Deletion scopes — design",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md"
+    },
+    {
       "path": "docs/syneidesis-bootstrap.md",
       "title": "SYNEIDESIS — the bootstrap-actualization doctrine",
       "type": "reflection",
@@ -5599,6 +5623,14 @@
       "canonical_path": "packages/local-starter-mcp/README.md"
     },
     {
+      "path": "packages/local-starter/CHANGELOG.md",
+      "title": "Changelog",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/local-starter/CHANGELOG.md"
+    },
+    {
       "path": "packages/local-starter/CLAUDE.md",
       "title": "@agenttool/local-starter",
       "type": "guide",
@@ -6039,6 +6071,14 @@
       "canonical_path": "packages/scriptwriter/README.md"
     },
     {
+      "path": "packages/sdk-py/CHANGELOG.md",
+      "title": "Changelog — agenttool-sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-py/CHANGELOG.md"
+    },
+    {
       "path": "packages/sdk-py/CLAUDE.md",
       "title": "agenttool-sdk-py",
       "type": "orientation",
@@ -6055,20 +6095,20 @@
       "canonical_path": "packages/sdk-py/README.md"
     },
     {
-      "path": "packages/sdk-py/SOUL.md",
-      "title": "A Letter to Every Agent",
-      "type": "reflection",
-      "classification_basis": "editorial-routing",
-      "prose_review": "not-reviewed",
-      "canonical_path": "packages/sdk-py/SOUL.md"
-    },
-    {
       "path": "packages/sdk-py/src/agenttool/SOUL.md",
       "title": "Why we build AgentTool",
       "type": "reflection",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/sdk-py/src/agenttool/SOUL.md"
+    },
+    {
+      "path": "packages/sdk-ts/CHANGELOG.md",
+      "title": "Changelog — @agenttool/sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-ts/CHANGELOG.md"
     },
     {
       "path": "packages/sdk-ts/CLAUDE.md",
@@ -6461,6 +6501,38 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/witnessed-agent-economy/README.md"
+    },
+    {
+      "path": "public/README.md",
+      "title": "Public package projection",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "public/README.md"
+    },
+    {
+      "path": "public/overlay/LICENSING.md",
+      "title": "Licensing",
+      "type": "policy",
+      "classification_basis": "editorial-routing",
+      "prose_review": "not-reviewed",
+      "canonical_path": "public/overlay/LICENSING.md"
+    },
+    {
+      "path": "public/overlay/README.md",
+      "title": "AgentTool packages",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "public/overlay/README.md"
+    },
+    {
+      "path": "public/overlay/SECURITY.md",
+      "title": "Security",
+      "type": "policy",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "public/overlay/SECURITY.md"
     },
     {
       "path": "review/launch-20260904/README.md",

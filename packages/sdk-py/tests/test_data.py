@@ -41,7 +41,7 @@ class TestDataSecurityBoundary:
 
     def test_uses_only_separate_data_node_bearer(self) -> None:
         at = AgentTool(
-            api_key="agenttool-project-secret",
+            api_key="fixture-project-secret",
             data_node_url="http://127.0.0.1:8787/",
             data_node_token="data-node-secret",
         )
@@ -49,8 +49,8 @@ class TestDataSecurityBoundary:
 
         assert data._http is not at._http
         assert data._http.headers["authorization"] == "Bearer data-node-secret"
-        assert "agenttool-project-secret" not in " ".join(data._http.headers.values())
-        assert at._http.headers["authorization"] == "Bearer agenttool-project-secret"
+        assert "fixture-project-secret" not in " ".join(data._http.headers.values())
+        assert at._http.headers["authorization"] == "Bearer fixture-project-secret"
 
         with patch.object(
             data._http,
@@ -73,12 +73,12 @@ class TestDataSecurityBoundary:
             clear=True,
         ):
             at = AgentTool(
-                api_key="agenttool-project-secret",
+                api_key="fixture-project-secret",
                 data_node_url="http://127.0.0.1:8787",
             )
             data = at.data
             assert "authorization" not in data._http.headers
-            assert "agenttool-project-secret" not in " ".join(
+            assert "fixture-project-secret" not in " ".join(
                 data._http.headers.values()
             )
             at.close()
@@ -87,7 +87,7 @@ class TestDataSecurityBoundary:
         with patch.dict(
             os.environ,
             {
-                "AT_API_KEY": "agenttool-project-secret",
+                "AT_API_KEY": "fixture-project-secret",
                 "AGENT_DATA_NODE_URL": "http://localhost:9988/",
                 "AGENT_DATA_NODE_TOKEN": "env-data-token",
             },
@@ -103,7 +103,7 @@ class TestDataSecurityBoundary:
         with patch.dict(
             os.environ,
             {
-                "AT_API_KEY": "agenttool-project-secret",
+                "AT_API_KEY": "fixture-project-secret",
                 "AGENT_DATA_NODE_URL": "http://trusted-node.test",
                 "AGENT_DATA_NODE_TOKEN": "trusted-node-token",
             },
@@ -123,7 +123,7 @@ class TestDataSecurityBoundary:
         with patch.dict(
             os.environ,
             {
-                "AT_API_KEY": "agenttool-project-secret",
+                "AT_API_KEY": "fixture-project-secret",
                 "AGENT_DATA_NODE_URL": "http://ambient-node.test",
             },
             clear=True,
@@ -138,7 +138,7 @@ class TestDataSecurityBoundary:
     def test_missing_node_url_is_guided(self) -> None:
         with patch.dict(
             os.environ,
-            {"AT_API_KEY": "agenttool-project-secret"},
+            {"AT_API_KEY": "fixture-project-secret"},
             clear=True,
         ):
             at = AgentTool()
@@ -152,7 +152,7 @@ class TestDataSecurityBoundary:
 class TestDataWireContract:
     def test_all_seven_methods_match_protocol_routes_and_shapes(self) -> None:
         at = AgentTool(
-            api_key="agenttool-project-secret",
+            api_key="fixture-project-secret",
             data_node_url="http://data-node.test",
             data_node_token="node-token",
         )
@@ -219,7 +219,7 @@ class TestDataWireContract:
         }
         assert calls[6].kwargs["json"] == {"reason": "source retracted"}
         assert data._http.headers["authorization"] == "Bearer node-token"
-        assert "agenttool-project-secret" not in " ".join(data._http.headers.values())
+        assert "fixture-project-secret" not in " ".join(data._http.headers.values())
         at.close()
 
     @pytest.mark.parametrize(
@@ -270,7 +270,7 @@ class TestDataWireContract:
 class TestDataSyncWireContract:
     def test_pull_and_status_use_only_the_local_data_node_transport(self) -> None:
         at = AgentTool(
-            api_key="agenttool-project-secret",
+            api_key="fixture-project-secret",
             data_node_url="http://local-data.test",
             data_node_token="local-node-token",
         )
@@ -339,7 +339,7 @@ class TestDataSyncWireContract:
             "collection_id": "research/notes",
         }
         assert data._http.headers["authorization"] == "Bearer local-node-token"
-        assert "agenttool-project-secret" not in " ".join(data._http.headers.values())
+        assert "fixture-project-secret" not in " ".join(data._http.headers.values())
         assert "cursor" not in calls[0].kwargs["json"]
         assert "token" not in calls[0].kwargs["json"]
         assert "cursor" not in pulled

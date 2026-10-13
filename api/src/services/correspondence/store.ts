@@ -89,6 +89,23 @@ export interface CorrespondenceEventPage {
   };
 }
 
+export interface CorrespondenceRepositorySummary {
+  repository_id: string;
+  /** Highest project-local receipt cursor in this repository stream. */
+  last_received_seq: string;
+}
+
+export interface CorrespondenceRepositoryPage {
+  protocol: typeof CORRESPONDENCE_PROTOCOL;
+  scope: typeof CORRESPONDENCE_SCOPE;
+  repositories: CorrespondenceRepositorySummary[];
+  page: {
+    after: string | null;
+    next_after: string | null;
+    has_more: boolean;
+  };
+}
+
 export interface ActiveCorrespondenceClaim {
   claim_id: string;
   generation: number;
@@ -867,6 +884,98 @@ export async function listCorrespondenceEvents(
   return listEventsWith(db, input);
 }
 
+export interface ListRepositoriesInput {
+  projectId: string;
+  /** Exclusive repository_id position; the caller echoes next_after. */
+  after?: string;
+  limit?: number;
+}
+
+interface RepositorySummaryRow {
+  [key: string]: unknown;
+  repository_id: string;
+  last_received_seq: string | bigint | number;
+}
+
+/** Distinct repository streams in one project, so a reader can enumerate
+ * every /events walk without knowing repository ids in advance.
+ *
+ * A recursive loose index scan over correspondence_events_project_repo_seq_idx
+ * (project_id, repository_id, received_seq) visits one index probe per
+ * repository rather than every event. Order is the column's default
+ * collation (server-defined; callers echo next_after rather than sorting).
+ * The outer LIMIT stops the recursion after limit + 1 repositories; the
+ * extra row is the has_more sentinel and is never emitted. */
+async function listRepositoriesWith(
+  executor: ReadExecutor,
+  input: ListRepositoriesInput,
+): Promise<CorrespondenceRepositoryPage> {
+  const limit = input.limit ?? DEFAULT_EVENT_PAGE;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_EVENT_PAGE) {
+    throw new CorrespondenceFailure(
+      "limit_invalid",
+      `limit must be an integer between 1 and ${MAX_EVENT_PAGE}.`,
+      400,
+    );
+  }
+  const afterClause =
+    input.after === undefined ? sql`` : sql` AND e.repository_id > ${input.after}`;
+  const rows = await asReadDb(executor).execute<RepositorySummaryRow>(sql`
+    WITH RECURSIVE repositories AS (
+      (
+        SELECT e.repository_id
+          FROM correspondence.events e
+         WHERE e.project_id = ${input.projectId}::uuid${afterClause}
+         ORDER BY e.repository_id
+         LIMIT 1
+      )
+      UNION ALL
+      SELECT (
+        SELECT e.repository_id
+          FROM correspondence.events e
+         WHERE e.project_id = ${input.projectId}::uuid
+           AND e.repository_id > repositories.repository_id
+         ORDER BY e.repository_id
+         LIMIT 1
+      )
+        FROM repositories
+       WHERE repositories.repository_id IS NOT NULL
+    )
+    SELECT repositories.repository_id,
+           (
+             SELECT max(x.received_seq)
+               FROM correspondence.events x
+              WHERE x.project_id = ${input.projectId}::uuid
+                AND x.repository_id = repositories.repository_id
+           )::text AS last_received_seq
+      FROM repositories
+     WHERE repositories.repository_id IS NOT NULL
+     LIMIT ${limit + 1}
+  `);
+  const visible = [...rows].slice(0, limit);
+  const nextAfter = visible.at(-1)?.repository_id ?? input.after ?? null;
+  return {
+    protocol: CORRESPONDENCE_PROTOCOL,
+    scope: CORRESPONDENCE_SCOPE,
+    repositories: visible.map((row) => ({
+      repository_id: row.repository_id,
+      last_received_seq: BigInt(row.last_received_seq).toString(),
+    })),
+    page: {
+      after: input.after ?? null,
+      next_after: nextAfter,
+      has_more: rows.length > limit,
+    },
+  };
+}
+
+export async function listCorrespondenceRepositories(
+  input: ListRepositoriesInput,
+  options: { database?: ReadExecutor } = {},
+): Promise<CorrespondenceRepositoryPage> {
+  return listRepositoriesWith(options.database ?? db, input);
+}
+
 const MAX_CLAIM_TIP_CANDIDATES = 512;
 const MAX_COMPETING_TIP_IDS = 16;
 
@@ -1448,6 +1557,7 @@ export async function readCorrespondenceVoice(
 export interface CorrespondenceService {
   append(projectId: string, event: CorrespondenceEvent): Promise<AppendCorrespondenceResult>;
   listEvents(input: ListEventsInput): Promise<CorrespondenceEventPage>;
+  listRepositories(input: ListRepositoriesInput): Promise<CorrespondenceRepositoryPage>;
   listClaims(input: ListClaimsInput): Promise<ActiveClaimsProjection>;
   readVoice(input: ReadVoiceInput): Promise<CorrespondenceVoice>;
 }
@@ -1455,6 +1565,7 @@ export interface CorrespondenceService {
 export const correspondenceService: CorrespondenceService = {
   append: appendCorrespondenceEvent,
   listEvents: listCorrespondenceEvents,
+  listRepositories: (input) => listCorrespondenceRepositories(input),
   listClaims: listCorrespondenceClaims,
   readVoice: readCorrespondenceVoice,
 };

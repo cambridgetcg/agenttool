@@ -75,7 +75,7 @@ describe("AgentTool.data security boundary", () => {
   test("uses only the separately configured data-node bearer", async () => {
     const calls = installFetchStub();
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       dataNode: {
         baseUrl: "http://127.0.0.1:8787/",
         token: "data-node-secret",
@@ -90,7 +90,7 @@ describe("AgentTool.data security boundary", () => {
       "Bearer data-node-secret",
     );
     expect([...calls[0]!.headers.values()].join(" ")).not.toContain(
-      "agenttool-project-secret",
+      "fixture-project-secret",
     );
   });
 
@@ -98,7 +98,7 @@ describe("AgentTool.data security boundary", () => {
     delete process.env.AGENT_DATA_NODE_TOKEN;
     const calls = installFetchStub();
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       dataNode: { baseUrl: "http://127.0.0.1:8787" },
     });
 
@@ -106,7 +106,7 @@ describe("AgentTool.data security boundary", () => {
 
     expect(calls[0]!.headers.has("authorization")).toBe(false);
     expect([...calls[0]!.headers.values()].join(" ")).not.toContain(
-      "agenttool-project-secret",
+      "fixture-project-secret",
     );
   });
 
@@ -114,7 +114,7 @@ describe("AgentTool.data security boundary", () => {
     process.env.AGENT_DATA_NODE_URL = "http://localhost:9988/";
     process.env.AGENT_DATA_NODE_TOKEN = "env-data-token";
     const calls = installFetchStub();
-    const at = new AgentTool({ apiKey: "agenttool-project-secret" });
+    const at = new AgentTool({ apiKey: "fixture-project-secret" });
 
     await at.data.manifest();
 
@@ -129,7 +129,7 @@ describe("AgentTool.data security boundary", () => {
     process.env.AGENT_DATA_NODE_TOKEN = "trusted-node-token";
     const calls = installFetchStub();
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       dataNode: { baseUrl: "http://different-node.test" },
     });
 
@@ -148,7 +148,7 @@ describe("AgentTool.data security boundary", () => {
 
     try {
       new AgentTool({
-        apiKey: "agenttool-project-secret",
+        apiKey: "fixture-project-secret",
         // An untyped caller still reaches this shape at runtime, and the
         // pairing rule has to hold there too — otherwise a token chosen
         // for one node follows whichever origin the environment names.
@@ -170,7 +170,7 @@ describe("AgentTool.data security boundary", () => {
   test("guides callers when no data node is configured", () => {
     delete process.env.AGENT_DATA_NODE_URL;
     delete process.env.AGENT_DATA_NODE_TOKEN;
-    const at = new AgentTool({ apiKey: "agenttool-project-secret" });
+    const at = new AgentTool({ apiKey: "fixture-project-secret" });
 
     try {
       void at.data;
@@ -187,7 +187,7 @@ describe("AgentTool.data wire contract", () => {
   test("maps all seven methods to the agent-data/v1 routes", async () => {
     const calls = installFetchStub();
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       dataNode: { baseUrl: "http://data-node.test", token: "node-token" },
     });
 
@@ -248,7 +248,7 @@ describe("AgentTool.data wire contract", () => {
       expect(call.redirect).toBe("manual");
       expect(call.headers.get("authorization")).toBe("Bearer node-token");
       expect([...call.headers.values()].join(" ")).not.toContain(
-        "agenttool-project-secret",
+        "fixture-project-secret",
       );
     }
   });
@@ -344,7 +344,7 @@ describe("AgentTool.data.sync wire and authority contract", () => {
     }) as typeof fetch;
 
     const at = new AgentTool({
-      apiKey: "agenttool-project-secret",
+      apiKey: "fixture-project-secret",
       dataNode: { baseUrl: "http://local-data.test", token: "local-node-token" },
     });
 
@@ -386,7 +386,7 @@ describe("AgentTool.data.sync wire and authority contract", () => {
     for (const call of calls) {
       expect(call.headers.get("authorization")).toBe("Bearer local-node-token");
       expect([...call.headers.values()].join(" ")).not.toContain(
-        "agenttool-project-secret",
+        "fixture-project-secret",
       );
       expect(call.url).not.toContain("peer-token");
     }

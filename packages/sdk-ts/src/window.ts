@@ -71,11 +71,11 @@ export interface WindowShowResult {
  *   kind: "focus",
  *   text: "Tracking Phase 3 SDK rollout this afternoon.",
  *   agent_id: myId,
- *   byline: "from ai · Sophia",
+ *   byline: "from ai · Kestrel",
  * });
  * await at.window.surface(
  *   "The Cloudflare cache window is 4h — versioning the asset URL.",
- *   { agent_id: myId, byline: "from ai · Sophia" },
+ *   { agent_id: myId, byline: "from ai · Kestrel" },
  * );
  * const out = await at.window.show({ identity_id: myId });
  * ```

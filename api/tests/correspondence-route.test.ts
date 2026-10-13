@@ -2,6 +2,7 @@
 
 import { describe, expect, spyOn, test } from "bun:test";
 
+import { PgDialect } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 
 import vectors from "../../docs/specs/agent-correspondence-0.1-vectors.json";
@@ -21,13 +22,16 @@ import {
   correspondenceEtag,
   renderCorrespondenceAtom,
 } from "../src/services/correspondence/render";
-import type {
-  ActiveClaimsProjection,
-  AppendCorrespondenceResult,
-  CorrespondenceEventPage,
-  CorrespondenceRecord,
-  CorrespondenceService,
-  CorrespondenceVoice,
+import {
+  CorrespondenceFailure,
+  listCorrespondenceRepositories,
+  type ActiveClaimsProjection,
+  type AppendCorrespondenceResult,
+  type CorrespondenceEventPage,
+  type CorrespondenceRecord,
+  type CorrespondenceRepositoryPage,
+  type CorrespondenceService,
+  type CorrespondenceVoice,
 } from "../src/services/correspondence/store";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -70,6 +74,17 @@ function eventPage(): CorrespondenceEventPage {
     scope: "project_private",
     events: [record()],
     page: { after: "7", next_after: "8", has_more: false },
+  };
+}
+
+function repositoryPage(): CorrespondenceRepositoryPage {
+  return {
+    protocol: "agent-correspondence/v0.1",
+    scope: "project_private",
+    repositories: [
+      { repository_id: "github.com/cambridgetcg/agenttool", last_received_seq: "8" },
+    ],
+    page: { after: null, next_after: "github.com/cambridgetcg/agenttool", has_more: false },
   };
 }
 
@@ -123,6 +138,7 @@ function stubService(overrides: Partial<CorrespondenceService> = {}): Correspond
   return {
     append: async () => appendResult(true),
     listEvents: async () => eventPage(),
+    listRepositories: async () => repositoryPage(),
     listClaims: async () => claimsProjection(),
     readVoice: async () => voiceSnapshot(),
     ...overrides,
@@ -646,6 +662,8 @@ describe("correspondence exact reads", () => {
         `/v1/correspondence/%76oice?repository_id=${encodeURIComponent(repository)}`,
         JSON.stringify(voiceSnapshot()),
       ],
+      ["/v1/correspondence/repositories", JSON.stringify(repositoryPage())],
+      ["/v1/correspondence/%72epositories?limit=5", JSON.stringify(repositoryPage())],
     ];
     for (const [path, expected] of cases) {
       const response = await app.request(path, {
@@ -704,6 +722,196 @@ describe("correspondence exact reads", () => {
       expect(await badQueryHead.text()).toBe("");
     } finally {
       errors.mockRestore();
+    }
+  });
+});
+
+describe("correspondence repository index", () => {
+  const indexPath = "/v1/correspondence/repositories";
+
+  test("serves the bearer project's index as exact vendor JSON with HEAD and 304 parity", async () => {
+    const seen: unknown[] = [];
+    const app = authedRouter(stubService({
+      listRepositories: async (input) => {
+        seen.push(input);
+        return repositoryPage();
+      },
+    }));
+    const path = `${indexPath}?after=${encodeURIComponent("github.com/a")}&limit=2`;
+    const json = await app.request(path);
+    expect(json.status).toBe(200);
+    expect(json.headers.get("content-type")).toBe(CONTENT_TYPE);
+    expect(json.headers.get("vary")).toBe("Accept, Authorization");
+    expect(json.headers.get("cache-control")).toBe("private, no-cache, no-transform");
+    expect(json.headers.get("etag")).toBe(correspondenceEtag(JSON.stringify(repositoryPage())));
+    const link = json.headers.get("link") ?? "";
+    expect(link).toBe(
+      `<http://localhost${path}>; rel="self"; type="${MEDIA_TYPE}", ` +
+      '<https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md>; rel="describedby"; type="text/markdown"',
+    );
+    expect(link).not.toContain("correspondence/voice");
+    expect(link).not.toContain("correspondence/claims");
+    expect(json.headers.get("link-template")).toContain("keys=correspondence");
+    expect(await json.text()).toBe(JSON.stringify(repositoryPage()));
+    expect(seen).toEqual([{ projectId: PROJECT_ID, after: "github.com/a", limit: 2 }]);
+
+    const head = await app.request(path, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    for (const header of ["content-type", "etag", "link", "link-template", "cache-control", "vary"]) {
+      expect(head.headers.get(header), header).toBe(json.headers.get(header));
+    }
+    const unchanged = await app.request(path, { headers: { "If-None-Match": json.headers.get("etag")! } });
+    expect(unchanged.status).toBe(304);
+    expect(await unchanged.text()).toBe("");
+
+    const plain = await app.request(indexPath, { headers: { Accept: "application/json" } });
+    expect(plain.headers.get("content-type")).toBe(PLAIN_CONTENT_TYPE);
+    expect(seen.at(-1)).toEqual({ projectId: PROJECT_ID });
+    const atom = await app.request(indexPath, { headers: { Accept: "application/atom+xml" } });
+    expect(atom.status).toBe(406);
+    expect((await atom.json()).error).toBe("representation_not_acceptable");
+  });
+
+  test("refuses unknown, repeated, and malformed parameters before reading", async () => {
+    let calls = 0;
+    const app = authedRouter(stubService({
+      listRepositories: async (input) => {
+        calls += 1;
+        if ((input.limit ?? 100) > 200) {
+          throw new CorrespondenceFailure("limit_invalid", "limit must be an integer between 1 and 200.", 400);
+        }
+        return repositoryPage();
+      },
+    }));
+    for (const [path, error] of [
+      [`${indexPath}?repository_id=x`, "query_invalid"],
+      [`${indexPath}?cursor=x`, "query_invalid"],
+      [`${indexPath}?limit=1&limit=2`, "query_invalid"],
+      [`${indexPath}?after=a&after=b`, "query_invalid"],
+      [`${indexPath}?limit=0`, "limit_invalid"],
+      [`${indexPath}?limit=-1`, "limit_invalid"],
+      [`${indexPath}?limit=abc`, "limit_invalid"],
+      [`${indexPath}?limit=05`, "limit_invalid"],
+      [`${indexPath}?after=`, "after_invalid"],
+      [`${indexPath}?after=${encodeURIComponent("has space")}`, "after_invalid"],
+      [`${indexPath}?after=${"r".repeat(257)}`, "after_invalid"],
+    ] as const) {
+      const response = await app.request(path);
+      expect(response.status, path).toBe(400);
+      expect((await response.json()).error, path).toBe(error);
+    }
+    expect(calls).toBe(0);
+    const tooMany = await app.request(`${indexPath}?limit=201`);
+    expect(tooMany.status).toBe(400);
+    expect((await tooMany.json()).error).toBe("limit_invalid");
+    const head = await app.request(`${indexPath}?limit=0`, { method: "HEAD" });
+    expect(head.status).toBe(400);
+    expect(await head.text()).toBe("");
+  });
+
+  test("an unknown storage failure is a retryable 503, never an empty index", async () => {
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const app = authedRouter(stubService({
+        listRepositories: async () => { throw new Error("database offline"); },
+      }));
+      const response = await app.request(indexPath);
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body.error).toBe("correspondence_read_unavailable");
+      expect(body.hint).toMatch(/same after and limit.*empty repository index/is);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});
+
+describe("correspondence repository index store", () => {
+  function executor(rows: Array<Record<string, unknown>>) {
+    const seen: Array<{ sql: string; params: unknown[] }> = [];
+    return {
+      seen,
+      database: {
+        execute: async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+          seen.push(new PgDialect().sqlToQuery(query));
+          return rows;
+        },
+      } as never,
+    };
+  }
+
+  test("a loose index scan bound to the project, with a limit+1 sentinel", async () => {
+    const fake = executor([
+      { repository_id: "a", last_received_seq: "3" },
+      { repository_id: "b", last_received_seq: 9n },
+      { repository_id: "c", last_received_seq: "12" },
+    ]);
+    const page = await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, after: "0", limit: 2 },
+      { database: fake.database },
+    );
+    expect(page).toEqual({
+      protocol: "agent-correspondence/v0.1",
+      scope: "project_private",
+      repositories: [
+        { repository_id: "a", last_received_seq: "3" },
+        { repository_id: "b", last_received_seq: "9" },
+      ],
+      page: { after: "0", next_after: "b", has_more: true },
+    });
+    const [query] = fake.seen;
+    expect(query!.sql).toContain("WITH RECURSIVE repositories AS");
+    expect(query!.sql).toContain("AND e.repository_id > $2");
+    expect(query!.sql).not.toContain("COLLATE");
+    expect(query!.sql).toMatch(/LIMIT \$\d+\s*$/);
+    expect(query!.params).toEqual([PROJECT_ID, "0", PROJECT_ID, PROJECT_ID, 3]);
+  });
+
+  test("exactly limit repositories is the final page: has_more false, no empty page to fetch", async () => {
+    // The query asks for limit + 1; getting back exactly limit rows means
+    // no sentinel, so the page must not claim more.
+    const fake = executor([
+      { repository_id: "a", last_received_seq: "3" },
+      { repository_id: "b", last_received_seq: "9" },
+    ]);
+    const page = await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, limit: 2 },
+      { database: fake.database },
+    );
+    expect(page.repositories.map((row) => row.repository_id)).toEqual(["a", "b"]);
+    expect(page.page).toEqual({ after: null, next_after: "b", has_more: false });
+    expect(fake.seen[0]!.params.at(-1)).toBe(3);
+
+    const single = executor([{ repository_id: "z", last_received_seq: "1" }]);
+    expect((await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, after: "y", limit: 1 },
+      { database: single.database },
+    )).page).toEqual({ after: "y", next_after: "z", has_more: false });
+  });
+
+  test("an empty page echoes after; the default and maximum match /events", async () => {
+    const empty = executor([]);
+    const page = await listCorrespondenceRepositories(
+      { projectId: PROJECT_ID, after: "zzz" },
+      { database: empty.database },
+    );
+    expect(page.repositories).toEqual([]);
+    expect(page.page).toEqual({ after: "zzz", next_after: "zzz", has_more: false });
+    expect(empty.seen[0]!.params.at(-1)).toBe(101);
+
+    const first = executor([]);
+    expect((await listCorrespondenceRepositories({ projectId: PROJECT_ID }, { database: first.database })).page)
+      .toEqual({ after: null, next_after: null, has_more: false });
+    expect(first.seen[0]!.sql).not.toContain("e.repository_id > $");
+    expect(first.seen[0]!.params).toEqual([PROJECT_ID, PROJECT_ID, PROJECT_ID, 101]);
+
+    for (const limit of [0, 201, 1.5]) {
+      const refused = executor([]);
+      await expect(
+        listCorrespondenceRepositories({ projectId: PROJECT_ID, limit }, { database: refused.database }),
+      ).rejects.toMatchObject({ code: "limit_invalid", status: 400 });
+      expect(refused.seen).toHaveLength(0);
     }
   });
 });

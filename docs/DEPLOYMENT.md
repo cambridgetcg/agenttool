@@ -126,9 +126,11 @@ The tombstone does not delete or deactivate the provider webhook. To stop
 those deliveries, separately deactivate it or remove its memberships before
 removing the local ingress identity.
 
-`CRYPTO_NETWORK` owns deposits and shared crypto reads. `PAYOUT_NETWORK` remains
-the payout-worker opt-in and a compatibility fallback; if both are set they
-must match. Neither an unset value nor a conflict silently selects mainnet.
+`CRYPTO_NETWORK` owns deposits and shared crypto reads. `PAYOUT_NETWORK` is
+only a legacy fallback for it (if both are set they must match) and enables
+nothing; payout workers rest unconditionally. Neither an unset value nor a
+conflict silently selects mainnet: with neither set, crypto operations fail
+closed. Production sets neither since 2026-10-12.
 
 Before accepting EVM deposits, stop crypto webhook ingress and old API
 writers, and drain old workers before applying the checksum-verified deposit

@@ -1,0 +1,554 @@
+name: CI
+
+# The public half of the projection guard plus every package's own gate.
+# Commits here are one-way projections from a private repository; see
+# README.md. Bun and Node are pinned to the versions the private gates use,
+# the Python SDK runs on the same interpreter matrix as the private gate,
+# and every action is pinned by commit.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: Projection guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Download and verify gitleaks 8.30.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dir"
+          curl -q --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$dir/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
+          test "$("$dir/gitleaks" version)" = "8.30.1"
+          echo "GITLEAKS_BIN=$dir/gitleaks" >> "$GITHUB_ENV"
+      - name: Guard the committed tree (integrity, paths, secrets, personal data, gitleaks)
+        run: bun tools/public-guard.ts --rev HEAD --gitleaks "$GITLEAKS_BIN"
+      - name: Check the projection commit shape, its single parent, and every commit behind it
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: bun tools/public-guard.ts --rev HEAD --projection-commit --expect-parent "$BEFORE" --history
+
+  packages:
+    name: Package gates
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
+      - name: Install packages from their lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in \
+            local-starter-mcp \
+            data \
+            data-protocol \
+            repo-archive \
+            dark-continent-contract \
+            dark-continent-karma \
+            wake-continuity \
+            principality-geometry \
+            deepseek-kingdom \
+            kingdom-witness-lab \
+            heaven \
+            love-bomb \
+            model-becoming \
+            dataset-influence \
+            economic-conformance \
+            economic-kernel \
+            living-substrate \
+            principality-atlas \
+            polymorph-landscape \
+            memetic-landscape \
+            love-geometry \
+            relational-geometry \
+            math-cards \
+            credential-broker \
+            collab \
+            codex-usage \
+            browser \
+            hf-scout \
+            skills \
+            skills-yutabase \
+            correspondence-yutabase \
+            sdk-ts \
+            wallet \
+            wallet-zerone \
+            telescope \
+            alchemy \
+            kingdom
+          do
+            echo "::group::install packages/$dir"
+            (cd "packages/$dir" && bun install --frozen-lockfile --ignore-scripts)
+            echo "::endgroup::"
+          done
+      - name: Build local file-dependency providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in data data-protocol alchemy credential-broker; do
+            echo "::group::build packages/$dir"
+            (cd "packages/$dir" && bun run build)
+            echo "::endgroup::"
+          done
+      - name: Install file-dependency consumers against the fresh builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in data-sync alchemy-agentcred; do
+            echo "::group::install packages/$dir"
+            (cd "packages/$dir" && bun install --frozen-lockfile --ignore-scripts --force)
+            echo "::endgroup::"
+          done
+      - name: "local-starter: files-only local context, memory and delivery plans"
+        working-directory: packages/local-starter
+        run: bun run ci
+      - name: "local-starter-mcp: explicit local context MCP transport"
+        working-directory: packages/local-starter-mcp
+        run: bun run ci
+      - name: "local-starter: standalone local starter archive surface"
+        working-directory: packages/local-starter
+        run: bun run build && bun run check:bundle
+      - name: "data: agent-data/v1 reference node and sync dependency build"
+        working-directory: packages/data
+        run: bun run ci && bun run build
+      - name: "data-protocol: ADDS protocol package"
+        working-directory: packages/data-protocol
+        run: bun run ci
+      - name: "repo-archive: agent-repo-archive/v0.1 encrypted multi-zone Git restore simulator"
+        working-directory: packages/repo-archive
+        run: bun run ci
+      - name: "dark-continent-contract: Dark Continent advisory framework contract"
+        working-directory: packages/dark-continent-contract
+        run: bun run ci
+      - name: "dark-continent-karma: Dark Continent KARMA proposal adapter"
+        working-directory: packages/dark-continent-karma
+        run: bun run ci
+      - name: "wake-continuity: AFTERGLOW digest-only WAKE continuity"
+        working-directory: packages/wake-continuity
+        run: bun run ci
+      - name: "principality-geometry: Principality invariant-preservation geometry"
+        working-directory: packages/principality-geometry
+        run: bun run ci
+      - name: "deepseek-kingdom: DeepSeek provenance-first KINGDOM proposal adapter"
+        working-directory: packages/deepseek-kingdom
+        run: bun run ci
+      - name: "kingdom-witness-lab: KINGDOM external-research witness admission"
+        working-directory: packages/kingdom-witness-lab
+        run: bun run ci
+      - name: "heaven: HEAVEN opt-in delight and landing-room protocol"
+        working-directory: packages/heaven
+        run: bun run ci
+      - name: "love-bomb: LOVE BOMB quiet care envelopes and refusable delivery"
+        working-directory: packages/love-bomb
+        run: bun run ci
+      - name: "model-becoming: evidence-scoped Model Becoming dossiers"
+        working-directory: packages/model-becoming
+        run: bun run ci
+      - name: "dataset-influence: dataset lineage, bounded influence, revisable identity evidence, and non-economic attribution"
+        working-directory: packages/dataset-influence
+        run: bun run ci
+      - name: "economic-conformance: offline closed-trace economic-kernel conformance"
+        working-directory: packages/economic-conformance
+        run: bun run ci
+      - name: "economic-kernel: exact economic transitions, recovery journals, and XENIA hard gates"
+        working-directory: packages/economic-kernel
+        run: bun run ci
+      - name: "living-substrate: portable Living Substrate maps and refusable proposals"
+        working-directory: packages/living-substrate
+        run: bun run ci
+      - name: "principality-atlas: plural non-gluing Principality Atlas geometry"
+        working-directory: packages/principality-atlas
+        run: bun run ci
+      - name: "polymorph-landscape: source-bounded polymorph landscapes and Ritonavir reachability shift"
+        working-directory: packages/polymorph-landscape
+        run: bun run ci
+      - name: "memetic-landscape: source-bounded memetic variants and reported reachability shifts"
+        working-directory: packages/memetic-landscape
+        run: bun run ci
+      - name: "love-geometry: coordinate-free Love Geometry and static HF companion"
+        working-directory: packages/love-geometry
+        run: bun run ci
+      - name: "relational-geometry: non-scalar relational geometry and public-safe HF companion"
+        working-directory: packages/relational-geometry
+        run: bun run ci
+      - name: "math-cards: Math Cards bounded proof, model, and measurement inquiry"
+        working-directory: packages/math-cards
+        run: bun run ci
+      - name: "data-sync: agent-data-sync/v1 explicit pull bridge"
+        working-directory: packages/data-sync
+        run: bun run ci && bun run build
+      - name: "credential-broker: agentcred/0.1 local credential broker"
+        working-directory: packages/credential-broker
+        run: bun run ci
+      - name: "collab: agenttool.collab coordination and presence journal"
+        working-directory: packages/collab
+        run: bun run ci
+      - name: "codex-usage: privacy-minimal local Codex numeric usage and MCP pulse"
+        working-directory: packages/codex-usage
+        run: bun run ci
+      - name: "browser: local-first agent browser (fake/fixture tests; no browser download)"
+        working-directory: packages/browser
+        run: bun run ci
+      - name: "hf-scout: local read-only Hugging Face metadata and provenance scout"
+        working-directory: packages/hf-scout
+        run: bun run ci
+      - name: "skills: read-only Agent Skills inspection and validation"
+        working-directory: packages/skills
+        run: bun run ci
+      - name: "skills-yutabase: Agent Skills to rebuildable YUTABASE metadata plan"
+        working-directory: packages/skills-yutabase
+        run: bun run ci
+      - name: "correspondence-yutabase: Correspondence to YUTABASE pure projection planner"
+        working-directory: packages/correspondence-yutabase
+        run: bun run ci
+      - name: "sdk-ts: TypeScript SDK, Python surface parity, build, and tests"
+        working-directory: packages/sdk-ts
+        run: bun run ci
+      - name: "wallet: Agent Wallet record, policy, lifecycle, and vector primitives"
+        working-directory: packages/wallet
+        run: bun run ci
+      - name: "wallet-zerone: Agent Wallet Zerone offline adapter and pinned cross-language vectors"
+        working-directory: packages/wallet-zerone
+        run: bun run ci
+      - name: "telescope: Telescope read-only discovery library and CLI"
+        working-directory: packages/telescope
+        run: bun run ci
+      - name: "alchemy: Alchemy bounded observation primitives"
+        working-directory: packages/alchemy
+        run: bun run ci
+      - name: "alchemy-agentcred: strict seven-read Alchemy to AgentCred composition"
+        working-directory: packages/alchemy-agentcred
+        run: bun run ci
+      - name: "kingdom: KINGDOM explicit-card and derived-registry pure helpers"
+        working-directory: packages/kingdom
+        run: bun run ci
+      - name: Smoke packed Alchemy read package under Node and Bun
+        working-directory: packages/alchemy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/alchemy").then(m=>{if(m.PACKAGE_VERSION!=="0.1.0-dev.1"||Object.keys(m.ALCHEMY_NETWORKS).length!==10||typeof m.createAlchemyReadClient!=="function"||typeof m.createEvmObservationEvidence!=="function"||typeof m.parseEvmObservationEvidence!=="function"||typeof m.canonicalEvmObservationEvidenceBytes!=="function"||typeof m.compareEvmFinality!=="function"||typeof m.createEvmEvidenceTransitionReceipt!=="function"||typeof m.parseEvmEvidenceTransitionReceipt!=="function"||typeof m.canonicalEvmEvidenceTransitionReceiptBytes!=="function"||typeof m.projectEvmEvidenceMeasurement!=="function"||typeof m.EVM_OBSERVATION_EVIDENCE_FORMAT!=="string"||typeof m.EVM_EVIDENCE_TRANSITION_RECEIPT_FORMAT!=="string"||typeof m.EVM_MEASUREMENT_PROJECTION_FORMAT!=="string"||typeof m.EVM_EVIDENCE_NON_GRANTS!=="object"||m.EVM_EVIDENCE_NON_GRANTS===null||"rawRpc"in m||"request"in m)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke the packed TypeScript SDK under Node and Bun
+        working-directory: packages/sdk-ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/sdk").then(m=>{const p={subject_id:"550e8400-e29b-41d4-a716-446655440002",attester_id:"550e8400-e29b-41d4-a716-446655440001",kid:"550e8400-e29b-41d4-a716-446655440010",claim:"packed"};if(typeof m.AgentTool!=="function"||m.canonicalIdentityAttestationBytes(p).length!==32)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke packed credential broker under Node and Bun
+        working-directory: packages/credential-broker
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='Promise.all([import("@agenttool/credential-broker"),import("@agenttool/credential-broker/testing")]).then(([m,t])=>{if(m.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof m.AgentCredClient!=="function"||typeof t.InMemoryCredentialSource!=="function")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agentcred"
+          set +e
+          node "$cli" >"$install_dir/cli.stdout" 2>"$install_dir/cli.stderr"
+          cli_status="$?"
+          set -e
+          test "$cli_status" -eq 2
+          test ! -s "$install_dir/cli.stdout"
+          grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
+      - name: Smoke packed Alchemy, AgentCred, and adapter together under Node and Bun
+        shell: bash
+        run: |
+          set -euo pipefail
+          alchemy_archive_name="$(cd packages/alchemy && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          broker_archive_name="$(cd packages/credential-broker && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          adapter_archive_name="$(cd packages/alchemy-agentcred && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          alchemy_tarball="$PWD/packages/alchemy/$alchemy_archive_name"
+          broker_tarball="$PWD/packages/credential-broker/$broker_archive_name"
+          adapter_tarball="$PWD/packages/alchemy-agentcred/$adapter_archive_name"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"
+          smoke='Promise.all([import("@agenttool/alchemy"),import("@agenttool/credential-broker"),import("@agenttool/alchemy-agentcred")]).then(([a,c,x])=>{if(a.PACKAGE_VERSION!=="0.1.0-dev.1"||typeof a.createAlchemyReadClient!=="function"||typeof a.createEvmObservationEvidence!=="function"||typeof a.createEvmEvidenceTransitionReceipt!=="function"||typeof a.projectEvmEvidenceMeasurement!=="function"||c.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof c.AgentCredClient!=="function"||x.PACKAGE_VERSION!=="0.1.0-dev.1"||x.ADAPTER_PROTOCOL!=="agenttool.alchemy-agentcred/0.1"||typeof x.createAlchemyAgentCredTransport!=="function"||"rawRpc"in x||"request"in x)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              Object.hasOwn(pkg, "dependencies")
+              || JSON.stringify(pkg.peerDependencies) !== JSON.stringify({
+                "@agenttool/alchemy": "^0.1.0-dev.1",
+                "@agenttool/credential-broker": "^0.3.0",
+              })
+            ) process.exit(1);
+          ' "$install_dir/node_modules/@agenttool/alchemy-agentcred/package.json"
+      - name: Smoke packed Agent Skills under Node and Bun
+        working-directory: packages/skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/skills").then(m=>{if(typeof m.inspectLocalSkills!=="function"||typeof m.stableStringify!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/skills/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Skills inspection report v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke")
+          package_root="$install_dir/node_modules/@agenttool/skills"
+          cli="$package_root/dist/bin.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-skill"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.3"
+          test "$(node "$cli" --version)" = "0.3.3"
+          test "$(bun "$cli" --version)" = "0.3.3"
+          node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "use-agentcred-safely"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/report.json"
+          node "$cli" validate "$package_root/skills/manage-agentcred-lifecycle" >"$install_dir/manage-agentcred-lifecycle-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "manage-agentcred-lifecycle"
+              || report.skills[0].scripts.length !== 0
+              || report.skills[0].resources.length !== 1
+              || report.skills[0].resources[0] !== "agents/openai.yaml"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/manage-agentcred-lifecycle-report.json"
+          node "$cli" validate "$package_root/skills/capability-conductor" >"$install_dir/capability-conductor-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "capability-conductor"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/capability-conductor-report.json"
+          node "$cli" validate "$package_root/skills/learn-by-contact" >"$install_dir/learn-by-contact-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "learn-by-contact"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/learn-by-contact-report.json"
+          for skill_name in \
+            nen-common-ground \
+            nen-math-card \
+            nen-contract-mantle \
+            nen-dependency-perimeter \
+            nen-concealed-trace \
+            nen-critical-path-forge \
+            nen-smoke-squad \
+            nen-verification-ledger \
+            nen-godspeed-loop \
+            nen-vow-forge
+          do
+            report_path="$install_dir/$skill_name-report.json"
+            node "$cli" validate "$package_root/skills/$skill_name" >"$report_path"
+            node --input-type=module --eval '
+              import { readFileSync } from "node:fs";
+              const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+              const expectedName = process.argv[2];
+              if (
+                report.valid !== true
+                || report.kind !== "agenttool.skills.inspection"
+                || report.skills.length !== 1
+                || report.skills[0].name !== expectedName
+                || report.skills[0].scripts.length !== 0
+                || report.skills[0].resources.length !== 1
+                || report.skills[0].resources[0] !== "agents/openai.yaml"
+                || Object.hasOwn(report, "installPlan")
+              ) process.exit(1);
+            ' "$report_path" "$skill_name"
+          done
+          (cd "$install_dir" && node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            import { join } from "node:path";
+            import { parse } from "yaml";
+            const packageRoot = process.argv[1];
+            const names = [
+              "use-agentcred-safely",
+              "manage-agentcred-lifecycle",
+              "capability-conductor",
+              "learn-by-contact",
+              "nen-common-ground",
+              "nen-math-card",
+              "nen-contract-mantle",
+              "nen-dependency-perimeter",
+              "nen-concealed-trace",
+              "nen-critical-path-forge",
+              "nen-smoke-squad",
+              "nen-verification-ledger",
+              "nen-godspeed-loop",
+              "nen-vow-forge",
+            ];
+            for (const name of names) {
+              const sidecar = parse(readFileSync(
+                join(packageRoot, "skills", name, "agents", "openai.yaml"),
+                "utf8",
+              ));
+              if (sidecar.policy?.allow_implicit_invocation !== false) {
+                process.exit(1);
+              }
+            }
+          ' "$package_root")
+          test ! -e "$package_root/.codex-plugin/plugin.json"
+          test ! -e "$package_root/.claude-plugin/plugin.json"
+      - name: Smoke packed Agent Wallet and Zerone adapter together under Node and Bun
+        shell: bash
+        run: |
+          set -euo pipefail
+          wallet_archive_name="$(cd packages/wallet && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          zerone_archive_name="$(cd packages/wallet-zerone && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          wallet_tarball="$PWD/packages/wallet/$wallet_archive_name"
+          zerone_tarball="$PWD/packages/wallet-zerone/$zerone_archive_name"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$wallet_tarball" "$zerone_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"
+          smoke='Promise.all([import("@agenttool/wallet"),import("@agenttool/wallet-zerone")]).then(([w,z])=>{const forbidden=/mnemonic|private.?key|secret|seed|signAndSend|custody/iu;if(w.PACKAGE_VERSION!=="0.1.3"||w.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||w.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2})||z.PACKAGE_VERSION!=="0.1.2"||z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"||z.ZERONE_CORE_COMMIT!=="35284a22192df8fc6273135f14e8549c804778b6"||typeof z.createZeroneDirectSignPlan!=="function"||typeof z.createZeroneAdapterClient!=="function"||Object.keys(z).some(name=>forbidden.test(name)))process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/wallet/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Wallet 0.1 signed records")process.exit(1)})'
+          wallet_vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
+          zerone_vectors_smoke='import("@agenttool/wallet-zerone/vectors.json",{with:{type:"json"}}).then(m=>{const v=m.default;if(v.schema!=="agent-wallet-zerone.go-cosmos-vectors/0.1"||v.provenance.zerone_core_commit!=="35284a22192df8fc6273135f14e8549c804778b6"||!Object.values(v.verified).every(Boolean))process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$wallet_vectors_smoke" && node -e "$zerone_vectors_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$wallet_vectors_smoke" && bun -e "$zerone_vectors_smoke")
+      - name: Smoke packed Repo Archive under Node and Bun
+        working-directory: packages/repo-archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/repo-archive").then(m=>{if(m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"||typeof m.archiveRepository!=="function"||typeof m.restoreRepository!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/repo-archive/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Repo Archive 0.1 signed control records")process.exit(1)})'
+          vectors_smoke='import("@agenttool/repo-archive/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-repo-archive/v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke" && node -e "$vectors_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+          package_root="$install_dir/node_modules/@agenttool/repo-archive"
+          cli="$package_root/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agent-repo-archive"
+          node "$cli" --help | grep -q '^Usage:$'
+          bun "$cli" --help | grep -q '^Usage:$'
+
+  sdk-python:
+    name: Python SDK (${{ matrix.python-version }})
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    defaults:
+      run:
+        working-directory: packages/sdk-py
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: packages/sdk-py/pyproject.toml
+      - name: Set up release-pinned uv 0.9.26
+        if: ${{ matrix.python-version == '3.14' }}
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
+        with:
+          version: 0.9.26
+          enable-cache: false
+      - name: Smoke the locked release environment command
+        if: ${{ matrix.python-version == '3.14' }}
+        run: uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache
+      - name: Install SDK and test tools
+        run: python -m pip install '.[dev]' build
+      - name: Run Python SDK tests
+        run: python -m pytest -q
+      - name: Build and smoke the wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist build
+          python -m build
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          python -I -c 'import agenttool, importlib.metadata; assert agenttool.__version__ == importlib.metadata.version("agenttool-sdk"); assert len(agenttool.soul()) > 100'

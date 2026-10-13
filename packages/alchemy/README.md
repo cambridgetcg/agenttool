@@ -222,7 +222,8 @@ database, and lifecycle effects remain with separately authorized consumers.
 
 The checked-in schemas and fixtures are packed as opaque JSON assets; the root
 TypeScript API supplies the code exports. See the
-[mathematical framework](../../docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md) for the
+mathematical framework (`docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md` in the private
+source repository) for the
 state, order, transition, privacy, and authority boundaries.
 
 The packed `kingdom.extension.json` is a declaration-only, unregistered hint
@@ -243,24 +244,24 @@ npm pack --ignore-scripts --dry-run --json
 The current public developer preview is
 `@agenttool/alchemy@0.1.0-dev.1`. It adds Base Mainnet to the explicit
 internal-transfer support set and carries the versioned evidence additions
-plus the unregistered declaration hint. Protected trusted [run
-`32754993343`](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)
-published annotated [tag
-`alchemy-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.1)
+plus the unregistered declaration hint. Protected trusted run
+`32754993343`
+published annotated tag
+`alchemy-v0.1.0-dev.1`
 from exact source `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`.
 Anonymous GitHub/npm readback matched 48,880 bytes and SHA-256
 `1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`;
 npm `next` resolves to dev.1 while mutable `latest` deliberately remains
 dev.0. The exact tag-object, provenance, signature, and integrity receipt is in
-[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md) and
-[`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). This package still has no
+`docs/ALCHEMY.md` and
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md). This package still has no
 LOVE inventory entry, and publication does not install a KINGDOM contract.
 
 The immutable `0.1.0-dev.0` preview remains historical release evidence under
 annotated tag `alchemy-v0.1.0-dev.0` after requesting npm dist-tag `next`. Its
 exact GitHub prerelease asset and npm tarball were independently read back
 byte-identical; the protected run, size, and SHA-256 receipt are recorded in
-[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). Mutable `latest` remains on that
+`docs/ALCHEMY.md`. Mutable `latest` remains on that
 historical version; that fallback is not a maturity signal and does not
 rewrite dev.0. Neither release is part of an immutable LOVE inventory. Source
 metadata, building, and packing alone are not release evidence.
