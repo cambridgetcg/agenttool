@@ -82,7 +82,7 @@ Deny rules, for edit and build jobs:
 - There is no `--output` rule. The form `Bash(git diff:*--output*)` was never verified against Claude Code's matcher, and the sandbox confines the write it would have blocked.
 
 Env and files, for edit and build jobs:
-- `TMPDIR=<cwdReal>/.summon-tmp/<job id>` (§3) and `SUMMON_JOB_ID=<job id>` (§3, the process sweep).
+- `TMPDIR=<cwdReal>/.summon-tmp/<job id>` (§3).
 - `UNSAFE_IN_RULE` applies to the folder and to every command string. If either contains one of its characters, the harness throws and the job does not start (the `run` regex already keeps those characters out of a command at parse time; this is the second guard).
 
 **Git env, edit and build jobs.**
@@ -119,12 +119,12 @@ Review jobs have no `Bash` tool and get no `--settings`, as today.
 
 The names are found by a case-insensitive listing of the folder root, of `.git/` and of those subdirectories, so every case spelling (`.Git`, `.gIt`, `.GitAttributes`, `Config`) is covered on the Mac's case-insensitive volume. The baseline keeps each file's contents, outside the folder, in the runner's private state for the job. After the job, any file whose hash differs from the baseline, that has appeared, or that has vanished is restored from the baseline: contents and mode rewritten, new files removed, vanished files recreated. The first line of the job's result file then says `tampered: <paths>`. A ledger line records it too, with a fixed word and the number of paths; the paths themselves stay in the 0600 result file, as every harness-derived string does. The job's status is not changed by the restore.
 
-**Process sweep.** The runner starts claude for an edit or build job in its own process group, with `SUMMON_JOB_ID=<job id>` in its env. When the job ends, normally or by timeout, the runner:
+**Process sweep.** The runner starts claude for an edit or build job in its own process group. While the job runs, the runner records the job's process tree every 2 s: every process whose parent chain reaches the claude process (`/bin/ps -A -o pid=,ppid=,pgid=,lstart=`, walked in memory), keyed by pid and start time so a reused pid is never mistaken for a job process. When the job ends, normally or by timeout, the runner:
 1. kills the whole process group;
-2. lists the user's own processes with their environments (`ps -E -o pid=,command=`) and kills every one, other than the runner itself, whose environment carries `SUMMON_JOB_ID=<job id>`. A child that called `setsid`, or that was reparented to launchd, still carries the marker it inherited, so the group and the parent chain are not needed;
+2. kills every recorded process that is still alive with the same start time, which catches a child that called `setsid` or left the group, as long as it lived through one snapshot;
 3. only then compares the fingerprint, restores, and removes the temp dir.
 
-A detached child that cleared its env is not found. It stays sandboxed, with no network and writes only inside the folder, and this is accepted as a residual in Phase 0.5 (§7).
+A process that detaches and is reparented to launchd within one 2 s interval is not found. It stays sandboxed, with no network and writes only inside the folder, and this is accepted as a residual in Phase 0.5 (§7). Spike B3 (Air, 2026-10-13) found that `ps -E` does not show other processes' environments on this macOS, so an environment marker cannot serve as the sweep's key, and the design does not use one.
 
 **Spikes on the Air, 2026-10-13.** Both ran the collab-bridge hermetic suite through `claude -p` with Summon's flags, on a committed copy at `af10ebfc`, where the suite passes 175 of 175 unsandboxed.
 
@@ -181,7 +181,7 @@ The Air's `~/.local/bin/summon` keeps pointing at `feat/summon-phase0`. That bra
 - turn caps;
 - exact allow and deny rule strings for edit and build jobs, including the basename forms (emitted when the basename resolves to the same realpath, absolute only when it does not), the `PATH` append, no `--output` rule, and `UNSAFE_IN_RULE` on an edit or build cwd and on every command string;
 - `--settings` JSON for edit and build jobs, exactly as in §3, and none for review;
-- `TMPDIR` and `SUMMON_JOB_ID` for edit and build jobs, and a review env unchanged;
+- `TMPDIR` for edit and build jobs, and a review env unchanged;
 - git env pairs and `GIT_CONFIG_COUNT`, plus a real `git commit` in a temp repo under exactly that env (a temp `HOME` holding an identity): it succeeds, and a planted `pre-commit` hook does not run;
 - `.git/**` and `.GIT/**` denies for edit and build jobs;
 - negative shell-form strings. For a build command `bun test` with `args: false`, a table of job commands: `bun test > ~/x`, `bun test >> ~/x`, `bun test | tee ~/x`, `FOO=1 bun test`, a second command after a newline, `bun test $(id)`, ``bun test `id` ``, `bun test <(id)`, `bun test --cwd /elsewhere`, and a `run` with `:` or `=` in a word. The test asserts that no emitted allow rule is an exact match for any of them. The forms that only a `:*` rule could match (`git log --output=~/x`, `git commit -m x >> ~/x`, `bun test --preload x` with `args: true`) are listed as left to the sandbox and the live checks.
@@ -255,7 +255,7 @@ The re-review (Opus, 2026-10-13) did not approve the design: findings 4, 6, 10 a
 - (b) No `sandbox_write`, no `local_binding` and no Unix sockets in Phase 0.5; all three are deferred to Phase 1 with the re-review's notes (§7). Temp files go to a per-job directory in the folder, set as `TMPDIR`.
 - (c) Edit and build folders are git repository roots with a real `.git` directory, and nesting among edit and build entries is a parse error, re-checked on realpaths at admission.
 - (d) The runner fingerprints the git files that can run code, restores any change and reports `tampered`.
-- (e) The process sweep is a process group plus the `SUMMON_JOB_ID` marker.
+- (e) The process sweep is a process group plus 2 s snapshots of the job's process tree (Ruling S3: an env marker cannot be read on this macOS).
 - (f) Negative tests, as harness strings and as live checks on Nuance, for the shell forms and case variants; the unverified `--output` rule form is dropped.
 - (g) The refusal order says where the existing non-claude `reads_anywhere` check stays.
 - (h) The git env test also runs a real `git commit`.
@@ -286,3 +286,8 @@ R1 to R18 are the re-review's numbered findings, in its order; N1 to N5 are its 
 - N3. "Edit job in a build folder" is undefined. Settled by (a) and (c): the term is gone because every edit job is sandboxed, and an edit entry nested inside a build repo is a parse error, with a realpath re-check at admission.
 - N4. `allowAllUnixSockets` is tied to `local_binding`. Settled by (b): both are false in the settings JSON, and §7 returns them as separate opt-ins with a path list.
 - N5. The sweep cannot work as worded. Settled by (e): the sweep goes by the `SUMMON_JOB_ID` marker in the process environment, which survives reparenting to launchd and `setsid`; a detached child that cleared its env stays sandboxed and is accepted as a residual (§7).
+
+## 10. Second re-review (smn_01a1374e…, Opus xhigh)
+
+1. Whether `ps -E` shows a child's environment. It does not: Spike B3a ran a marked `sleep` with and without `setsid`, and `ps -E -ww` listed neither marker. The sweep now records the job's process tree every 2 s, keyed by pid and start time (§3).
+2. Whether `denyRead` of `~/.claude` breaks claude itself. It does not: Spike B3b ran `claude -p` under the sandbox with that `denyRead`. The job answered normally, and the sandboxed `cat ~/.claude/settings.json` got "Operation not permitted". The rule stays.
