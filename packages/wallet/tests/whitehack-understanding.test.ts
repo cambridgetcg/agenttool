@@ -273,6 +273,28 @@ describe.skipIf(!WHITEHACK_ADAPTER_PRESENT)(PROJECTION_SUITE, () => {
     expect(asserted.policy.approvals).toBe("requirement-unsatisfied");
   });
 
+  test("projects approval as required when any overlapping matching rule requires it", async () => {
+    const base = await signedBundle();
+    const capability = await sealWalletCapability(capabilityCore(base.descriptor, {
+      approval_threshold: 1,
+      call_rules: [
+        { ...base.capability.call_rules[0]!, actions: ["call", "transfer"], methods: ["noop"] },
+        { ...base.capability.call_rules[0]!, requires_approval: true },
+      ],
+    }), owner.signer);
+    const intent = await sealTransactionIntent(intentCore({
+      descriptor: base.descriptor,
+      capability,
+    }), delegate.signer);
+    const simulation = await sealSimulationReceipt(
+      simulationCore({ intent }),
+      simulator.signer,
+    );
+    const projected = projectAgentWalletContext(populatedRequest({ ...base, capability, intent, simulation }));
+    expect(projected.policy.calls).toBe("within-bounds");
+    expect(projected.policy.approvals).toBe("requirement-unsatisfied");
+  });
+
   test("validates a presented continuity chain without claiming it is current", async () => {
     const bundle = await signedBundle();
     const continuity = await sealContinuityEvent({

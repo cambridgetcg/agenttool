@@ -152,7 +152,12 @@ Accessor properties are also rejected without invocation; in-process inputs
 are snapshotted as data before validation and canonicalization.
 
 Deterministic public vectors live at
-`packages/wallet/vectors/agent-wallet-v0.1-vectors.json`.
+`packages/wallet/vectors/agent-wallet-v0.1-vectors.json`. Since 2026-10-11,
+deterministic negative vectors, cases a conforming implementation MUST refuse,
+live beside them in the AgentTool source repository at
+`packages/wallet/vectors/agent-wallet-v0.1-negative-vectors.json`. The source
+repository is private, so that path is not a promise of anonymous public
+access, and the published 0.1.3 artifact does not contain that file.
 
 ## 5. Records
 
@@ -185,6 +190,22 @@ are host assertions, not protocol approval records. Before supplying them, a
 conforming host MUST authenticate the approver authority, bind the approval to
 the exact capability and intent, enforce expiry and replay rules, and retain
 auditable evidence. The source package does not verify those properties.
+
+**Erratum (2026-10-11): overlapping call rules.** This section did not say how
+call rules combine when more than one rule covers the same call. A rule
+matches an intent call or simulation effect when its `target_account` equals
+the item's target, its `actions` include the item's action, and, unless the
+action is `transfer`, its `methods` include the item's method. Overlapping
+rules remain valid capability records. A verifier MUST evaluate every matching
+rule: the item is allowlisted if at least one rule matches, and it requires
+approval if any matching rule has `requires_approval: true`. Rule order
+therefore never changes the outcome. This only tightens authorization. A
+capability that relied on first-match leniency, where only the first matching
+rule in sorted order was read, will now be denied unless the host supplies at
+least `approval_threshold` distinct approval IDs. The published
+`@agenttool/wallet` 0.1.3 artifact still has first-match behaviour until a
+release ships the source change (see the Unreleased section of
+`packages/wallet/README.md` in the private source repository).
 
 Spend and fee limits use CAIP-19 assets and atomic amounts. `max_total` is a
 cumulative bound over durable usage for the capability and revocation epoch,
@@ -239,6 +260,15 @@ The receipt authority attests to the receipt record; it does not replace the
 chain-native signature or independently prove submission. Hosts MUST persist
 the signed payload or a recoverable provider reference before broadcasting.
 
+Clarified 2026-10-11: in version 0.1 a signing receipt is attestation-only.
+No cross-record binding check is defined for it. The reference package checks
+a receipt's own shape, signature, and `record_id`. It does not check that the
+receipt's wallet, descriptor, grant, capability, intent, simulation, policy,
+source account, signer key, or payload hashes match an authorized intent,
+signing request, or signed payload, and it does not tie `receipt_authority`
+to a trusted key. A host that relies on a receipt MUST make those binding and
+authority checks itself.
+
 ### 5.6 Continuity event
 
 `agent-wallet/continuity/0.1` is an append-only event signed by the current
@@ -270,7 +300,12 @@ one durable authorization transaction or an equivalent serializable mechanism:
    host-authenticated approval evidence and threshold, intent count, spend,
    fees, and simulated effects;
 6. reserve the capability intent count, cumulative spend, chain nonce or
-   sequence, and a unique request/intent identity atomically;
+   sequence, and a unique request/intent identity atomically. The intent
+   replay dedupe keys are `intent_id` and the (`grant_id`, `nonce`) pair: a
+   host MUST reserve both as unique and MUST NOT rely on `record_id` as a
+   replay key, because the delegate key holder can produce another valid
+   signature over the same intent core and so a different `record_id`
+   (clarified 2026-10-11);
 7. persist an operation in `reserved`, then commit; and
 8. only then invoke the signer with the exact unsigned payload bytes.
 
@@ -398,6 +433,12 @@ An implementation claiming **Agent Wallet 0.1 record conformance** MUST:
   closed shapes, and semantic validation in this document;
 - enforce exact cross-record references and authority relationships; and
 - identify which optional record types it produces or consumes.
+
+Clarified 2026-10-11: the negative vectors named in §4 sample required
+refusals; they are not an exhaustive mutation set, and the closed-shape and
+semantic requirements still define negative conformance. Signing receipts are
+attestation-only in version 0.1 (§5.5), so binding a receipt to other records
+is the host's job, not part of record conformance.
 
 An implementation claiming **Agent Wallet 0.1 execution conformance** MUST also
 implement durable sign-time reservation, trusted adapter verification,
