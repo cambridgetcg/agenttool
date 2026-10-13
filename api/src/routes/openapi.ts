@@ -97,6 +97,7 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
 import { GARDENS_OPENAPI_PATHS } from "./openapi-gardens";
+import { depositAddressDisclosureRestResponse } from "./openapi-crypto-deposit";
 import { RETENTION_OPENAPI_PATHS } from "./openapi-retention";
 import { CORE_LAUNCH_EXAMPLES, CORE_LAUNCH_RECOVERY_PATHS, REGISTER_AGENT_SUCCESS_SCHEMA } from "./openapi-core-launch";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
@@ -998,7 +999,12 @@ const COMMON_SCHEMAS = {
                 const: "@agenttool/wallet-zerone",
               },
               version: { type: "string", const: "0.1.2" },
-              source: { type: "string", format: "uri" },
+              source: {
+                type: "string",
+                format: "uri",
+                description:
+                  "Publicly served package coordinate. The TypeScript source is in a private repository, so this names the LOVE manifest.",
+              },
               love_manifest: { type: "string", format: "uri" },
               availability: {
                 type: "string",
@@ -1011,7 +1017,7 @@ const COMMON_SCHEMAS = {
                 properties: {
                   observed_at: {
                     type: "string",
-                    const: "2026-07-29",
+                    const: "2026-10-11",
                     format: "date",
                   },
                   love: {
@@ -1021,7 +1027,9 @@ const COMMON_SCHEMAS = {
                   npm: { type: "string", const: "public_exact_mirror" },
                   github_release: {
                     type: "string",
-                    const: "public_exact_mirror",
+                    const: "repository_access_mutable_mirror",
+                    description:
+                      "The GitHub Release is in the private cambridgetcg/agenttool repository and answers 404 without repository access. It is mutable; reverify its size and SHA-256 against the LOVE manifest.",
                   },
                 },
                 required: ["observed_at", "love", "npm", "github_release"],
@@ -8958,16 +8966,10 @@ function spec() {
         get: {
           tags: ["crypto"],
           summary:
-            "Get or list deterministic USDC deposit addresses; EVM disclosure is readiness-gated and Solana does not credit by default",
+            "Deposit-address disclosure is resting; no address is created or shown",
           description:
-            "Every disclosed EVM address must match the active derivation root and a freshly verified durable provider-watch generation. Mainnet non-L1 address disclosure is disabled until a chain-specific settlement-finality policy exists. A Solana response reports operator_configuration_unverified: derivation and signed ingress exist, but there is no Helius watch/finality reconciler and production balance credit is refused by default. Do not send funds unless the returned instructions describe a ready path.",
-          responses: {
-            "200": { description: "Address" },
-            "503": {
-              description:
-                "Stored derivation validation or settlement policy failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready. Solana's unreconciled default is instead described in its 200 response and does not imply automatic credit.",
-            },
-          },
+            "Resting fail-closed: every request returns 503 deposit_address_disclosure_resting before wallet lookup, deposit-row reads, derivation, or network selection, so no deposit address, new or previously issued, is created or disclosed. Do not send funds to an address cached from an earlier response. Signed webhook ingress for addresses disclosed earlier is unchanged, behind a production fence: a production runtime accepts no unsigned delivery and credits neither unreconciled Solana activity nor testnet deposits. The retained disclosure path, unreachable while resting: EVM disclosure is readiness-gated and Solana does not credit by default. An EVM address must match the active derivation root and a freshly verified provider-watch generation, mainnet non-L1 disclosure waits for a chain-specific settlement-finality policy, only whole multiples of 0.01 USDC credit (any remainder quarantines the whole deposit), and a Solana address is withheld unless the development-only unreconciled adapter and a Helius webhook secret are both configured.",
+          responses: { "503": depositAddressDisclosureRestResponse() },
         },
       },
       "/v1/wallets/{walletId}/payout": {

@@ -1107,9 +1107,12 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 
 }
 
-// Payout workers (Horizon A — Slices 1+2+3). Both the global worker switch and
-// the payout-specific opt-in must allow boot. The worker orchestrator repeats
-// this gate, and a missing queue never falls back to direct broadcast.
+// Payout workers (Horizon A — Slices 1+2+3). Every payout worker rests
+// unconditionally: payoutWorkerBootAllowed() returns false and no environment
+// flag can reopen it (services/economy/config.ts). Fresh payout admission rests
+// separately, in the request path (services/economy/crypto/index.ts, 503
+// payout_admission_resting). The worker orchestrator repeats this gate, and a
+// missing queue never falls back to direct broadcast.
 if (payoutWorkerBootAllowed()) {
   void import("./workers/payout")
     .then(({ startPayoutWorkers }) => startPayoutWorkers())
@@ -1147,8 +1150,9 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 }
 
 // Signed EVM webhook observations remain pending until this independent
-// canonical receipt/log worker reaches the configured chain depth. It is
-// separate from payout enablement and shares only the global worker switch.
+// canonical receipt/log worker reaches the configured chain depth. It does not
+// depend on the payout workers, which rest unconditionally, and is gated only
+// by the global worker switch.
 if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   void import("./workers/deposit/confirm-worker")
     .then(({ startDepositConfirmWorker }) => startDepositConfirmWorker())
@@ -1411,7 +1415,7 @@ app.get("/about", (c) =>
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is retired. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit-address disclosure is resting unconditionally: GET /v1/wallets/:id/deposit-address returns 503 deposit_address_disclosure_resting and shows no address, new or previously issued (disclosed addresses derive from an operator mnemonic); balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion requires separate configuration. Fresh payout admission and every payout worker are resting unconditionally: a fresh payout request returns 503 payout_admission_resting and no environment flag can reopen it, while existing payout rows remain listable and requested rows remain cancellable. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:
