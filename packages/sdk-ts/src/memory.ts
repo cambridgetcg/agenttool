@@ -114,8 +114,8 @@ export class MemoryClient {
    *
    * Tier does not make a memory immutable and no witness signature is needed.
    * A memory carrying a paid marketplace witness receipt is erased in place
-   * instead: its content is replaced, it leaves every read, and the row stays
-   * only for the receipt. The API records the deletion in its deletion ledger.
+   * instead: its content is replaced, the memory API's reads skip it, and the
+   * row stays only for the receipt. The API records the deletion in its deletion ledger.
    *
    * @param memoryId - The UUID of the memory to release.
    * @param options - Root proof, required when the project is agent-rooted.

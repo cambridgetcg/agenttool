@@ -48,8 +48,12 @@ deletion_ledger_unavailable` and nothing is deleted.
 - Memory deletes remove the row. A memory that a paid witness receipt points
   at is erased in place instead of being refused: its content becomes
   `withdrawn by author on <date>`, its key, embedding and identity patch are
-  cleared, and the row stays only so the receipt still points at it. It no
-  longer appears in any read.
+  cleared, and the row stays only so the receipt still points at it. The
+  memory API's reads (by id, by key, list, the keyset walk, text and vector
+  search, count and the Wake's memory window) no longer return it. A few
+  surfaces read memory rows directly (identity composition and foundations,
+  dashboard counts, the per-agent MCP memory list and fork carry-over) and can
+  still list it, showing only the marker.
 - Each of these also writes a **deletion moment**: a content-free chronicle
   row of type `deletion` telling the owner what kind of record was erased,
   how many, when, the ledger entry and the authority.
@@ -66,8 +70,9 @@ owner and authority rule are at `GET /public/ownership-map`
 
 **Rules that erase on a clock** (pg_cron, each writing a ledger entry):
 working memories expired more than 24 hours ago are deleted
-(`expired_working_memory_24h`, hourly), and an expired working memory is no
-longer served even by id; vault audit addresses are set to NULL after 30 days
+(`expired_working_memory_24h`, hourly), and the memory API stops serving an
+expired working memory, by id included (the direct readers above can still
+show it until the rule deletes it); vault audit addresses are set to NULL after 30 days
 (`vault_audit_ip_30d`, daily); ledger entries lose their row ids after 15
 days (`ledger_compaction_15d`, daily).
 

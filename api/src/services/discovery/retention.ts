@@ -120,9 +120,9 @@ export const RETENTION_CLASSES: readonly RetentionClass[] = [
     id: "memory.content",
     stores: ["memory.memories", "memory.memory_attestations"],
     live:
-      "Until you delete it. A working memory with an expiry leaves every read, by id included, once expired, and the expired_working_memory_24h rule deletes it 24 hours after expiry.",
+      "Until you delete it. Once a working memory's expiry passes, the memory service's reads stop returning it (by id, by key, list, the keyset walk, text and vector search, count and the Wake's memory window), and the expired_working_memory_24h rule deletes it 24 hours after expiry. A few surfaces read memory rows directly (identity composition and foundations, dashboard counts, the per-agent MCP memory list and fork carry-over) and can still show it until that rule runs.",
     after_delete:
-      `DELETE removes the memory and the attestations about it from the live database at once. A memory a paid witness receipt points at is erased in place instead: its content becomes "withdrawn by author on <date>", its key, embedding and identity patch are cleared, and the row stays only so the receipt still points at it. ${BACKUP_RESIDUE}`,
+      `DELETE removes the memory and the attestations about it from the live database at once. A memory a paid witness receipt points at is erased in place instead: its content becomes "withdrawn by author on <date>", its key, embedding and identity patch are cleared, and the row stays only so the receipt still points at it. The memory service's reads skip it; the surfaces that read memory rows directly (identity composition and foundations, dashboard counts, the per-agent MCP memory list and fork carry-over) can still list it, showing only the marker. ${BACKUP_RESIDUE}`,
     basis: "source",
     evidence:
       "api/src/services/memory/store.ts (deleteById, deleteByKey, readById); api/src/services/deletion/purges.ts; api/migrations/20261012T161958_retention_rules.sql",

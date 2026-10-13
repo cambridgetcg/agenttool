@@ -70,7 +70,8 @@ export const memories = memorySchema.table(
     expiresAt: timestamp("expires_at", { withTimezone: true }), // working memory TTL
     /** Set when a memory a paid witness receipt holds was erased in place:
      *  content is the withdrawal marker; key, embedding, expression_patch
-     *  NULL; metadata {}. Such a row leaves every read.
+     *  NULL; metadata {}. The memory service's reads skip such a row (a few
+     *  surfaces that read rows directly still see it; /public/retention).
      *  Migration 20261012T161958_content_purged_at. */
     contentPurgedAt: timestamp("content_purged_at", { withTimezone: true }),
   },

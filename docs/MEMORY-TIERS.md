@@ -87,12 +87,15 @@ The **elevation is witness-sealed; the stored row is not immutable**. The
 owning project bearer can change a memory's `private` / `public` visibility and
 can call `DELETE /v1/memories/:id` at every tier. Delete takes no witness
 signature. Ordinary constitutive memories remain deletable. A memory carrying
-a paid marketplace witness receipt (`memory_attestations.source_grant_id` is
-non-null) is erased in place instead of deleted, regardless of tier: its
+a paid marketplace witness receipt (its `memory_attestations.source_grant_id`
+is non-null, or, for a receipt issued before 2026-07-13, a memory-witness grant
+points back at it) is erased in place instead of deleted, regardless of tier: its
 content becomes `withdrawn by author on <date>`, its key, embedding and
 identity patch become NULL and its metadata `{}`, and `content_purged_at` is
 set. The row stays only so the paid receipt and its grant still point at it;
-it leaves every read, and the response's `erased_in_place_reason` says so.
+the memory API's reads skip it (a few surfaces that read memory rows
+directly can still list it, showing only the marker; see
+[Retention](RETENTION.md)), and the response's `erased_in_place_reason` says so.
 
 `DELETE /v1/memories?key=...` applies the same rule to every match that existed
 when the request was authorized: in one transaction, ordinary matches are
@@ -103,7 +106,7 @@ entry cannot be written, nothing is deleted (`503`). Changing visibility does
 not bypass or change any of this; visibility remains mutable for paid and
 unpaid rows at every tier.
 
-An expired working memory leaves every read, by id included; the
+The memory API stops serving an expired working memory, by id included; the
 `expired_working_memory_24h` retention rule deletes it (or erases it in place,
 for a receipt) 24 hours after expiry. See [Retention](RETENTION.md).
 

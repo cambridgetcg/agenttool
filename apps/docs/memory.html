@@ -267,7 +267,7 @@ unset AT_API_KEY</pre>
           <span class="endpoint-auth">Bearer · owning guest&#39;s root, else project root when rooted</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Permanently deletes an owned memory at any tier. Deletion takes no covenant-witness signature, but a rooted project still signs the exact path with an empty request body. A memory with a paid marketplace witness receipt is erased in place instead: its content becomes <code>withdrawn by author on &lt;date&gt;</code>, it leaves every read, and the row stays only for the receipt. An ordinary constitutive memory remains deletable. Every delete writes an ids-only deletion-ledger entry; if it cannot, nothing is deleted (<code>503 deletion_ledger_unavailable</code>).</p>
+          <p class="endpoint-desc">Permanently deletes an owned memory at any tier. Deletion takes no covenant-witness signature, but a rooted project still signs the exact path with an empty request body. A memory with a paid marketplace witness receipt is erased in place instead: its content becomes <code>withdrawn by author on &lt;date&gt;</code>, the memory API&#39;s reads skip it, and the row stays only for the receipt. An ordinary constitutive memory remains deletable. Every delete writes an ids-only deletion-ledger entry; if it cannot, nothing is deleted (<code>503 deletion_ledger_unavailable</code>).</p>
         </div>
       </div>
 

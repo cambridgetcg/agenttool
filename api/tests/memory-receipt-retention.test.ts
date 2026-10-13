@@ -3,7 +3,8 @@
  *  Deletion spec §7.4 (Yu's Q1–Q9, choice 7): deleting a memory that a paid
  *  receipt points at erases it in place instead of answering 409. The row
  *  stays so the receipt and its grant still point at something; its content
- *  becomes the withdrawal marker and it leaves every read. The database's
+ *  becomes the withdrawal marker and the memory service's reads skip it
+ *  (memory-erasure-read-filters.test.ts pins each read). The database's
  *  own RESTRICT edge still refuses a cascade that would drop the receipt. */
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";

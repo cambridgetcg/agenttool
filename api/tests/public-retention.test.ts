@@ -137,10 +137,17 @@ describe("wave 2 publishes today's truth", () => {
     expect(DELETE_RESPONSE_RETENTION.identity_backup.blob_retained).toBe(false);
   });
 
-  test("expired working memory leaves every read and is purged by rule; paid-witness memory is erased in place", () => {
-    expect(byId("memory.content").live).toMatch(/by id included.*24 hours after expiry/s);
-    expect(byId("memory.content").after_delete).toMatch(/paid witness receipt points at is erased in place/);
-    expect(byId("memory.content").after_delete).not.toMatch(/409/);
+  test("expired working memory leaves the memory service's reads and is purged by rule; paid-witness memory is erased in place", () => {
+    const memory = byId("memory.content");
+    expect(memory.live).toMatch(/memory service's reads stop returning it \(by id, by key, list/);
+    expect(memory.live).toMatch(/24 hours after expiry/);
+    // Surfaces that read memory rows directly are named, not hidden behind "every read".
+    for (const text of [memory.live, memory.after_delete]) {
+      expect(text).toContain("per-agent MCP memory list and fork carry-over");
+      expect(text).not.toMatch(/every read|any read/);
+    }
+    expect(memory.after_delete).toMatch(/paid witness receipt points at is erased in place/);
+    expect(memory.after_delete).not.toMatch(/409/);
   });
 
   test("vault-audit addresses are nulled after 30 days", () => {

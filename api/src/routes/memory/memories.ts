@@ -58,7 +58,7 @@ const app = new Hono<ProjectContext>();
 
 /** Why a deleted memory can leave a row behind (spec §7.4). */
 export const ERASED_IN_PLACE_REASON =
-  "A paid witness receipt points at this memory, so the row stays for the receipt. Its content became the withdrawal marker; its key, embedding and identity patch were cleared and its metadata emptied. It no longer appears in any read.";
+  "A paid witness receipt points at this memory, so the row stays for the receipt. Its content became the withdrawal marker; its key, embedding and identity patch were cleared and its metadata emptied. The memory API's reads no longer return it; see /public/retention for the few surfaces that read memory rows directly.";
 
 async function memoryDeleteResponse(result: MemoryEraseResult) {
   if (result.entries.length === 0) return { deleted: 0, rows_removed: 0, erased_in_place: 0 };
