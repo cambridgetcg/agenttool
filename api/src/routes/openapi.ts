@@ -8235,25 +8235,10 @@ function spec() {
         delete: {
           tags: ["trace"],
           summary: "Delete a trace",
-          description:
-            "The bearer deletes the project's rows with this trace id (traces are project-owned). The delete writes one ids-only deletion-ledger entry in the same transaction, so a backup restore replays it; a missing trace writes nothing.",
+          description: "The bearer deletes the project's rows with this trace id (traces are project-owned), writing one ids-only deletion-ledger entry in the same transaction so a backup restore replays it; a missing trace writes nothing and answers ledger null.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: {
-            "200": {
-              description: "Deleted",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      deleted: { type: "integer", minimum: 0 },
-                      ledger: { oneOf: [deletionLedgerBlock, { type: "null" }] },
-                    },
-                    required: ["deleted", "ledger"],
-                  },
-                },
-              },
-            },
+            "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", required: ["deleted", "ledger"], properties: { deleted: { type: "integer", minimum: 0 }, ledger: { oneOf: [deletionLedgerBlock, { type: "null" }] } } } } } },
             "503": deletionLedgerUnavailableResponse,
           },
         },
