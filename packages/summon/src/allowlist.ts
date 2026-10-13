@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, realpathSync } from 'node:fs'
+import { accessSync, closeSync, constants, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs'
 import { join, normalize } from 'node:path'
 import { ACCESSES, CLAUDE_EFFORTS, DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
 
@@ -204,10 +204,58 @@ export function safeRealpath(p: string): string | null {
   try { return realpathSync.native(p) } catch { return null }
 }
 
-/** What admission asks of the disk besides realpath: one lstat. Injectable, so a test needs no files. */
+/**
+ * What admission asks of the disk besides realpath. Injectable, so a test needs no files.
+ * `readPrefix` is a bounded read of the start of a regular file (null when it cannot be read);
+ * `searchable` is git's own test of a directory it must enter (access(2) with X_OK).
+ */
 export interface FsEntry { isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean }
-export interface FsProbe { lstat(p: string): FsEntry | null }
-export const realFs: FsProbe = { lstat: (p) => { try { return lstatSync(p) } catch { return null } } }
+export interface FsProbe {
+  lstat(p: string): FsEntry | null
+  readPrefix(p: string, max: number): string | null
+  searchable(p: string): boolean
+}
+export const realFs: FsProbe = {
+  lstat: (p) => { try { return lstatSync(p) } catch { return null } },
+  readPrefix: (p, max) => {
+    let fd: number | undefined
+    try {
+      // O_NOFOLLOW and O_NONBLOCK: a link or a pipe swapped in after the lstat is not followed and cannot block admission.
+      fd = openSync(p, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      const buf = Buffer.alloc(max)
+      return buf.toString('utf8', 0, readSync(fd, buf, 0, max, 0))
+    } catch { return null } finally {
+      if (fd !== undefined) { try { closeSync(fd) } catch { /* nothing to do */ } }
+    }
+  },
+  searchable: (p) => { try { accessSync(p, constants.X_OK); return true } catch { return false } },
+}
+
+/** git (validate_headref) reads at most 255 bytes of HEAD. */
+const HEAD_READ_MAX = 256
+/** A HEAD git accepts, in its strict form: a ref under refs/ (the placeholder git writes for reftable included), or a full object id. */
+const HEAD_RE = /^(?:ref:[ \t]*refs\/\S+|[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\s*$/
+
+/**
+ * Why `dotGit` (the `.git` directory of an edit or build folder) is not one git would take as the folder's repository, or null.
+ * git (setup.c is_git_directory) takes a `.git` directory only when HEAD names a ref or an object and objects/ and refs/ can be
+ * entered, and with a `commondir` it looks for those in the directory the file names. Otherwise it skips this folder and
+ * walks up to an enclosing repository, and a job can bring that about with one command in its own folder. So admission asks the
+ * same things, strictly: HEAD a regular file read from its start, objects and refs real directories (not links) that can be
+ * entered, and no commondir at all.
+ */
+function notAGitDir(dotGit: string, fs: FsProbe): string | null {
+  if (fs.lstat(join(dotGit, 'commondir'))) return 'has a commondir file, which sends git to another directory'
+  const head = fs.lstat(join(dotGit, 'HEAD'))
+  if (!head || head.isSymbolicLink() || !head.isFile()) return 'has no regular HEAD file'
+  const text = fs.readPrefix(join(dotGit, 'HEAD'), HEAD_READ_MAX)
+  if (text === null || !HEAD_RE.test(text)) return 'has a HEAD that names neither a ref nor an object'
+  for (const name of ['objects', 'refs']) {
+    const dir = fs.lstat(join(dotGit, name))
+    if (!dir || dir.isSymbolicLink() || !dir.isDirectory() || !fs.searchable(join(dotGit, name))) return `has no real ${name} directory that git can enter`
+  }
+  return null
+}
 
 const within = (child: string, parent: string) => child === parent || child.startsWith(parent.endsWith('/') ? parent : parent + '/')
 const strictlyWithin = (child: string, parent: string) => child !== parent && within(child, parent)
@@ -319,11 +367,12 @@ export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
       return refuse(`${best.f.path} is not a git repository root with a real .git directory`,
         `an ${req.access} folder must be a repository root: .git must be a directory in ${best.f.path} itself, not a file, a symlink or a parent's`)
     }
-    // A .git directory without its HEAD (empty, or HEAD deleted) is not a repository to git, which then walks up to the enclosing one.
-    const head = fs.lstat(join(cwdReal, '.git', 'HEAD'))
-    if (!head || head.isSymbolicLink() || !head.isFile()) {
-      return refuse(`${best.f.path}/.git has no regular HEAD file, so git would use a parent repository instead`,
-        `an ${req.access} folder must be a repository root: .git/HEAD must be a regular file in ${best.f.path}; repair or re-clone the repository`)
+    // A .git directory that git would skip (no valid HEAD, no objects or refs, a commondir) is not the folder's repository: git then
+    // walks up to the enclosing one.
+    const notGit = notAGitDir(join(cwdReal, '.git'), fs)
+    if (notGit) {
+      return refuse(`${best.f.path}/.git ${notGit}, so git would use a parent repository instead`,
+        `an ${req.access} folder must be a repository root: .git in ${best.f.path} must be a plain git directory (a regular HEAD naming a ref or an object, real objects and refs directories, no commondir); repair or re-clone the repository`)
     }
     // On realpaths, so a symlink into another entry and a ~ spelling against an absolute one are caught. A folder that cannot be resolved is compared as spelled.
     const mine = stripSlash(best.real).toLowerCase()

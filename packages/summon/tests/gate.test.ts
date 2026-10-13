@@ -6,7 +6,7 @@ import { requestCancel, resultOf, statusOf } from '../src/gatekeeper.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { claimId } from '../src/replay.ts'
-import { cleanupTmps, DEFAULT_ALLOWLIST, sampleRequest, targetHome } from './helpers.ts'
+import { cleanupTmps, DEFAULT_ALLOWLIST, fakeGitRoot, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -256,8 +256,8 @@ describe('Phase 0.5: the front door applies the build access and the edit/build 
   const BUILD = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test\n        args: true')
   const EDIT = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: edit')
   const stateOf = (h: string, id: string) => JSON.parse(readFileSync(join(h, '.local/state/summon/jobs', id, 'state.json'), 'utf8'))
-  /** ~/Projects/x as a repository root as far as Summon looks: a real .git directory with a HEAD file in it. */
-  const makeRepo = (h: string) => { mkdirSync(join(h, 'Projects/x/.git')); writeFileSync(join(h, 'Projects/x/.git/HEAD'), 'ref: refs/heads/main\n') }
+  /** ~/Projects/x as a repository root as far as Summon looks: a real .git directory that git itself would take. */
+  const makeRepo = (h: string) => { fakeGitRoot(join(h, 'Projects/x')) }
 
   test('a build request into a build folder that is a repository root is admitted, and the job state records access build', () => {
     const h = targetHome(BUILD); makeRepo(h)
@@ -286,6 +286,21 @@ describe('Phase 0.5: the front door applies the build access and the edit/build 
     const h = targetHome(EDIT); mkdirSync(join(h, 'Projects/x/.git'))
     expect(gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h)))
       .toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('HEAD'), hint: expect.any(String) })
+  })
+  test('a .git directory that git would not take is not a repository root: invalid HEAD, no refs, no objects, a commondir', () => {
+    const states: Array<[string, string, (git: string) => void]> = [
+      ['HEAD of junk', 'HEAD', (g) => writeFileSync(join(g, 'HEAD'), 'x')],
+      ['no refs', 'refs', (g) => rmSync(join(g, 'refs'), { recursive: true })],
+      ['no objects', 'objects', (g) => rmSync(join(g, 'objects'), { recursive: true })],
+      ['a commondir', 'commondir', (g) => writeFileSync(join(g, 'commondir'), '../nonexistent\n')],
+    ]
+    for (const [label, word, break_] of states) {
+      const h = targetHome(EDIT); makeRepo(h); break_(join(h, 'Projects/x/.git'))
+      const r = gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h))
+      expect([label, r]).toEqual([label, expect.objectContaining({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining(word), hint: expect.any(String) })])
+    }
+    const h = targetHome(EDIT); makeRepo(h)
+    expect(gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h)).status).toBe('admitted')
   })
   test('a build entry spelled absolutely in a place the location rules forbid refuses every request, as the allowlist file problem', () => {
     const build = (path: string) => FLAGGED.replace('  - path: ~/Projects\n    access: review', `  - path: ${path}\n    access: build\n    commands:\n      - run: bun test`)

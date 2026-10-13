@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkAdmission, parseAllowlist as parseWithHome, parseDurationS, type Admission, type Allowlist, type AllowlistFolder, type FsProbe } from '../src/allowlist.ts'
-import { cleanupTmps, sampleRequest, trackTmp } from './helpers.ts'
+import { checkAdmission, parseAllowlist as parseWithHome, parseDurationS, realFs, type Admission, type Allowlist, type AllowlistFolder, type FsProbe } from '../src/allowlist.ts'
+import { cleanupTmps, fakeGitRoot, sampleRequest, trackTmp } from './helpers.ts'
 
 /** The home the parser is told when a test does not care which: a spelling is judged against it, never looked up. */
 const TEST_HOME = '/Users/yu'
@@ -22,12 +22,8 @@ function home(): string {
 }
 afterEach(() => cleanupTmps())
 
-/** A git repository root as far as Summon looks: a real .git directory directly in the folder, with a HEAD file in it. */
-function repo(dir: string): string {
-  mkdirSync(join(dir, '.git'), { recursive: true })
-  writeFileSync(join(dir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
-  return dir
-}
+/** A git repository root as far as Summon looks: a real .git directory directly in the folder that git itself would take. */
+const repo = fakeGitRoot
 /** home() with ~/Projects/x and ~/Projects/y made repository roots. */
 function repoHome(): string {
   const h = home()
@@ -786,22 +782,82 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
     expect(checkAdmission(sampleRequest({ access: 'review', cwd: '~/Projects/none' }), allowOf([editEntry('~/Projects/none')]), h)).toMatchObject({ ok: true })
   })
 
-  test('with real git: a repository that lost its HEAD resolves to the enclosing repository, and admission refuses it', () => {
-    const h = home()
-    const env = { PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin', HOME: h, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
-    const git = (cwd: string, ...args: string[]) => {
-      const r = Bun.spawnSync(['git', ...args], { cwd, env })
-      return { ok: r.exitCode === 0, out: new TextDecoder().decode(r.stdout).trim() }
-    }
-    const parent = join(h, 'Projects/gparent'); const child = join(parent, 'child')
-    mkdirSync(child, { recursive: true })
-    expect(git(parent, 'init', '-q').ok && git(child, 'init', '-q').ok).toBe(true)
-    const admit = () => checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/gparent/child' }), allowOf([editEntry('~/Projects/gparent/child')]), h)
-    expect(git(child, 'rev-parse', '--show-toplevel').out).toBe(child)
-    expect(admit()).toMatchObject({ ok: true, cwdReal: child })
-    unlinkSync(join(child, '.git', 'HEAD'))
-    expect(git(child, 'rev-parse', '--show-toplevel').out).toBe(parent) // what the next edit job's git would have worked on
-    nope(admit(), 'HEAD')
+  describe('with real git: admission takes a .git directory only where git itself would, so git never walks up to a parent repository', () => {
+    // Every way a job can leave its own .git, with one command, such that git skips it and uses the enclosing repository.
+    // `git` is where real git (2.39) resolves the folder; `word` is what a refusal names, or null when admission accepts.
+    // A state where git says 'child' but admission refuses is a deliberate narrowing (admission fails closed).
+    const HEX40 = 'a1'.repeat(20); const HEX64 = 'b2'.repeat(32)
+    type State = { label: string; git: 'child' | 'parent'; word: string | null; set: (g: string, spare: string) => void }
+    const head = (label: string, content: string, git: 'child' | 'parent', word: string | null): State =>
+      ({ label, git, word, set: (g) => writeFileSync(join(g, 'HEAD'), content) })
+    const without = (label: string, name: 'objects' | 'refs'): State =>
+      ({ label: `no ${name}`, git: 'parent', word: name, set: (g) => rmSync(join(g, name), { recursive: true }) })
+    const asFile = (name: 'objects' | 'refs'): State =>
+      ({ label: `${name} is a file`, git: 'parent', word: name, set: (g) => { rmSync(join(g, name), { recursive: true }); writeFileSync(join(g, name), '') } })
+    const symlinked = (name: 'objects' | 'refs'): State =>
+      ({ label: `${name} is a symlink to a directory`, git: 'child', word: name, set: (g, spare) => { renameSync(join(g, name), join(spare, name)); symlinkSync(join(spare, name), join(g, name)) } })
+    const mode = (label: string, name: 'objects' | 'refs' | 'HEAD', m: number): State =>
+      ({ label, git: 'parent', word: name, set: (g) => chmodSync(join(g, name), m) })
+    const STATES: State[] = [
+      { label: 'a plain repository', git: 'child', word: null, set: () => {} },
+      head('HEAD names a branch, no newline', 'ref: refs/heads/main', 'child', null),
+      head('HEAD names a nested branch', 'ref: refs/heads/feature/x\n', 'child', null),
+      head('HEAD names the reftable placeholder', 'ref: refs/heads/.invalid\n', 'child', null),
+      head('HEAD is a detached sha-1', `${HEX40}\n`, 'child', null),
+      head('HEAD is a detached sha-256', `${HEX64}\n`, 'child', null),
+      head('HEAD is x', 'x', 'parent', 'HEAD'),
+      head('HEAD is empty', '', 'parent', 'HEAD'),
+      head('HEAD names no refs/ path', 'ref: heads/main\n', 'parent', 'HEAD'),
+      head('HEAD is only "ref: refs"', 'ref: refs\n', 'parent', 'HEAD'),
+      head('HEAD is a short hex id', `${HEX40.slice(0, 39)}\n`, 'parent', 'HEAD'),
+      head('HEAD is 300 bytes of junk', 'x'.repeat(300), 'parent', 'HEAD'),
+      head('HEAD is a ref line and then more text (narrower than git)', 'ref: refs/heads/main\ngarbage\n', 'child', 'HEAD'),
+      mode('HEAD cannot be read', 'HEAD', 0o000),
+      without('', 'objects'), without('', 'refs'), asFile('objects'), asFile('refs'),
+      mode('objects cannot be entered', 'objects', 0o000), mode('refs cannot be entered', 'refs', 0o000),
+      mode('refs has no search bit', 'refs', 0o600),
+      symlinked('objects'), symlinked('refs'),
+      { label: 'a commondir naming a missing directory', git: 'parent', word: 'commondir', set: (g) => writeFileSync(join(g, 'commondir'), '../nonexistent\n') },
+      { label: 'a commondir naming a directory with no objects or refs', git: 'parent', word: 'commondir', set: (g, spare) => { mkdirSync(join(spare, 'common')); writeFileSync(join(g, 'commondir'), `${join(spare, 'common')}\n`) } },
+      { label: 'a commondir naming another repository (narrower than git)', git: 'child', word: 'commondir', set: (g, spare) => { repo(join(spare, 'other')); writeFileSync(join(g, 'commondir'), `${join(spare, 'other/.git')}\n`) } },
+      { label: 'an empty .git', git: 'parent', word: 'HEAD', set: (g) => { rmSync(g, { recursive: true }); mkdirSync(g) } },
+    ]
+    const root = process.getuid?.() === 0 // permission bits do not bind root
+
+    test('each state: where real git resolves the folder, and what admission says', () => {
+      const h = home()
+      const env = { PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin', HOME: h, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+      const git = (cwd: string, ...args: string[]) => {
+        const r = Bun.spawnSync(['git', ...args], { cwd, env })
+        return { ok: r.exitCode === 0, out: new TextDecoder().decode(r.stdout).trim() }
+      }
+      const parent = join(h, 'Projects/gparent')
+      mkdirSync(parent, { recursive: true })
+      expect(git(parent, 'init', '-q').ok).toBe(true)
+      const restore: string[] = []
+      try {
+        for (const [i, st] of STATES.entries()) {
+          if (root && st.label.match(/cannot be|no search bit/)) continue
+          const child = join(parent, `c${i}`); const spare = join(h, `spare${i}`)
+          mkdirSync(child); mkdirSync(spare)
+          expect(git(child, 'init', '-q').ok).toBe(true)
+          st.set(join(child, '.git'), spare)
+          for (const n of ['HEAD', 'objects', 'refs']) restore.push(join(child, '.git', n))
+          const toplevel = git(child, 'rev-parse', '--show-toplevel').out
+          expect([st.label, toplevel]).toEqual([st.label, st.git === 'child' ? child : parent])
+          for (const access of ['edit', 'build'] as const) {
+            const entry = access === 'edit' ? editEntry(`~/Projects/gparent/c${i}`) : buildEntry(`~/Projects/gparent/c${i}`)
+            const r = checkAdmission(sampleRequest({ access, cwd: `~/Projects/gparent/c${i}` }), allowOf([entry]), h)
+            if (st.word === null) expect([st.label, access, r]).toEqual([st.label, access, expect.objectContaining({ ok: true, cwdReal: child })])
+            else { expect([st.label, access, r.ok]).toEqual([st.label, access, false]); nope(r, st.word) }
+            // the one property that matters: admitted means git works on this folder, not on its parent
+            if (r.ok) expect([st.label, toplevel]).toEqual([st.label, child])
+          }
+        }
+      } finally {
+        for (const p of restore) { try { chmodSync(p, 0o755) } catch { /* removed by the state */ } }
+      }
+    })
   })
 
   test('no other edit or build entry may lie inside the matched one or contain it, by realpath', () => {
@@ -900,31 +956,69 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
     expect(refusalHint(edit)).not.toContain('commands:')
   })
 
-  test('the filesystem checks are injectable, so a test needs no disk: realpath and the lstat probe', () => {
+  test('the real probe: a bounded read that follows no link, and a search test that is git\'s own', () => {
+    const h = home()
+    writeFileSync(join(h, 'big'), 'ref: refs/heads/main\n' + 'x'.repeat(1_000_000))
+    writeFileSync(join(h, 'small'), 'ab')
+    symlinkSync(join(h, 'small'), join(h, 'link'))
+    expect(realFs.readPrefix(join(h, 'big'), 256)).toBe(('ref: refs/heads/main\n' + 'x'.repeat(1_000_000)).slice(0, 256))
+    expect(realFs.readPrefix(join(h, 'small'), 256)).toBe('ab')
+    expect(realFs.readPrefix(join(h, 'link'), 256)).toBeNull() // not followed
+    expect(realFs.readPrefix(join(h, 'Projects'), 256)).toBeNull() // a directory
+    expect(realFs.readPrefix(join(h, 'missing'), 256)).toBeNull()
+    expect(realFs.searchable(join(h, 'Projects'))).toBe(true)
+    expect(realFs.searchable(join(h, 'missing'))).toBe(false)
+    if (process.getuid?.() !== 0) {
+      const closed = join(h, 'Projects/x'); chmodSync(closed, 0o600)
+      try { expect(realFs.searchable(closed)).toBe(false) } finally { chmodSync(closed, 0o755) }
+    }
+  })
+  test('the filesystem checks are injectable, so a test needs no disk: realpath and the probe', () => {
     const real = new Map([['/h', '/h'], ['/h/p', '/h/p'], ['/h/p/x', '/h/p/x']])
     const realpath = (p: string) => real.get(p) ?? null
-    const kinds = new Map<string, 'dir' | 'file' | 'link'>([['/h/p/x/.git', 'dir'], ['/h/p/x/.git/HEAD', 'file']])
+    const G = '/h/p/x/.git'
+    const kinds = new Map<string, 'dir' | 'file' | 'link'>([[G, 'dir'], [`${G}/HEAD`, 'file'], [`${G}/objects`, 'dir'], [`${G}/refs`, 'dir']])
+    const contents = new Map<string, string>([[`${G}/HEAD`, 'ref: refs/heads/main\n']])
+    const closed = new Set<string>() // directories git could not enter
     const asked: string[] = []
-    const fs: FsProbe = { lstat: (p) => {
-      asked.push(p)
-      const k = kinds.get(p)
-      return k ? { isDirectory: () => k === 'dir', isFile: () => k === 'file', isSymbolicLink: () => k === 'link' } : null
-    } }
+    const fs: FsProbe = {
+      lstat: (p) => {
+        asked.push(`lstat ${p}`)
+        const k = kinds.get(p)
+        return k ? { isDirectory: () => k === 'dir', isFile: () => k === 'file', isSymbolicLink: () => k === 'link' } : null
+      },
+      readPrefix: (p, max) => { asked.push(`read ${p} ${max}`); return contents.get(p) ?? null },
+      searchable: (p) => { asked.push(`enter ${p}`); return !closed.has(p) },
+    }
     const a = allowOf([buildEntry('~/p/x')])
-    expect(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs)).toEqual({ ok: true, cwdReal: '/h/p/x', access: 'build', commands: BUN })
-    expect(asked).toEqual(['/h/p/x/.git', '/h/p/x/.git/HEAD'])
-    kinds.set('/h/p/x/.git/HEAD', 'link')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
-    kinds.set('/h/p/x/.git/HEAD', 'dir')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
-    kinds.delete('/h/p/x/.git/HEAD')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
-    kinds.set('/h/p/x/.git/HEAD', 'file')
-    kinds.set('/h/p/x/.git', 'file')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), '.git')
-    kinds.set('/h/p/x/.git', 'link')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), '.git')
-    kinds.delete('/h/p/x/.git')
-    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), '.git')
+    const admit = () => checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs)
+    expect(admit()).toEqual({ ok: true, cwdReal: '/h/p/x', access: 'build', commands: BUN })
+    // exactly these probes, in this order, and HEAD is read for at most as much as git itself reads
+    expect(asked).toEqual([`lstat ${G}`, `lstat ${G}/commondir`, `lstat ${G}/HEAD`, `read ${G}/HEAD 256`,
+      `lstat ${G}/objects`, `enter ${G}/objects`, `lstat ${G}/refs`, `enter ${G}/refs`])
+    const refused = (word: string) => nope(admit(), word)
+    kinds.set(`${G}/HEAD`, 'link'); refused('HEAD')
+    kinds.set(`${G}/HEAD`, 'dir'); refused('HEAD')
+    kinds.delete(`${G}/HEAD`); refused('HEAD')
+    kinds.set(`${G}/HEAD`, 'file')
+    for (const bad of ['', 'x', 'ref: heads/main\n', 'ref: refs\n', 'a1'.repeat(19) + '\n']) { contents.set(`${G}/HEAD`, bad); refused('HEAD') }
+    contents.delete(`${G}/HEAD`); refused('HEAD') // unreadable
+    for (const ok of ['ref: refs/heads/main', 'ref:refs/heads/x\r\n', 'a1'.repeat(20), 'b2'.repeat(32) + '\n']) { contents.set(`${G}/HEAD`, ok); expect(admit().ok).toBe(true) }
+    contents.set(`${G}/HEAD`, 'ref: refs/heads/main\n')
+    for (const d of ['objects', 'refs']) {
+      for (const k of ['file', 'link', undefined] as const) {
+        const was = kinds.get(`${G}/${d}`)
+        if (k) kinds.set(`${G}/${d}`, k); else kinds.delete(`${G}/${d}`)
+        refused(d)
+        kinds.set(`${G}/${d}`, was!)
+      }
+      closed.add(`${G}/${d}`); refused(d); closed.delete(`${G}/${d}`)
+    }
+    for (const k of ['file', 'dir', 'link'] as const) { kinds.set(`${G}/commondir`, k); refused('commondir') }
+    kinds.delete(`${G}/commondir`)
+    expect(admit().ok).toBe(true)
+    kinds.set(G, 'file'); refused('.git')
+    kinds.set(G, 'link'); refused('.git')
+    kinds.delete(G); refused('.git')
   })
 })

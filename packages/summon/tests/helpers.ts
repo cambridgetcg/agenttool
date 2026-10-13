@@ -24,6 +24,18 @@ export function sampleRequest(over: Partial<SummonRequest> = {}): SummonRequest 
   }
 }
 
+/**
+ * `dir` as a git repository root as far as Summon looks, which is as far as git's own test looks (setup.c is_git_directory):
+ * a real .git directory holding a HEAD that names a ref, and objects/ and refs/. A fake repository that stops short of any of
+ * these is not a root to admission, and git would use the enclosing repository instead.
+ */
+export function fakeGitRoot(dir: string): string {
+  mkdirSync(join(dir, '.git', 'objects'), { recursive: true })
+  mkdirSync(join(dir, '.git', 'refs'), { recursive: true })
+  writeFileSync(join(dir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  return dir
+}
+
 const tmps: string[] = []
 
 /** Records a temp dir so cleanupTmps() can remove it; returns the dir unchanged. */
