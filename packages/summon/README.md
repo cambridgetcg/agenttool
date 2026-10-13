@@ -92,8 +92,8 @@ otherwise win. sshd is not reloaded: macOS starts it per connection, so the next
 
 1. On Nuance, unload and delete the runner: `launchctl bootout gui/$(id -u)/dev.summon.runner; rm ~/Library/LaunchAgents/dev.summon.runner.plist`
 2. Remove the one key line: `sed -i '' '/ summon-air$/d' ~/.ssh/authorized_keys` (no other line matches).
-3. Delete the drop-in: `sudo rm /etc/ssh/sshd_config.d/010-summon.conf`. Password logins come back with it.
-4. Turn Remote Login off (System Settings → General → Sharing) if nothing else needs it.
+3. Delete the drop-in (skip while `grep -c ' collab-air$' ~/.ssh/authorized_keys` is not 0; run Collab's Nuance rollback first): `sudo rm /etc/ssh/sshd_config.d/010-summon.conf`. Password logins come back with it.
+4. Turn Remote Login off (System Settings → General → Sharing) if nothing else needs it (skip while `grep -c ' collab-air$' ~/.ssh/authorized_keys` is not 0; Collab's bridge relies on Remote Login).
 5. Archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.local/share/summon`, `~/.local/state/summon`,
    `~/.config/summon`, and any `~/Downloads/summon-nuance-bundle-*` still there.
 6. On the Air, archive `~/.local/state/summon/ledger.jsonl`, then delete `~/.ssh/summon` (the key, its expiry, its ssh
