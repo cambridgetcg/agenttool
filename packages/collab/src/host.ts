@@ -61,6 +61,8 @@ export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
 export const COLLAB_KNOCKS_USAGE =
   "usage: agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]";
+export const COLLAB_KNOCKS_SESSION_USAGE =
+  "usage: agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]";
 export const COLLAB_DOORBELL_SCAN_USAGE = "usage: agenttool-collab-host doorbell-scan [--db <path>]";
 
 /** The trimmed-length limit endSession applies to its reason. */
@@ -70,6 +72,8 @@ const COLLAB_APPLICATION_ID = 0x4154434c;
 /** A ledger lock older than this was left by a crashed run and may be broken. */
 const LEDGER_LOCK_STALE_MS = 30_000;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+/** knocks --session refuses a longer id before it opens the journal. */
+const MAX_KNOCK_SESSION_ID = 200;
 
 export interface HostEndReceipt {
   protocol: typeof COLLAB_HOST_PROTOCOL;
@@ -107,6 +111,12 @@ export interface KnockItem {
   kind: "report.posted" | "handoff.offered";
   from_actor: string;
   ref_id: string;
+}
+
+/** A KnockItem plus the sender's session id, present only when asked for. */
+export interface SenderKnockItem extends KnockItem {
+  /** `events.session_id` of the addressed event: the sending session, null for a legacy event. */
+  from_session_id: string | null;
 }
 
 export interface KnockReport {
@@ -351,12 +361,28 @@ function runKnocks(
     strict: true,
     options: {
       "host-ancestor": { type: "string" },
+      session: { type: "string" },
       "mark-tapped": { type: "boolean" },
+      "with-sender": { type: "boolean" },
       db: { type: "string" },
     },
   });
   if (parsed.positionals.length > 0) throw new CollabError("usage_error", COLLAB_KNOCKS_USAGE);
   const ancestor = parsed.values["host-ancestor"];
+  const session = parsed.values.session;
+  const withSender = parsed.values["with-sender"] === true;
+  // --session reads one session by id: no binding, no ps. It never combines
+  // with --host-ancestor, and only it may ask for the sender's session id, so
+  // the --host-ancestor output stays byte-identical.
+  if (session !== undefined) {
+    if (ancestor !== undefined) throw new CollabError("usage_error", COLLAB_KNOCKS_SESSION_USAGE);
+    return knockForSession(selectedJournal(parsed.values.db, env), session, {
+      mark_tapped: parsed.values["mark-tapped"] === true,
+      include_sender_session: withSender,
+      now: dependencies.now,
+    });
+  }
+  if (withSender) throw new CollabError("usage_error", COLLAB_KNOCKS_SESSION_USAGE);
   let startPid: number;
   if (ancestor === "auto") {
     startPid = dependencies.parent_pid ?? process.ppid;
@@ -464,7 +490,7 @@ export function knockForHost(
   if (!bound) return null;
   const now = (options.now ?? (() => new Date()))();
   const db = openReadOnly(databasePath);
-  let found: { session: ReadOnlySessionRow; rest: SessionRest | null; waiting: KnockItem[] } | null;
+  let found: KnockRead | null;
   try {
     found = db.transaction(() => {
       const active = bound.flatMap((binding) => {
@@ -472,28 +498,42 @@ export function knockForHost(
         return row?.status === "active" ? [row] : [];
       });
       if (active.length !== 1) return null;
-      const session = active[0]!;
-      return { session, rest: restAt(db, session, now), waiting: addressedItems(db, session) };
+      // Never the sender: the --host-ancestor output stays byte-identical.
+      return readKnockAt(db, active[0]!, now, false);
     })();
   } finally {
     db.close();
   }
-  if (!found) return null;
-  const { session, rest, waiting } = found;
-  // A held rest (resting without wake_on "addressed") is never tapped: its items
-  // stay unmarked, so they tap at the first turn after the session returns.
-  const held = rest !== null && !rest.wake_on.includes("addressed");
-  const fresh = options.mark_tapped && !held
-    ? markTapped(databasePath, session.id, waiting)
-    : untapped(readKnockLedger(databasePath), session.id, waiting);
-  return {
-    protocol: COLLAB_KNOCK_PROTOCOL,
-    session_id: session.id,
-    liveness: livenessAt(session, rest, now),
-    rest,
-    waiting: waiting.length,
-    new: fresh,
-  };
+  return found ? knockReport(databasePath, found, now, options.mark_tapped === true) : null;
+}
+
+/**
+ * The knock for one session named by id, for a caller that already knows
+ * which session it serves (the cross-device hub): no binding and no ps.
+ * Null unless the id is well formed and the session is active. The rest of
+ * the report, the held-rest rule and mark_tapped are knockForHost's own. With
+ * include_sender_session, each item also carries the sender's session id.
+ */
+export function knockForSession(
+  databasePath: string,
+  sessionId: string,
+  options: { mark_tapped?: boolean; include_sender_session?: boolean; now?: () => Date } = {},
+): KnockReport | null {
+  // A malformed id is refused before the journal is opened.
+  if (sessionId.length > MAX_KNOCK_SESSION_ID || !SESSION_ID.test(sessionId)) return null;
+  const now = (options.now ?? (() => new Date()))();
+  const db = openReadOnly(databasePath);
+  let found: KnockRead | null;
+  try {
+    found = db.transaction(() => {
+      const session = sessionRowById(db, sessionId);
+      if (session?.status !== "active") return null;
+      return readKnockAt(db, session, now, options.include_sender_session === true);
+    })();
+  } finally {
+    db.close();
+  }
+  return found ? knockReport(databasePath, found, now, options.mark_tapped === true) : null;
 }
 
 /**
@@ -552,6 +592,41 @@ interface ReadOnlySessionRow {
   status: string;
   last_seen_at: string;
   cursor_sequence: number;
+}
+
+/** One session's knock state, read inside the caller's read-only transaction. */
+interface KnockRead {
+  session: ReadOnlySessionRow;
+  rest: SessionRest | null;
+  waiting: KnockItem[] | SenderKnockItem[];
+}
+
+/**
+ * The shared reader of knockForHost and knockForSession. Each caller opens
+ * its own single read-only transaction around it, so each report is read
+ * from one snapshot.
+ */
+function readKnockAt(db: Database, session: ReadOnlySessionRow, now: Date, includeSender: boolean): KnockRead {
+  return { session, rest: restAt(db, session, now), waiting: addressedItems(db, session, includeSender) };
+}
+
+/** Build the report from one read; mark the new items unless the rest is held. */
+function knockReport(databasePath: string, found: KnockRead, now: Date, markTappedItems: boolean): KnockReport {
+  const { session, rest, waiting } = found;
+  // A held rest (resting without wake_on "addressed") is never tapped: its items
+  // stay unmarked, so they tap at the first turn after the session returns.
+  const held = rest !== null && !rest.wake_on.includes("addressed");
+  const fresh = markTappedItems && !held
+    ? markTapped(databasePath, session.id, waiting)
+    : untapped(readKnockLedger(databasePath), session.id, waiting);
+  return {
+    protocol: COLLAB_KNOCK_PROTOCOL,
+    session_id: session.id,
+    liveness: livenessAt(session, rest, now),
+    rest,
+    waiting: waiting.length,
+    new: fresh,
+  };
 }
 
 /**
@@ -624,9 +699,14 @@ function livenessAt(session: ReadOnlySessionRow, rest: SessionRest | null, now: 
 /**
  * Addressed items past the session's acknowledged cursor, judged by the
  * store's own isAddressedTo, so `waiting` always equals collab_next's
- * addressed_waiting.
+ * addressed_waiting. The sender's session id (`events.session_id`) is added
+ * last, and only when asked for.
  */
-function addressedItems(db: Database, session: ReadOnlySessionRow): KnockItem[] {
+function addressedItems(
+  db: Database,
+  session: ReadOnlySessionRow,
+  includeSender = false,
+): KnockItem[] | SenderKnockItem[] {
   const rows = db.query(`
     SELECT sequence, type, actor, entity_id, session_id, payload_json FROM events
     WHERE workspace_id = ? AND sequence > ?
@@ -635,14 +715,15 @@ function addressedItems(db: Database, session: ReadOnlySessionRow): KnockItem[] 
   `).all(session.workspace_id, session.cursor_sequence) as Array<
     AddressedEventRow & { sequence: number; actor: string; entity_id: string }
   >;
-  return rows
-    .filter((row) => isAddressedTo(row, session.id))
-    .map((row) => ({
-      seq: row.sequence,
-      kind: row.type as KnockItem["kind"],
-      from_actor: row.actor,
-      ref_id: row.entity_id,
-    }));
+  const addressed = rows.filter((row) => isAddressedTo(row, session.id));
+  const item = (row: (typeof addressed)[number]): KnockItem => ({
+    seq: row.sequence,
+    kind: row.type as KnockItem["kind"],
+    from_actor: row.actor,
+    ref_id: row.entity_id,
+  });
+  if (!includeSender) return addressed.map(item);
+  return addressed.map((row): SenderKnockItem => ({ ...item(row), from_session_id: row.session_id }));
 }
 
 interface KnockLedger {

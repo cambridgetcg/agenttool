@@ -474,6 +474,7 @@ commands expose knocks:
 
 ```bash
 agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]
+agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]
 agenttool-collab-host doorbell-scan [--db <path>]
 ```
 
@@ -487,7 +488,15 @@ or nothing. `new` lists the pointers not yet in the private ledger
 `collab-sessions/knock-ledger.json`, which only `--mark-tapped` writes. When
 more than one active session is bound to that host, or a Codex Desktop
 app-server runs more than one collab server, it prints nothing and marks
-nothing: ambiguity means silence, not a guess. `doorbell-scan` prints
+nothing: ambiguity means silence, not a guess. `knocks --session <id>` is
+for a host that already knows which session it serves (the cross-device
+bridge's hub): it reads that one session, needs no binding and runs no `ps`,
+and prints nothing unless the session is active. Its report is the same line,
+and with `--with-sender` each item also carries `from_session_id`, the sending
+session's id, so the host can name the sender's device without trusting
+`from_actor`. `--session` never combines with `--host-ancestor`, and
+`--with-sender` needs `--session`; any other combination prints nothing.
+`doorbell-scan` prints
 `{"protocol":"agenttool.collab-doorbell-scan/1","sessions":[...]}`: the resting
 sessions with `wake_on` addressed and waiting items no tap has announced, each
 with its host binding. Both open the journal read-only (`readonly`,
