@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { readLedger, verifyLedger } from '../src/ledger.ts'
 import { encodeFrame, FRAME_TYPE, FrameDecoder, PreambleScanner, type Frame } from '../src/link/frame.ts'
 import { MAX_PIPE_TO_HUB } from '../src/link/messages.ts'
 import { pktLineErr } from '../src/nuance/fetch-gate.ts'
+import { runGate } from '../src/nuance/gate-main.ts'
 import { nuancePaths, type NuancePaths } from '../src/paths.ts'
 import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
-import { cleanupTmps, temp, testEnv } from './helpers.ts'
+import { cleanupTmps, sha256File, temp, testEnv } from './helpers.ts'
 import { fixtureGit as git, installedNuanceHome, installForHello, recordedGit, secretBranchRepo } from './nuance-home.ts'
 
 afterEach(cleanupTmps)
@@ -24,8 +25,8 @@ function nuance() {
 }
 
 /** One ssh call as the hub or pin-device makes it: argv in; stdout bytes, stderr and the exit code out. */
-async function ssh(n: ReturnType<typeof nuance>, command: string | null) {
-  const fake = makeFakeSsh({ nuanceHome: n.home, target: gateFromSource(), env: n.env })
+async function ssh(n: ReturnType<typeof nuance>, command: string | null, extraEnv: Record<string, string> = {}) {
+  const fake = makeFakeSsh({ nuanceHome: n.home, target: gateFromSource(), env: { ...n.env, ...extraEnv } })
   const args = ['-F', '/Users/yuai/.ssh/collab-bridge/config', 'collab-nuance', ...(command === null ? [] : [command])]
   const p = Bun.spawn([fake.bin, ...args], { stdin: new Blob(['']), stdout: 'pipe', stderr: 'pipe', env: { PATH: '/usr/bin:/bin' } })
   const [out, err, code] = await Promise.all([new Response(p.stdout).arrayBuffer(), new Response(p.stderr).text(), p.exited])
@@ -263,5 +264,165 @@ describe('upload-pack through the fake ssh and the real gate entry (§12.1 Git t
     const end = Date.now() + 5_000
     while (gateLines(w.h.paths).length === 0 && Date.now() < end) await Bun.sleep(20)
     expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome])).toEqual([['upload-pack', 'not_shared']])
+  }, 30_000)
+})
+
+/** The code a ledger line carries, for the lines the gate appends. */
+const gateTriples = (paths: NuancePaths) => gateLines(paths).map((e) => [e.form, e.outcome, e.code])
+
+describe('gate entry: failures stay on the record (Task 24 review)', () => {
+  test('a throw in the hello dispatch still appends the ledger line, and exits 70 with one stderr line', async () => {
+    const n = nuance()
+    installForHello(n.paths)
+    // systemBin throws under the override when its knob is empty: a real throw inside the gate's own dispatch.
+    const r = await ssh(n, 'hello', { COLLAB_BRIDGE_BIN_ZSH: '' })
+    expect(r.code).toBe(70)
+    expect(r.out).toBe('')
+    expect(lines(r.err)).toHaveLength(1)
+    expect(gateTriples(n.paths)).toEqual([['hello', 'error', 'exception']])
+    expect(verifyLedger(n.paths.ledger).ok).toBe(true)
+  })
+
+  test('a throw in the upload-pack dispatch answers a pkt-line ERR, ledgers the line and exits 70', async () => {
+    // The recorded git is a file that is not executable, with its true sha256: every check passes, and spawning it throws.
+    const dir = temp('cb-nonexec-')
+    const notGit = join(dir, 'git')
+    writeFileSync(notGit, '#!/bin/sh\nexit 0\n', { mode: 0o644 })
+    const h = installedNuanceHome({ share: join('Projects', 'collab-trial'),
+      git: { path: notGit, version: '2.52.0', sha256: sha256File(notGit), guard: true, apple: false } })
+    secretBranchRepo(h.share, h.home)
+    const r = await ssh({ home: h.home, env: h.env, paths: h.paths }, `git-upload-pack '${join(h.share, '.git')}'`)
+    expect(r.code).toBe(70)
+    expect(Array.from(r.bytes)).toEqual(Array.from(pktLineErr('exception')))
+    expect(lines(r.err)).toHaveLength(1)
+    expect(r.err).not.toContain(notGit)                 // a failure's message is never echoed
+    expect(gateTriples(h.paths)).toEqual([['upload-pack', 'error', 'exception']])
+  }, 30_000)
+
+  test('a ledger append that fails is named once on stderr, and the answer still goes out', async () => {
+    const n = nuance()
+    installForHello(n.paths)
+    mkdirSync(n.paths.ledger, { recursive: true })      // a directory where the ledger file belongs: every append fails with EISDIR
+    const r = await ssh(n, 'hello')
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out).v).toBe(1)
+    expect(lines(r.err)).toHaveLength(1)
+    expect(r.err).toContain('ledger')
+    expect(r.err).toContain('EISDIR')
+  })
+
+  test('a relay with a failing ledger says so once, not once per line', async () => {
+    const n = nuance()
+    mkdirSync(n.paths.ledger, { recursive: true })
+    const up = await relayUp(n)
+    up.p.stdin.end()
+    expect(await up.p.exited).toBe(0)                    // start, exit and the gate's own line all failed to append
+    const err = await up.err
+    expect(lines(err)).toHaveLength(1)
+    expect(err).toContain('EISDIR')
+  }, 20_000)
+})
+
+/** The relay form behind the fake ssh, read up to its preamble; the hub's stdin and stdout are the process's. */
+async function relayUp(n: ReturnType<typeof nuance>) {
+  const fake = makeFakeSsh({ nuanceHome: n.home, target: gateFromSource(), env: n.env })
+  const p = Bun.spawn([fake.bin, '-F', '/Users/yuai/.ssh/collab-bridge/config', 'collab-nuance', `relay 1 ${NONCE}`],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: { PATH: '/usr/bin:/bin' } })
+  const err = new Response(p.stderr).text()
+  const reader = p.stdout.getReader()
+  const scanner = new PreambleScanner(NONCE)
+  const deadline = Date.now() + 10_000
+  for (;;) {
+    if (Date.now() > deadline) throw new Error('relay: no preamble')
+    const { value, done } = await reader.read()
+    if (done) throw new Error('relay: stdout closed early')
+    if (scanner.push(value).state === 'found') break
+  }
+  return { p, reader, err }
+}
+
+describe('a relay whose reader has gone (Task 23 write guard)', () => {
+  test('writes after the hub side closed are no-ops: no crash, and the relay still cleans up and ledgers', async () => {
+    const n = nuance()
+    const up = await relayUp(n)
+    await up.reader.cancel()                             // the hub's end of the ssh channel is gone: the next write meets EPIPE
+    const sock = await Bun.connect({ unix: n.paths.hubSock, socket: { data() {}, close() {}, error() {} } })
+    await Bun.sleep(200)                                 // the relay writes the pipe's OPEN frame toward a closed hub
+    sock.end()
+    await Bun.sleep(200)                                 // and its CLOSE
+    up.p.stdin.end()
+    expect(await up.p.exited).toBe(0)
+    expect(await up.err).toBe('')
+    expect(existsSync(n.paths.hubSock)).toBe(false)
+    expect(existsSync(n.paths.relayStatus)).toBe(false)
+    expect(readLedger(n.paths.ledger).map((e) => [e.event, e.form ?? e.outcome])).toEqual([['relay', 'start'], ['relay', 'exit'], ['gate', 'relay']])
+    expect(verifyLedger(n.paths.ledger).ok).toBe(true)
+  }, 20_000)
+})
+
+/** A repo whose HEAD holds `bytes` of incompressible data: a pack far beyond one pipe buffer, and git cannot shrink it. */
+function noiseWorld(bytes: number) {
+  const h = installedNuanceHome({ share: join('Projects', 'collab-trial') })
+  mkdirSync(h.share, { recursive: true })
+  git(['init', '-q', '-b', 'main', h.share], h.home)
+  const noise = new Uint8Array(bytes)
+  for (let off = 0; off < bytes; off += 65536) crypto.getRandomValues(noise.subarray(off, Math.min(bytes, off + 65536)))
+  writeFileSync(join(h.share, 'noise.bin'), noise)
+  git(['-C', h.share, 'add', 'noise.bin'], h.home)
+  git(['-C', h.share, '-c', 'user.name=t', '-c', 'user.email=t@t.invalid', 'commit', '-q', '-m', 'noise'], h.home)
+  const head = git(['-C', h.share, 'rev-parse', 'HEAD'], h.home)
+  const blob = git(['-C', h.share, 'rev-parse', 'HEAD:noise.bin'], h.home)
+  const fake = makeFakeSsh({ nuanceHome: h.home, target: gateFromSource(), env: h.env })
+  return { h, fake, gitdir: join(h.share, '.git'), head, blob, bytes }
+}
+
+const NOISE_BYTES = 6 * 1024 * 1024
+/** A v0 conversation that wants HEAD and says done: the advertisement, a NAK and then the pack come back. */
+const wantHead = (head: string) => pkt(`want ${head} multi_ack\n`) + '0000' + pkt('done\n')
+
+describe('a served pack outlives the old 2 s exit cap (Task 24 review)', () => {
+  test('a reader that starts 3 s late still gets every byte the gate ledgered', async () => {
+    const w = noiseWorld(NOISE_BYTES)
+    const dir = temp('cb-slow-')
+    const [req, out, status] = [join(dir, 'request'), join(dir, 'out'), join(dir, 'status')]
+    writeFileSync(req, wantHead(w.head))
+    // The gate writes into a pipe whose reader sleeps first: a plain write's bytes would be dropped by the exit after 2 s.
+    const p = Bun.spawn(['/bin/sh', '-c', '{ "$1" collab-nuance "$2" < "$3"; echo $? > "$4"; } | { /bin/sleep 3; /bin/cat > "$5"; }',
+      'sh', w.fake.bin, `git-upload-pack '${w.gitdir}'`, req, status, out], { stdout: 'pipe', stderr: 'pipe', env: { PATH: '/usr/bin:/bin' } })
+    expect(await p.exited).toBe(0)
+    expect(readFileSync(status, 'utf8').trim()).toBe('0')
+    const got = statSync(out).size
+    expect(got).toBeGreaterThan(w.bytes)                 // the incompressible blob alone is this big
+    expect(readFileSync(out).includes(Buffer.from('PACK'))).toBe(true)
+    const served = gateLines(w.h.paths)
+    expect(served.map((e) => [e.form, e.outcome])).toEqual([['upload-pack', 'served']])
+    expect(served[0]!.bytes).toBe(got)                   // what the ledger says was written is what arrived
+  }, 60_000)
+
+  test('a real git fetch of the same multi-MiB repo through the gate gets the blob intact', () => {
+    const w = noiseWorld(NOISE_BYTES)
+    const r = fetchThrough(w.fake, w.gitdir, '+HEAD:refs/collab/t/incoming', 0)
+    expect([r.code, r.stderr]).toEqual([0, expect.any(String)])
+    expect(git(['-C', r.air, 'rev-parse', 'refs/collab/t/incoming'], r.air)).toBe(w.head)
+    expect(git(['-C', r.air, 'rev-parse', 'refs/collab/t/incoming:noise.bin'], r.air)).toBe(w.blob)
+    expect(git(['-C', r.air, 'cat-file', '-s', w.blob], r.air)).toBe(String(w.bytes))
+    expect(git(['-C', r.air, 'fsck', '--no-dangling'], r.air)).toBe('')
+  }, 60_000)
+
+  test('a reader that never drains holds the fetch for the fetch deadline, not for ever', async () => {
+    const w = uploadWorld()
+    const request = new TextEncoder().encode(wantHead(w.head))
+    const stdin = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(request); c.close() } })
+    let writes = 0
+    const io = { stdin, stdout: { write: () => { writes++; return new Promise<void>(() => {}) } }, stderr: { write() {} } }
+    // The suite's time scale: 60 s of fetch deadline is 600 ms here.
+    const env = { ...w.h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${w.gitdir}'`, COLLAB_BRIDGE_TEST_TIME_SCALE: '0.01' }
+    const t0 = Date.now()
+    expect(await runGate(env, io)).toBe(0)
+    const waited = Date.now() - t0
+    expect(waited).toBeGreaterThanOrEqual(500)           // it did wait for the reader first
+    expect(waited).toBeLessThan(15_000)                  // and then stopped waiting
+    expect(writes).toBeGreaterThan(0)
+    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome])).toEqual([['upload-pack', 'served']])
   }, 30_000)
 })
