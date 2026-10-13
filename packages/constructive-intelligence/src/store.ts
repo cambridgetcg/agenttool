@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import {
+  chmodSync,
   closeSync,
   constants,
   fchmodSync,
@@ -110,6 +111,13 @@ function assertTrustedParent(path: string): void {
   }
 }
 
+function isStableRegularEntry(status: Stats): boolean {
+  return status.isFile() && !status.isSymbolicLink() && status.nlink === 1;
+}
+
+/** Descriptor-based create/verify/tighten. Use only before this store opens
+ * its SQLite connection: see `secureOpenLedgerPath` for why.
+ */
 function secureRegularFile(path: string, create: boolean): void {
   const flags = constants.O_RDWR
     | constants.O_NOFOLLOW
@@ -138,6 +146,47 @@ function secureRegularFile(path: string, create: boolean): void {
     fchmodSync(descriptor, 0o600);
   } finally {
     closeSync(descriptor);
+  }
+}
+
+/** Verify and tighten a ledger path while this process may hold a SQLite
+ * connection to it, without opening or closing any descriptor.
+ *
+ * POSIX advisory locks belong to a process and inode, and closing any
+ * descriptor for a file releases every lock this process holds on it,
+ * including the locks SQLite holds on the database and its -shm index
+ * (https://sqlite.org/howtocorrupt.html, section 2.2). Another process could
+ * then take the -shm dead-man-switch lock and truncate the WAL index this
+ * process still has mapped, which kills it with SIGBUS, or conclude it is the
+ * last connection and checkpoint and delete the WAL beneath this one.
+ *
+ * SQLite creates -wal and -shm with the database file's mode, so a chmod is
+ * needed only after outside drift. chmod(2) by path opens no descriptor. The
+ * caller has just verified the parent is owned and not group/other writable,
+ * so only this user could swap the entry between the lstat and the chmod, and
+ * the identity recheck afterwards fails closed.
+ */
+function secureOpenLedgerPath(path: string): void {
+  const before = lstatIfPresent(path);
+  if (before === null) return;
+  if (!isStableRegularEntry(before)) {
+    fail("file_error", `Ledger path is not one stable, singly linked regular file: ${path}`);
+  }
+  if ((before.mode & 0o777) === 0o600) return;
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    fail("file_error", `Cannot tighten ledger file mode: ${path}`);
+  }
+  const after = lstatIfPresent(path);
+  if (
+    after === null
+    || !isStableRegularEntry(after)
+    || after.dev !== before.dev
+    || after.ino !== before.ino
+    || (after.mode & 0o777) !== 0o600
+  ) {
+    fail("file_error", `Ledger path is not one stable, singly linked regular file: ${path}`);
   }
 }
 
@@ -172,6 +221,8 @@ export class ConstructiveStore {
     }
     this.filesystemPath = join(parent, basename(requestedPath));
     assertTrustedParent(this.filesystemPath);
+    // Descriptor-based checks happen only here, before this store holds any
+    // SQLite lock. From the open onward, tightenFileModes opens no descriptor.
     secureRegularFile(this.filesystemPath, options.create);
     for (const suffix of ["-wal", "-shm", "-journal"]) {
       if (lstatIfPresent(`${this.filesystemPath}${suffix}`) !== null) {
@@ -696,6 +747,10 @@ export class ConstructiveStore {
         && (status.mode & 0o777) === 0o600);
   }
 
+  /** Runs while the connection is open and after it closes (a closed Bun
+   * connection can linger with its locks until unfinalized statements are
+   * collected), so it must never open or close a ledger descriptor.
+   */
   private tightenFileModes(): void {
     if (!this.filesystemPath) return;
     assertTrustedParent(this.filesystemPath);
@@ -705,7 +760,7 @@ export class ConstructiveStore {
       `${this.filesystemPath}-shm`,
       `${this.filesystemPath}-journal`,
     ]) {
-      if (lstatIfPresent(path) !== null) secureRegularFile(path, false);
+      secureOpenLedgerPath(path);
     }
   }
 }
