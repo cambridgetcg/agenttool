@@ -109,15 +109,24 @@ const spelledInside = (a: Spelled, b: Spelled) =>
   a.home === b.home && !a.escapes && !b.escapes && a.segs.length > b.segs.length && startsWith(a.segs, b.segs)
 
 const SENSITIVE_SEGS = [...BUILD_SENSITIVE, ...TCC_PROTECTED].map((p) => p.toLowerCase().split('/'))
-/** Whether a `~` spelling breaks the build location rules. An absolute spelling cannot be judged without ~, so it passes here and admission judges it. */
-function buildSpellingRefused(path: string): boolean {
-  const s = spell(path)
-  if (!s.home) return false
+/**
+ * Whether a build entry's spelling breaks the build location rules. A `~` spelling is read from ~ itself; an absolute spelling is
+ * read against `home`, by its words alone (no realpath: a symlink into a forbidden place is admission's, on realpaths). An absolute
+ * spelling that is not strictly inside `home` is refused, and so is every absolute spelling when `home` is not an absolute path.
+ */
+function buildSpellingRefused(path: string, home: string): boolean {
+  let s = spell(path)
+  if (!s.home) {
+    const h = spell(home)
+    if (!home.startsWith('/') || !startsWith(s.segs, h.segs)) return true // the home itself is left with no words: refused below
+    s = { home: true, segs: s.segs.slice(h.segs.length), escapes: false }
+  }
   if (s.escapes || s.segs.length === 0) return true // not strictly inside ~
   return SENSITIVE_SEGS.some((f) => startsWith(s.segs, f) || startsWith(f, s.segs)) // is, lies within, or contains one
 }
 
-export function parseAllowlist(text: string): Parsed {
+/** `home` is the Mac's home folder, the ~ that a build entry's spelling is judged against; the caller has it (`SummonPaths.home`). */
+export function parseAllowlist(text: string, home: string): Parsed {
   let y: any
   try { y = Bun.YAML.parse(text) } catch (e) { return { ok: false, detail: `yaml: ${String((e as Error).message).slice(0, 120)}` } }
   const fail = (detail: string): Parsed => ({ ok: false, detail })
@@ -157,7 +166,7 @@ export function parseAllowlist(text: string): Parsed {
     if (!Object.hasOwn(f, 'commands') || f.commands === null) return fail(`${at}.commands: a build folder needs commands`)
     const cmds = parseCommands(f.commands, `${at}.commands`)
     if (!cmds.ok) return fail(cmds.detail)
-    if (buildSpellingRefused(f.path)) return fail(`${at}.path: a build folder must lie strictly inside ~, outside .ssh, .claude, .config, .local, Library and the privacy-protected folders`)
+    if (buildSpellingRefused(f.path, home)) return fail(`${at}.path: a build folder must lie strictly inside ~, outside .ssh, .claude, .config, .local, Library and the privacy-protected folders`)
     folders.push({ path: f.path, access: 'build', commands: cmds.commands })
   }
   // An edit or build folder may not lie inside another edit or build folder. A review folder may lie inside either.
@@ -181,10 +190,10 @@ export function parseAllowlist(text: string): Parsed {
   }
 }
 
-export function loadAllowlist(path: string): Parsed {
+export function loadAllowlist(path: string, home: string): Parsed {
   let text: string
   try { text = readFileSync(path, 'utf8') } catch { return { ok: false, detail: 'missing' } }
-  return parseAllowlist(text)
+  return parseAllowlist(text, home)
 }
 
 export function expandHome(p: string, home: string): string {
@@ -309,6 +318,12 @@ export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
     if (!dotGit || dotGit.isSymbolicLink() || !dotGit.isDirectory()) {
       return refuse(`${best.f.path} is not a git repository root with a real .git directory`,
         `an ${req.access} folder must be a repository root: .git must be a directory in ${best.f.path} itself, not a file, a symlink or a parent's`)
+    }
+    // A .git directory without its HEAD (empty, or HEAD deleted) is not a repository to git, which then walks up to the enclosing one.
+    const head = fs.lstat(join(cwdReal, '.git', 'HEAD'))
+    if (!head || head.isSymbolicLink() || !head.isFile()) {
+      return refuse(`${best.f.path}/.git has no regular HEAD file, so git would use a parent repository instead`,
+        `an ${req.access} folder must be a repository root: .git/HEAD must be a regular file in ${best.f.path}; repair or re-clone the repository`)
     }
     // On realpaths, so a symlink into another entry and a ~ spelling against an absolute one are caught. A folder that cannot be resolved is compared as spelled.
     const mine = stripSlash(best.real).toLowerCase()

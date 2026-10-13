@@ -256,15 +256,17 @@ describe('Phase 0.5: the front door applies the build access and the edit/build 
   const BUILD = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test\n        args: true')
   const EDIT = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: edit')
   const stateOf = (h: string, id: string) => JSON.parse(readFileSync(join(h, '.local/state/summon/jobs', id, 'state.json'), 'utf8'))
+  /** ~/Projects/x as a repository root as far as Summon looks: a real .git directory with a HEAD file in it. */
+  const makeRepo = (h: string) => { mkdirSync(join(h, 'Projects/x/.git')); writeFileSync(join(h, 'Projects/x/.git/HEAD'), 'ref: refs/heads/main\n') }
 
   test('a build request into a build folder that is a repository root is admitted, and the job state records access build', () => {
-    const h = targetHome(BUILD); mkdirSync(join(h, 'Projects/x/.git'))
+    const h = targetHome(BUILD); makeRepo(h)
     const req = sampleRequest({ access: 'build' })
     expect(gateStart(JSON.stringify(req), deps(h))).toEqual({ status: 'admitted', handle: `nuance/${req.id}` })
     expect(stateOf(h, req.id)).toMatchObject({ status: 'queued', access: 'build', cwd_real: join(h, 'Projects/x') })
   })
   test('a build request into an edit folder is outside_allowlist, with a hint that is a complete build entry', () => {
-    const h = targetHome(EDIT); mkdirSync(join(h, 'Projects/x/.git'))
+    const h = targetHome(EDIT); makeRepo(h)
     const r = gateStart(JSON.stringify(sampleRequest({ access: 'build' })), deps(h))
     expect(r).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: 'build is not allowed in ~/Projects/x (edit)' })
     expect((r as { hint?: string }).hint).toBe('folders:\n  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test')
@@ -273,15 +275,31 @@ describe('Phase 0.5: the front door applies the build access and the edit/build 
     const h = targetHome(EDIT)
     const notRepo = gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h))
     expect(notRepo).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('.git'), hint: expect.any(String) })
-    mkdirSync(join(h, 'Projects/x/.git')); mkdirSync(join(h, 'Projects/x/sub'))
+    makeRepo(h); mkdirSync(join(h, 'Projects/x/sub'))
     const below = gateStart(JSON.stringify(sampleRequest({ access: 'edit', cwd: '~/Projects/x/sub' })), deps(h))
     expect(below).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('folder entry itself') })
     const req = sampleRequest({ access: 'edit' })
     expect(gateStart(JSON.stringify(req), deps(h))).toMatchObject({ status: 'admitted' })
     expect(stateOf(h, req.id)).toMatchObject({ access: 'edit', cwd_real: join(h, 'Projects/x') })
   })
+  test('a .git directory without a HEAD file is not a repository root: git would use the enclosing repository', () => {
+    const h = targetHome(EDIT); mkdirSync(join(h, 'Projects/x/.git'))
+    expect(gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h)))
+      .toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('HEAD'), hint: expect.any(String) })
+  })
+  test('a build entry spelled absolutely in a place the location rules forbid refuses every request, as the allowlist file problem', () => {
+    const build = (path: string) => FLAGGED.replace('  - path: ~/Projects\n    access: review', `  - path: ${path}\n    access: build\n    commands:\n      - run: bun test`)
+    const h = targetHome()
+    for (const path of ['/etc/z', `${h}/.ssh/x`, `${h}/Library/y`, `${h}/Projects/../.config/z`]) {
+      writeFileSync(join(h, '.config/summon/allowlist.yaml'), build(path))
+      const r = gateStart(JSON.stringify(sampleRequest()), deps(h))
+      expect([path, r]).toEqual([path, expect.objectContaining({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('allowlist: folders[0].path') })])
+    }
+    writeFileSync(join(h, '.config/summon/allowlist.yaml'), build(`${h}/Projects/x`))
+    expect(gateStart(JSON.stringify(sampleRequest()), deps(h)).status).toBe('admitted')
+  })
   test('a request carrying commands or sandbox fields is malformed at the front door, even for a build folder', () => {
-    const h = targetHome(BUILD); mkdirSync(join(h, 'Projects/x/.git'))
+    const h = targetHome(BUILD); makeRepo(h)
     for (const extra of [{ commands: [{ run: 'bun test' }] }, { sandbox: false }]) {
       expect(gateStart(JSON.stringify({ ...sampleRequest({ access: 'build' }), ...extra }), deps(h))).toMatchObject({ status: 'refused', reason: 'malformed' })
     }

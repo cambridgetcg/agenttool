@@ -51,7 +51,7 @@ export function gateStart(raw: string, deps: GateDeps): GateResponse {
   const v = validateRequest(raw)
   if (!v.ok) return refuse(deps, null, v.reason, v.detail, undefined, v.reason === 'too_large' ? undefined : wellFormedId(raw))
   const req = v.request
-  const al = loadAllowlist(deps.paths.allowlist)
+  const al = loadAllowlist(deps.paths.allowlist, deps.home)
   if (!al.ok) {
     return refuse(deps, req, 'outside_allowlist', `allowlist: ${al.detail}`,
       `fix ~/.config/summon/allowlist.yaml on Nuance (${al.detail}); the installer's starter file is the reference`)

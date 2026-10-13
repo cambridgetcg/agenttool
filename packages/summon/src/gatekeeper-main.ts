@@ -21,7 +21,7 @@ const say = (o: GateResponse) => new Promise<void>((done) => { process.stdout.wr
 
 async function answer(cmd: Command): Promise<GateResponse> {
   const paths = summonPaths()
-  const al = loadAllowlist(paths.allowlist)
+  const al = loadAllowlist(paths.allowlist, paths.home)
   const device = al.ok ? al.allowlist.device : 'unknown'
   const now = Date.now()
   switch (cmd.verb) {

@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkAdmission, parseAllowlist, parseDurationS, type Admission, type Allowlist, type FsProbe } from '../src/allowlist.ts'
+import { checkAdmission, parseAllowlist as parseWithHome, parseDurationS, type Admission, type Allowlist, type AllowlistFolder, type FsProbe } from '../src/allowlist.ts'
 import { cleanupTmps, sampleRequest, trackTmp } from './helpers.ts'
+
+/** The home the parser is told when a test does not care which: a spelling is judged against it, never looked up. */
+const TEST_HOME = '/Users/yu'
+const parseAllowlist = (text: string, home: string = TEST_HOME) => parseWithHome(text, home)
 
 // Mirrors the planned gate: narrows on !adm.ok, then reads adm.hint. Must type-check under tsc --strict.
 function refusalHint(adm: Admission): string | undefined {
@@ -18,9 +22,10 @@ function home(): string {
 }
 afterEach(() => cleanupTmps())
 
-/** A git repository root as far as Summon looks: a real .git directory directly in the folder. */
+/** A git repository root as far as Summon looks: a real .git directory directly in the folder, with a HEAD file in it. */
 function repo(dir: string): string {
   mkdirSync(join(dir, '.git'), { recursive: true })
+  writeFileSync(join(dir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
   return dir
 }
 /** home() with ~/Projects/x and ~/Projects/y made repository roots. */
@@ -246,23 +251,28 @@ describe('checkAdmission', () => {
 // ---------------------------------------------------------------------------------------------------------------------
 
 type Folder = Record<string, unknown>
+type Over = { flag?: boolean; runtimes?: unknown[]; home?: string }
 const BUN = [{ run: 'bun test', args: false }]
 const buildEntry = (path = '~/Projects/x', commands: unknown = BUN): Folder => ({ path, access: 'build', commands })
 const editEntry = (path = '~/Projects/x'): Folder => ({ path, access: 'edit' })
 const reviewEntry = (path = '~/Projects'): Folder => ({ path, access: 'review' })
 
-function allowJson(folders: Folder[], over: { flag?: boolean; runtimes?: unknown[] } = {}): string {
+function allowJson(folders: Folder[], over: Over = {}): string {
   return JSON.stringify({
     version: 1, device: 'nuance', peers: ['air'],
     runtimes: [{ id: 'claude', models: [{ model: 'sonnet' }, { model: 'haiku' }], reads_anywhere: over.flag ?? true }, ...(over.runtimes ?? [])],
     folders, limits: { max_concurrent: 1, starts_per_hour: 6, job_timeout_max: '30m' },
   })
 }
-const parseF = (folders: Folder[], over?: { flag?: boolean; runtimes?: unknown[] }) => parseAllowlist(allowJson(folders, over))
-function allowOf(folders: Folder[], over?: { flag?: boolean; runtimes?: unknown[] }): Allowlist {
+const parseF = (folders: Folder[], over?: Over) => parseAllowlist(allowJson(folders, over), over?.home)
+function allowOf(folders: Folder[], over?: Over): Allowlist {
   const r = parseF(folders, over)
   if (!r.ok) throw new Error(r.detail)
   return r.allowlist
+}
+/** An allowlist that did not come through the parser (a hand-built object): admission is the backstop for it, so its tests start here. */
+function unparsed(folders: Folder[], over?: Over): Allowlist {
+  return { ...allowOf([reviewEntry()], over), folders: folders as unknown as AllowlistFolder[] }
 }
 const refusedWith = (folders: Folder[], word: string) =>
   expect(parseF(folders)).toEqual({ ok: false, detail: expect.stringContaining(word) })
@@ -485,8 +495,46 @@ describe('Phase 0.5 parseAllowlist: the build location rules, on the spelling', 
     for (const p of ['~/.configx/y', '~/.sshd/x', '~/.local-tools/x', '~/Libraryx/y', '~/DocumentsArchive/x', '~/Projects/.config/x', '~/Projects/Library/x',
       '~/Projects/Desktop']) expect([p, where(p).ok]).toEqual([p, true])
   })
-  test('an absolute spelling cannot be judged without ~, so admission judges it, on its realpath', () => {
-    expect(where('/srv/ci/x').ok).toBe(true)
+  describe('an absolute spelling is judged against the home the parser is given, by its words alone', () => {
+    const H = '/Users/yu'
+    const abs = (path: string, home = H) => parseF([buildEntry(path)], { home })
+    const refusedAbs = (path: string, home = H) => expect([path, abs(path, home)]).toEqual([path, { ok: false, detail: expect.stringContaining('build folder') }])
+
+    test('a folder outside the home is refused: /srv/ci/x, /etc/z, /, the home\'s parent and a sibling that shares a name prefix', () => {
+      for (const p of ['/srv/ci/x', '/etc/z', '/', '/Users', '/Users/yuki/x', '/Users/yu-x/Projects/x', '/private/Users/yu/Projects/x']) refusedAbs(p)
+    })
+    test('the home itself is not strictly inside it', () => {
+      for (const p of [H, `${H}/`, `${H}//`, `${H}/.`, `${H}/Projects/..`, `${H}/Projects/../..`]) refusedAbs(p)
+    })
+    test('the sensitive set and the TCC folders are refused whatever the spelling', () => {
+      for (const p of ['.ssh', '.ssh/x', '.claude/projects/x', '.config', '.config/summon', '.local/share/summon', 'Library', 'Library/y',
+        'Library/Mobile Documents/com~apple~CloudDocs', 'Desktop/x', 'Documents', 'Documents/secret', 'Downloads/x/y']) refusedAbs(`${H}/${p}`)
+    })
+    test('the words are folded first: .., doubled slashes, a trailing slash and case', () => {
+      for (const p of [`${H}/Projects/../.ssh`, `${H}/Projects/x/../../.config/y`, `${H}//.ssh//x`, `${H}/.ssh/`, `${H}/.SSH/x`, `${H}/Library/../Library/y`,
+        '/USERS/YU/.config/summon', `${H}/documents/secret`, `${H}/Projects/../../../etc/z`]) refusedAbs(p)
+    })
+    test('a folder strictly inside the home and outside the sensitive set parses, however it is spelled', () => {
+      for (const p of [`${H}/Projects/x`, `${H}/Projects/x/`, `${H}//Projects//x`, `${H}/Projects/q/../x`, '/USERS/YU/projects/X', `${H}/.configx/y`, `${H}/Projects/.config/x`,
+        `${H}/DocumentsArchive/x`]) expect([p, abs(p).ok]).toEqual([p, true])
+    })
+    test('the home is the one the parser is given: the same path is fine in one home and refused in another', () => {
+      expect(abs('/srv/ci/x', '/srv/ci').ok).toBe(true) // the build folder is strictly inside that home
+      refusedAbs('/srv/ci/x', '/Users/yu')
+      refusedAbs('/Users/yu/Projects/x', '/Users/other')
+    })
+    test('a home that is not an absolute path judges no absolute spelling as inside it', () => {
+      for (const home of ['', 'Users/yu', '~']) refusedAbs('/Users/yu/Projects/x', home)
+    })
+    test('the refusal is a parse error, so the whole allowlist fails closed and names the entry', () => {
+      const r = parseF([reviewEntry(), buildEntry('/Users/yu/.ssh/x')], { home: H })
+      expect(r).toEqual({ ok: false, detail: expect.stringContaining('folders[1].path') })
+    })
+    test('~ and absolute spellings of one place agree', () => {
+      for (const [tilde, absolute] of [['~/Projects/x', `${H}/Projects/x`], ['~/.ssh/x', `${H}/.ssh/x`], ['~/Library/y', `${H}/Library/y`], ['~/Desktop', `${H}/Desktop`]]) {
+        expect([tilde, parseF([buildEntry(tilde!)], { home: H }).ok]).toEqual([tilde, abs(absolute!).ok])
+      }
+    })
   })
   test('edit and review entries are not held to the location rules', () => {
     expect(parseF([editEntry('~/.config/x')]).ok).toBe(true)
@@ -627,7 +675,7 @@ describe('Phase 0.5 checkAdmission: the refusal order', () => {
     const h = repoHome()
     for (const d of ['.config/x', 'Projects/z/sub', 'Projects/x/inner']) mkdirSync(join(h, d), { recursive: true })
     // location first: an absolute build entry in ~/.config, with cwd below it, no .git anywhere
-    expect(detailOf(checkAdmission(sampleRequest({ access: 'build', cwd: '~/.config/x' }), allowOf([buildEntry(`${h}/.config`)]), h))).toContain('build folders must lie')
+    expect(detailOf(checkAdmission(sampleRequest({ access: 'build', cwd: '~/.config/x' }), unparsed([buildEntry(`${h}/.config`)]), h))).toContain('build folders must lie')
     // cwd at the entry second: neither folder is a repository, the cwd is below the entry
     expect(detailOf(checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/z/sub' }), allowOf([editEntry('~/Projects/z')]), h))).toContain('folder entry itself')
     // a real .git third: cwd is at the entry, no .git, and the entry overlaps another entry
@@ -699,33 +747,61 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
   test('the entry must be a git repository root with a real .git directory', () => {
     const h = home()
     const at = (name: string) => { mkdirSync(join(h, 'Projects', name), { recursive: true }); return join(h, 'Projects', name) }
-    const cases: Array<[string, string]> = []
+    const cases: Array<[string, string, string]> = []
     // none at all
-    at('none'); cases.push(['none', 'none'])
+    at('none'); cases.push(['none', 'none', '.git'])
     // a parent repository: the parent has .git, the folder does not
-    repo(at('parent')); at('parent/child'); cases.push(['parent/child', 'parent child'])
+    repo(at('parent')); at('parent/child'); cases.push(['parent/child', 'parent child', '.git'])
     // a gitfile (a worktree or submodule link)
-    const gf = at('gitfile'); writeFileSync(join(gf, '.git'), 'gitdir: ../elsewhere/.git\n'); cases.push(['gitfile', 'gitfile'])
+    const gf = at('gitfile'); writeFileSync(join(gf, '.git'), 'gitdir: ../elsewhere/.git\n'); cases.push(['gitfile', 'gitfile', '.git'])
     // a symlinked .git
-    const sl = at('symlinked'); mkdirSync(join(h, 'real-git')); symlinkSync(join(h, 'real-git'), join(sl, '.git')); cases.push(['symlinked', 'symlink'])
+    const sl = at('symlinked'); mkdirSync(join(h, 'real-git')); symlinkSync(join(h, 'real-git'), join(sl, '.git')); cases.push(['symlinked', 'symlink', '.git'])
     // a symlink to a file
-    const sf = at('symfile'); writeFileSync(join(h, 'a-file'), ''); symlinkSync(join(h, 'a-file'), join(sf, '.git')); cases.push(['symfile', 'symlink to file'])
+    const sf = at('symfile'); writeFileSync(join(h, 'a-file'), ''); symlinkSync(join(h, 'a-file'), join(sf, '.git')); cases.push(['symfile', 'symlink to file', '.git'])
     // a dangling symlink
-    const dl = at('dangling'); symlinkSync(join(h, 'nowhere'), join(dl, '.git')); cases.push(['dangling', 'dangling'])
+    const dl = at('dangling'); symlinkSync(join(h, 'nowhere'), join(dl, '.git')); cases.push(['dangling', 'dangling', '.git'])
+    // a .git directory that is not a repository: git skips it and walks up to the enclosing repository, so it is not a root
+    repo(at('hparent')); mkdirSync(join(at('hparent/empty'), '.git')); cases.push(['hparent/empty', 'empty .git inside a repository', 'HEAD'])
+    mkdirSync(join(at('emptyalone'), '.git')); cases.push(['emptyalone', 'empty .git on its own', 'HEAD'])
+    // a real repository whose HEAD is gone, or is not a regular file; `noHead` returns the path HEAD had
+    const noHead = (name: string) => { const head = join(repo(at(name)), '.git', 'HEAD'); unlinkSync(head); return head }
+    noHead('nohead'); cases.push(['nohead', 'HEAD deleted', 'HEAD'])
+    writeFileSync(join(h, 'head-file'), 'ref: refs/heads/main\n')
+    symlinkSync(join(h, 'head-file'), noHead('headlink')); cases.push(['headlink', 'HEAD a symlink to a file', 'HEAD'])
+    symlinkSync(join(h, 'nowhere'), noHead('headdangling')); cases.push(['headdangling', 'HEAD a dangling symlink', 'HEAD'])
+    mkdirSync(noHead('headdir')); cases.push(['headdir', 'HEAD a directory', 'HEAD'])
     repo(at('good'))
-    for (const [name, label] of cases) {
+    for (const [name, label, word] of cases) {
       for (const [kind, entry] of entries) {
         for (const job of jobs) {
           if (job === 'build' && kind === 'edit') continue
           const r = checkAdmission(sampleRequest({ access: job, cwd: `~/Projects/${name}` }), allowOf([entry(`~/Projects/${name}`)]), h)
           expect([label, kind, job, r.ok]).toEqual([label, kind, job, false])
-          nope(r, '.git')
+          nope(r, word)
         }
       }
     }
     expect(checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/good' }), allowOf([editEntry('~/Projects/good')]), h)).toMatchObject({ ok: true })
     // review needs none of this
     expect(checkAdmission(sampleRequest({ access: 'review', cwd: '~/Projects/none' }), allowOf([editEntry('~/Projects/none')]), h)).toMatchObject({ ok: true })
+  })
+
+  test('with real git: a repository that lost its HEAD resolves to the enclosing repository, and admission refuses it', () => {
+    const h = home()
+    const env = { PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin', HOME: h, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+    const git = (cwd: string, ...args: string[]) => {
+      const r = Bun.spawnSync(['git', ...args], { cwd, env })
+      return { ok: r.exitCode === 0, out: new TextDecoder().decode(r.stdout).trim() }
+    }
+    const parent = join(h, 'Projects/gparent'); const child = join(parent, 'child')
+    mkdirSync(child, { recursive: true })
+    expect(git(parent, 'init', '-q').ok && git(child, 'init', '-q').ok).toBe(true)
+    const admit = () => checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/gparent/child' }), allowOf([editEntry('~/Projects/gparent/child')]), h)
+    expect(git(child, 'rev-parse', '--show-toplevel').out).toBe(child)
+    expect(admit()).toMatchObject({ ok: true, cwdReal: child })
+    unlinkSync(join(child, '.git', 'HEAD'))
+    expect(git(child, 'rev-parse', '--show-toplevel').out).toBe(parent) // what the next edit job's git would have worked on
+    nope(admit(), 'HEAD')
   })
 
   test('no other edit or build entry may lie inside the matched one or contain it, by realpath', () => {
@@ -762,7 +838,7 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
       const h = home()
       for (const rel of ['.ssh/proj', '.claude/proj', '.config/proj', '.local/proj', 'Library/proj', '.SSH/proj']) {
         const dir = at(h, rel)
-        const r = checkAdmission(sampleRequest({ access: 'build', cwd: dir }), allowOf([buildEntry(dir)]), h)
+        const r = checkAdmission(sampleRequest({ access: 'build', cwd: dir }), unparsed([buildEntry(dir)]), h)
         expect([rel, r.ok]).toEqual([rel, false])
         nope(r, 'build folders must lie')
       }
@@ -776,24 +852,24 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
       const h = home()
       const dotfiles = at(h, 'dotfiles'); mkdirSync(join(dotfiles, 'cfg'), { recursive: true }); repo(join(dotfiles, 'cfg'))
       symlinkSync(dotfiles, join(h, '.config'))
-      nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/dotfiles/cfg' }), allowOf([buildEntry(`${h}/dotfiles/cfg`)]), h), 'build folders must lie')
-      nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/dotfiles' }), allowOf([buildEntry(`${h}/dotfiles`)]), h), 'build folders must lie')
+      nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/dotfiles/cfg' }), unparsed([buildEntry(`${h}/dotfiles/cfg`)]), h), 'build folders must lie')
+      nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/dotfiles' }), unparsed([buildEntry(`${h}/dotfiles`)]), h), 'build folders must lie')
     })
     test('strictly inside ~: ~ itself, and a folder outside ~, are refused', () => {
       const h = home(); repo(h)
-      nope(checkAdmission(sampleRequest({ access: 'build', cwd: h }), allowOf([buildEntry(h)]), h), 'build folders must lie')
+      nope(checkAdmission(sampleRequest({ access: 'build', cwd: h }), unparsed([buildEntry(h)]), h), 'build folders must lie')
       const elsewhere = trackTmp(realpathSync(mkdtempSync(join(tmpdir(), 'summon-al-out-')))); repo(elsewhere)
-      nope(checkAdmission(sampleRequest({ access: 'build', cwd: elsewhere }), allowOf([buildEntry(elsewhere)]), h), 'build folders must lie')
+      nope(checkAdmission(sampleRequest({ access: 'build', cwd: elsewhere }), unparsed([buildEntry(elsewhere)]), h), 'build folders must lie')
     })
     test('the rules bind a build entry only: edit entries are not held to them, and neither is a review job in a build entry', () => {
       const h = home(); const dir = at(h, '.config/proj')
       // ~/.config is not a TCC folder: an edit entry there is admitted, as in Phase 0
       expect(checkAdmission(sampleRequest({ access: 'edit', cwd: dir }), allowOf([editEntry(dir)]), h)).toMatchObject({ ok: true })
-      expect(checkAdmission(sampleRequest({ access: 'review', cwd: dir }), allowOf([buildEntry(dir)]), h)).toMatchObject({ ok: true })
+      expect(checkAdmission(sampleRequest({ access: 'review', cwd: dir }), unparsed([buildEntry(dir)]), h)).toMatchObject({ ok: true })
     })
     test('an edit job in a build entry is held to the build entry\'s location rules too', () => {
       const h = home(); const dir = at(h, '.config/proj')
-      nope(checkAdmission(sampleRequest({ access: 'edit', cwd: dir }), allowOf([buildEntry(dir)]), h), 'build folders must lie')
+      nope(checkAdmission(sampleRequest({ access: 'edit', cwd: dir }), unparsed([buildEntry(dir)]), h), 'build folders must lie')
     })
   })
 
@@ -811,10 +887,12 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
     const h = repoHome()
     mkdirSync(join(h, 'Projects/x/sub'), { recursive: true })
     repo(join(h, 'Projects/x/sub/deep'))
+    mkdirSync(join(h, 'Projects/z/.git'), { recursive: true })
     const refused: Admission[] = [
       checkAdmission(sampleRequest({ access: 'build', cwd: '~/Projects/x/sub' }), allowOf([buildEntry()]), h), // cwd below the entry
       checkAdmission(sampleRequest({ access: 'build', cwd: '~/Projects/x/sub' }), allowOf([buildEntry('~/Projects/x/sub')]), h), // no .git
       checkAdmission(sampleRequest({ access: 'build', cwd: '~/Projects/x' }), allowOf([buildEntry(), editEntry(`${h}/Projects/x/sub/deep`)]), h), // overlap
+      checkAdmission(sampleRequest({ access: 'build', cwd: '~/Projects/z' }), allowOf([buildEntry('~/Projects/z')]), h), // .git without HEAD
     ]
     for (const r of refused) { expect(r.ok).toBe(false); expect(refusalHint(r)).toContain('commands:') }
     const edit = checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/x/sub' }), allowOf([editEntry()]), h)
@@ -825,7 +903,7 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
   test('the filesystem checks are injectable, so a test needs no disk: realpath and the lstat probe', () => {
     const real = new Map([['/h', '/h'], ['/h/p', '/h/p'], ['/h/p/x', '/h/p/x']])
     const realpath = (p: string) => real.get(p) ?? null
-    const kinds = new Map<string, 'dir' | 'file' | 'link'>([['/h/p/x/.git', 'dir']])
+    const kinds = new Map<string, 'dir' | 'file' | 'link'>([['/h/p/x/.git', 'dir'], ['/h/p/x/.git/HEAD', 'file']])
     const asked: string[] = []
     const fs: FsProbe = { lstat: (p) => {
       asked.push(p)
@@ -834,7 +912,14 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
     } }
     const a = allowOf([buildEntry('~/p/x')])
     expect(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs)).toEqual({ ok: true, cwdReal: '/h/p/x', access: 'build', commands: BUN })
-    expect(asked).toContain('/h/p/x/.git')
+    expect(asked).toEqual(['/h/p/x/.git', '/h/p/x/.git/HEAD'])
+    kinds.set('/h/p/x/.git/HEAD', 'link')
+    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
+    kinds.set('/h/p/x/.git/HEAD', 'dir')
+    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
+    kinds.delete('/h/p/x/.git/HEAD')
+    nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), 'HEAD')
+    kinds.set('/h/p/x/.git/HEAD', 'file')
     kinds.set('/h/p/x/.git', 'file')
     nope(checkAdmission(sampleRequest({ access: 'build', cwd: '~/p/x' }), a, '/h', realpath, fs), '.git')
     kinds.set('/h/p/x/.git', 'link')
