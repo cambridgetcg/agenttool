@@ -30,7 +30,9 @@ subject ids, the authority mode and sequence, and three integrity fields:
 The ledger key is the Supabase Vault secret `agenttool_deletion_ledger_key`
 (at least 32 characters). The API and the SQL writer
 `deletion.append_ledger_entry()` read it at write time. The mirror
-credential and the sweep never hold it.
+credential never holds it, and the sweep script never reads it; run the sweep
+with the least-privileged database role below, because the database owner
+role can call `deletion.ledger_key()`.
 
 Guards on the table refuse every update except setting `mirrored_at` or
 `replayed_at` once and compaction after 15 days; refuse every delete except
@@ -62,11 +64,63 @@ Writes are conditional (`If-None-Match: *`). A re-send of the same entry is
 accepted; a different object under the same key stops the push. The sweep
 refuses with no mirror configured and while replay maintenance is active.
 
-Bucket requirements (operator, not provisioned by any code here): private;
-objects cannot be overwritten or deleted by the write credential (object
-lock, or a credential without delete); a lifecycle rule deleting objects
-after 30 days; region `auto`. Verify the conditional write against the real
-bucket once: a second PUT of an existing key must answer 412.
+**Mirror lag readback.** The oldest entry not yet copied off the database is
+the window in which a database loss would lose a deletion for good:
+
+```bash
+DATABASE_URL=... bun bin/deletion-ledger-mirror.ts --status --max-age-hours 24
+```
+
+It reads only the database (no mirror credential), prints the unmirrored
+count, the oldest seq and its age, and exits 1 when that entry is older than
+`--max-age-hours`. The API pushes after each erase and stops at the first
+failure; pg_cron rule entries are pushed only by the next erase or the sweep.
+Nothing schedules the sweep: run `--status` with the routine deploy readback
+and at least daily, and run the sweep whenever it reports anything waiting.
+A scheduled job (for example a GitHub Actions workflow holding the mirror
+credential and the sweep role) is an operator choice not built here.
+
+**Bucket requirements** (operator, not provisioned by any code here):
+
+- private;
+- write-once for at least the 30-day window: the credential the API and the
+  sweep use can neither replace nor delete an existing object. A credential
+  without delete permission is not enough. On S3-compatible stores (R2
+  included) a PUT without a condition overwrites, and R2 has no permission
+  that allows writes but forbids overwrites, so this needs the bucket's own
+  lock or retention rule over `ledger/`. Where an overwrite only adds a new
+  version (S3 Object Lock with versioning), replay would read the newest
+  version, so that setup does not qualify on its own;
+- a lifecycle rule deleting objects after 30 days, no sooner than the lock
+  allows; region `auto`.
+
+Verify against the real bucket before relying on it: a second conditional PUT
+of an existing key answers 412, a PUT of an existing key without the
+condition is refused, and a DELETE of it is refused. Without these, anyone
+holding the write credential can replace an entry. The MAC still stops a
+forged entry from being replayed, but a replaced or garbled object makes
+`plan` stop at that seq, so later deletions cannot be replayed until the
+object is repaired.
+
+**Credentials.** The API and the sweep need PUT and GET on `ledger/` (a
+conditional PUT that meets an existing object reads it back to compare);
+replay (`plan`, `apply`, `finish`) needs GET and LIST. Every holder can read
+every mirrored entry's row ids for up to 30 days; give the replay operator a
+separate read-only credential where the provider allows it.
+
+**The sweep's database role.** Run the sweep as a role that can copy entries
+and mark them mirrored but cannot read the ledger key or change anything else
+(`api/tests/integration/deletion-ledger-postgres.test.ts` checks these
+grants):
+
+```sql
+CREATE ROLE deletion_sweep LOGIN PASSWORD '<generated>';
+GRANT USAGE ON SCHEMA deletion TO deletion_sweep;
+GRANT SELECT ON deletion.ledger, deletion.settings TO deletion_sweep;
+GRANT UPDATE (mirrored_at) ON deletion.ledger TO deletion_sweep;
+```
+
+The `--status` readback needs only the two SELECT grants.
 
 ## Replay after a restore
 
@@ -144,9 +198,13 @@ before the run is no longer `deleted` and is not touched.
    Until it exists, every delete answers 503 and the rules roll back.
 2. Apply the four `20261012T161958_*` migrations with `bin/migrate-pending.sh`
    (after `--dry-run`), then deploy.
-3. Provision the mirror bucket and its write credential, and set the
-   `AGENTTOOL_DELETION_MIRROR_*` secrets on the API. Run the sweep once.
-4. Key rotation is not designed: entries verify only under the key that wrote
+3. Provision the mirror bucket (write-once as above, verified) and its
+   credentials, set the `AGENTTOOL_DELETION_MIRROR_*` secrets on the API,
+   create the sweep role, and run the sweep once. Until then every erase
+   response says `mirrored: false` and that a restore cannot replay it.
+4. Add `bun bin/deletion-ledger-mirror.ts --status --max-age-hours 24` to the
+   routine readback, and run the sweep when it reports entries waiting.
+5. Key rotation is not designed: entries verify only under the key that wrote
    them.
 
 ## Drill

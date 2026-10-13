@@ -1101,6 +1101,21 @@ Exit `42` means at least one pending file is in
 `api/migrations/quiescence-required.txt`; the ordinary deploy must remain
 blocked until the exclusive cutover above has applied it.
 
+### Deletion-ledger mirror lag
+
+Once the deletion ledger exists (wave 2 migrations applied):
+
+```bash
+DATABASE_URL=<sweep role> bun bin/deletion-ledger-mirror.ts --status --max-age-hours 24
+```
+
+It reads only the database and reports how many ledger entries are not yet in
+the off-database mirror and how old the oldest is; exit `1` means the oldest
+is older than 24 hours. An entry still waiting cannot be replayed after a
+database loss. Run the sweep (`bun bin/deletion-ledger-mirror.ts`) whenever
+anything is waiting; see [`DELETION-REPLAY.md`](DELETION-REPLAY.md). Nothing
+schedules this.
+
 ## Phase 6 — Rollback
 
 ### API

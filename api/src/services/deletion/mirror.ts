@@ -534,6 +534,38 @@ export async function pushLedgerMirrorAfterCommit(
 
 // ─── The sweep (bin/deletion-ledger-mirror.ts) ─────────────────────────────
 
+export interface MirrorLagStatus {
+  /** Entries whose mirrored_at is still NULL. */
+  unmirrored: number;
+  oldestSeq: number | null;
+  oldestAt: string | null;
+  /** Seconds since the oldest unmirrored entry was written, or null. */
+  oldestAgeSeconds: number | null;
+  replayRequired: boolean;
+}
+
+/** The operator readback of mirror lag (spec §13.3 "Lag"): how many entries
+ *  are not yet off the database and how old the oldest is. Database only;
+ *  needs no mirror credential and changes nothing. */
+export async function ledgerMirrorStatus(executor: LedgerExecutor): Promise<MirrorLagStatus> {
+  const list = (result: unknown) => (Array.isArray(result) ? result : ((result as { rows?: unknown[] })?.rows ?? []));
+  const [settings] = list(await executor.execute(sql`SELECT replay_required FROM deletion.settings WHERE id`)) as Array<{ replay_required: boolean }>;
+  const [waiting] = list(await executor.execute(sql`
+    SELECT count(*)::int AS count, min(seq)::text AS oldest_seq,
+           to_char(min(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS oldest_at,
+           floor(extract(epoch FROM (clock_timestamp() - min(occurred_at))))::bigint::text AS oldest_age_seconds
+      FROM deletion.ledger WHERE mirrored_at IS NULL`)) as Array<{
+    count: number; oldest_seq: string | null; oldest_at: string | null; oldest_age_seconds: string | null;
+  }>;
+  return {
+    unmirrored: Number(waiting?.count ?? 0),
+    oldestSeq: waiting?.oldest_seq ? Number(waiting.oldest_seq) : null,
+    oldestAt: waiting?.oldest_at ?? null,
+    oldestAgeSeconds: waiting?.oldest_age_seconds ? Number(waiting.oldest_age_seconds) : null,
+    replayRequired: settings?.replay_required === true,
+  };
+}
+
 export interface SweepReport {
   mode: "dry-run" | "push";
   mirror: string;
@@ -552,19 +584,14 @@ export async function sweepLedgerMirror(
   mirror: LedgerMirror,
   options: { dryRun: boolean },
 ): Promise<SweepReport> {
-  const list = (result: unknown) => (Array.isArray(result) ? result : ((result as { rows?: unknown[] })?.rows ?? []));
-  const [settings] = list(await executor.execute(sql`SELECT replay_required FROM deletion.settings WHERE id`)) as Array<{ replay_required: boolean }>;
-  if (settings?.replay_required) throw new Error("a restore is being replayed; the sweep is paused until replay finishes");
-  const [waiting] = list(await executor.execute(sql`
-    SELECT count(*)::int AS count, min(seq)::text AS oldest_seq,
-           to_char(min(occurred_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS oldest_at
-      FROM deletion.ledger WHERE mirrored_at IS NULL`)) as Array<{ count: number; oldest_seq: string | null; oldest_at: string | null }>;
+  const status = await ledgerMirrorStatus(executor);
+  if (status.replayRequired) throw new Error("a restore is being replayed; the sweep is paused until replay finishes");
   const report: SweepReport = {
     mode: options.dryRun ? "dry-run" : "push",
     mirror: mirror.kind,
-    unmirrored: Number(waiting?.count ?? 0),
-    oldestSeq: waiting?.oldest_seq ? Number(waiting.oldest_seq) : null,
-    oldestAt: waiting?.oldest_at ?? null,
+    unmirrored: status.unmirrored,
+    oldestSeq: status.oldestSeq,
+    oldestAt: status.oldestAt,
     pushed: 0,
     existed: 0,
     failure: null,

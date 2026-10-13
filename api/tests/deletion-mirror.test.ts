@@ -27,6 +27,7 @@ import {
   MirrorConflictError,
   S3LedgerMirror,
   ledgerMirrorFromEnv,
+  ledgerMirrorStatus,
   mirrorObjectBytes,
   mirrorObjectKey,
   parseMirrorObject,
@@ -210,6 +211,22 @@ describe("configuration and pushing", () => {
     const executor = { execute: async () => { throw new Error("must not query"); } };
     expect(await pushLedgerMirrorAfterCommit(executor as never, 1, { env: {} }))
       .toEqual({ mirrored: false, status: "unconfigured" });
+  });
+
+  test("the lag readback reads only the database and reports the oldest unmirrored entry", async () => {
+    const seen: string[] = [];
+    const executor = {
+      execute: async (query: { queryChunks?: unknown[] }) => {
+        const text = JSON.stringify(query.queryChunks ?? query);
+        seen.push(text);
+        if (text.includes("deletion.settings")) return [{ replay_required: false }];
+        return [{ count: 3, oldest_seq: "7", oldest_at: "2026-10-12T10:00:00.000000Z", oldest_age_seconds: "5400" }];
+      },
+    };
+    expect(await ledgerMirrorStatus(executor as never)).toEqual({
+      unmirrored: 3, oldestSeq: 7, oldestAt: "2026-10-12T10:00:00.000000Z", oldestAgeSeconds: 5400, replayRequired: false,
+    });
+    expect(seen.every((text) => !/UPDATE|INSERT|DELETE/.test(text))).toBe(true);
   });
 
   test("an erase response promises replay only for an entry that reached the mirror", () => {

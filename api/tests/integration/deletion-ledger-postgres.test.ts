@@ -18,7 +18,13 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql as dsql } from "drizzle-orm";
 import type { Sql } from "postgres";
 
+import { randomBytes } from "node:crypto";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import * as ledger from "../../src/services/deletion/ledger";
+import { FileLedgerMirror, ledgerMirrorStatus, sweepLedgerMirror } from "../../src/services/deletion/mirror";
 import { recordErasure } from "../../src/services/deletion/record";
 import postgres from "../fixtures/verified-postgres";
 import {
@@ -249,6 +255,58 @@ describe("guards", () => {
     // A replayed or hand-run apply with a later cutoff still skips it.
     expect((await admin`SELECT deletion.apply_ledger_compaction(now()) AS ids`)[0]!.ids).toEqual([]);
     expect((await admin`SELECT cardinality(row_ids)::int AS n FROM deletion.ledger WHERE seq = 1`)[0]!.n).toBe(1);
+  });
+});
+
+describe("mirror lag readback and a least-privileged sweep", () => {
+  databaseTest("the readback needs no mirror; a sweep role that cannot read the key mirrors every entry", async () => {
+    for (const id of ["e0000000-0000-4000-8000-000000000001", "e0000000-0000-4000-8000-000000000002"]) {
+      await database.transaction((tx) => ledger.appendLedgerEntry(tx, {
+        scope: "record", action: "delete", store: "memory.memories", rowKeys: [id],
+        projectId: P, subjectIdentityId: AGENT, authorityMode: "legacy_bearer",
+      }, { keyProvider: ledger.vaultLedgerKeyProvider }));
+    }
+    const lag = await ledgerMirrorStatus(database);
+    expect(lag).toMatchObject({ unmirrored: 2, oldestSeq: 1, replayRequired: false });
+    expect(lag.oldestAgeSeconds).toBeGreaterThanOrEqual(0);
+
+    // The operator script's --status: database only, no mirror variables.
+    const script = join(import.meta.dir, "../../../bin/deletion-ledger-mirror.ts");
+    const status = Bun.spawnSync([process.execPath, script, "--status", "--max-age-hours", "1"], {
+      env: { DATABASE_URL: DATABASE, PATH: process.env.PATH ?? "" },
+    });
+    expect(status.exitCode).toBe(0);
+    expect(JSON.parse(status.stdout.toString())).toMatchObject({ mode: "status", unmirrored: 2, oldestSeq: 1, stale: false });
+    const badArgument = Bun.spawnSync([process.execPath, script, "--status", "--max-age-hours", "0"], {
+      env: { DATABASE_URL: DATABASE, PATH: process.env.PATH ?? "" },
+    });
+    expect(badArgument.exitCode).toBe(2);
+
+    // The documented sweep grants (docs/DELETION-REPLAY.md): enough to copy
+    // entries and mark them mirrored, never to read the ledger key or edit.
+    const role = `deletion_sweep_${randomBytes(4).toString("hex")}`;
+    await admin.unsafe(`
+      CREATE ROLE ${role} LOGIN;
+      GRANT USAGE ON SCHEMA deletion TO ${role};
+      GRANT SELECT ON deletion.ledger, deletion.settings TO ${role};
+      GRANT UPDATE (mirrored_at) ON deletion.ledger TO ${role};`);
+    const url = new URL(DATABASE);
+    url.username = role;
+    const sweeper = postgres(url.toString(), { max: 1, prepare: false, onnotice: () => {} });
+    const directory = await mkdtemp(join(process.env.DELETION_TEST_TMPDIR ?? tmpdir(), "deletion-sweep-role-"));
+    try {
+      const report = await sweepLedgerMirror(drizzle(sweeper) as never, new FileLedgerMirror(directory), { dryRun: false });
+      expect(report).toMatchObject({ unmirrored: 2, pushed: 2, failure: null });
+      expect(await readdir(join(directory, "ledger", "v1"))).toHaveLength(2);
+      expect((await ledgerMirrorStatus(database)).unmirrored).toBe(0);
+      await expect(settle(sweeper`SELECT deletion.ledger_key()`)).rejects.toThrow(/permission denied/);
+      await expect(settle(sweeper`SELECT decrypted_secret FROM vault.decrypted_secrets`)).rejects.toThrow(/permission denied/);
+      await expect(settle(sweeper`UPDATE deletion.ledger SET row_count = 0`)).rejects.toThrow(/permission denied/);
+    } finally {
+      await sweeper.end({ timeout: 2 });
+      await rm(directory, { recursive: true, force: true });
+      await admin.unsafe(`DROP OWNED BY ${role}; DROP ROLE ${role};`);
+    }
   });
 });
 
