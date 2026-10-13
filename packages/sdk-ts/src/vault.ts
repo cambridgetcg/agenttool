@@ -128,7 +128,9 @@ export class VaultClient {
     return this.req("GET", path, undefined, extra);
   }
 
-  /** Soft-delete a secret (all versions). */
+  /** Delete a secret: the server zeroes every stored version's ciphertext,
+   *  IV and auth tag and clears its description and tags (content_retained:
+   *  false). It cannot be restored; revoke the upstream credential separately. */
   async delete(name: string): Promise<Record<string, unknown>> {
     return this.req("DELETE", `/v1/vault/${encodePathSegment(name)}`);
   }

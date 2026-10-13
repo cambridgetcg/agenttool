@@ -246,7 +246,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Soft-delete the secret. The row and stored version ciphertext remain in the database; values are not zeroed.</p>
+          <p class="endpoint-desc">Delete the secret: every stored version&#39;s ciphertext, IV and auth tag are zeroed and its description and tags cleared, in the same transaction as an ids-only deletion-ledger entry (if that entry cannot be written, nothing is deleted: <code>503 deletion_ledger_unavailable</code>). The name stays in the audit trail and the response says <code>content_retained: false</code>. Revoke the upstream credential separately.</p>
         </div>
       </div>
 

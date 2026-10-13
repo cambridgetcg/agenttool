@@ -188,7 +188,12 @@ class VaultClient:
         return resp.json()
 
     def delete(self, name: str) -> Dict[str, Any]:
-        """Soft-delete a secret (all versions)."""
+        """Delete a secret.
+
+        The server zeroes every stored version's ciphertext, IV and auth tag
+        and clears its description and tags (``content_retained: false``). It
+        cannot be restored; revoke the upstream credential separately.
+        """
         resp = self._http.delete(self._url(f"/v1/vault/{_path_segment(name)}"))
         if resp.status_code != 200:
             # Server guidance travels intact. See exceptions.py § _error_from_response.

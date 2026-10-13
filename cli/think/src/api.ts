@@ -71,6 +71,17 @@ export class TransientApiError extends Error {
   }
 }
 
+/** 428 authority_proof_required: the server wants the identity root's
+ *  exact-request signature (the deletion owner rule). This CLI holds the
+ *  identity's signing key and K_master, never its authority root, so it
+ *  cannot add that proof itself. */
+export class AuthorityProofRequiredError extends Error {
+  constructor(public readonly path: string, public readonly method: string, public readonly body: string) {
+    super(`${method} ${path} → 428 ${body.slice(0, 500)}`);
+    this.name = "AuthorityProofRequiredError";
+  }
+}
+
 export class AgenttoolClient {
   constructor(private config: ThinkConfig) {}
 
@@ -104,6 +115,7 @@ export class AgenttoolClient {
           method,
         );
       }
+      if (res.status === 428) throw new AuthorityProofRequiredError(path, method, body);
       // 4xx = the server understood and rejected. Not retryable.
       throw new Error(`${method} ${path} → ${res.status} ${body.slice(0, 500)}`);
     }
