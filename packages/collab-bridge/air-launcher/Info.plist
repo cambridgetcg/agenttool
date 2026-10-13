@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>collab-bridge-hub</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.agenttool.collab-bridge.hub</string>
+	<key>CFBundleName</key>
+	<string>CollabBridgeHub</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Collab Bridge reaches your other Mac on the home network so agents there can share this Mac's Collab journal.</string>
+</dict>
+</plist>
