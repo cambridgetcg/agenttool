@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import type { AllowlistFolder } from '../src/allowlist.ts'
 import { hasLazyFetchGuard, parseGitVersion, sha256File, type ResolvedGit } from '../src/nuance/git-resolve.ts'
 import { renderInstalled, writeShares, type InstalledInfo } from '../src/nuance/installed.ts'
+import { writeSeatKeyIfAbsent } from '../src/nuance/seatkey.ts'
 import { nuancePaths, type NuancePaths } from '../src/paths.ts'
 import { temp, testEnv } from './helpers.ts'
 
@@ -107,4 +108,26 @@ export function secretBranchRepo(dir: string, home: string): { head: string; sec
   const secret = commit(dir, home, 'secret.txt', 'hidden\n', 'secret')
   fixtureGit(['-C', dir, 'checkout', '-q', 'main'], home)
   return { head, secret }
+}
+
+/**
+ * What `install write` leaves for hello (Task 56 makes the real one): INSTALLED (testInstalled with a fixed recorded git
+ * the gate never runs for hello), the seat key, shares.json naming ~/Projects/collab-trial, an authorized_keys with a
+ * ` summon-air` line and the Summon drop-in. Returns the seat public key as hello prints it. Added by Task 24; Task 58
+ * uses it for the compiled gate.
+ */
+export function installForHello(paths: NuancePaths): string {
+  mkdirSync(dirname(paths.installed), { recursive: true, mode: 0o700 })
+  writeFileSync(paths.installed, renderInstalled(testInstalled({
+    build: '0a1b2c3d', summon_key_sha256: 'd'.repeat(64), summon_dropin_stat: '1 2 3 4 600',
+    git: { path: '/opt/homebrew/bin/git', version: '2.52.0', sha256: 'c'.repeat(64), guard: true, apple: false },
+  })), { mode: 0o600 })
+  const { publicHex } = writeSeatKeyIfAbsent(paths)
+  const share = join(paths.home, 'Projects', 'collab-trial')
+  writeShares(paths, [{ realpath: share, gitdir: join(share, '.git') }])
+  mkdirSync(dirname(paths.authorizedKeys), { recursive: true, mode: 0o700 })
+  writeFileSync(paths.authorizedKeys, 'restrict,command="/x/summon-gatekeeper" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA summon-air\n')
+  mkdirSync(dirname(paths.summonDropin), { recursive: true })
+  writeFileSync(paths.summonDropin, 'PasswordAuthentication no\n')
+  return publicHex
 }
