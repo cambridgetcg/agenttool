@@ -678,4 +678,4 @@ and verifies its vendored Playwright entry. No lifecycle hook downloads or
 installs a browser.
 
 Apache-2.0. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and the fuller
-[Agent Browser boundary](../../docs/AGENT-BROWSER.md).
+Agent Browser boundary (`docs/AGENT-BROWSER.md` in the private source repository).

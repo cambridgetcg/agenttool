@@ -24,10 +24,14 @@ describe("marketplace fair-pricing", () => {
     expect(MARKETPLACE_PRICING.cancel).toBe(0);
   });
 
+  test("taking a listing down is free — archive and pause are leaving (deletion scopes Q8 A)", () => {
+    expect(MARKETPLACE_PRICING.archive).toBe(0);
+    expect(MARKETPLACE_PRICING.pause).toBe(0);
+  });
+
   test("anti-spam metering survives only at listing creation/mutation", () => {
     expect(MARKETPLACE_PRICING.publish).toBeGreaterThan(0);
     expect(MARKETPLACE_PRICING.update).toBeGreaterThan(0);
-    expect(MARKETPLACE_PRICING.archive).toBeGreaterThan(0);
   });
 
   test("resting dispute arbitration cannot carry a flat charge", () => {

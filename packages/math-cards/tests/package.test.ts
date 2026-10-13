@@ -10,7 +10,7 @@ describe("public package boundary", () => {
   test("is zero-runtime-dependency, side-effect-free, Apache-2.0, and public-ready", () => {
     expect(packageJson).toMatchObject({
       name: "@agenttool/math-cards",
-      version: "0.1.0-dev.1",
+      version: "0.1.0-dev.2",
       license: "Apache-2.0",
       sideEffects: false,
       publishConfig: { access: "public", tag: "next" },
@@ -61,7 +61,7 @@ describe("public package boundary", () => {
       schema: "kingdom-extension-local/v0.1",
       id: "math-cards",
       package: "@agenttool/math-cards",
-      version: "0.1.0-dev.1",
+      version: "0.1.0-dev.2",
       status: "public_ready_source",
       host_contract: "not_registered",
     });

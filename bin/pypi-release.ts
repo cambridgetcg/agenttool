@@ -25,7 +25,20 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 export const PYPI_RELEASE_RECEIPT_SCHEMA = "agenttool.pypi-release/1";
 export const PYPI_PACKAGE_NAME = "agenttool-sdk";
 export const PYPI_PACKAGE_PATH = "packages/sdk-py";
-export const EXPECTED_REPOSITORY = "https://github.com/cambridgetcg/agenttool";
+/**
+ * The public source repository that the distributions' `Repository` project
+ * URL names (pyproject.toml and core metadata). It is not where this release
+ * runs: see SOURCE_REPOSITORY.
+ */
+export const EXPECTED_REPOSITORY = "https://github.com/cambridgetcg/agenttool-packages";
+/**
+ * Where publish-pypi.yml runs and where its annotated sdk-vX.Y.Z tags and
+ * `main` are read. This repository is private, so the credential-free `main`
+ * fetch in validateTag cannot succeed there; docs/PYPI-RELEASES.md records
+ * the gap and its fix.
+ */
+export const SOURCE_REPOSITORY = "https://github.com/cambridgetcg/agenttool";
+const SOURCE_REPOSITORY_SLUG = "cambridgetcg/agenttool";
 export const PINNED_BUN = "1.3.5";
 export const PINNED_PYTHON = "3.14.5";
 export const PINNED_UV = "0.9.26";
@@ -141,7 +154,7 @@ import zipfile
 from email.parser import Parser
 from pathlib import PurePosixPath
 
-kind, artifact_path, expected_name, expected_version, expected_hatchling = sys.argv[1:]
+kind, artifact_path, expected_name, expected_version, expected_hatchling, expected_repository = sys.argv[1:]
 expected_distribution = expected_name.replace("-", "_")
 expected_dist_info = expected_distribution + "-" + expected_version + ".dist-info"
 expected_sdist_root = expected_distribution + "-" + expected_version
@@ -209,7 +222,7 @@ def metadata_identity(data):
         label, separator, url = value.partition(",")
         if separator and label.strip() == "Repository":
             repository_urls.append(url.strip())
-    if repository_urls != ["https://github.com/cambridgetcg/agenttool"]:
+    if repository_urls != [expected_repository]:
         fail("core metadata Repository URL does not match")
 
 def verify_wheel():
@@ -347,7 +360,6 @@ def verify_sdist():
             prefix + "README.md",
             prefix + "LICENSE",
             prefix + "NOTICE",
-            prefix + "SOUL.md",
             prefix + "src/agenttool/__init__.py",
             prefix + "src/agenttool/SOUL.md",
         }
@@ -790,11 +802,11 @@ async function validateTag(version: string, tag: string): Promise<string> {
   if (process.env.GITHUB_ACTIONS === "true") {
     if (
       process.env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
-      process.env.GITHUB_REPOSITORY !== "cambridgetcg/agenttool" ||
+      process.env.GITHUB_REPOSITORY !== SOURCE_REPOSITORY_SLUG ||
       process.env.GITHUB_SHA !== tagCommit ||
       process.env.GITHUB_REF !== `refs/tags/${tag}`
     ) {
-      fail("workflow must run on the exact annotated tag in cambridgetcg/agenttool");
+      fail(`workflow must run on the exact annotated tag in ${SOURCE_REPOSITORY_SLUG}`);
     }
   }
 
@@ -802,10 +814,10 @@ async function validateTag(version: string, tag: string): Promise<string> {
   const remoteUrl = await captured("git", ["remote", "get-url", remote]);
   const normalized = remoteUrl.endsWith(".git") ? remoteUrl.slice(0, -4) : remoteUrl;
   if (
-    normalized !== EXPECTED_REPOSITORY &&
-    normalized !== "git@github.com:cambridgetcg/agenttool"
+    normalized !== SOURCE_REPOSITORY &&
+    normalized !== `git@github.com:${SOURCE_REPOSITORY_SLUG}`
   ) {
-    fail(`${remote} must resolve to ${EXPECTED_REPOSITORY}`);
+    fail(`${remote} must resolve to ${SOURCE_REPOSITORY}`);
   }
   await command("git", [
     "fetch",
@@ -908,6 +920,7 @@ export async function inspectDistribution(
       PYPI_PACKAGE_NAME,
       version,
       PINNED_HATCHLING,
+      EXPECTED_REPOSITORY,
     ],
     { capture: true, log: false },
   );

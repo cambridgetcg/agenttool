@@ -11,7 +11,11 @@
  *  Payout broadcast, Solana derivation/signature verification, and Alchemy +
  *  Helius ingress exist. EVM observations remain pending until canonical-log
  *  depth and block-generation checks pass. Solana deposit finality remains a
- *  production blocker. */
+ *  production blocker.
+ *
+ *  Deposit-address disclosure is resting (owner decision, 2026-10-11): the
+ *  deposit-address route refuses before showing any address, while signed
+ *  webhook ingress keeps running behind the production fence. */
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -32,6 +36,7 @@ import {
 } from "../../services/economy/crypto/chains";
 import {
   cancelPayout,
+  DEPOSIT_ADDRESS_DISCLOSURE_RESTING_ERROR,
   DepositAddressInvariantError,
   DepositWatchNotReadyError,
   getOrCreateDepositAddress,
@@ -43,10 +48,16 @@ import {
   PAYOUT_ADMISSION_RESTING_ERROR,
   reconcileRemovedInboundTransfer,
   requestPayout,
+  SolanaDepositUnavailableError,
   type InboundTransfer,
   verifyAndBind,
 } from "../../services/economy/crypto";
-import { economyConfig } from "../../services/economy/config";
+import {
+  depositAddressDisclosureAllowed,
+  economyConfig,
+  unreconciledSolanaDepositsAllowed,
+  unsignedDepositWebhooksAllowed,
+} from "../../services/economy/config";
 import {
   alchemyAddressActivityNetwork,
   alchemyNotifyConfig,
@@ -63,8 +74,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const router = new Hono<ProjectContext>();
 const MAX_CRYPTO_WEBHOOK_BODY_BYTES = 1024 * 1024;
 
-/** Constant-time string compare that never leaks length via early return.
- *  Returns false for any nullish input. */
+/** Compares equal-length values in constant time. timingSafeEqual requires
+ *  equal byte lengths, so a length mismatch returns false early and response
+ *  timing can show whether a guess has the expected length. That length is
+ *  public for the Alchemy hex HMAC; for the plain Helius shared secret it can
+ *  reveal the secret's length, never its bytes. Returns false for any
+ *  nullish input. */
 function secretsMatch(a: string | undefined | null, b: string | undefined | null): boolean {
   if (typeof a !== "string" || typeof b !== "string") return false;
   const ab = Buffer.from(a);
@@ -205,6 +220,24 @@ function depositWatchReadinessHint(
     : "Restarting a worker alone does not repair an exhausted or blocked provider outcome. Fix the recorded cause; there is no supported reset route or CLI yet, so an approved maintenance tool must invoke the internal reconciliation seam.";
 }
 
+function settlementPolicyGuidance(error: EvmDepositSettlementPolicyError): {
+  hint: string;
+  refused: string;
+} {
+  return error.reason === "testnet_credit_refused_in_production"
+    ? {
+        hint:
+          "Run the testnet flow on a separate non-production runtime: NODE_ENV not production and no FLY_APP_NAME.",
+        refused:
+          "no testnet deposit can become spendable in a production runtime",
+      }
+    : {
+        hint:
+          "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+        refused: "no mainnet non-L1 deposit can become spendable",
+      };
+}
+
 export async function resolveReadyDepositAddressRows(
   walletId: string,
   rows: ListedDepositAddress[],
@@ -254,7 +287,28 @@ async function ensureWalletOwnership(
 }
 
 // ── GET /v1/wallets/:id/deposit-address?chain=&token= ──────────────────
+// Disclosure is resting. The refusal comes before wallet lookup, deposit-row
+// reads, derivation, or network selection, so no address, new or issued
+// before the rest, is shown. The disclosure path below is retained for a
+// separately reviewed reopening. Inbound webhook processing is not gated here
+// (see POST /v1/billing/crypto-webhook/:chain).
 router.get("/wallets/:walletId/deposit-address", async (c) => {
+  if (!depositAddressDisclosureAllowed()) {
+    return fail(
+      c,
+      errors.refusal({
+        error: DEPOSIT_ADDRESS_DISCLOSURE_RESTING_ERROR,
+        deposit_address_disclosure: "resting",
+        retryable: false,
+        message:
+          "Crypto deposit-address disclosure is resting: showing an address would invite a deposit. No deposit address, new or previously issued, was created, derived, or disclosed.",
+        hint:
+          "Do not send funds to an address cached from an earlier response. Signed EVM deliveries to previously disclosed addresses are still recorded when that chain's webhook, network and derivation mnemonic are configured, but no new deposit is invited. Reopening disclosure needs a separately reviewed release.",
+      }),
+      503,
+    );
+  }
+
   const walletId = c.req.param("walletId");
   await ensureWalletOwnership(c, walletId);
 
@@ -287,6 +341,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       readyRows = await resolveReadyDepositAddressRows(walletId, rows);
     } catch (error) {
       if (error instanceof EvmDepositSettlementPolicyError) {
+        const guidance = settlementPolicyGuidance(error);
         return fail(
           c,
           errors.refusal({
@@ -294,10 +349,24 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
             chain: error.chain,
             retryable: false,
             message: error.message,
+            hint: guidance.hint,
+            consequence: `No stored address was disclosed and ${guidance.refused}.`,
+          }),
+          503,
+        );
+      }
+      if (error instanceof SolanaDepositUnavailableError) {
+        return fail(
+          c,
+          errors.refusal({
+            error: error.code,
+            chain: "solana",
+            retryable: false,
+            message: error.message,
             hint:
-              "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+              "Do not send Solana deposits. Solana needs a Helius watch and raw-atomic finality before its deposits can credit outside development.",
             consequence:
-              "No stored address was disclosed and no mainnet non-L1 deposit can become spendable.",
+              "No deposit address was disclosed because a stored Solana row is withheld.",
           }),
           503,
         );
@@ -364,6 +433,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
     );
   } catch (error) {
     if (error instanceof EvmDepositSettlementPolicyError) {
+      const guidance = settlementPolicyGuidance(error);
       return fail(
         c,
         errors.refusal({
@@ -371,10 +441,23 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
           chain: error.chain,
           retryable: false,
           message: error.message,
+          hint: guidance.hint,
+          consequence: `No address was created or disclosed and ${guidance.refused}.`,
+        }),
+        503,
+      );
+    }
+    if (error instanceof SolanaDepositUnavailableError) {
+      return fail(
+        c,
+        errors.refusal({
+          error: error.code,
+          chain: "solana",
+          retryable: false,
+          message: error.message,
           hint:
-            "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
-          consequence:
-            "No address was created or disclosed and no mainnet non-L1 deposit can become spendable.",
+            "Do not send Solana deposits. Solana needs a Helius watch and raw-atomic finality before its deposits can credit outside development.",
+          consequence: "No Solana address was created or disclosed.",
         }),
         503,
       );
@@ -432,8 +515,8 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       ? "pending_until_chain_depth"
       : "solana_unreconciled",
     instructions: isEvmChain(result.chain as string)
-      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address. A signed delivery is stored pending; credits become spendable only after the exact canonical receipt/log and block generation reach the configured depth. Mainnet non-L1 address disclosure and credit stay disabled until a chain-specific settlement policy exists."
-      : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, deposit finality, and reversal are not yet reconciled.",
+      ? "Send USDC to this address from any wallet, in whole multiples of 0.01 USDC: one credit is 0.01 USDC (10,000 atomic units), and a deposit with any remainder is quarantined in full, with no wallet credit and no refund route. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address. A signed delivery is stored pending; credits become spendable only after the exact canonical receipt/log and block generation reach the configured depth. Mainnet non-L1 address disclosure and credit stay disabled until a chain-specific settlement policy exists."
+      : "Development only. Never send production funds: this address credits through the unreconciled Helius adapter from signed human-unit evidence, with no verified address watch, raw-atomic finality, or reversal.",
   });
 });
 
@@ -750,6 +833,16 @@ router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
 // Public — signature-verified per chain.
 // Mounted on the parent app at /v1/billing/crypto-webhook (NOT auth-gated).
 //
+// Deposit-address disclosure rests, but this path deliberately stays as it
+// was, behind the production fence (no unsigned deliveries, no unreconciled
+// Solana credit, no testnet credit in a production runtime). Signed EVM
+// deliveries for addresses disclosed before the rest can still be recorded
+// rather than refused, so a stray deposit leaves durable evidence. Recording
+// needs that chain's signing key and webhook ID, a selected network
+// (CRYPTO_NETWORK, or PAYOUT_NETWORK as fallback), the active derivation
+// mnemonic, and a provider still delivering for that address; the funds stay
+// at the derived address in operator custody either way.
+//
 // Providers wired:
 //   ethereum/base/polygon/arbitrum/optimism — Alchemy ERC-20 transfer
 //   solana                                  — Helius enhanced webhooks
@@ -798,12 +891,13 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   // ── Signature verification (per provider) ──────────────────────────
   // This route is UNAUTH and credits real wallet balance, so an unset secret
   // FAILS CLOSED (503) rather than accepting an unsigned, forgeable payload.
-  // Local dev may opt out with CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 (see config.ts).
+  // Local dev may opt out with CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1; a production
+  // runtime refuses that opt-out (see config.ts).
   if (isEvmChain(chainParam)) {
     // Alchemy: HMAC-SHA256 over raw body, hex digest in x-alchemy-signature.
     const signingKey = economyConfig.alchemyWebhookSigningKeys[chainParam];
     if (!signingKey) {
-      if (!economyConfig.allowUnsignedWebhooks) {
+      if (!unsignedDepositWebhooksAllowed()) {
         return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
       }
     } else {
@@ -828,7 +922,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   } else if (chainParam === "solana") {
     // Helius: shared-secret in Authorization header (plain, not Bearer).
     if (!economyConfig.heliusWebhookSecret) {
-      if (!economyConfig.allowUnsignedWebhooks) {
+      if (!unsignedDepositWebhooksAllowed()) {
         return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
       }
     } else {
@@ -999,7 +1093,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
 
     if (
       validatedTransfers.length > 0 &&
-      !economyConfig.allowUnreconciledSolanaDeposits
+      !unreconciledSolanaDepositsAllowed()
     ) {
       return fail(
         c,
@@ -1010,7 +1104,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
           message:
             "Signed Helius activity is not sufficient for production balance credit without raw-atomic identity and fork reconciliation.",
           hint:
-            "Do not send Solana deposits yet. Operators may enable the explicitly unreconciled development adapter only with CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1.",
+            "Do not send Solana deposits yet. Operators may enable the explicitly unreconciled development adapter only outside a production runtime, with CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1.",
           consequence:
             "No wallet balance or deposit event was changed.",
         }),

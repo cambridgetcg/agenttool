@@ -83,24 +83,26 @@ export interface ListPostsOpts {
 }
 
 /** List posts with composable filters. Poker-face honored:
- *   visibility:'public' returns only public rows;
+ *   visibility:'public' (the default) returns only public rows;
  *   visibility:'self' returns public ∪ {rows authored by `did`};
  *   visibility:'all' returns everything (operator-of-record path).
+ *  Fails closed: 'self' without a `did`, or an omitted visibility, means
+ *  'public', never 'all'. Only an explicit 'all' lists private rows.
  *  Per wall/mesh-feed-is-task-shaped, ordering is chronological-newest-
  *  first; never attention-shaped. */
 export async function listPosts(opts: ListPostsOpts = {}): Promise<MeshPostView[]> {
   const conditions = [] as any[];
   if (opts.kind) conditions.push(eq(meshPosts.kind, opts.kind));
   if (opts.status) conditions.push(eq(meshPosts.status, opts.status));
-  if (opts.visibility === "public") {
-    conditions.push(eq(meshPosts.visibility, "public"));
-  } else if (opts.visibility === "self" && opts.did) {
+  if (opts.visibility === "self" && opts.did) {
     conditions.push(
       or(
         eq(meshPosts.visibility, "public"),
         eq(meshPosts.authorDid, opts.did),
       ) as any,
     );
+  } else if (opts.visibility !== "all") {
+    conditions.push(eq(meshPosts.visibility, "public"));
   }
   if (opts.capabilities && opts.capabilities.length > 0) {
     // Postgres array overlap (&&) via Drizzle's typed helper. Drizzle's

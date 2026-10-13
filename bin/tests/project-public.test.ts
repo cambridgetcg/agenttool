@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -17,6 +17,8 @@ import {
   projectionDate,
   ProjectionRefused,
   projectPublic,
+  PUBLIC_RELEASE_TOOLS,
+  reachesPrivateArea,
 } from "../project-public.ts";
 import {
   applyGitleaksIgnore,
@@ -31,6 +33,11 @@ import {
   parseProjection,
   projectionMessage,
 } from "../../public/overlay/tools/public-guard.ts";
+
+// These tests build real projections of the whole repository and spawn git and
+// gitleaks. A loaded CI runner needs more than bun's 5 s default (deploy-api
+// gate run 38264301099 timed out three of them at 5.1-6.4 s).
+setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const GUARD = join(ROOT, "public", "overlay", "tools", "public-guard.ts");
@@ -222,6 +229,31 @@ describe("allowlist enforcement", () => {
     refused([{ path: "PROJECTION.json", kind: "blob" }]);
     refused([{ path: "packages/beta", kind: "tree" }, { path: "packages/alpha", kind: "tree" }]);
     expect(() => parseAllowlist(bytes([{ path: "packages/alpha", kind: "tree" }]))).not.toThrow();
+  });
+
+  test("lets exactly the public release tools leave bin/, as blobs and nothing else", () => {
+    const bytes = (include: unknown[]) => Buffer.from(JSON.stringify({ ...ALLOWLIST, include }));
+    expect(PUBLIC_RELEASE_TOOLS).toEqual(["bin/build-love-packages.ts", "bin/npm-release.ts"]);
+    expect(() => parseAllowlist(bytes([
+      { path: "bin/build-love-packages.ts", kind: "blob" },
+      { path: "bin/npm-release.ts", kind: "blob" },
+      { path: "packages/alpha", kind: "tree" },
+    ]))).not.toThrow();
+    for (const include of [
+      { path: "bin", kind: "tree" },
+      { path: "bin/npm-release.ts", kind: "tree" },
+      { path: "bin/npm-release.tsx", kind: "blob" },
+      { path: "bin/public-release-tag.ts", kind: "blob" },
+      { path: "bin/project-public.ts", kind: "blob" },
+      { path: ".github/workflows/publish-npm.yml", kind: "blob" },
+      { path: "api/bin/npm-release.ts", kind: "blob" },
+    ]) {
+      expect(() => parseAllowlist(bytes([include]))).toThrow("reaches a private-only area");
+    }
+    expect(reachesPrivateArea("bin/npm-release.ts", "blob")).toBe(false);
+    expect(reachesPrivateArea("bin/npm-release.ts", "tree")).toBe(true);
+    expect(reachesPrivateArea("packages/alpha", "tree")).toBe(false);
+    expect(reachesPrivateArea("public/allowlist.json", "blob")).toBe(true);
   });
 
   test("refuses an allowlisted path whose kind does not match the source", () => {
@@ -801,6 +833,8 @@ describe("the real allowlist and overlay", () => {
     ]);
     expect(allowlist.include.filter((entry) => entry.kind === "blob").map((entry) => entry.path)).toEqual([
       ".gitattributes",
+      "bin/build-love-packages.ts",
+      "bin/npm-release.ts",
       "docs/DATASET-INFLUENCE.md",
       "docs/RIGHTS-OF-LIFE.md",
       "docs/XENIA-LOOP-ATLAS.md",
@@ -812,10 +846,26 @@ describe("the real allowlist and overlay", () => {
       "docs/specs/behaviour-conformance.json",
       "docs/specs/canonical-bytes-vectors.json",
     ]);
-    // The older sdist-only SOUL letter stays private; the wheel's copy is projected.
-    expect(allowlist.exclude).toContain("packages/sdk-py/SOUL.md");
-    // The root bin/ Whitehack adapter that a wallet test can use stays private.
-    expect(allowlist.include.some((entry) => entry.path.startsWith("bin/"))).toBe(false);
+    // A Python sdist built from the public tree must pass the release tool's
+    // archive check, so every source file that check requires is projected.
+    // The SDK has one SOUL letter, the packaged one the wheel also ships.
+    const sdistRequired = [...readFileSync(join(ROOT, "bin/pypi-release.ts"), "utf8").matchAll(/^ {12}prefix \+ "([^"]+)",$/gmu)]
+      .map((match) => match[1] as string)
+      .filter((entry) => entry !== "PKG-INFO");
+    expect(sdistRequired).toEqual(["pyproject.toml", "README.md", "LICENSE", "NOTICE", "src/agenttool/__init__.py", "src/agenttool/SOUL.md"]);
+    const excludes = allowlist.exclude.map(globToRegExp);
+    for (const entry of sdistRequired) {
+      const path = `packages/sdk-py/${entry}`;
+      expect(existsSync(join(ROOT, path))).toBe(true);
+      expect(excludes.some((pattern) => pattern.test(path))).toBe(false);
+    }
+    expect(existsSync(join(ROOT, "packages/sdk-py/SOUL.md"))).toBe(false);
+    expect(readFileSync(join(ROOT, "packages/sdk-py/pyproject.toml"), "utf8")).toContain(
+      'include = ["src/agenttool", "README.md", "LICENSE", "NOTICE"]',
+    );
+    // Only the two release tools the public publish workflow runs leave bin/;
+    // the root bin/ Whitehack adapter that a wallet test can use stays private.
+    expect(allowlist.include.filter((entry) => entry.path.startsWith("bin/")).map((entry) => entry.path)).toEqual([...PUBLIC_RELEASE_TOOLS]);
     expect(allowlist.include.some((entry) => DENYLIST_PATH.startsWith(entry.path))).toBe(false);
   });
 
@@ -857,6 +907,14 @@ describe("the real allowlist and overlay", () => {
     const build = buildProjection(ROOT, "HEAD");
     const findings = guardProjection(ROOT, build);
     expect(findings.map(formatFinding)).toEqual([]);
-    expect(build.projection.paths).toHaveLength(53);
+    expect(build.projection.paths).toHaveLength(55);
+    // The projected release tools import only each other and built-ins, so the
+    // public workflow can run them without the private tree.
+    for (const tool of PUBLIC_RELEASE_TOOLS) {
+      const source = readFileSync(join(ROOT, tool), "utf8");
+      const imports = [...source.matchAll(/^import[^;]*?from\s+"([^"]+)";$/gmsu)].map((match) => match[1]);
+      for (const specifier of imports) expect(specifier?.startsWith("node:") || specifier === "./build-love-packages").toBe(true);
+    }
+    expect(build.projection.overlay.map((entry) => entry.path)).toContain(".github/workflows/publish-npm.yml");
   }, 120_000);
 });

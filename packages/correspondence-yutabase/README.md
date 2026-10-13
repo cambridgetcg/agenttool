@@ -17,9 +17,9 @@ The boundary is deliberate:
 ## Developer-preview status
 
 This source and public npm developer preview are `0.1.0-dev.1`. Protected
-[workflow run `30468784750`](https://github.com/cambridgetcg/agenttool/actions/runs/30468784750)
+workflow run `30468784750`
 published it with provenance from annotated
-[GitHub prerelease `correspondence-yutabase-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/correspondence-yutabase-v0.1.0-dev.1).
+GitHub prerelease `correspondence-yutabase-v0.1.0-dev.1`.
 Anonymous readback confirmed the npm and GitHub tarballs are byte-identical
 (26,694 bytes;
 `sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
@@ -85,7 +85,7 @@ checkpoint behavior required of an executor. This public preview remains pure
 and does not implement those effects.
 
 The monorepo also contains a **private, loopback-only**
-[`correspondence-yutabase-projector`](https://github.com/cambridgetcg/agenttool/tree/main/packages/correspondence-yutabase-projector)
+`correspondence-yutabase-projector`
 which implements the bounded local verifier/writer/checkpoint profile. It is
 not part of this npm package, an AgentTool API, a daemon, a deployment, or a
 YUTABASE conformance claim.

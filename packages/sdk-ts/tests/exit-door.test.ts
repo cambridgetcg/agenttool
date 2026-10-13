@@ -138,7 +138,7 @@ describe("exit door: export against a paged host", () => {
 
     expect(manifest.schema).toBe("agenttool-exit-manifest/v1");
     expect(manifest.overall).toBe("complete");
-    expect(manifest.exporter).toEqual({ package: "@agenttool/sdk", version: "0.22.1" });
+    expect(manifest.exporter).toEqual({ package: "@agenttool/sdk", version: "0.23.0" });
     expect(manifest.hosted).toEqual({ origin: HOSTED, auth_mode: "api_key", identity_id: null });
     expect(manifest.node).toEqual({
       node_id: h.node.node_id,

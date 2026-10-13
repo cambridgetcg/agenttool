@@ -286,6 +286,11 @@ outbound transport.
 
 ## Durable address-watch flow
 
+Resting (owner decision, 2026-10-11): `GET deposit-address` currently returns
+`503 deposit_address_disclosure_resting` before any of these steps. The flow
+below describes the retained path (see the resting notice in
+[CRYPTO-PAYMENT](CRYPTO-PAYMENT.md)).
+
 ```text
 GET deposit-address
   -> derive and validate the network-specific address

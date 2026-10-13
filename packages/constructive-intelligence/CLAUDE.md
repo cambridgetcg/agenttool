@@ -32,6 +32,10 @@ bun run ci
   transactions, append-only triggers, owned non-group/other-writable database
   parents, no symlink/hardlink following, and 0600 database/WAL/SHM/journal
   modes.
+- Open and close ledger descriptors only before this process opens its SQLite
+  connection. Closing any descriptor for the database or its -shm releases
+  every POSIX lock SQLite holds there, letting another process truncate the
+  mapped WAL index (SIGBUS) or delete the WAL beneath this connection.
 - Keep supersession prior-only, same-ledger, same-level, same-deliverable, and
   single-successor. Preserve full history; evaluate only active receipts.
 - Keep E0→E6 forward-only. E3 is 3 clusters, 2 organizations, 3

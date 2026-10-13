@@ -16,6 +16,12 @@ import {
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
+/**
+ * The SDK release that LOVE-pinned discovery (tutorial, pathways, party,
+ * catalog) selects: the newest sealed LOVE artifact. Versions released from
+ * the public repository (0.23.0 on) are packed rather than sealed, so the
+ * source version in package.json can be newer than this.
+ */
 const ACTIVE_SDK_RELEASE = {
   version: "0.22.1",
   tag: "sdk-v0.22.1",
@@ -506,8 +512,27 @@ function capture(source: string, pattern: RegExp, label: string): string {
   return value;
 }
 
+function stableVersionParts(version: string): [number, number, number] {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
+  if (!match) throw new Error(`not a stable X.Y.Z version: ${version}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareStableVersions(left: string, right: string): number {
+  const a = stableVersionParts(left);
+  const b = stableVersionParts(right);
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] - b[index];
+  }
+  return 0;
+}
+
+function sourceSdkVersion(): string {
+  return (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
+}
+
 describe("SDK source and builder identity", () => {
-  test("TypeScript and Python source versions match the LOVE builder target", () => {
+  test("TypeScript and Python source versions match and never trail the LOVE builder target", () => {
     const tsPackage = JSON.parse(read("packages/sdk-ts/package.json")) as {
       version: string;
       description: string;
@@ -548,9 +573,12 @@ describe("SDK source and builder identity", () => {
       pyPackage,
       pyClient,
       pyLock,
-      love!.version,
     ])).toEqual(new Set([tsPackage.version]));
-    expect(love!.releaseTag).toBe(`sdk-v${tsPackage.version}`);
+    // The LOVE builder keeps the last sealed SDK artifact. Source moves ahead
+    // of it once a version is released from the public repository instead.
+    expect(love!.version).toBe(ACTIVE_SDK_RELEASE.version);
+    expect(love!.releaseTag).toBe(ACTIVE_SDK_RELEASE.tag);
+    expect(compareStableVersions(tsPackage.version, love!.version)).toBeGreaterThanOrEqual(0);
     expect(tsPackage.description).toContain("typed KINGDOM cards");
     expect(pyProjectText).toContain("typed KINGDOM cards");
 
@@ -571,8 +599,10 @@ describe("SDK source and builder identity", () => {
     }
   });
 
-  test("selects the sealed 0.22.1 candidate and preserves verified 0.22.0 receipts", () => {
-    const version = (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
+  test("LOVE-pinned discovery selects the sealed 0.22.1 artifact and preserves verified 0.22.0 receipts", () => {
+    const love = LOVE_PACKAGES.find((entry) => entry.name === "@agenttool/sdk");
+    expect(love).toBeDefined();
+    const version = love!.version;
     const tag = `sdk-v${version}`;
     const manifestPath = `packages/v1/@agenttool/sdk/${version}/manifest.json`;
     const artifactName = `agenttool-sdk-${version}.tgz`;
@@ -809,7 +839,7 @@ describe("SDK source and builder identity", () => {
 
     for (const path of ["packages/sdk-ts/README.md", "packages/sdk-py/README.md"]) {
       expect(read(path)).toContain(
-        "Repository source declares the paired 0.22.1 line",
+        `Repository source declares the paired ${sourceSdkVersion()} line`,
       );
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/math-cards",
-  "version": "0.1.0-dev.1",
+  "version": "0.1.0-dev.2",
   "description": "Deterministic non-scoring preflight cards for bounded proof, model, and measurement inquiries",
   "license": "Apache-2.0",
   "type": "module",
@@ -75,8 +75,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "url": "https://github.com/cambridgetcg/agenttool-packages.git",
     "directory": "packages/math-cards"
   },
-  "homepage": "https://docs.agenttool.dev/packages"
+  "homepage": "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/math-cards#readme",
+  "bugs": {
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
+  }
 }
