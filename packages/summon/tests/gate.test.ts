@@ -250,3 +250,45 @@ describe('F19: the admitted entry records origin and effort, and origin never de
     }
   })
 })
+
+describe('Phase 0.5: the front door applies the build access and the edit/build folder rules', () => {
+  const FLAGGED = DEFAULT_ALLOWLIST.replace('models: [{ model: sonnet }, { model: haiku }]', 'models: [{ model: sonnet }, { model: haiku }]\n    reads_anywhere: true')
+  const BUILD = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test\n        args: true')
+  const EDIT = FLAGGED.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: edit')
+  const stateOf = (h: string, id: string) => JSON.parse(readFileSync(join(h, '.local/state/summon/jobs', id, 'state.json'), 'utf8'))
+
+  test('a build request into a build folder that is a repository root is admitted, and the job state records access build', () => {
+    const h = targetHome(BUILD); mkdirSync(join(h, 'Projects/x/.git'))
+    const req = sampleRequest({ access: 'build' })
+    expect(gateStart(JSON.stringify(req), deps(h))).toEqual({ status: 'admitted', handle: `nuance/${req.id}` })
+    expect(stateOf(h, req.id)).toMatchObject({ status: 'queued', access: 'build', cwd_real: join(h, 'Projects/x') })
+  })
+  test('a build request into an edit folder is outside_allowlist, with a hint that is a complete build entry', () => {
+    const h = targetHome(EDIT); mkdirSync(join(h, 'Projects/x/.git'))
+    const r = gateStart(JSON.stringify(sampleRequest({ access: 'build' })), deps(h))
+    expect(r).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: 'build is not allowed in ~/Projects/x (edit)' })
+    expect((r as { hint?: string }).hint).toBe('folders:\n  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test')
+  })
+  test('an edit request is admitted at a repository root and refused anywhere else, as outside_allowlist with the ledgered reason', () => {
+    const h = targetHome(EDIT)
+    const notRepo = gateStart(JSON.stringify(sampleRequest({ access: 'edit' })), deps(h))
+    expect(notRepo).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('.git'), hint: expect.any(String) })
+    mkdirSync(join(h, 'Projects/x/.git')); mkdirSync(join(h, 'Projects/x/sub'))
+    const below = gateStart(JSON.stringify(sampleRequest({ access: 'edit', cwd: '~/Projects/x/sub' })), deps(h))
+    expect(below).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('folder entry itself') })
+    const req = sampleRequest({ access: 'edit' })
+    expect(gateStart(JSON.stringify(req), deps(h))).toMatchObject({ status: 'admitted' })
+    expect(stateOf(h, req.id)).toMatchObject({ access: 'edit', cwd_real: join(h, 'Projects/x') })
+  })
+  test('a request carrying commands or sandbox fields is malformed at the front door, even for a build folder', () => {
+    const h = targetHome(BUILD); mkdirSync(join(h, 'Projects/x/.git'))
+    for (const extra of [{ commands: [{ run: 'bun test' }] }, { sandbox: false }]) {
+      expect(gateStart(JSON.stringify({ ...sampleRequest({ access: 'build' }), ...extra }), deps(h))).toMatchObject({ status: 'refused', reason: 'malformed' })
+    }
+  })
+  test('an allowlist with a nested edit entry refuses every request, naming the file problem', () => {
+    const h = targetHome(EDIT.replace('  - path: ~/Projects/x\n    access: edit', '  - path: ~/Projects\n    access: edit\n  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test'))
+    const r = gateStart(JSON.stringify(sampleRequest()), deps(h))
+    expect(r).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('allowlist: folders[1].path') })
+  })
+})

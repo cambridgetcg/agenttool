@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   CLOCK_SKEW_MS, ID_RE, MAX_PROMPT_BYTES, checkTiming, newRequestId, originTag, validateRequest,
 } from '../src/request.ts'
@@ -109,5 +112,46 @@ describe('F19: origin', () => {
     expect(originTag({})).toBeUndefined()
     expect(originTag(undefined)).toBeUndefined()
     expect(originTag({ harness: 'h'.repeat(300), pid: 1 })!.length).toBe(200)
+  })
+})
+
+describe('Phase 0.5: the build access in the request', () => {
+  const send = (over: Record<string, unknown>) => validateRequest(JSON.stringify({ ...sampleRequest(), ...over }))
+
+  test('access: build is accepted, with review and edit', () => {
+    for (const access of ['review', 'edit', 'build']) expect([access, send({ access }).ok]).toEqual([access, true])
+    expect(send({ access: 'build' })).toMatchObject({ ok: true, request: { access: 'build' } })
+  })
+  test('other accesses are still malformed', () => {
+    for (const access of ['admin', 'Build', 'BUILD', 'builder', 'build ', '', null, 2, ['build'], { build: true }]) {
+      expect([access, send({ access })]).toEqual([access, { ok: false, reason: 'malformed', detail: 'access' }])
+    }
+  })
+  test('a request never carries commands or sandbox fields: each is malformed, on any access', () => {
+    for (const access of ['review', 'edit', 'build']) {
+      for (const extra of [{ commands: [{ run: 'bun test' }] }, { commands: [] }, { sandbox: { enabled: false } }, { sandbox: false }, { sandbox_write: ['/tmp'] },
+        { local_binding: true }, { allowedTools: ['Bash'] }, { run: 'bun test' }]) {
+        expect([access, Object.keys(extra)[0], send({ access, ...extra })]).toEqual([access, Object.keys(extra)[0],
+          { ok: false, reason: 'malformed', detail: `unknown field: ${Object.keys(extra)[0]}` }])
+      }
+    }
+  })
+
+  // A Nuance runner that has not been updated has Phase 0's validator. The design promises that it refuses access: build
+  // as malformed, a definite refusal, so this pins it against the real Phase 0 file rather than a copy of its rule.
+  test('the Phase 0 validator (5958f271) refuses a build request as malformed, and still takes review and edit', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'summon-old-request-'))
+    try {
+      const git = Bun.spawnSync(['git', 'show', '5958f271:packages/summon/src/request.ts'], { cwd: import.meta.dir })
+      expect(git.exitCode).toBe(0)
+      const file = join(dir, 'request-phase0.ts')
+      writeFileSync(file, git.stdout)
+      const old: { validateRequest: typeof validateRequest } = await import(file)
+      expect(old.validateRequest(JSON.stringify(sampleRequest({ access: 'build' })))).toEqual({ ok: false, reason: 'malformed', detail: 'access' })
+      expect(old.validateRequest(JSON.stringify(sampleRequest({ access: 'review' }))).ok).toBe(true)
+      expect(old.validateRequest(JSON.stringify(sampleRequest({ access: 'edit' }))).ok).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

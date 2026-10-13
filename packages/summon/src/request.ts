@@ -13,7 +13,9 @@ export const RUNTIMES = ['claude', 'codex', 'hermes'] as const
 /** What `claude --help` (2.1.296) lists for `--effort <level>`. */
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 export type Runtime = (typeof RUNTIMES)[number]
-export type Access = 'review' | 'edit'
+/** Phase 0.5 adds build: edit's powers plus the allowlisted commands of its folder entry. The request never carries those commands. */
+export const ACCESSES = ['review', 'edit', 'build'] as const
+export type Access = (typeof ACCESSES)[number]
 
 export interface SummonOrigin { harness?: string; pid?: number; started_at?: string }
 export interface SummonRequest {
@@ -78,7 +80,7 @@ export function validateRequest(raw: string): Valid | Invalid {
   }
   if (typeof j.cwd !== 'string' || j.cwd.length === 0 || j.cwd.length > 1024 || hasControl(j.cwd)
     || !(j.cwd === '~' || j.cwd.startsWith('~/') || j.cwd.startsWith('/'))) return bad('malformed', 'cwd')
-  if (j.access !== 'review' && j.access !== 'edit') return bad('malformed', 'access')
+  if (!(ACCESSES as readonly unknown[]).includes(j.access)) return bad('malformed', 'access')
   if (!Number.isInteger(j.timeout_s) || j.timeout_s < 1 || j.timeout_s > 86_400) return bad('malformed', 'timeout_s')
   if (j.label !== undefined && (typeof j.label !== 'string' || j.label.length > 120 || hasControl(j.label))) return bad('malformed', 'label')
   if (j.origin !== undefined) {
