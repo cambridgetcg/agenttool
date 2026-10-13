@@ -1,7 +1,10 @@
 // The pipe's tool cache (spec §6.2, R16, T5). The pipe answers tools/list from tools/<digest>.json, named by tools/current,
 // so it works with the hub away. The bundle seeds it (tools/seed is the seeded list itself), and a list from the hub is
-// taken only when its digest has the digest form, the digest recomputed here matches, and every tool name is one the
-// bundle seeded: a stand-in hub (the stolen-key case of §5.1) can reword nothing and add no tool.
+// taken only when its digest has the digest form, the digest recomputed here matches, the list is not empty, and every
+// tool name is one the bundle seeded, each once. That keeps a damaged message out and a stand-in hub (the stolen-key case
+// of §5.1) from adding a tool. It does not stop a stand-in from rewording the seeded ones: the digest comes from the same
+// sender as the list, so it proves only that the message is consistent, and a reworded list with its own digest is taken
+// (accepted for Phase 1, T5). Proof that a list came from the real hub comes with the hub-to-pipe proof in D10.
 import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import { DIGEST_RE, type ToolDef, type ToolsRefusedReason } from '../link/messages.ts'
 import { writeFileDurable } from '../native.ts'
@@ -36,6 +39,7 @@ export function storeTools(paths: NuancePaths, list: ToolDef[]): string {
 /** The bundle's list (install write, Task 56): refused unless `digest` is its digest; it becomes the seed and current. */
 export function seedTools(paths: NuancePaths, list: ToolDef[], digest: string): void {
   if (!DIGEST_RE.test(digest) || toolsDigest(list) !== digest) throw new Error('seedTools: the digest is not the digest of this list')
+  if (new Set(list.map((t) => t.name)).size !== list.length) throw new Error('seedTools: the list names a tool twice')
   toolsDir(paths)
   writeToolsFile(paths.toolsSeed, list)
   storeTools(paths, list)
@@ -51,7 +55,9 @@ export function acceptHubTools(paths: NuancePaths, msg: { digest: string; list: 
   if (!DIGEST_RE.test(msg.digest)) return { ok: false, reason: 'digest_format' }
   const names = seededNames(paths)
   if (!names) return { ok: false, reason: 'no_seed' }
-  if (toolsDigest(msg.list) !== msg.digest) return { ok: false, reason: 'digest_mismatch' }
+  if (toolsDigest(msg.list) !== msg.digest) return { ok: false, reason: 'digest_mismatch' }   // a consistent message only: the sender made both
+  // An empty list would silently remove every tool, and the closed set of reasons (Task 15) has no word for it: fail closed as unknown_tool.
+  if (msg.list.length === 0) return { ok: false, reason: 'unknown_tool' }
   const seen = new Set<string>()
   for (const t of msg.list) {
     // A name the bundle never seeded, or one seeded name listed twice: neither is a list this pipe may serve.
