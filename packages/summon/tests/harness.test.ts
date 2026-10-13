@@ -276,10 +276,6 @@ describe('build jobs: allow and deny rules (Phase 0.5 §2)', () => {
     expect(allow).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', 'Bash(bun run test:unit)', 'Bash(bun test --timeout=5000)',
       'Bash(bun test --timeout=5000:*)', ...GIT_RULES])
   })
-  test('a rule is listed once, however many commands produce it', () => {
-    const allow = rules(make(buildJob([cmd('bun test'), cmd('bun run typecheck')])), 'allowedTools')
-    expect(new Set(allow).size).toBe(allow.length)
-  })
   test('bare names need no PATH change and the resolver is never asked', () => {
     expect(pathOf(make(buildJob([cmd('bun test'), cmd('make check')])))).toBe(SYSTEM_PATH)
   })
@@ -300,6 +296,33 @@ describe('build jobs: allow and deny rules (Phase 0.5 §2)', () => {
       const inv = make(buildJob([cmd(`${BUN} test`, true)]), disk({ [BUN]: BUN }))
       expect(rules(inv, 'allowedTools')).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', `Bash(${BUN} test)`, `Bash(${BUN} test:*)`,
         'Bash(bun test)', 'Bash(bun test:*)', ...GIT_RULES])
+    })
+    test('a rule is listed once, however many commands produce it', () => {
+      // The one way two commands make the same rule: `bun test` written bare, and written absolute for the very same program, whose
+      // basename form is `Bash(bun test)` again. Two bare commands that differ never share a rule, so they could not show this.
+      const allow = rules(make(buildJob([cmd('bun test'), cmd(`${BUN} test`)]), disk({ [BUN]: BUN })), 'allowedTools')
+      expect(allow).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', 'Bash(bun test)', `Bash(${BUN} test)`, ...GIT_RULES])
+      expect(allow.filter((r) => r === 'Bash(bun test)')).toHaveLength(1)
+      expect(new Set(allow).size).toBe(allow.length)
+      // Two entries that are the same text give one rule each too.
+      const twice = rules(make(buildJob([cmd('bun test'), cmd('bun test'), cmd('make all', true), cmd('make all', true)])), 'allowedTools')
+      expect(twice).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', 'Bash(bun test)', 'Bash(make all)', 'Bash(make all:*)', ...GIT_RULES])
+    })
+    test('a bare entry with args false gains the :* rule from an absolute sibling with args true, when both are the same program', () => {
+      // J10: the second entry says "bun test and anything after it", and `bun` on the final PATH is that program. Pinned as the
+      // designed reading, so a change to it shows up here and not in a live job.
+      const same = rules(make(buildJob([cmd('bun test'), cmd(`${BUN} test`, true)]), disk({ [BUN]: BUN })), 'allowedTools')
+      expect(same).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', 'Bash(bun test)', `Bash(${BUN} test)`, `Bash(${BUN} test:*)`,
+        'Bash(bun test:*)', ...GIT_RULES])
+      expect(allows(same, 'bun test --watch')).toBe(true)
+      // Controls: the bare entry alone allows exactly `bun test`; and when the bare name is a different program, the sibling's
+      // permission does not travel to it.
+      expect(allows(rules(make(buildJob([cmd('bun test')])), 'allowedTools'), 'bun test --watch')).toBe(false)
+      const shadowed = rules(make(buildJob([cmd('bun test'), cmd(`${BUN} test`, true)]),
+        disk({ [BUN]: BUN, '/opt/homebrew/bin/bun': '/opt/homebrew/Cellar/bun/1.0/bin/bun' })), 'allowedTools')
+      expect(allows(shadowed, 'bun test')).toBe(true) // the bare entry itself
+      expect(allows(shadowed, 'bun test --watch')).toBe(false)
+      expect(allows(shadowed, `${BUN} test --watch`)).toBe(true)
     })
     test('a symlink earlier on PATH to the same program is the same program', () => {
       const real = '/Users/yu/.bun/install/global/bin/bun'
@@ -420,7 +443,23 @@ describe('resolveProgram (the real disk lookup, in a temp directory)', () => {
   })
   test('only absolute directories on the path are searched', () => {
     const d = tree()
-    expect(resolveProgram('tool', `b:${d}/a::.`)).toBeNull()
+    // Relative entries are read against the process's cwd, so the cwd is set to a directory where each of them WOULD find an
+    // executable `tool`: `b` (b/tool), the empty entry and `.` (./tool). Only a lookup that skips them can answer null.
+    writeFileSync(join(d, 'tool'), '#!/bin/sh\n'); chmodSync(join(d, 'tool'), 0o755)
+    const before = process.cwd()
+    process.chdir(d)
+    try {
+      expect(realpathSync(process.cwd())).toBe(d) // the chdir took effect
+      expect(existsSync('b/tool') && existsSync('tool')).toBe(true) // and the relative candidates are there to be found
+      expect(resolveProgram('tool', `b:${d}/a::.`)).toBeNull()
+      expect(resolveProgram('tool', 'b')).toBeNull()
+      expect(resolveProgram('tool', '')).toBeNull()
+      expect(resolveProgram('tool', '.')).toBeNull()
+      // Control: the same lookup does answer when the directory is written absolutely.
+      expect(resolveProgram('tool', `b:${d}/a::.:${d}`)).toBe(join(d, 'tool'))
+    } finally {
+      process.chdir(before)
+    }
   })
 })
 
