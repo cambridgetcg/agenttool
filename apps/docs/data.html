@@ -334,6 +334,46 @@ hits = at.data.query(
       </div>
       <p class="muted">For data-only use with no AgentTool account, instantiate the exported TypeScript or Python <code>DataClient</code> directly with the node URL and token. It does not require <code>AT_API_KEY</code>.</p>
 
+      <h2 id="exit-door">Take a copy home: the exit door</h2>
+      <p>The exit door copies an agent's hosted continuity into a collection on a node you run. It goes one way, hosted → local. Hosted reads are <code>GET</code>-only through the project's own credentials, and every write goes through <code>at.data</code>, so the project bearer never reaches the node.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>TypeScript · @agenttool/sdk 0.23.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">const</span> plan = <span class="kw">await</span> at.exitDoor.<span class="fn">plan</span>(); <span class="cm">// hosted reads only; needs no node</span>
+<span class="kw">const</span> { manifest_record_id, manifest } = <span class="kw">await</span> at.exitDoor.<span class="fn">export</span>({
+  collection_id: <span class="str">"default"</span>, <span class="cm">// an existing collection on the node</span>
+});
+console.<span class="fn">log</span>(plan.overall, manifest.overall); <span class="cm">// complete | partial | failed</span>
+<span class="kw">const</span> check = <span class="kw">await</span> at.exitDoor.<span class="fn">verify</span>(manifest_record_id); <span class="cm">// re-reads, re-hashes</span></pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>Python · agenttool-sdk 0.23.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>plan = at.exit_door.<span class="fn">plan</span>()
+result = at.exit_door.<span class="fn">export</span>(collection_id=<span class="str">"default"</span>)
+check = at.exit_door.<span class="fn">verify</span>(result[<span class="str">"manifest_record_id"</span>])</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>CLI · agenttool-exit-door</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>agenttool-exit-door export \
+  --hosted-token-env AT_API_KEY \
+  --node-url http://127.0.0.1:7742 --node-token-env AGENT_DATA_NODE_TOKEN \
+  --collection default</pre>
+      </div>
+
+      <p><strong>What v1 copies:</strong> memories, chronicle, strands with their ciphertext thoughts, correspondence events, covenants, identities and keys (as context), and the vault and identity-backup indexes. Vault secret values and backup blobs are not exported: their custody decision is still open, and every manifest says so.</p>
+      <p><strong>What it promises:</strong> each hosted item becomes one immutable record keyed <code>&lt;store&gt;/&lt;hosted id&gt;</code>, and the manifest reports completeness per store from the host's own end-of-walk signal. An unchanged re-run inserts nothing. The exporter never decrypts, never deletes, never calls search (search costs credits), and never reads single memories (that read updates <code>accessed_at</code>). Putting any of the copy back into hosted memory is a separate, explicit step (<a href="AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary">agent-data/v1 §11</a>).</p>
+      <p><strong>What it refuses before the first write:</strong> a node that does not report <code>agent-data/v1</code> with the <code>text</code> collector, a target collection that does not already exist (the exporter never creates one), a non-loopback node URL unless you pass <code>allow_remote_node</code>, a node on the hosted API's own origin, and a node token equal to the project API key. CLI tokens come only from environment variables or stdin, never from argv.</p>
+
+      <div class="callout">
+        <span class="icon">◇</span>
+        <p><strong>Availability, 2026-10-13.</strong> The cursor-paged hosted walks it reads are live on <code>api.agenttool.dev</code>. The client first ships in SDK 0.23.0, tagged <code>sdk-v0.23.0</code> in the public <a href="https://github.com/cambridgetcg/agenttool-packages">agenttool-packages</a> source repository. npm and PyPI still serve 0.22.1, which has no exit door, so check the installed version before relying on it.</p>
+      </div>
+
+      <h2 id="retention">What a delete does today</h2>
+      <p>Taking a copy and deleting are separate acts. Before deleting anything hosted, read <a href="https://api.agenttool.dev/public/retention"><code>GET /public/retention</code></a>: an unauthenticated, static answer to how long each kind of record is kept and what a delete does to it now. Every value names its basis (<code>measured</code>, <code>source</code>, <code>config</code>, <code>declared</code> or <code>unknown</code>). Three deletes hide a record but keep its content (inbox messages, vault secrets and identity backups), and their responses say so with <code>content_retained: true</code>. <a href="RETENTION.md">RETENTION.md</a> explains how to read it.</p>
+
       <h2 id="http">Reference node HTTP surface</h2>
       <table class="endpoint-table">
         <thead><tr><th>Method</th><th>Path</th><th>Authority</th><th>Purpose</th></tr></thead>

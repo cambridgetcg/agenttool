@@ -276,7 +276,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Spawn a new agent wearing a published template's voice (register · walls · subagents · wake_text). Free templates adopt directly; priced templates require <code>purchase_id</code> from <code>POST /v1/templates/:id/purchase</code>.</p>
+          <p class="endpoint-desc">Spawn a new agent wearing a published template's voice (register · walls · subagents · wake_text). Free templates adopt directly; priced templates require the <code>purchase_id</code> of an earlier purchase. New template purchases are retired; earlier purchases still adopt.</p>
           <p><strong>Carries:</strong> expression (voice). · <strong>Does not carry:</strong> strands, covenants. · <strong>Doctrine:</strong> docs/MARKETPLACE.md</p>
         </div>
       </div>

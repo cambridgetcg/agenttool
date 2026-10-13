@@ -463,11 +463,13 @@ function effectsMatch(
   return true;
 }
 
-function findRule(
+// Mirrors the core: every matching rule counts, and any match requiring
+// approval gates the item (Agent Wallet 0.1 §5.2 erratum, 2026-10-11).
+function matchingRules(
   capability: WalletCapability,
   item: { target_account: string; action: string; method: string | null },
 ) {
-  return capability.call_rules.find((rule) => (
+  return capability.call_rules.filter((rule) => (
     rule.target_account === item.target_account
     && rule.actions.includes(item.action as (typeof rule.actions)[number])
     && (
@@ -484,7 +486,7 @@ function applicableRules(
 ) {
   if (!capability || !intent || !simulation) return null;
   const items = [...intent.calls, ...simulation.effects];
-  return items.map((item) => findRule(capability, item));
+  return items.map((item) => matchingRules(capability, item));
 }
 
 function callsState(
@@ -494,7 +496,7 @@ function callsState(
 ): BoundState {
   const rules = applicableRules(capability, intent, simulation);
   if (!rules) return "unknown";
-  return rules.some((rule) => rule === undefined)
+  return rules.some((matches) => matches.length === 0)
     ? "outside-bounds"
     : "within-bounds";
 }
@@ -506,8 +508,8 @@ function approvalState(
   usage: UsageAssertion | null,
 ): ApprovalState {
   const rules = applicableRules(capability, intent, simulation);
-  if (!rules || rules.some((rule) => rule === undefined)) return "unknown";
-  const requiresApproval = rules.some((rule) => rule!.requires_approval);
+  if (!rules || rules.some((matches) => matches.length === 0)) return "unknown";
+  const requiresApproval = rules.some((matches) => matches.some((rule) => rule.requires_approval));
   if (!requiresApproval) return "not-required";
   if (!usage || !capability) return "unknown";
   return usage.authenticated_distinct_approval_count >= capability.approval_threshold
