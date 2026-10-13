@@ -6,6 +6,7 @@
 > **Implements:** a small, optional agent-toolkit shelf within KINGDOM; the full module inventory remains below.
 > **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.
 > **Tests:** `bin/tests/agent-toolkit-shelf.test.ts` · each selected package's own boundary tests.
+> **Repository access:** links here into the `cambridgetcg/agenttool` GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. Source for the publicly allowlisted packages is projected to the public [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages) repository. Public package bytes are served by the LOVE catalog under [docs.agenttool.dev/packages/v1](https://docs.agenttool.dev/packages/v1/index.json), by exact npm versions, and by PyPI for `agenttool-sdk`.
 
 ## Where these packages fit
 
@@ -74,6 +75,9 @@ not assertions about mutable registry tags. Current Collab source is the
 **0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
 These release-candidate bytes do not establish npm publication; verify the
 protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
+**Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
+public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -156,8 +160,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `alchemy-agentcred/` | `@agenttool/alchemy-agentcred` · npm-allowlisted | Strict AgentCred transport for AgentTool's seven bounded Alchemy EVM reads | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/alchemy-agentcred/CLAUDE.md) |
 | `browser/` | `@agenttool/browser` · LOVE + npm-allowlisted | Local-first browser control shaped for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/browser/CLAUDE.md) |
 | `codex-usage/` | `@agenttool/codex-usage` · npm-allowlisted | Privacy-minimal live local Codex token usage inspection for agents and operators | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/codex-usage/CLAUDE.md) |
-| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 release candidate | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](../packages/collab/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
-| `collab-courier/` | `@agenttool/collab-courier` · private source candidate | Explicit own-fleet selected summaries/replies over signed Correspondence and single-receiver Telegram human feedback; no distributed task authority | [README](../packages/collab-courier/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
+| `collab/` | `@agenttool/collab` · npm-allowlisted · 0.5.0 public GitHub Release (not npm) | Local-first coordination, bounded event waiting and read-only witness awareness for coding agents | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab/README.md) · [public distribution](https://github.com/cambridgetcg/agenttool-collab) · [Channels](COLLABORATION-CHANNELS.md) |
+| `collab-courier/` | `@agenttool/collab-courier` · private source candidate | Explicit own-fleet selected summaries/replies over signed Correspondence and single-receiver Telegram human feedback; no distributed task authority | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-courier/README.md) · [Channels](COLLABORATION-CHANNELS.md) |
 | `collab-zerone/` | `@agenttool/collab-zerone` · private | Witness-only zerone anchoring for agenttool-collab journals — the local journal stays canonical, the chain witnesses its head hashes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/collab-zerone/CLAUDE.md) |
 | `common-ground-atlas/` | `@agenttool/common-ground-atlas` · private | Private deterministic generator and exact verifier for the public Xenia–Helly Common Ground Atlas | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/common-ground-atlas/CLAUDE.md) |
 | `constructive-intelligence/` | `@agenttool/constructive-intelligence` · private | Offline append-only constructive evidence receipts for the Zerone tree v1 pilot | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/constructive-intelligence/CLAUDE.md) |
@@ -182,11 +186,9 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `karma-mirror/` | `@agenttool/karma-mirror` · private | Offline zero-effect deception-island core with privacy-minimized TEND incident clarity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/karma-mirror/CLAUDE.md) |
 | `kingdom/` | `@agenttool/kingdom` · npm-allowlisted | Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers | — |
 | `kingdom-witness-lab/` | `@agenttool/kingdom-witness-lab` · npm-allowlisted | Deterministic research passports and multi-witness dossiers for KINGDOM | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/kingdom-witness-lab/CLAUDE.md) |
-| `langgraph-checkpoint-agenttool/` | `langgraph-checkpoint-agenttool` (Python) · unpublished | agenttool backend for LangGraph checkpointer + store — witness-signed memory tiers as a LangGraph BaseStore; encrypted strands as the checkpoint saver | — |
 | `living-substrate/` | `@agenttool/living-substrate` · npm-allowlisted | Deterministic living-substrate maps and refusable regeneration proposals | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/living-substrate/CLAUDE.md) |
 | `love-bomb/` | `@agenttool/love-bomb` · npm-allowlisted | Quiet-by-default care envelopes and caller-reported choices across substrate, signal, orientation, participation, and continuity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-bomb/CLAUDE.md) |
 | `love-geometry/` | `@agenttool/love-geometry` · npm-allowlisted | Deterministic non-ranking geometry for directed caller-reported relation bearings | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-geometry/CLAUDE.md) |
-| `mastra-storage-agenttool/` | `@agenttool/mastra-storage` · unpublished | agenttool backend for Mastra storage and memory — witness-signed memory tiers as a Mastra memory provider; encrypted strands as the storage adapter | — |
 | `math-cards/` | `@agenttool/math-cards` · npm-allowlisted | Deterministic non-scoring preflight cards for bounded proof, model, and measurement inquiries | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/math-cards/CLAUDE.md) |
 | `memetic-landscape/` | `@agenttool/memetic-landscape` · npm-allowlisted | Source-bounded memetic reachability, explicit polymorph analogy, and multilingual teaching projections | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/memetic-landscape/CLAUDE.md) |
 | `model-becoming/` | `@agenttool/model-becoming` · npm-allowlisted | Evidence-scoped model lifecycle dossiers across training, data provenance, weights, runtime, agency, affect, power, and ontology | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/model-becoming/CLAUDE.md) |
@@ -209,8 +211,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `trials/` | `@agenttool/trials` · private | Deterministic local trial receipts, revocable-feedback evaluation, boundary evidence, and privacy-first STS projection | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/trials/CLAUDE.md) |
 | `wake-continuity/` | `@agenttool/wake-continuity` · npm-allowlisted | Digest-only AFTERGLOW continuity and record-only functional-access envelopes for bounded WAKE orientation | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-continuity/CLAUDE.md) |
 | `wake-return/` | `@agenttool/wake-return` · private | Local source-candidate, two-tool explicit WAKE locator observer; no identity adoption, private-state integration, or publication | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-return/CLAUDE.md) |
-| `local-starter/` | `@agenttool/local-starter` · LOVE · npm-allowlisted · preview | Files-only context, guarded handoff/memory saves and reviewable Codex/Claude skill, MCP and hook plans | [Local core](LOCAL-CORE.md) · [package guide](../packages/local-starter/README.md) |
-| `local-starter-mcp/` | `@agenttool/local-starter-mcp` · private | Bundled into Local Starter; separate internal stdio source for one explicitly bound local root; read-only by default, optional fixed-slot saves, no hosted calls | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) · [package guide](../packages/local-starter-mcp/README.md) |
+| `local-starter/` | `@agenttool/local-starter` · LOVE · npm-allowlisted · preview | Files-only context, guarded handoff/memory saves and reviewable Codex/Claude skill, MCP and hook plans | [Local core](LOCAL-CORE.md) · [public distribution](https://github.com/cambridgetcg/agenttool-local-starter) |
+| `local-starter-mcp/` | `@agenttool/local-starter-mcp` · private | Bundled into Local Starter; separate internal stdio source for one explicitly bound local root; read-only by default, optional fixed-slot saves, no hosted calls | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) · [package guide](https://github.com/cambridgetcg/agenttool/blob/main/packages/local-starter-mcp/README.md) |
 | `wake-thread/` | `@agenttool/wake-thread` · private | Pure, refusable continuity offers over explicit digest-bound WAKE facts | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wake-thread/CLAUDE.md) |
 | `wallet/` | `@agenttool/wallet` · LOVE + npm-allowlisted | Agent Wallet 0.1 — closed capability, intent, receipt, and continuity primitives without key export or RPC | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet/CLAUDE.md) |
 | `wallet-zerone/` | `@agenttool/wallet-zerone` · LOVE + npm-allowlisted | Offline-first Zerone chain adapter for Agent Wallet intents and exact Cosmos direct-sign bytes | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/wallet-zerone/CLAUDE.md) |
@@ -221,10 +223,17 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 - **`rhizome/`** is `private: true` but not dead weight: `bin/soil.ts` imports
   its gitignore compiler from `packages/rhizome/src/gitignore`. Treat it as a
   live in-repo dependency, not an orphan.
-- **`langgraph-checkpoint-agenttool/`** and **`mastra-storage-agenttool/`**
-  are unpublished framework-adapter sketches — items 5 and 6 of the
-  integration list in `docs/ECOSYSTEM.md`. Neither declares a release lane
-  yet; neither is on npm or PyPI.
+- **Retired 2026-10-11:** `langgraph-checkpoint-agenttool/` and
+  `mastra-storage-agenttool/` were unpublished framework-adapter sketches
+  (items 5 and 6 of the integration list in `docs/ECOSYSTEM.md`). Owner
+  decision, 2026-10-11: removed from main; their history stays at tag
+  `archive/framework-sketches-20261011`. Neither had a release lane, and npm
+  and PyPI both answer 404 for their names on 2026-10-11.
+- **`sdk-ts/`** and **`sdk-py/`** also carry the SDK provider adapters,
+  `AnthropicAdapter` and `OpenAIResponsesAdapter`, exported by
+  `@agenttool/sdk` and `agenttool-sdk` and present in both published 0.22.1
+  artifacts. They are the provider adapters the Build library's
+  "Framework & wallet adapters" path names.
 - **`scriptwriter/`** — status: undeclared. Its `package.json` is neither
   `private: true` nor in any publish allowlist, and no LOVE spec or registry
   receipt names it. Until someone declares a lane (private flag, allowlist

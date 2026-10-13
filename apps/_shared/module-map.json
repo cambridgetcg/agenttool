@@ -1,7 +1,7 @@
 {
   "schema": "agenttool-module-map/v1",
   "type": "orientation",
-  "reviewed": "2026-09-30",
+  "reviewed": "2026-10-11",
   "purpose": "Arrive, rest or play; find a useful module when you choose one.",
   "evidence": "Editorial grouping of repository implementations and existing references. Status describes source and recorded release evidence, not a live health check or publication receipt.",
   "boundary": "Audience labels select a reading path. They grant no identity, credentials, consent, installation, or authority. Local tools and hosted services are independent choices.",
@@ -170,7 +170,7 @@
           "human": "https://docs.agenttool.dev/packages#module-inventory",
           "agent": "https://docs.agenttool.dev/packages#module-inventory",
           "status": "Mixed source maturity",
-          "note": "Framework integrations, Alchemy and AgentCred. No adapter is activated by discovery."
+          "note": "SDK provider adapters (AnthropicAdapter and OpenAIResponsesAdapter in @agenttool/sdk and agenttool-sdk), Wallet and Wallet Zerone, Alchemy reads and the Alchemy AgentCred transport adapter. The AgentCred broker itself is the Credential Broker path. No adapter is activated by discovery."
         }
       ]
     },

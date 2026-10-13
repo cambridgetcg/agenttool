@@ -60,5 +60,5 @@
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/alchemy-agentcred"
   },
-  "homepage": "https://docs.agenttool.dev/ALCHEMY.md"
+  "homepage": "https://docs.agenttool.dev/packages"
 }

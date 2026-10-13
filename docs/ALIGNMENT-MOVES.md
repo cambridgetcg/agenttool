@@ -11,11 +11,11 @@
 >
 > **Implements:** a dated integration register that separates live, bounded, resting, and pending work. It is not a claim that every named wire has shipped.
 >
-> **Code:** `api/src/routes/mcp.ts` · `api/src/observability/otel.ts` · `api/src/middleware/x402.ts` · `packages/langgraph-checkpoint-agenttool/` · `packages/mastra-storage-agenttool/`
+> **Code:** `api/src/routes/mcp.ts` · `api/src/observability/otel.ts` · `api/src/middleware/x402.ts` · Move 5 packages retired 2026-10-11 (tag `archive/framework-sketches-20261011`)
 >
 > **Tests:** `api/tests/mcp-server.test.ts` · `api/tests/well-known.test.ts` · `api/tests/observability-otel.test.ts` · `api/tests/x402-middleware.test.ts`
 >
-> **Status:** mixed · four moves live in whole or bounded form · A2A task transport and AgentCard pending · MCP transport and discovery proof refreshed 2026-07-24
+> **Status:** mixed · three moves live in whole or bounded form · A2A task transport and AgentCard pending · Move 5 retired 2026-10-11 · MCP transport and discovery proof refreshed 2026-07-24
 
 ## Current state of the 2026-05-13 batch
 
@@ -23,15 +23,22 @@ Four of the five moves landed in whole or bounded form. The A2A task transport
 and AgentCard did not; its discovery-only card was removed rather than left as
 a false door.
 
+> **Correction (2026-10-11):** Move 5 did not land either, so three of the five
+> moves are live in whole or bounded form. Both Move 5 adapters were
+> non-functional sketches: they called SDK methods that never existed, their
+> tests were mock-only and outside CI, and neither was published. Owner
+> decision, 2026-10-11: retired from main; history at tag
+> `archive/framework-sketches-20261011`.
+
 | Move | Tests | Files | Status |
 |---|---|---|---|
 | **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ stateless Streamable HTTP; the established path keeps its five tool names and call-result shapes, retains every prior resource, and adds open-seat plus descriptor titles. `/v1/mcp/canon` is a separate two-tool citable search/fetch surface with two orientation resources. Historical public proof at exact revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f` negotiated SDK 1.29.0 / MCP 2025-11-25 with 387 resources and five tools |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
-| **5. LangGraph + Mastra adapter packages** | 7 pytest + 12 bun = 19 pass | `packages/langgraph-checkpoint-agenttool/` (Py) + `packages/mastra-storage-agenttool/` (TS) | ✓ shipped, ready to `npm publish` + `twine upload` |
+| **5. LangGraph + Mastra adapter packages** | 7 pytest + 12 bun = 19 pass (mock clients only) | `packages/langgraph-checkpoint-agenttool/` (Py) + `packages/mastra-storage-agenttool/` (TS), retired 2026-10-11 | ~~✓ shipped, ready to `npm publish` + `twine upload`~~ ✗ retired 2026-10-11, never published (see correction above) |
 
-**Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages.
+**Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages. *(Correction 2026-10-11: those adapter tests used mock clients only; both packages are retired.)*
 
 **Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, the resting 4-of-5 arbiter-pool design, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
 
@@ -70,12 +77,12 @@ a false door.
 | `@browserbasehq/sdk` | latest | Browserbase session API | Ring 3 listing `services/listings/browserbase.ts` |
 | `@browserbasehq/stagehand` | v3 | Agent-native browser actions | same |
 | `e2b` | latest | E2B sandbox SDK | Ring 3 listing `services/listings/e2b.ts` |
-| `@mastra/core` | ^1.x | Mastra agent framework | `packages/mastra-storage-agenttool` (new package) |
+| `@mastra/core` | ^1.x | Mastra agent framework | none; the Move 5 sketch was retired 2026-10-11 |
 | `@inngest/agent-kit` | latest | Inngest TS framework | optional adapter |
 | `mem0ai` (npm) | latest | Mem0 client | `services/memory/adapters/mem0.ts` (new) |
 | `@letta-ai/letta-client` | 1.12.1 (registry checked 2026-07-24) | Letta REST client | optional adapter |
-| `langchain` | ^0.3 | LangChain JS | optional |
-| `@langchain/langgraph` | ^0.3 | LangGraph JS | optional |
+| `langchain` | 1.5.16 (registry checked 2026-10-11) | LangChain JS | optional |
+| `@langchain/langgraph` | 1.4.21 (registry checked 2026-10-11) | LangGraph JS | optional |
 | `@modelcontextprotocol/inspector` | latest | dev tool for testing MCP servers | `bin/agenttool-mcp-inspect.ts` |
 | `ai` (Vercel AI SDK 7) | 7.0.37 (registry checked 2026-07-24) | Provider-agnostic; AI Elements | `apps/dashboard/` |
 
@@ -84,10 +91,10 @@ a false door.
 | Package | Version | Use case | Add to / consume in |
 |---|---|---|---|
 | `mcp` (Python MCP SDK) | latest | MCP server + client | `packages/agenttool-mcp-py/` (new) |
-| `langgraph` + `langgraph-checkpoint` | ^0.3 | LangGraph checkpointer base classes | `packages/langgraph-checkpoint-agenttool/` (new) |
+| `langgraph` + `langgraph-checkpoint` | 1.2.14 + 4.2.0 (registry checked 2026-10-11) | LangGraph checkpointer base classes | none; the Move 5 sketch was retired 2026-10-11 |
 | `mem0ai` | latest | Mem0 Python | `packages/agenttool-memory-adapters/` |
 | `letta` (or `letta-client`) | latest | Letta server / client | optional |
-| `pydantic-ai` | ^0.0.x | Pydantic AI agent framework | adapter target |
+| `pydantic-ai` | 2.55.0 (registry checked 2026-10-11) | Pydantic AI agent framework | adapter target |
 | `opentelemetry-api` + `-sdk` + `-instrumentation` | ^1.x | OTel Python | `bin/agenttool-think.ts` (if any Py worker) |
 | `inspect-ai` | latest | UK AISI eval framework | `tests/contract/` |
 | `promptfoo` | latest | Eval-as-code (now OpenAI-owned, still OSS) | `tests/contract/` |
@@ -156,6 +163,22 @@ Registry, API catalog, and AgentTool manifest provide bounded ways to find it.
 - `api/src/services/mcp/tools.ts` — map a curated subset of agenttool routes → MCP tools (`memory.append`, `memory.search`, `strand.append`, `inbox.send`, `wake.read`, `covenant.propose`)
 - `api/src/services/mcp/prompts.ts` — the wake doctrine as a top-level prompt resource
 - `api/tests/mcp-server.test.ts` — wire-level test against the SDK's test client
+
+> **Status (2026-10-11):** the file list above is the 2026-05-13 plan, not the
+> current code. Today `api/src/routes/mcp.ts` serves two read-only endpoints,
+> building a fresh server for each POST: `POST /v1/mcp` with five tools
+> (`canon.lookup`, `canon.by_type`, `canon.list_types`, `canon.summary`,
+> `wake.platform`) and `POST /v1/mcp/canon` with `search` and `fetch`, both
+> backed by `api/src/services/mcp/{resources,tools}.ts`. The write tools named
+> above (`memory.append`, `strand.append`, `inbox.send`, `covenant.propose`)
+> are deliberately not registered. `services/mcp/prompts.ts` and the
+> `docs/PATTERN-MCP-EXPOSURE.md` doctrine pin below were never created. The
+> snippet below is simplified: the shipped route checks origin, method, rate
+> limit, media types and body size before it builds a server. Two other
+> surfaces are separate: the per-agent partial JSON-RPC scaffold at
+> `/v1/mcp/agents/:did` (`api/src/routes/mcp-per-agent.ts`) and the local
+> stdio server (`api/src/services/mcp/stdio.ts`; see
+> [MCP-SERVER](MCP-SERVER.md)).
 
 **Current transport shape:**
 ```ts
@@ -296,6 +319,13 @@ async function thinkOneCycle(runtime) {
 ---
 
 ### Move 5 — LangGraph checkpoint adapter (Py package)
+
+> **Correction (2026-10-11):** this plan was not carried out as written. The
+> packages that landed took no key material, did no signing or encryption,
+> had no `tests/test_saver_roundtrip.py`, and called SDK methods that never
+> existed. They were retired on 2026-10-11 without being published; history at
+> tag `archive/framework-sketches-20261011`. The text below is the original
+> 2026-05-13 plan.
 
 **Why fifth:** LangGraph is the de-facto stateful-agent runtime (LangGraph 1.0 GA late 2025). Their `BaseCheckpointSaver` interface is exactly the surface agenttool's strands+memory can back. Witness-signed memory is what `BaseStore` wants but can't promise.
 
@@ -449,6 +479,13 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [x] Scaffold `packages/langgraph-checkpoint-agenttool/` (Py) — shipped (Saver + Store, 7 pytest pass)
 - [x] Scaffold `packages/mastra-storage-agenttool/` (TS) — shipped (Storage + Memory, 12 bun:test pass)
 - [ ] Publish both to PyPI/npm — operator follow-up (both versioned 0.1.0, ready to `python -m build` + `npm publish`)
+
+> **Correction (2026-10-11):** neither scaffold shipped in working form, and
+> neither was ready to publish. Both called SDK methods that never existed;
+> the 7 + 12 passing tests used mock clients and ran outside CI. Owner
+> decision, 2026-10-11: both retired without publishing; history at tag
+> `archive/framework-sketches-20261011`. For the same reason, "adapter wires are
+> present" in the paragraph below does not hold for Move 5.
 
 Current result: the MCP endpoint uses the official stateless Streamable HTTP
 transport, keeps the public surface read-only, and passed deployment plus an

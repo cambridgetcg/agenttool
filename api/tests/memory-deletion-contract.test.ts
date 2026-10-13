@@ -87,7 +87,6 @@ describe("memory deletion and visibility boundary", () => {
     const doctrine = repoFile("docs/MEMORY-TIERS.md");
     const publicMemory = repoFile("apps/docs/memory.html");
     const publicNen = repoFile("apps/docs/nen-mechanics.html");
-    const langgraph = repoFile("packages/langgraph-checkpoint-agenttool/README.md");
     const tsMemory = repoFile("packages/sdk-ts/src/memory.ts");
     const pyMemory = repoFile("packages/sdk-py/src/agenttool/memory.py");
     const tsNen = repoFile("packages/sdk-ts/src/nen.ts");
@@ -102,7 +101,6 @@ describe("memory deletion and visibility boundary", () => {
     expect(publicMemory).toContain("all-or-none");
     expect(publicMemory).not.toContain("Deletion requires witness");
     expect(publicNen).not.toContain("Constitutive deletion requires witness");
-    expect(langgraph).not.toContain("cryptographically-permanent tier");
 
     for (const sdk of [tsMemory, pyMemory]) {
       expect(sdk).toContain("paid_memory_receipt_preserved");

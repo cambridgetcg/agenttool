@@ -27,6 +27,16 @@ public erratum and neither historical artifact is rewritten. The wire contract
 is pinned to zerone-core commit
 `35284a22192df8fc6273135f14e8549c804778b6` and Cosmos SDK `v0.50.15`.
 
+Profile scope, checked 2026-10-11: this profile is pinned to zerone-core as of
+that 2026-07-28 commit. zerone-core commit `7f3405b1b` (2026-07-29) made the
+attestation keeper reject a link whose `source.adapter_id` differs from its
+`adapter_id` (`ErrSourceAdapterIdMismatch`, code 28), and its CLI now fills
+`source.adapter_id`. This profile requires `source.adapter_id` to stay empty,
+so its attestation messages do not validate against current zerone-core source.
+Which zerone-core commit the live chains run could not be determined
+(`abci_info` reports version `dev`). Whether to re-target the profile is an
+open owner decision.
+
 It does not derive, accept, store, or export private keys or mnemonics. It does
 not choose a custody provider, bundle an RPC URL or bearer credential, retry a
 broadcast, persist sequence/budget state, or expose a combined sign-and-send

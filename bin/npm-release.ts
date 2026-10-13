@@ -967,10 +967,9 @@ export async function publicCiRun(commit: string, pinned: number | undefined, fe
  * must be a completed, successful push run of ci.yml on main for exactly the
  * tagged commit, so a hand-made tag citing an unrelated, pending, or failed
  * run is refused. The check runs code from the tagged commit, so it guards
- * against mistakes and hand-made tags on genuine projection commits; the
- * environment reviewer, the npm trust binding, and the maintainer's 2FA
- * approval of every stage remain the barriers against anyone able to push
- * other commits.
+ * against mistakes and hand-made tags on genuine projection commits; the npm
+ * trust binding and the maintainer's 2FA approval of every stage remain the
+ * barriers against anyone able to push other commits.
  */
 export async function assertReleaseTagEvidence(
   raw: string,

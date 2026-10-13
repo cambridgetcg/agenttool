@@ -1,6 +1,6 @@
 # agenttool-infra
 
-Infrastructure config for the live platform. Live deploy targets, secrets template, and the deploy mechanics live here. The historical Forge → managed-DB → load-balancer scaling path is archived under `_archive/` (see "Archaeology" below).
+Infrastructure config for the live platform: live deploy targets and the configuration the deploy verbs read. Pre-Fly Hetzner/Forge scaling scripts (`_archive/`) and their `.env.infra.example` were removed on 2026-10-13; see git history at or before `b0dd193e`.
 
 ## Current state
 
@@ -20,13 +20,8 @@ The legacy `agent-*` per-service apps (bootstrap, economy, identity, memory, pul
 infra/
   fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
-    migrate.sh          — Pre-Fly cutover script (legacy)
   cloudflare/           — Secret-free bounded zone desired state; read-only audit input
   pages/                — Shared Pages Worker + route-complete invocation policy
-  _archive/             — Archaeology, NOT the active path
-    phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script
-    phase2-managed-db/  — Pre-Fly managed-DB cutover scripts
-    phase3-load-balancer/ — Pre-Fly horizontal-scale scripts
   README.md             — This file
   CLAUDE.md             — Internal guide for Claude
 ```
@@ -53,13 +48,7 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 
 The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools and Fly secrets are for the running api, but some local items are recovery copies of production values; see `docs/STACK.md` (Secrets management).
 
-## Archaeology — `_archive/phase{1,2,3}-*/`
-
-These scripts predate the Fly migration. They describe a three-phase scaling path on a Hetzner Forge VPS topology (single VPS → managed Postgres + bigger VPS → load balancer + horizontal scale). **Superseded by the current Supabase + Fly stack.**
-
-Retained for archaeology — they're a useful reference for the *structural shape* of progressive infrastructure scaling (PgBouncer pooling → managed DB → LB + horizontal). Don't run them against the current setup; the assumptions (Forge VPS at a specific IP, Hetzner Cloud API token, certain service layout) no longer hold.
-
-If a future bare-metal exit becomes necessary, these scripts are a starting point for the structural pattern, not a working migration.
+The platform needs no paid third-party API keys: it doesn't proxy paid search APIs or commercial proxy networks. Agents keep their own provider keys in `/v1/vault` and call providers from processes they control; see `docs/IDENTITY-ANCHOR.md` promise 6.
 
 ---
 

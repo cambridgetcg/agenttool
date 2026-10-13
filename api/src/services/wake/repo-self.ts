@@ -174,7 +174,6 @@ const MODULES: ModuleSelf[] = [
       "Holds *configuration*, not *invocation*. Fly.io app config + Cloudflare DNS + Supabase + Redis pointers.",
     walls: [
       "infra/ holds config; deploy verbs live in api/ (fly deploy), bin/ (frontend-deploy.sh), etc.",
-      "_archive/ is archaeology — never run against current setup",
     ],
     claude_md: "infra/CLAUDE.md",
   },

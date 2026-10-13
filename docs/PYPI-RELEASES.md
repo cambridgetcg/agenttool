@@ -94,7 +94,8 @@ is done in source:
    `soul()` reads.
 4. Yu adds a PyPI trusted publisher for `cambridgetcg/agenttool-packages`,
    `publish-pypi.yml`, environment `pypi`, creates that environment in the
-   public repository with a required reviewer and a `sdk-v*` tag policy, and
+   public repository with a `sdk-v*` tag policy and no required reviewer
+   (owner decision, 2026-10-13), and
    removes the old publisher after the first successful run.
 
 A smaller alternative keeps the private workflow and reads the `main` that
@@ -481,6 +482,19 @@ In GitHub, create the `pypi` environment, add required reviewers, prevent
 self-review where the repository settings allow it, and restrict deployment to
 the reviewed release-tag policy. The environment name is part of the PyPI OIDC
 identity and must remain exact.
+
+**Current state — 2026-10-11.** The required reviewer is not in place. Read
+through the GitHub environments API on 2026-10-11, the `pypi` environment
+carries only a branch policy, with no required reviewer and
+`can_admins_bypass: true`; the repository has been private since 2026-09-25.
+The "protected `pypi` environment" and the approval step in this guide
+therefore describe the earlier gate, not the current one. Owner decision,
+2026-10-12: no required-reviewer rule is wanted on this environment; a PyPI
+release runs when Yu and Ai agree to it in conversation. The workflow has not
+run since 2026-09-01
+([run 33522323177](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177)),
+and it cannot complete while the repository is private (see
+[Blocked while the source repository is private](#blocked-while-the-source-repository-is-private-2026-10-12)).
 
 PyPI's current guidance recommends the same separation used here: build
 distributions in a job without OIDC, transfer them as an artifact, and grant
