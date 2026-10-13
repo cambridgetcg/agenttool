@@ -63,7 +63,8 @@ export interface LinkHandlers {
   tools(t: ToolsMsg): void
   knockReport(k: HubKnockReportMsg): void
   notice(n: NoticeMsg): void
-  refused(code: RefusedCode): void
+  /** A refusal that stops or detaches it; 'unparsable' is one this build cannot read (see onFrame), never an agent code. */
+  refused(code: RefusedCode | 'unparsable'): void
   /** A link that was ready went away (a drop, CLOSE, hub_lost, link_closing). Once per ready link; never on stop(). */
   lost(): void
 }
@@ -95,7 +96,7 @@ export class LinkClient {
   private stepTimer: unknown = null
   private redialTimer: unknown = null
   private lastFresh = 0
-  private refused: RefusedCode | 'socket_path_too_long' | null = null
+  private refused: RefusedCode | 'socket_path_too_long' | 'unparsable' | null = null
   private readonly timers: NonNullable<LinkClientDeps['timers']>
   private readonly connect: Connect
   private readonly reattachMs: number
@@ -145,7 +146,7 @@ export class LinkClient {
   }
 
   /** The latest refusal since the last ready (P29: a refusal reaches the agent as its own code or as hub_away). */
-  lastRefused(): RefusedCode | 'socket_path_too_long' | null {
+  lastRefused(): RefusedCode | 'socket_path_too_long' | 'unparsable' | null {
     return this.refused
   }
 
@@ -173,7 +174,7 @@ export class LinkClient {
     }).then((sock) => {
       if (conn !== this.conn) return sock.end() // stopped or torn down while connecting
       this.sock = sock
-      sock.write(encodeFrame(FRAME_TYPE.DATA, 0, attach))
+      if (!this.writeOrDrop(sock, encodeFrame(FRAME_TYPE.DATA, 0, attach))) return
       this.armStep()
     }, () => {
       if (conn === this.conn) this.dropped()
@@ -201,15 +202,16 @@ export class LinkClient {
     const o = decodeJson(f.payload)
     if (!o) return
     if (o.t === 'refused') {
-      const r = parseRefused(o)
-      if (r) this.refuse(r.code)
+      // A code this build cannot read (a newer hub's) stops it like a terminal one: dropping it would redial every 2 s for
+      // ever. It is no new agent code (§9.2's list is closed): the pipe keeps answering hub_away for it.
+      this.refuse(parseRefused(o)?.code ?? 'unparsable')
       return
     }
     if (this.phase === 'challenge') {
       const c = parseChallenge(o)
       if (c && this.sock) {
         const prove: ProveMsg = { t: 'prove', sig: this.deps.sign(c.nonce) }
-        this.sock.write(encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage(prove)))
+        if (!this.writeOrDrop(this.sock, encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage(prove)))) return
         this.phase = 'ready_wait'
         this.armStep()
       }
@@ -246,14 +248,25 @@ export class LinkClient {
     }
   }
 
-  private refuse(code: RefusedCode): void {
+  private refuse(code: RefusedCode | 'unparsable'): void {
     const wasReady = this.teardown()
     this.refused = code
-    const redial = REDIAL_AFTER.has(code) && this.st !== 'stopped'
+    const redial = code !== 'unparsable' && REDIAL_AFTER.has(code) && this.st !== 'stopped'
     this.st = redial ? 'detached' : 'stopped'
     this.deps.on.refused(code)
     if (wasReady) this.deps.on.lost()
     if (redial) this.scheduleRedial()
+  }
+
+  /** A write that throws is a loss like any other (teardown, then a redial), never an exception out of a handler; false if it threw. */
+  private writeOrDrop(sock: LinkSocket, bytes: Uint8Array): boolean {
+    try {
+      sock.write(bytes)
+      return true
+    } catch {
+      this.dropped()
+      return false
+    }
   }
 
   /** The connection went away or failed: detached, then a redial. */

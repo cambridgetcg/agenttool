@@ -4,8 +4,10 @@ import { lstatSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanupTmps, shortSockRoot } from './helpers.ts'
 import { makeFakeLink, makeStaleSocket, type FakeLink } from './fake-link.ts'
+import { encodeFrame, FRAME_TYPE, FrameDecoder } from '../src/link/frame.ts'
+import { decodeJson, encodeMessage, MAX_PIPE_TO_HUB } from '../src/link/messages.ts'
 import type { AttachMsg, CallMsg, HubKnockReportMsg, NoticeMsg, ReadyMsg, RefusedCode, ResultMsg, ToolsMsg } from '../src/link/messages.ts'
-import { LinkClient, type LinkClientDeps } from '../src/nuance/link-client.ts'
+import { LinkClient, type Connect, type LinkClientDeps } from '../src/nuance/link-client.ts'
 
 const fakes: FakeLink[] = []
 const clients: LinkClient[] = []
@@ -46,9 +48,36 @@ function fakeTimers() {
   }
 }
 
+/**
+ * An injected connect that answers like a hub, in memory, so a test decides what a write does. onWrite sees every message
+ * the client writes, before the answer: it may throw (a write that throws) or call h.close() (a write that drops the link).
+ */
+function scriptedConnect(onWrite: (m: { t: string }, h: { data(b: Uint8Array): void; close(): void }) => void) {
+  let dials = 0
+  let ends = 0
+  const connect: Connect = async (_path, h) => {
+    dials++
+    const decoder = new FrameDecoder(MAX_PIPE_TO_HUB)
+    const answer = (m: object) => queueMicrotask(() => h.data(encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage(m as { t: string }))))
+    return {
+      write(bytes) {
+        for (const f of decoder.push(bytes)) {
+          const m = decodeJson(f.payload)
+          if (!m || typeof m.t !== 'string') continue
+          onWrite({ t: m.t }, h)
+          if (m.t === 'attach') answer({ t: 'challenge', nonce: 'c'.repeat(64) })
+          else if (m.t === 'prove') answer({ t: 'ready', tools_digest: '0'.repeat(64), hub_build: '00000000', skew_s: 0, session_hint: null })
+        }
+      },
+      end() { ends++ },
+    }
+  }
+  return { connect, dials: () => dials, ends: () => ends }
+}
+
 function rig(sockPath: string, o: Partial<LinkClientDeps> = {}) {
   const readies: ReadyMsg[] = []
-  const refusals: RefusedCode[] = []
+  const refusals: Array<RefusedCode | 'unparsable'> = []
   const notices: NoticeMsg[] = []
   const results: ResultMsg[] = []
   const tools: ToolsMsg[] = []
@@ -334,5 +363,76 @@ describe('the link client', () => {
     expect(r.client.send(CALL)).toBe('not_ready')
     expect(r.ft.delays()).toEqual([])
     expect(r.lost()).toBe(0) // stopping is the pipe's own act; it answers its own calls
+  })
+
+  test('a write that drops the link is still written: send cannot tell, state() and lost() do (§9.3 item 3)', async () => {
+    const sc = scriptedConnect((m, h) => { if (m.t === 'call') h.close() }) // bunConnect's flush seeing the socket gone, inside the write
+    const r = rig('/tmp/never-dialled.sock', { connect: sc.connect })
+    r.client.start()
+    await until(() => r.readies.length === 1)
+    expect(r.client.send(CALL)).toBe('written') // handed to the stream: it may have reached the hub, so the caller must not resend
+    expect(r.client.state()).not.toBe('ready') // the pipe settles that call unknown from this (Task 30)
+    expect(r.client.fresh()).toBe(false)
+    expect(r.lost()).toBe(1)
+    expect(r.ft.delays()).toEqual([2000])
+    await Bun.sleep(20)
+    expect(r.lost()).toBe(1) // once, and nothing of the old connection stirs afterwards
+  })
+
+  test('a write that throws during attach is a loss like any other: torn down and redialled, nothing unhandled', async () => {
+    const sc = scriptedConnect((m) => { if (m.t === 'attach') throw new Error('EPIPE') })
+    const r = rig('/tmp/never-dialled.sock', { connect: sc.connect })
+    r.client.start()
+    await until(() => r.ft.delays().length === 1)
+    expect(r.client.state()).toBe('detached')
+    expect(r.ft.delays()).toEqual([2000]) // the redial alone: no handshake step is armed for a connection that is gone
+    expect(sc.ends()).toBe(1)
+    expect(r.lost()).toBe(0) // it never reached ready
+    expect(r.client.lastRefused()).toBeNull()
+    r.ft.fire(2000)
+    await until(() => sc.dials() === 2) // the host lives, so it dials again
+  })
+
+  test('a write that throws during prove is a loss like any other: torn down and redialled, nothing unhandled', async () => {
+    const sc = scriptedConnect((m) => { if (m.t === 'prove') throw new Error('EPIPE') })
+    const r = rig('/tmp/never-dialled.sock', { connect: sc.connect })
+    r.client.start()
+    await until(() => r.ft.delays().join() === '2000') // the attach step deadline was cleared by the teardown
+    expect(r.client.state()).toBe('detached')
+    expect(sc.ends()).toBe(1)
+    expect(r.lost()).toBe(0)
+    r.ft.fire(2000)
+    await until(() => sc.dials() === 2)
+  })
+
+  test('a refusal it cannot parse stops it for good and shows as unparsable', async () => {
+    const sock = join(shortSockRoot(), 'hub.sock')
+    const fake = await makeFakeLink(sock)
+    fakes.push(fake)
+    fake.accept({ refuse: 'a_code_from_a_newer_hub' as RefusedCode }) // refused, CLOSE and the end of the socket, as a hub would
+    const r = rig(sock)
+    r.client.start()
+    await until(() => r.refusals.length === 1)
+    expect(r.refusals).toEqual(['unparsable'])
+    expect(r.client.lastRefused()).toBe('unparsable')
+    expect(r.client.state()).toBe('stopped')
+    expect(r.ft.delays()).toEqual([]) // no redial, and the CLOSE that followed did not start one
+    expect(r.lost()).toBe(0)
+    await Bun.sleep(50)
+    expect(fake.connections()).toBe(1) // no further dial
+    expect(r.client.send(CALL)).toBe('not_ready')
+  })
+
+  test('a refusal without a code on a ready link also stops it, and the loss is reported once', async () => {
+    const r = await linked()
+    r.fake.send({ t: 'refused' })
+    await until(() => r.client.state() === 'stopped')
+    expect(r.refusals).toEqual(['unparsable'])
+    expect(r.client.lastRefused()).toBe('unparsable')
+    expect(r.lost()).toBe(1)
+    expect(r.ft.delays()).toEqual([])
+    await Bun.sleep(50)
+    expect(r.fake.connections()).toBe(1)
+    expect(r.lost()).toBe(1)
   })
 })
