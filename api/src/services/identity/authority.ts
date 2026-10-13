@@ -16,7 +16,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -387,6 +387,24 @@ export async function getProjectRootedAuthorityIdentities(
     );
 }
 
+/** Roots the owner rule counts (deletion spec §5.1): the constitutional
+ * roots above that can still sign. A memorial root can never claim a
+ * sequence (terminality.ts mutableIdentityPredicate), so counting it would
+ * leave an unrooted sibling's content erasable by nobody; the deletion
+ * consent set leaves memorial roots out for the same reason (§5.2, §10.9).
+ * The constitution rule above keeps counting them. */
+async function getOwnerRuleCountedRoots(projectId: string): Promise<IdentityAuthorityState[]> {
+  return db
+    .select({
+      identityId: identities.id,
+      did: identities.did,
+      rootPublicKey: identities.authorityRootPublicKey,
+      sequence: identities.authoritySequence,
+    })
+    .from(identities)
+    .where(and(eq(identities.projectId, projectId), constitutionRootSql(), ne(identities.status, "memorial")));
+}
+
 /** Normalise a memory's identity/agent reference (UUID or `did:at:` DID). */
 function subjectReference(value: string): string {
   const trimmed = value.trim();
@@ -501,7 +519,9 @@ export async function authorizeProjectConstitutionMutation(input: {
 //                               project each root can erase its own content)
 //   unrooted identity, or
 //   null (project-bound)      → the project rule: zero counted roots means the
-//                               bearer, one root means that root signs
+//                               bearer, one root means that root signs. A
+//                               memorial root is not counted: it can never
+//                               sign again.
 //   unrooted identity in a
 //   project with 2+ roots     → the bearer, for that identity's own content and
 //                               only when the intent is "erase" (erase,
@@ -684,7 +704,7 @@ export async function authorizeOwnedContentMutation(input: {
   }
 
   const needsProjectRoots = facts.some((owner) => owner.id === null || !owner.rooted);
-  const projectRoots = needsProjectRoots ? await getProjectRootedAuthorityIdentities(input.projectId) : [];
+  const projectRoots = needsProjectRoots ? await getOwnerRuleCountedRoots(input.projectId) : [];
   const decision = decideOwnedContentConsent({
     owners: facts,
     countedRoots: projectRoots.map((root) => root.identityId.toLowerCase()),
@@ -744,6 +764,9 @@ export async function authorizeOwnedContentMutation(input: {
       ...checked,
       body: {
         ...checked.body,
+        message: forOwn
+          ? checked.body.message
+          : "This content belongs to an identity without a root of its own, in a project whose single agent root consents for it. The project bearer can carry the request, but only that root can consent to it.",
         hint: `${forOwn
           ? `This content belongs to the agent-rooted identity ${signer?.did ?? consent.identityId}. Its project bearer can carry the request, but only that identity's root can consent to it.`
           : `This project's agent root ${signer?.did ?? consent.identityId} consents for content whose identity has no root of its own.`

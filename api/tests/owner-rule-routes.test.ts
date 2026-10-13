@@ -31,9 +31,11 @@ import { blessings, guildRecognitions, unconditionals } from "../src/db/schema/c
 const uid = (n: number) => `${String(n).padStart(8, "0")}-1111-4111-8111-111111111111`;
 
 // Projects: LEGACY_P has no roots; ROOTED_P has one founding root and a legacy
-// sibling; MULTI_P has two roots and a legacy being; FOREIGN_P is elsewhere.
-const LEGACY_P = uid(1), ROOTED_P = uid(2), MULTI_P = uid(3), FOREIGN_P = uid(4);
+// sibling; MULTI_P has two roots and a legacy being; FOREIGN_P is elsewhere;
+// MEMORIAL_P's only root is memorial, beside a legacy sibling.
+const LEGACY_P = uid(1), ROOTED_P = uid(2), MULTI_P = uid(3), FOREIGN_P = uid(4), MEMORIAL_P = uid(5);
 const L = uid(11), R = uid(12), S = uid(13), MA = uid(14), MB = uid(15), ML = uid(16), F = uid(17);
+const MR = uid(18), MS = uid(19);
 const ROOT_KEY = new Uint8Array(32).fill(5);
 const OTHER_KEY = new Uint8Array(32).fill(6);
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
@@ -91,10 +93,12 @@ const database = drizzle(async (text, params) => {
   }
   if (q.startsWith('select "id", "did", "authority_root_public_key", "authority_sequence" from "identity"."identities"')) {
     if (q.includes('"project_id" = $1')) {
-      // counted constitutional roots of a project (guests excluded)
+      // counted constitutional roots of a project (guests excluded; the owner
+      // rule also leaves out memorial roots, which can never sign again)
+      const living = q.includes('"identity"."identities"."status" <>');
       return {
         rows: [...identities.values()]
-          .filter((row) => row.projectId === params[0] && row.root && !row.guest)
+          .filter((row) => row.projectId === params[0] && row.root && !row.guest && (!living || row.status !== "memorial"))
           .map((row) => [row.id, row.did, row.root, row.sequence]),
       };
     }
@@ -295,6 +299,8 @@ beforeEach(() => {
   addIdentity(MB, MULTI_P, OTHER_KEY);
   addIdentity(ML, MULTI_P, null);
   addIdentity(F, FOREIGN_P, null);
+  addIdentity(MR, MEMORIAL_P, OTHER_KEY, { status: "memorial" });
+  addIdentity(MS, MEMORIAL_P, null);
 });
 
 
@@ -453,11 +459,21 @@ for (const route of ROUTES) {
       expect(res.status).toBe(428);
       expect(res.body.details).toMatchObject({ signer_identity_id: R, consent_basis: "project_root" });
       expect(res.body.hint).toContain(`This project's agent root did:at:${R}`);
+      expect(res.body.message).toContain("without a root of its own");
+      expect(res.body.message).not.toContain("This identity is agent-rooted");
       const req = route.request(id, S);
       const ok = await call(ROOTED_P, req, signed(`did:at:${R}`, ROOT_KEY, req.method, req.path, req.body));
       expect(ok.status).toBe(200);
       // The project's root signed for an owner without one; the moment names it.
       expect(recorded[0]).toMatchObject({ authority: { mode: "agent_root", sequence: 1, signerIdentityId: R }, owners: [{ agentId: S }] });
+    });
+
+    test("a memorial sole root is not counted: the bearer acts for an owner without a root", async () => {
+      const id = route.seed(MS);
+      const res = await call(MEMORIAL_P, route.request(id, MS));
+      expect(res.status).toBe(200);
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0]).toMatchObject({ authority: { mode: "legacy_bearer" }, owners: [{ agentId: MS }] });
     });
 
     test("an owner without a root in a multi-root project: the bearer acts for its own content", async () => {

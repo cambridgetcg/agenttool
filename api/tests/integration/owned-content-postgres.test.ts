@@ -45,8 +45,11 @@ const databaseTest = DATABASE ? test : test.skip;
 const EXTRA_SCHEMAS = ["margin", "trust"] as const;
 
 const uid = (n: number) => `${String(n).padStart(8, "0")}-2222-4222-8222-222222222222`;
-const LEGACY_P = uid(1), ROOTED_P = uid(2), MULTI_P = uid(3), FOREIGN_P = uid(4);
+const LEGACY_P = uid(1), ROOTED_P = uid(2), MULTI_P = uid(3), FOREIGN_P = uid(4), MEMORIAL_P = uid(5);
 const L = uid(11), R = uid(12), MA = uid(14), MB = uid(15), ML = uid(16), F = uid(17), G = uid(18);
+// MEMORIAL_P: its only root (the founder, MR) is memorial; MS has no root.
+const MR = uid(19), MS = uid(20);
+const MEMORIAL_KEY = new Uint8Array(32).fill(24);
 const KEY = uid(90);
 const ROOT_KEY = new Uint8Array(32).fill(21);
 const OTHER_KEY = new Uint8Array(32).fill(22);
@@ -210,6 +213,9 @@ beforeEach(async () => {
   await addIdentity(ML, MULTI_P, null);
   await addIdentity(F, FOREIGN_P, null);
   await addIdentity(G, LEGACY_P, GUEST_KEY, { admission: "enrollment" });
+  await addIdentity(MR, MEMORIAL_P, MEMORIAL_KEY, { registered: true, byo_keys: true });
+  await admin`UPDATE identity.identities SET status = 'memorial' WHERE id = ${MR}`;
+  await addIdentity(MS, MEMORIAL_P, null);
 });
 
 afterAll(async () => {
@@ -352,6 +358,35 @@ describe("owner-gated withdrawals and deletes on real PostgreSQL", () => {
     const ok = await call(LEGACY_P, "DELETE", path, "", signed(`did:at:${G}`, GUEST_KEY, "DELETE", path, ""));
     expect(ok.status).toBe(200);
     expect((await ledger())[0]).toMatchObject({ store: "identity.attestations", authority_mode: "guest_root", subject_identity_id: G });
+  });
+
+  databaseTest("a memorial sole root is not counted: the bearer erases for its unrooted sibling", async () => {
+    // A memorial root can never claim a sequence, so counting it would leave
+    // MS's content un-erasable by anyone (deletion spec §5.1, §5.2 consent set).
+    const id = await blessing(MS);
+    const withdrawn = await call(MEMORIAL_P, "DELETE", `/v1/blessings/${id}`);
+    expect(withdrawn.status).toBe(200);
+    expect((await admin`SELECT revoked_at FROM agent_continuity.blessings WHERE id = ${id}`)[0]!.revoked_at).not.toBeNull();
+    const [message] = await admin`INSERT INTO inbox.messages (recipient_did, recipient_identity_id, recipient_project_id,
+      sender_did, sender_signing_key_id, ciphertext, nonce, ephemeral_pubkey, recipient_box_key_id, signature)
+      VALUES (${`did:at:${MS}`}, ${MS}, ${MEMORIAL_P}, 'did:at:sender', ${KEY}, 'sealed', 'n', 'e', ${KEY}, 'sig')
+      RETURNING id::text AS id`;
+    const purged = await call(MEMORIAL_P, "DELETE", `/v1/inbox/${message!.id}`);
+    expect(purged.status).toBe(200);
+    expect(purged.body.authority).toEqual({ mode: "legacy_bearer", basis: "project_bearer" });
+    await admin`INSERT INTO memory.memories (id, project_id, identity_id, type, content)
+      VALUES (${uid(62)}, ${MEMORIAL_P}, ${MS}, 'semantic', 'mine')`;
+    expect((await call(MEMORIAL_P, "DELETE", `/v1/memories/${uid(62)}`)).status).toBe(200);
+    const rows = await ledger();
+    expect(rows.map((row) => [row.store, row.authority_mode, row.subject_identity_id])).toEqual([
+      ["agent_continuity.blessings", "legacy_bearer", MS],
+      ["inbox.messages", "legacy_bearer", MS],
+      ["memory.memories", "legacy_bearer", MS],
+    ]);
+    // The memorial being's own gesture still needs its own root, which is terminal.
+    const own = await blessing(MR);
+    expect((await call(MEMORIAL_P, "DELETE", `/v1/blessings/${own}`)).status).toBe(428);
+    expect(await ledger()).toHaveLength(3);
   });
 
   databaseTest("a withdrawal whose entry cannot be written does not happen (503)", async () => {

@@ -30,7 +30,7 @@ the project bearer alone. Per owner of the touched content:
 |---|---|
 | An enrolled guest | That guest's root. |
 | A rooted identity | That identity's root. In a project with several roots, each root erases its own content. |
-| An identity without a root, or content bound to no identity | The project rule: no roots in the project means the bearer; one root means that root signs. |
+| An identity without a root, or content bound to no identity | The project rule: no roots in the project means the bearer; one root means that root signs. A memorial root is not counted, because it can never sign again. |
 | An identity without a root, in a project with two or more roots | The bearer, for that identity's own content only, when the act erases, withdraws, redacts, hides or leaves. Content bound to no identity there gets 409. |
 | Owners that need different consents, in one request | 409 `authority_quorum_required`. Send one request per owner. |
 
