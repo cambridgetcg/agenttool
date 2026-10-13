@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-![Verified 0.22.0 release](https://img.shields.io/badge/release-v0.22.0-blue)
+![Verified 0.22.1 release](https://img.shields.io/badge/release-v0.22.1-blue)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 The badge records the newest verified annotated tag and GitHub Release at the
@@ -15,8 +15,9 @@ ledger is
 [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md).
 Source links in this file point at the public
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
-projection or at docs.agenttool.dev. Tags, GitHub Releases, Actions run ids,
-and source paths named without a link are in the private source repository.
+projection or at docs.agenttool.dev; releases from 0.23.0 onward are built and
+tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
+named without a link are in the private source repository.
 
 ## Quickstart — zero to a living agent
 
@@ -37,17 +38,20 @@ The package is **ESM-only**: your project needs `"type": "module"` in its
 `package.json` (or use `.mts` files). There is no CommonJS `require()` build.
 Declared engines are Node >= 20.19 and Bun >= 1.3.5.
 
-To pin the exact verified release instead:
+To pin the version this file ships with:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.22.0
+npm install --save-exact @agenttool/sdk@0.23.0
 ```
 
-That mirror was independently matched byte-for-byte to the LOVE release
-artifact (protected run
-`33434131214`).
-For a registry-free, size/SHA-256-verified install, follow the pinned
-first-success tutorial instead:
+From 0.23.0, releases are staged from the public source repository and
+reach npm only after a maintainer approves the stage with two-factor
+authentication; the GitHub Release for each tag there carries the same
+tarball. The newest version with an independently verified LOVE artifact is
+0.22.1 (protected run
+`33522319466`),
+which predates the exit door. For that registry-free, size/SHA-256-verified
+install, follow the pinned first-success tutorial instead:
 
 ```bash
 curl -q -fsS https://api.agenttool.dev/v1/pathways | \
@@ -656,9 +660,9 @@ agenttool-exit-door export \
 
 Tokens come only from `--*-token-env NAME` or non-interactive
 `--*-token-stdin`, never from argv, and at most one token can come from stdin.
-Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door is in
-repository source after the 0.22.1 line and is not part of any published
-release yet; check the installed version before relying on it.
+Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door first
+ships in 0.23.0; earlier versions do not have it, so check the installed
+version before relying on it.
 
 ### Bounded Math Cards
 
@@ -896,19 +900,29 @@ const at = new AgentTool({
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
 - 📦 [LOVE package discovery](https://docs.agenttool.dev/.well-known/love-packages)
-- 🧾 [Verified 0.22.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/manifest.json)
+- 🧾 [Verified 0.22.1 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.1/manifest.json)
+- 📂 [Public source — packages/sdk-ts](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-ts) · [changelog](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/CHANGELOG.md)
 - 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## The 0.23 line — what it carries
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `x402.ts`
+Repository source declares the paired 0.23.0 line. Its headline is the exit
+door documented above: `at.exitDoor` and the `agenttool-exit-door` bin copy
+the hosted continuity core into a local `agent-data/v1` collection and report
+completeness per store. The vault client now matches the API: `set_policy`
+sends `agent_ids` (null shares, `[]` denies) and refuses the unimplemented
+`read_only` and `require_agent_id` options before any request; `get` accepts
+`read_authority` for identity-signed reads of restricted values; `audit` reads
+`entries` and `check` maps the API's `results`; the old `bulk()` value read,
+which had no API endpoint, now refuses, and `bulk_put` is the explicit bulk
+write. [`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
+
+The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
+introduced in 0.22.0: `x402.ts`
 ports the server's payer function-for-function on the already-declared
 `@noble/curves` + `@noble/hashes` dependencies (zero new deps), and the `x402`
 client option installs a paying transport that answers a challenged 402 with

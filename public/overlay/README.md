@@ -106,10 +106,9 @@ python -m pip install '.[dev]'
 python -m pytest -q
 ```
 
-`packages/sdk-py/SOUL.md` is not projected (it is listed under `excluded` in
-`PROJECTION.json`). The wheel's letter, `src/agenttool/SOUL.md`, is here, so
-`agenttool.soul()` works the same, and a source distribution built here
-carries only that letter.
+The SDK's letter is `src/agenttool/SOUL.md`. The wheel and the source
+distribution both carry it and `agenttool.soul()` reads it, so a build made
+here carries the same letter as one made from the private source.
 
 ## Releases
 

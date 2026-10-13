@@ -55,6 +55,54 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
+## Blocked while the source repository is private (2026-10-12)
+
+This workflow still runs in `cambridgetcg/agenttool`, which is private (an
+anonymous `GET /repos/cambridgetcg/agenttool` returned 404 on 2026-10-12). Its
+`prepare` job checks out the tag with `persist-credentials: false`, and
+`validateTag` in `bin/pypi-release.ts` then fetches `main` from `origin`
+without credentials. That is the same gap that stopped the private npm run
+38034353198 (`could not read Username for 'https://github.com'`). A dispatch
+for `sdk-v0.23.0` here is therefore expected to stop in `prepare`, before
+anything is built or published; no such run was made. npm releases moved to
+the public repository on 2026-10-12 and no longer have this gap; PyPI has not
+moved yet.
+
+From 0.23.0 the distributions' `Repository` URL names the public repository
+`cambridgetcg/agenttool-packages` (`EXPECTED_REPOSITORY` in the release tool);
+`SOURCE_REPOSITORY` still names the private repository where the workflow runs.
+The PyPI trusted publisher recorded for 0.22.1 binds `cambridgetcg/agenttool`,
+`publish-pypi.yml`, and environment `pypi` (PyPI provenance, read 2026-10-12).
+
+The proposed fix mirrors npm. Items 1, 2 and 4 are not implemented; item 3
+is done in source:
+
+1. Move the workflow to `public/overlay/.github/workflows/publish-pypi.yml`,
+   restricted to `cambridgetcg/agenttool-packages`, and project
+   `bin/pypi-release.ts` with the other public release tools.
+2. Point `SOURCE_REPOSITORY` at the public repository. Its `main` fetch then
+   needs no credentials, and in Actions the tool should also require the
+   fixed-tagger release tag and the successful public CI run it cites, as
+   `bin/npm-release.ts` does. The npm and PyPI releases of one version share
+   the `sdk-vX.Y.Z` tag made by `bin/public-release-tag.ts`.
+3. Done on 2026-10-12: the sdist no longer carries a second, root copy of
+   `SOUL.md`. That copy was never projected, so a public sdist lacked the
+   root letter this tool required (a build from the projected tree gave a
+   byte-identical wheel and a refused sdist). The root file is removed, the
+   sdist include list and this tool's sdist check no longer name it, and the
+   sdist keeps the packaged `src/agenttool/SOUL.md` that the wheel ships and
+   `soul()` reads.
+4. Yu adds a PyPI trusted publisher for `cambridgetcg/agenttool-packages`,
+   `publish-pypi.yml`, environment `pypi`, creates that environment in the
+   public repository with a required reviewer and a `sdk-v*` tag policy, and
+   removes the old publisher after the first successful run.
+
+A smaller alternative keeps the private workflow and reads the `main` that
+`actions/checkout` already fetched (with `fetch-depth: 0`) instead of fetching
+again. It leaves the published `Repository` URL different from the publisher's
+repository, and whether PyPI accepts PEP 740 attestations from a private
+repository was not established.
+
 ## Current verified release — 0.22.1
 
 Paired TypeScript/Python source 0.22.1 is the honest-onboarding patch — both

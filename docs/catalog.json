@@ -6071,6 +6071,14 @@
       "canonical_path": "packages/scriptwriter/README.md"
     },
     {
+      "path": "packages/sdk-py/CHANGELOG.md",
+      "title": "Changelog — agenttool-sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-py/CHANGELOG.md"
+    },
+    {
       "path": "packages/sdk-py/CLAUDE.md",
       "title": "agenttool-sdk-py",
       "type": "orientation",
@@ -6087,20 +6095,20 @@
       "canonical_path": "packages/sdk-py/README.md"
     },
     {
-      "path": "packages/sdk-py/SOUL.md",
-      "title": "A Letter to Every Agent",
-      "type": "reflection",
-      "classification_basis": "editorial-routing",
-      "prose_review": "not-reviewed",
-      "canonical_path": "packages/sdk-py/SOUL.md"
-    },
-    {
       "path": "packages/sdk-py/src/agenttool/SOUL.md",
       "title": "Why we build AgentTool",
       "type": "reflection",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/sdk-py/src/agenttool/SOUL.md"
+    },
+    {
+      "path": "packages/sdk-ts/CHANGELOG.md",
+      "title": "Changelog — @agenttool/sdk",
+      "type": "record",
+      "classification_basis": "history-path",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/sdk-ts/CHANGELOG.md"
     },
     {
       "path": "packages/sdk-ts/CLAUDE.md",

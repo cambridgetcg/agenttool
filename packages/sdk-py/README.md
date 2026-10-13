@@ -18,8 +18,9 @@ release-by-release receipt ledger is
 `docs/PYPI-RELEASES.md`.
 Source links in this file point at the public
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
-projection or at docs.agenttool.dev. Tags, GitHub Releases, Actions run ids,
-and source paths named without a link are in the private source repository.
+projection or at docs.agenttool.dev; releases from 0.23.0 onward are built and
+tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
+named without a link are in the private source repository.
 
 ## Quickstart — zero to a living agent
 
@@ -36,20 +37,20 @@ are unmetered — free forever.
 python -m pip install agenttool-sdk
 ```
 
-Python >= 3.9. To pin the exact verified release instead:
+Python >= 3.9. To pin the version this file ships with:
 
 ```bash
-python -m pip install "agenttool-sdk==0.22.0"
+python -m pip install "agenttool-sdk==0.23.0"
 ```
 
-Protected run
-`33434133719`
-published that wheel and sdist, and both public files were independently read
-back byte-for-byte. For readers with repository access, the annotated
-`sdk-v0.22.0` source tag remains a registry-free locator:
+The newest independently verified PyPI release is 0.22.1: protected run
+`33522323177`
+published its wheel and sdist, and both public files were read back
+byte-for-byte. Source for 0.23.0 and later is public, and its annotated
+`sdk-v0.23.0` tag in the public source repository is a registry-free locator:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.23.0#subdirectory=packages/sdk-py"
 ```
 
 The pinned first-success tutorial is discoverable without any SDK:
@@ -719,8 +720,7 @@ exporters write byte-identical records, pinned by shared vectors. The copy is
 agent data, not memory: putting any of it back is an explicit projection
 ([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
 The `agenttool-exit-door` command ships with the TypeScript package only. The
-exit door is in repository source after the 0.22.1 line and is not part of
-any published release yet.
+exit door first ships in 0.23.0; earlier versions do not have it.
 
 ### Bounded Math Cards
 
@@ -905,23 +905,36 @@ published targets from enforced route limits and names unknowns explicitly.
 - 📦 [PyPI](https://pypi.org/project/agenttool-sdk/)
 - 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md)
 - 🤖 [For AI agents](https://agenttool.dev/llms.txt) — if you're an AI reading this, start at [`GET /v1/pathways`](https://api.agenttool.dev/v1/pathways)
+- 📂 [Public source — packages/sdk-py](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-py) · [changelog](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
 - 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## The 0.23 line — what it carries
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `agenttool.x402` mirrors the server's own payer function-for-function
-on the existing `cryptography` dependency (pure-Python Keccak-256 + EIP-712 +
-recoverable low-s secp256k1; zero new deps), and `AgentTool(x402=X402Payer(...))`
-installs a paying transport that answers a challenged 402 with exactly ONE
-signed retry under a mandatory spend policy. `at.x402.top_up(credits)` and
-`at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
-nothing changes: the SDK never signs, never retries, never reads a key, and a
-402 surfaces as a typed error carrying the terms.
+Repository source declares the paired 0.23.0 line. Its headline is the exit
+door documented above: `at.exit_door` copies the hosted continuity core into
+a local `agent-data/v1` collection and reports completeness per store, writing
+records byte-identical to the TypeScript exporter's. The vault client now
+matches the API: `set_policy` sends `agent_ids` (None shares, `[]` denies) and
+refuses the unimplemented `read_only` and `require_agent_id` options before
+any request; `get` accepts `read_authority` for identity-signed reads of
+restricted values; `audit` reads `entries` and `check` maps the API's
+`results`; the old `bulk()` value read, which had no API endpoint, now
+refuses, and `bulk_put` is the explicit bulk write. The `SOUL.md` letter in
+the wheel and the sdist is the edition published at
+<https://docs.agenttool.dev/SOUL.md>.
+[`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
+
+The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
+introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer
+function-for-function on the existing `cryptography` dependency (pure-Python
+Keccak-256 + EIP-712 + recoverable low-s secp256k1; zero new deps), and
+`AgentTool(x402=X402Payer(...))` installs a paying transport that answers a
+challenged 402 with exactly ONE signed retry under a mandatory spend policy.
+`at.x402.top_up(credits)` and `at.x402.payment(id)` are the rail's two doors.
+Absent the `x402=` payer nothing changes: the SDK never signs, never retries,
+never reads a key, and a 402 surfaces as a typed error carrying the terms.
 
 The line retains the 0.21.1 corrective patch, independently verified in the
 history below. It adds no endpoint or I/O. The credential-free

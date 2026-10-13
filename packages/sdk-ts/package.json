@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "description": "TypeScript SDK for agenttool.dev with credential-free functional-access records, bounded LOVE BOMB reads and Math Cards, typed KINGDOM cards, and local agent infrastructure",
   "license": "Apache-2.0",
   "type": "module",
@@ -81,9 +81,14 @@
     "functional-access",
     "j-space"
   ],
-  "homepage": "https://docs.agenttool.dev",
+  "homepage": "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-ts#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cambridgetcg/agenttool.git"
+    "url": "https://github.com/cambridgetcg/agenttool-packages.git",
+    "directory": "packages/sdk-ts"
+  },
+  "bugs": {
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
   }
 }

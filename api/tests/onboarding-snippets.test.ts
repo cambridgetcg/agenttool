@@ -363,9 +363,14 @@ describe("public SDK onboarding snippets", () => {
       "TypeScript birth",
       (code) => code.includes("bootstrapAgent") && code.includes("readFileSync"),
     ).code;
-    const sdkPackage = JSON.parse(read("packages/sdk-ts/package.json")) as {
-      version: string;
+    // The tutorial installs an exact LOVE artifact, so it follows the newest
+    // SDK version on the LOVE mirror, which can trail the source version.
+    const loveIndex = JSON.parse(read("apps/docs/packages/v1/index.json")) as {
+      packages: Array<{ name: string; latest: string }>;
     };
+    const loveSdk = loveIndex.packages.find((entry) => entry.name === "@agenttool/sdk");
+    expect(loveSdk).toBeDefined();
+    const sdkPackage = { version: loveSdk!.latest };
     expect(canonicalBirth).toContain(
       `sdkPackage.version !== "${sdkPackage.version}"`,
     );
