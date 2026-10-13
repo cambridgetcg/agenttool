@@ -364,3 +364,36 @@ export const OWNERSHIP_MAP_OPENAPI_PATHS = {
     },
   },
 };
+
+/** Every erasing route: the ledger entry could not be written, so nothing was deleted. */
+export const deletionLedgerUnavailableResponse = {
+  description:
+    "deletion_ledger_unavailable: the deletion's ids-only ledger entry could not be written (ledger key missing, or a restore is being replayed), so nothing was deleted.",
+  content: {
+    "application/json": {
+      schema: {
+        type: "object",
+        properties: {
+          error: { type: "string", const: "deletion_ledger_unavailable" },
+          message: { type: "string" },
+          hint: { type: "string" },
+          details: { type: "object" },
+          docs: { type: "string" },
+        },
+        required: ["error", "message"],
+      },
+    },
+  },
+};
+
+export const deletionLedgerBlock = {
+  type: "object",
+  description: "The ids-only deletion-ledger entry written in the same transaction (docs/DELETION-REPLAY.md).",
+  properties: {
+    entry_id: { type: "string", format: "uuid" },
+    seq: { type: "integer", minimum: 1 },
+    mirrored: { type: "boolean" },
+    note: { type: "string" },
+  },
+  required: ["entry_id", "seq", "mirrored"],
+};
