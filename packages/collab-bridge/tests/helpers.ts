@@ -180,3 +180,50 @@ export function teardownSuite(): void {
   rmSync(SUITE.sockRoot, { recursive: true, force: true })
   if (sudo.length > 0) throw new Error(`the stub log has ${sudo.length} sudo call(s): no code may invoke sudo (spec §12.1)`)
 }
+
+// ---- Task 27: temp git repos for the git tests (appended; the imports above already cover them) ----
+
+/** The Air's git (spec §7.1): hermetic repos are made and read with the same binary the hub runs. */
+export const REAL_GIT = '/opt/homebrew/bin/git'
+
+/**
+ * `git -C <repo> <args>` in a scrubbed env: HOME is a fresh empty temp dir and the system config is skipped, so neither
+ * this Mac's ~/.gitconfig (its global hooksPath, credential helpers) nor Homebrew's gitconfig reaches a test repo.
+ * Throws on a non-zero exit; returns stdout without its last newline.
+ */
+export function repoGit(repo: string, args: string[]): string {
+  const r = Bun.spawnSync([REAL_GIT, '-C', repo, ...args], {
+    cwd: '/',
+    env: { PATH: '/usr/bin:/bin', HOME: temp('cb-githome-'), GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  if (r.exitCode !== 0) throw new Error(`git ${args.join(' ')} in ${repo}: exit ${r.exitCode}: ${r.stderr.toString().trim()}`)
+  return r.stdout.toString().replace(/\n$/, '')
+}
+
+/** Writes each file (null deletes it), stages everything with `add -A`, commits, and returns the new HEAD. */
+export function commitFiles(repo: string, files: Record<string, string | null>, message: string): string {
+  for (const [rel, content] of Object.entries(files)) {
+    const p = join(repo, rel)
+    if (content === null) {
+      rmSync(p, { force: true })
+    } else {
+      mkdirSync(join(p, '..'), { recursive: true })
+      writeFileSync(p, content)
+    }
+  }
+  repoGit(repo, ['add', '-A'])
+  repoGit(repo, ['-c', 'user.name=Collab Test', '-c', 'user.email=test@collab-bridge.invalid', 'commit', '-q', '--allow-empty', '-m', message])
+  return repoGit(repo, ['rev-parse', 'HEAD'])
+}
+
+/**
+ * A repo at `dir` (created if absent) on branch main with one commit holding `files`, by default the trial repo's shape
+ * (spec §10.2 step 1: README.md and notes/.gitkeep). Returns that first commit's oid.
+ */
+export function makeRepo(dir: string, files: Record<string, string> = { 'README.md': 'collab trial\n', 'notes/.gitkeep': '' }): string {
+  mkdirSync(dir, { recursive: true })
+  repoGit(dir, ['init', '-q', '-b', 'main'])
+  return commitFiles(dir, files, 'trial base')
+}
