@@ -50,6 +50,16 @@ describe('INSTALLED', () => {
     writeFileSync(p.installed, TEXT)
     expect(readInstalled(p)).toEqual(INFO)
   })
+  test('a line named like an inherited property is an unknown key, not a throw', () => {
+    // `k in FORMATS` also sees Object.prototype, so these names used to pass the guard and then throw a TypeError.
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+      const extra = `${name} foo\n`
+      expect(() => parseInstalled(TEXT + extra)).not.toThrow()
+      expect(parseInstalled(TEXT + extra)).toEqual(parseInstalled(TEXT))
+      expect(parseInstalled(extra + TEXT)).toEqual(INFO)
+    }
+    expect(parseInstalled('constructor foo\n' + TEXT.replace('device nuance', 'toString x\ndevice nuance'))).toEqual(INFO)
+  })
   test('renderInstalled refuses a value that is not one printable line', () => {
     expect(() => renderInstalled({ ...INFO, claude_version: '2.1.296\nbuild 00000000' })).toThrow('INSTALLED: claude_version is malformed')
     expect(() => renderInstalled({ ...INFO, build: 'XYZ' })).toThrow('INSTALLED: build is malformed')

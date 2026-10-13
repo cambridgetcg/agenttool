@@ -55,7 +55,7 @@ export function parseInstalled(text: string): InstalledInfo | null {
     const sp = line.indexOf(' ')
     if (sp < 1) return null
     const k = line.slice(0, sp), value = line.slice(sp + 1)
-    if (!(k in FORMATS)) continue
+    if (!Object.hasOwn(FORMATS, k)) continue
     if (v.has(k as Key) || !FORMATS[k as Key].test(value)) return null
     v.set(k as Key, value)
   }
