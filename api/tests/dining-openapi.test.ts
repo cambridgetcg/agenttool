@@ -32,6 +32,7 @@ describe("Agent Dining OpenAPI contract", () => {
     );
     const gardens = readFileSync(join(routesDir, "openapi-gardens.ts"), "utf8");
     const localContext = readFileSync(join(routesDir, "openapi-local-context.ts"), "utf8");
+    const retention = readFileSync(join(routesDir, "openapi-retention.ts"), "utf8");
 
     // @agenttool/whitehack-scan 0.10.0 fails closed above 10,000 lines.
     expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
@@ -42,6 +43,8 @@ describe("Agent Dining OpenAPI contract", () => {
     expect(x402Payable.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(gardens.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(localContext.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(retention.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(main).toContain("...RETENTION_OPENAPI_PATHS");
     expect(main).toContain("paths: withX402PayableOperations({");
     expect(main).toContain("}, { x402Response, staticToolResponseHeaders }),");
     expect(main).toContain("...x402TopUpOpenApiPaths({ x402Response, staticToolResponseHeaders })");

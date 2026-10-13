@@ -40,6 +40,15 @@ describe("/public/marketplace/terms", () => {
     expect(b.resting_actions.dispute).toMatch(/503 dispute_arbitration_resting/i);
   });
 
+  test("taking a listing down is free in the table and in the prose", async () => {
+    const b = await get();
+    expect(b.free_actions).toContain("archive");
+    expect(b.free_actions).toContain("pause");
+    expect(b.metered_actions_in_credits.archive).toBeUndefined();
+    expect(b.pricing_rule).toMatch(/as do archiving and pausing a listing; publishing and updating are metered/i);
+    expect(b.pricing_rule).not.toMatch(/archiving are metered/i);
+  });
+
   test("the current ranking signal and absence of paid placement are disclosed", async () => {
     const b = await get();
     expect(b.ranking.paid_placement).toBe(false);

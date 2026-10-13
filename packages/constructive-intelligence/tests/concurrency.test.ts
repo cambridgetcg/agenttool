@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -86,8 +87,11 @@ const runner = `
 
   const classifyOutput = (chunks) => {
     if (chunks.length === 0) return "empty";
+    const text = Buffer.concat(chunks).toString("utf8");
+    // A runtime crash report is named by kind only; its bytes stay private.
+    if (/^panic\\(|Bun has crashed/m.test(text)) return "bun_crash";
     try {
-      const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      const value = JSON.parse(text);
       if (value?.status === "inserted" || value?.status === "existing") return value.status;
       const errors = ["argument_error", "canonical_error", "conflict", "file_error", "integrity_error", "not_found", "ordering_error", "pin_error", "receipt_error", "internal_error"];
       return errors.includes(value?.error) ? value.error : "json_other";
@@ -97,16 +101,20 @@ const runner = `
     let exists = null;
     try { process.kill(pid, 0); exists = true; }
     catch (error) { if (error?.code === "ESRCH") exists = false; }
-    let state = null, wait_channel = null;
+    let state = null, wait_channel = null, core_dumping = null;
     if (process.platform === "linux") {
       try {
         const status = readFileSync("/proc/" + pid + "/status", "utf8");
         state = status.match(/^State:\\s+([A-Z])/m)?.[1] ?? null;
+        // A crashed child still holds its SQLite locks while the kernel
+        // writes its core image, often into a core_pattern helper pipe.
+        const dumping = status.match(/^CoreDumping:\\s+([01])$/m)?.[1];
+        core_dumping = dumping === undefined ? null : dumping === "1";
         const channel = readFileSync("/proc/" + pid + "/wchan", "utf8").trim();
         wait_channel = /^[a-zA-Z0-9_]{1,80}$/.test(channel) ? channel : null;
       } catch { /* Child exit or unavailable procfs is represented by nulls. */ }
     }
-    return { exists, state, wait_channel };
+    return { exists, state, wait_channel, core_dumping };
   };
 
   const settle = (exitCode, reason) => {
@@ -352,7 +360,12 @@ type RunnerDiagnostics = {
   output_bytes: number;
   children: Array<{ exited: boolean; exit_code: number | null; stdout_done: boolean; stderr_done: boolean }>;
   child_io: Array<{ stdout_bytes: number; stderr_bytes: number; stdout_kind: string; stderr_kind: string }>;
-  processes: Array<{ exists: boolean | null; state: string | null; wait_channel: string | null }>;
+  processes: Array<{
+    exists: boolean | null;
+    state: string | null;
+    wait_channel: string | null;
+    core_dumping: boolean | null;
+  }>;
 };
 
 function readJson<T>(path: string): T {
@@ -566,6 +579,65 @@ test.each(Array.from({ length: 10 }, (_, index) => index + 1))(
   expect(store.listReceipts(pin.pin_id)).toHaveLength(1);
   expect(store.verify().receipt_count).toBe(1);
   store.close();
+}, TEST_TIMEOUT_MS);
+
+// POSIX advisory locks belong to a process and inode: closing any descriptor
+// for the ledger or its -shm index releases every lock SQLite holds there.
+// While this store stays open after its own private-mode maintenance, another
+// process must still be refused an EXCLUSIVE database-file lock. A plain
+// connection on the same platform is the control for that expectation.
+test("an open ledger keeps its SQLite locks through private-mode maintenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "constructive-lock-retention-"));
+  const contender = (path: string) => Bun.spawnSync(
+    [
+      process.execPath,
+      "-e",
+      `import { Database } from "bun:sqlite";
+       const db = new Database(${JSON.stringify(path)});
+       db.exec("PRAGMA busy_timeout = 0");
+       db.exec("PRAGMA locking_mode = EXCLUSIVE");
+       let outcome = "acquired";
+       try { db.query("SELECT COUNT(*) AS count FROM pins").get(); }
+       catch (error) { outcome = error?.code === "SQLITE_BUSY" ? "busy" : "other"; }
+       db.close(false);
+       process.stdout.write(outcome);`,
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: CHILD_EMERGENCY_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+    },
+  );
+
+  const controlPath = join(directory, "control.sqlite");
+  const control = new Database(controlPath, { create: true, strict: true });
+  control.exec("PRAGMA journal_mode = WAL");
+  control.exec("CREATE TABLE pins (pin_id TEXT PRIMARY KEY)");
+  const controlRun = contender(controlPath);
+  control.close(false);
+  expect(controlRun.exitCode).toBe(0);
+  expect(controlRun.stderr.toString()).toBe("");
+  expect(controlRun.stdout.toString()).toBe("busy");
+
+  const database = join(directory, "pilot.sqlite");
+  const pin = makePin();
+  const store = new ConstructiveStore(database, { create: true });
+  try {
+    store.initialize();
+    store.putPin(pin);
+    expect(store.record(makeBody(pin, "E0")).status).toBe("inserted");
+    const storeRun = contender(database);
+    expect(storeRun.exitCode).toBe(0);
+    expect(storeRun.stderr.toString()).toBe("");
+    expect(storeRun.stdout.toString()).toBe("busy");
+    expect(existsSync(`${database}-wal`)).toBe(true);
+    expect(existsSync(`${database}-shm`)).toBe(true);
+    expect(store.verify().receipt_count).toBe(1);
+  } finally {
+    store.close();
+  }
 }, TEST_TIMEOUT_MS);
 
 test("post-results settlement cannot publish a timeout as success", () => {

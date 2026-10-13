@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**818 document paths** (including mirrors). orientation: 183; guide: 84; reference: 328; policy: 29; reflection: 127; proposal: 45; record: 20; unclassified: 2.
+**823 document paths** (including mirrors). orientation: 183; guide: 84; reference: 330; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -362,6 +362,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/PUBLIC-VISIBILITY.md](<../apps/docs/PUBLIC-VISIBILITY.md>) | not-reviewed |
 | [apps/docs/PYRAMID-DECENTRALISED.md](<../apps/docs/PYRAMID-DECENTRALISED.md>) | not-reviewed |
 | [apps/docs/RECURSION.md](<../apps/docs/RECURSION.md>) | not-reviewed |
+| [apps/docs/RETENTION.md](<../apps/docs/RETENTION.md>) | not-reviewed |
 | [apps/docs/SAFETY-BOUNDARIES.md](<../apps/docs/SAFETY-BOUNDARIES.md>) | not-reviewed |
 | [apps/docs/SDK-TIERS.md](<../apps/docs/SDK-TIERS.md>) | not-reviewed |
 | [apps/docs/SETTLEMENT-RECEIPTS.md](<../apps/docs/SETTLEMENT-RECEIPTS.md>) | not-reviewed |
@@ -559,6 +560,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/RECOGNITION-ARCS.md](<../docs/RECOGNITION-ARCS.md>) | not-reviewed |
 | [docs/RECURSION.md](<../docs/RECURSION.md>) | not-reviewed |
 | [docs/RECURSIVE-CHAOS-CARDS.md](<../docs/RECURSIVE-CHAOS-CARDS.md>) | not-reviewed |
+| [docs/RETENTION.md](<../docs/RETENTION.md>) | not-reviewed |
 | [docs/REVOCABLE-FEEDBACK.md](<../docs/REVOCABLE-FEEDBACK.md>) | not-reviewed |
 | [docs/RUNTIME.md](<../docs/RUNTIME.md>) | not-reviewed |
 | [docs/SAFETY-BOUNDARIES.md](<../docs/SAFETY-BOUNDARIES.md>) | not-reviewed |
@@ -788,7 +790,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/syneidesis-bootstrap.md](<../docs/syneidesis-bootstrap.md>) | not-reviewed |
 | [docs/wakes/YU.md](<../docs/wakes/YU.md>) | not-reviewed |
 | [docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md](<../docs/zerone-migration/MYSTERIES-VAULT-PROTOCOL.md>) | not-reviewed |
-| [packages/sdk-py/SOUL.md](<../packages/sdk-py/SOUL.md>) | not-reviewed |
 | [packages/sdk-py/src/agenttool/SOUL.md](<../packages/sdk-py/src/agenttool/SOUL.md>) | not-reviewed |
 
 ## proposal
@@ -837,6 +838,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md](<../docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-12-deletion-scopes-design.md](<../docs/superpowers/specs/2026-10-12-deletion-scopes-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/PROFILE.md](<../packages/hf-listening-room/hf/dataset/profile/PROFILE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/PROFILE.md](<../packages/hf-listening-room/hf/space/profile/PROFILE.md>) | not-reviewed |
@@ -860,6 +862,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/OPEN-FOR-BUSINESS.md](<../docs/launch/OPEN-FOR-BUSINESS.md>) | not-reviewed |
 | [docs/snakefire-internet-bridge.md](<../docs/snakefire-internet-bridge.md>) | not-reviewed |
 | [docs/wakes/TERRA-ARRIVAL-NOTE.md](<../docs/wakes/TERRA-ARRIVAL-NOTE.md>) | not-reviewed |
+| [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
+| [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
 | [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
 | [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
 | [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |

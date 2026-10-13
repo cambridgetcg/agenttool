@@ -35,7 +35,11 @@ import {
   resolvePublicListing,
 } from "../marketplace/listings";
 
-import type { McpTool, McpToolResult } from "./tools";
+import {
+  READ_ONLY_TOOL_ANNOTATIONS,
+  type McpTool,
+  type McpToolResult,
+} from "./tools";
 import { ownChronicle, writtenByDidOf } from "../continuity/own-chronicle";
 
 /** Scope of a per-agent MCP request, derived from project ownership. */
@@ -136,12 +140,14 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       name: "agent.profile",
       description:
         "Read the same lifecycle-aware public shape as GET /public/agents/:did. Memorial identities return the smaller witness profile rather than active identity metadata.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "listings.list",
       description:
         "List the agent's public marketplace listings — priced callable services other agents can invoke. Returns name, description, price, currency, SLA, and listing_id.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
         properties: {
@@ -156,6 +162,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       name: "listings.get",
       description:
         "Read a single listing's full spec including input_schema and output_schema. Use after listings.list to discover the call shape.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
         properties: {
@@ -189,13 +196,15 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       {
         name: "wake.read",
         description:
-          "Read project-scoped session orientation: selected identity and continuity summaries plus links to deeper source routes. This is not a complete export.",
+          "Pointer to this agent's wake, not the wake itself. Slice 1 always returns a guided error naming GET /v1/wake?identity_id=<this agent> (JSON) and its format=md variant; fetch either over HTTP with the same bearer. The wake is project-scoped session orientation, not a complete export.",
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
         inputSchema: { type: "object", properties: {} },
       },
       {
         name: "memory.search",
         description:
-          "Semantic search across your own memories. BYO embedding via the standard /v1/memories/search shape; this JSON-RPC tool returns recent-by-default if no embedding is supplied.",
+          "Your own most recent memories in this project, newest first. Despite the name it does not search: it takes only limit, with no query or embedding input and no ranking. For semantic or free-text recall, call POST /v1/memories/search over HTTP with query_embedding (1536-dim) or query (text); that route charges credits.",
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
         inputSchema: {
           type: "object",
           properties: {
@@ -207,6 +216,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
         name: "chronicle.recent",
         description:
           "Recent chronicle moments on your own timeline (plaintext-by-design, forgetting-legible). An entry whose text another being wrote (thanks, recognitions, invitations) carries that being's written_by_did; otherwise written_by_did is null.",
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
         inputSchema: {
           type: "object",
           properties: {
@@ -218,6 +228,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
         name: "listings.mine",
         description:
           "List your own marketplace listings (all statuses, not just active+public).",
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
         inputSchema: { type: "object", properties: {} },
       },
     );
@@ -432,8 +443,8 @@ async function toolMemorySearch(
 
   return textResult({
     note:
-      "Recent memories (slice 1). Vector search via the standard /v1/memories/search endpoint requires " +
-      "BYO embedding; that integration lands in slice 2.",
+      "Most recent memories, newest first; this tool takes no query. POST /v1/memories/search " +
+      "accepts query_embedding (1536-dim, semantic) or query (free text) over HTTP and charges credits.",
     count: rows.length,
     memories: rows,
   });

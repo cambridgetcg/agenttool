@@ -63,7 +63,10 @@ Before and after any protected production cutover:
    `confirmed`, `failed`, and `cancelled`.
 4. Keep payout admission and every payout worker closed. Capture every exact
    Fly Machine ID and its material configuration before maintenance. Do not
-   destroy, recreate, or scale the fleet to zero as a fencing shortcut.
+   destroy, recreate, or scale the fleet to zero as a fencing shortcut. A
+   `fly secrets deploy` is not identity-preserving: on 2026-10-12 one replaced
+   the stopped thinker Machine (`2873537f7d4278` became `287356df90e9d8`), so
+   do not change secrets during a protected cutover.
 5. Use a separately reviewed and rehearsed identity-preserving mechanism to
    fence restart, autostart, schedules, and external admission; drain durable
    jobs, leases, and in-flight work; then stop those same Machine IDs in place.

@@ -28,7 +28,7 @@ test("runtime has no network client, provider SDK, or runtime dependency", () =>
 
   const repositoryRoot = join(root, "..", "..");
   const publicationSurfaces = [
-    ".github/workflows/publish-npm.yml",
+    "public/overlay/.github/workflows/publish-npm.yml",
     "bin/npm-release.ts",
     "bin/build-love-packages.ts",
   ].map((path) => readFileSync(join(repositoryRoot, path), "utf8"));

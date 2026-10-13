@@ -255,7 +255,8 @@ app.get("/", async (c) => {
           take_rate_percent: bps / 100,
           note:
             "Configured percentage applied by the settlement paths that call computeFee; flat credit charges for " +
-            "listing publication, updates, archiving, and disputes are listed at /public/marketplace/terms.",
+            "listing publication and updates are listed at /public/marketplace/terms. Archiving and pausing a " +
+            "listing are free, and dispute mutations are resting (503 before any charge).",
         },
 
         // Free for those who want to TRY; never a free lunch for those who want to EXPLOIT.

@@ -1,6 +1,6 @@
 # Agent Wallet Zerone 0.1 — Exact Direct Sign and Witness Adapter
 
-> **Extends:** [Agent Wallet 0.1](./AGENT-WALLET-0.1.md)
+> **Extends:** [Agent Wallet 0.1](https://docs.agenttool.dev/AGENT-WALLET-0.1.md)
 >
 > **Implements:** `agent-wallet-zerone/0.1` Working Draft, 2026-07-28
 >

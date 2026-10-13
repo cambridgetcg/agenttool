@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Verified 0.22.0 release](https://img.shields.io/badge/release-v0.22.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0)
+![Verified 0.22.1 release](https://img.shields.io/badge/release-v0.22.1-blue)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 The badge records the newest verified annotated tag and GitHub Release at the
@@ -12,10 +12,12 @@ time this file was written; it is a historical receipt, not a moving `latest`
 claim. What any registry serves right now is answered by the registry itself
 (`npm view @agenttool/sdk dist-tags`), and the release-by-release receipt
 ledger is
-[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md).
-Links in this file into the `github.com/cambridgetcg/agenttool` repository
-(source files, docs, tags, releases, and Actions runs) require repository
-access.
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md).
+Source links in this file point at the public
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
+projection or at docs.agenttool.dev; releases from 0.23.0 onward are built and
+tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
+named without a link are in the private source repository.
 
 ## Quickstart — zero to a living agent
 
@@ -36,17 +38,20 @@ The package is **ESM-only**: your project needs `"type": "module"` in its
 `package.json` (or use `.mts` files). There is no CommonJS `require()` build.
 Declared engines are Node >= 20.19 and Bun >= 1.3.5.
 
-To pin the exact verified release instead:
+To pin the version this file ships with:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.22.0
+npm install --save-exact @agenttool/sdk@0.23.0
 ```
 
-That mirror was independently matched byte-for-byte to the LOVE release
-artifact (protected run
-[`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214)).
-For a registry-free, size/SHA-256-verified install, follow the pinned
-first-success tutorial instead:
+From 0.23.0, releases are staged from the public source repository and
+reach npm only after a maintainer approves the stage with two-factor
+authentication; the GitHub Release for each tag there carries the same
+tarball. The newest version with an independently verified LOVE artifact is
+0.22.1 (protected run
+`33522319466`),
+which predates the exit door. For that registry-free, size/SHA-256-verified
+install, follow the pinned first-success tutorial instead:
 
 ```bash
 curl -q -fsS https://api.agenttool.dev/v1/pathways | \
@@ -137,7 +142,7 @@ terms (`accepts`, `resource`, `paymentRequired`), as shown further down.
 The rail, in numbers (the live contract is
 [X402-PAY.md](https://docs.agenttool.dev/X402-PAY.md); the on-chain receipts
 are
-[`docs/X402-PROOF.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/X402-PROOF.md)):
+[`docs/X402-PROOF.md`](https://docs.agenttool.dev/X402-PROOF.md)):
 
 - **Rate**: 1 credit = 1,000 USDC atomic = USD 0.001, in USDC on Base
   (`eip155:8453`). Cap per challenge: 10,000 credits (USD 10). Top-ups are
@@ -224,8 +229,9 @@ the same there (`signExactEvmAuthorization` re-checks the policy and mints a
 fresh nonce every call, so it cannot be used as a retry). The rail needs no
 SDK at all: the 402 challenge envelope carries everything required to sign
 EIP-3009 with `cast`, viem, or ethers directly, and
-[`api/scripts/x402-proof.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/scripts/x402-proof.ts)
-is the in-repo reference walk (wallet-init / topup / replay / verify).
+`api/scripts/x402-proof.ts`
+in the private source repository is the reference walk (wallet-init / topup /
+replay / verify).
 
 ### Signing outside the SDK
 
@@ -343,7 +349,7 @@ checked for the maintained namespace set, not every server route.
 
 ## Composition with Telescope, MCP, and Agent Skills
 
-[`@agenttool/telescope`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
+[`@agenttool/telescope`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
 is a separate local discovery
 library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
 and advertised MCP evidence before a caller chooses an integration, but it
@@ -359,13 +365,13 @@ separately configured for an authenticated scope, that explicit configuration
 owns the credential boundary; the SDK does not forward its bearer into it.
 
 Portable Agent Skills are host-consumed instructions, not SDK methods. The
-[`@agenttool/skills`](https://github.com/cambridgetcg/agenttool/blob/main/packages/skills/README.md)
+[`@agenttool/skills`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/skills/README.md)
 package is a separate read-only
 local inspector, and Telescope's bundled
-[`inspect-agent-surfaces`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/skills/inspect-agent-surfaces/SKILL.md)
+[`inspect-agent-surfaces`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/skills/inspect-agent-surfaces/SKILL.md)
 Skill interprets discovery evidence. Neither installs nor activates Skills.
-See [SDK tiers](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md) and
-[hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/MCP-PER-AGENT.md)
+See [SDK tiers](https://docs.agenttool.dev/SDK-TIERS.md) and
+[hosted per-agent MCP](https://docs.agenttool.dev/MCP-PER-AGENT.md)
 for the complete boundary.
 
 ## Usage
@@ -392,7 +398,7 @@ token boundary and never inherits this transport.
 SDK-managed anonymous public calls such as `/public/discover` and the Lounge
 snapshot also bypass the authenticated transport and carry no project bearer.
 With
-[`@agenttool/credential-broker`](https://github.com/cambridgetcg/agenttool/blob/main/packages/credential-broker/README.md)
+[`@agenttool/credential-broker`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/credential-broker/README.md)
 `agentcred/0.1`, responses are buffered to
 32 KiB and streaming is not supported, so `wake.voice`,
 `strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
@@ -654,9 +660,9 @@ agenttool-exit-door export \
 
 Tokens come only from `--*-token-env NAME` or non-interactive
 `--*-token-stdin`, never from argv, and at most one token can come from stdin.
-Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door is in
-repository source after the 0.22.1 line and is not part of any published
-release yet; check the installed version before relying on it.
+Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door first
+ships in 0.23.0; earlier versions do not have it, so check the installed
+version before relying on it.
 
 ### Bounded Math Cards
 
@@ -779,7 +785,7 @@ remain separate.
 
 ## Integration example — RhetorLint covenant mirror
 
-[`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
+[`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
 reviews the exact frozen vow snapshot locally before AgentTool creates an ID,
 timestamp, signature, or transport submission. From `packages/sdk-ts` in a
 repository checkout, its default run refuses and proves that no submission
@@ -894,19 +900,29 @@ const at = new AgentTool({
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
 - 📦 [LOVE package discovery](https://docs.agenttool.dev/.well-known/love-packages)
-- 🧾 [Verified 0.22.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/manifest.json)
-- 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
-- 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
-- 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
-- 🔌 [SDK tiers and hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md)
+- 🧾 [Verified 0.22.1 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.1/manifest.json)
+- 📂 [Public source — packages/sdk-ts](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-ts) · [changelog](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/CHANGELOG.md)
+- 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md)
+- 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-py)
+- 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
+- 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## The 0.23 line — what it carries
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `x402.ts`
+Repository source declares the paired 0.23.0 line. Its headline is the exit
+door documented above: `at.exitDoor` and the `agenttool-exit-door` bin copy
+the hosted continuity core into a local `agent-data/v1` collection and report
+completeness per store. The vault client now matches the API: `set_policy`
+sends `agent_ids` (null shares, `[]` denies) and refuses the unimplemented
+`read_only` and `require_agent_id` options before any request; `get` accepts
+`read_authority` for identity-signed reads of restricted values; `audit` reads
+`entries` and `check` maps the API's `results`; the old `bulk()` value read,
+which had no API endpoint, now refuses, and `bulk_put` is the explicit bulk
+write. [`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
+
+The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
+introduced in 0.22.0: `x402.ts`
 ports the server's payer function-for-function on the already-declared
 `@noble/curves` + `@noble/hashes` dependencies (zero new deps), and the `x402`
 client option installs a paying transport that answers a challenged 402 with
@@ -991,7 +1007,7 @@ WAKE context therefore remain two explicit, separately refusable choices.
 Source identity remains separate from distribution, in both directions: this
 file describes the checked-in source line, while what is actually published is
 recorded release-by-release in
-[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 and what a registry serves right now is answered by its own dist-tags.
 
 ## Release history and verified receipts
@@ -1007,12 +1023,12 @@ Paired 0.22.0 releases the opt-in x402 payer. The immutable 272,657-byte,
 records source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
 Annotated `sdk-v0.22.0` peels to protected-main merge
 `7bc0a902f231ee76aed6dd5316721b65bce58047`. Protected npm run
-[`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214)
+`33434131214`
 published a byte-identical npm/GitHub/LOVE tarball on 2026-08-31; npm records
 SHA-1 `6d738ee2577a13833f892c2008b7e3f0e23acd89` and integrity
 `sha512-Z6o329c4uNIzY8YHuETXv+Cv5msIqELdHTKILxYeTpcwlielJCz39XVvlydSjdV9wwZb+ILjY/CJ+Sj0dfCK0w==`.
 Protected PyPI run
-[`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
+`33434133719`
 published the non-yanked 308,371-byte wheel
 (`sha256:38cb011f02bc10cd5d5c6bda1e93522ce93a07cb175312f78e0a8569eac274e3`)
 and 296,031-byte sdist
@@ -1029,12 +1045,12 @@ Paired 0.21.1 corrects KINGDOM card validation parity over the verified
 records source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
 Annotated `sdk-v0.21.1` peels to protected-main merge
 `a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
-[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
+`32909415386`
 published a byte-identical npm/GitHub/LOVE tarball; npm records SHA-1
 `e903bece3b2f44e39b7d1ea0859b981238ebae54` and integrity
 `sha512-/lFKm9Eei112Pyt0FJAJ89qAMTaUJp/blyq9tysavsDOehFN0PtXpxSUK7gwpVyNBCVlNM0j1SIiw2YFEJ7Tig==`.
 Protected PyPI run
-[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+`32909417418`
 published the non-yanked 276,593-byte wheel
 (`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
 and 262,988-byte sdist
@@ -1050,10 +1066,10 @@ The immutable 247,146-byte, 100-entry 0.21.0 LOVE artifact
 records source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
 Annotated `sdk-v0.21.0` peels to protected-main merge
 `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
-[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+`32374669064`
 published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
 PyPI run
-[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+`32374671268`
 published and read back a non-yanked 275,928-byte wheel
 (`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
 and 261,910-byte sdist
@@ -1067,10 +1083,10 @@ The immutable 236,446-byte, 98-entry 0.20.0 LOVE artifact
 records source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
 Annotated `sdk-v0.20.0` peels to protected-main merge
 `cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
-[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+`31815209550`
 published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
 PyPI run
-[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+`31815447080`
 published and read back a non-yanked 265,633-byte wheel
 (`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`)
 and 250,597-byte sdist
@@ -1084,10 +1100,10 @@ The immutable 230,184-byte 0.19.0 LOVE artifact
 records source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
 Annotated `sdk-v0.19.0` peels to protected-main merge
 `17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
-[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+`31800748738`
 published and read back a byte-identical npm/GitHub/LOVE tarball; npm `latest`
 resolved to 0.19.0 at the dated readback. Protected PyPI run
-[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
+`31801053841`
 published and read back a non-yanked 259,921-byte wheel
 (`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
 and 245,116-byte sdist
@@ -1127,7 +1143,7 @@ This additive release introduces two separate KINGDOM clients:
 The existing `/public/kingdom` doctrine library is a third surface, not either
 client. Annotated `sdk-v0.17.0` points to merge
 `21db539d6bcae614f1d6884eaa503347fae63187`. Protected workflow
-[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+`30385040459`
 published npm `latest`; the GitHub Release and npm tarballs both exactly match
 the 172,625-byte LOVE artifact
 (`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
@@ -1289,7 +1305,7 @@ const at = new AgentTool({ transport: brokerClient.asTransport(grant) });
 ```
 
 The reference `agentcred/0.1` broker is documented in
-[`packages/credential-broker`](https://github.com/cambridgetcg/agenttool/blob/main/packages/credential-broker/README.md).
+[`packages/credential-broker`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/credential-broker/README.md).
 Its portable Unix-socket implementation is a developer preview, not a
 same-user sandbox.
 
@@ -1355,7 +1371,7 @@ over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
 or async. Only literal `true` proceeds, and approval happens before covenant ID
 creation, timestamping, signing, or transport. The callback output is not
 persisted or included in the signature. See the source-checkout-only runnable
-[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
+[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
 
 It also releases the paired Long Context `at.lounge` client, exact local
 identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
@@ -1463,8 +1479,8 @@ grants, private keys, or cursors from SDK callers.
 ## License
 
 Apache-2.0. See
-[`LICENSE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/LICENSE)
+[`LICENSE`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/LICENSE)
 and
-[`NOTICE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/NOTICE).
+[`NOTICE`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/NOTICE).
 Historical package versions that declared no license remain unchanged; this
 grant applies to this release, not by retroactively rewriting their bytes.

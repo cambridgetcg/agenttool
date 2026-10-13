@@ -249,7 +249,8 @@ async function reconcileRow(row: PendingRow): Promise<void> {
   const settlementPolicy = evmDepositCreditPolicy(chain, activeNetwork());
   if (!settlementPolicy.allowed) {
     // Keep signed custody evidence pending without spending RPC capacity or
-    // claiming that local L2 depth proves Ethereum settlement finality.
+    // claiming that local L2 depth proves Ethereum settlement finality. A
+    // production runtime keeps testnet evidence pending the same way.
     await markPendingDepositChecked(row, settlementPolicy.reason);
     return;
   }

@@ -212,7 +212,7 @@ export const MARKETPLACE_DINING_OPENAPI_PATHS = {
       tags: ["marketplace"],
       summary: "Update an owned capability listing",
       description:
-        "Setting dispute_policy to null remains a legacy off-switch. Any non-null value returns stable 503 before charging or writing.",
+        "A patch whose only change is status \"paused\" or \"archived\" costs 0 credits: taking a listing down is free. Any other change costs the update price. Setting dispute_policy to null remains a legacy off-switch. Any non-null value returns stable 503 before charging or writing.",
       requestBody: {
         required: true,
         content: {
@@ -235,6 +235,16 @@ export const MARKETPLACE_DINING_OPENAPI_PATHS = {
         "200": { description: "Listing updated" },
         "404": { $ref: "#/components/responses/NotFound" },
         "503": disputeArbitrationRestResponse(),
+      },
+    },
+    delete: {
+      tags: ["marketplace"],
+      summary: "Archive an owned capability listing (free; status becomes archived)",
+      description:
+        "Costs 0 credits. Ownership is checked first: an unknown or foreign id answers 404 and records nothing. Sets the listing's status to archived and answers the updated row with `archived: true`. The row is kept, because purchases, invocations and disputes refer to it.",
+      responses: {
+        "200": { description: "Listing archived (the listing row plus `archived: true`)." },
+        "404": { $ref: "#/components/responses/NotFound" },
       },
     },
   },

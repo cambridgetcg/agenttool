@@ -51,7 +51,7 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 | **Server (Fly)** | `fly secrets set KEY=value -a agenttool` |
 | **Cloudflare API token** | macOS Keychain service `agenttool-cloudflare-token`, account `macair` |
 
-The local keychain and Fly's secret store are **disjoint** — different data with overlapping naming. Local entries are for dev tools; Fly secrets are for the running api.
+The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools and Fly secrets are for the running api, but some local items are recovery copies of production values; see `docs/STACK.md` (Secrets management).
 
 ## Archaeology — `_archive/phase{1,2,3}-*/`
 

@@ -4,7 +4,7 @@
  *
  *  Path layout (crypto-only; Stripe billing layer dropped 2026-05-17):
  *    /v1/wallets/...                       — wallet CRUD + fund + spend + policy + transactions
- *    /v1/wallets/:id/deposit-address       — derive multi-chain crypto deposit addr
+ *    /v1/wallets/:id/deposit-address       — crypto deposit addresses (disclosure resting)
  *    /v1/wallets/:id/onchain/{challenge,verify} — sovereign wallet binding (EIP-191)
  *    /v1/wallets/:id/{payout,payouts}      — outgoing crypto transfers
  *    /v1/escrows/...                        — escrow lifecycle

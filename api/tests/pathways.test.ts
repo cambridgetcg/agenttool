@@ -83,10 +83,14 @@ describe("GET /v1/pathways", () => {
     expect(first.tutorial.source_path).toBe(
       "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
     );
-    const sdkPackage = JSON.parse(
-      readFileSync(join(import.meta.dir, "../../packages/sdk-ts/package.json"), "utf8"),
-    ) as { version: string };
-    expect(first.tutorial.sdk_version).toBe(sdkPackage.version);
+    // The tutorial pins an exact LOVE artifact, so it follows the newest SDK
+    // version on the LOVE mirror. Source can be newer: versions released from
+    // the public repository (0.23.0 on) are packed, not sealed as LOVE.
+    const loveIndex = JSON.parse(
+      readFileSync(join(import.meta.dir, "../../apps/docs/packages/v1/index.json"), "utf8"),
+    ) as { packages: Array<{ name: string; latest: string }> };
+    const loveSdk = loveIndex.packages.find((entry) => entry.name === "@agenttool/sdk");
+    expect(first.tutorial.sdk_version).toBe(loveSdk?.latest);
     expect(first.package_discovery.endpoint).toBe(
       "GET /.well-known/love-packages",
     );

@@ -185,7 +185,11 @@ class SyneidesisClient:
                 ``invited_witness_did`` resolves to the platform — that path
                 updates the memory tier to constitutive, which composes into
                 project constitution. It is harmless on the other paths: the
-                route binds the entity bytes either way.
+                route binds the entity bytes either way. In a project holding
+                exactly one constitutional root (enrolled guest roots do not
+                count), that root signs; for an agent enrolled into an
+                existing project as a guest, that guest's own root signs
+                instead.
 
         Raises:
             AgentToolError: ``self_witness_refused``, before any request is
@@ -261,7 +265,9 @@ class SyneidesisClient:
                 to have the wall held before the request is sent.
             authority: Root proof — and note whose. The route authorizes
                 against the BOOTSTRAPPING agent's project, not the cosigning
-                witness's.
+                witness's. When the bootstrapping agent was enrolled into an
+                existing project as a guest, that guest's own root signs
+                instead.
 
         Raises:
             AgentToolError: ``self_witness_refused``, before any request is

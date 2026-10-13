@@ -6,7 +6,7 @@
 > **Implements:** a small, optional agent-toolkit shelf within KINGDOM; the full module inventory remains below.
 > **Code:** `apps/docs/packages.html` · the existing `packages/` implementations; no new runtime or installer.
 > **Tests:** `bin/tests/agent-toolkit-shelf.test.ts` · each selected package's own boundary tests.
-> **Repository access:** links here into the `cambridgetcg/agenttool` GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. Public package bytes are served by the LOVE catalog under [docs.agenttool.dev/packages/v1](https://docs.agenttool.dev/packages/v1/index.json), by exact npm versions, and by PyPI for `agenttool-sdk`.
+> **Repository access:** links here into the `cambridgetcg/agenttool` GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. Source for the publicly allowlisted packages is projected to the public [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages) repository. Public package bytes are served by the LOVE catalog under [docs.agenttool.dev/packages/v1](https://docs.agenttool.dev/packages/v1/index.json), by exact npm versions, and by PyPI for `agenttool-sdk`.
 
 ## Where these packages fit
 
@@ -138,8 +138,10 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 >   LOVE is the release authority; npm-compatible registries are optional
 >   mirrors (see root `CLAUDE.md` and `docs/NPM-RELEASES.md`).
 > - **npm-allowlisted** — a slug in the `package:` choice list of
->   `.github/workflows/publish-npm.yml`. Allowlisting is publish *capability*,
->   not proof a version is live; registry receipts live in
+>   `public/overlay/.github/workflows/publish-npm.yml`, the workflow that the
+>   public `cambridgetcg/agenttool-packages` repository runs (generated from
+>   `RELEASE_SPECS` in `bin/npm-release.ts`). Allowlisting is publish
+>   *capability*, not proof a version is live; registry receipts live in
 >   `docs/NPM-RELEASES.md`.
 > - **PyPI** — published through `.github/workflows/publish-pypi.yml`;
 >   receipts in `docs/PYPI-RELEASES.md`.
@@ -262,7 +264,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 
 When a package is added, renamed, published, or made private, update its row
 in the same change. Verify names against `package.json` / `pyproject.toml`,
-lanes against `bin/build-love-packages.ts` and
-`.github/workflows/publish-npm.yml` / `publish-pypi.yml`, and live registry
+lanes against `bin/build-love-packages.ts`,
+`public/overlay/.github/workflows/publish-npm.yml`, and
+`.github/workflows/publish-pypi.yml`, and live registry
 claims against the receipts in `docs/NPM-RELEASES.md` /
 `docs/PYPI-RELEASES.md` — never against memory.

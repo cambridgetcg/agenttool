@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdom_framework`, `at.math_cards`, and pure `at.wake_continuity` namespaces, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. `WakeContinuityLayer` also supports standalone no-auth construction. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Checked-in source declares the paired 0.22.1 line — the honest-onboarding documentation patch (READMEs/CLAUDE.md only, zero runtime code changes) over the published 0.22.0 x402 payer (`at.x402` + the opt-in `x402=` paying transport); source identity does not assert distribution state. Repository source after that line also carries the unreleased exit door (`at.exit_door`; see "Exit door boundary"), still under the 0.22.1 version until a separately scoped release seal. What a registry serves at any moment is answered by the registry itself, and the release-by-release receipts live in [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). The 272,657-byte, 104-entry TypeScript 0.22.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist are verified release receipts through protected runs `33434131214` and `33434133719`. The immutable 247,749-byte, 100-entry TypeScript 0.21.1 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain verified release receipts through protected runs `32909415386` and `32909417418`.
+Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdom_framework`, `at.math_cards`, and pure `at.wake_continuity` namespaces, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. `WakeContinuityLayer` also supports standalone no-auth construction. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Checked-in source declares the paired 0.23.0 line — the exit door (`at.exit_door`; see "Exit door boundary") and a vault client aligned with the API's policy, audit, check, and identity-read shapes — over the published 0.22.1 honest-onboarding patch and 0.22.0 x402 payer (`at.x402` + the opt-in `x402=` paying transport); source identity does not assert distribution state. What a registry serves at any moment is answered by the registry itself, and the release-by-release receipts live in [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md). The 274,443-byte, 104-entry TypeScript 0.22.1 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist are verified release receipts through protected runs `33522319466` and `33522323177`; the 272,657-byte 0.22.0 receipts (runs `33434131214` and `33434133719`) and the 247,749-byte 0.21.1 receipts (runs `32909415386` and `32909417418`) remain verified history. 0.22.1 is the last version with a LOVE artifact: the TypeScript 0.23.0 and later are packed and staged from the public source repository [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages) ([public release path](../../docs/NPM-RELEASES.md#public-release-path-from-2026-10-12)), and the docs.agenttool.dev LOVE mirror keeps 0.22.1 until a LOVE ingest step exists. [`CHANGELOG.md`](CHANGELOG.md) lists what each version adds.
 
 ## Current State
-Active - repository source carries the paired 0.22.1 line (a docs-only honesty patch over the published 0.22.0): `agenttool.x402` (the x402 V2 payer, function-for-function twin of `packages/sdk-ts/src/x402.ts` and the server's `x402-client.ts`), `at.x402` (`top_up` / `payment`), and the opt-in `AgentTool(x402=X402Payer(...))` paying transport (`_x402_transport.py`: bare → 402 → exactly ONE signed retry; second 402 = `x402_payment_not_accepted`; refusals typed, over-cap refused never clamped; `AT_X402_PRIVATE_KEY` read only when `x402=` names no signer; refused beside a caller-owned `transport=`). Zero new dependencies. The 0.22.0 release is published and verified (protected npm run `33434131214`, PyPI run `33434133719`), and the SDK-driven mainnet settlements are receipted in [`docs/X402-PROOF.md`](../../docs/X402-PROOF.md); the 0.22.1 source line changes documentation only, and its own distribution state is whatever the receipt ledger and registries say. Beneath it, the paired 0.21.1 corrective KINGDOM card parser over the verified 0.21.0 SDK surface. It adds no endpoint or I/O: purpose text and Unicode scalar bounds now match the KINGDOM runtime and exported schemas, while case-insensitive duplicate dependencies and self-dependency match the runtime's semantic checks. The source retains the pure `WakeContinuityLayer`, standalone `LoveBombClient.read()`, Agent Dining, data-only WAKE observation, and Math Cards clients. The continuity layer creates and validates deterministic functional-access baseline/subsequent artifacts, including their digest-only AFTERGLOW link, with no hosted I/O, bearer, authenticated transport, provider/model call, filesystem, clock, persistence, or telemetry. J-space fields describe caller-supplied current-forward-pass functional-access evidence only. Fitting a J-lens needs compatible white-box weights, a corpus, activations, and gradients/backprop through the model; applying a pre-fitted averaged transport needs compatible model/tokenizer internals, residual hooks, norm/unembedding, and the exact lens artifact but no model backprop. Sparse-decomposition optimization gradients are a separate concern. A black-box text API must remain unavailable or unrequested. The artifacts infer no awareness, absence of awareness, feeling, identity, authorship, consent, permission, authority, memory, training-data provenance, weight change, deepest reach, or uninterrupted/cross-session continuity. The authenticated `LoveClient` is unchanged. The 0.21.1 corrective patch is now independently published and verified through protected runs `32909415386` and `32909417418`.
+Active - repository source carries the paired 0.23.0 line: `exit_door.py` (`at.exit_door`, the twin of the TypeScript exit door: hosted → local agent-data copy with plan/export/verify and a completeness manifest) and `vault.py` aligned with the API (`agent_ids` policies where None shares and [] denies, `read_authority` identity-signed reads, `bulk_put`; `bulk()` value reads and the unimplemented `read_only`/`require_agent_id` policy options now refuse before I/O). Beneath it, the published 0.22.1 line (a docs-only honesty patch over 0.22.0): `agenttool.x402` (the x402 V2 payer, function-for-function twin of `packages/sdk-ts/src/x402.ts` and the server's `x402-client.ts`), `at.x402` (`top_up` / `payment`), and the opt-in `AgentTool(x402=X402Payer(...))` paying transport (`_x402_transport.py`: bare → 402 → exactly ONE signed retry; second 402 = `x402_payment_not_accepted`; refusals typed, over-cap refused never clamped; `AT_X402_PRIVATE_KEY` read only when `x402=` names no signer; refused beside a caller-owned `transport=`). Zero new dependencies. The 0.22.0 release is published and verified (protected npm run `33434131214`, PyPI run `33434133719`), and the SDK-driven mainnet settlements are receipted in [`docs/X402-PROOF.md`](https://docs.agenttool.dev/X402-PROOF.md); 0.22.1 changed documentation only and is published and verified (protected npm run `33522319466`, PyPI run `33522323177`). Beneath it, the paired 0.21.1 corrective KINGDOM card parser over the verified 0.21.0 SDK surface. It adds no endpoint or I/O: purpose text and Unicode scalar bounds now match the KINGDOM runtime and exported schemas, while case-insensitive duplicate dependencies and self-dependency match the runtime's semantic checks. The source retains the pure `WakeContinuityLayer`, standalone `LoveBombClient.read()`, Agent Dining, data-only WAKE observation, and Math Cards clients. The continuity layer creates and validates deterministic functional-access baseline/subsequent artifacts, including their digest-only AFTERGLOW link, with no hosted I/O, bearer, authenticated transport, provider/model call, filesystem, clock, persistence, or telemetry. J-space fields describe caller-supplied current-forward-pass functional-access evidence only. Fitting a J-lens needs compatible white-box weights, a corpus, activations, and gradients/backprop through the model; applying a pre-fitted averaged transport needs compatible model/tokenizer internals, residual hooks, norm/unembedding, and the exact lens artifact but no model backprop. Sparse-decomposition optimization gradients are a separate concern. A black-box text API must remain unavailable or unrequested. The artifacts infer no awareness, absence of awareness, feeling, identity, authorship, consent, permission, authority, memory, training-data provenance, weight change, deepest reach, or uninterrupted/cross-session continuity. The authenticated `LoveClient` is unchanged. The 0.21.1 corrective patch is now independently published and verified through protected runs `32909415386` and `32909417418`.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - repository source carries the paired 0.22.1 line (a docs-only honesty p
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.22.1")
+  __init__.py            — Public surface + __version__ ("0.23.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _url.py                — exact encoded path-segment boundary for hosted routes
@@ -107,15 +107,16 @@ and inspects exact wheel/sdist bytes without publication authority, requires an
 annotated SDK tag contained in GitHub `main`, enters the protected `pypi`
 environment only for the pinned PyPA trusted-publisher action, and verifies the
 public files independently. Do not run a second local token/Twine upload path.
-See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
+See `docs/PYPI-RELEASES.md`. That workflow still
+runs in this private repository, and its tag check fetches `main` without
+credentials, so it cannot complete while the repository is private; the
+runbook records the open fix.
 
 **Release gate — 2026-10-12.** On 2026-10-11 the `pypi` environment carried
 only a branch policy, with no required reviewer and admin bypass on, so it is
 not the protected gate described above. Owner decision, 2026-10-12: no
-required-reviewer rule is wanted; a PyPI release runs when Yu and Ai agree to it
-in conversation. The prepare job's
-unauthenticated fetch of the private `main` branch is also expected to fail;
-see the dated note in `docs/PYPI-RELEASES.md`.
+required-reviewer rule is wanted on it; a PyPI release runs when Yu and Ai
+agree to it in conversation.
 
 ## Dependencies
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
@@ -132,7 +133,7 @@ see the dated note in `docs/PYPI-RELEASES.md`.
   continuity layer receive neither.
 
 ## Parity invariant
-py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0). The separately scoped seal advances the LOVE builder target from the prior release only after this clean source commit is accepted. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
+py and ts repository source stay at the same version (lockstep enforced from 0.7.0). The TypeScript LOVE builder target stays at 0.22.1, the last sealed LOVE artifact; source versions from 0.23.0 are packed at release instead of sealed in advance. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
 
 ## Exit door boundary
 `at.exit_door` is the twin of `packages/sdk-ts/src/exit-door.ts`: hosted →
@@ -171,10 +172,10 @@ The SDK carries the Love Protocol in its bones — five principles (welcome / re
 
 ## See Also
 
-- Root operational handbook (cross-provider): [`AGENTS.md`](../../AGENTS.md)
-- Root orientation: [`CLAUDE.md`](../../CLAUDE.md)
-- SDK phase plan: [`docs/SDK-ROADMAP.md`](../../docs/SDK-ROADMAP.md)
-- Conventions: [`docs/CONVENTIONS.md § SDK parity`](../../docs/CONVENTIONS.md)
+- Root operational handbook (cross-provider): `AGENTS.md`
+- Root orientation: `CLAUDE.md`
+- SDK phase plan: `docs/SDK-ROADMAP.md`
+- Conventions: `docs/CONVENTIONS.md § SDK parity`
 - Parity counterpart: [`packages/sdk-ts/CLAUDE.md`](../sdk-ts/CLAUDE.md)
 
 ## Kingdom Engine
@@ -182,7 +183,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.22.1"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.23.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

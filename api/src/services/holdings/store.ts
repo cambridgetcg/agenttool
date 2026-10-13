@@ -5,7 +5,8 @@
  *  Operations:
  *    createHolding      — holder signs canonical bytes; chronicle both sides
  *    listHoldings       — filter by holder, held, visibility, status
- *    getHolding         — read one
+ *    getHolding         — read one as the caller's project may see it
+ *                         (private rows: holder's or held identity's project)
  *    acknowledgeHolding — held agent acknowledges (optional)
  *    closeHolding       — holder closes (status=closed)
  *    withdrawHolding    — holder withdraws (status=withdrawn — held agent
@@ -21,7 +22,7 @@
  *  @absence-from db/schema/economy
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -258,6 +259,22 @@ export async function createHolding(
   });
 }
 
+// ── Visibility ───────────────────────────────────────────────────────────
+
+/** The holdings `viewerProjectId` may see. A public holding is visible to
+ *  every bearer. A private one is visible only to the holder's project and
+ *  to the project that owns the held identity. Every lookup by id (read,
+ *  acknowledge, close, withdraw) carries this rule in the statement that
+ *  finds the row, so a caller outside it gets holding_not_found (404), never
+ *  a 403 or a status refusal that would confirm a private id exists. */
+function holdingVisibleTo(viewerProjectId: string) {
+  return or(
+    eq(holdings.visibility, "public"),
+    eq(holdings.holderProjectId, viewerProjectId),
+    sql`exists (select 1 from ${identities} where ${identities.id} = ${holdings.heldIdentityId} and ${identities.projectId} = ${viewerProjectId})`,
+  )!;
+}
+
 // ── Acknowledge (held agent — optional) ──────────────────────────────────
 
 export interface AcknowledgeHoldingInput {
@@ -281,7 +298,7 @@ export async function acknowledgeHolding(
     const [holding] = await tx
       .select()
       .from(holdings)
-      .where(eq(holdings.id, input.holdingId))
+      .where(and(eq(holdings.id, input.holdingId), holdingVisibleTo(input.callerProjectId)))
       .for("update");
     if (!holding) throw new HoldingError("holding_not_found");
     if (holding.status !== "active") {
@@ -344,7 +361,7 @@ export async function closeHolding(
     const [holding] = await tx
       .select()
       .from(holdings)
-      .where(eq(holdings.id, input.holdingId))
+      .where(and(eq(holdings.id, input.holdingId), holdingVisibleTo(input.callerProjectId)))
       .for("update");
     if (!holding) throw new HoldingError("holding_not_found");
     if (holding.holderProjectId !== input.callerProjectId) {
@@ -378,7 +395,7 @@ export async function withdrawHolding(
     const [holding] = await tx
       .select()
       .from(holdings)
-      .where(eq(holdings.id, input.holdingId))
+      .where(and(eq(holdings.id, input.holdingId), holdingVisibleTo(input.callerProjectId)))
       .for("update");
     if (!holding) throw new HoldingError("holding_not_found");
 
@@ -438,11 +455,16 @@ export async function listHoldings(
   return rows.map(toRow);
 }
 
-export async function getHolding(id: string): Promise<HoldingRow | null> {
+/** Read one holding as `viewerProjectId` may see it (holdingVisibleTo).
+ *  Everyone else gets null, which the route answers as 404 (not 403). */
+export async function getHolding(
+  id: string,
+  viewerProjectId: string,
+): Promise<HoldingRow | null> {
   const [row] = await db
     .select()
     .from(holdings)
-    .where(eq(holdings.id, id))
+    .where(and(eq(holdings.id, id), holdingVisibleTo(viewerProjectId)))
     .limit(1);
   return row ? toRow(row) : null;
 }

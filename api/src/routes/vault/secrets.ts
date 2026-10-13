@@ -29,6 +29,7 @@ import { vaultAudit, vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { decrypt, encrypt } from "../../services/vault/crypto";
 import { authorizeVaultHttpRead, validateVaultAudience, vaultAudienceSchema } from "../../services/vault/audience";
 import { abort } from "../../lib/errors";
+import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
 
 const app = new Hono<ProjectContext>();
 
@@ -337,7 +338,13 @@ app.delete("/:name", async (c) => {
     ipAddress: ip,
   });
 
-  return c.json({ name, deleted: true });
+  // Soft delete: the version ciphertext stays, and the response says so.
+  return c.json({
+    name,
+    deleted: true,
+    content_retained: true,
+    _retention: DELETE_RESPONSE_RETENTION.vault,
+  });
 });
 
 // ─── GET / — list secret NAMES (never values) ───────────────────────────────

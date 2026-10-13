@@ -13,6 +13,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { errors, fail } from "../../lib/errors";
+import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
 import {
   coSignMessage,
   getMessage,
@@ -234,6 +235,7 @@ app.post("/:id/co-sign", async (c) => {
 
 // ── DELETE /v1/inbox/:id ─────────────────────────────────────────────
 //  Soft delete via status='deleted'. List filters skip 'deleted' by default.
+//  The content stays, and the response says so (content_retained).
 app.delete("/:id", async (c) => {
   const updated = await updateStatus(
     c.var.project.id,
@@ -241,7 +243,12 @@ app.delete("/:id", async (c) => {
     "deleted",
   );
   if (!updated) throw new HTTPException(404, { message: "message_not_found" });
-  return c.json({ id: updated.id, deleted: true });
+  return c.json({
+    id: updated.id,
+    deleted: true,
+    content_retained: true,
+    _retention: DELETE_RESPONSE_RETENTION.inbox,
+  });
 });
 
 export default app;

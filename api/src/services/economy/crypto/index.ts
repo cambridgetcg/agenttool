@@ -16,7 +16,10 @@ import {
   payoutRequestIdempotency,
   policies,
 } from "../../../db/schema/economy";
-import { economyConfig } from "../config";
+import {
+  economyConfig,
+  unreconciledSolanaDepositsAllowed,
+} from "../config";
 import {
   EVM_CHAIN_IDS,
   USDC_ADDRESSES,
@@ -55,6 +58,37 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 
 // ── Deposit address ────────────────────────────────────────────────────
+
+/** Stable refusal code while deposit-address disclosure rests. */
+export const DEPOSIT_ADDRESS_DISCLOSURE_RESTING_ERROR =
+  "deposit_address_disclosure_resting";
+
+/** Solana has no Helius watch or raw-atomic finality reconciler, and its
+ * webhook refuses balance credit unless the development-only unreconciled
+ * adapter is enabled. Disclosing an address whose deposits cannot credit
+ * would leave funds in operator custody with no product path back, so a
+ * Solana address is withheld unless that adapter (refused in a production
+ * runtime) and HELIUS_WEBHOOK_SECRET are both configured. */
+export class SolanaDepositUnavailableError extends Error {
+  readonly code = "solana_deposit_finality_unavailable";
+
+  constructor() {
+    super(
+      "Solana deposit addresses are withheld unless the development-only unreconciled Solana adapter and a Helius webhook secret are both configured; by default Solana deposits do not credit. No address was created or disclosed.",
+    );
+    this.name = "SolanaDepositUnavailableError";
+  }
+}
+
+/** Refuse before derivation or any database write. */
+function assertSolanaDepositDisclosureSupported(): void {
+  if (
+    !unreconciledSolanaDepositsAllowed() ||
+    economyConfig.heliusWebhookSecret.trim().length === 0
+  ) {
+    throw new SolanaDepositUnavailableError();
+  }
+}
 
 export class DepositAddressInvariantError extends Error {
   readonly code = "deposit_address_invariant_failed";
@@ -183,6 +217,8 @@ export async function getOrCreateDepositAddress(
   }
   if (isEvmChain(chain)) {
     assertEvmDepositCreditSupported(chain);
+  } else if (chain === "solana") {
+    assertSolanaDepositDisclosureSupported();
   }
 
   if (!isChainSupported(chain)) {

@@ -49,6 +49,13 @@
       "line_sha256": "677d28abd105d0bee3df2fdbe733cbce3ad8ee9809a2962b6e86dade74f58b23",
       "reason": "GitHub Actions runner workspace prefix in a check that asserts the release bundle contains no build path; not a personal home directory.",
       "approver": "Ai, 2026-10-11"
+    },
+    {
+      "path": "bin/npm-release.ts",
+      "rule": "personal/email",
+      "line_sha256": "f0f184d1baf7aac3a8dbb6056218d16712a331e1b8a700d6af3288bfabf590b4",
+      "reason": "The SSH remote form of the public release repository URL (user git on host github.com), accepted beside its https URL; not an email address.",
+      "approver": "Ai, 2026-10-12"
     }
   ],
   "binaries": [

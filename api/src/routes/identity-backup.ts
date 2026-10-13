@@ -20,6 +20,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identityBackups } from "../db/schema/continuity";
 import { requireActiveProjectIdentity } from "../services/identity/partition";
+import { DELETE_RESPONSE_RETENTION } from "../services/discovery/retention";
 
 const app = new Hono<ProjectContext>();
 
@@ -150,22 +151,57 @@ app.get("/:id", async (c) => {
 });
 
 // ─── DELETE /v1/identity/backup/:id — revoke a backup ───────────────────────
+//  Honest about what happened: 404 when no backup of this project has the id;
+//  `already_revoked: true` with the original revoked_at when it was revoked
+//  before; and `blob_retained: true`, because revocation hides the backup but
+//  keeps the stored blob (see /public/retention).
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.delete("/:id", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
+  if (!UUID_RE.test(id)) return c.json({ error: "Backup not found" }, 404);
 
-  await db
-    .update(identityBackups)
-    .set({ revokedAt: new Date() })
-    .where(
-      and(
-        eq(identityBackups.id, id),
-        eq(identityBackups.projectId, project.id),
-      ),
-    );
+  const outcome = await db.transaction(async (tx) => {
+    const [backup] = await tx
+      .select({ id: identityBackups.id, revokedAt: identityBackups.revokedAt })
+      .from(identityBackups)
+      .where(
+        and(
+          eq(identityBackups.id, id),
+          eq(identityBackups.projectId, project.id),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!backup) return null;
+    if (backup.revokedAt) return { revokedAt: backup.revokedAt, alreadyRevoked: true };
 
-  return c.json({ id, revoked: true });
+    const [revoked] = await tx
+      .update(identityBackups)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(identityBackups.id, backup.id),
+          eq(identityBackups.projectId, project.id),
+          isNull(identityBackups.revokedAt),
+        ),
+      )
+      .returning({ revokedAt: identityBackups.revokedAt });
+    return { revokedAt: revoked!.revokedAt!, alreadyRevoked: false };
+  });
+
+  if (!outcome) return c.json({ error: "Backup not found" }, 404);
+
+  return c.json({
+    id,
+    revoked: true,
+    already_revoked: outcome.alreadyRevoked,
+    revoked_at: outcome.revokedAt.toISOString(),
+    blob_retained: true,
+    _retention: DELETE_RESPONSE_RETENTION.identity_backup,
+  });
 });
 
 export default app;

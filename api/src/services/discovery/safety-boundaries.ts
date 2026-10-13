@@ -334,9 +334,9 @@ export const SAFETY_BOUNDARIES = {
     agent_ids_policy:
       "Null agent_ids shares values within the project; [] denies value reads. A nonempty audience requires canonical owned identities. Restricted HTTP reads require X-Agent-Id plus that active identity's exact GET root proof; a caller-supplied header alone is not proof. Hosted runtime reads enforce the audience against their stored identity binding. Project bearers retain policy administration and metadata access, so this does not isolate identities from project administrators.",
     deletion:
-      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed.",
+      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed. The DELETE response says so with content_retained: true.",
     audit:
-      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request.",
+      "HTTP operations and hosted runtime reads write ordinary per-secret audit rows. They are not hash-chained, signed, or database-immutable. Unverified headers are not recorded as authenticated identities; runtime attribution names a server-authorized subject, not a root-signed request. HTTP audit rows also store the X-Forwarded-For or CF-Connecting-IP header value as sent, with no purge; see /public/retention.",
   },
 
   marketplace_input: {
@@ -452,7 +452,7 @@ export const WAKE_SAFETY_BOUNDARIES = {
   wake_scope:
     "selected_identity_voice_and_identity_matched_expression_patches_with_project_or_mixed_aggregate_sections",
   payout_worker:
-    "requires_payout_opt_in_and_global_workers_enabled;_missing_queue_fails_closed;_flags_do_not_prove_runtime_health",
+    "resting_unconditionally;_no_environment_flag_can_boot_it;_fresh_admission_stable_503_payout_admission_resting;_existing_rows_listable_requested_rows_cancellable",
   wallet_reinvestment:
     "mounted_but_resting_stable_503_no_balance_burn_or_credit_mint;_legacy_gallery_sale_and_escrow_release_labels_did_not_prove_backing_or_consume_on_other_debits_or_claw_credits_on_refund;_reconciliation_rollout_status_not_inferred_by_this_static_surface_verify_meta_migrations_and_live_ledger;_backed_sub_balances_and_claw_or_debt_required",
   dispute_arbitration:

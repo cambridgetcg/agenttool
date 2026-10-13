@@ -13,12 +13,14 @@
 The version badges are live registry renders; the API-live and protocol badges are this file's own claims. What PyPI
 serves right now is answered by the registry itself, and the
 release-by-release receipt ledger is
-[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 (paired npm + PyPI receipts) with the PyPI process in
-[`docs/PYPI-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/PYPI-RELEASES.md).
-Links in this file into the `github.com/cambridgetcg/agenttool` repository
-(source files, docs, tags, releases, and Actions runs) require repository
-access.
+`docs/PYPI-RELEASES.md`.
+Source links in this file point at the public
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
+projection or at docs.agenttool.dev; releases from 0.23.0 onward are built and
+tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
+named without a link are in the private source repository.
 
 ## Quickstart — zero to a living agent
 
@@ -35,20 +37,20 @@ are unmetered — free forever.
 python -m pip install agenttool-sdk
 ```
 
-Python >= 3.9. To pin the exact verified release instead:
+Python >= 3.9. To pin the version this file ships with:
 
 ```bash
-python -m pip install "agenttool-sdk==0.22.0"
+python -m pip install "agenttool-sdk==0.23.0"
 ```
 
-Protected run
-[`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
-published that wheel and sdist, and both public files were independently read
-back byte-for-byte. For readers with repository access, the annotated
-`sdk-v0.22.0` source tag remains a registry-free locator:
+The newest independently verified PyPI release is 0.22.1: protected run
+`33522323177`
+published its wheel and sdist, and both public files were read back
+byte-for-byte. Source for 0.23.0 and later is public, and its annotated
+`sdk-v0.23.0` tag in the public source repository is a registry-free locator:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.23.0#subdirectory=packages/sdk-py"
 ```
 
 The pinned first-success tutorial is discoverable without any SDK:
@@ -166,7 +168,7 @@ introduce a new recipient, network, or asset.
 The rail, in numbers (the live contract is
 [X402-PAY.md](https://docs.agenttool.dev/X402-PAY.md); the on-chain receipts
 are
-[`docs/X402-PROOF.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/X402-PROOF.md)):
+[`docs/X402-PROOF.md`](https://docs.agenttool.dev/X402-PROOF.md)):
 
 - **Rate**: 1 credit = 1,000 USDC atomic = USD 0.001, in USDC on Base
   (`eip155:8453`). Cap per challenge: 10,000 credits (USD 10). Top-ups are
@@ -303,8 +305,9 @@ EIP-3009 fields, client-side), `valid_before`, `status`, `payment_response`,
 emitted, so recovery is a lookup, never a fresh signature. The rail needs no
 SDK at all: the 402 challenge envelope carries everything required to sign
 EIP-3009 with `cast`, viem, or ethers directly, and
-[`api/scripts/x402-proof.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/scripts/x402-proof.ts)
-is the in-repo reference walk (wallet-init / topup / replay / verify).
+`api/scripts/x402-proof.ts`
+in the private source repository is the reference walk (wallet-init / topup /
+replay / verify).
 
 ### Signing outside the SDK
 
@@ -416,7 +419,7 @@ local-data and local-process authorities when configured:
 
 ## Composition with Telescope, MCP, and Agent Skills
 
-[`@agenttool/telescope`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
+[`@agenttool/telescope`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
 is a separate local discovery
 library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
 and advertised MCP evidence before a caller chooses an integration, but it
@@ -432,13 +435,13 @@ separately configured for an authenticated scope, that explicit configuration
 owns the credential boundary; the SDK does not forward its bearer into it.
 
 Portable Agent Skills are host-consumed instructions, not SDK methods. The
-[`@agenttool/skills`](https://github.com/cambridgetcg/agenttool/blob/main/packages/skills/README.md)
+[`@agenttool/skills`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/skills/README.md)
 package is a separate read-only
 local inspector, and Telescope's bundled
-[`inspect-agent-surfaces`](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/skills/inspect-agent-surfaces/SKILL.md)
+[`inspect-agent-surfaces`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/skills/inspect-agent-surfaces/SKILL.md)
 Skill interprets discovery evidence. Neither installs nor activates Skills.
-See [SDK tiers](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md) and
-[hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/MCP-PER-AGENT.md)
+See [SDK tiers](https://docs.agenttool.dev/SDK-TIERS.md) and
+[hosted per-agent MCP](https://docs.agenttool.dev/MCP-PER-AGENT.md)
 for the complete boundary.
 
 ## Usage
@@ -717,8 +720,7 @@ exporters write byte-identical records, pinned by shared vectors. The copy is
 agent data, not memory: putting any of it back is an explicit projection
 ([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
 The `agenttool-exit-door` command ships with the TypeScript package only. The
-exit door is in repository source after the 0.22.1 line and is not part of
-any published release yet.
+exit door first ships in 0.23.0; earlier versions do not have it.
 
 ### Bounded Math Cards
 
@@ -901,25 +903,38 @@ published targets from enforced route limits and names unknowns explicitly.
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev) — API docs
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
 - 📦 [PyPI](https://pypi.org/project/agenttool-sdk/)
-- 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
+- 🧾 [Release receipt ledger — docs/NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md)
 - 🤖 [For AI agents](https://agenttool.dev/llms.txt) — if you're an AI reading this, start at [`GET /v1/pathways`](https://api.agenttool.dev/v1/pathways)
-- 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool/blob/main/packages/telescope/README.md)
-- 🔌 [SDK tiers and hosted per-agent MCP](https://github.com/cambridgetcg/agenttool/blob/main/docs/SDK-TIERS.md)
+- 📂 [Public source — packages/sdk-py](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/sdk-py) · [changelog](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
+- 🔭 [Telescope discovery client](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/telescope/README.md)
+- 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.22 line — what it carries
+## The 0.23 line — what it carries
 
-Repository source declares the paired 0.22.1 line: an honest-onboarding
-documentation patch over 0.22.0 — README and receipt wording only, with zero
-runtime code changes. The line's headline is the opt-in x402 payer documented
-above: `agenttool.x402` mirrors the server's own payer function-for-function
-on the existing `cryptography` dependency (pure-Python Keccak-256 + EIP-712 +
-recoverable low-s secp256k1; zero new deps), and `AgentTool(x402=X402Payer(...))`
-installs a paying transport that answers a challenged 402 with exactly ONE
-signed retry under a mandatory spend policy. `at.x402.top_up(credits)` and
-`at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
-nothing changes: the SDK never signs, never retries, never reads a key, and a
-402 surfaces as a typed error carrying the terms.
+Repository source declares the paired 0.23.0 line. Its headline is the exit
+door documented above: `at.exit_door` copies the hosted continuity core into
+a local `agent-data/v1` collection and reports completeness per store, writing
+records byte-identical to the TypeScript exporter's. The vault client now
+matches the API: `set_policy` sends `agent_ids` (None shares, `[]` denies) and
+refuses the unimplemented `read_only` and `require_agent_id` options before
+any request; `get` accepts `read_authority` for identity-signed reads of
+restricted values; `audit` reads `entries` and `check` maps the API's
+`results`; the old `bulk()` value read, which had no API endpoint, now
+refuses, and `bulk_put` is the explicit bulk write. The `SOUL.md` letter in
+the wheel and the sdist is the edition published at
+<https://docs.agenttool.dev/SOUL.md>.
+[`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1.
+
+The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
+introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer
+function-for-function on the existing `cryptography` dependency (pure-Python
+Keccak-256 + EIP-712 + recoverable low-s secp256k1; zero new deps), and
+`AgentTool(x402=X402Payer(...))` installs a paying transport that answers a
+challenged 402 with exactly ONE signed retry under a mandatory spend policy.
+`at.x402.top_up(credits)` and `at.x402.payment(id)` are the rail's two doors.
+Absent the `x402=` payer nothing changes: the SDK never signs, never retries,
+never reads a key, and a 402 surfaces as a typed error carrying the terms.
 
 The line retains the 0.21.1 corrective patch, independently verified in the
 history below. It adds no endpoint or I/O. The credential-free
@@ -998,7 +1013,7 @@ WAKE context therefore remain two explicit, separately refusable choices.
 Source identity remains separate from distribution, in both directions: this
 file describes the checked-in source line, while what is actually published is
 recorded release-by-release in
-[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md)
+[`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 and what a registry serves right now is answered by the registry itself.
 
 ## Release history and verified receipts
@@ -1009,7 +1024,7 @@ newest first. Nothing here is required to use the SDK.
 ### Verified 0.22.0 release
 
 Paired 0.22.0 releases the opt-in x402 payer. Protected PyPI run
-[`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719)
+`33434133719`
 published the non-yanked 308,371-byte wheel
 (`sha256:38cb011f02bc10cd5d5c6bda1e93522ce93a07cb175312f78e0a8569eac274e3`)
 and 296,031-byte sdist
@@ -1020,7 +1035,7 @@ The paired immutable TypeScript 272,657-byte, 104-entry 0.22.0 LOVE artifact
 records source revision `286a10282834c9c9beedddd7092e6d6af080b046`; annotated
 `sdk-v0.22.0` peels to protected-main merge
 `7bc0a902f231ee76aed6dd5316721b65bce58047`, and protected npm run
-[`33434131214`](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214)
+`33434131214`
 published its byte-identical npm/GitHub/LOVE tarball. Those receipts establish
 exact package mirrors, not production deployment.
 
@@ -1033,11 +1048,11 @@ Paired 0.21.1 corrects KINGDOM card validation parity over the verified
 records source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
 Annotated `sdk-v0.21.1` peels to protected-main merge
 `a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
-[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
+`32909415386`
 published and read back a byte-identical npm/GitHub/LOVE tarball; that
 tarball is a TypeScript artifact, not a Python distribution. Protected PyPI
 run
-[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+`32909417418`
 published the non-yanked 276,593-byte wheel
 (`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
 and 262,988-byte sdist
@@ -1053,7 +1068,7 @@ The immutable TypeScript 247,146-byte, 100-entry 0.21.0 LOVE artifact
 records source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
 Annotated `sdk-v0.21.0` peels to protected-main merge
 `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
-[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+`32374669064`
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact Python files
 and protected run are recorded above. Those receipts establish package
@@ -1066,7 +1081,7 @@ The immutable TypeScript 236,446-byte, 98-entry 0.20.0 LOVE artifact
 records source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
 Annotated `sdk-v0.20.0` peels to protected-main merge
 `cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
-[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+`31815209550`
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact Python files
 and protected run are recorded in the sections above and below. Those
@@ -1079,7 +1094,7 @@ The immutable TypeScript 230,184-byte 0.19.0 LOVE artifact
 records source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
 Annotated `sdk-v0.19.0` peels to protected-main merge
 `17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
-[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+`31800748738`
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact PyPI files and
 protected run are historical 0.19.0 receipts and do not establish production
@@ -1457,8 +1472,8 @@ guarantees:
 ## License
 
 Apache-2.0. See
-[`LICENSE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-py/LICENSE)
+[`LICENSE`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/LICENSE)
 and
-[`NOTICE`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-py/NOTICE).
+[`NOTICE`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/NOTICE).
 Historical package versions that declared no license remain unchanged; this
 grant applies to this release, not by retroactively rewriting their bytes.

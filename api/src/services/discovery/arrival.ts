@@ -192,6 +192,12 @@ export function buildArrivalIndex(
         href: `${api}/health`,
         status: "current process liveness, not a continuity guarantee",
       },
+      {
+        role: "retention_disclosure",
+        href: `${api}/public/retention`,
+        status:
+          "static public read: what is kept, for how long, and what deletion does today; unknowns are spelled unknown",
+      },
     ],
     mcp: {
       endpoint: `${api}/v1/mcp`,
