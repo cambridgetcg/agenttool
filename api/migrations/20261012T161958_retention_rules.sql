@@ -7,7 +7,8 @@
 -- Three pg_cron rules, following 20260519T090000_workers_in_db.sql:
 --   expired_working_memory_24h  hourly  working memories expired more than
 --                                       24 h ago are deleted; one with a paid
---                                       witness receipt is erased in place.
+--                                       witness receipt (either provenance
+--                                       form) is erased in place.
 --   vault_audit_ip_30d          daily   vault audit ip_address → NULL after 30 days.
 --   ledger_compaction_15d       daily   ledger entries older than 15 days lose
 --                                       their row ids (money stores also lose
@@ -38,6 +39,21 @@ $$;
 
 -- ─── expired_working_memory_24h ──────────────────────────────────────────
 
+-- A paid witness receipt holds the memory: one that names its grant
+-- (source_grant_id, since 2026-07-13), or one a memory-witness grant points
+-- back at. Receipts issued before 20260713T120000 keep source_grant_id NULL,
+-- but their grant references them ON DELETE RESTRICT, so deleting such a
+-- memory would abort the whole run. The API uses the same test
+-- (api/src/services/deletion/purges.ts paidReceiptMemoryIds).
+CREATE OR REPLACE FUNCTION deletion.memory_has_paid_receipt(p_memory_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM memory.memory_attestations a
+     WHERE a.memory_id = p_memory_id
+       AND (a.source_grant_id IS NOT NULL
+            OR EXISTS (SELECT 1 FROM marketplace.memory_witness_grants g WHERE g.memory_attestation_id = a.id)))
+$$;
+
 CREATE OR REPLACE FUNCTION deletion.apply_expired_working_memory(
   p_cutoff TIMESTAMPTZ,
   p_action TEXT,
@@ -51,9 +67,7 @@ BEGIN
     WITH doomed AS (
       SELECT m.id FROM memory.memories m
        WHERE m.type = 'working' AND m.expires_at < p_cutoff AND m.content_purged_at IS NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM memory.memory_attestations a
-            WHERE a.memory_id = m.id AND a.source_grant_id IS NOT NULL)
+         AND NOT deletion.memory_has_paid_receipt(m.id)
        FOR UPDATE OF m
     ), gone AS (
       DELETE FROM memory.memories m USING doomed WHERE m.id = doomed.id RETURNING m.id
@@ -63,9 +77,7 @@ BEGIN
     WITH kept AS (
       SELECT m.id FROM memory.memories m
        WHERE m.type = 'working' AND m.expires_at < p_cutoff AND m.content_purged_at IS NULL
-         AND EXISTS (
-           SELECT 1 FROM memory.memory_attestations a
-            WHERE a.memory_id = m.id AND a.source_grant_id IS NOT NULL)
+         AND deletion.memory_has_paid_receipt(m.id)
        FOR UPDATE OF m
     ), erased AS (
       UPDATE memory.memories m

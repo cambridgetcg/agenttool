@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 const STORE = readFileSync(new URL("../src/services/memory/store.ts", import.meta.url), "utf8");
 const PURGES = readFileSync(new URL("../src/services/deletion/purges.ts", import.meta.url), "utf8");
 const ROUTE = readFileSync(new URL("../src/routes/memory/memories.ts", import.meta.url), "utf8");
+const RULES = readFileSync(new URL("../migrations/20261012T161958_retention_rules.sql", import.meta.url), "utf8");
 const MIGRATION = readFileSync(
   new URL("../migrations/20260713T120000_attestation_receipt_integrity.sql", import.meta.url),
   "utf8",
@@ -31,6 +32,20 @@ describe("paid memory receipt retention", () => {
     expect(ROUTE).not.toContain("paid_memory_receipt_preserved");
     expect(ROUTE).toContain("erased_in_place_reason");
     expect(ROUTE).toMatch(/ERASED_IN_PLACE_REASON =\s*"A paid witness receipt points at this memory/);
+  });
+
+  test("a receipt issued before 2026-07-13 counts as paid through its grant's reverse link", () => {
+    // Those receipts keep source_grant_id NULL; only the grant's RESTRICT
+    // reference marks them. The live erase and the hourly rule must both see
+    // it, or a delete fails on the foreign key (integration:
+    // deletion-erase-postgres and deletion-ledger-postgres).
+    const link = /source_grant_id IS NOT NULL\s+OR EXISTS \(SELECT 1 FROM marketplace\.memory_witness_grants g WHERE g\.memory_attestation_id = a\.id\)/g;
+    expect([...PURGES.matchAll(link)]).toHaveLength(2);
+    expect([...RULES.matchAll(link)]).toHaveLength(1);
+    const ruleBody = RULES.slice(RULES.indexOf("CREATE OR REPLACE FUNCTION deletion.apply_expired_working_memory"));
+    expect(ruleBody).toContain("AND NOT deletion.memory_has_paid_receipt(m.id)");
+    expect(ruleBody).toContain("AND deletion.memory_has_paid_receipt(m.id)");
+    expect(ruleBody).not.toMatch(/a\.source_grant_id IS NOT NULL\)\s+FOR UPDATE/);
   });
 
   test("the database still prevents a paid receipt cascade", () => {

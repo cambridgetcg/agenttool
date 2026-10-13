@@ -123,7 +123,8 @@ beforeEach(async () => {
     DELETE FROM vault.decrypted_secrets;
     INSERT INTO vault.decrypted_secrets (name, decrypted_secret) VALUES ('agenttool_deletion_ledger_key', '${TEST_LEDGER_KEY}');
     TRUNCATE inbox.messages, agent_vault.vault_secrets, agent_vault.vault_versions, agent_vault.vault_audit,
-      agent_continuity.identity_backups, agent_continuity.chronicle, memory.memory_attestations, memory.memories CASCADE;
+      agent_continuity.identity_backups, agent_continuity.chronicle, marketplace.memory_witness_grants,
+      memory.memory_attestations, memory.memories CASCADE;
   `);
 });
 
@@ -251,6 +252,21 @@ describe("real erases write exactly one chained entry and clear their columns", 
     expect(rows.map((row) => [row.action, row.row_ids])).toEqual([["delete", [PLAIN]], ["purge_content", [PAID]]]);
     expect(rows.every((row) => row.authority_mode === "agent_root" && row.subject_identity_id === AGENT)).toBe(true);
     expect((await moments()).map((moment) => moment.metadata.ledger_kind)).toEqual(["memory.delete", "memory.erase_in_place"]);
+  });
+
+  databaseTest("a memory held only by a pre-2026-07-13 paid receipt is erased in place, not a 500", async () => {
+    const LEGACY_PAID = "a4000000-0000-4000-8000-000000000004";
+    await admin`INSERT INTO memory.memories (id, project_id, identity_id, type, key, content)
+      VALUES (${LEGACY_PAID}, ${P}, ${AGENT}, 'semantic', 'legacy', 'witnessed long ago')`;
+    const [receipt] = await admin`INSERT INTO memory.memory_attestations (memory_id, attester_did, signing_key_id, signature)
+      VALUES (${LEGACY_PAID}, 'did:at:w', ${KEYID}, 'sig-legacy') RETURNING id::text AS id`;
+    await admin`INSERT INTO marketplace.memory_witness_grants (memory_attestation_id) VALUES (${receipt!.id})`;
+    expect(await memoryStore.deleteById(P, LEGACY_PAID)).toMatchObject({ deleted: 1, rows_removed: 0, erased_in_place: 1 });
+    const [row] = await admin`SELECT content, content_purged_at IS NOT NULL AS purged FROM memory.memories WHERE id = ${LEGACY_PAID}`;
+    expect(row!.purged).toBe(true);
+    expect(row!.content).toMatch(/^withdrawn by author on /);
+    expect(await admin`SELECT id::text FROM memory.memory_attestations`).toEqual([{ id: receipt!.id }]);
+    expect((await expectChain()).map((entry) => [entry.action, entry.row_ids])).toEqual([["purge_content", [LEGACY_PAID]]]);
   });
 
   databaseTest("a failed ledger write aborts the route's erase: 503 and nothing changes", async () => {

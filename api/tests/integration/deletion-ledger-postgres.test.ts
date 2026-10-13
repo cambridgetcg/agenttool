@@ -88,7 +88,8 @@ beforeEach(async () => {
     DELETE FROM vault.decrypted_secrets;
     INSERT INTO vault.decrypted_secrets (name, decrypted_secret) VALUES ('agenttool_deletion_ledger_key', '${TEST_LEDGER_KEY}');
     TRUNCATE inbox.messages, agent_vault.vault_secrets, agent_vault.vault_versions, agent_vault.vault_audit,
-      agent_continuity.identity_backups, agent_continuity.chronicle, memory.memory_attestations, memory.memories CASCADE;
+      agent_continuity.identity_backups, agent_continuity.chronicle, marketplace.memory_witness_grants,
+      memory.memory_attestations, memory.memories CASCADE;
   `);
 });
 
@@ -229,6 +230,26 @@ describe("guards", () => {
     // Nothing left to unlink: the rule falls silent.
     expect((await admin`SELECT deletion.run_ledger_compaction_rule() AS run`)[0]!.run).toBe(0);
   });
+
+  databaseTest("compaction never reaches an entry younger than 15 days, whatever cutoff it is given", async () => {
+    const at = new Date(Date.now() - 14 * 86_400_000).toISOString().replace("Z", "001Z");
+    const fields = {
+      seq: 1, entryId: "f1000000-0000-4000-8000-000000000009", occurredAt: at,
+      scope: "record" as const, action: "purge_content" as const, store: "inbox.messages", predicate: null,
+      rowIdsSha256: ledger.rowIdsDigest(["f0000000-0000-4000-8000-000000000009"]), rowCount: 1, rowKeySalt: null,
+      ruleId: null, ruleCutoff: null, subjectIdentityId: AGENT, projectId: P, requestId: null,
+      authorityMode: "legacy_bearer" as const, authoritySequence: null, prevHash: "",
+    };
+    const hash = ledger.ledgerEntryHash(fields);
+    await admin`INSERT INTO deletion.ledger (seq, entry_id, occurred_at, scope, action, store, row_ids, row_ids_sha256,
+      row_count, subject_identity_id, project_id, authority_mode, prev_hash, entry_hash, entry_mac)
+      VALUES (1, ${fields.entryId}, ${at}::text::timestamptz, 'record', 'purge_content', 'inbox.messages',
+        '{f0000000-0000-4000-8000-000000000009}'::text[], ${fields.rowIdsSha256}, 1, ${AGENT}, ${P}, 'legacy_bearer', '',
+        ${hash}, ${ledger.ledgerEntryMac(hash, TEST_LEDGER_KEY)})`;
+    // A replayed or hand-run apply with a later cutoff still skips it.
+    expect((await admin`SELECT deletion.apply_ledger_compaction(now()) AS ids`)[0]!.ids).toEqual([]);
+    expect((await admin`SELECT cardinality(row_ids)::int AS n FROM deletion.ledger WHERE seq = 1`)[0]!.n).toBe(1);
+  });
 });
 
 describe("serialisation and refusal", () => {
@@ -282,22 +303,35 @@ describe("retention rules erase by rule and write rule entries", () => {
     const OLD_PAID = "a5000000-0000-4000-8000-000000000002";
     const FRESH = "a5000000-0000-4000-8000-000000000003";
     const LIVE = "a5000000-0000-4000-8000-000000000004";
+    // A receipt issued before 2026-07-13: source_grant_id NULL, paid only
+    // through the grant's ON DELETE RESTRICT link back to it.
+    const OLD_LEGACY_PAID = "a5000000-0000-4000-8000-000000000005";
+    // Expired, but not a working memory: the rule never touches it.
+    const OLD_EPISODIC = "a5000000-0000-4000-8000-000000000006";
     await admin`INSERT INTO memory.memories (id, project_id, type, key, content, expires_at) VALUES
       (${OLD}, ${P}, 'working', 'w', 'old', now() - interval '25 hours'),
       (${OLD_PAID}, ${P}, 'working', 'w', 'old paid', now() - interval '25 hours'),
       (${FRESH}, ${P}, 'working', 'w', 'fresh', now() - interval '1 hour'),
-      (${LIVE}, ${P}, 'working', 'w', 'live', now() + interval '1 hour')`;
+      (${LIVE}, ${P}, 'working', 'w', 'live', now() + interval '1 hour'),
+      (${OLD_LEGACY_PAID}, ${P}, 'working', 'w', 'old legacy paid', now() - interval '25 hours'),
+      (${OLD_EPISODIC}, ${P}, 'episodic', 'w', 'old episodic', now() - interval '25 hours')`;
     await admin`INSERT INTO memory.memory_attestations (memory_id, attester_did, signing_key_id, signature, source_grant_id)
       VALUES (${OLD_PAID}, 'did:at:w', ${KEYID}, 's', ${KEYID})`;
+    const [legacy] = await admin`INSERT INTO memory.memory_attestations (memory_id, attester_did, signing_key_id, signature)
+      VALUES (${OLD_LEGACY_PAID}, 'did:at:w', ${KEYID}, 's') RETURNING id::text AS id`;
+    await admin`INSERT INTO marketplace.memory_witness_grants (memory_attestation_id) VALUES (${legacy!.id})`;
     expect((await admin`SELECT deletion.run_expired_working_memory_rule() AS n`)[0]!.n).toBe(2);
     const left = await admin`SELECT id::text, content, content_purged_at IS NOT NULL AS purged FROM memory.memories ORDER BY id`;
-    expect(left.map((row) => row.id)).toEqual([OLD_PAID, FRESH, LIVE]);
-    expect(left[0]).toMatchObject({ purged: true });
-    expect(left[0]!.content).toMatch(/^withdrawn by author on /);
+    expect(left.map((row) => row.id)).toEqual([OLD_PAID, FRESH, LIVE, OLD_LEGACY_PAID, OLD_EPISODIC]);
+    for (const erased of [left[0]!, left[3]!]) {
+      expect(erased).toMatchObject({ purged: true });
+      expect(erased.content).toMatch(/^withdrawn by author on /);
+    }
+    expect(left[4]).toMatchObject({ content: "old episodic", purged: false });
     const rows = await expectChain();
     expect(rows.map((row) => [row.scope, row.action, row.rule_id, row.row_ids, row.row_count, row.authority_mode])).toEqual([
       ["retention", "delete", "expired_working_memory_24h", [], 1, "retention_rule"],
-      ["retention", "purge_content", "expired_working_memory_24h", [], 1, "retention_rule"],
+      ["retention", "purge_content", "expired_working_memory_24h", [], 2, "retention_rule"],
     ]);
     expect((await admin`SELECT deletion.run_expired_working_memory_rule() AS n`)[0]!.n).toBe(0);
   });

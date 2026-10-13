@@ -19,6 +19,7 @@ export const TEST_LEDGER_KEY = "test-ledger-key-0123456789abcdef-not-for-product
 
 export const DELETION_FIXTURE_SCHEMAS = [
   "deletion", "inbox", "agent_vault", "agent_continuity", "memory", "vault", "cron", "extensions", "identity",
+  "marketplace",
 ] as const;
 
 export const WAVE2_MIGRATIONS = [
@@ -128,6 +129,17 @@ export async function createDeletionFixture(admin: Sql): Promise<void> {
       memory_id uuid NOT NULL REFERENCES memory.memories(id) ON DELETE CASCADE,
       attester_did text NOT NULL, signing_key_id uuid NOT NULL, signature text NOT NULL, signature_context text,
       signed_payload text, source_grant_id uuid, replay_key text, attested_at timestamptz NOT NULL DEFAULT now());
+
+    -- A paid memory-witness grant points back at its receipt, ON DELETE
+    -- RESTRICT (20260713T120000_attestation_receipt_integrity.sql). Receipts
+    -- issued before that migration have source_grant_id NULL and are paid
+    -- only through this reverse link.
+    CREATE SCHEMA marketplace;
+    CREATE TABLE marketplace.memory_witness_grants (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      memory_attestation_id uuid
+        CONSTRAINT fk_memory_witness_grants_attestation
+        REFERENCES memory.memory_attestations(id) ON DELETE RESTRICT);
   `);
   for (const file of WAVE2_MIGRATIONS) {
     await admin.unsafe(readFileSync(new URL(`../../migrations/${file}`, import.meta.url), "utf8"));
@@ -139,7 +151,7 @@ export async function dropDeletionFixture(admin: Sql): Promise<void> {
     DROP SCHEMA IF EXISTS deletion CASCADE; DROP SCHEMA IF EXISTS inbox CASCADE;
     DROP SCHEMA IF EXISTS agent_vault CASCADE; DROP SCHEMA IF EXISTS agent_continuity CASCADE;
     DROP SCHEMA IF EXISTS memory CASCADE; DROP SCHEMA IF EXISTS vault CASCADE;
-    DROP SCHEMA IF EXISTS identity CASCADE;
+    DROP SCHEMA IF EXISTS identity CASCADE; DROP SCHEMA IF EXISTS marketplace CASCADE;
     DROP EXTENSION IF EXISTS pg_cron CASCADE; DROP SCHEMA IF EXISTS cron CASCADE;
     DROP EXTENSION IF EXISTS pgcrypto CASCADE; DROP SCHEMA IF EXISTS extensions CASCADE;
   `);

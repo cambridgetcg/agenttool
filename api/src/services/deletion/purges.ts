@@ -104,12 +104,22 @@ export async function purgeIdentityBackups(tx: LedgerExecutor, ids: readonly str
 
 // ─── Memory ────────────────────────────────────────────────────────────────
 
-/** Of these memories, the ones a paid witness receipt points at. */
+/** Of these memories, the ones a paid witness receipt points at.
+ *
+ *  A receipt is paid when it names its grant (source_grant_id, set since
+ *  2026-07-13) or when a memory-witness grant points back at it: receipts
+ *  issued before 20260713T120000_attestation_receipt_integrity.sql keep
+ *  source_grant_id NULL, but that migration linked their grant to them ON
+ *  DELETE RESTRICT, so deleting such a memory would fail on the foreign key.
+ *  The pg_cron rule (deletion.apply_expired_working_memory) uses the same
+ *  test. */
 export async function paidReceiptMemoryIds(tx: LedgerExecutor, ids: readonly string[]): Promise<string[]> {
   if (ids.length === 0) return [];
   return idsOf(await tx.execute(sql`
-    SELECT DISTINCT memory_id::text AS id FROM memory.memory_attestations
-     WHERE memory_id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[]) AND source_grant_id IS NOT NULL`));
+    SELECT DISTINCT memory_id::text AS id FROM memory.memory_attestations a
+     WHERE a.memory_id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
+       AND (a.source_grant_id IS NOT NULL
+            OR EXISTS (SELECT 1 FROM marketplace.memory_witness_grants g WHERE g.memory_attestation_id = a.id))`));
 }
 
 export async function eraseMemoriesInPlace(tx: LedgerExecutor, ids: readonly string[], at: Date | string): Promise<string[]> {
@@ -131,7 +141,9 @@ export async function deleteMemoriesWithoutReceipts(tx: LedgerExecutor, ids: rea
      WHERE m.id = ANY(string_to_array(${uuidCsv(ids)}, ',')::uuid[])
        AND NOT EXISTS (
          SELECT 1 FROM memory.memory_attestations a
-          WHERE a.memory_id = m.id AND a.source_grant_id IS NOT NULL)
+          WHERE a.memory_id = m.id
+            AND (a.source_grant_id IS NOT NULL
+                 OR EXISTS (SELECT 1 FROM marketplace.memory_witness_grants g WHERE g.memory_attestation_id = a.id)))
     RETURNING m.id::text AS id`));
 }
 

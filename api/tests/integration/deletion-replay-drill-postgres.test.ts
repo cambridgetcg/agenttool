@@ -28,6 +28,7 @@ import postgres from "../fixtures/verified-postgres";
 import {
   assertDisposableDatabase,
   createDeletionFixture,
+  dropDeletionFixture,
   refuseExistingSchemas,
   snapshotErasableState,
   withDatabase,
@@ -103,12 +104,8 @@ afterAll(async () => {
     if (ownedRestored) await control.unsafe(`DROP DATABASE IF EXISTS ${RESTORED_NAME}`);
     if (ownedSource) {
       const cleanup = open(SOURCE_NAME, "deletion-drill-cleanup");
-      await cleanup.unsafe(`
-        DROP SCHEMA IF EXISTS deletion CASCADE; DROP SCHEMA IF EXISTS inbox CASCADE; DROP SCHEMA IF EXISTS agent_vault CASCADE;
-        DROP SCHEMA IF EXISTS agent_continuity CASCADE; DROP SCHEMA IF EXISTS memory CASCADE; DROP SCHEMA IF EXISTS vault CASCADE;
-        DROP SCHEMA IF EXISTS identity CASCADE;
-        DROP EXTENSION IF EXISTS pg_cron CASCADE; DROP SCHEMA IF EXISTS cron CASCADE;
-        DROP EXTENSION IF EXISTS pgcrypto CASCADE; DROP SCHEMA IF EXISTS extensions CASCADE;`);
+      // The shared fixture's own teardown, so a schema it gains is dropped too.
+      await dropDeletionFixture(cleanup);
       await cleanup.end({ timeout: 2 });
     }
     await control.end({ timeout: 2 });
