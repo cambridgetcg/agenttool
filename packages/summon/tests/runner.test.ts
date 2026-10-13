@@ -420,6 +420,64 @@ describe('runOnce', () => {
     })
   })
 
+  describe('what the runner hands the harness (Phase 0.5 Task 2: pass-through only)', () => {
+    const argvOf = () => JSON.parse(readFileSync(fake.argvOut, 'utf8')) as { argv: string[]; env: Record<string, string> }
+    const flagOf = (argv: string[], name: string) => argv.filter((a) => a.startsWith(`--${name}=`)).map((a) => a.slice(name.length + 3))
+    test('a review job: the review cap, no settings, and the env it always had', async () => {
+      const h = targetHome(); const req = admit(h)
+      fake.setMode('ok')
+      await runOnce(rdeps(h))
+      const { argv, env } = argvOf()
+      expect(flagOf(argv, 'max-turns')).toEqual(['40'])
+      expect(flagOf(argv, 'settings')).toEqual([])
+      expect(env.GIT_CONFIG_COUNT).toBe('2')
+      expect(env.GIT_CEILING_DIRECTORIES).toBeUndefined()
+      expect(env.TMPDIR).not.toContain('.summon-tmp')
+      expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+    })
+    test('an edit job: the edit cap, the sandbox settings, its own TMPDIR named by the job id, and the git env', async () => {
+      const h = targetHome()
+      const req = enqueue(h, { access: 'edit' })
+      fake.setMode('ok')
+      await runOnce(rdeps(h))
+      const { argv, env } = argvOf()
+      const cwd = join(h, 'Projects/x')
+      expect(flagOf(argv, 'max-turns')).toEqual(['60'])
+      expect(flagOf(argv, 'allowedTools')).toEqual(['Bash(git add:*),Bash(git commit:*)'])
+      expect(JSON.parse(flagOf(argv, 'settings')[0]!).sandbox).toMatchObject({ enabled: true, failIfUnavailable: true, filesystem: { allowWrite: [] } })
+      expect(env.TMPDIR).toBe(`${cwd}/.summon-tmp/${req.id}`)
+      expect(env.GIT_CEILING_DIRECTORIES).toBe(join(h, 'Projects'))
+      expect(env.GIT_CONFIG_COUNT).toBe('6')
+      expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+    })
+    test('a build job has no commands to run until the runner re-admits at start (Task 3), so it ends failed rather than run without them', async () => {
+      const h = targetHome()
+      const req = enqueue(h, { access: 'build' })
+      fake.setMode('ok')
+      await runOnce(rdeps(h))
+      expect(existsSync(fake.argvOut)).toBe(false) // claude never ran
+      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
+    })
+    test('an access the harness does not know ends failed without running claude (a damaged state file never gains edit powers)', async () => {
+      const h = targetHome()
+      const req = enqueue(h, { access: 'admin' as never })
+      await runOnce(rdeps(h))
+      expect(existsSync(fake.argvOut)).toBe(false)
+      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
+    })
+    test('the turn cap detail is the cap of the job\'s own access: 40 for review, 60 for edit', async () => {
+      for (const [access, cap] of [['review', 40], ['edit', 60]] as const) {
+        const h = targetHome()
+        const req = enqueue(h, { access })
+        fake.setMode('maxturns')
+        await runOnce(rdeps(h))
+        expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: `turn cap (${cap}) reached before a final answer` })
+        expect(resultOf(h, req.id)).toMatchObject({ status: 'failed', detail: `turn cap (${cap}) reached before a final answer` })
+        rmSync(fake.argvOut, { force: true })
+      }
+    })
+  })
+
   describe('no job is stranded by a runner error (ruling 2)', () => {
     const failedWith = (h: string, id: string, detail: string | RegExp) => {
       const s = readState(summonPaths(h), id)!

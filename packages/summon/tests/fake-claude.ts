@@ -16,6 +16,11 @@ if (mode === 'flood') {
   for (let i = 0; i < 10; i++) process.stdout.write(line)
   await Bun.sleep(30_000)
 }
+// What 2.1.296 prints when --max-turns is reached: an error result with no `result` text, exit 1.
+if (mode === 'maxturns') {
+  emit({ type: 'result', subtype: 'error_max_turns', is_error: true, num_turns: 99, terminal_reason: 'max_turns' })
+  process.exit(1)
+}
 if (mode === 'auth') { emit({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in · Please run /login' }); process.exit(1) }
 if (mode === 'denied') {
   // 2.1.296 with --permission-prompts=none: the denied call is answered locally, and the run still ends `success`.

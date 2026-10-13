@@ -73,7 +73,7 @@ export function targetHome(allowlist: string = DEFAULT_ALLOWLIST): string {
   return h
 }
 
-export type FakeMode = 'ok' | 'warn' | 'slow' | 'auth' | 'flood' | 'denied' | 'badflag'
+export type FakeMode = 'ok' | 'warn' | 'slow' | 'auth' | 'flood' | 'denied' | 'badflag' | 'maxturns'
 
 /**
  * A stand-in for the `claude` binary. The harness builds the child's env from scratch (no inherited PATH or FAKE_*),

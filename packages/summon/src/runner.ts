@@ -1,6 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { AllowlistCommand } from './allowlist.ts'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
@@ -65,7 +66,11 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const bin = deps.claudeBin()
   if (!bin) return finish(deps, s, { status: 'failed', detail: 'claude is not installed on this Mac' })
   let inv: Invocation
-  try { inv = claudeInvocation({ model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
+  // Phase 0.5: a build job runs the commands its folder entry lists, and only the admission at start can hand those over (it re-reads
+  // the allowlist: Task 3 wires that in). Until then there are none, and the harness refuses a build job without commands, so a
+  // build job ends failed here rather than run with a list nobody checked. Review and edit jobs use none.
+  const commands: AllowlistCommand[] = []
+  try { inv = claudeInvocation({ id, model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, commands, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
     return finish(deps, s, { status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
   }
   const started = await startChild(inv, s.cwd_real)
@@ -145,7 +150,7 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   clearTimeout(killTimer)
   child.stdout!.destroy(); child.stderr!.destroy()
   if (buf) lines.push(buf)
-  const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'))
+  const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'), s.access)
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
   finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
 }
