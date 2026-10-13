@@ -1,0 +1,4 @@
+# `bun test` only: every test file runs after tests/preload.ts has made the hermetic suite (spec §12.1).
+# Every bun the bridge runs outside tests passes --config=/dev/null, so nothing here reaches a build or the hub (P15, R39).
+[test]
+preload = ["./tests/preload.ts"]

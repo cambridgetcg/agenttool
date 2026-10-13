@@ -1,0 +1,13 @@
+{
+  "name": "@agenttool/collab-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Agents on Yu's other Macs join the Air's shared Collab journal (Phase 1: Nuance, Claude, home LAN)",
+  "type": "module",
+  "scripts": {
+    "test": "bun test tests/",
+    "build:nuance": "bun --no-env-file --config=/dev/null scripts/build-nuance.ts",
+    "build:hub": "bun --no-env-file --config=/dev/null scripts/build-hub.ts",
+    "build:launcher": "bun --no-env-file --config=/dev/null scripts/build-launcher.ts"
+  }
+}
