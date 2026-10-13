@@ -62,7 +62,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
 
 > **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), `agenttool-proxy` is deployed separately as a Worker, and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
 
-The DB is on **Supabase**. The three-phase upgrade path in `infra/README.md` (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale) was written for the old Hetzner Forge VPS and no longer applies: Hetzner was retired entirely on 2026-10-12.
+The DB is on **Supabase**. Hetzner was retired entirely on 2026-10-12, and the pre-Fly Hetzner/Forge scaling scripts were removed on 2026-10-13; see git history at or before `b0dd193e`.
 
 ---
 
@@ -696,10 +696,6 @@ the configuration mode without claiming network reachability. See
 [`launch/ADMISSION-OPERATIONS.md`](launch/ADMISSION-OPERATIONS.md) for the
 activation and isolated verification boundaries.
 
-### Legacy infra phases (`infra/`)
-
-Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer}/` were written for an earlier Hetzner-Forge-based deployment. **Superseded by the current Supabase + Fly stack** — kept for archaeology and as a reference for the structural shape (PgBouncer → managed DB → LB). Don't run them against the current setup.
-
 ---
 
 ## 5 · Domain map
@@ -765,9 +761,6 @@ successful version deployment alone does not prove the later settings update
 succeeded; the GET-only live audit must report `worker_observability: ok`
 afterward. This sampling contract does not make request bodies or
 `Authorization` safe to log; Worker source must continue not to emit them.
-
-The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the
-historical Hetzner-LB DNS update and is not used today.
 
 ---
 
