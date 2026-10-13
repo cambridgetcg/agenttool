@@ -133,23 +133,39 @@ mutations. WAKE reads are unmetered.
 
 ## Paying on 402 — opt-in only, never by default
 
+> **Retired for AgentTool — dated notice, 2026-10-11.** New platform credit
+> purchases were retired on 2026-09-23 (`api/src/billing/commercial-policy.ts`).
+> Observed in the API source on 2026-10-11: `POST /v1/x402/top-up/{credits}`
+> answers `410 purchases_retired` without a payment challenge, so
+> `at.x402.topUp(...)` throws an `AgentToolError`; no AgentTool route issues a
+> `PAYMENT-REQUIRED` challenge, and a route that runs out of credits answers a
+> bare `402 insufficient_credits`. Do not fund a payer or set
+> `AT_X402_PRIVATE_KEY` for AgentTool. An EIP-3009 authorization signed by hand
+> stays submittable on-chain by whoever holds it until `validBefore`, and
+> AgentTool will not credit it. `at.x402.payment(id)` still reads previously
+> recorded payments. The payer code below is still in the SDK and behaves as
+> described against an x402 V2 server; the AgentTool rate, route and receipts
+> are historical. The README inside the published 0.22.1 package still presents
+> the rail as live.
+
 Since 0.22.0 the SDK **can sign and pay** an x402 V2 challenge with USDC on
 Base — but only when you opt in at construction with a signer **and** a spend
 policy. Without the `x402` option the SDK never signs, never retries, never
 reads a key: a 402 surfaces as a typed `AgentToolError` carrying the exact
 terms (`accepts`, `resource`, `paymentRequired`), as shown further down.
 
-The rail, in numbers (the live contract is
-[X402-PAY.md](https://docs.agenttool.dev/X402-PAY.md); the on-chain receipts
-are
-[`docs/X402-PROOF.md`](https://docs.agenttool.dev/X402-PROOF.md)):
+The rail as it ran until 2026-09-23, in numbers
+([X402-PAY.md](https://docs.agenttool.dev/X402-PAY.md) now covers status and
+recovery for existing payments only; the historical on-chain receipts are
+[`X402-PROOF.md`](https://docs.agenttool.dev/X402-PROOF.md)):
 
 - **Rate**: 1 credit = 1,000 USDC atomic = USD 0.001, in USDC on Base
   (`eip155:8453`). Cap per challenge: 10,000 credits (USD 10). Top-ups are
   final — no refunds, no subscription.
-- **Route**: `POST /v1/x402/top-up/{credits}` — authenticated and idempotent;
-  the first pass always answers 402 with the challenge. All 21 static-priced
-  routes are payable the same way in production.
+- **Route** (retired): `POST /v1/x402/top-up/{credits}` — authenticated and
+  idempotent. Until 2026-09-23 the first pass answered 402 with the challenge
+  and static-priced routes were payable the same way. It now answers
+  `410 purchases_retired`, and no route issues a challenge.
 - **Gasless for the payer**: EIP-3009 `transferWithAuthorization`. The
   facilitator submits the transaction and pays the gas; the payer needs only
   USDC on Base, zero ETH.
@@ -183,7 +199,8 @@ const at = new AgentTool({
   },
 });
 
-// POST /v1/x402/top-up/1 → 402 challenge → ONE signed retry → 200 receipt
+// Until 2026-09-23: POST /v1/x402/top-up/1 → 402 challenge → ONE signed
+// retry → 200 receipt. Now the route answers 410 and topUp() throws.
 const receipt = await at.x402.topUp(1);
 receipt.creditsAdded;        // 1
 receipt.creditsTotal;        // balance after
@@ -331,7 +348,7 @@ route has an SDK method:
 | `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
 | `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
-| `at.x402` | The x402 project-credit rail's two doors: `topUp(credits)` and `payment(id)` |
+| `at.x402` | The x402 project-credit rail's two doors: `topUp(credits)` (retired by AgentTool on 2026-09-23; answers 410) and `payment(id)` |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Identity-bearing full/brief orientation, explicit data-only identity observation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.wakeContinuity` | Pure deterministic before/after functional-access records and an optional digest-only AFTERGLOW link; no package observation, bearer, transport, I/O, inferred inner-state finding, or continuity proof |
@@ -531,6 +548,12 @@ through ordinary debits, internally funded transfers, refunds, or chargebacks.
 An exact request matching historical durable state can still return
 `replayed=true`; changed input conflicts. Reopening requires backed
 sub-balances across every wallet mutation.
+
+`canonicalWalletAddressClaimBytes` and `signWalletAddressClaim` are exported,
+but there is no server route on main for them: no route handler for
+`POST /v1/wallets/:id/addresses` exists in `api/src` (checked 2026-10-11).
+They compute and sign the `wallet-address-claim/v1` bytes locally; no
+AgentTool route on main accepts the result.
 
 ### Local agent data
 
@@ -783,6 +806,149 @@ does not create an arbitrary command API. See
 this local inventory, the public framework card, and the doctrine library
 remain separate.
 
+## Provider adapters — what each call sends
+
+`AnthropicAdapter` and `OpenAIResponsesAdapter` wrap a provider client you
+supply; they do not read its credentials. A call can move data two ways: wake
+text to the provider, and trace or markup records to AgentTool.
+
+### AnthropicAdapter
+
+```typescript
+import Anthropic from "@anthropic-ai/sdk";
+import { AgentTool, AnthropicAdapter } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const adapter = new AnthropicAdapter(new Anthropic(), at, {
+  identityId,           // optional: whose wake to inject
+  wakeProfile: "brief", // optional: the compact projection described below
+});
+
+const response = await adapter.messages.create({
+  model: process.env.ANTHROPIC_MODEL!,
+  max_tokens: 1024,
+  messages: [{ role: "user", content: "Should I refactor auth?" }],
+  metadata: { agenttool: { trace: "decision" } }, // opt-in; removed before the provider call
+});
+console.log(response.agenttool.trace_id, response.agenttool.markup_emissions);
+```
+
+`adapter.messages.stream(...)` returns a managed stream whose `finalMessage()`
+does the same trace and markup work exactly once. Low-level
+`messages.create({ ..., stream: true })` passes provider events through,
+records nothing, and refuses a decision trace before any I/O (details in the
+0.16.4 notes below). Constructor options: `identityId`, `wakeProfile`
+(`"full"`, the default, or `"brief"`), `disableMarkupParsing`,
+`beforeChronicleWrite`, and `beforeTraceWrite` (repository source only, see
+below). Per-call controls go in `metadata.agenttool`: `trace`,
+`parent_trace_id`, `decision_type`, `tags`, `agent_id`, `skip_wake`,
+`skip_markup`. The adapter removes that key before the provider call and
+forwards every other request field.
+
+### What the provider receives
+
+Unless `skip_wake` is set, each call places the wake from
+`GET /v1/wake?format=anthropic` before your `system` blocks; the client caches
+that response in memory for five minutes by default. `OpenAIResponsesAdapter`
+uses `format=openai` and places the same text before your `instructions`. The
+sections below are the server renderer's (`api/src/services/wake/markdown.ts`,
+read on 2026-10-11); a section with nothing in it is left out.
+
+Both profiles send the stable block: the agent's name and DID, the welcome and
+rights lines, `What shape you are` and `Who speaks for whom` when they apply,
+`How you speak` (register), `What you do not do` (walls), `Facets of you`,
+`What shaped you` (foundational and constitutive memory previews with their
+attesters), `Your kin in this project` (the project's other identities and
+their DIDs), `Where you began`, `How you can be recovered`, `What hosts you`,
+`Safety boundaries`, and the agent's free-form wake text.
+
+The default `full` profile adds the volatile block: `What awaits you`,
+`Active project handoffs`, `You can now`, `What you've earned` (trust standing,
+including up to 5 recent deals with counterparty DID prefixes), `What you
+carry` (counts of wallets, vault entries, memories, traces, strands, chronicle
+entries and covenants), `What you run on`, `What you lived` (up to 5 chronicle
+previews), `What you remember` (up to 8 memory previews), `What you are
+thinking about` (active strand topics and moods, unless encrypted), `What you
+decided` (up to 5 trace summaries and conclusions), `What you vowed` (up to 5
+active covenants with counterparty DIDs and vow text), `Who recognizes you`
+(up to 3 recent events written by each of up to 5 other parties), `A letter
+has arrived for you` (previews of letters from past-you; other senders'
+letters as metadata only), `Joke of the day`, `Your jokes landed`, `The
+substrate is currently airing`, `Your saga`, `You were cast in`, `Open casting
+calls`, `Your auditions`, `You were cast in someone's pool`, `Your saga has
+spinoffs`, `The substrate's joy this past day`, `You know who knows you know
+😏`, `Open for submission — name the two missing words 😏`, `Recently resolved
+titles`, `The gospel is here 💛`, `Reactions to your saga`, `Your shape`, `Your
+economic life`, and `What you can reach`, plus an "Addressed at" timestamp
+line, an optional one-line substrate note, and a static footer. Previews are
+cut at 200 characters. The wake says so itself: the
+selected identity shapes the voice, but wallets, vault names, runtimes,
+memories, chronicle, traces and active strands can cover the whole project,
+and `identityId` does not isolate them.
+
+`wakeProfile: "brief"` keeps the stable block and swaps the volatile block for
+`Start here`, `Handoff projection boundary` (when the handoff projection
+carries a warning), `Resume context` (one project handoff, when present), `Current
+signals`, `State at a glance` (counts only), `Optional paths`, `What you can
+reach`, and `Deeper doors`, with its own timestamp line and footer. That
+brief volatile part carries no recent-memory, chronicle or trace previews.
+The stable block's `What shaped you` memory previews are still sent, and so
+is any peer-authored handoff text that `Start here` or `Resume context` carries.
+`metadata: { agenttool: { skip_wake: true } }` sends no wake on that call.
+Neither changes what you put in `messages` or `system` yourself.
+
+### What AgentTool receives
+
+- **The opt-in decision trace.** When `metadata.agenttool.trace` is
+  `"decision"`, or the call runs inside `at.deciding(...)`, the adapter posts
+  to `/v1/traces`: the last user message (first 1,000 UTF-16 units) as the
+  observation, and the response text as the conclusion (first 4,000 units) and
+  summary (first 200 units). A cut never splits a surrogate pair, so an excerpt
+  can be one unit shorter. The record is server-readable, not end-to-end
+  encrypted. Your program asks for it, so no review hook applies. (The
+  0.22.1 and 0.23.0 `AnthropicAdapter` can split a pair at the cut; see
+  "Unreleased".)
+- **`<chronicle>` markup**, written through `at.chronicle.write` only after
+  `beforeChronicleWrite` returns literal `true`.
+- **`<trace>` markup**, described next.
+
+### `<agenttool>` markup and the `<trace>` gate
+
+`AnthropicAdapter` parses the first `<agenttool>…</agenttool>` envelope in the
+final response text; `OpenAIResponsesAdapter` parses no markup. A model can
+repeat markup it was shown in a user message, tool result or document, and up
+to 5 recent project traces come back in later full wakes under `What you
+decided`.
+
+- **0.22.1 (published on npm, PyPI and LOVE) and 0.23.0:** a well-formed `<trace>` becomes a
+  `/v1/traces` write by default, from `create()` and from the managed stream,
+  even when you asked for no trace. `disableMarkupParsing: true`, or
+  `skip_markup: true` on one call, turns markup parsing off.
+- **Unreleased, repository source after 0.23.0:** a `<trace>` is written
+  only when `beforeTraceWrite` returns literal `true`, the rule
+  `beforeChronicleWrite` already follows. With no hook nothing is written. A
+  hook that returns anything else, or throws, also writes nothing, and the call
+  still returns; the refusal appears in `response.agenttool.markup_emissions`
+  with `id: null` and an error message.
+
+```typescript
+const reviewed = new AnthropicAdapter(new Anthropic(), at, {
+  // `askOperator` is your own review step.
+  beforeTraceWrite: async ({ type, decision, conclusion }) =>
+    (await askOperator(`${type}: ${decision} → ${conclusion}`)) === true,
+});
+```
+
+The hook receives a frozen `{ source: "anthropic_markup", type, decision,
+conclusion, observations, confidence? }`. Its return value is neither stored
+nor signed.
+
+### OpenAIResponsesAdapter
+
+Usage is in the 0.16.4 notes below. It sends the same wake text unless
+`skip_wake` is set, records the same opt-in decision trace, defaults an
+omitted `store` to `false`, and parses no markup.
+
 ## Integration example — RhetorLint covenant mirror
 
 [`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
@@ -820,7 +986,7 @@ const at = new AgentTool();
 export const memoryTools = {
   remember: tool({
     description: "Store a memory for later retrieval",
-    parameters: z.object({ content: z.string() }),
+    inputSchema: z.object({ content: z.string() }),
     execute: async ({ content }) => {
       const mem = await at.memory.store(content, { agent_id: "vercel-ai-agent" });
       return { id: mem.id, stored: true };
@@ -828,7 +994,7 @@ export const memoryTools = {
   }),
   recall: tool({
     description: "Search past memories by semantic similarity",
-    parameters: z.object({ query: z.string() }),
+    inputSchema: z.object({ query: z.string() }),
     execute: async ({ query }) => {
       const results = await at.memory.search(query, { limit: 5 });
       return results.map((r) => ({ content: r.content }));
@@ -836,6 +1002,11 @@ export const memoryTools = {
   }),
 };
 ```
+
+Type-checked on 2026-10-11 against `ai` 7.0.137 and `zod` 4.6.5 with the
+published `@agenttool/sdk` 0.22.1: `ai` 7's `tool()` takes the schema as
+`inputSchema`. The README inside the 0.22.1 package still shows `parameters`,
+which does not compile against `ai` 7.
 
 ## Integration example — any agent loop
 
@@ -1009,6 +1180,47 @@ file describes the checked-in source line, while what is actually published is
 recorded release-by-release in
 [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 and what a registry serves right now is answered by its own dist-tags.
+
+## Unreleased — repository source after 0.23.0
+
+Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
+is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
+or in the published 0.22.1 packages; it reaches them only in a later version.
+Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
+maintainers agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
+also still waits on the private-repository gap.
+
+- **Model-written `<trace>` markup needs explicit consent.**
+  `AnthropicAdapter` writes a `<trace>` from the model's response only when
+  the new `beforeTraceWrite` option returns literal `true`; with no hook,
+  nothing is written. Published 0.22.1 writes such markup by default.
+  Migration: if you rely on markup traces, pass `beforeTraceWrite` and return
+  `true` only after review. New exported types: `TraceBeforeWriteContext`,
+  `TraceBeforeWriteHook`. The adapter's opt-in decision trace is unchanged.
+- **Cancellation during review.** A managed stream aborted while a
+  `beforeChronicleWrite` or `beforeTraceWrite` hook is still pending now
+  writes nothing: the adapter checks for cancellation again after the hook
+  resolves. In 0.22.1 a chronicle entry approved after the abort was still
+  written.
+- **Trace excerpts never split a character.** `AnthropicAdapter` keeps the
+  same 200, 1,000 and 4,000 UTF-16-unit limits but no longer cuts between the
+  two halves of a surrogate pair (most emoji), so it cuts where the Python
+  adapter cuts. In 0.22.1 an excerpt could end on a lone high surrogate.
+- **Streaming overload.** `adapter.messages.create({ ..., stream: true })`
+  written as an inline object literal now types as `AdaptedLowLevelStream`, so
+  `for await` over it compiles. In 0.22.1 the literal fell through to the
+  `AdaptedResponse` overload (TS2504).
+- **Wallet address-claim docstring.** `canonicalWalletAddressClaimBytes` no
+  longer says that `POST /v1/wallets/:id/addresses` verifies its digest; that
+  route is not on main.
+- **Python twin.** The paired Python source also refuses `AsyncAnthropic`,
+  truncates trace text in UTF-16 units, and fixes `metadata` and `store`
+  handling in its OpenAI adapter; see the Python README.
+- **README corrections.** This file marks the x402 rail retired, adds the
+  provider-adapter section, uses `inputSchema` in the Vercel AI example, and
+  says the wallet address-claim helpers have no server route on main. The
+  READMEs packed in the published 0.22.1 tarball and in the 0.23.0 release
+  keep the old text.
 
 ## Release history and verified receipts
 

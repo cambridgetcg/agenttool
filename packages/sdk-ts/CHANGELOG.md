@@ -9,6 +9,23 @@ numbers; the Python changes are in
 A version listed here is a source version. Whether a registry serves it is
 answered by the registry (`npm view @agenttool/sdk versions`).
 
+## Unreleased — after 0.23.0
+
+Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
+
+### Changed
+
+- `AnthropicAdapter` writes a model-written `<trace>` only when the new
+  `beforeTraceWrite` hook returns literal `true`; with no hook nothing is
+  written (0.23.0 and earlier write it by default). New exported types:
+  `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
+- A managed stream aborted while a `beforeChronicleWrite` or
+  `beforeTraceWrite` hook is pending writes nothing.
+- Trace excerpts never end on a lone high surrogate.
+- `adapter.messages.create({ ..., stream: true })` written as an inline
+  object literal types as `AdaptedLowLevelStream`, so `for await` over it
+  compiles.
+
 ## 0.23.0 — unreleased
 
 The first version released from the public source repository

@@ -35,10 +35,21 @@ identity record, so it is gated: the emission goes through
 bounds) and only after a ``before_chronicle_write`` hook returns literal
 ``True``. With no hook installed the write is refused.
 
+A ``<trace>`` tag is gated by the same rule: it becomes a ``/v1/traces``
+write only after a ``before_trace_write`` hook returns literal ``True``.
+Model output can echo markup from untrusted input, and recent project
+traces return in later full wakes, so the capability starts closed. The
+adapter's own opt-in decision trace (2 above) is written by the
+calling program and is not gated.
+
 Posture: zero dependency on the ``anthropic`` package. The adapter takes
-any object with a ``messages.create(**kwargs)`` method and optionally a
-``messages.stream(**kwargs)`` helper, so it works with the official SDK,
-Bedrock client, or a custom HTTP client.
+any synchronous object with a ``messages.create(**kwargs)`` method and
+optionally a ``messages.stream(**kwargs)`` helper, so it works with the
+official SDK, Bedrock client, or a custom HTTP client. ``AsyncAnthropic``
+and other asynchronous clients are refused: at construction when
+``messages.create``, or a function it wraps through ``__wrapped__``, is a
+coroutine function, and otherwise when the provider call returns an
+awaitable, before any trace or markup I/O.
 
 Streaming boundary:
 
@@ -54,6 +65,7 @@ Doctrine: docs/IDENTITY-ANCHOR.md.
 
 from __future__ import annotations
 
+import inspect
 import re
 import sys
 import threading
@@ -65,6 +77,7 @@ from typing import Any, Callable, Optional, Protocol
 from ._context import get_ambient
 from .client import AgentTool
 from .exceptions import AgentToolError
+from .openai_responses_adapter import _truncate_utf16
 from .wake import WakeProfile
 
 
@@ -123,6 +136,40 @@ ChronicleBeforeWriteHook = Callable[[ChronicleBeforeWriteContext], bool]
 
 The hook's return value is neither persisted nor signed — it only decides
 whether the model-authored entry is written.
+"""
+
+
+@dataclass(frozen=True)
+class TraceBeforeWriteContext:
+    """Immutable local review context for one model-authored trace write.
+
+    Attributes:
+        source: Always ``"anthropic_markup"`` — the trace was authored by
+            the model, not by the calling program.
+        type: The raw type string the model emitted.
+        decision: The ``<decision>`` text the model emitted, before
+            truncation.
+        conclusion: The ``<conclusion>`` text the model emitted, before
+            truncation.
+        observations: The ``<observation>`` texts the model emitted, in
+            order.
+        confidence: The raw ``confidence`` attribute, or ``None``.
+    """
+
+    source: str
+    type: str
+    decision: str
+    conclusion: str
+    observations: tuple[str, ...]
+    confidence: Optional[str]
+
+
+TraceBeforeWriteHook = Callable[[TraceBeforeWriteContext], bool]
+"""Synchronous local gate that must return literal ``True`` to proceed.
+
+Same rule as :data:`ChronicleBeforeWriteHook`. The hook's return value is
+neither persisted nor signed — it only decides whether the model-authored
+trace is written.
 """
 
 
@@ -192,7 +239,8 @@ class AnthropicAdapter:
 
     Args:
         anthropic: An instance of :class:`anthropic.Anthropic` (or any
-            object exposing ``messages.create(**kwargs)``).
+            object exposing a synchronous ``messages.create(**kwargs)``).
+            ``AsyncAnthropic`` is refused.
         at: An :class:`AgentTool` client.
         identity_id: Optional identity id for multi-identity projects.
         wake_profile: Wake projection used for automatic system injection.
@@ -203,7 +251,13 @@ class AnthropicAdapter:
             model emits. Required for those emissions to be written at
             all: without it every model-authored chronicle write is
             refused, because a chronicle entry is a mark on the agent's
-            own identity record. ``<trace>`` emissions are unaffected.
+            own identity record.
+        before_trace_write: Review gate for ``<trace>`` tags the model
+            emits. Required for those emissions to be written at all:
+            without it every model-authored trace write is refused,
+            because recent project traces are rendered back into later
+            full wakes. The opt-in ``metadata.agenttool.trace`` decision
+            trace is unaffected.
 
     Usage::
 
@@ -233,10 +287,22 @@ class AnthropicAdapter:
         wake_profile: WakeProfile = "full",
         disable_markup_parsing: bool = False,
         before_chronicle_write: Optional[ChronicleBeforeWriteHook] = None,
+        before_trace_write: Optional[TraceBeforeWriteHook] = None,
     ) -> None:
         if wake_profile not in ("full", "brief"):
             raise ValueError(
                 f"Unknown wake profile {wake_profile!r}; expected one of: full, brief"
+            )
+        create = getattr(getattr(anthropic, "messages", None), "create", None)
+        if _is_coroutine_callable(create):
+            raise AgentToolError(
+                "AnthropicAdapter requires a synchronous Anthropic client.",
+                hint=(
+                    "Pass anthropic.Anthropic (or another synchronous "
+                    "messages.create). AsyncAnthropic is not supported by "
+                    "this adapter."
+                ),
+                error_code="anthropic_async_client_unsupported",
             )
         self._anthropic = anthropic
         self._at = at
@@ -244,6 +310,7 @@ class AnthropicAdapter:
         self._wake_profile = wake_profile
         self._disable_markup_parsing = disable_markup_parsing
         self._before_chronicle_write = before_chronicle_write
+        self._before_trace_write = before_trace_write
         self.messages = _MessagesProxy(self)
 
     def _do_create(self, params: dict) -> Any:
@@ -264,6 +331,21 @@ class AnthropicAdapter:
 
         forward_params, wake_meta = self._prepare_request(params, meta)
         response = self._anthropic.messages.create(**forward_params)
+        if inspect.isawaitable(response):
+            # An un-awaited provider call made no request. Close it and stop
+            # before any trace or markup work can describe a response that
+            # does not exist.
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+            raise AgentToolError(
+                "AnthropicAdapter received an asynchronous response.",
+                hint=(
+                    "Pass a synchronous Anthropic client; AsyncAnthropic is "
+                    "not supported by this adapter."
+                ),
+                error_code="anthropic_async_client_unsupported",
+            )
 
         if low_level_streaming:
             try:
@@ -476,11 +558,13 @@ class AnthropicAdapter:
         body: dict = {
             "decision": {
                 "type": meta.get("decision_type") or "decision",
-                "summary": conclusion[:200],
+                "summary": _truncate_utf16(conclusion, 200),
             },
             "reasoning": {
-                "observations": [user_text[:1000]] if user_text else [],
-                "conclusion": conclusion[:4000],
+                "observations": (
+                    [_truncate_utf16(user_text, 1000)] if user_text else []
+                ),
+                "conclusion": _truncate_utf16(conclusion, 4000),
             },
         }
         # Merge ambient context (`with at.deciding(...)`) — explicit
@@ -559,6 +643,48 @@ class AnthropicAdapter:
                     "approval."
                 ),
                 error_code="chronicle_before_write_refused",
+            )
+
+    def _review_trace_write(self, context: TraceBeforeWriteContext) -> None:
+        """Fail-closed gate for one model-authored trace write.
+
+        The same rule as ``_review_chronicle_write``: no hook is a refusal,
+        a raising hook is a refusal, and only literal ``True`` proceeds. A
+        ``<trace>`` tag is written by the model and recent project traces
+        return in later full wakes, so the capability starts closed.
+        """
+        hook = self._before_trace_write
+        if hook is None:
+            raise AgentToolError(
+                "anthropic-adapter: model-authored <trace> writes need a "
+                "before_trace_write hook.",
+                hint=(
+                    "The trace was not written. Pass before_trace_write to "
+                    "AnthropicAdapter and return literal True only after review, "
+                    "or set disable_markup_parsing to drop the markup path "
+                    "entirely."
+                ),
+                error_code="trace_before_write_missing",
+            )
+        try:
+            review_result = hook(context)
+        except Exception as exc:
+            raise AgentToolError(
+                "anthropic-adapter: before_trace_write hook failed locally.",
+                hint=(
+                    "The trace was not written. Inspect the local hook and "
+                    "try again."
+                ),
+                error_code="trace_before_write_failed",
+            ) from exc
+        if review_result is not True:
+            raise AgentToolError(
+                "anthropic-adapter: before_trace_write hook did not return true.",
+                hint=(
+                    "The trace was not written. Return literal True only after "
+                    "approval."
+                ),
+                error_code="trace_before_write_refused",
             )
 
     def _parse_and_emit_markup(
@@ -669,10 +795,13 @@ class AnthropicAdapter:
                 )
                 continue
             post = {
-                "decision": {"type": kind_type, "summary": decision[:200]},
+                "decision": {
+                    "type": kind_type,
+                    "summary": _truncate_utf16(decision, 200),
+                },
                 "reasoning": {
                     "observations": observations or [],
-                    "conclusion": conclusion[:4000],
+                    "conclusion": _truncate_utf16(conclusion, 4000),
                 },
             }
             # Markup-emitted traces inherit ambient parent + tags too,
@@ -693,6 +822,16 @@ class AnthropicAdapter:
             _run_terminal_guard(terminal_guard)
             with _open_side_effect_scope(side_effect_scope):
                 try:
+                    self._review_trace_write(
+                        TraceBeforeWriteContext(
+                            source="anthropic_markup",
+                            type=kind_type,
+                            decision=decision,
+                            conclusion=conclusion,
+                            observations=tuple(observations),
+                            confidence=confidence_str,
+                        )
+                    )
                     result = self._at.request("POST", "/v1/traces", post)
                     rid = (
                         result.get("trace_id") if isinstance(result, Mapping) else None
@@ -1519,6 +1658,25 @@ class _MappingResponseWithAgentTool(_ResponseWithAgentTool, Mapping):
 
 def _as_dict(value: Any) -> dict:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _is_coroutine_callable(value: Any) -> bool:
+    """Recognise an async callable, including one behind ``functools.wraps``.
+
+    The official ``AsyncAnthropic`` client wraps ``messages.create`` in a
+    synchronous argument-checking decorator, so the coroutine function is
+    only visible through ``__wrapped__``. Every ``__wrapped__`` link is
+    followed, so a synchronous shim built with ``functools.wraps`` over a
+    coroutine function is refused too; this fails closed.
+    """
+    if value is None or not callable(value):
+        return False
+    if inspect.iscoroutinefunction(value):
+        return True
+    try:
+        return inspect.iscoroutinefunction(inspect.unwrap(value))
+    except ValueError:
+        return False
 
 
 def _run_terminal_guard(

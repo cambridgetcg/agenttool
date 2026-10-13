@@ -9,6 +9,24 @@ numbers; the TypeScript changes are in
 A version listed here is a source version. Whether PyPI serves it is answered
 by PyPI (`https://pypi.org/project/agenttool-sdk/`).
 
+## Unreleased — after 0.23.0
+
+Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
+
+### Changed
+
+- `AnthropicAdapter` writes a model-written `<trace>` only when the new
+  `before_trace_write` hook returns literal `True`; with no hook nothing is
+  written (0.23.0 and earlier write it by default). New exports:
+  `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
+- `AnthropicAdapter` refuses asynchronous clients (`AsyncAnthropic`) at
+  construction with `anthropic_async_client_unsupported`.
+- Trace limits count UTF-16 units, as the server does, and never split a
+  character.
+- `OpenAIResponsesAdapter` accepts any mapping as `metadata` and treats the
+  `openai` package's `NOT_GIVEN` / `omit` as an omitted `store` (sent as
+  `False`).
+
 ## 0.23.0 — unreleased
 
 ### Added

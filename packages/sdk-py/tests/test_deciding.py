@@ -316,7 +316,8 @@ def test_markup_traces_inside_deciding_chain_to_parent():
         '<conclusion>It is faster</conclusion>'
         "</trace></agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at)
+    # Model-authored <trace> writes need the explicit literal-True gate.
+    adapter = AnthropicAdapter(fake, at, before_trace_write=lambda ctx: True)
 
     with at.deciding("frame", tags=["framing"]):
         r = adapter.messages.create(

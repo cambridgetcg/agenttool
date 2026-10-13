@@ -298,6 +298,8 @@ export type {
   ChronicleBeforeWriteContext,
   ChronicleBeforeWriteHook,
   MarkupEmission,
+  TraceBeforeWriteContext,
+  TraceBeforeWriteHook,
 } from "./anthropic-adapter.js";
 export { OpenAIResponsesAdapter } from "./openai-responses-adapter.js";
 export type {

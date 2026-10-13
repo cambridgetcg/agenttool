@@ -33,6 +33,14 @@
  *      literal `true`. With no hook installed the write is refused. See
  *      {@link ChronicleBeforeWriteHook}.
  *
+ *      A `<trace>` tag is gated by the same rule: it becomes a
+ *      `/v1/traces` write only after a `beforeTraceWrite` hook returns
+ *      literal `true`. Model output can echo markup from untrusted input,
+ *      and recent project traces return in later full wakes, so the
+ *      capability starts closed. See {@link TraceBeforeWriteHook}. The
+ *      adapter's own opt-in decision trace (2 above) is written by
+ *      the calling program and is not gated.
+ *
  * Posture: zero dependency on @anthropic-ai/sdk types. The adapter takes
  * any object with a `messages.create(params)` method and optionally a
  * `messages.stream(params)` helper, so the wrapping works whether the
@@ -55,6 +63,7 @@ import type { AmbientContext } from "./_context.js";
 import type { ChronicleType } from "./chronicle.js";
 import type { AgentTool } from "./client.js";
 import { AgentToolError } from "./errors.js";
+import { truncateUtf16 } from "./_utf16.js";
 import type {
   AnthropicWakeShape,
   WakeProfile,
@@ -176,6 +185,36 @@ export type ChronicleBeforeWriteHook = (
   context: ChronicleBeforeWriteContext,
 ) => boolean | Promise<boolean>;
 
+/** Immutable local review context for one model-authored trace write. */
+export interface TraceBeforeWriteContext {
+  /** Always `"anthropic_markup"` — the trace was authored by the model,
+   *  not by the calling program. */
+  readonly source: "anthropic_markup";
+  /** The raw type string the model emitted. */
+  readonly type: string;
+  /** The `<decision>` text the model emitted, before truncation. */
+  readonly decision: string;
+  /** The `<conclusion>` text the model emitted, before truncation. */
+  readonly conclusion: string;
+  /** The `<observation>` texts the model emitted, in order. */
+  readonly observations: readonly string[];
+  /** The raw `confidence` attribute, when the model supplied one. */
+  readonly confidence?: string;
+}
+
+/**
+ * Local gate for model-authored trace writes.
+ *
+ * Same rule as {@link ChronicleBeforeWriteHook}: the hook may review
+ * synchronously or asynchronously, and it must return literal `true` to
+ * proceed; every other result fails closed locally. The hook's return value
+ * is neither persisted nor signed — it only decides whether the trace is
+ * written.
+ */
+export type TraceBeforeWriteHook = (
+  context: TraceBeforeWriteContext,
+) => boolean | Promise<boolean>;
+
 export interface AnthropicAdapterOptions {
   /** Identity id for multi-identity projects (passed through to /v1/wake). */
   identityId?: string;
@@ -187,9 +226,17 @@ export interface AnthropicAdapterOptions {
    * Review gate for `<chronicle>` tags the model emits. Required for those
    * emissions to be written at all: without it every model-authored
    * chronicle write is refused, because a chronicle entry is a mark on the
-   * agent's own identity record. `<trace>` emissions are unaffected.
+   * agent's own identity record.
    */
   beforeChronicleWrite?: ChronicleBeforeWriteHook;
+  /**
+   * Review gate for `<trace>` tags the model emits. Required for those
+   * emissions to be written at all: without it every model-authored trace
+   * write is refused, because recent project traces are rendered back into
+   * later full wakes. The opt-in `metadata.agenttool.trace` decision trace
+   * is unaffected.
+   */
+  beforeTraceWrite?: TraceBeforeWriteHook;
 }
 
 /** A markup emission produced by parsing `<agenttool>...</agenttool>` from
@@ -250,8 +297,12 @@ export interface AdaptedManagedStream extends AsyncIterable<unknown> {
 }
 
 export interface AnthropicAdapterMessages {
-  create(
-    params: object & { stream: true },
+  // Generic so an inline `{ ..., stream: true }` literal selects this
+  // overload: a fixed `object & { stream: true }` parameter fails
+  // excess-property checking for literals and falls through to the
+  // non-streaming overload below.
+  create<P extends { stream: true }>(
+    params: P,
     ...requestOptions: unknown[]
   ): Promise<AdaptedLowLevelStream>;
   create(
@@ -569,11 +620,11 @@ export class AnthropicAdapter {
     const body: Record<string, unknown> = {
       decision: {
         type: meta.decision_type ?? "decision",
-        summary: conclusion.slice(0, 200),
+        summary: truncateUtf16(conclusion, 200),
       },
       reasoning: {
-        observations: userText ? [userText.slice(0, 1000)] : [],
-        conclusion: conclusion.slice(0, 4000),
+        observations: userText ? [truncateUtf16(userText, 1000)] : [],
+        conclusion: truncateUtf16(conclusion, 4000),
       },
     };
     // Merge ambient context (`at.deciding(...)`) — explicit values on
@@ -648,6 +699,49 @@ export class AnthropicAdapter {
     }
   }
 
+  /** Fail-closed gate for one model-authored trace write. The same rule as
+   *  `_reviewChronicleWrite`: no hook is a refusal, a throwing hook is a
+   *  refusal, and only literal `true` proceeds. A `<trace>` tag is written
+   *  by the model and recent project traces return in later full wakes, so
+   *  the capability starts closed. */
+  private async _reviewTraceWrite(
+    context: TraceBeforeWriteContext,
+  ): Promise<void> {
+    const hook = this.options.beforeTraceWrite;
+    if (hook === undefined) {
+      throw new AgentToolError(
+        "anthropic-adapter: model-authored <trace> writes need a beforeTraceWrite hook.",
+        {
+          code: "trace_before_write_missing",
+          hint: "The trace was not written. Pass beforeTraceWrite to AnthropicAdapter and return literal true only after review, or set disableMarkupParsing to drop the markup path entirely.",
+        },
+      );
+    }
+    let reviewResult: unknown;
+    try {
+      reviewResult = await hook(Object.freeze(context));
+    } catch (cause) {
+      const error = new AgentToolError(
+        "anthropic-adapter: beforeTraceWrite hook failed locally.",
+        {
+          code: "trace_before_write_failed",
+          hint: "The trace was not written. Inspect the local hook and try again.",
+        },
+      );
+      error.cause = cause;
+      throw error;
+    }
+    if (reviewResult !== true) {
+      throw new AgentToolError(
+        "anthropic-adapter: beforeTraceWrite hook did not return true.",
+        {
+          code: "trace_before_write_refused",
+          hint: "The trace was not written. Return literal true only after approval.",
+        },
+      );
+    }
+  }
+
   /** Walk the response text for <agenttool>...</agenttool> blocks and
    *  emit each child to the right endpoint. Tolerant of whitespace and
    *  child ordering; failures are recorded per-emission, not thrown. */
@@ -694,6 +788,9 @@ export class AnthropicAdapter {
           title,
           ...(bodyText ? { body: bodyText } : {}),
         });
+        // The review may outlast a stream cancellation; re-check the fence
+        // before the request so an aborted stream writes nothing.
+        throwIfStreamAborted(signal);
         // Through the client, not raw at.request: chronicle.write is where
         // the type union and the 1-200 title bound live.
         const result = (await this.at.chronicle.write({
@@ -740,10 +837,10 @@ export class AnthropicAdapter {
         continue;
       }
       const post: Record<string, unknown> = {
-        decision: { type, summary: decision.slice(0, 200) },
+        decision: { type, summary: truncateUtf16(decision, 200) },
         reasoning: {
           observations: observations.length > 0 ? observations : [],
-          conclusion: conclusion.slice(0, 4000),
+          conclusion: truncateUtf16(conclusion, 4000),
         },
       };
       // Markup-emitted traces inherit ambient parent + tags too, so
@@ -766,6 +863,15 @@ export class AnthropicAdapter {
       }
       throwIfStreamAborted(signal);
       try {
+        await this._reviewTraceWrite({
+          source: "anthropic_markup",
+          type,
+          decision,
+          conclusion,
+          observations: Object.freeze([...observations]),
+          ...(confidenceStr !== undefined ? { confidence: confidenceStr } : {}),
+        });
+        throwIfStreamAborted(signal);
         const result = (await this.at.request("POST", "/v1/traces", post)) as
           | { trace_id?: string }
           | undefined;

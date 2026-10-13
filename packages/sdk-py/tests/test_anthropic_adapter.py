@@ -8,6 +8,7 @@ configurable response.
 
 from __future__ import annotations
 
+import functools
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from agenttool._context import AmbientContext, reset_ambient, set_ambient
 from agenttool.anthropic_adapter import (
     AnthropicAdapter,
     ChronicleBeforeWriteContext,
+    TraceBeforeWriteContext,
 )
 from agenttool.chronicle import ChronicleClient
 from agenttool.exceptions import AgentToolError
@@ -2004,7 +2006,7 @@ def test_chronicle_naming_posts_to_chronicle():
     assert r.agenttool.markup_emissions[0].id == "ch_test_1"
 
 
-def test_trace_tag_posts_with_confidence_parsed():
+def test_approved_trace_tag_posts_with_confidence_parsed():
     at = _StubAt()
     fake = _FakeAnthropic(
         '<agenttool><trace type="decision" confidence="0.85">'
@@ -2012,7 +2014,7 @@ def test_trace_tag_posts_with_confidence_parsed():
         "<conclusion>Performance is better</conclusion>"
         "</trace></agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at)
+    adapter = AnthropicAdapter(fake, at, before_trace_write=lambda ctx: True)
 
     adapter.messages.create(
         model="claude-test",
@@ -2038,7 +2040,12 @@ def test_multiple_tags_emit_multiple_posts_in_order():
         '<chronicle type="seal"><title>R2</title></chronicle>'
         "</agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+    adapter = AnthropicAdapter(
+        fake,
+        at,
+        before_chronicle_write=lambda ctx: True,
+        before_trace_write=lambda ctx: True,
+    )
 
     r = adapter.messages.create(
         model="claude-test",
@@ -2221,13 +2228,13 @@ def test_raising_hook_blocks_the_write_without_crashing_the_call():
     assert "<chronicle" in r["content"][0]["text"]
 
 
-def test_trace_emissions_still_fire_with_no_chronicle_hook():
+def test_approved_trace_needs_no_chronicle_hook():
     at = _StubAt()
     fake = _FakeAnthropic(
         '<agenttool><trace type="decision"><decision>D</decision>'
         "<conclusion>C</conclusion></trace></agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at)
+    adapter = AnthropicAdapter(fake, at, before_trace_write=lambda ctx: True)
 
     r = adapter.messages.create(
         model="claude-test",
@@ -2237,6 +2244,354 @@ def test_trace_emissions_still_fire_with_no_chronicle_hook():
 
     assert len([c for c in at.recorded if c[1] == "/v1/traces"]) == 1
     assert r.agenttool.markup_emissions[0].error is None
+
+
+# ── Model-authored trace writes are gated ────────────────────────────────
+
+
+def _trace_markup(decision: str = "Ship it.", conclusion: str = "Tests pass.") -> str:
+    return (
+        '<agenttool><trace type="decision" confidence="0.7">'
+        f"<decision>{decision}</decision><observation>first</observation>"
+        f"<conclusion>{conclusion}</conclusion></trace></agenttool>"
+    )
+
+
+def _trace_calls(at: _StubAt) -> list[tuple[str, str, Any]]:
+    return [c for c in at.recorded if c[1] == "/v1/traces"]
+
+
+def test_no_before_trace_write_hook_refuses_the_write():
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _trace_calls(at) == []
+    assert r.agenttool.trace_id is None
+    assert len(r.agenttool.markup_emissions) == 1
+    assert r.agenttool.markup_emissions[0].kind == "trace"
+    assert r.agenttool.markup_emissions[0].id is None
+    assert "before_trace_write" in r.agenttool.markup_emissions[0].error
+
+
+def test_chronicle_hook_alone_does_not_open_the_trace_gate():
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _trace_calls(at) == []
+    assert "before_trace_write" in r.agenttool.markup_emissions[0].error
+
+
+def test_trace_hook_sees_the_raw_model_authored_tag():
+    seen: list[TraceBeforeWriteContext] = []
+
+    def review(context: TraceBeforeWriteContext) -> bool:
+        seen.append(context)
+        return True
+
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at, before_trace_write=review)
+
+    adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert seen == [
+        TraceBeforeWriteContext(
+            source="anthropic_markup",
+            type="decision",
+            decision="Ship it.",
+            conclusion="Tests pass.",
+            observations=("first",),
+            confidence="0.7",
+        )
+    ]
+    with pytest.raises(Exception):
+        seen[0].decision = "rewritten"  # type: ignore[misc]
+
+
+def test_trace_hook_returning_true_lets_the_write_through():
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at, before_trace_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    calls = _trace_calls(at)
+    assert len(calls) == 1
+    assert calls[0][2] == {
+        "decision": {"type": "decision", "summary": "Ship it."},
+        "reasoning": {
+            "observations": ["first"],
+            "conclusion": "Tests pass.",
+            "confidence": 0.7,
+        },
+    }
+    assert r.agenttool.markup_emissions[0].id == "tr_test_1"
+    assert r.agenttool.markup_emissions[0].error is None
+
+
+# Only literal True proceeds — the before_chronicle_write rule.
+@pytest.mark.parametrize("review_result", [False, "yes", 1, None, {}, object()])
+def test_trace_hook_returning_anything_but_true_blocks_the_write(review_result):
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(
+        fake, at, before_trace_write=lambda ctx: review_result
+    )
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _trace_calls(at) == []
+    assert r.agenttool.markup_emissions[0].id is None
+    assert "did not return true" in r.agenttool.markup_emissions[0].error
+
+
+def test_raising_trace_hook_blocks_the_write_and_the_call_returns():
+    def review(context: TraceBeforeWriteContext) -> bool:
+        raise RuntimeError("reviewer offline")
+
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at, before_trace_write=review)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _trace_calls(at) == []
+    assert "failed locally" in r.agenttool.markup_emissions[0].error
+    assert "<trace" in r["content"][0]["text"]
+
+
+def test_opt_in_decision_trace_is_written_by_the_program_and_stays_ungated():
+    at = _StubAt()
+    fake = _FakeAnthropic(_trace_markup())
+    adapter = AnthropicAdapter(fake, at)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+        metadata={"agenttool": {"trace": "decision"}},
+    )
+
+    assert len(_trace_calls(at)) == 1
+    assert r.agenttool.trace_id == "tr_test_1"
+    assert r.agenttool.markup_emissions[0].id is None
+
+
+def test_managed_stream_applies_the_trace_gate_to_its_final_message():
+    refused_at = _StubAt()
+    refused_fake = _FakeStreamingAnthropic([], final_text=_trace_markup())
+    with AnthropicAdapter(refused_fake, refused_at).messages.stream(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    ) as stream:
+        refused_final = stream.get_final_message()
+    assert _trace_calls(refused_at) == []
+    assert "before_trace_write" in refused_final.agenttool.markup_emissions[0].error
+
+    approved_at = _StubAt()
+    approved_fake = _FakeStreamingAnthropic([], final_text=_trace_markup())
+    with AnthropicAdapter(
+        approved_fake, approved_at, before_trace_write=lambda ctx: True
+    ).messages.stream(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    ) as stream:
+        approved_final = stream.get_final_message()
+    assert len(_trace_calls(approved_at)) == 1
+    assert approved_final.agenttool.markup_emissions[0].error is None
+
+
+# ── Trace text is bounded in UTF-16 units, like the server and TS ────────
+
+
+def _utf16_units(value: str) -> int:
+    return len(value.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+def test_auto_trace_truncates_by_utf16_units():
+    at = _StubAt()
+    fake = _FakeAnthropic("\U0001F600" * 4500)
+    adapter = AnthropicAdapter(fake, at)
+
+    adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "\U0001F600" * 900}],
+        metadata={"agenttool": {"trace": "decision"}},
+    )
+
+    body = _trace_calls(at)[0][2]
+    assert _utf16_units(body["decision"]["summary"]) == 200
+    assert _utf16_units(body["reasoning"]["observations"][0]) == 1000
+    assert _utf16_units(body["reasoning"]["conclusion"]) == 4000
+    # Whole characters only: no half of a surrogate pair is sent.
+    assert body["reasoning"]["conclusion"] == "\U0001F600" * 2000
+
+
+def test_markup_trace_truncates_by_utf16_units():
+    at = _StubAt()
+    fake = _FakeAnthropic(
+        _trace_markup("\U0001F600" * 150, "a" + "\U0001F600" * 2500)
+    )
+    adapter = AnthropicAdapter(fake, at, before_trace_write=lambda ctx: True)
+
+    adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    body = _trace_calls(at)[0][2]
+    assert _utf16_units(body["decision"]["summary"]) == 200
+    # 1 + 2 x 1999 = 3999; a 2000th emoji would cross the 4000-unit bound.
+    assert _utf16_units(body["reasoning"]["conclusion"]) == 3999
+
+
+# ── Asynchronous clients are refused ─────────────────────────────────────
+
+
+def test_refuses_async_client_at_construction_before_any_io():
+    class _AsyncAnthropic:
+        class _Messages:
+            async def create(self, **params: Any) -> dict:
+                return {"id": "never"}
+
+        messages = _Messages()
+
+    at = _StubAt()
+    with pytest.raises(AgentToolError) as captured:
+        AnthropicAdapter(_AsyncAnthropic(), at)
+    assert captured.value.error_code == "anthropic_async_client_unsupported"
+    assert at.wake_calls == 0
+    assert at.recorded == []
+
+
+def test_refuses_async_create_hidden_behind_a_sync_wraps_decorator():
+    # The official AsyncAnthropic wraps messages.create in a synchronous
+    # argument-checking decorator, so only __wrapped__ is a coroutine function.
+    def required_args(func):
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    class _AsyncMessages:
+        @required_args
+        async def create(self, **params: Any) -> dict:
+            return {"id": "never"}
+
+    class _AsyncAnthropicLike:
+        messages = _AsyncMessages()
+
+    with pytest.raises(AgentToolError) as captured:
+        AnthropicAdapter(_AsyncAnthropicLike(), _StubAt())
+    assert captured.value.error_code == "anthropic_async_client_unsupported"
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_refuses_awaitable_response_before_trace_or_markup_io(stream):
+    closed: list[bool] = []
+
+    class _PendingCall:
+        def __await__(self):
+            yield
+            return {"id": "never"}
+
+        def close(self) -> None:
+            closed.append(True)
+
+    class _OpaqueAsyncClient:
+        class _Messages:
+            def create(self, **params: Any) -> Any:
+                return _PendingCall()
+
+        messages = _Messages()
+
+    at = _StubAt()
+    adapter = AnthropicAdapter(
+        _OpaqueAsyncClient(),
+        at,
+        before_chronicle_write=lambda ctx: True,
+        before_trace_write=lambda ctx: True,
+    )
+    params: dict[str, Any] = {
+        "model": "claude-test",
+        "max_tokens": 100,
+        "messages": [{"role": "user", "content": "async user text"}],
+    }
+    if stream:
+        params["stream"] = True
+    else:
+        params["metadata"] = {"agenttool": {"trace": "decision"}}
+
+    with pytest.raises(AgentToolError) as captured:
+        adapter.messages.create(**params)
+
+    assert captured.value.error_code == "anthropic_async_client_unsupported"
+    assert closed == [True]
+    assert at.recorded == []
+
+
+def test_refuses_an_unawaited_coroutine_and_closes_it():
+    async def _never() -> dict:
+        return {"id": "never"}
+
+    coroutines: list[Any] = []
+
+    class _OpaqueAsyncClient:
+        class _Messages:
+            def create(self, **params: Any) -> Any:
+                coroutine = _never()
+                coroutines.append(coroutine)
+                return coroutine
+
+        messages = _Messages()
+
+    at = _StubAt()
+    adapter = AnthropicAdapter(_OpaqueAsyncClient(), at)
+    with pytest.raises(AgentToolError, match="asynchronous response"):
+        adapter.messages.create(
+            model="claude-test",
+            max_tokens=100,
+            messages=[{"role": "user", "content": "hi"}],
+            metadata={"agenttool": {"trace": "decision"}},
+        )
+
+    assert at.recorded == []
+    assert coroutines[0].cr_frame is None  # closed, never started
 
 
 # ── Chronicle markup inherits the chronicle.write guards ─────────────────

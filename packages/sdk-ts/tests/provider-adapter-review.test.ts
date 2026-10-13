@@ -129,6 +129,7 @@ const CONTROL_IDS = [
   "anthropic-low-level-no-final-effects",
   "anthropic-managed-terminal-fence",
   "anthropic-model-authored-chronicle-gated",
+  "anthropic-model-authored-trace-gated",
 ] as const;
 
 const CASE_BINDINGS = {
@@ -204,6 +205,12 @@ const CASE_BINDINGS = {
       "local-agenttool-metadata-stripped",
       "anthropic-managed-terminal-fence",
     ],
+  },
+  "anthropic-completed-trace-markup-gated": {
+    provider: "anthropic",
+    lifecycle: "completed",
+    fixture: "anthropic.completed.trace-markup-gated",
+    proves: ["anthropic-model-authored-trace-gated"],
   },
 } as const;
 
@@ -780,7 +787,14 @@ class RecordingAnthropic {
     + '<agenttool><chronicle type="recognition">'
     + "<title>Bridge reviewed</title><body>Offline fixture.</body>"
     + "</chronicle></agenttool>";
+  static readonly TRACE_MARKUP_TEXT = "Holding.\n"
+    + '<agenttool><trace type="decision">'
+    + "<decision>Hold the release.</decision>"
+    + "<observation>Gate fixture.</observation>"
+    + "<conclusion>Wait for review.</conclusion>"
+    + "</trace></agenttool>";
 
+  completedText: string = RecordingAnthropic.COMPLETED_TEXT;
   readonly managed: ManagedProviderStream;
   readonly messages: {
     create: (params: Record<string, unknown>) => Promise<unknown>;
@@ -801,7 +815,7 @@ class RecordingAnthropic {
         return {
           id: "msg_review_completed",
           model: "claude-review-fixture",
-          content: [{ type: "text", text: RecordingAnthropic.COMPLETED_TEXT }],
+          content: [{ type: "text", text: this.completedText }],
           stop_reason: "end_turn",
         };
       },
@@ -928,9 +942,10 @@ async function replayOpenAI(fixture: string): Promise<TranscriptEvent[]> {
 async function replayAnthropic(fixture: string): Promise<TranscriptEvent[]> {
   const recorder = new Recorder();
   const provider = new RecordingAnthropic(recorder);
+  const agenttool = makeRecordingAgentTool(recorder);
   const adapter = new AnthropicAdapter(
     provider,
-    makeRecordingAgentTool(recorder),
+    agenttool,
     // Model-authored <chronicle> writes are gated locally; the replay
     // declares the approving reviewer so the markup fixture still records
     // the write it is evidence for. See control
@@ -1062,6 +1077,40 @@ async function replayAnthropic(fixture: string): Promise<TranscriptEvent[]> {
     return adapterResult(recorder, {
       status: "cancelled",
       finalizationCount: recorder.finalMessageCalls,
+      agenttoolWriteCount: recorder.agenttoolWrites,
+    });
+  }
+
+  if (fixture === "anthropic.completed.trace-markup-gated") {
+    // Model-authored <trace> markup is refused without a beforeTraceWrite
+    // hook and written only after the hook returns literal true. See
+    // control anthropic-model-authored-trace-gated.
+    provider.completedText = RecordingAnthropic.TRACE_MARKUP_TEXT;
+    const request = () => ({
+      model: "claude-review-fixture",
+      max_tokens: 64,
+      messages: [{ role: "user", content: "Hold this decision." }],
+      metadata: { agenttool: { skip_wake: true } },
+    });
+
+    const refused = await adapter.messages.create(request());
+    recorder.add("adapter", "result", {
+      status: "completed",
+      gate: "absent",
+      traceId: refused.agenttool.trace_id,
+      markupIds: refused.agenttool.markup_emissions.map((e) => e.id),
+      agenttoolWriteCount: recorder.agenttoolWrites,
+    });
+
+    const approving = new AnthropicAdapter(provider, agenttool, {
+      beforeTraceWrite: () => true,
+    });
+    const approved = await approving.messages.create(request());
+    return adapterResult(recorder, {
+      status: "completed",
+      gate: "literal-true",
+      traceId: approved.agenttool.trace_id,
+      markupIds: approved.agenttool.markup_emissions.map((e) => e.id),
       agenttoolWriteCount: recorder.agenttoolWrites,
     });
   }

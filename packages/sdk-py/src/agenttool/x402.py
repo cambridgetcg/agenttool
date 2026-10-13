@@ -963,6 +963,14 @@ def _header(response: httpx.Response, *names: str) -> Optional[str]:
 class X402Client:
     """``at.x402`` — the agent rail's two doors.
 
+    Retired for AgentTool (dated note, 2026-10-11): new credit purchases were
+    retired on 2026-09-23. In the API source on 2026-10-11,
+    ``POST /v1/x402/top-up/:credits`` answers a new purchase with
+    ``410 purchases_retired`` and no AgentTool route issues a 402 challenge,
+    so ``top_up`` raises :class:`AgentToolError` and nothing is signed.
+    ``payment(id)`` still reads previously recorded payments. The rest of
+    this docstring describes the rail as it ran until 2026-09-23.
+
     ``top_up(credits)`` knocks on ``POST /v1/x402/top-up/:credits``. With no
     ``x402=`` payer on the client the answer is the 402 challenge itself, as
     a typed :class:`AgentToolError` carrying ``accepts`` /
@@ -987,6 +995,8 @@ class X402Client:
     ) -> X402TopUpResult:
         """Buy ``credits`` project credits with USDC on Base (1 credit = 1,000
         atomic = USD 0.001). Final: no refunds; unspent credits stay.
+        Retired for AgentTool since 2026-09-23: the route now answers
+        ``410 purchases_retired`` (see the class docstring).
 
         ``payment_signature`` is an opaque, already signed x402 V2
         ``PAYMENT-SIGNATURE`` value for callers who sign outside the SDK; it

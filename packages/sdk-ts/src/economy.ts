@@ -68,7 +68,11 @@ function decodeClaimPubkey(value: string): Uint8Array {
   return bytes;
 }
 
-/** Exact domain-separated digest verified by `POST /v1/wallets/:id/addresses`.
+/** Exact domain-separated digest for the `wallet-address-claim/v1` format.
+ *
+ *  No server route on main verifies it: no route handler for
+ *  `POST /v1/wallets/:id/addresses` exists in `api/src` (checked 2026-10-11),
+ *  so no AgentTool route on main accepts this claim.
  *
  *  Recipe 1 — `sha256( utf8(tag) || 0x00 || fields… )`. The pubkey field is
  *  folded as its raw 32 bytes, not as its base64 text; everything else is

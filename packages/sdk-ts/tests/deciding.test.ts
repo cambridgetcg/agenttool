@@ -343,7 +343,10 @@ describe("at.deciding(...) — markup-emitted traces inherit ambient", () => {
     const fake = fakeAnthropic(
       `<agenttool><trace type="decision"><decision>Use approach Q</decision><conclusion>It is faster</conclusion></trace></agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, at);
+    // Model-authored <trace> writes need the explicit literal-true gate.
+    const adapter = new AnthropicAdapter(fake.client, at, {
+      beforeTraceWrite: () => true,
+    });
 
     await at.deciding("frame", { tags: ["framing"] }, async () => {
       await adapter.messages.create({
