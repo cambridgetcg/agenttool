@@ -24,6 +24,9 @@ import {
   OWNERSHIP_STORES,
 } from "../src/services/discovery/ownership-map";
 import { RETENTION_CLASSES } from "../src/services/discovery/retention";
+import { SAFETY_BOUNDARIES } from "../src/services/discovery/safety-boundaries";
+
+const SAFETY_BOUNDARIES_OWNER_RULE: string = SAFETY_BOUNDARIES.deletion_ledger.owner_rule;
 
 const API_ROOT = join(import.meta.dir, "..");
 const REPO_ROOT = join(API_ROOT, "..");
@@ -116,6 +119,26 @@ describe("GET /public/ownership-map", () => {
     }
     expect(AUTHORITY_RULES.owner_rule.rule).toContain("409 authority_quorum_required");
     expect(AUTHORITY_RULES.owner_rule.refusals["428"]).toContain("authority_proof_required");
+  });
+
+  test("identity and shared stores say which owner-gated routes reach them today; the rest claim none", () => {
+    const byStore = new Map(OWNERSHIP_STORES.map((entry) => [entry.store, entry]));
+    for (const entry of OWNERSHIP_STORES) {
+      const ownerClass = entry.owner_class === "identity" || entry.owner_class === "shared";
+      expect({ store: entry.store, listed: Array.isArray(entry.owner_gated_today) }).toEqual({ store: entry.store, listed: ownerClass });
+    }
+    // Every published route lands on exactly the store it names.
+    const listed = OWNERSHIP_STORES.flatMap((entry) => entry.owner_gated_today ?? []);
+    expect(listed.sort()).toEqual(OWNER_GATED_ROUTES.map((route) => `${route.method} ${route.path}`).sort());
+    expect(byStore.get("offerings.offerings")!.owner_gated_today).toEqual(["POST /v1/offerings/:id/archive"]);
+    // Identity-owned stores whose status routes are still bearer-managed say so.
+    for (const store of ["marketplace.gallery_artifacts", "gardens.gardens", "holdings.holdings", "agent_continuity.guild_invitations"]) {
+      expect({ store, today: byStore.get(store)!.owner_gated_today }).toEqual({ store, today: [] });
+    }
+    expect(AUTHORITY_RULES.owner_rule.rule).toContain("Today this is enforced on the routes in owner_gated_routes");
+    expect(AUTHORITY_RULES.shared_owner_rule.rule).toContain("other withdraw and status routes keep their current authority until wave 3");
+    expect(SAFETY_BOUNDARIES_OWNER_RULE).toContain("On the owner-gated routes");
+    expect(SAFETY_BOUNDARIES_OWNER_RULE).toContain("keep their current, mostly bearer-managed, authority until wave 3");
   });
 
   test("owner_gated_routes match the routes that call the owner rule and the SDK helper", () => {

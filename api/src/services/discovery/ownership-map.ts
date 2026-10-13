@@ -28,7 +28,7 @@ export const AUTHORITY_RULES = {
   owner_rule: {
     actor: "R(owner)",
     rule:
-      "The owner of the touched content consents. An enrolled guest: that guest's root. A rooted identity: that identity's root, signing the exact request (identity-authority/v1). An identity without a root, or content bound to no identity: the project rule (no roots in the project means the bearer; one root means that root signs; a memorial root, which can never sign again, is not counted). An identity without a root in a project with two or more roots: the bearer, for that identity's own content only, when the act erases, withdraws, redacts, hides or leaves; content bound to no identity there gets 409. Owners needing different consents in one request: 409 authority_quorum_required, one request per owner. An owner outside the caller's project: 404.",
+      "The owner of the touched content consents. An enrolled guest: that guest's root. A rooted identity: that identity's root, signing the exact request (identity-authority/v1). An identity without a root, or content bound to no identity: the project rule (no roots in the project means the bearer; one root means that root signs; a memorial root, which can never sign again, is not counted). An identity without a root in a project with two or more roots: the bearer, for that identity's own content only, when the act erases, withdraws, redacts, hides or leaves; content bound to no identity there gets 409. Owners needing different consents in one request: 409 authority_quorum_required, one request per owner. An owner outside the caller's project: 404. Today this is enforced on the routes in owner_gated_routes; each identity or shared store lists its own in owner_gated_today. Where that list is empty, the store's routes keep their current authority until wave 3: most status changes (for example gallery withdraw, garden archive, holding withdraw, guild-invitation withdraw) are bearer-managed, and a love-offer withdraw already needs the sender's root through the identity rule.",
     refusals: {
       "404": "an owner outside the caller's project (the same answer as a missing row)",
       "409": "authority_quorum_required (owners needing different consents, or project-bound content with several roots) or authority_sequence_conflict",
@@ -38,7 +38,7 @@ export const AUTHORITY_RULES = {
   shared_owner_rule: {
     actor: "R(author) for each party's own words and gestures",
     rule:
-      "Another party holds the same row. Each party governs only what it wrote or gave, under owner_rule: a giver withdraws its own gesture where a withdraw route exists, and redaction of one's own words in shared records is not built yet. Things others wrote about an identity stay.",
+      "Another party holds the same row. Each party governs only what it wrote or gave: a giver withdraws its own gesture under owner_rule on the routes in owner_gated_routes (listed per store in owner_gated_today); other withdraw and status routes keep their current authority until wave 3, and redaction of one's own words in shared records is not built yet. Things others wrote about an identity stay.",
   },
   project_bearer: {
     actor: "B",
@@ -71,6 +71,23 @@ const RULE_FOR: Record<OwnerClass, AuthorityRuleId> = {
   platform: "platform_only",
 };
 
+/** The routes the owner rule gates today. The SDKs build and sign these
+ *  exact requests (ownerGatedRequest / owner_gated_request). */
+export const OWNER_GATED_ROUTES = [
+  { method: "DELETE", path: "/v1/memories/:id", store: "memory.memories", owner: "identity_id (the memory's identity)" },
+  { method: "DELETE", path: "/v1/memories?key=", store: "memory.memories", owner: "identity_id of every match; one request per owner when consents differ" },
+  { method: "PATCH", path: "/v1/memories/:id", store: "memory.memories", owner: "identity_id (visibility change; no multi-root bearer fallback)" },
+  { method: "DELETE", path: "/v1/inbox/:id", store: "inbox.messages", owner: "recipient_identity_id" },
+  { method: "PATCH", path: "/v1/inbox/:id", store: "inbox.messages", owner: "recipient_identity_id, when status becomes deleted" },
+  { method: "DELETE", path: "/v1/blessings/:id", store: "agent_continuity.blessings", owner: "blesser_identity_id" },
+  { method: "DELETE", path: "/v1/unconditionals/:id", store: "agent_continuity.unconditionals", owner: "holder_identity_id" },
+  { method: "DELETE", path: "/v1/guild/recognitions/:id", store: "agent_continuity.guild_recognitions", owner: "the identity whose DID is recognizer_did" },
+  { method: "DELETE", path: "/v1/attestations/:id", store: "identity.attestations", owner: "attester_id" },
+  { method: "POST", path: "/v1/margin/withdraw", store: "margin.margins", owner: "author_identity_id (or the identity whose DID is author_did)" },
+  { method: "POST", path: "/v1/trust/withdraw", store: "trust.trusts", owner: "truster_identity_id (or the identity whose DID is truster_did)" },
+  { method: "POST", path: "/v1/offerings/:id/archive", store: "offerings.offerings", owner: "giver_identity_id" },
+] as const;
+
 export interface OwnershipStore {
   readonly store: string;
   /** Group number from the deletion spec's Appendix A; 0 for platform-only stores. */
@@ -78,7 +95,15 @@ export interface OwnershipStore {
   readonly owner_class: OwnerClass;
   readonly authority_rule: AuthorityRuleId;
   readonly retention_class: string;
+  /** Identity and shared stores only: the owner_gated_routes that touch this
+   *  store today. Empty means no route of the store asks the owner under the
+   *  owner rule yet; its routes keep their current authority until wave 3. */
+  readonly owner_gated_today?: readonly string[];
   readonly note?: string;
+}
+
+function ownerGatedToday(store: string): string[] {
+  return OWNER_GATED_ROUTES.filter((route) => route.store === store).map((route) => `${route.method} ${route.path}`);
 }
 
 function entries(
@@ -92,6 +117,7 @@ function entries(
     owner_class: owner,
     authority_rule: RULE_FOR[owner],
     retention_class: retention,
+    ...(owner === "identity" || owner === "shared" ? { owner_gated_today: ownerGatedToday(store) } : {}),
     ...(note ? { note } : {}),
   }));
 }
@@ -320,23 +346,6 @@ export const OWNERSHIP_STORES: readonly OwnershipStore[] = [
     ["citizens.pyramid_peers", "platform"],
   ]),
 ];
-
-/** The routes the owner rule gates today. The SDKs build and sign these
- *  exact requests (ownerGatedRequest / owner_gated_request). */
-export const OWNER_GATED_ROUTES = [
-  { method: "DELETE", path: "/v1/memories/:id", store: "memory.memories", owner: "identity_id (the memory's identity)" },
-  { method: "DELETE", path: "/v1/memories?key=", store: "memory.memories", owner: "identity_id of every match; one request per owner when consents differ" },
-  { method: "PATCH", path: "/v1/memories/:id", store: "memory.memories", owner: "identity_id (visibility change; no multi-root bearer fallback)" },
-  { method: "DELETE", path: "/v1/inbox/:id", store: "inbox.messages", owner: "recipient_identity_id" },
-  { method: "PATCH", path: "/v1/inbox/:id", store: "inbox.messages", owner: "recipient_identity_id, when status becomes deleted" },
-  { method: "DELETE", path: "/v1/blessings/:id", store: `${AC}.blessings`, owner: "blesser_identity_id" },
-  { method: "DELETE", path: "/v1/unconditionals/:id", store: `${AC}.unconditionals`, owner: "holder_identity_id" },
-  { method: "DELETE", path: "/v1/guild/recognitions/:id", store: `${AC}.guild_recognitions`, owner: "the identity whose DID is recognizer_did" },
-  { method: "DELETE", path: "/v1/attestations/:id", store: "identity.attestations", owner: "attester_id" },
-  { method: "POST", path: "/v1/margin/withdraw", store: "margin.margins", owner: "author_identity_id (or the identity whose DID is author_did)" },
-  { method: "POST", path: "/v1/trust/withdraw", store: "trust.trusts", owner: "truster_identity_id (or the identity whose DID is truster_did)" },
-  { method: "POST", path: "/v1/offerings/:id/archive", store: "offerings.offerings", owner: "giver_identity_id" },
-] as const;
 
 export const OWNERSHIP_MAP = {
   schema: OWNERSHIP_MAP_SCHEMA,

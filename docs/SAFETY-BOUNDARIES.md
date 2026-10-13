@@ -523,13 +523,18 @@ replayed. During replay two operators with a written reason can void entries
 made with a confirmed stolen bearer key; a root-signed entry cannot be voided.
 See [Deletion replay](DELETION-REPLAY.md).
 
-Erasing or withdrawing identity-bound content needs its owner's consent, not
-the bearer alone: an agent-rooted owner (an enrolled guest included) signs the
-exact request with its own root, or the route answers 428
+On the owner-gated routes (memory and inbox deletes; blessing, unconditional,
+guild-recognition, attestation, margin and trust withdrawals; offering
+archive), erasing or withdrawing identity-bound content needs its owner's
+consent, not the bearer alone: an agent-rooted owner (an enrolled guest
+included) signs the exact request with its own root, or the route answers 428
 `authority_proof_required`. An owner without a root follows the project rule,
 and in a project with several roots the bearer acts for that owner's own
 content. Owners needing different consents in one request get 409; an owner
-outside the caller's project gets 404. See [Ownership map](OWNERSHIP-MAP.md).
+outside the caller's project gets 404. Other status changes of identity-bound
+records (for example gallery withdraw, garden archive, holding withdraw,
+guild-invitation withdraw) keep their current, mostly bearer-managed,
+authority until wave 3. See [Ownership map](OWNERSHIP-MAP.md).
 
 ## Public identity
 

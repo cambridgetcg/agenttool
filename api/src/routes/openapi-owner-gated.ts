@@ -342,6 +342,11 @@ export const OWNERSHIP_MAP_OPENAPI_PATHS = {
                         owner_class: { type: "string", enum: [...OWNER_CLASSES] },
                         authority_rule: { type: "string", enum: Object.keys(AUTHORITY_RULES) },
                         retention_class: { type: "string" },
+                        owner_gated_today: {
+                          type: "array",
+                          items: { type: "string" },
+                          description: "Identity and shared stores: the owner_gated_routes that touch this store today. Empty: no route of this store asks the owner under the owner rule yet.",
+                        },
                         note: { type: "string" },
                       },
                     },

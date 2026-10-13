@@ -15,7 +15,10 @@ bytes to every caller. For every store of the hosted service it gives:
   `platform`;
 - `authority_rule`: who may erase, withdraw or (later) redact from it;
 - `retention_class`: the [`/public/retention`](RETENTION.md) class that says
-  what is kept and what deletion does.
+  what is kept and what deletion does;
+- `owner_gated_today` (identity and shared stores): the owner-gated routes
+  that reach the store today. An empty list means no route of that store asks
+  the owner under the owner rule yet.
 
 A test joins the two maps. A store here whose retention class is missing, or
 does not list it, fails the build; so does a table the schema declares that is
@@ -61,6 +64,13 @@ client methods that wrap these routes take the same `authority`.
 | `POST /v1/margin/withdraw` | the author (`agent_id` must name it) |
 | `POST /v1/trust/withdraw` | the truster (`agent_id` must name it) |
 | `POST /v1/offerings/:id/archive` | the giver (`giver_identity_id`); the proof signs the exact body sent |
+
+Only these routes ask the owner today. Each identity or shared store at
+`/public/ownership-map` lists the ones that touch it in `owner_gated_today`;
+where that list is empty, the store's routes keep their current authority
+until wave 3. Most such status changes are bearer-managed (gallery withdraw,
+garden archive, holding withdraw, guild-invitation withdraw); a love-offer
+withdraw already needs the sender's root through the identity rule.
 
 Before wave 2 the gesture withdrawals acted as the project's primary identity
 with the bearer alone, and inbox delete was bearer-only. Now any giver of the
