@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,8 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { HOST_BINDING_FORMAT, writeHostBinding } from "../src/host-binding.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
+import { readProcessTable } from "../src/process-tree.js";
 import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
+import { writeSessionCredentialFile } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
@@ -1488,5 +1492,183 @@ describe("MCP surface", () => {
     const unbound = host(["knocks", "--host-ancestor", "1"]);
     expect(unbound.exitCode).toBe(0);
     expect(unbound.stdout.toString()).toBe("");
+  }, 30_000);
+
+  test("carries knocks --session with the sender through the checked-in host bundle", () => {
+    const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-mcp-knock-session-"));
+    const root = join(directory, "repo");
+    const databasePath = join(directory, "state", "collab.sqlite");
+    const hostBundle = join(packageRoot, "dist", "agenttool-collab-host.js");
+    mkdirSync(root);
+    const store = new CollabStore(databasePath);
+    cleanup.push(() => {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    });
+    const alpha = store.startSession({ root_path: root, actor: "alpha" });
+    const beta = store.startSession({ root_path: root, actor: "beta" });
+    // What beta's own MCP leaves behind: the credential file, in collab-sessions/ (0700).
+    writeSessionCredentialFile(store.defaultSessionCredentialPath(beta.session.id), beta.credential);
+    const note = store.appendReportForSession({
+      ...alpha.credential,
+      idempotency_key: "bundle-knock-note",
+      to_session_id: beta.session.id,
+      kind: "observation",
+      body: "One addressed note for the host bundle.",
+    });
+
+    const host = (args: string[]) => {
+      const result = Bun.spawnSync([process.execPath, hostBundle, ...args, "--db", databasePath], {
+        cwd: packageRoot,
+        env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir() },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr.toString()).toBe("");
+      return result.stdout.toString().split("\n").filter((line) => line.length > 0);
+    };
+
+    // A bundle built before C10 prints nothing here.
+    const peek = host(["knocks", "--session", beta.session.id, "--with-sender"]);
+    expect(peek).toHaveLength(1);
+    const expectedNew = [{
+      seq: note.event_sequence,
+      kind: "report.posted",
+      from_actor: "alpha",
+      ref_id: note.id,
+      from_session_id: alpha.session.id,
+    }];
+    expect(JSON.parse(peek[0]!)).toEqual({
+      protocol: "agenttool.collab-knock/1",
+      session_id: beta.session.id,
+      liveness: "live",
+      rest: null,
+      waiting: 1,
+      new: expectedNew,
+    });
+    const tapped = host(["knocks", "--session", beta.session.id, "--mark-tapped", "--with-sender"]);
+    expect(tapped).toHaveLength(1);
+    expect(JSON.parse(tapped[0]!).new).toEqual(expectedNew);
+    const again = host(["knocks", "--session", beta.session.id, "--mark-tapped", "--with-sender"]);
+    expect(JSON.parse(again[0]!)).toMatchObject({ waiting: 1, new: [] });
+    // pid 1 is never a recorded host: the ancestor form still prints nothing at all.
+    expect(host(["knocks", "--host-ancestor", "1"])).toEqual([]);
+  }, 30_000);
+
+  // The knock branch's tracked host bundle (1c3659c5): C10 must not change its
+  // --host-ancestor bytes. That commit is local history, so a shallow checkout
+  // lacks it; the comparison then reports as skipped instead of failing.
+  const knockBranchHostBundle = spawnSync(
+    "git",
+    ["-C", packageRoot, "show", "1c3659c51e9dc346035093898c6fbf75fa133abc:packages/collab/dist/agenttool-collab-host.js"],
+    { stdio: ["ignore", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024 },
+  );
+
+  test.skipIf(knockBranchHostBundle.status !== 0)("the rebuilt host bundle prints byte-identical --host-ancestor output to the 1c3659c5 bundle", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-mcp-knock-bytes-"));
+    const root = join(directory, "repo");
+    const state = join(directory, "state");
+    const databasePath = join(state, "collab.sqlite");
+    const hostBundle = join(packageRoot, "dist", "agenttool-collab-host.js");
+    const knockBranchBundle = join(directory, "agenttool-collab-host-1c3659c5.js");
+    mkdirSync(root);
+    cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+    writeFileSync(knockBranchBundle, knockBranchHostBundle.stdout);
+
+    // This test process plays the host. Its bound MCP is a child whose argv names a
+    // collab MCP (`…/agenttool-collab-mcp.js`), which is all the knock walk checks.
+    const fakeMcp = join(directory, "agenttool-collab-mcp.js");
+    writeFileSync(fakeMcp, 'process.stdout.write("ready\\n");\nsetInterval(() => {}, 60_000);\n');
+    const mcp = Bun.spawn([process.execPath, fakeMcp], {
+      cwd: directory,
+      env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir() },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    cleanup.push(async () => {
+      mcp.kill();
+      await mcp.exited;
+    });
+    // Its ready line means ps already shows its own argv.
+    const reader = mcp.stdout.getReader();
+    const decoder = new TextDecoder();
+    let banner = "";
+    while (!banner.includes("ready")) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error(`the stand-in MCP exited early: ${banner}`);
+      banner += decoder.decode(chunk.value, { stream: true });
+    }
+
+    const store = new CollabStore(databasePath);
+    let storeOpen = true;
+    cleanup.push(() => {
+      if (storeOpen) store.close();
+    });
+    const alpha = store.startSession({ root_path: root, actor: "alpha" });
+    const beta = store.startSession({ root_path: root, actor: "beta" });
+    writeSessionCredentialFile(store.defaultSessionCredentialPath(beta.session.id), beta.credential);
+    const self = readProcessTable()?.get(process.pid);
+    expect(self).toBeDefined();
+    writeHostBinding(databasePath, {
+      format: HOST_BINDING_FORMAT,
+      session_id: beta.session.id,
+      host_kind: "unknown",
+      host_pid: process.pid,
+      host_started_at: self!.started_at,
+      mcp_pid: mcp.pid,
+      credential_file_path: store.defaultSessionCredentialPath(beta.session.id),
+      written_at: new Date().toISOString(),
+    });
+    store.appendReportForSession({
+      ...alpha.credential,
+      idempotency_key: "bytes-note",
+      to_session_id: beta.session.id,
+      kind: "observation",
+      body: "One addressed note for the byte comparison.",
+    });
+    store.appendReportForSession({
+      ...alpha.credential,
+      idempotency_key: "bytes-broadcast",
+      kind: "observation",
+      body: "A broadcast that knocks nobody.",
+    });
+
+    const knock = (bundle: string, db: string, extra: string[] = []) => {
+      const result = Bun.spawnSync(
+        [process.execPath, bundle, "knocks", "--host-ancestor", String(process.pid), ...extra, "--db", db],
+        {
+          cwd: packageRoot,
+          env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir() },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr.toString()).toBe("");
+      return result.stdout.toString();
+    };
+
+    const before = knock(knockBranchBundle, databasePath);
+    expect(JSON.parse(before)).toMatchObject({ session_id: beta.session.id, waiting: 1 });
+    expect(JSON.parse(before).new).toHaveLength(1);
+    expect(knock(hostBundle, databasePath)).toBe(before);
+    expect(before).not.toContain("from_session_id");
+
+    // --mark-tapped writes the knock ledger, so each bundle marks its own copy of the journal.
+    store.close();
+    storeOpen = false;
+    const [oldCopy, newCopy] = ["old", "new"].map((name) => {
+      const copy = join(directory, `state-${name}`);
+      cpSync(state, copy, { recursive: true });
+      return copy;
+    });
+    const oldTapped = knock(knockBranchBundle, join(oldCopy!, "collab.sqlite"), ["--mark-tapped"]);
+    const newTapped = knock(hostBundle, join(newCopy!, "collab.sqlite"), ["--mark-tapped"]);
+    expect(JSON.parse(oldTapped).new).toHaveLength(1);
+    expect(newTapped).toBe(oldTapped);
+    const ledger = (copy: string) => readFileSync(join(copy, "collab-sessions", "knock-ledger.json"), "utf8");
+    expect(ledger(newCopy!)).toBe(ledger(oldCopy!));
   }, 30_000);
 });

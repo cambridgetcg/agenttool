@@ -5575,11 +5575,13 @@ var COLLAB_DOORBELL_SCAN_PROTOCOL = "agenttool.collab-doorbell-scan/1";
 var KNOCK_LEDGER_FORMAT = "agenttool.collab-knock-ledger/1";
 var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
 var COLLAB_KNOCKS_USAGE = "usage: agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]";
+var COLLAB_KNOCKS_SESSION_USAGE = "usage: agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]";
 var COLLAB_DOORBELL_SCAN_USAGE = "usage: agenttool-collab-host doorbell-scan [--db <path>]";
 var MAX_HOST_REASON = 2000;
 var COLLAB_APPLICATION_ID = 1096041292;
 var LEDGER_LOCK_STALE_MS = 30000;
 var SESSION_ID2 = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var MAX_KNOCK_SESSION_ID = 200;
 function endSessionFromCredential(store, credential, options) {
   let resumed;
   try {
@@ -5742,13 +5744,28 @@ function runKnocks(argv, env, dependencies) {
     strict: true,
     options: {
       "host-ancestor": { type: "string" },
+      session: { type: "string" },
       "mark-tapped": { type: "boolean" },
+      "with-sender": { type: "boolean" },
       db: { type: "string" }
     }
   });
   if (parsed.positionals.length > 0)
     throw new CollabError("usage_error", COLLAB_KNOCKS_USAGE);
   const ancestor = parsed.values["host-ancestor"];
+  const session = parsed.values.session;
+  const withSender = parsed.values["with-sender"] === true;
+  if (session !== undefined) {
+    if (ancestor !== undefined)
+      throw new CollabError("usage_error", COLLAB_KNOCKS_SESSION_USAGE);
+    return knockForSession(selectedJournal(parsed.values.db, env), session, {
+      mark_tapped: parsed.values["mark-tapped"] === true,
+      include_sender_session: withSender,
+      now: dependencies.now
+    });
+  }
+  if (withSender)
+    throw new CollabError("usage_error", COLLAB_KNOCKS_SESSION_USAGE);
   let startPid;
   if (ancestor === "auto") {
     startPid = dependencies.parent_pid ?? process.ppid;
@@ -5827,25 +5844,30 @@ function knockForHost(databasePath, startPid, options = {}) {
       });
       if (active.length !== 1)
         return null;
-      const session2 = active[0];
-      return { session: session2, rest: restAt(db, session2, now), waiting: addressedItems(db, session2) };
+      return readKnockAt(db, active[0], now, false);
     })();
   } finally {
     db.close();
   }
-  if (!found)
+  return found ? knockReport(databasePath, found, now, options.mark_tapped === true) : null;
+}
+function knockForSession(databasePath, sessionId, options = {}) {
+  if (sessionId.length > MAX_KNOCK_SESSION_ID || !SESSION_ID2.test(sessionId))
     return null;
-  const { session, rest, waiting } = found;
-  const held = rest !== null && !rest.wake_on.includes("addressed");
-  const fresh = options.mark_tapped && !held ? markTapped(databasePath, session.id, waiting) : untapped(readKnockLedger(databasePath), session.id, waiting);
-  return {
-    protocol: COLLAB_KNOCK_PROTOCOL,
-    session_id: session.id,
-    liveness: livenessAt(session, rest, now),
-    rest,
-    waiting: waiting.length,
-    new: fresh
-  };
+  const now = (options.now ?? (() => new Date))();
+  const db = openReadOnly(databasePath);
+  let found;
+  try {
+    found = db.transaction(() => {
+      const session = sessionRowById(db, sessionId);
+      if (session?.status !== "active")
+        return null;
+      return readKnockAt(db, session, now, options.include_sender_session === true);
+    })();
+  } finally {
+    db.close();
+  }
+  return found ? knockReport(databasePath, found, now, options.mark_tapped === true) : null;
 }
 function doorbellScan(databasePath, options = {}) {
   const now = (options.now ?? (() => new Date))();
@@ -5888,6 +5910,22 @@ function doorbellScan(databasePath, options = {}) {
   } finally {
     db.close();
   }
+}
+function readKnockAt(db, session, now, includeSender) {
+  return { session, rest: restAt(db, session, now), waiting: addressedItems(db, session, includeSender) };
+}
+function knockReport(databasePath, found, now, markTappedItems) {
+  const { session, rest, waiting } = found;
+  const held = rest !== null && !rest.wake_on.includes("addressed");
+  const fresh = markTappedItems && !held ? markTapped(databasePath, session.id, waiting) : untapped(readKnockLedger(databasePath), session.id, waiting);
+  return {
+    protocol: COLLAB_KNOCK_PROTOCOL,
+    session_id: session.id,
+    liveness: livenessAt(session, rest, now),
+    rest,
+    waiting: waiting.length,
+    new: fresh
+  };
 }
 function boundHostFor(startPid, table, bindings) {
   for (const record of ancestry(startPid, table)) {
@@ -5934,19 +5972,23 @@ function livenessAt(session, rest, now) {
   const age = now.getTime() - Date.parse(session.last_seen_at);
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
 }
-function addressedItems(db, session) {
+function addressedItems(db, session, includeSender = false) {
   const rows = db.query(`
     SELECT sequence, type, actor, entity_id, session_id, payload_json FROM events
     WHERE workspace_id = ? AND sequence > ?
       AND type IN ('report.posted', 'handoff.offered')
     ORDER BY sequence
   `).all(session.workspace_id, session.cursor_sequence);
-  return rows.filter((row) => isAddressedTo(row, session.id)).map((row) => ({
+  const addressed = rows.filter((row) => isAddressedTo(row, session.id));
+  const item = (row) => ({
     seq: row.sequence,
     kind: row.type,
     from_actor: row.actor,
     ref_id: row.entity_id
-  }));
+  });
+  if (!includeSender)
+    return addressed.map(item);
+  return addressed.map((row) => ({ ...item(row), from_session_id: row.session_id }));
 }
 function knockLedgerPath(databasePath) {
   return join4(collabSessionsDirectory(databasePath), "knock-ledger.json");
