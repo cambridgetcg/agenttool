@@ -1,5 +1,8 @@
 /** Pure bounded offline evidence comparison; no configuration or I/O.
  * Doctrine: docs/SETTLEMENT-RECEIPTS.md.
+ * CLI-only: bin/agenttool-zerone-reconcile.ts is its sole importer. It imports
+ * packages/wallet-zerone, which the API image does not copy, so no API module
+ * may import it (guard: api/tests/api-image-package-boundary.test.ts).
  */
 import { createHash } from "node:crypto";
 import { z } from "zod";

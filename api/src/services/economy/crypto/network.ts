@@ -6,6 +6,7 @@
 
 import { http, type HttpTransport } from "viem";
 
+import { isProductionOrFlyRuntime } from "../../../lib/production-runtime";
 import { economyConfig } from "../config";
 import {
   EVM_CHAIN_IDS,
@@ -56,11 +57,15 @@ export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
 
 export type ActiveNetwork = "mainnet" | "testnet";
 
+export type EvmDepositCreditRefusal =
+  | "mainnet_settlement_policy_unavailable"
+  | "testnet_credit_refused_in_production";
+
 export type EvmDepositCreditPolicy =
   | { allowed: true }
   | {
       allowed: false;
-      reason: "mainnet_settlement_policy_unavailable";
+      reason: EvmDepositCreditRefusal;
     };
 
 /**
@@ -68,12 +73,22 @@ export type EvmDepositCreditPolicy =
  * prove that an L2/non-L1 withdrawal is settled on Ethereum. Until each
  * production chain has an explicit settlement policy, only Ethereum mainnet
  * may turn EVM deposit evidence into spendable AgentTool balance.
+ *
+ * Testnet USDC is free from faucets, and a credited funding leg records no
+ * network. A production runtime (NODE_ENV=production or FLY_APP_NAME set)
+ * therefore refuses testnet credit outright, the way x402 refuses testnet
+ * settlement there; no environment flag reopens it.
  */
 export function evmDepositCreditPolicy(
   chain: EvmChain,
   network: ActiveNetwork,
 ): EvmDepositCreditPolicy {
-  if (network === "testnet" || chain === "ethereum") {
+  if (network === "testnet") {
+    return isProductionOrFlyRuntime()
+      ? { allowed: false, reason: "testnet_credit_refused_in_production" }
+      : { allowed: true };
+  }
+  if (chain === "ethereum") {
     return { allowed: true };
   }
   return {
@@ -85,9 +100,15 @@ export function evmDepositCreditPolicy(
 export class EvmDepositSettlementPolicyError extends Error {
   readonly code = "evm_deposit_settlement_policy_unavailable";
 
-  constructor(readonly chain: EvmChain) {
+  constructor(
+    readonly chain: EvmChain,
+    readonly reason: EvmDepositCreditRefusal =
+      "mainnet_settlement_policy_unavailable",
+  ) {
     super(
-      `${chain} mainnet deposit addresses are withheld until AgentTool has a chain-specific settlement-finality policy.`,
+      reason === "testnet_credit_refused_in_production"
+        ? `${chain} testnet deposit addresses are withheld in a production runtime (NODE_ENV=production or FLY_APP_NAME set), where testnet evidence never becomes spendable balance.`
+        : `${chain} mainnet deposit addresses are withheld until AgentTool has a chain-specific settlement-finality policy.`,
     );
     this.name = "EvmDepositSettlementPolicyError";
   }
@@ -124,7 +145,7 @@ export function activeNetwork(): ActiveNetwork {
 export function assertEvmDepositCreditSupported(chain: EvmChain): void {
   const policy = evmDepositCreditPolicy(chain, activeNetwork());
   if (!policy.allowed) {
-    throw new EvmDepositSettlementPolicyError(chain);
+    throw new EvmDepositSettlementPolicyError(chain, policy.reason);
   }
 }
 

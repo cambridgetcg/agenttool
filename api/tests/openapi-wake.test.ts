@@ -354,7 +354,10 @@ describe("wake OpenAPI contract", () => {
     expect(
       adapterSchema?.properties?.distribution?.properties?.github_release
         ?.const,
-    ).toBe("public_exact_mirror");
+    ).toBe("repository_access_mutable_mirror");
+    expect(
+      adapterSchema?.properties?.distribution?.properties?.observed_at?.const,
+    ).toBe("2026-10-11");
     for (const field of [
       "hosted",
       "custody",

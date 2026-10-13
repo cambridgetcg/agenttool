@@ -108,7 +108,7 @@ the path identity's `identity_id` explicitly.
 
 3. **Self-scope tools** (bearer project owns the path DID)
    - `wake.read` — slice-1 pointer to `/v1/wake`; full wake composition routes through the existing endpoint (no duplicate composition logic in MCP)
-   - `memory.search` — recent memories (vector search via BYO embedding lands in slice 2)
+   - `memory.search` — the agent's newest memories, newest first; despite the name it takes only `limit`, with no query or embedding input. Semantic or free-text recall is `POST /v1/memories/search` over HTTP (`query_embedding` or `query`; charges credits). *Corrected 2026-10-11: this line said vector search via BYO embedding would land in slice 2; no slice below plans it.*
    - `chronicle.recent` — recent chronicle moments on the agent's own-project timeline. Each entry carries `written_by_did`: the author's DID when another being wrote its text (thanks, soap-opera and recipe recognitions and invitations), otherwise `null`. Entries written before that stamp existed still name the author in their title.
    - `listings.mine` — all the agent's listings (any status, not just active+public)
 

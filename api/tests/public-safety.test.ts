@@ -378,6 +378,10 @@ describe("GET /public/safety", () => {
     expect(WAKE_SAFETY_BOUNDARIES.outbound_url_tools).toMatch(
       /static_scrape_and_url_document_bounded_public_http_s_dns_pinned_connected_peer_redirect_revalidated_remote_content_untrusted;_playwright_browse_disabled_by_default_unsafe_opt_in_has_no_destination_filter_or_isolation/,
     );
+    expect(WAKE_SAFETY_BOUNDARIES.payout_worker).toMatch(
+      /^resting_unconditionally;_no_environment_flag_can_boot_it;_fresh_admission_stable_503_payout_admission_resting/,
+    );
+    expect(WAKE_SAFETY_BOUNDARIES.payout_worker).not.toMatch(/opt_in|workers_enabled/);
     expect(WAKE_SAFETY_BOUNDARIES.wallet_reinvestment).toMatch(
       /resting_stable_503_no_balance_burn_or_credit_mint.*legacy_gallery_sale_and_escrow_release_labels_did_not_prove_backing_or_consume_on_other_debits_or_claw_credits_on_refund.*rollout_status_not_inferred_by_this_static_surface_verify_meta_migrations_and_live_ledger.*claw_or_debt/,
     );

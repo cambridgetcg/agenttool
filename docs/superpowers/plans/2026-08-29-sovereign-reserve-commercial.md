@@ -2,6 +2,8 @@
 
 Date: 2026-08-29. Authors: Yu + Ai. Status: proposed (Wave 0 executed, Waves 1–4 open).
 
+> Superseded 2026-09-23: PR #431 retired commercial targets and new purchases. `AGENTTOOL_CARD_CHECKOUT_ENABLED` was never honoured after that; it and both CDP key pairs were removed from Fly on 2026-10-12.
+
 ## Purpose (locked with Yu, 2026-08-29)
 
 Build the loop that fills the KINGDOM Sovereign Reserve: survival + sovereignty, measured by
