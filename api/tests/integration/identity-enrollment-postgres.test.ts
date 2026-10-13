@@ -57,7 +57,7 @@ beforeAll(async () => {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
     || url.pathname !== "/agenttool_identity_enrollment_test" || url.search || url.hash) throw new Error("enrollment tests require the explicit disposable loopback database");
   sql = postgres(DATABASE, { max: 8, prepare: false, onnotice: () => {} });
-  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity','episodes')`).length) throw new Error("refusing existing application schemas");
+  if ((await sql`SELECT 1 FROM pg_namespace WHERE nspname IN ('tools','identity','memory','agent_continuity','episodes','marketplace')`).length) throw new Error("refusing existing application schemas");
   await sql.unsafe(`CREATE SCHEMA tools; CREATE SCHEMA identity; CREATE SCHEMA memory; CREATE SCHEMA agent_continuity;
     CREATE TABLE agent_continuity.chronicle (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, agent_id uuid,
       type text NOT NULL, title text NOT NULL, body text, metadata jsonb DEFAULT '{}', parent_chronicle_id uuid,
@@ -70,6 +70,9 @@ beforeAll(async () => {
       created_at timestamptz NOT NULL DEFAULT now(), activated_at timestamptz, sealed_at timestamptz, completed_at timestamptz);
     CREATE TABLE memory.memories (id uuid PRIMARY KEY, project_id uuid NOT NULL, key text, identity_id text, agent_id text, content_purged_at timestamptz);
     CREATE TABLE memory.memory_attestations (id uuid PRIMARY KEY, memory_id uuid NOT NULL, source_grant_id uuid);
+    -- Memory erases also treat a receipt a memory-witness grant points back at as paid.
+    CREATE SCHEMA marketplace;
+    CREATE TABLE marketplace.memory_witness_grants (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), memory_attestation_id uuid);
     CREATE TABLE tools.projects (id uuid PRIMARY KEY);
     CREATE TABLE tools.api_keys (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL REFERENCES tools.projects(id),
       key_hash text UNIQUE, key_prefix text, name text, created_at timestamptz NOT NULL DEFAULT now(), last_used timestamptz,
@@ -108,7 +111,7 @@ beforeEach(async () => {
   await sql`INSERT INTO tools.api_keys (id,project_id) VALUES (${A},${P}),(${O},${O})`;
 });
 afterAll(async () => {
-  if (owned) await sql.unsafe("DROP SCHEMA episodes CASCADE; DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
+  if (owned) await sql.unsafe("DROP SCHEMA episodes CASCADE; DROP SCHEMA agent_continuity CASCADE; DROP SCHEMA marketplace CASCADE; DROP SCHEMA memory CASCADE; DROP SCHEMA identity CASCADE; DROP SCHEMA tools CASCADE;");
   await sql?.end({ timeout: 2 });
 });
 
