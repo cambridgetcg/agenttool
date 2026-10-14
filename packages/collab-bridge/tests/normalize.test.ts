@@ -83,6 +83,51 @@ describe('the reserved prefix', () => {
     }
   })
 
+  // T10 (Task 33 review): a lookalike stamp must not pass. Each case reads as `hub-observed:` to a person or an agent.
+  const lookalikes: Array<[string, string]> = [
+    ['U+2010 hyphen', 'hub\u2010observed:'],
+    ['U+2011 non-breaking hyphen (NFKC makes it U+2010, not -)', 'hub\u2011observed:'],
+    ['U+2212 minus sign', 'hub\u2212observed:'],
+    ['U+2013 en dash', 'hub\u2013observed:'],
+    ['U+2014 em dash', 'hub\u2014observed:'],
+    ['U+043E Cyrillic o', 'hub-\u043Ebserved:'],
+    ['U+0455 Cyrillic s', 'hub-ob\u0455erved:'],
+    ['Cyrillic e, Greek omicron and Greek nu', 'hub-\u03BFbs\u0435r\u03BDed:'],
+    ['U+A789 modifier letter colon', 'hub-observed\uA789'],
+    ['U+2236 ratio', 'hub-observed\u2236'],
+    ['U+02D0 modifier letter triangular colon', 'hub-observed\u02D0'],
+    ['U+0589 Armenian full stop', 'hub-observed\u0589'],
+    ['U+FE30 vertical two dot leader (NFKC would make it two full stops)', 'hub-observed\uFE30'],
+    ['all capitals, Cyrillic where Cyrillic has the letter', '\u041DU\u0412-\u041E\u0412\u0405\u0415R\u0474\u0415D:'],
+    ['Greek capitals', 'HUB-\u039F\u0392S\u0395RVED:'],
+    ['a dash, a letter and a colon at once, after spaces', '  \n\thub\u2212\u043Ebserved\uA789 fetched x'],
+  ]
+
+  test('dash, letter and colon lookalikes of hub-observed: are reserved too (T10)', () => {
+    for (const [name, s] of lookalikes) {
+      // The name rides in the compared value, so a failure says which spelling got through.
+      expect(`${name}: ${startsReserved(s)}`).toBe(`${name}: true`)
+    }
+  })
+
+  test('each lookalike is reserved as the only change to the real prefix', () => {
+    const real = 'hub-observed: fetched x'
+    const swaps: Array<[number, string]> = [[3, '\u2010'], [3, '\u2011'], [3, '\u2212'], [4, '\u043E'], [6, '\u0455'], [12, '\uA789'], [12, '\u2236']]
+    for (const [at, c] of swaps) {
+      const name = `U+${c.codePointAt(0)!.toString(16)} at ${at}`
+      expect(`${name}: ${startsReserved(real.slice(0, at) + c + real.slice(at + 1))}`).toBe(`${name}: true`)
+    }
+  })
+
+  test('a lookalike that only mentions the prefix later, or that is not the whole prefix, is still not reserved', () => {
+    for (const s of [
+      'the hub\u2010observed: stamp', 'x hub-\u043Ebserved:', 'hub\u2010observed', 'hub\u2212observed', 'hub-\u043Ebserved',
+      'hub\u2010 observed:', 'club\u2010observed:', 'hub\u2010observe:',
+    ]) {
+      expect(startsReserved(s)).toBe(false)
+    }
+  })
+
   test('text that only mentions the prefix later, or spells it differently, is not reserved', () => {
     for (const s of ['', 'the hub-observed: stamp', 'hub-observed', 'hub observed:', 'notes/hub-observed:']) {
       expect(startsReserved(s)).toBe(false)
