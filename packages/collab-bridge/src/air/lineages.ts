@@ -3,7 +3,7 @@
 // is whole-file and durable (temp file, F_FULLFSYNC, rename, dir fsync; P13), because the session_start marker must be on
 // disk before a start is forwarded (§9.3 item 8). A damaged file throws on load, and the hub then writes
 // `needs Yu: config` instead of guessing which sessions exist.
-import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, isAbsolute } from 'node:path'
 import { writeFileDurable } from '../native.ts'
 import { CALL_REF_RE, callRefLineage, LABEL_TOKEN_RE, LINEAGE_RE, MAX_FOLDER_BYTES, START_NONCE_RE } from '../link/messages.ts'
@@ -75,20 +75,37 @@ function problem(v: unknown): string | null {
   return null
 }
 
+const errCode = (e: unknown): string => (e as NodeJS.ErrnoException).code ?? 'unknown error'
+const cannotRead = (why: string, cause: unknown) => new Error(`lineages.json is damaged: cannot be read (${why})`, { cause })
+
 export class LineageStore {
   private entries = new Map<string, LineageEntry>()
 
   constructor(readonly path: string) {}
 
-  /** A missing file is an empty store; anything that does not validate throws. */
+  /**
+   * A missing file is an empty store; a file that cannot be read, or does not validate, throws. Only ENOENT on a path that
+   * is not there at all counts as missing: existsSync would also report false for a state dir that lost its search
+   * permission or for a dangling link, and the next upsert would then overwrite the store the hub is never to prune.
+   */
   load(): void {
-    if (!existsSync(this.path)) {
-      this.entries = new Map()
-      return
+    let text: string
+    try {
+      text = readFileSync(this.path, 'utf8')
+    } catch (e) {
+      if (errCode(e) !== 'ENOENT') throw cannotRead(errCode(e), e)
+      try {
+        lstatSync(this.path) // a dangling symlink reads as ENOENT too, but something is there
+      } catch (l) {
+        if (errCode(l) !== 'ENOENT') throw cannotRead(errCode(l), l)
+        this.entries = new Map()
+        return
+      }
+      throw cannotRead('dangling symlink', e)
     }
     let doc: unknown
     try {
-      doc = JSON.parse(readFileSync(this.path, 'utf8'))
+      doc = JSON.parse(text)
     } catch {
       throw new Error('lineages.json is damaged: it does not parse')
     }
