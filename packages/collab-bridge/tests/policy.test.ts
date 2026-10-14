@@ -23,6 +23,12 @@ function argsOf(d: Decision): Record<string, unknown> {
   return d.args
 }
 const codeOf = (d: Decision): string | null => (d.kind === 'refuse' ? d.code : null)
+// The seat schema's view of one property: whether Collab requires it, and its enum. The omitted-field tests below stand
+// on these, so a Collab default (a field leaving required) turns them red and the hub's exact-value checks must fail closed.
+function schemaOf(tool: string, prop: string): { required: boolean; values: unknown } {
+  const s = SEAT.find((t) => t.name === tool)!.inputSchema as { required?: string[]; properties?: Record<string, { enum?: unknown }> }
+  return { required: (s.required ?? []).includes(prop), values: s.properties?.[prop]?.enum }
+}
 
 // Minimal valid-looking arguments per tool; decide() checks no required fields (Collab does).
 const BASE: Record<string, Record<string, unknown>> = {
@@ -127,6 +133,15 @@ describe('one test per §6.3 row', () => {
     expect(Object.keys(argsOf(run('collab_session_rest', { idempotency_key: 'k3', mode: 'ready' })))).not.toContain('wake_on')
   })
 
+  test('rest without mode: Collab requires mode, so the call is forwarded untouched and wake_on is not rewritten (R9, R28, R29, K62)', () => {
+    // If Collab ever defaulted mode, this call would arrive as resting with ["addressed"] intact: these two lines go red first.
+    expect(schemaOf('collab_session_rest', 'mode')).toEqual({ required: true, values: ['resting', 'ready'] })
+    expect(run('collab_session_rest', { idempotency_key: 'k4', wake_on: ['addressed'] })).toEqual({
+      kind: 'forward', args: { idempotency_key: 'k4', wake_on: ['addressed'], workspace_id: WS },
+    })
+    expect(Object.keys(argsOf(run('collab_session_rest', { idempotency_key: 'k5' })))).not.toContain('wake_on')
+  })
+
   test('report kind decision is refused and authority fields are prefixed', () => {
     expect(codeOf(run('collab_report_append', { ...BASE.collab_report_append, kind: 'decision' }))).toBe('tool_not_available_remote')
     const a = argsOf(run('collab_report_append', { ...BASE.collab_report_append, authority_scope: 'notes/ only', authority_basis: 'Yu asked' }))
@@ -140,6 +155,8 @@ describe('one test per §6.3 row', () => {
   test('review accept is remote_review_blind and request_changes passes', () => {
     expect(codeOf(run('collab_task_review', { ...BASE.collab_task_review, outcome: 'accept' }))).toBe('remote_review_blind')
     expect(run('collab_task_review', BASE.collab_task_review!).kind).toBe('forward')
+    // Collab requires outcome, so an omitted one never arrives as accept; a default would turn this red.
+    expect(schemaOf('collab_task_review', 'outcome')).toEqual({ required: true, values: ['accept', 'request_changes'] })
   })
 
   test('create edit or omitted work_mode with reported is remote_review_required, coordination passes', () => {
@@ -150,6 +167,17 @@ describe('one test per §6.3 row', () => {
     expect(run('collab_task_create', { ...BASE.collab_task_create, work_mode: 'read_only', completion_policy: 'reported' }).kind).toBe('forward')
     expect(run('collab_task_create', BASE.collab_task_create!).kind).toBe('forward')
     expect(run('collab_task_create', noMode).kind).toBe('forward')
+  })
+
+  test('create with completion_policy omitted is forwarded and the hub adds none: Collab defaults an edit task to accepted', () => {
+    // The default itself (KN src/store.ts:2395-2396) is not in the schema; what the schema shows is that omitting it is a legal call.
+    expect(schemaOf('collab_task_create', 'completion_policy')).toEqual({ required: false, values: ['reported', 'accepted'] })
+    const { completion_policy: _policy, ...noPolicy } = BASE.collab_task_create!
+    const { work_mode: _mode, ...noPolicyNoMode } = noPolicy
+    for (const sent of [noPolicy, noPolicyNoMode]) {
+      expect(run('collab_task_create', sent)).toEqual({ kind: 'forward', args: { ...sent, workspace_id: WS } })
+      expect(Object.keys(argsOf(run('collab_task_create', sent)))).not.toContain('completion_policy')
+    }
   })
 
   test('claim, complete, takeover and attach become edit flows, release and block pass', () => {

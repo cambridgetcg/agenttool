@@ -125,6 +125,9 @@ export function decide(ctx: SeatCtx, name: string, rawArgs: Record<string, unkno
       return { kind: 'session_start', args: out }
     }
     case 'collab_session_rest': {
+      // Collab has no default for mode: it is a required enum (`z.enum(["resting", "ready"])`, KN src/mcp.ts:372) and
+      // anything else is invalid_mode (validateRestMode, KN src/store.ts:2050, :6199), so a call without mode never
+      // reaches Collab as resting, and only an exact 'resting' can be a rest that wake_on matters to (R9, R28, R29).
       if (args.mode !== 'resting') return { kind: 'forward', args }   // a return is never rewritten (K62, R29)
       const wake = args.wake_on
       if ((Array.isArray(wake) && wake.includes('addressed')) || wake === 'addressed') {
@@ -142,10 +145,14 @@ export function decide(ctx: SeatCtx, name: string, rawArgs: Record<string, unkno
       return { kind: 'forward', args }
     }
     case 'collab_task_review':
+      // Collab has no default for outcome either: it is a required enum (`z.enum(["accept", "request_changes"])`, KN
+      // src/mcp.ts:847; invalid_review_outcome, KN src/store.ts:3470-3471), so no omitted outcome arrives as accept.
       if (args.outcome === 'accept') return refuse('remote_review_blind', 'Remote seats accept no work in this phase: request changes or report, and an Air session accepts')
       return { kind: 'forward', args }
     case 'collab_task_create': {
-      // An omitted work_mode is Collab's edit (`input.work_mode ?? "edit"`, KN src/store.ts:2380).
+      // An omitted work_mode is Collab's edit (`input.work_mode ?? "edit"`, KN src/store.ts:2380), and an omitted
+      // completion_policy is accepted for an edit task (`?? (work_mode === "edit" ? "accepted" : "reported")`, KN
+      // src/store.ts:2395-2396), so only an explicit reported is the bypass and the hub adds no completion_policy.
       const mode = args.work_mode
       if ((mode === undefined || mode === null || mode === 'edit') && args.completion_policy === 'reported') {
         return refuse('remote_review_required', 'Edit tasks from remote seats need review: use completion_policy accepted')
