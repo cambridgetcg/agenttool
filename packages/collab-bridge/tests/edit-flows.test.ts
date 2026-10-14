@@ -2,16 +2,16 @@
 // temp "Nuance" home whose ~/Projects/collab-trial is shared for edit, the real gate from source behind the fake ssh,
 // a real mirror made by createMirror, and two real Collab children on one temp shared journal (the remote seat's,
 // rooted at the mirror, and an Air session's, rooted at the Air clone).
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { mirrorBusy } from '../src/air/busy.ts'
-import { CollabChild } from '../src/air/children.ts'
+import { CollabChild, type CallOutcome } from '../src/air/children.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
 import { FLOW_MESSAGES, runEditFlow, type EditFlowCtx, type EditFlowOutcome } from '../src/air/edit-flows.ts'
 import { airGit, type GitRunner } from '../src/air/git.ts'
 import { createMirror, mirrorIdOf, mirrorRefs, MirrorLock, type MirrorDeps, type MirrorSpec } from '../src/air/mirror.ts'
-import type { MirrorHandle } from '../src/air/sync-points.ts'
+import { PLAN_MESSAGES, type MirrorHandle } from '../src/air/sync-points.ts'
 import { readTask } from '../src/air/tasks.ts'
 import type { LedgerFields } from '../src/ledger.ts'
 import type { Declared } from '../src/link/messages.ts'
@@ -55,14 +55,31 @@ function expireLease(journal: string, taskId: string): void {
   if (r.exitCode !== 0) throw new Error(`expireLease: ${r.stderr.toString()}`)
 }
 
-/** Faults a test can arm on the mirror's git runner: the next checkout of `checkoutOf` fails once. */
-interface Faults { checkoutOf: string | null }
+/**
+ * Faults a test can arm on the mirror's git runner, each firing once. checkoutOf: the next checkout naming that commit
+ * answers a failure code. rejectCheckoutOf: the next such checkout rejects instead of answering, as a spawn failure or
+ * ENOSPC would (syncMirror awaits it unguarded). rejectUpdateRefOf: the next update-ref of that ref rejects the same way.
+ */
+interface Faults { checkoutOf: string | null; rejectCheckoutOf: string | null; rejectUpdateRefOf: string | null }
+
+/** Long, non-ASCII and multi-sentence on purpose: the hub's log line must clip and reduce it to printable ASCII. */
+const INJECTED = `injected git failure \u00e9 ${'x'.repeat(300)}`
 
 function faulty(g: GitRunner, faults: Faults): GitRunner {
   return {
     path: g.path,
     records: (args, o) => g.records(args, o),
     run: async (args, o) => {
+      const rejectCo = faults.rejectCheckoutOf
+      if (rejectCo !== null && args.includes('checkout') && args.some((a) => a.includes(rejectCo))) {
+        faults.rejectCheckoutOf = null
+        throw new Error(INJECTED)
+      }
+      const rejectRef = faults.rejectUpdateRefOf
+      if (rejectRef !== null && args.includes('update-ref') && args.includes(rejectRef)) {
+        faults.rejectUpdateRefOf = null
+        throw new Error(INJECTED)
+      }
       const target = faults.checkoutOf
       if (target !== null && args.includes('checkout') && args.some((a) => a.includes(target))) {
         faults.checkoutOf = null
@@ -107,7 +124,7 @@ async function world(): Promise<World> {
   const spec: MirrorSpec = { device: 'nuance', user: 'macair', mirrorId, mirrorPath: ap.mirrorDir('nuance', 'macair', mirrorId), airClone,
     remoteGitdir: join(share, '.git'), caps: DEFAULT_CAPS }
   const ledger: LedgerFields[] = []
-  const faults: Faults = { checkoutOf: null }
+  const faults: Faults = { checkoutOf: null, rejectCheckoutOf: null, rejectUpdateRefOf: null }
   const deps: MirrorDeps = { git: faulty(airGit({ git: REAL_GIT, home: airHome }), faults), sshBin: fake.bin, sshConfig: ap.sshConfig,
     alias: 'collab-nuance', freeBytes: () => Number.MAX_SAFE_INTEGER, fetchedToday: () => 0, ledger: (f) => { ledger.push(f) } }
   const made = await createMirror(spec, deps)
@@ -161,9 +178,9 @@ function createEdit(w: World, id: string, o: { base?: string | null; policy?: 'a
 }
 
 function ctxOf(w: World, flow: EditFlowCtx['flow'], name: string, args: Record<string, unknown>, declared: Declared | undefined,
-  o: { child?: CollabChild; nowMs?: number; notAfterMono?: number; mono?: () => number } = {}): EditFlowCtx {
+  o: { child?: CollabChild; nowMs?: number; notAfterMono?: number; mono?: () => number; deps?: MirrorDeps } = {}): EditFlowCtx {
   return { flow, name, args, declared, device: 'nuance', user: 'macair', sessionId: w.sessionId, workspaceId: w.ws,
-    child: o.child ?? w.remote, mirror: w.handle, mirrorDeps: w.deps, nowMs: o.nowMs ?? Date.now(),
+    child: o.child ?? w.remote, mirror: w.handle, mirrorDeps: o.deps ?? w.deps, nowMs: o.nowMs ?? Date.now(),
     notAfterMono: o.notAfterMono ?? null, mono: o.mono ?? (() => performance.now()) }
 }
 
@@ -171,15 +188,17 @@ const claimArgs = (w: World, t: any, o: { key?: string; ttl?: number } = {}) => 
   idempotency_key: o.key ?? key(), expected_version: t.version, ...(o.ttl === undefined ? {} : { ttl_seconds: o.ttl }) })
 const completeArgs = (w: World, t: any, o: { key?: string; limits?: string } = {}) => ({ workspace_id: w.ws, task_id: t.id,
   lease_id: t.lease_id, idempotency_key: o.key ?? key(), expected_version: t.version, summary: 'edited notes', ...(o.limits === undefined ? {} : { limits: o.limits }) })
-const takeoverArgs = (w: World, t: { id: string; version: number }, note: string) => ({ workspace_id: w.ws, task_id: t.id,
-  idempotency_key: key(), expected_version: t.version, recovery_note: note })
+const takeoverArgs = (w: World, t: { id: string; version: number }, note: string, k?: string) => ({ workspace_id: w.ws, task_id: t.id,
+  idempotency_key: k ?? key(), expected_version: t.version, recovery_note: note })
 
-const claim = (w: World, t: any, declared: Declared | undefined, o: { key?: string; ttl?: number; child?: CollabChild } = {}) =>
+type FlowOpts = { child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number }
+const claim = (w: World, t: any, declared: Declared | undefined, o: FlowOpts & { key?: string; ttl?: number } = {}) =>
   runEditFlow(ctxOf(w, 'claim', 'collab_task_claim', claimArgs(w, t, o), declared, o))
-const complete = (w: World, t: any, declared: Declared | undefined, o: { key?: string; limits?: string; child?: CollabChild } = {}) =>
+const complete = (w: World, t: any, declared: Declared | undefined, o: FlowOpts & { key?: string; limits?: string } = {}) =>
   runEditFlow(ctxOf(w, 'complete', 'collab_task_complete', completeArgs(w, t, o), declared, o))
-const takeover = (w: World, t: { id: string; version: number }, declared: Declared | undefined, note: string, o: { child?: CollabChild } = {}) =>
-  runEditFlow(ctxOf(w, 'takeover', 'collab_task_recover', takeoverArgs(w, t, note), declared, o))
+const takeover = (w: World, t: { id: string; version: number }, declared: Declared | undefined, note: string,
+  o: { key?: string; child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number } = {}) =>
+  runEditFlow(ctxOf(w, 'takeover', 'collab_task_recover', takeoverArgs(w, t, note, o.key), declared, o))
 
 /** The task of a flow that reached Collab and succeeded. */
 function taskOf(r: EditFlowOutcome): any {
@@ -209,12 +228,20 @@ const airReview = (w: World, t: any, outcome: 'accept' | 'request_changes') =>
   airOk(w.air, 'collab_task_review', { workspace_id: w.ws, task_id: t.id, idempotency_key: key(), expected_version: t.version,
     outcome, summary: outcome === 'accept' ? 'read the diff; it holds' : 'please change' }).then((r) => r.task)
 
-/** A view of `child` that records every call, and can run something of its own just before one named call. */
-function recording(child: CollabChild, before?: { name: string; run(): Promise<void> }) {
+/**
+ * A view of `child` that records every call, and can run something of its own just before one named call (`before`).
+ * stopAfter: once that call has answered, accepting() is false (a park, an end or a drain reached the child mid-flow).
+ * unknownFor: that call is not made and answers unknown (a child that went silent). rewrite: that call's real answer is
+ * changed on its way back to the flow.
+ */
+function recording(child: CollabChild, before?: { name: string; run(): Promise<void> },
+  o: { stopAfter?: string; unknownFor?: string; rewrite?: { name: string; to(real: CallOutcome): CallOutcome } } = {}) {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = []
   let armed = before
+  let stopped = false
   const proxy = new Proxy(child, {
     get(target, prop) {
+      if (prop === 'accepting') return () => !stopped && target.accepting()
       if (prop === 'call') {
         return async (name: string, args: Record<string, unknown>) => {
           calls.push({ name, args: structuredClone(args) })
@@ -223,7 +250,10 @@ function recording(child: CollabChild, before?: { name: string; run(): Promise<v
             armed = undefined
             await b.run()
           }
-          return target.call(name, args)
+          if (o.unknownFor === name) return { outcome: 'unknown', reason: 'timeout', ms: 0 } satisfies CallOutcome
+          const real = await target.call(name, args)
+          if (o.stopAfter === name) stopped = true
+          return o.rewrite && o.rewrite.name === name ? o.rewrite.to(real) : real
         }
       }
       const v = Reflect.get(target, prop, target)
@@ -636,5 +666,287 @@ describe('takeover, review and the mirror', () => {
     expect(await attach).toEqual({ kind: 'refuse', code: 'hub_away', message: FLOW_MESSAGES.childStopped })
     expect(rec.calls).toEqual([])
     await stopping
+  }, T)
+})
+
+// ---- Task 45 fix round 1 ----
+
+/** A claimed task whose lease has run out, as Collab reads it (recovery_required): where a takeover starts. */
+async function expiredClaim(w: World, id = 'T'): Promise<any> {
+  await claimed(w, id)
+  expireLease(w.journal, id)
+  return (await readTask(w.remote, w.ws, id))!
+}
+
+describe('takeover replays', () => {
+  // §7.6 / K24: a takeover's note names the mirror's last synced commit and the device HEAD the pipe declared, and Collab
+  // holds neither, so a replay is byte-identical only while both are unchanged; otherwise Collab answers idempotency_conflict.
+  test('a same-key takeover replay with the same declared head sends the same bytes and returns the stored receipt', async () => {
+    const w = await world()
+    const expired = await expiredClaim(w)
+    commitFiles(w.share, { 'notes/a.md': 'work in progress\n' }, 'wip')
+    const rec = recording(w.remote)
+    const k = key()
+    const first = taskOf(await takeover(w, expired, declaredOf(w), 'picking it up again', { key: k, child: rec.child }))
+    const again = taskOf(await takeover(w, expired, declaredOf(w), 'picking it up again', { key: k, child: rec.child }))
+    expect(again).toEqual(first)
+    const sent = rec.calls.filter((c) => c.name === 'collab_task_recover').map((c) => c.args)
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toEqual(sent[0]!)
+    expect(first.status).toBe('claimed')
+  }, T)
+
+  test('a same-key takeover replay after the device HEAD moved answers idempotency_conflict and leaves the task as the first call made it', async () => {
+    const w = await world()
+    const expired = await expiredClaim(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'work in progress\n' }, 'wip')
+    const rec = recording(w.remote)
+    const k = key()
+    const first = taskOf(await takeover(w, expired, declaredOf(w), 'picking it up again', { key: k, child: rec.child }))
+    const n2 = commitFiles(w.share, { 'notes/b.md': 'more work\n' }, 'more')
+    const before = fetches(w)
+    expect(collabError(await takeover(w, expired, declaredOf(w), 'picking it up again', { key: k, child: rec.child }))).toBe('idempotency_conflict')
+    const sent = rec.calls.filter((c) => c.name === 'collab_task_recover').map((c) => String(c.args.recovery_note))
+    expect(sent).toEqual([
+      `hub-observed: mirror at ${w.base}, not refetched; device HEAD ${n1} self-declared\npicking it up again`,
+      `hub-observed: mirror at ${w.base}, not refetched; device HEAD ${n2} self-declared\npicking it up again`,
+    ])
+    const now = (await airOk(w.air, 'collab_task_get', { workspace_id: w.ws, task_id: 'T' })).task
+    expect([now.version, now.status, now.lease_id, now.assignee_session_id]).toEqual([first.version, first.status, first.lease_id, first.assignee_session_id])
+    expect(fetches(w)).toBe(before) // a takeover never syncs, replay or not
+    expect(mirrorAt(w)).toBe(w.base)
+  }, T)
+})
+
+describe('stamps Collab itself refuses to go without', () => {
+  // The hub forwards a non-string limits and a missing recovery_note untouched, for Collab to refuse: its zod schemas are
+  // recovery_note z.string().min(1).max(4000) (required, KN src/mcp.ts:659) and limits z.string().max(2000).optional()
+  // (KN src/mcp.ts:802), and neither accepts null or a missing note, so nothing lands without a hub-observed line.
+  test('a complete with limits null is forwarded as it came and Collab refuses it: the task stays claimed with no completion report', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    commitFiles(w.share, { 'notes/a.md': 'null limits\n' }, 'null limits')
+    const rec = recording(w.remote)
+    const r = await runEditFlow(ctxOf(w, 'complete', 'collab_task_complete', { ...completeArgs(w, t), limits: null }, declaredOf(w), { child: rec.child }))
+    expect(r.kind === 'outcome' && r.outcome.outcome).toBe('error')
+    const sent = rec.calls.filter((c) => c.name === 'collab_task_complete')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.args.limits).toBeNull() // not stamped
+    const now = (await airOk(w.air, 'collab_task_get', { workspace_id: w.ws, task_id: 'T' })).task
+    expect([now.status, now.result_checkpoint, now.completion_report_id ?? null]).toEqual(['claimed', null, null])
+    expect((await airOk(w.air, 'collab_report_list', { workspace_id: w.ws, task_id: 'T' })).reports).toEqual([])
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([])
+    expect(tasksRef(w, 'T')).toBeNull()
+  }, T)
+
+  test('a takeover with no recovery_note is forwarded as it came and Collab refuses it: the task stays recovery_required', async () => {
+    const w = await world()
+    const expired = await expiredClaim(w)
+    const rec = recording(w.remote)
+    const { recovery_note: _gone, ...noNote } = takeoverArgs(w, expired, 'unused')
+    const r = await runEditFlow(ctxOf(w, 'takeover', 'collab_task_recover', noNote, declaredOf(w), { child: rec.child }))
+    expect(r.kind === 'outcome' && r.outcome.outcome).toBe('error')
+    const sent = rec.calls.filter((c) => c.name === 'collab_task_recover')
+    expect(sent).toHaveLength(1)
+    expect('recovery_note' in sent[0]!.args).toBe(false) // not stamped
+    expect((await readTask(w.remote, w.ws, 'T'))?.effective_status).toBe('recovery_required')
+    const events = (await airOk(w.air, 'collab_events_since', { workspace_id: w.ws })).events as any[]
+    expect(events.filter((e) => e.type === 'task.recovered')).toEqual([])
+  }, T)
+})
+
+/** Everything written to process.stderr while `run` runs (kept out of the test output), and the lines the hub wrote. */
+async function withStderr<V>(run: () => Promise<V>): Promise<{ value: V; hub: string[] }> {
+  const written: string[] = []
+  const spy = spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+    written.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk))
+    return true
+  }) as typeof process.stderr.write)
+  try {
+    const value = await run()
+    return { value, hub: written.filter((l) => l.startsWith('collab-bridge hub: ')) }
+  } finally {
+    spy.mockRestore()
+  }
+}
+
+describe('a fault the flow did not expect', () => {
+  // The cause goes to the hub's stderr (launchd's hub.log, spec §10.4), because the ledger stays content-free: an
+  // error name and message in printable ASCII cut at 200 characters, and never the seat's text.
+  test('a syncMirror that throws is the syncFault refusal, logs its cause as one ASCII line, forwards nothing and leaves the lock free', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'sync will throw\n' }, 'sync will throw')
+    w.faults.rejectCheckoutOf = n1 // the fetch is real; the checkout of the fetched commit rejects, as a spawn failure would
+    const rec = recording(w.remote)
+    const { value, hub } = await withStderr(() => complete(w, t, declaredOf(w), { child: rec.child, limits: 'SEAT-TEXT-MARKER' }))
+    expect(value).toEqual({ kind: 'refuse', code: 'mirror_tampered', message: FLOW_MESSAGES.syncFault })
+    expect(rec.calls.map((c) => c.name)).not.toContain('collab_task_complete')
+    const label = 'collab-bridge hub: complete nuance/macair: sync fault: '
+    expect(hub).toHaveLength(1)
+    expect(hub[0]!.startsWith(`${label}Error: injected git failure ? xxx`)).toBe(true)
+    expect(hub[0]!.slice(label.length)).toMatch(/^[\x20-\x7e]{200}\n$/) // printable ASCII, cut at 200
+    expect(hub[0]).not.toContain('SEAT-TEXT-MARKER')
+    expect(syncedAt(w)).toBe(w.base)
+    expect(taskOf(await complete(w, t, declaredOf(w))).result_checkpoint.head_sha).toBe(n1) // the lock was released
+  }, T)
+
+  test('a tasks ref write that throws still answers Collab\'s result, ledgers tasks_ref without content and logs one ASCII line', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'ref will throw\n' }, 'ref will throw')
+    w.faults.rejectUpdateRefOf = mirrorRefs(w.spec).task('T')
+    const { value, hub } = await withStderr(() => complete(w, t, declaredOf(w), { limits: 'SEAT-TEXT-MARKER' }))
+    const done = taskOf(value)
+    expect([done.status, done.result_checkpoint.head_sha]).toEqual(['completed', n1])
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([{ event: 'tasks_ref', device: 'nuance', user: 'macair', code: 'mirror_tampered', outcome: 'refused' }])
+    expect(tasksRef(w, 'T')).toBeNull()
+    const label = 'collab-bridge hub: complete nuance/macair: tasks ref fault: '
+    expect(hub).toHaveLength(1)
+    expect(hub[0]!.startsWith(`${label}Error: injected git failure ? xxx`)).toBe(true)
+    expect(hub[0]!.slice(label.length)).toMatch(/^[\x20-\x7e]{200}\n$/)
+    expect(hub[0]).not.toContain('SEAT-TEXT-MARKER')
+  }, T)
+
+  test("a result with no result_checkpoint head_sha writes no ref, ledgers tasks_ref missing and still returns Collab's result", async () => {
+    const w = await world()
+    const t = await claimed(w)
+    commitFiles(w.share, { 'notes/a.md': 'no head\n' }, 'no head')
+    const rec = recording(w.remote, undefined, { rewrite: { name: 'collab_task_complete', to: (real) => {
+      if (real.outcome === 'unknown') return real
+      const c = structuredClone(real)
+      ;(c.result.structuredContent as any).task.result_checkpoint.head_sha = null
+      return c
+    } } })
+    const r = await complete(w, t, declaredOf(w), { child: rec.child })
+    const done = taskOf(r)
+    expect([done.status, done.result_checkpoint.head_sha]).toEqual(['completed', null])
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([{ event: 'tasks_ref', device: 'nuance', user: 'macair', code: 'missing', outcome: 'refused' }])
+    expect(tasksRef(w, 'T')).toBeNull()
+  }, T)
+})
+
+type Flow3 = 'claim' | 'complete' | 'takeover'
+const FLOWS: Flow3[] = ['claim', 'complete', 'takeover']
+const FORWARDED: Record<Flow3, string> = { claim: 'collab_task_claim', complete: 'collab_task_complete', takeover: 'collab_task_recover' }
+const NOT_AFTER = 64_000 // the forwarder's notAfter on the hub's monotonic clock
+const PAST = 70_000
+
+/**
+ * One task in the state a remote `flow` starts from, plus one new commit on Nuance that a sync would fetch (a takeover
+ * never syncs, so it never fetches it). `effective` is the task's effective_status until the flow applies.
+ */
+async function readyFor(w: World, flow: Flow3) {
+  if (flow === 'claim') {
+    const task = await createEdit(w, 'T', { base: null }) // no expected base: the claim may name any commit
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'fetched\n' }, 'work')
+    return { n1, effective: 'open', run: (o: FlowOpts = {}) => claim(w, task, declaredOf(w), o) }
+  }
+  if (flow === 'complete') {
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'fetched\n' }, 'work')
+    return { n1, effective: 'claimed', run: (o: FlowOpts = {}) => complete(w, t, declaredOf(w), o) }
+  }
+  const expired = await expiredClaim(w)
+  const n1 = commitFiles(w.share, { 'notes/a.md': 'never fetched\n' }, 'work')
+  return { n1, effective: 'recovery_required', run: (o: FlowOpts = {}) => takeover(w, expired, declaredOf(w), 'again', o) }
+}
+
+const LATE_REFUSAL: EditFlowOutcome = { kind: 'refuse', code: 'hub_away', message: FLOW_MESSAGES.late, extra: { reason: 'deadline_passed' } }
+
+describe('every way a flow is stopped before the forward', () => {
+  for (const flow of FLOWS) {
+    test(`a ${flow} whose deadline has passed when it gets the lock is hub_away and nothing is read, fetched or sent`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const rec = recording(w.remote)
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, notAfterMono: NOT_AFTER, mono: () => PAST })).toEqual(LATE_REFUSAL)
+      expect(rec.calls).toEqual([])
+      expect([fetches(w), mirrorAt(w)]).toEqual([before, w.base])
+    }, T)
+
+    test(`a ${flow} whose deadline passes after the sync (a takeover has none) and before the forward is hub_away: the mirror stays at the fetched commit and nothing is forwarded`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const clock = { mono: 5_000 }
+      const deps: MirrorDeps = { ...w.deps, ledger: (f) => { w.deps.ledger(f); if (f.event === 'fetch') clock.mono = PAST } }
+      // A takeover has no fetch to flip the clock: it flips when the hub reads which tasks hold the mirror.
+      const rec = recording(w.remote, flow === 'takeover' ? { name: 'collab_task_list', run: async () => { clock.mono = PAST } } : undefined)
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, deps, notAfterMono: NOT_AFTER, mono: () => clock.mono })).toEqual(LATE_REFUSAL)
+      expect(rec.calls.map((c) => c.name)).not.toContain(FORWARDED[flow])
+      if (flow === 'takeover') {
+        expect([fetches(w), mirrorAt(w)]).toEqual([before, w.base])
+      } else {
+        expect([fetches(w), mirrorAt(w), syncedAt(w)]).toEqual([before + 1, ready.n1, ready.n1])
+      }
+      expect((await readTask(w.remote, w.ws, 'T'))?.effective_status).toBe(ready.effective)
+    }, T)
+
+    test(`a ${flow} whose child stops accepting after the task read is hub_away childStopped and nothing is forwarded`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const rec = recording(w.remote, undefined, { stopAfter: 'collab_task_get' })
+      expect(await ready.run({ child: rec.child })).toEqual({ kind: 'refuse', code: 'hub_away', message: FLOW_MESSAGES.childStopped })
+      expect(rec.calls[0]!.name).toBe('collab_task_get')
+      expect(rec.calls.map((c) => c.name)).not.toContain(FORWARDED[flow])
+      expect((await readTask(w.remote, w.ws, 'T'))?.effective_status).toBe(ready.effective)
+    }, T)
+
+    test(`a ${flow} on a mirror whose HEAD reads but is not the synced commit refuses mirror_tampered and sends nothing`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const tampered = commitFiles(w.spec.mirrorPath, { 'tampered.txt': 'someone committed here\n' }, 'tampered')
+      const rec = recording(w.remote)
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child })).toEqual({ kind: 'refuse', code: 'mirror_tampered', message: FLOW_MESSAGES.tampered })
+      expect(rec.calls).toEqual([])
+      expect([fetches(w), mirrorAt(w), syncedAt(w)]).toEqual([before, tampered, w.base])
+    }, T)
+  }
+
+  for (const flow of ['claim', 'complete'] as const) {
+    test(`a ${flow} whose deadline passes after the busy read and before the sync is hub_away: nothing is fetched or forwarded`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const clock = { mono: 5_000 }
+      const rec = recording(w.remote, { name: 'collab_task_list', run: async () => { clock.mono = PAST } })
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, notAfterMono: NOT_AFTER, mono: () => clock.mono })).toEqual(LATE_REFUSAL)
+      expect(rec.calls.map((c) => c.name)).not.toContain(FORWARDED[flow])
+      expect([fetches(w), mirrorAt(w), syncedAt(w)]).toEqual([before, w.base, w.base])
+    }, T)
+  }
+
+  test('a task the hub cannot read is mirror_busy with exactly the reason read_failed, and nothing else is sent', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'T')
+    const rec = recording(w.remote, undefined, { unknownFor: 'collab_task_get' })
+    const before = fetches(w)
+    expect(await claim(w, task, declaredOf(w), { child: rec.child }))
+      .toEqual({ kind: 'refuse', code: 'mirror_busy', message: FLOW_MESSAGES.readFailed, extra: { reason: 'read_failed' } })
+    expect(rec.calls.map((c) => c.name)).toEqual(['collab_task_get'])
+    expect(fetches(w)).toBe(before)
+  }, T)
+
+  test('a busy read that fails is mirror_busy readFailed with the reason read_failed, and nothing is fetched or forwarded', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'T')
+    const rec = recording(w.remote, undefined, { unknownFor: 'collab_task_list' })
+    const before = fetches(w)
+    expect(await claim(w, task, declaredOf(w), { child: rec.child }))
+      .toMatchObject({ kind: 'refuse', code: 'mirror_busy', message: FLOW_MESSAGES.readFailed, extra: { reason: 'read_failed' } })
+    expect(rec.calls.map((c) => c.name)).toEqual(['collab_task_get', 'collab_task_list'])
+    expect(fetches(w)).toBe(before)
+  }, T)
+
+  test('an edit takeover with no declared head is fetch_failed noDeclared and nothing is sent', async () => {
+    const w = await world()
+    const expired = await expiredClaim(w)
+    const rec = recording(w.remote)
+    expect(await takeover(w, expired, undefined, 'again', { child: rec.child }))
+      .toEqual({ kind: 'refuse', code: 'fetch_failed', message: PLAN_MESSAGES.noDeclared })
+    expect(rec.calls.map((c) => c.name)).toEqual(['collab_task_get'])
   }, T)
 })

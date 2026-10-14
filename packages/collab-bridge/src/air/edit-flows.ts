@@ -8,8 +8,11 @@
 //      receipt (K61) even while another task holds the mirror;
 //   4. the one-task rule only before a sync for task X or a takeover of X (R36);
 //   5. the sync (Task 42), which refuses rather than repairs;
-//   6. the stamp of what the Air saw, in the same Collab write (R14), rebuilt from oids and labels only, so a same-key
-//      replay sends identical bytes (K24);
+//   6. the stamp of what the Air saw, in the same Collab write (R14), built from oids and labels only. A complete's
+//      oid comes from the result checkpoint Collab already holds on every path that does not sync, so its same-key
+//      replay sends identical bytes. A takeover's note names the mirror's last synced oid and the head the pipe declared,
+//      and Collab holds neither, so its replay is byte-identical only while both are unchanged; once either has moved,
+//      Collab answers idempotency_conflict (K24), a refusal that writes nothing and proves the key was used;
 //   7. one forward, never retried (R18), and the tasks ref for a new completion.
 // Every refusal before the forward is a definite "not sent".
 import type { AgentCode } from '../failure.ts'
@@ -50,6 +53,18 @@ const lateRefusal = () => refuse('hub_away', FLOW_MESSAGES.late, { reason: 'dead
 // read, a sync) is never written to, so the agent hears "not sent", never hub_outcome_unknown (§9.3 item 3).
 const stoppedRefusal = () => refuse('hub_away', FLOW_MESSAGES.childStopped)
 
+// The ledger stays content-free, so the cause of a fault the flow did not expect (a bug, a spawn failure, ENOSPC) goes to
+// the hub's stderr, which launchd keeps as hub.log (§10.4): the flow, device/user, which fault, then the error's name and
+// message in printable ASCII, cut at 200 characters, like src/nuance/main.ts. Never the call's arguments, so no seat
+// text; a stderr that cannot be written changes nothing the agent is told.
+const printable = (s: string) => s.replace(/[^\x20-\x7e]/g, '?').slice(0, 200)
+function logFault(ctx: EditFlowCtx, fault: 'sync fault' | 'tasks ref fault', e: unknown): void {
+  try {
+    const cause = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+    process.stderr.write(`collab-bridge hub: ${ctx.flow} ${printable(ctx.device)}/${printable(ctx.user)}: ${fault}: ${printable(cause)}\n`)
+  } catch { /* the refusal or the ledger line below is the record that still stands */ }
+}
+
 async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   const { spec } = ctx.mirror
   const deps = ctx.mirrorDeps
@@ -89,7 +104,8 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
     let r: SyncResult
     try {
       r = await syncMirror(spec, { declaredHead: ctx.declared!.head, atComplete: plan.atComplete }, deps)
-    } catch {
+    } catch (e) {
+      logFault(ctx, 'sync fault', e)
       return refuse('mirror_tampered', FLOW_MESSAGES.syncFault)
     }
     if (!r.ok) return refuse(r.code, r.message)
@@ -97,6 +113,9 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   }
 
   const args: Record<string, unknown> = { ...ctx.args }
+  // A limits that is not a string (null) and a recovery_note that is missing or not a string are forwarded untouched,
+  // for Collab to refuse: its schemas take limits as z.string().max(2000).optional() (KN src/mcp.ts:802) and
+  // recovery_note as a required z.string().min(1).max(4000) (KN src/mcp.ts:659), so neither can land without a stamp.
   if (ctx.flow === 'complete' && task.work_mode === 'edit' && (args.limits === undefined || typeof args.limits === 'string')) {
     // A new completion names what was just fetched; anything else (a replay, a duplicate, an expired lease) names what
     // Collab already holds, so the same key rebuilds the same request (§7.6). The policy already applied N2 (Task 36);
@@ -108,6 +127,7 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   }
   if (editTakeover && typeof args.recovery_note === 'string') {
     // Never refetched: the mirror stays at its last synced commit, and the device HEAD is only what the pipe declared.
+    // Both are inputs Collab does not hold, so a replay after either moved is Collab's idempotency_conflict (see the header).
     args.recovery_note = takeoverNoteStamp({ syncedOid: synced, declaredHead: ctx.declared!.head, seatNote: normalizeText(args.recovery_note) })
   }
 
@@ -124,7 +144,8 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
     let ref: 'ok' | 'mirror_tampered' | 'missing' = 'missing'
     try {
       if (resultHead !== null) ref = await writeTaskRef(spec, task.id, resultHead, deps)
-    } catch {
+    } catch (e) {
+      logFault(ctx, 'tasks ref fault', e)
       ref = 'mirror_tampered'
     }
     if (ref !== 'ok') deps.ledger({ event: 'tasks_ref', device: ctx.device, user: ctx.user, code: ref, outcome: 'refused' })
