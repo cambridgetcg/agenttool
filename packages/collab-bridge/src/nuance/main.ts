@@ -11,8 +11,9 @@ import { readInstalled } from './installed.ts'
 import { bunConnect } from './link-client.ts'
 import { runPipe, type PipeDeps } from './pipe.ts'
 import { nuanceStatus, renderNuanceStatus } from './status.ts'
+import { runTap } from './tap.ts'
 
-export const NUANCE_USAGE = 'usage: collab-bridge gate | pipe | status'
+export const NUANCE_USAGE = 'usage: collab-bridge gate | pipe | tap --host claude | status'
 
 /**
  * The pipe's deps from the env Claude gave it: this Mac's paths, INSTALLED, the real process table (`ps` by systemBin, so a
@@ -106,6 +107,18 @@ export async function runNuanceCli(argv: string[], env: Env, io: GateIo): Promis
       // Claude's MCP server (§6.2): JSON-RPC on this process's stdio until stdin ends.
       if (rest.length === 0) return runPipe({ ...livePipeDeps(env), stdin: io.stdin, write: (line) => io.stdout.write(line) })
       break
+    case 'tap': {
+      // Claude's UserPromptSubmit hook (§8): the envelope or nothing on stdout, and always exit 0, even when misconfigured,
+      // because a hook must never block a prompt.
+      if (rest.length !== 2 || rest[0] !== '--host' || rest[1] !== 'claude') return 0
+      let out: string | null = null
+      try {
+        const ps = systemBin('ps', env)
+        out = await runTap({ paths: nuancePaths(homeOf(env), env), selfPid: process.pid, table: () => readPs(ps), stdin: io.stdin, mono: monoNowMs, connect: bunConnect })
+      } catch { out = null }
+      if (out !== null) io.stdout.write(out)
+      return 0
+    }
     case 'status': {
       if (rest.length > 0) break
       const paths = nuancePaths(homeOf(env), env)
