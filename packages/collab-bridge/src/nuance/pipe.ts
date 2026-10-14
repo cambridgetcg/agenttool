@@ -414,7 +414,9 @@ export class Pipe {
       this.clearRecords(this.key, r.call_ref, own ? f.idempotencyKey : null)
       if (settlesKeyless(f.tool, result, own)) this.clearTool(this.key, f.tool)
     }
-    if (r.outcome === 'ok' && READS_NOTES.has(f.tool)) this.pending.clear()
+    // Only a read that succeeded shows the agent its notes; an isError answer keeps the report (§8 item 5). The link already
+    // drops an ok frame that carries isError (P50), so this holds even if that parser rule ever changed.
+    if (r.outcome === 'ok' && result.isError !== true && READS_NOTES.has(f.tool)) this.pending.clear()
     this.afterAnswer(f.tool, result, own)
     f.resolve(this.withPrior(result))
   }
