@@ -389,6 +389,12 @@ export class Forwarder implements SeatHandlers {
     } catch { /* a cause that cannot be printed changes nothing the agent is told */ }
   }
 
+  /** Counts one failed ledger append, whichever writer of the hub failed it (Task 52), and returns the running count. */
+  countLedgerFailure(): number {
+    this.ledgerFailures += 1
+    return this.ledgerFailures
+  }
+
   /**
    * The call, forward and result lines are the audit evidence (R18), but a failed append does not fail the call: it is
    * counted, and the first and every 100th failure is logged, so a ledger that stopped writing is not silent.
@@ -397,10 +403,10 @@ export class Forwarder implements SeatHandlers {
     try {
       this.deps.ledger(f)
     } catch (e) {
-      this.ledgerFailures += 1
-      if (this.ledgerFailures === 1 || this.ledgerFailures % 100 === 0) {
+      const n = this.countLedgerFailure()
+      if (n === 1 || n % 100 === 0) {
         try {
-          logLine(`forwarder ledger append failed (${this.ledgerFailures} so far): ${printable(causeOf(e))}`)
+          logLine(`forwarder ledger append failed (${n} so far): ${printable(causeOf(e))}`)
         } catch { /* nothing more can be said */ }
       }
     }
