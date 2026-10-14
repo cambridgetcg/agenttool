@@ -1,9 +1,11 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
 import { dirname, join } from 'node:path'
 import { checkAdmission, loadAllowlist, type Admission } from './allowlist.ts'
-import { describePaths, parseBaseline, restoreBaseline, serializeBaseline, takeBaseline, type Baseline, type ListDir } from './fingerprint.ts'
-import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
+import { blockFolder } from './blocked.ts'
+import { checkBaseline, describePaths, gitlinkPaths, parseBaseline, serializeBaseline, takeBaseline, type Baseline, type ListDir } from './fingerprint.ts'
+import { claudeInvocation, guardGitEnv, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { ensureExcluded, makeJobTmp, removeJobTmp } from './jobtmp.ts'
 import { appendLedger, withLock } from './ledger.ts'
@@ -32,13 +34,15 @@ export interface RunnerDeps {
   ps?: PsSnapshot
   /** Edit and build jobs: the listing the fingerprint finds the git files by, which must show names as stored. Defaults to readdirSync. */
   listDir?: ListDir
+  /** Edit and build jobs: the git that reads the index (`ls-files --stage`) before and after the job. Defaults to /usr/bin/git. */
+  git?: string
   /** Set by runner-main on SIGTERM (launchctl bootout, logout): the job that runs is stopped and closed, and no other is started. */
   halt?: HaltSignal
 }
 
 /**
  * A runner that is asked to stop (launchd sends SIGTERM and allows about 20 s, `ExitTimeOut`, before SIGKILL). Idle, it exits at once.
- * During a job it does not: it stops claude the way a cancel does, so the job is swept, restored and cleaned up before the process
+ * During a job it does not: it stops claude the way a cancel does, so the job is swept, checked and cleaned up before the process
  * ends. Claude runs in a session of its own, so launchd's cleanup of the runner's process group never reaches it.
  */
 export class HaltSignal {
@@ -65,6 +69,7 @@ const RUNNER_STOPPED = 'runner stopped mid-job'
 
 const SNAPSHOT_MS = 2000
 const NOT_BUILT = 'could not start claude: the command could not be built for this folder'
+const SUBMODULES_HINT = 'use a folder without submodules (no .gitmodules, no .git/modules, no gitlink in the index); a review job still works here'
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
 /** Kept in memory only, to recognise a command line claude rejects; never written anywhere. */
 const STDERR_KEEP_BYTES = 4096
@@ -117,14 +122,14 @@ function readmit(deps: RunnerDeps, s: JobState, req: SummonRequest): Admission {
   return adm
 }
 
-/** What an edit or build job needs around it: its folder, its temp directory, the baseline of its git files, and (once it runs) its process tree. */
-interface Guard { cwd: string; id: string; baseline: Baseline; tracker?: ProcessTracker; procsText?: string }
+/** What an edit or build job needs around it: its folder, its temp directory, the baseline of its git files, the git env to read its index under, and (once it runs) its process tree. */
+interface Guard { cwd: string; id: string; baseline: Baseline; env: Record<string, string>; tracker?: ProcessTracker; procsText?: string }
 
 /**
  * The two files that let a runner which did not see a job through (SIGKILL, a crash, power) clean up after it, both 0600 in the job's
- * private state directory and gone when the job is closed. guard.json: who runs the job and the git baseline (it holds file contents:
- * a `.git/config` can hold credentials, which is why the job's sandbox denies reading this directory and why it is deleted at the end).
- * procs.json: claude's pid, its group and start time, and the processes recorded under theirs.
+ * private state directory and gone when the job is closed. guard.json: who runs the job and the git baseline (hashes, sizes and modes,
+ * never contents; the job's sandbox cannot read this directory anyway). procs.json: claude's pid, its group and start time, and the
+ * processes recorded under theirs.
  */
 const GUARD_FILE = 'guard.json'
 const PROCS_FILE = 'procs.json'
@@ -143,44 +148,61 @@ function saveProcs(deps: RunnerDeps, g: Guard): void {
   g.procsText = text
 }
 
+/** The index of the folder already holds a gitlink when the job is about to start (Ruling S9): the folder is a submodule folder, whatever its allowlist entry says. */
+class GitlinksAtStart extends Error { constructor(readonly paths: string[]) { super('the index holds a gitlink') } }
+
 /**
- * Before claude is spawned: the temp directory, the exclude line (before the baseline), the baseline, and the saved copy of it
- * (guard.json). Throws, having cleaned up, if any of it cannot be done.
+ * Before claude is spawned: the index is read (a gitlink refuses the job; an index that cannot be read fails it), then the temp
+ * directory, the exclude line (before the baseline), the baseline, and the saved copy of it (guard.json). Throws, having cleaned up, if any
+ * of it cannot be done.
  */
 function prepareGuard(deps: RunnerDeps, cwd: string, id: string): Guard {
+  const env = guardGitEnv(cwd, deps.home, deps.user)
+  const links = gitlinkPaths(cwd, env, deps.git)
+  if (links === null) throw new Error('the index could not be read')
+  if (links.length > 0) throw new GitlinksAtStart(links)
   makeJobTmp(cwd, id)
   try {
     ensureExcluded(cwd)
     const baseline = takeBaseline(cwd, deps.listDir)
     writeJsonAtomic(guardFile(deps.paths, id), { v: 1, runner: { pid: process.pid, lstart: deps.processStartTime(process.pid) }, baseline: serializeBaseline(baseline) })
-    return { cwd, id, baseline }
+    return { cwd, id, baseline, env }
   } catch (e) { removeJobTmp(cwd, id); dropGuardFiles(deps.paths, id); throw e }
 }
 
+/** What a closed job leaves to say: the paths that make it tampered (empty if none), and whether the folder's block marker was written. */
+type Tamper = { paths: string[]; blocked: boolean }
+
 /**
- * When the job is over, in this order: sweep its processes (so nothing is left to change a file under us), compare the git files and
- * put back what differs, remove the temp directory, drop the saved guard files. Never throws.
+ * When the job is over, in this order: sweep its processes (so nothing is left to change a file under us), compare the git files with the
+ * baseline and, if anything differs, block the folder (Ruling S8: detect and block, never repair; the folder is left as the job left it),
+ * remove the temp directory, drop the saved guard files. Never throws.
  */
-async function closeGuard(deps: RunnerDeps, g: Guard): Promise<{ changed: string[]; failed: string[] }> {
+async function closeGuard(deps: RunnerDeps, g: Guard): Promise<Tamper> {
   if (g.tracker) { try { await g.tracker.sweep() } catch { /* the sandbox still confines whatever was missed */ } }
-  let out: { changed: string[]; failed: string[] }
-  try { out = restoreBaseline(g.cwd, g.baseline, deps.listDir) } catch { out = { changed: [], failed: ['(the git files could not be compared)'] } }
+  let paths: string[]
+  try { paths = checkBaseline(g.cwd, g.baseline, g.env, deps.listDir, deps.git) } catch { paths = ['(the git files could not be compared)'] }
+  const blocked = paths.length === 0 || blockFolder(deps.paths.state, g.cwd, { job: g.id, at: iso(deps.nowMs()), why: 'tampered' })
   removeJobTmp(g.cwd, g.id)
   dropGuardFiles(deps.paths, g.id)
-  return out
+  return { paths, blocked }
 }
 
-type Tamper = { changed: string[]; failed: string[] }
-/** The first line of a result says what was put back (and, on a second, what could not be). */
+const NOT_BLOCKED = 'folder not blocked: the block marker could not be written'
+/** The first line of a result names what differs (and, on a second, that the folder could not be blocked). */
 function tamperHead(t: Tamper): string {
-  return `tampered: ${describePaths([...new Set([...t.changed, ...t.failed])])}${t.failed.length > 0 ? `\nnot restored: ${describePaths(t.failed)}` : ''}`
+  return `tampered: ${describePaths(t.paths)}${t.blocked ? '' : `\n${NOT_BLOCKED}`}`
 }
-/** The ledger gets a fixed word and a count, never the paths. */
+/** The ledger gets a fixed word, a count and whether the folder was blocked, never the paths. */
 function ledgerTamper(deps: RunnerDeps | OrphanDeps, id: string, t: Tamper): void {
-  const n = new Set([...t.changed, ...t.failed]).size
+  const n = new Set(t.paths).size
   try {
-    appendLedger(deps.paths.ledger, { event: 'job_tampered', id, detail: `tampered: ${n} path(s)${t.failed.length > 0 ? `, ${t.failed.length} not restored` : ''}` }, deps.nowMs())
+    appendLedger(deps.paths.ledger, { event: 'job_tampered', id, detail: `tampered: ${n} path(s), ${t.blocked ? 'folder blocked' : 'folder not blocked'}` }, deps.nowMs())
   } catch { /* the result file carries it, and job_end is next */ }
+}
+/** A folder blocked because recovery could not look, not because of a change it found: a fixed word, no path. */
+function ledgerRecoveryBlock(deps: OrphanDeps, id: string, blocked: boolean): void {
+  try { appendLedger(deps.paths.ledger, { event: 'folder_blocked', id, detail: blocked ? 'recovery error, folder blocked' : 'recovery error, folder not blocked' }, deps.nowMs()) } catch { /* the result file carries it */ }
 }
 function noteTamper(deps: RunnerDeps, id: string, o: Outcome, t: Tamper): Outcome {
   const head = tamperHead(t)
@@ -218,7 +240,14 @@ async function runJobBody(deps: RunnerDeps, id: string): Promise<void> {
   const sandboxed = s.access !== 'review'
   let guard: Guard | null = null
   if (sandboxed) {
-    try { guard = prepareGuard(deps, adm.cwdReal, id) } catch { return finish(deps, s, { status: 'failed', detail: 'could not start claude: the job folder could not be prepared' }) }
+    try { guard = prepareGuard(deps, adm.cwdReal, id) } catch (e) {
+      if (e instanceof GitlinksAtStart) {
+        // The paths come from an index a job may have written: they go in the 0600 result file, never in the ledger's detail.
+        return finish(deps, s, { status: 'refused', reason: 'submodules_unsupported', detail: 'the index of the folder holds a gitlink (mode 160000): edit and build jobs do not support submodules',
+          result_text: `${SUBMODULES_HINT}\n${describePaths(e.paths.map((p) => `${p} (gitlink)`))}` })
+      }
+      return finish(deps, s, { status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
+    }
   }
   const started = await startChild(inv, adm.cwdReal, sandboxed)
   if ('error' in started) {
@@ -314,7 +343,7 @@ async function runJobBody(deps: RunnerDeps, id: string): Promise<void> {
   const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'), s.access)
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
   let outcome = stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted
-  if (tamper && (tamper.changed.length > 0 || tamper.failed.length > 0)) outcome = noteTamper(deps, id, outcome, tamper)
+  if (tamper && tamper.paths.length > 0) outcome = noteTamper(deps, id, outcome, tamper)
   finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, outcome, code)
 }
 
@@ -445,18 +474,20 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
   return n
 }
 
-/** What recoverOrphans needs of a runner. */
-export type OrphanDeps = Pick<RunnerDeps, 'paths' | 'nowMs' | 'processStartTime'> & Partial<Pick<RunnerDeps, 'ps' | 'listDir'>>
+/** What recoverOrphans needs of a runner. `user` is only for the git env the index is read under; it defaults to the user running the process. */
+export type OrphanDeps = Pick<RunnerDeps, 'paths' | 'nowMs' | 'processStartTime'> & Partial<Pick<RunnerDeps, 'ps' | 'listDir' | 'user' | 'git'>>
 
 /**
  * The runner that took an edit or build job may not have lived to see it through (SIGKILL, a crash, power; a SIGTERM it handles
- * itself). Claude runs in a session of its own, so it outlives that runner, with no timeout and nothing to sweep, restore or clean up
- * after it. This is called first when a runner starts, before markOrphans settles the job and before any job is claimed. For each job
- * that has guard files and whose runner is gone it:
+ * itself). Claude runs in a session of its own, so it outlives that runner, with no timeout and nothing to sweep or check after it. This is
+ * called first when a runner starts, before markOrphans settles the job and before any job is claimed. For each job that has guard files
+ * and whose runner is gone it:
  *   1. sweeps the job's processes: the group and the recorded tree, each only where the start time still matches the one recorded;
- *   2. compares the git files with the saved baseline and puts back what differs;
- *   3. removes the job's temp directory and the guard files;
- *   4. if it put anything back (or could not check), writes the job's result.json (`unknown`, first line `tampered: <paths>` or
+ *   2. compares the git files with the saved baseline, exactly as the end of a job does (Ruling S8: it reads, it never repairs);
+ *   3. blocks the folder if anything differs, and ALSO if anything could not be done (no usable baseline, a sweep that failed, an error
+ *      anywhere in this), because a folder that cannot be shown clean is not clean;
+ *   4. removes the job's temp directory and the guard files;
+ *   5. if it found or failed anything, writes the job's result.json (`unknown`, first line `tampered: <paths>`, or
  *      `fingerprint not checked: <why>`), so markOrphans settles the job from it.
  * A runner that is still alive (same pid and start time as recorded) owns its job: nothing is touched. A job that already ended only
  * has its leftover guard files dropped. Returns the number of jobs recovered.
@@ -464,7 +495,7 @@ export type OrphanDeps = Pick<RunnerDeps, 'paths' | 'nowMs' | 'processStartTime'
 export async function recoverOrphans(deps: OrphanDeps, isAlive: (pid: number) => boolean = pidAlive): Promise<number> {
   let n = 0
   for (const id of jobIds(deps.paths)) {
-    try { if (await recoverOne(deps, id, isAlive)) n++ } catch { /* left for the next start; the guard files stay until the work is done */ }
+    try { if (await recoverOne(deps, id, isAlive)) n++ } catch { /* recoverOne blocks the folder and drops the guard files itself; nothing more can be done here */ }
   }
   return n
 }
@@ -482,32 +513,52 @@ async function recoverOne(deps: OrphanDeps, id: string, isAlive: (pid: number) =
   if (owner && typeof owner.pid === 'number' && Number.isInteger(owner.pid) && owner.pid > 0 && isAlive(owner.pid)
     && (typeof owner.lstart !== 'string' || deps.processStartTime(owner.pid) === owner.lstart)) return false
 
-  const notes: string[] = []
-  // 1. Its processes. The record is procs.json; before that exists, the pid and start time the runner put in the job's state at spawn.
-  let record = parseTrackerRecord(readJson(pPath))
-  if (!record && existsSync(pPath)) notes.push('processes not swept: the record is not usable')
-  if (!record && !existsSync(pPath) && s.pid) record = parseTrackerRecord({ pid: s.pid, pgid: s.pid, start: s.pid_lstart ?? null, seen: [] })
-  if (record) {
-    const tracker = ProcessTracker.restore({ ...record, start: record.start ?? s.pid_lstart ?? null }, deps.ps ?? livePs)
-    try { await tracker.sweep() } catch { notes.push('processes not swept: the sweep failed') }
+  const at = () => iso(deps.nowMs())
+  try {
+    const notes: string[] = [] // everything that could not be done; any of them blocks the folder
+    // 1. Its processes. The record is procs.json; before that exists, the pid and start time the runner put in the job's state at spawn.
+    let record = parseTrackerRecord(readJson(pPath))
+    if (!record && existsSync(pPath)) notes.push('processes not swept: the record is not usable')
+    if (!record && !existsSync(pPath) && s.pid) record = parseTrackerRecord({ pid: s.pid, pgid: s.pid, start: s.pid_lstart ?? null, seen: [] })
+    if (record) {
+      const tracker = ProcessTracker.restore({ ...record, start: record.start ?? s.pid_lstart ?? null }, deps.ps ?? livePs)
+      try { await tracker.sweep() } catch { notes.push('processes not swept: the sweep failed') }
+    }
+    // 2. The git files, compared exactly as the end of a job compares them.
+    let paths: string[] = []
+    let baseline: Baseline | null = null
+    const unchecked: string[] = []
+    if (!guard) unchecked.push(existsSync(gPath) ? 'fingerprint not checked: the saved baseline is not usable' : 'fingerprint not checked: no baseline was saved')
+    else { try { baseline = parseBaseline(guard.baseline, s.cwd_real) } catch { unchecked.push('fingerprint not checked: the saved baseline is not usable') } }
+    if (baseline) {
+      let env: Record<string, string> | null = null
+      try { env = guardGitEnv(s.cwd_real, deps.paths.home, deps.user ?? userInfo().username) } catch { unchecked.push('fingerprint not checked: the git env could not be built') }
+      if (env) paths = checkBaseline(s.cwd_real, baseline, env, deps.listDir, deps.git)
+    }
+    notes.unshift(...unchecked)
+    // 3. Blocked on a change and on any failure to look.
+    const tampered = paths.length > 0
+    const blocked = !(tampered || notes.length > 0) || blockFolder(deps.paths.state, s.cwd_real, { job: id, at: at(), why: tampered ? 'tampered' : 'recovery error' })
+    // 4. The temp directory.
+    removeJobTmp(s.cwd_real, id)
+    // 5. What the next reader of the job should see first.
+    const tamper: Tamper = { paths, blocked }
+    const lines = [...(tampered ? [tamperHead(tamper)] : []), ...notes, ...(!tampered && !blocked ? [NOT_BLOCKED] : [])]
+    const resultPath = join(dir, 'result.json')
+    const done = readJson<JobResult>(resultPath)
+    if (lines.length > 0 && !(done?.status && TERMINAL.has(done.status))) {
+      writeJsonAtomic(resultPath, { status: 'unknown', detail: s.status === 'running' ? RUNNER_STOPPED : 'runner stopped before the job started', result_text: lines.join('\n'), exit_code: null })
+      if (tampered) ledgerTamper(deps, id, tamper)
+      else ledgerRecoveryBlock(deps, id, blocked)
+    }
+    dropGuardFiles(deps.paths, id)
+    return true
+  } catch {
+    // An error anywhere above: the folder cannot be shown clean, so it is blocked, and the guard files go (markOrphans settles the job next, so a retry would never come).
+    ledgerRecoveryBlock(deps, id, blockFolder(deps.paths.state, s.cwd_real, { job: id, at: at(), why: 'recovery error' }))
+    dropGuardFiles(deps.paths, id)
+    return true
   }
-  // 2. The git files.
-  let tamper: Tamper = { changed: [], failed: [] }
-  let baseline: Baseline | null = null
-  if (!guard) notes.unshift(existsSync(gPath) ? 'fingerprint not checked: the saved baseline is not usable' : 'fingerprint not checked: no baseline was saved')
-  else { try { baseline = parseBaseline(guard.baseline, s.cwd_real) } catch { notes.unshift('fingerprint not checked: the saved baseline is not usable') } }
-  if (baseline) tamper = restoreBaseline(s.cwd_real, baseline, deps.listDir)
-  // 3. The temp directory, and 4. what the next reader of the job should see first.
-  removeJobTmp(s.cwd_real, id)
-  const found = tamper.changed.length > 0 || tamper.failed.length > 0
-  const lines = [...(found ? [tamperHead(tamper)] : []), ...notes]
-  const resultPath = join(dir, 'result.json')
-  if (lines.length > 0 && !(readJson<JobResult>(resultPath)?.status && TERMINAL.has(readJson<JobResult>(resultPath)!.status))) {
-    writeJsonAtomic(resultPath, { status: 'unknown', detail: s.status === 'running' ? RUNNER_STOPPED : 'runner stopped before the job started', result_text: lines.join('\n'), exit_code: null })
-    if (found) ledgerTamper(deps, id, tamper)
-  }
-  dropGuardFiles(deps.paths, id)
-  return true
 }
 
 /** Finished jobs older than maxAge (from `ended_at`, else admission) are deleted. The ledger keeps their history. */

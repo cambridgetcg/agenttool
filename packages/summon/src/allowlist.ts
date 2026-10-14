@@ -1,5 +1,7 @@
 import { accessSync, closeSync, constants, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs'
 import { join, normalize } from 'node:path'
+import { blockedHint, blockMarkerPath } from './blocked.ts'
+import { summonPaths } from './paths.ts'
 import { ACCESSES, CLAUDE_EFFORTS, DEVICE_RE, RUNTIMES, type Access, type Runtime, type SummonRequest } from './request.ts'
 
 export interface AllowlistModel { model: string; provider?: string; effort?: string[] }
@@ -289,7 +291,8 @@ function buildLocationOk(folderReal: string, home: string, realpath: (p: string)
 
 export type Admission =
   | { ok: true; cwdReal: string; access: Access; commands: AllowlistCommand[] }
-  | { ok: false; reason: 'outside_allowlist'; detail: string; hint: string }
+  /** `folder_blocked` and `submodules_unsupported` are the last two checks of step 12 (Rulings S8 and S9); the hint is what to do about the folder, not an entry to add. */
+  | { ok: false; reason: 'outside_allowlist' | 'folder_blocked' | 'submodules_unsupported'; detail: string; hint: string }
   | { ok: false; reason: 'tcc_protected_folder'; detail: string; hint?: string }
 
 const BUILD_ENTRY_EXAMPLE = '    commands:\n      - run: bun test'
@@ -298,7 +301,9 @@ const BUILD_ENTRY_EXAMPLE = '    commands:\n      - run: bun test'
  * Every outside_allowlist refusal carries a hint: the YAML the operator would need to add. The order (Phase 0.5 §2):
  *  1 peer, 2 runtime (and, right after it, a non-claude runtime needs reads_anywhere), 3 non-review access on a non-claude
  *  runtime, 4 model, 5 TCC spelling, 6 cwd exists, 7 TCC target, 8 folder match, 9 ambiguous entries, 10 rank,
- *  11 reads_anywhere for rank >= 1 on claude, 12 the folder checks of an edit or build job.
+ *  11 reads_anywhere for rank >= 1 on claude, 12 the folder checks of an edit or build job: the location rules (build), cwd at the entry, a
+ *  real .git directory that git would take, no overlap with another edit or build entry, then the folder's own state: blocked by an earlier
+ *  tampered job (folder_blocked), and submodules (submodules_unsupported).
  */
 export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
   realpath: (p: string) => string | null = safeRealpath, fs: FsProbe = realFs): Admission {
@@ -384,6 +389,18 @@ export function checkAdmission(req: SummonRequest, al: Allowlist, home: string,
     })
     if (overlaps) {
       return refuse(`${best.f.path} overlaps another edit or build folder entry`, 'no edit or build folder may lie inside another: remove or move one of the overlapping entries')
+    }
+    // The folder's own state. Blocked first: a job that tampered may be what left the .gitmodules, and Yu should hear that before anything else.
+    // lstat answers for whatever spelling the Mac's volume answers to, as git's own reads do.
+    const marker = blockMarkerPath(summonPaths(home).state, cwdReal)
+    if (fs.lstat(marker)) {
+      return { ok: false, reason: 'folder_blocked', detail: `${best.f.path} is blocked: an earlier edit or build job there changed the folder's git files`,
+        hint: blockedHint(marker, home) }
+    }
+    const submodules = fs.lstat(join(cwdReal, '.gitmodules')) ? '.gitmodules' : fs.lstat(join(cwdReal, '.git', 'modules')) ? '.git/modules' : null
+    if (submodules) {
+      return { ok: false, reason: 'submodules_unsupported', detail: `${best.f.path} has ${submodules}: edit and build jobs do not support submodules`,
+        hint: 'use a folder without submodules (no .gitmodules, no .git/modules); a review job still works here' }
     }
   }
   return { ok: true, cwdReal, access: best.f.access, commands: (best.f.commands ?? []).map((c) => ({ ...c })) }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { blockFolder, blockMarkerPath, displayPath } from '../src/blocked.ts'
 import { checkAdmission, parseAllowlist as parseWithHome, parseDurationS, realFs, type Admission, type Allowlist, type AllowlistFolder, type FsProbe } from '../src/allowlist.ts'
 import { cleanupTmps, fakeGitRoot, sampleRequest, trackTmp } from './helpers.ts'
 
@@ -683,6 +684,126 @@ describe('Phase 0.5 checkAdmission: the refusal order', () => {
   })
 })
 
+describe('Rulings S8 and S9 checkAdmission: a folder with submodules, and a folder blocked by a tampered job', () => {
+  const jobs = ['edit', 'build'] as const
+  const entries: Array<[string, (path: string) => Folder]> = [['edit', editEntry], ['build', (p) => buildEntry(p)]]
+  const admit = (h: string, access: 'review' | 'edit' | 'build', kind: 'edit' | 'build' = 'build') =>
+    checkAdmission(sampleRequest({ access, cwd: '~/Projects/x' }), allowOf([kind === 'edit' ? editEntry() : buildEntry()]), h)
+  const block = (h: string, folder = join(h, 'Projects/x')) =>
+    expect(blockFolder(join(h, '.local/state/summon'), folder, { job: 'smn_' + 'a'.repeat(32), at: '2026-10-14T00:00:00.000Z', why: 'tampered' })).toBe(true)
+
+  describe('submodules_unsupported', () => {
+    const plants: Array<[string, string, (root: string) => void]> = [
+      ['.gitmodules file', '.gitmodules', (r) => writeFileSync(join(r, '.gitmodules'), '[submodule "a"]\n\tpath = a\n')],
+      ['.gitmodules empty', '.gitmodules', (r) => writeFileSync(join(r, '.gitmodules'), '')],
+      ['.gitmodules as a directory', '.gitmodules', (r) => mkdirSync(join(r, '.gitmodules'))],
+      ['.gitmodules as a dangling link', '.gitmodules', (r) => symlinkSync('/nowhere', join(r, '.gitmodules'))],
+      ['.git/modules directory', '.git/modules', (r) => mkdirSync(join(r, '.git/modules/a'), { recursive: true })],
+      ['.git/modules empty', '.git/modules', (r) => mkdirSync(join(r, '.git/modules'))],
+      ['.git/modules as a file', '.git/modules', (r) => writeFileSync(join(r, '.git/modules'), '')],
+    ]
+    test('a folder with .gitmodules or .git/modules, of any kind, is refused for an edit job and for a build job', () => {
+      for (const [label, word, plant] of plants) {
+        for (const [kind] of entries) {
+          for (const job of jobs) {
+            if (job === 'build' && kind === 'edit') continue
+            const h = repoHome(); plant(join(h, 'Projects/x'))
+            const r = admit(h, job, kind as 'edit' | 'build')
+            expect([label, kind, job, r]).toEqual([label, kind, job, { ok: false, reason: 'submodules_unsupported', detail: expect.stringContaining(word), hint: expect.stringContaining('without submodules') }])
+          }
+        }
+      }
+    })
+    test('it names what it found, and the hint is not an allowlist entry (the allowlist is not what is wrong)', () => {
+      const h = repoHome(); writeFileSync(join(h, 'Projects/x/.gitmodules'), 'x'); mkdirSync(join(h, 'Projects/x/.git/modules'))
+      const r = admit(h, 'build') as Extract<Admission, { ok: false }>
+      expect(r.detail).toBe('~/Projects/x has .gitmodules: edit and build jobs do not support submodules')
+      expect(r.hint).not.toContain('commands:')
+      expect(r.hint).not.toContain('folders:')
+      const h2 = repoHome(); mkdirSync(join(h2, 'Projects/x/.git/modules'))
+      expect((admit(h2, 'edit', 'edit') as Extract<Admission, { ok: false }>).detail).toBe('~/Projects/x has .git/modules: edit and build jobs do not support submodules')
+    })
+    test('a review job is not held back: it has no Bash tool, so it runs no git', () => {
+      const h = repoHome(); writeFileSync(join(h, 'Projects/x/.gitmodules'), 'x'); mkdirSync(join(h, 'Projects/x/.git/modules'))
+      expect(admit(h, 'review')).toMatchObject({ ok: true })
+    })
+    test('a nested .gitmodules does not count: only the folder root\'s is read by the git of the folder', () => {
+      const h = repoHome(); mkdirSync(join(h, 'Projects/x/sub')); writeFileSync(join(h, 'Projects/x/sub/.gitmodules'), 'x')
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: true })
+    })
+    test('on this volume a spelling it answers to is found too (.GitModules)', () => {
+      const h = repoHome(); writeFileSync(join(h, 'Projects/x/.GitModules'), 'x')
+      if (!realFs.lstat(join(h, 'Projects/x/.gitmodules'))) return // a case-sensitive volume: git would not read it either
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: false, reason: 'submodules_unsupported' })
+    })
+    test('a clean repository is admitted, with its result unchanged', () => {
+      const h = repoHome()
+      expect(admit(h, 'build')).toEqual({ ok: true, cwdReal: join(h, 'Projects/x'), access: 'build', commands: BUN })
+    })
+  })
+
+  describe('folder_blocked', () => {
+    test('a folder with a marker is refused for an edit job and for a build job, and the hint names the marker as Yu would type it', () => {
+      for (const [kind] of entries) {
+        for (const job of jobs) {
+          if (job === 'build' && kind === 'edit') continue
+          const h = repoHome(); block(h)
+          const marker = blockMarkerPath(join(h, '.local/state/summon'), join(h, 'Projects/x'))
+          const r = admit(h, job, kind as 'edit' | 'build')
+          expect([kind, job, r]).toEqual([kind, job, { ok: false, reason: 'folder_blocked', detail: '~/Projects/x is blocked: an earlier edit or build job there changed the folder\'s git files',
+            hint: `check the folder's git files, then remove ${displayPath(marker, h)}` }])
+          expect((r as { hint: string }).hint).toMatch(/^check the folder's git files, then remove ~\/\.local\/state\/summon\/blocked\/[0-9a-f]{64}$/)
+        }
+      }
+    })
+    test('removing the marker unblocks the folder', () => {
+      const h = repoHome(); block(h)
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: false, reason: 'folder_blocked' })
+      rmSync(blockMarkerPath(join(h, '.local/state/summon'), join(h, 'Projects/x')))
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: true })
+    })
+    test('a review job is not blocked, and neither is another folder', () => {
+      const h = repoHome(); block(h)
+      expect(admit(h, 'review')).toMatchObject({ ok: true })
+      const other = checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/y' }), allowOf([editEntry('~/Projects/y')]), h)
+      expect(other).toMatchObject({ ok: true })
+    })
+    test('the block is on the folder\'s realpath: a symlink to it, a trailing slash and a ~ spelling against an absolute one are all blocked', () => {
+      const h = repoHome(); block(h); symlinkSync(join(h, 'Projects/x'), join(h, 'Projects/xl'))
+      for (const [cwd, entry] of [['~/Projects/xl', '~/Projects/x'], ['~/Projects/x', '~/Projects/xl'], [`${h}/Projects/x/`, '~/Projects/x']] as const) {
+        expect([cwd, entry, checkAdmission(sampleRequest({ access: 'edit', cwd }), allowOf([editEntry(entry)]), h)]).toEqual([cwd, entry, expect.objectContaining({ ok: false, reason: 'folder_blocked' })])
+      }
+    })
+    test('the marker is read in the home the gate is given: another home\'s markers do not block this one', () => {
+      const h = repoHome(); const other = repoHome(); block(other)
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: true })
+    })
+    test('blocked comes before submodules: Yu hears that a job tampered first, not about the .gitmodules it may have left', () => {
+      const h = repoHome(); block(h); writeFileSync(join(h, 'Projects/x/.gitmodules'), 'x')
+      expect(admit(h, 'edit', 'edit')).toMatchObject({ ok: false, reason: 'folder_blocked' })
+    })
+  })
+
+  test('step 12 order, to the end: location, cwd at the entry, a real .git, a .git git would take, nesting, blocked, submodules', () => {
+    const h = repoHome()
+    mkdirSync(join(h, 'Projects/z'), { recursive: true }); repo(join(h, 'Projects/z')); mkdirSync(join(h, 'Projects/x/inner'), { recursive: true })
+    block(h, join(h, 'Projects/z')); writeFileSync(join(h, 'Projects/z/.gitmodules'), 'x')
+    const reasonOf = (r: Admission) => (r.ok ? 'ADMITTED' : r.reason)
+    // nesting beats blocked: z overlaps an entry below it
+    const nested = allowOf([editEntry('~/Projects/z'), editEntry(`${h}/Projects/z/sub`)])
+    mkdirSync(join(h, 'Projects/z/sub'))
+    expect(reasonOf(checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/z' }), nested, h))).toBe('outside_allowlist')
+    // then blocked beats submodules
+    expect(reasonOf(checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/z' }), allowOf([editEntry('~/Projects/z')]), h))).toBe('folder_blocked')
+    rmSync(blockMarkerPath(join(h, '.local/state/summon'), join(h, 'Projects/z')))
+    expect(reasonOf(checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/z' }), allowOf([editEntry('~/Projects/z')]), h))).toBe('submodules_unsupported')
+    // and a missing .git beats both
+    rmSync(join(h, 'Projects/z/.git'), { recursive: true }); block(h, join(h, 'Projects/z'))
+    const r = checkAdmission(sampleRequest({ access: 'edit', cwd: '~/Projects/z' }), allowOf([editEntry('~/Projects/z')]), h)
+    expect(r).toMatchObject({ ok: false, reason: 'outside_allowlist', detail: expect.stringContaining('.git') })
+  })
+})
+
 describe('Phase 0.5 checkAdmission: ambiguous folder entries', () => {
   test('two entries with equal-length realpaths are refused, by any spelling, symlink or access', () => {
     const h = repoHome()
@@ -995,7 +1116,8 @@ describe('Phase 0.5 checkAdmission: where an edit or build job may run', () => {
     expect(admit()).toEqual({ ok: true, cwdReal: '/h/p/x', access: 'build', commands: BUN })
     // exactly these probes, in this order, and HEAD is read for at most as much as git itself reads
     expect(asked).toEqual([`lstat ${G}`, `lstat ${G}/commondir`, `lstat ${G}/HEAD`, `read ${G}/HEAD 256`,
-      `lstat ${G}/objects`, `enter ${G}/objects`, `lstat ${G}/refs`, `enter ${G}/refs`])
+      `lstat ${G}/objects`, `enter ${G}/objects`, `lstat ${G}/refs`, `enter ${G}/refs`,
+      `lstat ${blockMarkerPath('/h/.local/state/summon', '/h/p/x')}`, 'lstat /h/p/x/.gitmodules', `lstat ${G}/modules`]) // blocked, then submodules (Rulings S8 and S9)
     const refused = (word: string) => nope(admit(), word)
     kinds.set(`${G}/HEAD`, 'link'); refused('HEAD')
     kinds.set(`${G}/HEAD`, 'dir'); refused('HEAD')

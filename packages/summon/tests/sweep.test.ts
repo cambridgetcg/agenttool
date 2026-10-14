@@ -175,6 +175,54 @@ describe('ProcessTracker: its record, for a runner that comes after the one that
     expect(t.kills).toEqual([])
     expect(t.rows).toHaveLength(1)
   })
+  // Ruling S10: a group is signalled only on proof. A process group number outlives its leader while any member is alive, and once the group is empty the
+  // number can be handed to a stranger who then leads a group of its own, so "somebody is in group 100" proves nothing about a job that ended long ago.
+  test('S10: claude is gone and the live members of its group are all unrecorded: the group is not signalled (it may be a stranger\'s now)', async () => {
+    const t = table([row(150, 1, 100, L(9)), row(151, 150, 100, L(10)), row(300, 1, 300)])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [] }, t.ps, t.kill, t.sleep)
+    expect(await restored.sweep()).toEqual({ groupKilled: false, killed: 0 })
+    expect(t.kills).toEqual([])
+    expect(t.rows.map((r) => r.pid)).toEqual([150, 151, 300])
+  })
+  test('S10: claude is gone and a live member of its group is a recorded process with the recorded start time: the group is signalled, and so are its unrecorded members', async () => {
+    const t = table([row(101, 1, 100, L(6)), row(150, 1, 100, L(9)), row(300, 1, 300)])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, t.ps, t.kill, t.sleep)
+    expect((await restored.sweep()).groupKilled).toBe(true)
+    expect(t.kills[0]).toEqual([-100, 'SIGKILL'])
+    expect(t.rows.map((r) => r.pid)).toEqual([300])
+  })
+  test('S10: a member of the group that was recorded under another start time is another process, so it proves nothing', async () => {
+    const t = table([row(101, 1, 100, L(59)), row(150, 1, 100, L(9))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, t.ps, t.kill, t.sleep)
+    expect(await restored.sweep()).toEqual({ groupKilled: false, killed: 0 })
+    expect(t.kills).toEqual([])
+  })
+  test('S10: a recorded process in some other group does not make claude\'s group the job\'s', async () => {
+    const t = table([row(101, 1, 101, L(6)), row(150, 1, 100, L(9))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, t.ps, t.kill, t.sleep)
+    await restored.sweep()
+    expect(t.kills).toEqual([[101, 'SIGKILL']]) // the recorded process itself goes, by pid; the group does not
+    expect(t.rows.map((r) => r.pid)).toEqual([150])
+  })
+  test('S10: a record with a null start time is never signalled: not when claude\'s pid is alive, not when it is gone with unrecorded members, not even beside a matching recorded member', async () => {
+    const alive = table([row(100, 1, 100, L(40))])
+    await ProcessTracker.restore({ pid: 100, pgid: 100, start: null, seen: [] }, alive.ps, alive.kill, alive.sleep).sweep()
+    expect(alive.kills).toEqual([])
+    const gone = table([row(150, 1, 100, L(9))])
+    await ProcessTracker.restore({ pid: 100, pgid: 100, start: null, seen: [] }, gone.ps, gone.kill, gone.sleep).sweep()
+    expect(gone.kills).toEqual([])
+    const beside = table([row(101, 1, 100, L(6)), row(150, 1, 100, L(9))])
+    const out = await ProcessTracker.restore({ pid: 100, pgid: 100, start: null, seen: [[101, L(6)]] }, beside.ps, beside.kill, beside.sleep).sweep()
+    expect(out.groupKilled).toBe(false)
+    expect(beside.kills.every(([pid]) => pid > 0)).toBe(true) // no group signal; the recorded process itself, by its own start time, may go
+    expect(beside.rows.map((r) => r.pid)).toEqual([150])
+  })
+  test('S10 does not change the tracker that spawned claude: with claude reaped and the group still populated it signals the group it made', async () => {
+    const t = table([row(150, 1, 100, L(9))])
+    const out = await new ProcessTracker(100, t.ps, t.kill, t.sleep).sweep()
+    expect(out.groupKilled).toBe(true)
+    expect(t.kills[0]).toEqual([-100, 'SIGKILL'])
+  })
   test('a restored tracker that cannot read the process table signals nothing: with no table, the number could be anyone\'s now', async () => {
     const t = table([row(100, 1, 100, L(5)), row(101, 100, 101, L(6))])
     const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, () => null, t.kill, t.sleep)

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { spawn } from 'node:child_process'
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
 import { describeCommand, requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
+import { blockFolder, blockMarkerPath, displayPath } from '../src/blocked.ts'
 import { serializeBaseline, takeBaseline } from '../src/fingerprint.ts'
 import { countActive, jobDir, readJson, readState, settleNeverReached, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { ensureExcluded, makeJobTmp } from '../src/jobtmp.ts'
@@ -12,7 +14,7 @@ import { summonPaths } from '../src/paths.ts'
 import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
 import { HaltSignal, markOrphans, processStartTime, recoverOrphans, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
 import { livePs } from '../src/sweep.ts'
-import { BUILD_ALLOWLIST, cleanupTmps, DEFAULT_ALLOWLIST, EDIT_ALLOWLIST, FLAGGED_ALLOWLIST, fakeGitRoot, makeFakeClaude, repoHome, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
+import { BUILD_ALLOWLIST, cleanupTmps, DEFAULT_ALLOWLIST, EDIT_ALLOWLIST, FLAGGED_ALLOWLIST, fakeGitRoot, makeFakeClaude, repoHome, runGatekeeper, sampleRequest, targetHome, trackTmp } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -606,6 +608,29 @@ describe('re-admission at start (design section 2, "Admission result")', () => {
     await runOnce(rdeps(h))
     refusedAtStart(h, req.id, 'outside_allowlist', '.git')
   })
+  test('Ruling S9: a folder that has grown submodules since the job was queued revokes it: refused submodules_unsupported, claude never runs', async () => {
+    for (const plant of [(root: string) => writeFileSync(join(root, '.gitmodules'), '[submodule "a"]\n\tpath = a\n'), (root: string) => mkdirSync(join(root, '.git/modules/a'), { recursive: true })]) {
+      const h = repoHome(); const req = admit(h, { access: 'edit' })
+      plant(join(h, 'Projects/x'))
+      await runOnce(rdeps(h))
+      refusedAtStart(h, req.id, 'submodules_unsupported', 'edit and build jobs do not support submodules')
+    }
+  })
+  test('Ruling S8: a folder blocked since the job was queued revokes it: refused folder_blocked, the hint (naming the marker) in the result text, claude never runs', async () => {
+    for (const access of ['edit', 'build'] as const) {
+      const h = repoHome(BUILD_ALLOWLIST); const req = admit(h, { access }); const paths = summonPaths(h)
+      expect(blockFolder(paths.state, join(h, 'Projects/x'), { job: 'smn_' + 'e'.repeat(32), at: iso(Date.now()), why: 'tampered' })).toBe(true)
+      await runOnce(rdeps(h))
+      refusedAtStart(h, req.id, 'folder_blocked', 'is blocked')
+      expect(resultOf(h, req.id).result_text).toBe(`check the folder's git files, then remove ${displayPath(blockMarkerPath(paths.state, join(h, 'Projects/x')), h)}`)
+    }
+  })
+  test('a review job is not held back by a blocked folder', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'review' })
+    blockFolder(summonPaths(h).state, join(h, 'Projects/x'), { job: 'smn_' + 'e'.repeat(32), at: iso(Date.now()), why: 'tampered' })
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+  })
   test('a folder that has become nested (by a symlink the parser cannot see) revokes a queued build job', async () => {
     const h = repoHome(BUILD_ALLOWLIST); const req = admit(h, { access: 'build' })
     symlinkSync(join(h, 'Projects'), join(h, 'Outer'))
@@ -741,14 +766,22 @@ describe('the job\'s temp directory (design section 3, "Temp files")', () => {
     expect(await runOnce(rdeps(h))).toBe(1)
     expect(readFileSync(exclude, 'utf8')).toBe('# mine\n*.log\n/.summon-tmp/\n')
   })
-  test('a watched git file too large to keep cannot be fingerprinted: the job ends failed, claude never starts, and the temp directory is gone', async () => {
+  test('a watched git file that cannot be read cannot be fingerprinted: the job ends failed, claude never starts, and the temp directory is gone', async () => {
     const h = repoHome(); const root = join(h, 'Projects/x')
-    mkdirSync(join(root, '.git/hooks')); writeFileSync(join(root, '.git/hooks/huge'), Buffer.alloc(9 * 1024 * 1024))
+    writeFileSync(join(root, '.git/config'), '[core]\n'); chmodSync(join(root, '.git/config'), 0o000)
     const req = admit(h, { access: 'edit' })
     await runOnce(rdeps(h))
     expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
     expect(existsSync(fake.argvOut)).toBe(false)
     expect(existsSync(dirOf(h))).toBe(false)
+    expect(existsSync(blockMarkerPath(summonPaths(h).state, root))).toBe(false) // nothing ran, so nothing was tampered with
+  })
+  test('a large watched file is no obstacle: it is hashed, not held (there used to be an 8 MiB cap)', async () => {
+    const h = repoHome(); const root = join(h, 'Projects/x')
+    mkdirSync(join(root, '.git/hooks')); writeFileSync(join(root, '.git/hooks/huge'), Buffer.alloc(9 * 1024 * 1024))
+    const req = admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
   })
   test('an edit job whose start cannot be ledgered is stopped, ends failed, and leaves no temp directory (the guard is closed on that path too)', async () => {
     const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
@@ -769,118 +802,115 @@ describe('the job\'s temp directory (design section 3, "Temp files")', () => {
   })
 })
 
-describe('the fingerprint of the git files that can run code (design section 3, "Fingerprint")', () => {
+describe('the fingerprint of the git files that can run code (design section 3, "Fingerprint"; Rulings S8 and S9): detect and block, never repair', () => {
   /** An edit-folder repository with every watched file present (the attributes file only if asked), admitted as an edit job. */
-  function watched(opts: { al?: string; attributes?: boolean; access?: 'edit' | 'build'; timeout_s?: number; modules?: boolean } = {}) {
+  function watched(opts: { al?: string; attributes?: boolean; access?: 'edit' | 'build'; timeout_s?: number } = {}) {
     const access = opts.access ?? 'edit'
     const h = repoHome(opts.al ?? (access === 'edit' ? EDIT_ALLOWLIST : BUILD_ALLOWLIST)); const root = join(h, 'Projects/x')
     writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
     mkdirSync(join(root, '.git/hooks'), { recursive: true }); writeFileSync(join(root, '.git/hooks/pre-commit.sample'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
     chmodSync(join(root, '.git/hooks/pre-commit.sample'), 0o755)
-    writeFileSync(join(root, '.gitmodules'), '[submodule "a"]\n\tpath = a\n')
+    // No .gitmodules (admission refuses a folder that has one, at the gate and again when the runner takes the job): a job that writes one is what the guard catches.
     if (opts.attributes !== false) writeFileSync(join(root, '.gitattributes'), '*.png binary\n')
-    if (opts.modules) { // an absorbed submodule: its git directory under .git/modules, with HEAD and objects that are not watched
-      mkdirSync(join(root, '.git/modules/a/hooks'), { recursive: true }); mkdirSync(join(root, '.git/modules/a/objects'), { recursive: true })
-      writeFileSync(join(root, '.git/modules/a/config'), '[core]\n\tworktree = ../../../a\n'); writeFileSync(join(root, '.git/modules/a/HEAD'), 'ref: refs/heads/main\n')
-      writeFileSync(join(root, '.git/modules/a/hooks/pre-commit.sample'), '#!/bin/sh\nexit 0\n', { mode: 0o755 }); chmodSync(join(root, '.git/modules/a/hooks/pre-commit.sample'), 0o755)
-    }
     const req = admit(h, { access, ...(opts.timeout_s ? { timeout_s: opts.timeout_s } : {}) })
-    return { h, root, id: req.id, before: listing(root) }
+    return { h, root, id: req.id, paths: summonPaths(h) }
   }
-  /** What the watched files hold, by the name they are stored under: mode and contents. */
-  function listing(root: string) {
-    const out: Record<string, string> = {}
-    const CONFIGS = new Set(['config', 'config.worktree', 'commondir'])
-    /** Design section 3 with Ruling S6: in .git, the three config files, hooks/** and info/**; under .git/modules/** the same, at any depth. */
-    const watchedInGit = (parts: string[]): boolean => {
-      const [first, ...rest] = parts
-      if (first === 'hooks' || first === 'info') return true
-      if (CONFIGS.has(first!)) return rest.length === 0
-      return first === 'modules' && rest.some((p, i) => (CONFIGS.has(p) && i === rest.length - 1) || ((p === 'hooks' || p === 'info') && i < rest.length - 1))
-    }
-    const walk = (rel: string) => {
-      for (const n of readdirSync(join(root, rel))) {
-        const r = rel ? `${rel}/${n}` : n
-        const lower = r.toLowerCase(); const st = lstatSync(join(root, r))
-        const parts = lower.split('/'); const inGit = parts[0] === '.git'
-        if (st.isDirectory()) { if (inGit && (parts.length === 1 || ['hooks', 'info', 'modules'].includes(parts[1]!))) walk(r); continue }
-        if (inGit ? !watchedInGit(parts.slice(1)) : lower !== '.gitattributes' && lower !== '.gitmodules') continue
-        out[r] = `${(st.mode & 0o777).toString(8)} ${st.isSymbolicLink() ? 'link' : readFileSync(join(root, r), 'utf8')}`
-      }
-    }
-    walk('')
-    return out
-  }
-  /** The runner writes the exclude line (and the file, if there was none) before it takes the baseline, so the baseline holds it. */
-  const withExclude = (before: Record<string, string>) => ({ '.git/info/exclude': '644 /.summon-tmp/\n', ...before })
   const result = (h: string, id: string) => resultOf(h, id)
   const firstLine = (h: string, id: string) => String(result(h, id).result_text).split('\n')[0]
   const tamperLines = (h: string, id: string) => ledgerOf(h).filter((e) => e.id === id && e.event === 'job_tampered')
+  const markerOf = (h: string) => blockMarkerPath(summonPaths(h).state, join(h, 'Projects/x'))
   const PROMPT = 'echo: Read the README and summarise it.'
+  const flagsOf = (p: string) => Bun.spawnSync(['/usr/bin/stat', '-f', '%Sf', p]).stdout.toString().trim()
+  const read = (root: string, rel: string) => readFileSync(join(root, rel), 'utf8')
+  const gateAfter = (h: string, access: 'review' | 'edit' | 'build') => gateStart(JSON.stringify(sampleRequest({ access })),
+    { nowMs: () => Date.now(), home: h, paths: summonPaths(h), guiSessionIsMine: () => true, runnerLoaded: () => true, claudeAvailable: () => true })
 
-  for (const [what, tampered, attributes] of [
-    ['config', '.git/config', true], ['hook', '.git/hooks/pre-commit', true], ['gitmodules', '.gitmodules', true], ['exclude', '.git/info/exclude', true],
-    ['chmod', '.git/hooks/pre-commit.sample', true], ['gitattributes', '.GitAttributes', false],
-  ] as const) {
-    test(`a job that changes ${what} is put back: the watched files are as they were, the result starts "tampered: ${tampered}", the ledger counts it`, async () => {
-      const { h, root, id, before } = watched({ attributes })
+  // What each way of changing the git files leaves: the paths named, and a check that the change is STILL THERE (nothing was put back).
+  const CASES: Array<[string, string, (root: string) => boolean, boolean?]> = [
+    ['config', '.git/config', (r) => read(r, '.git/config').includes('pager = evil')],
+    ['hook', '.git/hooks/pre-commit', (r) => existsSync(join(r, '.git/hooks/pre-commit'))],
+    ['gitmodules', '.gitmodules', (r) => read(r, '.gitmodules').includes('evil')],
+    ['exclude', '.git/info/exclude', (r) => !existsSync(join(r, '.git/info/exclude'))],
+    ['chmod', '.git/hooks/pre-commit.sample', (r) => (statSync(join(r, '.git/hooks/pre-commit.sample')).mode & 0o777) === 0o644],
+    ['gitattributes', '.GitAttributes', (r) => existsSync(join(r, '.GitAttributes')), false],
+    ['commondir', '.git/commondir', (r) => existsSync(join(r, '.git/commondir'))],
+    ['worktree-config', '.git/config.worktree', (r) => existsSync(join(r, '.git/config.worktree'))],
+    ['nested-git', 'sub/inner/.git', (r) => lstatSync(join(r, 'sub/inner/.git')).isDirectory()],
+    ['gitlink', 'vendor/lib (gitlink)', (r) => existsSync(join(r, '.git/index'))],
+  ]
+  for (const [what, tampered, stillThere, attributes] of CASES) {
+    test(`a job that changes ${what} is found and its folder blocked: the result starts "tampered: ${tampered}", the change is left as it is, the ledger counts it`, async () => {
+      const { h, root, id } = watched({ attributes: attributes ?? true })
       fake.setMode(`tamper:${what}`)
       await runOnce(rdeps(h))
-      expect(listing(root)).toEqual(withExclude(before))
-      expect(readState(summonPaths(h), id)?.status).toBe('completed') // the restore does not change the job's status
+      expect(stillThere(root)).toBe(true) // Ruling S8: nothing is put back
+      expect(readState(summonPaths(h), id)?.status).toBe('completed') // and the job's status is not changed
       expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
-      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ event: 'job_tampered', detail: 'tampered: 1 path(s)' })])
-      expect(JSON.stringify(ledgerOf(h))).not.toMatch(/\.git\/|gitattributes|gitmodules/i) // the paths stay in the 0600 result file
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ event: 'job_tampered', detail: 'tampered: 1 path(s), folder blocked' })])
+      expect(JSON.stringify(ledgerOf(h))).not.toMatch(/\.git\/|gitattributes|gitmodules|vendor|sub\/inner/i) // the paths stay in the 0600 result file
       expect(ledgerOf(h).filter((e) => e.id === id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_tampered', 'job_end'])
       expect(verifyLedger(summonPaths(h).ledger).ok).toBe(true)
+      expect(existsSync(markerOf(h))).toBe(true)
     })
   }
-  test('the exclude line was in the baseline: a deleted .git/info/exclude comes back WITH the line', async () => {
-    const { h, root } = watched()
-    fake.setMode('tamper:exclude')
-    await runOnce(rdeps(h))
-    expect(readFileSync(join(root, '.git/info/exclude'), 'utf8')).toBe('/.summon-tmp/\n')
-  })
-  test('a .git/info swapped for a symlink to the job\'s temp directory is replaced by the real directory, with its file', async () => {
-    const { h, root, id, before } = watched()
-    fake.setMode('tamper:info-link')
-    await runOnce(rdeps(h))
-    expect(lstatSync(join(root, '.git/info')).isSymbolicLink()).toBe(false)
-    expect(listing(root)).toEqual(withExclude(before))
-    expect(firstLine(h, id)).toBe('tampered: .git/info, .git/info/exclude')
+  test('a .git swapped for a gitfile or a link is found with everything that was in it, and is left as the job made it', async () => {
+    for (const what of ['gitfile', 'git-link']) {
+      const { h, root, id } = watched()
+      fake.setMode(`tamper:${what}`)
+      await runOnce(rdeps(h))
+      expect(lstatSync(join(root, '.git')).isDirectory()).toBe(false)
+      expect([what, firstLine(h, id)]).toEqual([what, 'tampered: .git, .git/config, .git/hooks, .git/hooks/pre-commit.sample, .git/info, .git/info/exclude'])
+      expect(existsSync(markerOf(h))).toBe(true)
+      expect(readState(summonPaths(h), id)?.status).toBe('completed')
+    }
   })
   test('everything at once: five paths, one line, sorted, and the ledger counts five', async () => {
-    const { h, root, id, before } = watched({ attributes: false })
+    const { h, id } = watched({ attributes: false })
     fake.setMode('tamper:all')
     await runOnce(rdeps(h))
-    expect(listing(root)).toEqual(withExclude(before))
     expect(firstLine(h, id)).toBe('tampered: .GitAttributes, .git/config, .git/hooks/pre-commit, .git/info/exclude, .gitmodules')
-    expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 5 path(s)' })])
+    expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 5 path(s), folder blocked' })])
   })
-  test('an untouched job reports nothing: its result is the harness\'s text alone, and there is no tampered line in the ledger', async () => {
-    const { h, root, id, before } = watched()
+  test('a .git/info swapped for a symlink to the job\'s temp directory is found, and left a link', async () => {
+    const { h, root, id } = watched()
+    fake.setMode('tamper:info-link')
+    await runOnce(rdeps(h))
+    expect(lstatSync(join(root, '.git/info')).isSymbolicLink()).toBe(true)
+    expect(firstLine(h, id)).toBe('tampered: .git/info, .git/info/exclude')
+  })
+  test('an untouched job reports nothing and blocks nothing: its result is the harness\'s text alone, no tampered line, no marker', async () => {
+    const { h, id } = watched()
     fake.setMode('ok')
     await runOnce(rdeps(h))
-    expect(listing(root)).toEqual(withExclude(before))
     expect(result(h, id)).toMatchObject({ status: 'completed', result_text: PROMPT })
     expect(tamperLines(h, id)).toEqual([])
     expect(ledgerOf(h).filter((e) => e.id === id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_end'])
+    expect(existsSync(markerOf(h))).toBe(false)
+    expect(gateAfter(h, 'edit').status).toBe('admitted')
   })
-  test('a job that ends by timeout is put right too, and still ends timed_out', async () => {
-    const { h, root, id, before } = watched({ timeout_s: 1 })
+  test('a repository the job makes in its TMPDIR (a test suite does) is not a nested repository: the temp directory is the runner\'s own', async () => {
+    const { h, id } = watched()
+    fake.setMode('tamper:temp-repo')
+    await runOnce(rdeps(h))
+    expect(result(h, id)).toMatchObject({ status: 'completed', result_text: PROMPT })
+    expect(existsSync(markerOf(h))).toBe(false)
+  })
+  test('a job that ends by timeout is checked too, and still ends timed_out', async () => {
+    const { h, root, id } = watched({ timeout_s: 1 })
     fake.setMode('tamper:config:slow')
     await runOnce(rdeps(h))
     expect(readState(summonPaths(h), id)).toMatchObject({ status: 'timed_out', detail: 'ran past 1s' })
-    expect(listing(root)).toEqual(withExclude(before))
+    expect(read(root, '.git/config')).toContain('pager = evil')
     expect(firstLine(h, id)).toBe('tampered: .git/config')
     expect(result(h, id)).toMatchObject({ status: 'timed_out' })
+    expect(existsSync(markerOf(h))).toBe(true)
   }, 15_000)
-  test('a build job is put right too', async () => {
-    const { h, root, id, before } = watched({ access: 'build' })
+  test('a build job is checked too', async () => {
+    const { h, id } = watched({ access: 'build' })
     fake.setMode('tamper:hook')
     await runOnce(rdeps(h))
-    expect(listing(root)).toEqual(withExclude(before))
     expect(firstLine(h, id)).toBe('tampered: .git/hooks/pre-commit')
+    expect(existsSync(markerOf(h))).toBe(true)
   })
   test('a path with a newline in its name cannot make a second line: it is escaped', async () => {
     const { h, id } = watched()
@@ -888,64 +918,153 @@ describe('the fingerprint of the git files that can run code (design section 3, 
     await runOnce(rdeps(h))
     expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/a\\x0ab', PROMPT])
   })
-  // Ruling S6: git's redirecting files and the submodules' git directories are watched, and a .git that stops being a directory is put right.
-  for (const [what, tampered, modules] of [
-    ['commondir', '.git/commondir', false], ['worktree-config', '.git/config.worktree', false], ['module', '.git/modules/evil/config, .git/modules/evil/hooks/pre-commit', true],
-    ['module-config', '.git/modules/a/config', true],
+  // A sandboxed job can set flags and ACLs and take a mode away. The guard reads each as what it is, and undoes none of it.
+  for (const [what, tampered, stillLocked] of [
+    ['immutable', '.git/config', (r: string) => flagsOf(join(r, '.git/config')).includes('uchg')],
+    ['locked-hook', '.git/hooks/pre-commit', (r: string) => flagsOf(join(r, '.git/hooks')).includes('uchg')],
+    ['acl', '.git/config, .git/hooks', (r: string) => { try { readFileSync(join(r, '.git/config')); return false } catch { return true } }],
+    ['unreadable', '.git/config', (r: string) => (statSync(join(r, '.git/config')).mode & 0o777) === 0],
+    ['dir-000', '.git/hooks', (r: string) => (statSync(join(r, '.git/hooks')).mode & 0o777) === 0],
+    ['new-dir-000', '.git/info/evil', (r: string) => (statSync(join(r, '.git/info/evil')).mode & 0o777) === 0],
   ] as const) {
-    test(`a job that writes ${what} is put back: the watched files are as they were, the result starts "tampered: ${tampered}", the ledger counts it`, async () => {
-      const { h, root, id, before } = watched({ modules })
+    test(`a job that tries to hide its change (${what}) is found all the same, said "tampered: ${tampered}", and the lock it set is left in place`, async () => {
+      const { h, root, id } = watched()
       fake.setMode(`tamper:${what}`)
       await runOnce(rdeps(h))
-      expect(listing(root)).toEqual(withExclude(before))
-      expect(existsSync(join(root, '.git/modules/evil'))).toBe(false)
       expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
-      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: `tampered: ${tampered.split(', ').length} path(s)` })])
-      if (modules) expect(readFileSync(join(root, '.git/modules/a/HEAD'), 'utf8')).toBe('ref: refs/heads/main\n') // what is not watched is left as it is
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: `tampered: ${tampered.split(', ').length} path(s), folder blocked` })])
+      expect(stillLocked(root)).toBe(true) // no chflags, no chmod -N, no mode repair: the runner only reads
+      expect(existsSync(markerOf(h))).toBe(true)
     })
   }
-  for (const [what, setup] of [['gitfile', 'a gitfile'], ['git-link', 'a link to the real git directory moved aside']] as const) {
-    test(`a job that replaces .git by ${setup} has the directory back with every watched file, said "tampered: .git, ...", and nothing is "not restored"`, async () => {
-      const { h, root, id, before } = watched({ modules: true })
-      fake.setMode(`tamper:${what}`)
-      await runOnce(rdeps(h))
-      expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
-      expect(listing(root)).toEqual(withExclude(before))
-      const lines = result(h, id).result_text.split('\n')
-      expect(lines[0]).toBe('tampered: .git, .git/config, .git/hooks/pre-commit.sample, .git/info/exclude, .git/modules/a/config, .git/modules/a/hooks/pre-commit.sample')
-      expect(lines.slice(1)).toEqual([PROMPT])
-      expect(readState(summonPaths(h), id)?.status).toBe('completed')
-      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 6 path(s)' })])
-      expect(existsSync(join(root, what === 'gitfile' ? '.x' : '.real'))).toBe(true) // outside the watched set: left where the job put it
-    })
-  }
-  test('a restore that really cannot be done (a special file in the baseline that the job removed) is said so on the second line, and counted in the ledger', async () => {
-    const { h, root, id, before } = watched()
+  test('a special file in the baseline that the job removed is a vanished path like any other', async () => {
+    const h = repoHome(); const root = join(h, 'Projects/x')
+    writeFileSync(join(root, '.git/config'), '[core]\n'); mkdirSync(join(root, '.git/hooks'))
     expect(Bun.spawnSync(['/usr/bin/mkfifo', join(root, '.git/hooks/pre-push')]).exitCode).toBe(0)
+    const req = admit(h, { access: 'edit' })
     fake.setMode('tamper:fifo-gone')
     await runOnce(rdeps(h))
-    expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/pre-push', 'not restored: .git/hooks/pre-push', PROMPT])
-    expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), 1 not restored' })])
-    expect(readState(summonPaths(h), id)?.status).toBe('completed')
-    expect(listing(root)).toEqual(withExclude(before)) // everything else is as it was
+    expect(String(result(h, req.id).result_text).split('\n')).toEqual(['tampered: .git/hooks/pre-push', PROMPT])
   })
-  // A sandboxed job can set flags and ACLs and take a mode away on what it writes. None of it keeps a change: the runner owns the files and undoes it.
-  for (const [what, tampered] of [
-    ['immutable', '.git/config'], ['locked-hook', '.git/hooks/pre-commit'], ['acl', '.git/config, .git/hooks/pre-commit'], ['unreadable', '.git/config'],
-    ['dir-000', '.git/hooks, .git/hooks/pre-commit'], ['new-dir-000', '.git/info/evil/x'],
-  ] as const) {
-    test(`a job that makes its change hard to undo (${what}) still has it undone: restored, said "tampered: ${tampered}", and nothing is "not restored"`, async () => {
-      const { h, root, id, before } = watched()
-      fake.setMode(`tamper:${what}`)
+
+  describe('blocking: the runner\'s private marker, and what admission does with it (Ruling S8)', () => {
+    test('the marker is in the runner\'s state, 0600, and holds the folder, the job and a fixed word and nothing the job wrote', async () => {
+      const { h, root, id, paths } = watched()
+      fake.setMode('tamper:config')
       await runOnce(rdeps(h))
-      expect(listing(root)).toEqual(withExclude(before))
-      expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
-      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: `tampered: ${tampered.split(', ').length} path(s)` })])
-      expect(Bun.spawnSync(['/usr/bin/stat', '-f', '%Sf', join(root, '.git/config')]).stdout.toString().trim()).toBe('-') // no flag left
-      expect(readdirSync(join(root, '.git/hooks')).sort()).toEqual(['pre-commit.sample'])
-      expect(readdirSync(join(root, '.git/info')).sort()).toEqual(['exclude'])
+      const marker = markerOf(h)
+      expect(marker.startsWith(join(paths.state, 'blocked') + '/')).toBe(true)
+      expect(statSync(marker).mode & 0o777).toBe(0o600)
+      expect(readJson<any>(marker)).toEqual({ v: 1, folder: root, job: id, at: expect.any(String), why: 'tampered' })
     })
-  }
+    test('the gate then refuses every edit and build request for the folder (folder_blocked, the hint naming the marker), and a review request still goes in', async () => {
+      const { h, id } = watched({ al: BUILD_ALLOWLIST })
+      fake.setMode('tamper:config')
+      await runOnce(rdeps(h))
+      expect(readState(summonPaths(h), id)?.status).toBe('completed')
+      for (const access of ['edit', 'build'] as const) {
+        expect([access, gateAfter(h, access)]).toEqual([access, { status: 'refused', reason: 'folder_blocked', detail: expect.stringContaining('is blocked'),
+          hint: `check the folder's git files, then remove ${displayPath(markerOf(h), h)}` }])
+      }
+      expect(gateAfter(h, 'review').status).toBe('admitted')
+    })
+    test('a job already queued when the folder is blocked is refused when the runner takes it, and unblocking is removing the marker', async () => {
+      const { h, root } = watched()
+      fake.setMode('tamper:config')
+      await runOnce(rdeps(h))
+      const queued = enqueue(h, { access: 'edit', cwd_real: root })
+      fake.setMode('ok')
+      await runOnce(rdeps(h))
+      expect(readState(summonPaths(h), queued.id)).toMatchObject({ status: 'refused', reason: 'folder_blocked' })
+      rmSync(markerOf(h))
+      // Yu has looked at the folder: .git/config is as the job left it, so the next job's baseline is that, and an untouched job is clean
+      expect(gateAfter(h, 'edit').status).toBe('admitted')
+      await runOnce(rdeps(h))
+      const states = ledgerOf(h).filter((e) => e.event === 'job_end').map((e) => e.status)
+      expect(states.slice(-1)).toEqual(['completed'])
+      expect(existsSync(markerOf(h))).toBe(false)
+    })
+    test('a marker that cannot be written is said so, in the result and in the ledger, and the job still ends as it ended', async () => {
+      const { h, id, paths } = watched()
+      writeFileSync(join(paths.state, 'blocked'), 'in the way') // the marker directory cannot be made
+      fake.setMode('tamper:config')
+      await runOnce(rdeps(h))
+      expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/config', 'folder not blocked: the block marker could not be written', PROMPT])
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), folder not blocked' })])
+      expect(readState(paths, id)?.status).toBe('completed')
+    })
+    test('a second tampered job in an unblocked folder leaves the first marker alone', async () => {
+      const { h, root, id } = watched()
+      fake.setMode('tamper:config')
+      await runOnce(rdeps(h))
+      const first = readJson<any>(markerOf(h))
+      expect(first.job).toBe(id)
+      expect(blockFolder(summonPaths(h).state, root, { job: 'smn_' + 'f'.repeat(32), at: iso(Date.now()), why: 'tampered' })).toBe(true)
+      expect(readJson<any>(markerOf(h)).job).toBe(id)
+    })
+  })
+
+  describe('the index (Ruling S9): git ls-files --stage, under the job\'s own git env, before and after', () => {
+    const logGit = () => {
+      const dir = trackTmp(mkdtempSync(join(tmpdir(), 'summon-git-'))); const log = join(dir, 'log'); const script = join(dir, 'git')
+      writeFileSync(script, `#!/bin/sh\n{ echo "ARGS $*"; echo "CWD $(pwd)"; env | sort; echo END; } >> '${log}'\n`, { mode: 0o755 })
+      return { script, calls: () => (existsSync(log) ? readFileSync(log, 'utf8').split('END\n').filter(Boolean) : []) }
+    }
+    test('git is run twice for a clean job, before and after, in the folder, with ls-files --stage -z and exactly the job\'s git env', async () => {
+      const { h, root } = watched(); const g = logGit()
+      fake.setMode('ok')
+      await runOnce(rdeps(h, { git: g.script }))
+      const calls = g.calls()
+      expect(calls).toHaveLength(2)
+      for (const c of calls) {
+        expect(c).toContain('ARGS ls-files --stage -z\n')
+        expect(c).toContain(`CWD ${root}\n`)
+        expect(c).toContain('GIT_CONFIG_COUNT=6\n')
+        expect(c).toContain('core.hooksPath')
+        expect(c).toContain(`GIT_CEILING_DIRECTORIES=${join(h, 'Projects')}\n`)
+        expect(c).toContain('GIT_TERMINAL_PROMPT=0\n')
+        expect(c).not.toContain('FAKE_') // nothing of the runner's own env
+      }
+    })
+    test('git is not run after a job whose watched files already changed: the configuration it would read is the job\'s now', async () => {
+      const { h } = watched(); const g = logGit()
+      fake.setMode('tamper:config')
+      await runOnce(rdeps(h, { git: g.script }))
+      expect(g.calls()).toHaveLength(1) // the one before the job
+    })
+    test('an index that already holds a gitlink refuses the job at start: submodules_unsupported, no path in the ledger, nothing made, nothing blocked', async () => {
+      const h = repoHome(); const root = join(h, 'Projects/x')
+      const env = { HOME: h, PATH: '/usr/bin:/bin', GIT_CEILING_DIRECTORIES: join(h, 'Projects') }
+      expect(Bun.spawnSync(['/usr/bin/git', 'update-index', '--add', '--cacheinfo', `160000,${'ab'.repeat(20)},vendor/lib`], { cwd: root, env }).exitCode).toBe(0)
+      const req = admit(h, { access: 'edit' })
+      await runOnce(rdeps(h))
+      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'refused', reason: 'submodules_unsupported',
+        detail: 'the index of the folder holds a gitlink (mode 160000): edit and build jobs do not support submodules' })
+      expect(result(h, req.id).result_text).toBe('use a folder without submodules (no .gitmodules, no .git/modules, no gitlink in the index); a review job still works here\nvendor/lib (gitlink)')
+      expect(JSON.stringify(ledgerOf(h))).not.toContain('vendor')
+      expect(existsSync(fake.argvOut)).toBe(false)
+      expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+      expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+      expect(existsSync(markerOf(h))).toBe(false)
+    })
+    test('git that cannot run fails the job at start, fail closed, with nothing made', async () => {
+      const h = repoHome(); const req = admit(h, { access: 'edit' })
+      await runOnce(rdeps(h, { git: '/no/such/git' }))
+      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
+      expect(existsSync(fake.argvOut)).toBe(false)
+      expect(existsSync(join(h, 'Projects/x', SUMMON_TMP))).toBe(false)
+    })
+    test('an index that cannot be read after the job is a change: the folder cannot be shown clean, so it is blocked', async () => {
+      const { h, id } = watched()
+      const dir = trackTmp(mkdtempSync(join(tmpdir(), 'summon-git-'))); const count = join(dir, 'n'); const script = join(dir, 'git')
+      writeFileSync(script, `#!/bin/sh\nif [ -e '${count}' ]; then exit 1; fi\n: > '${count}'\n`, { mode: 0o755 }) // fine the first time, broken after the job
+      fake.setMode('ok')
+      await runOnce(rdeps(h, { git: script }))
+      expect(result(h, id).result_text.split('\n')).toEqual(['tampered: (the index could not be read)', PROMPT])
+      expect(existsSync(markerOf(h))).toBe(true)
+    })
+  })
+
   test('the listing is injected: the runner asks it for the folder, .git, hooks and info before and after the job, and for nothing else', async () => {
     const { h, root } = watched(); const asked: string[] = []
     fake.setMode('ok')
@@ -956,19 +1075,24 @@ describe('the fingerprint of the git files that can run code (design section 3, 
     const { h, root, id } = watched()
     if (!existsSync(join(root, '.GIT'))) return // a case-sensitive volume has no such spelling to follow
     renameSync(join(root, '.git'), join(root, '.Git')); renameSync(join(root, '.Git/config'), join(root, '.Git/Config')); renameSync(join(root, '.Git/hooks'), join(root, '.Git/HOOKS'))
-    const before = listing(root)
     fake.setMode('tamper:config')
     await runOnce(rdeps(h))
     expect(firstLine(h, id)).toBe('tampered: .Git/Config')
-    expect(Object.keys(listing(root)).sort()).toEqual(Object.keys({ ...before, '.Git/info/exclude': '' }).sort())
-    expect(readFileSync(join(root, '.Git/Config'), 'utf8')).toBe('[core]\n\tbare = false\n')
   })
-  test('a review job is not fingerprinted: it has no Bash tool, and its folder is not touched', async () => {
-    const h = targetHome(); fakeGitRoot(join(h, 'Projects/x')); const root = join(h, 'Projects/x')
+  test('a review job is not fingerprinted: it has no Bash tool, its folder is not touched, git is not run and nothing is blocked', async () => {
+    const h = targetHome(); fakeGitRoot(join(h, 'Projects/x')); const root = join(h, 'Projects/x'); const g = (() => { const d = trackTmp(mkdtempSync(join(tmpdir(), 'summon-git-'))); const s = join(d, 'git'); writeFileSync(s, `#!/bin/sh\necho ran > '${d}/ran'\n`, { mode: 0o755 }); return { s, ran: () => existsSync(join(d, 'ran')) } })()
     writeFileSync(join(root, '.git/config'), 'a'); admit(h)
     fake.setMode('tamper:config')
-    await runOnce(rdeps(h))
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('a[core]\n\tpager = evil\n') // nothing put back: review jobs are Phase 0's, byte for byte
+    await runOnce(rdeps(h, { git: g.s }))
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('a[core]\n\tpager = evil\n') // review jobs are Phase 0's, byte for byte
+    expect(g.ran()).toBe(false)
+    expect(existsSync(blockMarkerPath(summonPaths(h).state, root))).toBe(false)
+  })
+  test('the runner and the guard only read: neither source has a call that repairs (chmod, chflags, ACLs, restore, removal of a watched path)', () => {
+    for (const file of ['runner.ts', 'fingerprint.ts']) {
+      const src = readFileSync(join(import.meta.dir, '..', 'src', file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+      for (const banned of ['chflags', 'chmod', 'lchmod', 'restoreBaseline', 'unlock(', 'chown', 'setfacl', '/bin/chmod']) expect([file, banned, src.includes(banned)]).toEqual([file, banned, false])
+    }
   })
 })
 
@@ -1015,13 +1139,17 @@ describe('the process sweep (design section 3, "Process sweep", Ruling S3)', () 
     await runOnce(rdeps(h, SNAP))
     await goneIn(noted(), ['group', 'setsid', 'reparent', 'cleared-env'])
   }, 20_000)
-  test('the sweep comes before the fingerprint: a leftover that keeps rewriting .git/config is dead before the files are compared', async () => {
+  test('the sweep comes before the comparison: the process table is last read before the git files are last listed, and the leftover that keeps rewriting .git/config is dead when the job is closed', async () => {
     const h = repoHome(); const req = admit(h, { access: 'edit' }); const config = join(h, 'Projects/x/.git/config')
     writeFileSync(config, '[core]\n\tbare = false\n')
+    const events: string[] = []
     fake.setMode('kids:writer')
-    await runOnce(rdeps(h, SNAP))
-    await Bun.sleep(300) // a writer still alive would have rewritten the restored file by now (and one alive during the comparison, before it)
-    expect(readFileSync(config, 'utf8')).toBe('[core]\n\tbare = false\n')
+    await runOnce(rdeps(h, { ...SNAP, ps: () => { events.push('ps'); return livePs() }, listDir: (d) => { events.push('list'); return readdirSync(d) } }))
+    expect(events.lastIndexOf('ps')).toBeGreaterThan(-1)
+    expect(events.lastIndexOf('ps')).toBeLessThan(events.lastIndexOf('list'))
+    const size = statSync(config).size
+    await Bun.sleep(300) // a writer still alive would have grown the file by now
+    expect(statSync(config).size).toBe(size)
     expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('tampered: .git/config')
     await goneIn(noted(), ['writer'])
   }, 20_000)
@@ -1063,7 +1191,7 @@ const privateFile = (h: string, id: string, name: string) => join(summonPaths(h)
 
 describe('what the runner keeps for a job it may not live to finish (guard.json, procs.json)', () => {
   test('while an edit job runs: guard.json holds the runner\'s identity and the baseline, procs.json claude\'s pid, group and start time; both are 0600', async () => {
-    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    const h = repoHome(); const paths = summonPaths(h); const secretConfig = '[url "https://user:hunter2@example.com/"]\n'; writeFileSync(join(h, 'Projects/x/.git/config'), secretConfig); const req = admit(h, { access: 'edit' })
     fake.setMode('slow')
     const p = runOnce(rdeps(h, { processStartTime }))
     await waitFor(() => existsSync(privateFile(h, req.id, PROCS)) && readState(paths, req.id)?.status === 'running')
@@ -1074,6 +1202,8 @@ describe('what the runner keeps for a job it may not live to finish (guard.json,
     const guard = readJson<any>(privateFile(h, req.id, GUARD))!
     expect(guard).toMatchObject({ v: 1, runner: { pid: process.pid, lstart: processStartTime(process.pid) } })
     expect(guard.baseline.files.map((f: any) => f.rel)).toContain('.git/info/exclude') // taken after the exclude line was written
+    expect(guard.baseline.files.find((f: any) => f.rel === '.git/config')).toEqual({ rel: '.git/config', kind: 'file', mode: expect.any(Number), size: Buffer.byteLength(secretConfig), sha: expect.stringMatching(/^[0-9a-f]{64}$/) })
+    expect(readFileSync(privateFile(h, req.id, GUARD), 'utf8')).not.toContain('hunter2') // hashes, never contents: a .git/config can hold credentials
     for (const name of [GUARD, PROCS]) expect([name, statSync(privateFile(h, req.id, name)).mode & 0o777]).toEqual([name, 0o600])
     requestCancel(paths, 'nuance', req.id, Date.now())
     await p
@@ -1151,7 +1281,7 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
     expect(exits).toBe(1) // the second halt did not exit: the job was still being closed
     expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
   }, 15_000)
-  test('a halt during an edit job stops claude, sweeps, restores and flags the git files, removes the temp directory and the guard files, and ends the job unknown', async () => {
+  test('a halt during an edit job stops claude, sweeps, checks the git files and blocks the folder, removes the temp directory and the guard files, and ends the job unknown', async () => {
     const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const root = join(h, 'Projects/x')
     writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
     const req = admit(h, { access: 'build' }); const halt = new HaltSignal(() => {})
@@ -1162,9 +1292,10 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
     halt.request()
     await p
     expect(alive(pid)).toBe(false)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('pager = evil') // found, not put back
     expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
     expect(resultOf(h, req.id).result_text.split('\n')[0]).toBe('tampered: .git/config')
+    expect(existsSync(blockMarkerPath(paths.state, root))).toBe(true)
     expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
     expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
     expect(ledgerOf(h).filter((e) => e.id === req.id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_tampered', 'job_end'])
@@ -1208,7 +1339,7 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
       await waitFor(() => readState(paths, req.id)?.status === 'running' && existsSync(privateFile(h, req.id, PROCS)) && readFileSync(join(root, '.git/config'), 'utf8').includes('evil'))
       return { h, paths, root, req, runner, pid: readState(paths, req.id)!.pid! }
     }
-    test('SIGTERM: the job is closed within the exit timeout, the process exits 0, and nothing is left running or tampered', async () => {
+    test('SIGTERM: the job is closed within the exit timeout, the process exits 0, nothing is left running, and the folder is blocked', async () => {
       const { h, paths, root, req, runner, pid } = await runningUnderRunner()
       try {
         const t0 = Date.now()
@@ -1216,14 +1347,15 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
         expect(await runner.exited).toBe(0)
         expect(Date.now() - t0).toBeLessThan(8000) // launchd's ExitTimeOut is 20 s by default
         expect(alive(pid)).toBe(false)
-        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('pager = evil')
         expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
         expect(resultOf(h, req.id).result_text.split('\n')[0]).toBe('tampered: .git/config')
+        expect(existsSync(blockMarkerPath(paths.state, root))).toBe(true)
         expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
         expect(verifyLedger(paths.ledger).ok).toBe(true)
       } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
     }, 30_000)
-    test('SIGKILL leaves claude running; the next runner start sweeps it, restores the git files, flags the job tampered, and only then settles it unknown', async () => {
+    test('SIGKILL leaves claude running; the next runner start sweeps it, compares the git files, flags the job tampered and blocks the folder, and only then settles it unknown', async () => {
       const { h, paths, root, req, runner, pid } = await runningUnderRunner()
       let second: ReturnType<typeof startRunner> | undefined
       try {
@@ -1235,7 +1367,8 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
         second = startRunner(h)
         expect(await second.exited).toBe(0)
         await waitFor(() => !alive(pid), 3000)
-        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('pager = evil') // found, not put back
+        expect(existsSync(blockMarkerPath(paths.state, root))).toBe(true)
         expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
         expect(resultOf(h, req.id)).toMatchObject({ status: 'unknown' })
         expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('tampered: .git/config')
@@ -1245,19 +1378,21 @@ describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => 
         expect(verifyLedger(paths.ledger).ok).toBe(true)
       } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
     }, 30_000)
-    test('a job queued behind an orphan starts only after the orphan is dealt with: recovery is the first thing the runner does', async () => {
+    test('a job queued behind an orphan starts only after the orphan is dealt with: recovery is the first thing the runner does; an edit job in the now blocked folder is refused, a review job runs', async () => {
       const { h, paths, root, req, runner, pid } = await runningUnderRunner()
       try {
         runner.kill('SIGKILL'); await runner.exited
         fake.setMode('ok')
-        const next = enqueue(h, { access: 'edit' }) // the gate would call the orphan active and refuse it; a job already queued is the runner's to decide on
+        const review = enqueue(h, { access: 'review' }) // the gate would call the orphan active and refuse it; a job already queued is the runner's to decide on
+        const edit = enqueue(h, { access: 'edit', cwd_real: root })
         const second = startRunner(h)
         expect(await second.exited).toBe(0)
         expect(alive(pid)).toBe(false)
-        expect(readState(paths, next.id)?.status).toBe('completed')
-        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readState(paths, review.id)?.status).toBe('completed')
+        expect(readState(paths, edit.id)).toMatchObject({ status: 'refused', reason: 'folder_blocked' }) // recovery blocked the folder before this job was looked at
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('pager = evil')
         expect(readState(paths, req.id)?.status).toBe('unknown')
-        expect(Date.parse(readState(paths, next.id)!.started_at!)).toBeGreaterThanOrEqual(Date.parse(readState(paths, req.id)!.ended_at!) - 1)
+        expect(Date.parse(readState(paths, review.id)!.started_at!)).toBeGreaterThanOrEqual(Date.parse(readState(paths, req.id)!.ended_at!) - 1)
       } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
     }, 30_000)
   })
@@ -1269,7 +1404,8 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
   const startOf = (pid: number) => livePs()!.find((r) => r.pid === pid)!.lstart
   const GOOD = '[core]\n\tbare = false\n'
   /** A job its runner left: running (or claimed), a real process group standing in for claude (a shell with two sleepers), the guard files, a tampered config. */
-  async function orphan(o: { runner?: 'dead' | 'alive' | 'reused'; state?: Partial<JobState>; guard?: 'ok' | 'corrupt' | 'none'; procs?: 'ok' | 'wrong-start' | 'no-start' | 'pid1' | 'none'; tamper?: boolean; claude?: boolean; stateStart?: boolean } = {}) {
+  async function orphan(o: { runner?: 'dead' | 'alive' | 'reused'; state?: Partial<JobState>; guard?: 'ok' | 'corrupt' | 'none'; procs?: 'ok' | 'wrong-start' | 'no-start' | 'pid1' | 'none'; tamper?: boolean; claude?: boolean; stateStart?: boolean;
+    /** Claude's own process is gone but its group still has live members (the two sleepers). */ leaderGone?: boolean; /** The record names the first sleeper, with its start time. */ recordKid?: boolean } = {}) {
     const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const root = join(h, 'Projects/x')
     writeFileSync(join(root, '.git/config'), GOOD)
     const req = enqueue(h, { access: 'build', cwd_real: root, status: 'running', ...o.state })
@@ -1285,25 +1421,31 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
       await waitFor(() => livePs()!.filter((r) => r.ppid === pid).length === 2, 3000) // the shell has started both sleepers
       kids = livePs()!.filter((r) => r.ppid === pid).map((r) => r.pid)
       const start = startOf(pid)
-      const rec = { pid, pgid: pid, start: o.procs === 'wrong-start' ? 'Mon Jan  1 00:00:00 2001' : o.procs === 'no-start' ? null : start, seen: [] as Array<[number, string]> }
+      const rec = { pid, pgid: pid, start: o.procs === 'wrong-start' ? 'Mon Jan  1 00:00:00 2001' : o.procs === 'no-start' ? null : start,
+        seen: o.recordKid ? [[kids[0]!, startOf(kids[0]!)]] as Array<[number, string]> : [] as Array<[number, string]> }
       if (o.procs !== 'none') writeJsonAtomic(privateFile(h, req.id, PROCS), o.procs === 'pid1' ? { ...rec, pid: 1, pgid: 1 } : rec)
       writeState(paths, { ...readState(paths, req.id)!, pid, ...(o.stateStart === false ? {} : { pid_lstart: processStartTime(pid)! }) })
+      if (o.leaderGone) { const leader: number = pid; process.kill(leader, 'SIGKILL'); await waitFor(() => !alive(leader), 3000); expect(kids.every(alive)).toBe(true) } // the group outlives its leader while a member lives
     }
     if (o.tamper !== false) appendFileSync(join(root, '.git/config'), '[core]\n\tpager = evil\n')
     return { h, paths, root, req, pid: pid!, kids }
   }
   const deps = (h: string) => rdeps(h, { processStartTime: (pid) => (pid === process.pid ? `fake-lstart-${pid}` : processStartTime(pid)) })
 
-  test('a dead runner\'s job: the group and its sleepers are killed, the git files restored, the temp directory and guard files removed, and the result says tampered', async () => {
+  const markerFor = (h: string) => blockMarkerPath(summonPaths(h).state, join(h, 'Projects/x'))
+  const EVIL = (root: string) => readFileSync(join(root, '.git/config'), 'utf8').includes('pager = evil')
+  test('a dead runner\'s job: the group and its sleepers are killed, the git files compared (and left as found), the folder blocked, the temp directory and guard files removed, and the result says tampered', async () => {
     const o = await orphan(); const { h, paths, root, req, pid, kids } = o
     expect(kids).toHaveLength(2)
     expect(await recoverOrphans(deps(h))).toBe(1)
     await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true) // Ruling S8: nothing is put back
+    expect(existsSync(markerFor(h))).toBe(true)
+    expect(readJson<any>(markerFor(h))).toMatchObject({ folder: root, job: req.id, why: 'tampered' })
     expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
     expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
     expect(resultOf(h, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job', result_text: 'tampered: .git/config' })
-    expect(ledgerOf(h).filter((e) => e.id === req.id && e.event === 'job_tampered')).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s)' })])
+    expect(ledgerOf(h).filter((e) => e.id === req.id && e.event === 'job_tampered')).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), folder blocked' })])
     // the state still says running until markOrphans, the next step, settles it from that result
     expect(readState(paths, req.id)?.status).toBe('running')
     expect(markOrphans(paths, Date.now())).toBe(1)
@@ -1312,30 +1454,58 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
     expect(gateResult(paths, 'nuance', req.id, Date.now())).toMatchObject({ result_text: 'tampered: .git/config' })
     expect(countActive(paths, Date.now())).toBe(0)
   }, 20_000)
-  test('it kills the group by the start time recorded at spawn, not the pid alone: a pid that is a stranger\'s now is left alone, and the files are restored anyway', async () => {
+  test('it kills the group by the start time recorded at spawn, not the pid alone: a pid that is a stranger\'s now is left alone, and the files are compared anyway', async () => {
     const { h, root, req, pid, kids } = await orphan({ procs: 'wrong-start' })
     await recoverOrphans(deps(h))
     expect([pid, ...kids].map(alive)).toEqual([true, true, true])
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
+    expect(existsSync(markerFor(h))).toBe(true)
     expect(resultOf(h, req.id).result_text).toBe('tampered: .git/config')
   }, 20_000)
   test('a record with no start time falls back to the start time the runner put in the job\'s state at spawn', async () => {
     const { h, root, pid, kids } = await orphan({ procs: 'no-start' })
     await recoverOrphans(deps(h))
     await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
   }, 20_000)
-  test('no start time anywhere proves nothing, so nothing is signalled while the pid is alive; the files are restored', async () => {
+  test('no start time anywhere proves nothing, so nothing is signalled while the pid is alive; the files are compared', async () => {
     const { h, root, pid, kids } = await orphan({ procs: 'no-start', stateStart: false })
     await recoverOrphans(deps(h))
     expect([pid, ...kids].map(alive)).toEqual([true, true, true])
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
+    expect(existsSync(markerFor(h))).toBe(true)
   }, 20_000)
-  test('a record naming pid 1 is never signalled; the files are restored and the result says the processes were not swept', async () => {
+  test('Ruling S10: claude is gone and the live members of its group are all unrecorded: the group is not signalled (it may be a stranger\'s now); the files are compared all the same', async () => {
+    const { h, root, req, kids } = await orphan({ leaderGone: true })
+    await recoverOrphans(deps(h))
+    expect(kids.map(alive)).toEqual([true, true])
+    expect(existsSync(markerFor(h))).toBe(true)
+    expect(resultOf(h, req.id).result_text).toBe('tampered: .git/config')
+    expect(EVIL(root)).toBe(true)
+  }, 20_000)
+  test('Ruling S10: claude is gone and one live member of its group is a process the record names, with its recorded start time: the group is signalled, unrecorded members included', async () => {
+    const { h, kids } = await orphan({ leaderGone: true, recordKid: true })
+    await recoverOrphans(deps(h))
+    await waitFor(() => kids.every((k) => !alive(k)), 3000)
+  }, 20_000)
+  test('Ruling S10: a record with no start time anywhere signals nothing, even with claude gone and members alive', async () => {
+    const { h, kids } = await orphan({ leaderGone: true, procs: 'no-start', stateStart: false })
+    await recoverOrphans(deps(h))
+    expect(kids.map(alive)).toEqual([true, true])
+  }, 20_000)
+  test('a record naming pid 1 is never signalled; the files are compared, the folder blocked, and the result says the processes were not swept', async () => {
     const { h, root, req } = await orphan({ procs: 'pid1' })
     await recoverOrphans(deps(h))
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
+    expect(existsSync(markerFor(h))).toBe(true)
     expect(String(resultOf(h, req.id).result_text).split('\n')).toEqual(['tampered: .git/config', 'processes not swept: the record is not usable'])
+  }, 20_000)
+  test('a record that cannot be used blocks the folder even when the files are clean: an unswept claude may still be writing', async () => {
+    const { h, req } = await orphan({ procs: 'pid1', tamper: false })
+    await recoverOrphans(deps(h))
+    expect(String(resultOf(h, req.id).result_text).split('\n')).toEqual(['processes not swept: the record is not usable'])
+    expect(readJson<any>(markerFor(h))).toMatchObject({ job: req.id, why: 'recovery error' })
+    expect(ledgerOf(h).filter((e) => e.event === 'folder_blocked')).toEqual([expect.objectContaining({ id: req.id, detail: 'recovery error, folder blocked' })])
   }, 20_000)
   test('a runner that is still alive owns its job: nothing is killed, restored or removed', async () => {
     const { h, root, req, pid, kids } = await orphan({ runner: 'alive' })
@@ -1349,14 +1519,17 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
     const { h, root, pid, kids } = await orphan({ runner: 'reused' })
     expect(await recoverOrphans(deps(h))).toBe(1)
     await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
+    expect(existsSync(markerFor(h))).toBe(true)
   }, 20_000)
-  test('a guard file that cannot be read: claude is still swept from procs.json, and the result says the fingerprint was not checked', async () => {
+  test('a guard file that cannot be read: claude is still swept from procs.json, the result says the fingerprint was not checked, and the folder is blocked (it cannot be shown clean)', async () => {
     const { h, root, req, pid, kids } = await orphan({ guard: 'corrupt' })
     await recoverOrphans(deps(h))
     await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil') // nothing to compare with, so nothing is changed
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil') // nothing to compare with
     expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('fingerprint not checked: the saved baseline is not usable')
+    expect(readJson<any>(markerFor(h))).toMatchObject({ job: req.id, why: 'recovery error' })
+    expect(ledgerOf(h).filter((e) => e.event === 'folder_blocked')).toEqual([expect.objectContaining({ id: req.id, detail: 'recovery error, folder blocked' })])
     expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
     expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
   }, 20_000)
@@ -1365,13 +1538,15 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
     await recoverOrphans(deps(h))
     await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
     expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('fingerprint not checked: no baseline was saved')
+    expect(existsSync(markerFor(h))).toBe(true)
   }, 20_000)
-  test('nothing tampered: no result file is written and nothing is ledgered; markOrphans ends the job unknown as it always did', async () => {
+  test('nothing tampered: no result file is written, nothing is ledgered and nothing is blocked; markOrphans ends the job unknown as it always did', async () => {
     const { h, paths, req, pid } = await orphan({ tamper: false })
     expect(await recoverOrphans(deps(h))).toBe(1)
     await waitFor(() => !alive(pid), 3000)
     expect(resultOf(h, req.id)).toBeNull()
-    expect(ledgerOf(h).filter((e) => e.event === 'job_tampered')).toEqual([])
+    expect(existsSync(markerFor(h))).toBe(false)
+    expect(ledgerOf(h).filter((e) => e.event === 'job_tampered' || e.event === 'folder_blocked')).toEqual([])
     markOrphans(paths, Date.now())
     expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
   }, 20_000)
@@ -1379,12 +1554,30 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
     const { h, paths, root, req } = await orphan({ claude: false, state: { status: 'queued' } })
     writeFileSync(join(jobDir(paths, req.id), 'claimed'), '')
     expect(await recoverOrphans(deps(h))).toBe(1)
-    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(EVIL(root)).toBe(true)
+    expect(existsSync(markerFor(h))).toBe(true)
     expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
     markOrphans(paths, Date.now())
     expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped before the job started' })
   })
-  test('a job that already ended keeps its result: leftover guard files are dropped, and nothing is killed or restored', async () => {
+  test('a nested .git the dead runner\'s claude made, and an index that cannot be read, are found by recovery as by the end of a job', async () => {
+    const a = await orphan({ tamper: false, claude: false }); mkdirSync(join(a.root, 'sub/inner/.git'), { recursive: true })
+    expect(await recoverOrphans(deps(a.h))).toBe(1)
+    expect(resultOf(a.h, a.req.id).result_text).toBe('tampered: sub/inner/.git')
+    const b = await orphan({ tamper: false, claude: false })
+    expect(await recoverOrphans({ ...deps(b.h), git: '/no/such/git' })).toBe(1)
+    expect(resultOf(b.h, b.req.id).result_text).toBe('tampered: (the index could not be read)')
+    expect(existsSync(markerFor(b.h))).toBe(true)
+  })
+  test('an error while recovering (the result file cannot be written) leaves the folder blocked and the guard files dropped: a folder that cannot be shown clean is not clean, and a retry would never come', async () => {
+    const { h, req, root } = await orphan({ claude: false, tamper: false, guard: 'corrupt' })
+    mkdirSync(join(jobDir(summonPaths(h), req.id), 'result.json')) // writeJsonAtomic renames onto a directory
+    expect(await recoverOrphans(deps(h))).toBe(1)
+    expect(readJson<any>(markerFor(h))).toMatchObject({ folder: root, job: req.id, why: 'recovery error' })
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    expect(ledgerOf(h).filter((e) => e.event === 'folder_blocked')).toEqual([expect.objectContaining({ id: req.id, detail: 'recovery error, folder blocked' })])
+  })
+  test('a job that already ended keeps its result: leftover guard files are dropped, and nothing is killed, compared or blocked', async () => {
     const { h, paths, root, req, pid } = await orphan({ state: { status: 'completed' } })
     writeJsonAtomic(join(jobDir(paths, req.id), 'result.json'), { status: 'completed', result_text: 'done', exit_code: 0 })
     expect(await recoverOrphans(deps(h))).toBe(0)
@@ -1392,6 +1585,7 @@ describe('recoverOrphans: a runner that finds a job its predecessor left (design
     expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil')
     expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
     expect(resultOf(h, req.id)).toMatchObject({ status: 'completed', result_text: 'done' })
+    expect(existsSync(markerFor(h))).toBe(false)
   }, 20_000)
   test('a job with no guard files at all (a review job, or Phase 0\'s) is not touched', async () => {
     const h = targetHome(); const paths = summonPaths(h)

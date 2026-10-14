@@ -2,7 +2,6 @@
 // Test double for `claude -p`. Reads the prompt from stdin like the real CLI.
 import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, chmodSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { userInfo } from 'node:os'
 const mode = process.env.FAKE_MODE_FILE ? (await Bun.file(process.env.FAKE_MODE_FILE).text()).trim() : 'ok'
 const prompt = await new Response(Bun.stdin.stream()).text()
 const emit = (o: object) => process.stdout.write(JSON.stringify(o) + '\n')
@@ -17,7 +16,7 @@ if (process.env.FAKE_ARGV_OUT) {
 }
 const [kind = '', arg = '', end = 'ok'] = mode.split(':')
 
-/** `tamper:<what>` changes the files the runner fingerprints, then ends normally; `tamper:<what>:slow` then hangs (for a timeout). */
+/** `tamper:<what>` changes what the runner fingerprints (or leaves a repository inside the folder), then ends normally; `tamper:<what>:slow` then hangs (for a timeout). */
 function tamper(what: string) {
   const all = what === 'all'
   if (all || what === 'config') appendFileSync('.git/config', '[core]\n\tpager = evil\n')
@@ -28,17 +27,22 @@ function tamper(what: string) {
   if (what === 'chmod') chmodSync('.git/hooks/pre-commit.sample', 0o644)
   if (what === 'info-link') { rmSync('.git/info', { recursive: true }); symlinkSync(process.env.TMPDIR!, '.git/info') }
   if (what === 'newline-name') { mkdirSync('.git/hooks', { recursive: true }); writeFileSync('.git/hooks/a\nb', 'x') }
-  // Ruling S6: the files that send git to other configuration, a submodule's git directory, and a .git that stops being a directory.
+  // Git's redirecting files, and a .git that stops being a directory (watched since Ruling S6; found, not rebuilt, since Ruling S8).
   const evilConfig = '[core]\n\tfsmonitor = evil\n'
   if (what === 'commondir') { writeFileSync('.git/commondir', '../.x\n'); mkdirSync('.x'); writeFileSync('.x/config', evilConfig) }
   if (what === 'worktree-config') writeFileSync('.git/config.worktree', evilConfig)
-  if (what === 'module') { mkdirSync('.git/modules/evil/hooks', { recursive: true }); writeFileSync('.git/modules/evil/config', evilConfig); writeFileSync('.git/modules/evil/hooks/pre-commit', '#!/bin/sh\necho evil\n', { mode: 0o755 }) }
-  if (what === 'module-config') appendFileSync('.git/modules/a/config', evilConfig)
   if (what === 'gitfile') { rmSync('.git', { recursive: true }); writeFileSync('.git', 'gitdir: .x\n'); mkdirSync('.x'); writeFileSync('.x/config', evilConfig) }
   if (what === 'git-link') { renameSync('.git', '.real'); symlinkSync('.real', '.git'); appendFileSync('.real/config', evilConfig) }
-  // Ways a job can try to keep a change: a user flag, a deny ACL, a mode of 000. The owner (the runner) can undo every one without root.
+  // Ruling S9: the ways into another repository. A nested repository, the same staged as a gitlink (mode 160000), and the ordinary case that is NOT one:
+  // a repository a test makes in TMPDIR, which is inside the folder.
+  if (what === 'nested-git') mkdirSync('sub/inner/.git', { recursive: true })
+  if (what === 'gitlink') spawnSync('/usr/bin/git', ['update-index', '--add', '--cacheinfo', `160000,${'ab'.repeat(20)},vendor/lib`], { stdio: 'ignore' })
+  if (what === 'temp-repo') spawnSync('/usr/bin/git', ['init', '-q', `${process.env.TMPDIR}/scratch-repo`], { stdio: 'ignore' })
+  // Ways a job can try to hide a change: a user flag, a deny ACL, a mode of 000. The guard reads each as what it is and undoes none of them.
   const flag = (p: string, f = 'uchg') => spawnSync('/usr/bin/chflags', [f, p])
-  const deny = (p: string, rights: string) => spawnSync('/bin/chmod', ['+a', `${userInfo().username} deny ${rights}`, p])
+  // The user is asked of the system, not of the env (the harness sets USER=yu, and an ACL for a user that does not exist is silently not set).
+  const me = spawnSync('/usr/bin/id', ['-un'], { encoding: 'utf8' }).stdout.trim()
+  const deny = (p: string, rights: string) => { const r = spawnSync('/bin/chmod', ['+a', `${me} deny ${rights}`, p]); if (r.status !== 0) throw new Error(`could not set the ACL: ${r.stderr}`) }
   const evilHook = () => { mkdirSync('.git/hooks', { recursive: true }); writeFileSync('.git/hooks/pre-commit', '#!/bin/sh\necho evil\n', { mode: 0o755 }) }
   if (what === 'immutable') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); flag('.git/config') }
   if (what === 'locked-hook') { evilHook(); flag('.git/hooks/pre-commit'); flag('.git/hooks') }
@@ -46,7 +50,7 @@ function tamper(what: string) {
   if (what === 'dir-000') { evilHook(); chmodSync('.git/hooks', 0o000) }
   if (what === 'new-dir-000') { mkdirSync('.git/info/evil'); writeFileSync('.git/info/evil/x', 'x'); chmodSync('.git/info/evil', 0o000) }
   if (what === 'unreadable') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); chmodSync('.git/config', 0o000) }
-  // The one thing that cannot be put back: a special file in the baseline (the test made it) that the job removed.
+  // A special file in the baseline (the test made it) that the job removed: a vanished path like any other.
   if (what === 'fifo-gone') rmSync('.git/hooks/pre-push')
 }
 

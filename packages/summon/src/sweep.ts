@@ -60,10 +60,13 @@ export class ProcessTracker {
   /** claude's start time, as the first snapshot that saw it printed it; a later row for the same pid with another one is another process. */
   private rootStart: string | null = null
   private readonly seen = new Map<number, string>()
+  /** A restored tracker's processes exactly as the record named them: what the group test asks about, before this sweep's own look adds anything. */
+  private readonly recorded = new Map<number, string>()
 
   /**
-   * `strict` is for a tracker rebuilt from a record by a runner that did not spawn claude: it holds no child handle, so a pid it finds
-   * alive is claude only if its start time is the recorded one, and a record without a start time proves nothing.
+   * `strict` is for a tracker rebuilt from a record by a runner that did not spawn claude: it holds no child handle, so it signals the group
+   * only on proof that the group is the job's (Ruling S10): claude's pid alive with the recorded start time, or, with claude gone, a live
+   * member of the group that is a recorded process with the start time it was recorded under. A record without a start time proves nothing.
    */
   constructor(private readonly root: number, private readonly ps: PsSnapshot = livePs, private readonly kill: Kill = realKill,
     private readonly sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms), private readonly strict = false) {}
@@ -72,7 +75,7 @@ export class ProcessTracker {
   static restore(rec: TrackerRecord, ps: PsSnapshot = livePs, kill: Kill = realKill, sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms)): ProcessTracker {
     const t = new ProcessTracker(rec.pid, ps, kill, sleep, true)
     t.rootStart = rec.start
-    for (const [pid, start] of rec.seen) t.seen.set(pid, start)
+    for (const [pid, start] of rec.seen) { t.seen.set(pid, start); t.recorded.set(pid, start) }
     return t
   }
 
@@ -117,16 +120,27 @@ export class ProcessTracker {
   /**
    * One last look, then: kill the group; then kill every recorded process still alive with the start time it was recorded under,
    * looking again after each round (three at most), since a process can start another as it dies.
-   * The group is signalled only when it is the job's: claude's pid, if it is in the table with another start time than it had, belongs
-   * to a stranger now, and so does the group it leads. With no table to read, the group is signalled anyway.
+   * The group is signalled only when it is the job's. The runner that spawned claude made the group, so for it: claude's pid, if it is in
+   * the table with another start time than it had, belongs to a stranger now, and so does the group it leads; and with no table to read
+   * the group is signalled anyway. A runner rebuilt from a record (strict) cannot know that a group number is still claude's: a number
+   * outlives its leader only while some member lives, and once the group is empty a stranger can be handed it and lead a group of its own.
+   * So it signals the group only when the table shows proof (Ruling S10): claude's pid alive with the recorded start time, or, with claude
+   * gone, a live member of the group that is a process the record names, with the start time it names. Unrecorded members prove nothing,
+   * and a record without claude's start time is never signalled.
    */
   async sweep(): Promise<{ groupKilled: boolean; killed: number }> {
     const first = this.ps()
     if (first) this.record(first)
     const me = first?.find((r) => r.pid === this.root)
-    // With no table to read, the runner that spawned claude still signals the group it made; one rebuilt from a record cannot know the number is still claude's.
-    const members = first ? first.some((r) => r.pgid === this.root) : !this.strict
-    const ours = me ? (this.rootStart === null ? !this.strict : me.lstart === this.rootStart) : members
+    let ours: boolean
+    if (this.strict) {
+      ours = first !== null && this.rootStart !== null
+        && (me ? me.lstart === this.rootStart : first.some((r) => r.pgid === this.root && this.recorded.get(r.pid) === r.lstart))
+    } else {
+      // With no table to read, the runner that spawned claude still signals the group it made.
+      const members = first ? first.some((r) => r.pgid === this.root) : true
+      ours = me ? (this.rootStart === null ? true : me.lstart === this.rootStart) : members
+    }
     const groupKilled = ours
     if (groupKilled) this.tryKill(-this.root)
     let killed = 0

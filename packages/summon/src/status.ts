@@ -2,6 +2,10 @@ export const REFUSAL_REASONS = [
   'malformed', 'too_large', 'expired', 'clock', 'replayed', 'outside_allowlist',
   'target_logged_out', 'runner_missing', 'runtime_unavailable', 'rate_limited', 'busy',
   'tcc_protected_folder',
+  /** Phase 0.5: an edit or build job there was found to have changed the git files (Ruling S8); Yu removes the folder's block marker by hand. */
+  'folder_blocked',
+  /** Phase 0.5: the folder has .gitmodules or .git/modules, or its index a gitlink (Ruling S9). */
+  'submodules_unsupported',
 ] as const
 export type RefusalReason = (typeof REFUSAL_REASONS)[number]
 export type BlockedReason = 'usage' | 'auth' | 'permission'

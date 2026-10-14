@@ -233,8 +233,15 @@ for any malformed allowlist:
 - **No edit or build entry lies inside another edit or build entry.** Spelled paths are compared with `..` and doubled slashes
   folded and case ignored; that is a parse error. A `~` spelling against an absolute one, and symlinks, are caught when a job is
   admitted, on realpaths. A review entry may lie inside an edit or build entry.
-- A refusal names its reason and carries a hint holding the entry to add (for a build refusal, a complete entry with a
-  `commands:` line).
+- **No submodules.** A folder that has `.gitmodules` or `.git/modules` is refused with the reason `submodules_unsupported` (a
+  review job there is fine). The runner refuses the job the same way at start if the folder's index holds a gitlink, an index
+  entry of mode 160000: a submodule, or a nested repository staged as one. Git enters another repository only through those, and
+  the guard below does not watch git's own data, so a folder with submodules is simply not supported in Phase 0.5.
+- **A folder where a job tampered is blocked** until Yu clears it (see "What the runner does around an edit or build job",
+  item 2). It is refused with `folder_blocked`.
+- A refusal names its reason and carries a hint. For an `outside_allowlist` refusal the hint holds the entry to add (for a build
+  refusal, a complete entry with a `commands:` line); for `folder_blocked` it says what to check and which marker to remove;
+  for `submodules_unsupported` it says to use a folder without submodules.
 
 **Absolute programs and `PATH`.** A job's `PATH` is the system directories. `run: /Users/yu/.bun/bin/bun test` appends
 `/Users/yu/.bun/bin` after them, so it never shadows `/usr/bin`; the rules for the bare form (`bun test`) are added only if `bun`,
@@ -243,7 +250,8 @@ projects on Nuance, install Bun there first (optional; Bun's own installer, `cur
 
 **The runner checks again when the job starts.** The gate admits a request; the runner re-runs the whole admission when it takes
 the job and uses that result. A build entry removed while the job waited, a folder that has stopped being a repository root or has
-become nested, an allowlist that went missing or broke, or a folder that now resolves somewhere else: the job ends **`refused`**
+become nested, a folder that has since grown submodules or been blocked, an allowlist that went missing or broke, or a folder that
+now resolves somewhere else: the job ends **`refused`**
 with the admission's reason (and its hint in the result text), and claude is never started. This holds for review jobs too.
 
 **What the runner does around an edit or build job.**
@@ -253,81 +261,116 @@ with the admission's reason (and its hint in the result text), and claude is nev
    `.git/info` if needed, and doing nothing if the line is there), so git never sees the temp files. The line stays. When the job is
    over, however it ended, the runner removes the job's directory, and `.summon-tmp` too if that leaves it empty. If `.git/info`
    or the exclude file is a link, or the temp directory or the fingerprint cannot be made, the job ends `failed` before claude starts.
-2. **A fingerprint.** Inside the folder the sandbox cannot tell `src/` from `.git/config`, so the runner keeps a copy of the git
-   files that could run code later: `.git/config`, `.git/config.worktree` and `.git/commondir` (git takes its config, hooks and
-   info from the directory a `commondir` names, and reads `config.worktree` when `extensions.worktreeConfig` is on), every file
-   under `.git/hooks/` and `.git/info/`, and `.gitattributes` and `.gitmodules` in the folder root. Under `.git/modules/` (the git
-   directories of absorbed submodules, which `git status` enters) it also keeps, at any depth, every `config`, `config.worktree`
-   and `commondir`, every file under `hooks/` and `info/`, and any link there whatever its name. They are found by a
-   case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are covered on the Mac's volume. Admission already refuses a
-   folder whose `.git/commondir` is there at the start; the fingerprint catches one a job writes. The copy is taken after the
-   exclude line is written. The runner keeps it in memory and also as `guard.json`, a 0600 file in the job's private state
-   directory (`~/.local/state/summon/jobs/<job id>/`, mode 0700, which the job's sandbox cannot read); it holds file contents, so a `.git/config` that holds credentials is on disk there for as long as the job runs,
-   and the file is deleted when the job is closed. After the job the runner puts back any file whose contents, type or mode
-   changed, removes any that appeared and recreates any that vanished, and puts each watched directory (and `.git` itself) back
-   to its mode. A `.git` that has turned from a directory into a file or a link (a gitfile, or a link to a directory the job
-   controls) counts as changed: it is removed without being followed and made a directory again, holding the watched files. That
-   is all a restore can give back: the rest of the repository (objects, refs, a repository the job moved aside) is not watched
-   and is not rebuilt, so admission will refuse that folder until it is repaired. A `.git` that is gone altogether is reported as
-   `not restored: .git`, and nothing is made. **If it changed anything, the first line of the result is `tampered: <paths>`**
-   (a second line, `not restored: <paths>`, names what it could not put back), and the Nuance ledger gets one `job_tampered` line
-   with a count and no paths; the paths stay in the 0600 result file. The job's status is not changed by any of this.
-   A job cannot keep a change by making it hard to undo. The folder belongs to the runner's user, and the owner can clear all of
-   these without root, so the restore does: a mode of 000 on a file or directory (it is opened, and a changed path is compared
-   without being read, so a huge file a job planted costs nothing), a user flag (`chflags uchg`, `uappnd`) and a deny ACL (the
-   restore clears them with `/usr/bin/chflags -h nouchg,nouappnd` and `/bin/chmod -N` on the path and its parent before it
-   replaces or removes the path), and a directory the job made unreadable (it is removed with what is in it). Only a failure that
-   is really outside the owner's power, such as a pipe or socket that was in the baseline and is gone, ends as `not restored`.
-   The restore puts back contents and mode, not timestamps or extended attributes, and a user flag or ACL on a path it replaces
-   is gone with the old copy.
+2. **A fingerprint that detects and blocks, and never repairs (Rulings S8 and S9).** Inside the folder the sandbox cannot tell
+   `src/` from `.git/config`, so the runner keeps a fingerprint of the git files that could run code later and compares it when
+   the job ends. In that comparison the runner only **reads**: `lstat`, the directory listing, `readlink` and the sha256 of a
+   file. It makes no `chmod`, `chflags`, ACL change, removal or write in the folder on account of the guard, because each of
+   those, done unsandboxed on a folder that a sandboxed job wrote, is a way for the job to steer the runner (a link followed out
+   of the folder, a flag or ACL stripped from somewhere else). Its only writes in the folder are the temp directory and the
+   exclude line of item 1.
+   - **The watched set is the root `.git` only**: `.git/config`, `.git/config.worktree` and `.git/commondir` (git takes its
+     config, hooks and info from the directory a `commondir` names, and reads `config.worktree` when `extensions.worktreeConfig`
+     is on), every file under `.git/hooks/` and `.git/info/`, and `.gitattributes` and `.gitmodules` in the folder root. It
+     never goes into `objects`, `refs`, `logs` or `modules`: what git does there while a job works is not a change, and a
+     `git gc` is not tampering. The names are found by a case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are
+     covered on the Mac's volume. Admission already refuses a folder whose `.git/commondir` is there at the start; the
+     fingerprint catches one a job writes.
+   - **What is kept** for each watched path is its type, mode, size and sha256, plus the modes of the watched directories and
+     the `.git` entries that are already below the folder root. **Never contents**: a `.git/config` that holds credentials is
+     not copied anywhere. The baseline is taken after the exclude line is written. The runner keeps it in memory and also as
+     `guard.json`, a 0600 file in the job's private state directory (`~/.local/state/summon/jobs/<job id>/`, mode 0700, which the
+     job's sandbox cannot read), deleted when the job is closed.
+   - **Other repositories.** After the job, any `.git` entry anywhere below the folder root that was not there before (a bounded
+     walk of the folder that skips `node_modules` and the runner's own `.summon-tmp`, and never follows a link) and any index
+     entry of mode 160000 (the runner runs `git ls-files --stage` itself, under the job's own git env: hooks, fsmonitor, pager
+     and editor off, and a ceiling so git never walks up to a parent repository) counts as tampered. Git is not run in a folder
+     whose watched files already changed. Before the job the same index check refuses a folder whose index already has a gitlink
+     (`submodules_unsupported`, no path in the ledger), and a folder that cannot be searched (a directory the runner cannot
+     read, more than a million entries, deeper than 128 levels) or whose index cannot be read fails the job before claude starts.
+   - **The comparison** is `lstat` and sha256 only. A file is hashed only if its type, mode and size are still the baseline's, so
+     a huge file a job plants is never read. **Any change, appearance, disappearance, unreadable path or type change marks the job
+     tampered**: edited contents; a changed mode; a file, directory or link that appeared or vanished; a directory swapped for a
+     link, or `.git` turned into a gitfile or a link; a path that cannot be read or listed. A job's tricks to hide a change are
+     read as what they are, and none is undone: a mode of 000, a user flag (`chflags uchg`, `uappnd`) and a deny ACL all make a
+     path unreadable or different, which is a change.
+   - **When the job is tampered**, the first line of the result is `tampered: <paths>` (twenty paths at most are named, then a
+     count; control characters in a name are shown as `\xNN`), the Nuance ledger gets one `job_tampered` line with a count, no
+     paths, and the words `folder blocked`, and the job's status is not changed. The folder is left exactly as the job left it,
+     so there is something to look at. Paths appear only in the 0600 result file, never in the ledger.
+   - **The folder is then blocked.** The runner writes a marker for the folder's realpath in its own private state,
+     `~/.local/state/summon/blocked/<sha256 of the lower-cased realpath>` (0600, in a 0700 directory the job's sandbox can
+     neither read nor write). While it exists, admission refuses every edit and build job in that folder, at the gate and again
+     when the runner takes a job that was already queued, with the reason **`folder_blocked`** and the hint `check the folder's
+     git files, then remove <marker path>`. Review jobs are not held back. Nothing in Summon ever removes a marker: Yu looks at
+     the folder, repairs it (for a lane clone, re-cloning is the easy path) and removes the marker by hand. If the marker cannot
+     be written, the result says `folder not blocked: the block marker could not be written` and the ledger line says `folder not
+     blocked`.
 3. **A process sweep.** Claude is started as the leader of a process group of its own, and the runner records its process tree
    every 2 s (`/bin/ps`, walked from the claude pid, keyed by pid *and* start time so a reused pid is never taken for a job
    process). When the job ends, normally or by timeout, the runner kills the group, then every recorded process still alive with
-   the same start time (this catches a child that called `setsid`), and only then compares the fingerprint, restores and removes
-   the temp directory.
+   the same start time (this catches a child that called `setsid`), and only then compares the fingerprint and removes the temp
+   directory.
 4. **A runner that is stopped or dies.** Claude runs in a session of its own, so stopping the runner no longer takes it down with
    it (launchd cleans up only the runner's own process group). Three things cover that:
    - The runner keeps `procs.json` (0600, next to `guard.json`): claude's pid, its process group, its start time and the
      recorded processes with theirs. It is written before the job is marked running and again whenever the recorded set changes,
      and deleted when the job is closed.
    - **SIGTERM** (`launchctl bootout`, logout, a reinstall): the runner stops the running job as a cancel does, then sweeps,
-     restores and cleans up as above, and ends it `unknown` (`runner stopped mid-job`) before it exits 0. No other job is
-     started. It has launchd's exit timeout (20 s by default); claude gets a 5 s grace before SIGKILL.
-   - **SIGKILL, a crash, power loss**: the next runner start does the same work first, before it settles any job or claims any:
-     for a running job whose runner is gone (its recorded pid is dead, or alive with another start time) it kills the group and
-     the recorded processes, but only those whose start time still matches the record, compares the git files with the saved
-     baseline and puts them back, removes the temp directory, and writes the result's first line (`tampered: <paths>`, or
-     `fingerprint not checked: <why>` if the saved baseline is missing or unreadable; a further line `processes not swept: <why>`
-     if the process record is). The job then ends `unknown`, as before. A runner that is still alive owns its job and is left
-     alone.
+     compares, blocks if it must and cleans up as above, and ends the job `unknown` (`runner stopped mid-job`) before it exits 0.
+     No other job is started. It has launchd's exit timeout (20 s by default); claude gets a 5 s grace before SIGKILL.
+   - **SIGKILL, a crash, power loss**: the next runner start does the same work first, before it settles any job or claims any.
+     For a running job whose runner is gone (its recorded pid is dead, or alive with another start time) it sweeps the job's
+     processes, compares the saved baseline with the folder exactly as the end of a job does, and blocks the folder on any
+     change **and on any error** (a baseline that is missing or unreadable, a process record that cannot be used, a failure
+     anywhere in the recovery): a folder that cannot be shown clean is not clean. It removes the temp directory and writes the
+     result's first line (`tampered: <paths>`, or `fingerprint not checked: <why>` if the saved baseline is missing or unreadable;
+     a further line `processes not swept: <why>` if the process record is). The job then ends `unknown`, as before. A runner that
+     is still alive owns its job and is left alone.
+     **Which processes it signals.** Only on proof, by start time. It kills claude's process group only when claude's pid is alive
+     with the recorded start time, or, with claude gone, when a live member of the group is a process the record names, with the
+     start time it names. A group number outlives its leader only while a member lives; once the group is empty a stranger can be
+     handed the number and lead a group of its own, so unrecorded members of "group N" prove nothing, and a record with no start
+     time is never signalled (Ruling S10). The recorded processes are killed one by one under the same start-time rule.
 
 **Known limits of Phase 0.5, accepted.**
 
 - A process that detaches and is reparented to launchd within one 2 s interval is not found. It stays sandboxed (no network,
   writes only inside the folder). An environment marker cannot serve instead: `ps -E` shows no other process's environment on
   this macOS.
-- A legitimate edit to a watched file (`.git/config`, a hook, `.git/info/**`, `.gitattributes`, `.gitmodules`, or any of the
-  files watched under `.git/modules/`) by a job is reverted and reported as `tampered`. In a repository with many submodules the
-  scan of `.git/modules/` makes the fingerprint slower.
-- `.gitattributes` files below the folder root are not fingerprinted. The filter and textconv drivers they name are defined in git
-  configuration, and the repository's own configuration is watched: `.git/config`, `.git/config.worktree`, `.git/commondir`
-  (which could send git to other configuration) and the same files in the submodules' git directories under `.git/modules/`.
-  The user's and the system's git configuration lie outside the folder, where the sandbox cannot write.
+- A legitimate edit to a watched file (`.git/config`, a hook, `.git/info/**`, `.gitattributes`, `.gitmodules`) by a job, a
+  repository the job makes anywhere in the folder other than the temp directory (`git init`, `git clone`, a test fixture that
+  keeps one in the tree), and anything that stages a gitlink are all found and **block the folder** until Yu clears it. Phase 0.5
+  prefers safety to breadth. A repository a test makes in `TMPDIR` is not one: the runner's own `.summon-tmp` is not searched.
+  One consequence worth knowing: `git gc` writes `.git/info/refs` (git's file for dumb-HTTP servers; git itself never reads it
+  locally), and it lies under the watched `.git/info/`. A gc that runs during a job, which `git commit` can start itself
+  (`gc --auto`, once a repository has some 6,700 loose objects), is therefore reported as `tampered: .git/info/refs` and blocks
+  the folder. That happens once per repository, and a folder is cleared by looking and removing the marker; if it proves a
+  nuisance, excluding that one file from the watched set is the cheap fix.
+- A folder with submodules cannot host an edit or build job (see "No submodules"). `.gitattributes` files below the folder root
+  are not fingerprinted. The filter and textconv drivers they name are defined in git configuration, and the repository's own
+  configuration is watched (`.git/config`, `.git/config.worktree`, `.git/commondir`); the user's and the system's git
+  configuration lie outside the folder, where the sandbox cannot write.
+- A watched file's contents are hashed with no size limit, once before and (only if its size and mode are unchanged) once after.
+  A folder with more than a million entries outside `node_modules` and `.git`, a path deeper than 128 levels, or a directory the
+  runner cannot read cannot host an edit or build job: the search for nested repositories cannot be completed.
+- A job that grows a legitimate build output past those limits is found to have changed the folder (the walk cannot be shown
+  clean), and the folder is blocked.
 - Test suites that need `/private/tmp` sockets or local ports (the collab-bridge suite is one) will not run as a build job here;
   suites that respect `TMPDIR` will.
 - A runner that is killed (SIGKILL, a crash, power loss) rather than stopped cannot clean up at once. launchd starts the runner only
   when something is in the spool, so claude, with its job's sandbox but no timeout, can keep running until the next request of
-  any kind arrives (`summon nuance inventory` is the quick way to start the runner); that start does the sweep and the restore
-  before anything else. Until then the git files stay as the job left them, and the job still says `running`. Also unrecoverable:
-  a runner that dies in the instant between spawning claude and saving `procs.json` (nothing is saved to find it by), a claude
-  whose start time was never read (`ps` failed, so a live pid proves nothing and is not signalled), and a detached child that was
-  never recorded (the same residual as above).
+  any kind arrives (`summon nuance inventory` is the quick way to start the runner); that start does the sweep and the comparison
+  before anything else. Until then the folder is unchecked and not yet blocked, and the job still says `running`. Also
+  unrecoverable: a runner that dies in the instant between spawning claude and saving `procs.json` (nothing is saved to find it
+  by), a claude whose start time was never read (`ps` failed, so a live pid proves nothing and is not signalled), a claude that
+  is gone from a group whose live members are all unrecorded (never signalled, Ruling S10: it may be a stranger's by now), and a
+  detached child that was never recorded (the same residual as above). All of these stay sandboxed.
 - There is no spend bound yet (a `--max-budget-usd` is deferred): the job timeout and `starts_per_hour` are the bounds.
 
 **Updating an existing install.** Before the new runner goes on Nuance, check the allowlist already there: no edit entry may lie
 inside another edit entry (that is now a parse error, and a parse error refuses every job), and each edit entry should be a git
 repository root with a real `.git` directory (a job's `cwd` must be that root; otherwise edit jobs in that folder are refused until
-the entry is corrected). The installer never rewrites an edited allowlist. For a build folder, then: install Bun if Bun projects
+the entry is corrected) and have no submodules (`.gitmodules` or `.git/modules`: edit jobs there are refused `submodules_unsupported`). The installer never rewrites an edited allowlist. For a build folder, then: install Bun if Bun projects
 are wanted, add the folder entry above, and set `reads_anywhere: true` on the claude runtime if it is not set. A Nuance runner that
 has not been updated refuses `access: build` as `malformed`, which is a definite refusal.
 

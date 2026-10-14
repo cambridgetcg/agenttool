@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { blockFolder, blockMarkerPath, displayPath } from '../src/blocked.ts'
 import { gateStart, type GateDeps } from '../src/gate.ts'
 import { requestCancel, resultOf, statusOf } from '../src/gatekeeper.ts'
 import { verifyLedger } from '../src/ledger.ts'
@@ -317,6 +318,37 @@ describe('Phase 0.5: the front door applies the build access and the edit/build 
     const h = targetHome(BUILD); makeRepo(h)
     for (const extra of [{ commands: [{ run: 'bun test' }] }, { sandbox: false }]) {
       expect(gateStart(JSON.stringify({ ...sampleRequest({ access: 'build' }), ...extra }), deps(h))).toMatchObject({ status: 'refused', reason: 'malformed' })
+    }
+  })
+  test('Ruling S9: an edit or build request into a folder with submodules is refused submodules_unsupported, ledgered, and status names the reason', () => {
+    for (const [label, plant] of [['.gitmodules', (root: string) => writeFileSync(join(root, '.gitmodules'), '[submodule "a"]\n\tpath = a\n')],
+      ['.git/modules', (root: string) => mkdirSync(join(root, '.git/modules/a'), { recursive: true })]] as const) {
+      for (const [access, al] of [['edit', EDIT], ['build', BUILD]] as const) {
+        const h = targetHome(al); makeRepo(h); plant(join(h, 'Projects/x'))
+        const req = sampleRequest({ access })
+        const r = gateStart(JSON.stringify(req), deps(h))
+        expect([label, access, r]).toEqual([label, access, { status: 'refused', reason: 'submodules_unsupported', detail: expect.stringContaining(label), hint: expect.stringContaining('without submodules') }])
+        expect(JSON.parse(readFileSync(join(h, '.local/state/summon/ledger.jsonl'), 'utf8').trim().split('\n').pop()!)).toMatchObject({ event: 'refused', reason: 'submodules_unsupported', id: req.id, access })
+        expect(statusOf(summonPaths(h), 'nuance', req.id, Date.now())).toMatchObject({ status: 'refused', reason: 'submodules_unsupported' })
+      }
+    }
+    const h = targetHome(EDIT); makeRepo(h); writeFileSync(join(h, 'Projects/x/.gitmodules'), 'x')
+    expect(gateStart(JSON.stringify(sampleRequest({ access: 'review' })), deps(h)).status).toBe('admitted') // a review job reads, it does not run git
+  })
+  test('Ruling S8: a blocked folder refuses edit and build requests folder_blocked, with the marker\'s path in the hint, and unblocking is removing the marker', () => {
+    for (const [access, al] of [['edit', EDIT], ['build', BUILD]] as const) {
+      const h = targetHome(al); makeRepo(h); const paths = summonPaths(h)
+      expect(blockFolder(paths.state, join(h, 'Projects/x'), { job: 'smn_' + 'c'.repeat(32), at: new Date().toISOString(), why: 'tampered' })).toBe(true)
+      const req = sampleRequest({ access })
+      const r = gateStart(JSON.stringify(req), deps(h))
+      const marker = blockMarkerPath(paths.state, join(h, 'Projects/x'))
+      expect([access, r]).toEqual([access, { status: 'refused', reason: 'folder_blocked', detail: expect.stringContaining('blocked'), hint: `check the folder's git files, then remove ${displayPath(marker, h)}` }])
+      expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'refused', reason: 'folder_blocked' })
+      // a review job has no Bash tool and is not held back by the block
+      const hr = targetHome(al); makeRepo(hr); blockFolder(summonPaths(hr).state, join(hr, 'Projects/x'), { job: 'smn_' + 'd'.repeat(32), at: new Date().toISOString(), why: 'tampered' })
+      expect(gateStart(JSON.stringify(sampleRequest({ access: 'review' })), deps(hr)).status).toBe('admitted')
+      rmSync(marker)
+      expect(gateStart(JSON.stringify(sampleRequest({ access })), deps(h)).status).toBe('admitted')
     }
   })
   test('an allowlist with a nested edit entry refuses every request, naming the file problem', () => {

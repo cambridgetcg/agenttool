@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, sy
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { AllowlistCommand } from '../src/allowlist.ts'
-import { MAX_TURNS, claudeInvocation, interpretClaudeStream, resolveProgram, usageWarning, type Invocation, type ProgramResolver } from '../src/harness.ts'
+import { MAX_TURNS, claudeInvocation, guardGitEnv, interpretClaudeStream, resolveProgram, usageWarning, type Invocation, type ProgramResolver } from '../src/harness.ts'
 import type { Access } from '../src/request.ts'
 import { cleanupTmps, trackTmp } from './helpers.ts'
 
@@ -239,6 +239,29 @@ describe('sandboxed jobs: env (Phase 0.5 §2, Rulings S1 and S5)', () => {
       expect(Object.keys(env).filter((k) => /KEY$|TOKEN|SECRET|^ANTHROPIC/.test(k) && !k.startsWith('GIT_CONFIG_KEY_'))).toEqual([])
     })
   }
+  describe('guardGitEnv: the env the runner reads the folder\'s index under (Ruling S9) is the job\'s own git env', () => {
+    for (const [name, j] of [['edit', job('edit')], ['build', buildJob([BUN_TEST])]] as const) {
+      test(`${name}: every GIT_ variable is exactly the job's, so the runner's git behaves as the job's git does`, () => {
+        const jobEnv = make(j).env
+        const guard = guardGitEnv(j.cwdReal, HOME, 'yu')
+        const gitOf = (e: Record<string, string>) => Object.fromEntries(Object.entries(e).filter(([k]) => k.startsWith('GIT_')))
+        expect(gitOf(guard)).toEqual(gitOf(jobEnv))
+        expect(guard.GIT_CONFIG_COUNT).toBe('6')
+        expect(guard.GIT_CEILING_DIRECTORIES).toBe('/Users/yu/Projects')
+      })
+    }
+    test('and nothing else of the runner\'s: a home, a user, a locale and the system PATH only', () => {
+      const guard = guardGitEnv('/Users/yu/Projects/x/', HOME, 'yu')
+      expect(Object.keys(guard).filter((k) => !k.startsWith('GIT_')).sort()).toEqual(['HOME', 'LANG', 'LOGNAME', 'PATH', 'USER'])
+      expect(guard).toMatchObject({ HOME, USER: 'yu', LOGNAME: 'yu', LANG: 'en_US.UTF-8' })
+      expect(guard.PATH).toBe(`${HOME}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`)
+      expect(guard.GIT_CEILING_DIRECTORIES).toBe('/Users/yu/Projects')
+    })
+    test('a folder that cannot be a git ceiling is refused, as the job\'s own invocation refuses it', () => {
+      for (const bad of ['', '/', '//', 'Projects/x', './x']) expect([bad, (() => { try { guardGitEnv(bad, HOME, 'yu'); return 'accepted' } catch { return 'refused' } })()]).toEqual([bad, 'refused'])
+      expect(() => guardGitEnv('/Users/yu/a:b/x', HOME, 'yu')).toThrow()
+    })
+  })
   test('a folder that is not an absolute path below the root is refused (the // of every folder rule says absolute)', () => {
     for (const bad of ['', '/', '//', 'Projects/x', './x']) {
       expect(() => make(job('edit', { cwdReal: bad }))).toThrow()

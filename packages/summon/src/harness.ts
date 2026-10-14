@@ -71,6 +71,25 @@ const SANDBOXED_GIT_PAIRS: ReadonlyArray<readonly [string, string]> = [...HOOK_O
 const gitConfigEnv = (pairs: ReadonlyArray<readonly [string, string]>): Record<string, string> =>
   Object.fromEntries([['GIT_CONFIG_COUNT', String(pairs.length)], ...pairs.flatMap(([k, v], i) => [[`GIT_CONFIG_KEY_${i}`, k], [`GIT_CONFIG_VALUE_${i}`, v]])])
 
+/** What git runs under for an edit or build job whose folder has `parent` above it: the stricter config, no prompt, and a ceiling so it never walks up to an enclosing repository. */
+const sandboxedGitEnv = (parent: string): Record<string, string> => ({
+  ...gitConfigEnv(SANDBOXED_GIT_PAIRS), GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true', GIT_PAGER: 'cat', GIT_CEILING_DIRECTORIES: parent,
+})
+const systemPath = (home: string) => `${home}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+
+/**
+ * The env the runner itself runs git under on an edit or build job's folder (Ruling S9: `git ls-files --stage`, before and after the job):
+ * the job's own git env, from the same pieces claudeInvocation uses, and nothing of the runner's. Throws for a folder that cannot be a
+ * git ceiling, as claudeInvocation does.
+ */
+export function guardGitEnv(cwdReal: string, home: string, user: string): Record<string, string> {
+  const folder = cwdReal.replace(/\/+$/, '')
+  if (!folder.startsWith('/')) throw new Error('edit folder is not an absolute path below the root')
+  const parent = dirname(folder)
+  if (parent.includes(':')) throw new Error('edit folder has a parent that cannot be written into GIT_CEILING_DIRECTORIES')
+  return { HOME: home, USER: user, LOGNAME: user, LANG: 'en_US.UTF-8', PATH: systemPath(home), ...sandboxedGitEnv(parent) }
+}
+
 const BUILD_GIT_READ_RULES = ['Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)', 'Bash(git rev-parse:*)']
 
 /** The rule(s) for one run string: the exact command, and with `args` anything after it. */
@@ -117,7 +136,7 @@ export function claudeInvocation(job: { id: string; model: string; effort?: stri
   const args = ['-p', '--verbose', '--output-format=stream-json', '--setting-sources=', '--strict-mcp-config', '--no-chrome',
     '--disable-slash-commands', '--no-session-persistence', `--max-turns=${MAX_TURNS[job.access]}`, `--model=${job.model}`,
     ...(job.effort ? [`--effort=${job.effort}`] : []), '--permission-mode=acceptEdits', '--permission-prompts=none']
-  let path = `${home}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+  let path = systemPath(home)
   let env: Record<string, string> = {
     HOME: home, USER: user, LOGNAME: user, LANG: 'en_US.UTF-8', TMPDIR: process.env.TMPDIR ?? '/tmp', PATH: path,
     CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CODE_MAX_RETRIES: '2', DISABLE_AUTOUPDATER: '1', ...gitConfigEnv(HOOK_OFF_PAIRS),
@@ -151,10 +170,7 @@ export function claudeInvocation(job: { id: string; model: string; effort?: stri
     args.push('--tools=Read,Write,Edit,Glob,Grep,Bash', `--allowedTools=${[...new Set(allow)].join(',')}`, `--disallowedTools=${deny.join(',')}`,
       `--settings=${SANDBOX_SETTINGS}`)
     // TMPDIR names a folder only the runner creates (mode 0700, before it spawns claude), and the runner removes it after the job.
-    env = {
-      ...env, PATH: path, TMPDIR: `${folder}/.summon-tmp/${job.id}`, ...gitConfigEnv(SANDBOXED_GIT_PAIRS),
-      GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true', GIT_PAGER: 'cat', GIT_CEILING_DIRECTORIES: parent,
-    }
+    env = { ...env, PATH: path, TMPDIR: `${folder}/.summon-tmp/${job.id}`, ...sandboxedGitEnv(parent) }
   }
   return { bin, args, env, stdin: job.prompt }
 }

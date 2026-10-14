@@ -17,13 +17,13 @@ const user = userInfo().username
 const tag = (e: any) => (typeof e?.code === 'string' ? e.code : 'error')
 
 // launchd stops a runner with SIGTERM (bootout, logout) and allows about 20 s. Claude runs in a session of its own, so it would
-// outlive the runner: a job that is running is stopped and closed (swept, restored, cleaned up) before the process exits.
+// outlive the runner: a job that is running is stopped and closed (swept, checked, cleaned up) before the process exits.
 const halt = new HaltSignal(() => process.exit(0))
 process.on('SIGTERM', () => halt.request())
 
 // Before anything else: a job whose runner died (SIGKILL, a crash) may have left claude running and its git files changed. Sweep it,
 // put the files back and clean up, so markOrphans settles it from what was found and no new job starts beside it.
-try { await recoverOrphans({ paths, nowMs: () => Date.now(), processStartTime }) } catch (e) { console.error(`summon-runner: recoverOrphans failed: ${tag(e)}`) }
+try { await recoverOrphans({ paths, nowMs: () => Date.now(), processStartTime, user }) } catch (e) { console.error(`summon-runner: recoverOrphans failed: ${tag(e)}`) }
 
 // Housekeeping must never keep the queue from running, so each step stands alone.
 const now = Date.now()
