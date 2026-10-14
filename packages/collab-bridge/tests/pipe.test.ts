@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, rmSync, utimesSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, utimesSync } from 'node:fs'
 import { bridgeFailure } from '../src/failure.ts'
+import { readLedger } from '../src/ledger.ts'
 import type { ToolResult } from '../src/link/messages.ts'
 import { lineageKey } from '../src/proc.ts'
 import { toolsDigest } from '../src/tools-digest.ts'
@@ -605,6 +606,35 @@ describe('the tool list', () => {
     await Bun.sleep(150)
     expect(l.frames().filter((m) => m.t === 'tools_refused')).toEqual([{ t: 'tools_refused', digest: toolsDigest(evil), reason: 'unknown_tool' }])
     expect(ledgerEvents(f.paths).filter((e) => e === 'tools_refused')).toHaveLength(1)
+  })
+
+  test('a tool-cache write that fails keeps the list, sends no tools_refused, ledgers tools_store_failed, and drops no call in flight', async () => {
+    const f = nuanceFixture()
+    const newDigest = toolsDigest(changed)
+    const l = await link(f, { ready: { tools_digest: newDigest } })
+    const d = pipeDeps(f)
+    const p = await started(d)
+    await waitFor(() => l.frames().some((m) => m.t === 'tools_get' && m.digest === newDigest))
+    const inflight = p.handleCall(1, 'collab_task_list', {})
+    const [c] = await waitFor(() => calls(l).length === 1 && calls(l))
+    // storeTools re-chmods its directory, so no mode can lock the owner out; a directory where tools/current must be renamed
+    // to fails the same way a full or failing disk does (EISDIR), after the seed is read, so this is not a no_seed refusal.
+    rmSync(f.paths.toolsCurrent)
+    mkdirSync(f.paths.toolsCurrent)
+    l.send({ t: 'tools', digest: newDigest, list: changed })
+    await waitFor(() => ledgerEvents(f.paths).includes('tools_store_failed'), 3000, 'the tools_store_failed ledger line')
+    l.send(resultFor(c!.call_ref as string))
+    expect(await inflight).toEqual(OK)   // the throw did not escape the socket handler: the call in flight still gets its answer
+    const after = await exchange(p, l, 'collab_task_list', {}, (ref) => resultFor(ref))   // not hub_version_mismatch: relist is unchanged
+    expect(after.r).toEqual(OK)
+    await p.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 'L', method: 'tools/list', params: {} }))
+    expect(written(d).find((m) => m.id === 'L').result.tools.find((t: any) => t.name === 'collab_task_list').description).toBe('List tasks.')
+    expect(written(d).some((m) => m.method === 'notifications/tools/list_changed')).toBe(false)
+    expect(l.frames().some((m) => m.t === 'tools_refused')).toBe(false)   // ToolsRefusedReason is closed: a store failure has no word in it
+    const failed = readLedger(f.paths.ledger).filter((e) => e.event === 'tools_store_failed')
+    expect(failed).toHaveLength(1)
+    expect(failed[0]!.code).toBe('EISDIR')
+    expect(ledgerEvents(f.paths)).not.toContain('tools_refused')
   })
 })
 

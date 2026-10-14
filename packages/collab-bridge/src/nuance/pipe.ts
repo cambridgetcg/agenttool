@@ -23,7 +23,7 @@ import { findHost, interactiveCheck, openLineage, SESSION_ID_RE, sweepLineages, 
 import { bunConnect, LinkClient, type Connect } from './link-client.ts'
 import { McpLocalServer } from './mcp-local.ts'
 import { loadSeatPrivate, signSeat } from './seatkey.ts'
-import { acceptHubTools, readCurrentTools } from './tools-cache.ts'
+import { acceptHubTools, readCurrentTools, type ToolsVerdict } from './tools-cache.ts'
 
 /** Claim and complete may fetch, check and check out on the Air: 150 s instead of 60 (§9.4). */
 export const LONG_CALL_TOOLS: ReadonlySet<string> = new Set(['collab_task_claim', 'collab_task_complete'])
@@ -293,7 +293,19 @@ export class Pipe {
 
   private onTools(t: ToolsMsg): void {
     const before = this.tools?.digest ?? null
-    const v = acceptHubTools(this.deps.paths, { digest: t.digest, list: t.list })
+    let v: ToolsVerdict
+    let now: ReturnType<typeof readCurrentTools> = null
+    try {
+      v = acceptHubTools(this.deps.paths, { digest: t.digest, list: t.list })
+      if (v.ok) now = readCurrentTools(this.deps.paths)
+    } catch (e) {
+      // The cache could not be written or read (a disk error, ENOSPC, a lock or permission problem): this runs inside the link's
+      // socket handler, so a throw here would drop every call in flight. Keep the current list and relist as they are (§6.2
+      // "otherwise it keeps its current list"). Not tools_refused: its reasons are closed and none says "could not store".
+      const code = (e as { code?: unknown } | null)?.code
+      this.ledger({ event: 'tools_store_failed', code: typeof code === 'string' ? code : 'unknown', lineage: this.lineage ?? undefined })
+      return
+    }
     if (!v.ok) {
       // Keep the current list; tell the hub once per refused digest, so its status shows the refusal (§6.2, P51).
       if (!this.refusedDigests.has(t.digest)) {
@@ -303,7 +315,6 @@ export class Pipe {
       }
       return
     }
-    const now = readCurrentTools(this.deps.paths)
     if (now) this.tools = now
     if (v.digest !== before) {
       this.relist = true   // calls answer hub_version_mismatch until the harness re-lists
