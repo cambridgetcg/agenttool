@@ -1,0 +1,414 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { randomBytes } from 'node:crypto'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { DEFAULT_CAPS, type TreeCaps } from '../src/air/diff-check.ts'
+import { airGit, type GitRunner } from '../src/air/git.ts'
+import {
+  createMirror, DAILY_BUDGET_BYTES, FETCH_HEADROOM_BYTES, fetchArgv, fetchedTodayFromLedger, liveMirrorDeps, MIN_FREE_BYTES,
+  MirrorLock, mirrorHead, mirrorIdOf, mirrorRefs, mirrorWorkspaceId, syncedOid, syncMirror, taskRefOk, ulimitBlocks, WIRE_CAP_BYTES,
+  writeTaskRef, type MirrorDeps, type MirrorSpec,
+} from '../src/air/mirror.ts'
+import { AIR_LEDGER_KEYS, appendLedger, readLedger } from '../src/ledger.ts'
+import { airPaths, type AirPaths } from '../src/paths.ts'
+import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
+import { cleanupTmps, commitFiles, makeRepo, modeOf, REAL_GIT, repoGit, temp } from './helpers.ts'
+import { collabHarness } from './mcp-harness.ts'
+import { installedNuanceHome } from './nuance-home.ts'
+
+afterEach(cleanupTmps)
+
+const T = 30_000 // every test here spawns git, the fake ssh and the source gate
+
+interface World {
+  air: string; paths: AirPaths; airClone: string; base: string
+  nuance: string; share: string; fake: FakeSsh; spec: MirrorSpec; deps: MirrorDeps
+}
+
+/**
+ * An Air home with the trial clone, and a "Nuance" home whose ~/Projects/collab-trial is an edit share holding a clone
+ * of it (or, with related: false, a repo with no shared history), INSTALLED, shares.json and the Summon allowlist. The
+ * Air side fetches through the fake ssh into the real gate from source, which runs the real `git upload-pack`.
+ */
+function world(o: { related?: boolean; caps?: Partial<TreeCaps>; deps?: Partial<MirrorDeps> } = {}): World {
+  const air = temp('cb-mirror-air-')
+  const paths = airPaths(air)
+  const airClone = join(air, 'Projects', 'collab-trial')
+  const base = makeRepo(airClone)
+  // Task 21's installed Nuance home: INSTALLED with the Air's git as Nuance's recorded git (recordedGit, its Cellar
+  // realpath, as `install check` records it), shares.json naming the share, and ~/Projects review, ~/Projects/collab-trial edit.
+  const h = installedNuanceHome({ share: join('Projects', 'collab-trial') })
+  const nuance = h.home
+  const share = h.share
+  if (o.related === false) {
+    makeRepo(share, { 'README.md': 'another repo\n' })
+  } else {
+    mkdirSync(join(nuance, 'Projects'), { recursive: true })
+    repoGit(join(nuance, 'Projects'), ['clone', '-q', airClone, 'collab-trial'])
+  }
+  const fake = makeFakeSsh({ nuanceHome: nuance, target: gateFromSource(), env: h.env })
+  const mirrorId = mirrorIdOf(share)
+  const spec: MirrorSpec = {
+    device: 'nuance', user: 'macair', mirrorId, mirrorPath: paths.mirrorDir('nuance', 'macair', mirrorId), airClone,
+    remoteGitdir: join(share, '.git'), caps: { ...DEFAULT_CAPS, ...o.caps },
+  }
+  const deps: MirrorDeps = {
+    git: airGit({ git: REAL_GIT, home: air }), sshBin: fake.bin, sshConfig: paths.sshConfig, alias: 'collab-nuance',
+    freeBytes: () => 1e15, fetchedToday: () => 0, ledger: (f) => { appendLedger(paths.ledger, AIR_LEDGER_KEYS, f) }, ...o.deps,
+  }
+  return { air, paths, airClone, base, nuance, share, fake, spec, deps }
+}
+
+async function created(o: Parameters<typeof world>[0] = {}): Promise<World> {
+  const w = world(o)
+  const r = await createMirror(w.spec, w.deps)
+  if (!r.ok) throw new Error(`createMirror: ${r.code}: ${r.message}`)
+  return w
+}
+
+const collabRefs = (w: World) => repoGit(w.airClone, ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/collab'])
+const packTemps = (w: World) => readdirSync(join(w.airClone, '.git', 'objects', 'pack')).filter((n) => n.startsWith('tmp_'))
+const fetchLines = (w: World) => readLedger(w.paths.ledger).filter((e) => e.event === 'fetch')
+
+describe('createMirror', () => {
+  test('createMirror makes a locked linked worktree at the fetched commit, with incoming and synced refs and no refs/heads', async () => {
+    const w = world()
+    const heads = repoGit(w.airClone, ['for-each-ref', '--format=%(refname)', 'refs/heads'])
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base })
+    const refs = mirrorRefs(w.spec)
+    expect(refs.incoming).toBe(`refs/collab/nuance/macair/${w.spec.mirrorId}/incoming`)
+    expect(refs.synced).toBe(`refs/collab/nuance/macair/${w.spec.mirrorId}/synced`)
+    expect(refs.task('t-notes-1')).toBe(`refs/collab/nuance/macair/${w.spec.mirrorId}/tasks/t-notes-1`)
+    expect(repoGit(w.airClone, ['worktree', 'list', '--porcelain'])).toContain(
+      `worktree ${w.spec.mirrorPath}\nHEAD ${w.base}\ndetached\nlocked collab-bridge mirror`)
+    expect(collabRefs(w)).toBe(`${refs.incoming} ${w.base}\n${refs.synced} ${w.base}`)
+    expect(repoGit(w.airClone, ['for-each-ref', '--format=%(refname)', 'refs/heads'])).toBe(heads)
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(readFileSync(join(w.spec.mirrorPath, 'README.md'), 'utf8')).toBe('collab trial\n')
+    expect(w.fake.calls().map((c) => c.at(-1))).toEqual([`git-upload-pack '${w.share}/.git'`])
+    // A second createMirror (a re-pin) finds a healthy mirror and changes nothing.
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base })
+    expect(w.fake.calls().length).toBe(1)
+  }, T)
+
+  test('after createMirror, collab-shared and every mirrors level are 0700', async () => {
+    const w = world()
+    mkdirSync(w.paths.sharedDir, { recursive: true, mode: 0o755 })
+    chmodSync(w.paths.sharedDir, 0o755) // as if an Air session's Collab had made it first
+    await createMirror(w.spec, w.deps)
+    const levels = [w.paths.sharedDir, w.paths.mirrorsRoot, join(w.paths.mirrorsRoot, 'nuance'), join(w.paths.mirrorsRoot, 'nuance', 'macair'), w.spec.mirrorPath]
+    for (const dir of levels) expect([dir, modeOf(dir)]).toEqual([dir, 0o700])
+  }, T)
+
+  test('the derived workspace id equals the one a real Collab session rooted at the mirror reports', async () => {
+    const w = await created()
+    const start = async (root: string) => {
+      const h = collabHarness({ journal: w.paths.sharedJournal, home: w.air })
+      try {
+        await h.initialize()
+        return await h.callTool('collab_session_start', { root_path: root, actor: 'mirror-test' })
+      } finally {
+        await h.close()
+      }
+    }
+    const remote = await start(w.spec.mirrorPath)
+    expect(remote.isError).toBeUndefined()
+    expect(await mirrorWorkspaceId(w.spec, w.deps)).toBe(remote.structuredContent.workspace.id)
+    // An Air session in the clone itself lands in the same workspace: mirrors share the clone's local-git key (§7.1).
+    const local = await start(w.airClone)
+    expect(local.structuredContent.workspace.id).toBe(remote.structuredContent.workspace.id)
+    expect(await mirrorWorkspaceId({ ...w.spec, mirrorPath: join(w.air, 'no-such-mirror') }, w.deps)).toBeNull()
+  }, T)
+
+  test('liveMirrorDeps reads free space and today\'s fetch total', async () => {
+    const air = temp('cb-mirror-air-')
+    const paths = airPaths(air)
+    const deps = liveMirrorDeps({ paths, git: airGit({ git: REAL_GIT, home: air }), ssh: '/usr/bin/ssh', alias: 'collab-nuance' })
+    expect([deps.sshBin, deps.sshConfig, deps.alias, deps.git.path]).toEqual(['/usr/bin/ssh', paths.sshConfig, 'collab-nuance', REAL_GIT])
+    const s = statfsSync(air)
+    expect(Math.abs(deps.freeBytes(air) - Number(s.bavail) * Number(s.bsize))).toBeLessThan(256 * 1024 * 1024)
+    deps.ledger({ event: 'fetch', device: 'nuance', user: 'macair', code: 'aaaaaaaaaaaaaaaa', bytes: 100, outcome: 'ok', ms: 5 })
+    deps.ledger({ event: 'fetch', device: 'nuance', user: 'macair', code: 'aaaaaaaaaaaaaaaa', bytes: 23, outcome: 'failed', ms: 5 })
+    deps.ledger({ event: 'fetch', device: 'nuance', user: 'macair', code: 'bbbbbbbbbbbbbbbb', bytes: 7, outcome: 'ok', ms: 5 })
+    expect(deps.fetchedToday('aaaaaaaaaaaaaaaa')).toBe(123)
+    expect(deps.fetchedToday('bbbbbbbbbbbbbbbb')).toBe(7)
+    expect(deps.fetchedToday('cccccccccccccccc')).toBe(0)
+    expect(modeOf(paths.ledger)).toBe(0o600)
+  }, T)
+
+  test('a Nuance repo with no shared history is repo_mismatch and leaves no worktree', async () => {
+    const w = world({ related: false })
+    const r = await createMirror(w.spec, w.deps)
+    expect(r.ok === false && r.code).toBe('repo_mismatch')
+    expect(existsSync(w.spec.mirrorPath)).toBe(false)
+    expect(repoGit(w.airClone, ['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length).toBe(1)
+    expect(collabRefs(w)).toBe('')
+  }, T)
+
+  test('a filter reached only through an includeIf on the worktree gitdir stops createMirror and leaves no worktree', async () => {
+    const w = world()
+    const inc = join(w.air, 'filters.conf')
+    writeFileSync(inc, '[filter "x"]\n\tsmudge = cat\n')
+    writeFileSync(join(w.air, '.gitconfig'), `[includeIf "gitdir:${w.airClone}/.git/worktrees/"]\n\tpath = ${inc}\n`)
+    const r = await createMirror(w.spec, w.deps)
+    expect(r.ok === false && r.code).toBe('mirror_filters_present')
+    expect(existsSync(w.spec.mirrorPath)).toBe(false)
+    expect(existsSync(join(w.airClone, '.git', 'worktrees', w.spec.mirrorId))).toBe(false)
+    expect(await syncedOid(w.spec, w.deps)).toBeNull()
+    rmSync(join(w.air, '.gitconfig'))
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base })
+  }, T)
+})
+
+describe('syncMirror', () => {
+  test('a sync moves synced only after the checkout', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const calls: string[][] = []
+    const real = w.deps.git
+    const recording: GitRunner = {
+      path: real.path,
+      run: (a, o) => { calls.push(a); return real.run(a, o) },
+      records: (a, o) => { calls.push(a); return real.records(a, o) },
+    }
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, git: recording })).toEqual({ ok: true, oid: c2 })
+    const checkout = calls.findIndex((a) => a.includes('checkout') && a.includes(c2))
+    const update = calls.findIndex((a) => a.includes('update-ref') && a.includes(mirrorRefs(w.spec).synced))
+    expect(checkout).toBeGreaterThan(-1)
+    expect(update).toBeGreaterThan(checkout)
+    expect(await mirrorHead(w.spec, w.deps)).toBe(c2)
+    expect(await syncedOid(w.spec, w.deps)).toBe(c2)
+    expect(readFileSync(join(w.spec.mirrorPath, 'notes', 'a.md'), 'utf8')).toBe('a\n')
+    const last = fetchLines(w).at(-1)!
+    expect([last.device, last.user, last.code, last.outcome]).toEqual(['nuance', 'macair', w.spec.mirrorId, 'ok'])
+    expect(last.bytes as number).toBeGreaterThan(0)
+  }, T)
+
+  test('a dirty mirror or one whose HEAD is not synced is mirror_tampered', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const code = async () => {
+      const r = await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+      return r.ok ? 'ok' : r.code
+    }
+    writeFileSync(join(w.spec.mirrorPath, 'stray.txt'), 'edited on the Air\n')
+    expect(await code()).toBe('mirror_tampered')
+    rmSync(join(w.spec.mirrorPath, 'stray.txt'))
+    writeFileSync(join(w.spec.mirrorPath, 'README.md'), 'changed in place\n')
+    expect(await code()).toBe('mirror_tampered')
+    repoGit(w.spec.mirrorPath, ['checkout', '-q', '--', 'README.md'])
+    const refs = mirrorRefs(w.spec)
+    const airOnly = commitFiles(w.airClone, { 'notes/air.md': 'air\n' }, 'an Air commit')
+    repoGit(w.airClone, ['update-ref', refs.synced, airOnly])
+    expect(await code()).toBe('mirror_tampered')
+    repoGit(w.airClone, ['update-ref', refs.synced, w.base])
+    repoGit(w.spec.mirrorPath, ['switch', '-q', '-c', 'on-a-branch'])
+    expect(await code()).toBe('mirror_tampered')
+    repoGit(w.spec.mirrorPath, ['switch', '-q', '--detach', w.base])
+    expect(w.fake.calls().length).toBe(1) // no refused sync ever fetched
+    expect(await code()).toBe('ok')
+  }, T)
+
+  test('a filter in a temp global config is mirror_filters_present', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    for (const conf of ['[filter "lfs"]\n\tclean = git-lfs clean -- %f\n', '[diff "pdf"]\n\ttextconv = cat\n', '[core]\n\tfsmonitor = true\n']) {
+      writeFileSync(join(w.air, '.gitconfig'), conf)
+      const r = await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+      expect([conf, r.ok === false && r.code]).toEqual([conf, 'mirror_filters_present'])
+    }
+    expect(w.fake.calls().length).toBe(1)
+    rmSync(join(w.air, '.gitconfig'))
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+  }, T)
+
+  test('a filter reached only through an includeIf is mirror_filters_present', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const inc = join(w.air, 'filters.conf')
+    writeFileSync(inc, '[filter "x"]\n\tsmudge = cat\n')
+    writeFileSync(join(w.air, '.gitconfig'), `[includeIf "gitdir:${w.airClone}/.git/worktrees/"]\n\tpath = ${inc}\n`)
+    // The clone's own view is clean: the include matches only the mirror's gitdir, which the check reads from.
+    expect((await w.deps.git.run(['-C', w.airClone, 'config', '--show-scope', '--get-regexp', '^filter\\.'])).code).toBe(1)
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+    expect(r.ok === false && r.code).toBe('mirror_filters_present')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+  }, T)
+
+  test('low disk before the fetch and before the checkout is mirror_low_disk', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a'.repeat(100) }, 'a note')
+    const before = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, freeBytes: () => MIN_FREE_BYTES + FETCH_HEADROOM_BYTES - 1 })
+    expect(before.ok === false && before.code).toBe('mirror_low_disk')
+    expect(w.fake.calls().length).toBe(1) // refused before fetching
+    // Enough for the fetch, then less than the tree needs: README (13) + notes/a.md (100) = 113 bytes over the floor.
+    const frees = [MIN_FREE_BYTES + FETCH_HEADROOM_BYTES, MIN_FREE_BYTES + 112]
+    const after = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, freeBytes: () => frees.shift() ?? 0 })
+    expect(after.ok === false && after.code).toBe('mirror_low_disk')
+    expect(w.fake.calls().length).toBe(2)
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(existsSync(join(w.spec.mirrorPath, 'notes', 'a.md'))).toBe(false)
+  }, T)
+
+  test('a mirror past its daily budget is rate_limited', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, fetchedToday: () => DAILY_BUDGET_BYTES })
+    expect(r.ok === false && r.code).toBe('rate_limited')
+    expect(w.fake.calls().length).toBe(1)
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, fetchedToday: () => DAILY_BUDGET_BYTES - 1 })).toEqual({ ok: true, oid: c2 })
+  }, T)
+
+  test('a pack over the wire cap is fetch_failed and leaves no temp pack', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/noise.txt': randomBytes(1536 * 1024).toString('base64') }, 'a 2 MiB note')
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, wireCapBytes: 1024 * 1024 })
+    expect(r.ok === false && [r.code, r.message]).toEqual(['fetch_failed', 'the fetched pack passed the 1 MiB limit for one sync'])
+    expect(packTemps(w)).toEqual([])
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(collabRefs(w)).toBe(`${mirrorRefs(w.spec).incoming} ${w.base}\n${mirrorRefs(w.spec).synced} ${w.base}`)
+    const last = fetchLines(w).at(-1)!
+    expect(last.outcome).toBe('failed')
+    expect(last.bytes as number).toBeGreaterThanOrEqual(1024 * 1024) // the cut pack counts against the day's budget
+  }, T)
+
+  test('the production cap is ulimit -f 131072', () => {
+    expect(ulimitBlocks(WIRE_CAP_BYTES)).toBe(131072)
+    expect(ulimitBlocks(1024 * 1024)).toBe(1024)
+    const spec: MirrorSpec = {
+      device: 'nuance', user: 'macair', mirrorId: '0123456789abcdef',
+      mirrorPath: '/Users/yuai/.local/share/agenttool/collab-shared/mirrors/nuance/macair/0123456789abcdef',
+      airClone: '/Users/yuai/Projects/collab-trial', remoteGitdir: '/Users/macair/Projects/collab-trial/.git', caps: DEFAULT_CAPS,
+    }
+    const git = airGit({ git: '/opt/homebrew/bin/git', home: '/Users/yuai' })
+    expect(fetchArgv(spec, { git, sshBin: '/usr/bin/ssh', sshConfig: '/Users/yuai/.ssh/collab-bridge/config', alias: 'collab-nuance' }, WIRE_CAP_BYTES)).toEqual([
+      '/bin/sh', '-c', 'ulimit -f 131072; exec "$@"', 'sh',
+      'env', '-u', 'GIT_SSH', "GIT_SSH_COMMAND=/usr/bin/ssh -F '/Users/yuai/.ssh/collab-bridge/config'",
+      '/opt/homebrew/bin/git', '-C', '/Users/yuai/Projects/collab-trial', '-c', 'protocol.version=0',
+      '-c', 'transfer.fsckObjects=true', '-c', 'fetch.fsckObjects=true', '-c', 'transfer.unpackLimit=1',
+      '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
+      'fetch', '--no-tags', '--no-recurse-submodules', '--no-prune', '--no-write-fetch-head',
+      'collab-nuance:/Users/macair/Projects/collab-trial/.git', '+HEAD:refs/collab/nuance/macair/0123456789abcdef/incoming',
+    ])
+    expect(mirrorIdOf('/Users/macair/Projects/collab-trial')).toMatch(/^[0-9a-f]{16}$/)
+    expect(() => fetchArgv({ ...spec, remoteGitdir: "/Users/macair/it's/.git" }, { git, sshBin: '/usr/bin/ssh', sshConfig: '/x', alias: 'collab-nuance' }, WIRE_CAP_BYTES)).toThrow()
+  })
+
+  test('a fetched oid other than the declared head is remote_head_moved and the mirror does not move', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const notAnOid = await syncMirror(w.spec, { declaredHead: 'HEAD' }, w.deps)
+    expect(notAnOid.ok === false && notAnOid.code).toBe('remote_head_moved')
+    expect(w.fake.calls().length).toBe(1) // refused before fetching
+    const r = await syncMirror(w.spec, { declaredHead: w.base }, w.deps)
+    expect(r.ok === false && r.code).toBe('remote_head_moved')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(collabRefs(w)).toBe(`${mirrorRefs(w.spec).incoming} ${c2}\n${mirrorRefs(w.spec).synced} ${w.base}`)
+  }, T)
+
+  test('the tree caps refuse before anything is checked out', async () => {
+    const w = await created({ caps: { maxEntries: 2 } })
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a third entry')
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+    expect(r.ok === false && r.code).toBe('remote_too_large')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(existsSync(join(w.spec.mirrorPath, 'notes', 'a.md'))).toBe(false)
+  }, T)
+
+  test('at complete the commit is held to its task before anything is checked out', async () => {
+    const w = await created()
+    const atComplete = { base: w.base, scopes: ['notes'] }
+    const outside = commitFiles(w.share, { 'src/x.ts': 'export {}\n' }, 'out of scope')
+    const r1 = await syncMirror(w.spec, { declaredHead: outside, atComplete }, w.deps)
+    expect(r1.ok === false && r1.code).toBe('remote_out_of_scope')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    const good = commitFiles(w.share, { 'src/x.ts': null, 'notes/a.md': 'a\n' }, 'in scope')
+    expect(await syncMirror(w.spec, { declaredHead: good, atComplete }, w.deps)).toEqual({ ok: true, oid: good, changed: 1 })
+    const airOnly = commitFiles(w.airClone, { 'notes/air.md': 'air\n' }, 'an Air commit')
+    const r3 = await syncMirror(w.spec, { declaredHead: good, atComplete: { base: airOnly, scopes: ['notes'] } }, w.deps)
+    expect(r3.ok === false && r3.code).toBe('remote_base_not_ancestor')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(good)
+  }, T)
+
+  test('a failed checkout restores the mirror and answers checkout_failed', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n', 'README.md': 'changed\n' }, 'two files')
+    const real = w.deps.git
+    const failing: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        if (a.includes('checkout') && a.includes(c2)) {
+          // A checkout that died half way: one file rewritten, one stray file left.
+          writeFileSync(join(w.spec.mirrorPath, 'README.md'), 'half-written\n')
+          writeFileSync(join(w.spec.mirrorPath, 'partial.tmp'), 'x')
+          return { code: 1, stdout: new Uint8Array(), stderr: 'error: simulated checkout failure\n', timedOut: false }
+        }
+        return real.run(a, o)
+      },
+    }
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, git: failing })
+    expect(r.ok === false && r.code).toBe('checkout_failed')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(readFileSync(join(w.spec.mirrorPath, 'README.md'), 'utf8')).toBe('collab trial\n')
+    expect(existsSync(join(w.spec.mirrorPath, 'partial.tmp'))).toBe(false)
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+  }, T)
+
+  test('the tasks ref is written once and only when it equals the mirror\'s HEAD', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+    const ref = mirrorRefs(w.spec).task('t-notes-1')
+    const refValue = () => repoGit(w.airClone, ['for-each-ref', '--format=%(objectname)', ref])
+    expect(await writeTaskRef(w.spec, 't-notes-1', w.base, w.deps)).toBe('mirror_tampered')
+    expect(refValue()).toBe('')
+    expect(await writeTaskRef(w.spec, 't-notes-1', c2, w.deps)).toBe('ok')
+    expect(refValue()).toBe(c2)
+    expect(await writeTaskRef(w.spec, 't-notes-1', c2, w.deps)).toBe('ok')
+    const c3 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'another note')
+    await syncMirror(w.spec, { declaredHead: c3 }, w.deps)
+    expect(await writeTaskRef(w.spec, 't-notes-1', c3, w.deps)).toBe('mirror_tampered')
+    expect(refValue()).toBe(c2)
+    // Collab allows ':' in a task id; git refuses it in a ref name, so no ref is written and the reviewer reads the
+    // task's result checkpoint head instead (§7.7).
+    expect([taskRefOk('t-notes-1'), taskRefOk('a:b'), taskRefOk('x.lock'), taskRefOk('a..b'), taskRefOk('a.')]).toEqual([true, false, false, false, false])
+    expect(await writeTaskRef(w.spec, 'a:b', c3, w.deps)).toBe('ok')
+    expect(repoGit(w.airClone, ['for-each-ref', '--format=%(refname)', `refs/collab/nuance/macair/${w.spec.mirrorId}/tasks`])).toBe(ref)
+    expect(() => mirrorRefs(w.spec).task('a:b')).toThrow()
+  }, T)
+
+  test('the daily total is summed from today\'s ledger lines', () => {
+    const ledger = join(temp('cb-mirror-ledger-'), 'ledger.jsonl')
+    const at = (day: number, h: number, m: number) => new Date(2026, 9, day, h, m, 0).getTime()
+    const line = (code: string, bytes: number, ms: number, event = 'fetch') =>
+      appendLedger(ledger, AIR_LEDGER_KEYS, { event, device: 'nuance', user: 'macair', code, bytes, outcome: 'ok', ms: 1 }, ms)
+    line('m1', 1000, at(12, 23, 59)) // yesterday
+    line('m1', 200, at(13, 0, 0)) // local midnight counts
+    line('m1', 30, at(13, 11, 0))
+    line('m2', 4, at(13, 11, 30))
+    line('m1', 5, at(13, 11, 31), 'dial')
+    const now = new Date(2026, 9, 13, 12, 0, 0)
+    expect(fetchedTodayFromLedger(ledger, 'm1', now)).toBe(230)
+    expect(fetchedTodayFromLedger(ledger, 'm2', now)).toBe(4)
+    expect(fetchedTodayFromLedger(join(temp('cb-mirror-ledger-'), 'none.jsonl'), 'm1', now)).toBe(0)
+  })
+})
+
+describe('MirrorLock', () => {
+  test('runs one at a time, in order, and a failure frees it', async () => {
+    const lock = new MirrorLock()
+    const order: string[] = []
+    const a = lock.run(async () => { order.push('a start'); await Bun.sleep(30); order.push('a end'); return 1 })
+    const b = lock.run(async () => { order.push('b'); throw new Error('b failed') })
+    const c = lock.run(async () => { order.push('c'); return 3 })
+    expect(await a).toBe(1)
+    await expect(b).rejects.toThrow('b failed')
+    expect(await c).toBe(3)
+    expect(order).toEqual(['a start', 'a end', 'b', 'c'])
+  })
+})
