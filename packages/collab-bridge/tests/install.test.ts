@@ -8,7 +8,7 @@ import {
   expectedKeyLine, FIXTURE_PUBKEY, FIXTURE_TRAILER, makeInstallBundle, summonReadyHome, makeTrialRepo, recordingClaude, runInstaller,
   summonLine, treeOf, type NuanceHome,
 } from './install-fixtures.ts'
-import { cleanupTmps, modeOf, PKG, repoGit, sha256File } from './helpers.ts'
+import { cleanupTmps, modeOf, PKG, repoGit, sha256File, temp, writeStub } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -54,6 +54,28 @@ describe('renderInstaller', () => {
     for (const over of bad) expect(() => renderInstaller(TMPL, { ...good(), ...over })).toThrow()
     expect(() => renderInstaller(TMPL + '# __EXTRA__\n', good())).toThrow()
     expect(() => renderInstaller(TMPL.replace("TRAILER='__TRAILER__'", ''), good())).toThrow()
+  })
+
+  test('a value that looks like a placeholder is inserted as it is and never filled again', () => {
+    // The trailer's pattern allows _ and capitals, so 'X __SHARES__' is a legal trailer. It is filled before the shares.
+    const trap = { ...good(), trailer: 'X __SHARES__', shares: ['/Users/macair/my trial', '/Users/macair/$(touch pwned)'] }
+    const out = renderInstaller(TMPL, trap)
+    expect(out).toContain("TRAILER='X __SHARES__'")
+    expect(out).toContain("SHARES=('/Users/macair/my trial' '/Users/macair/$(touch pwned)')")
+    // Read by bash itself: the trailer is one word, two shares are two words, and nothing is run.
+    const dir = temp('cb-render-')
+    const assigns = out.split('\n').filter((l) => /^(TRAILER|SHARES)=/.test(l)).join('\n')
+    const r = Bun.spawnSync(['/bin/bash', '-c', `${assigns}\nprintf '%s\\n' "$TRAILER" "\${#SHARES[@]}" "\${SHARES[0]}" "\${SHARES[1]}"`],
+      { cwd: dir, env: { PATH: '/usr/bin:/bin' }, stdout: 'pipe', stderr: 'pipe' })
+    expect([r.exitCode, r.stderr.toString(), r.stdout.toString().split('\n').slice(0, 4)])
+      .toEqual([0, '', ['X __SHARES__', '2', '/Users/macair/my trial', '/Users/macair/$(touch pwned)']])
+    expect(existsSync(join(dir, 'pwned'))).toBe(false)
+  })
+
+  test('a placeholder that only a value supplies does not count as the template having it', () => {
+    const noShares = TMPL.replace('SHARES=(__SHARES__)', 'SHARES=()')
+    expect(() => renderInstaller(noShares, { ...good(), trailer: 'X __SHARES__' })).toThrow('has no __SHARES__')
+    expect(() => renderInstaller(TMPL.replace("TRAILER='__TRAILER__'", "TRAILER='x'"), { ...good(), shares: ['/Users/macair/a'], trailer: 'X __BUILD__' })).toThrow('has no __TRAILER__')
   })
 })
 
@@ -230,5 +252,51 @@ describe('the bash installer', () => {
     expect(u.exitCode).toBe(0)
     expect(JSON.parse(readFileSync(settingsOf(h), 'utf8'))).toEqual({})
     expect(repoGit(h.share, ['status', '--porcelain', '--untracked-files=all'])).toBe('')
+  }, 60_000)
+
+  test('n then y: nothing is wired, the second question is never asked, and the run ends ✗ Not confirmed', () => {
+    const { h, claude, run } = world()
+    const r = run('n\ny\n')
+    expect(r.code).toBe(1)
+    expect(lastLine(r.stdout)).toStartWith('✗ Not confirmed')
+    expect(r.stdout).not.toContain('Done')
+    expect(r.stdout.match(/\[y\/N\]/g)).toHaveLength(1)          // only the first question: the trailing y was never read
+    expect(r.stdout).not.toContain('Knock line')
+    expect(claude.calls().map((c) => c.argv.slice(0, 2).join(' '))).toEqual(['--version'])   // no mcp remove, no add-json
+    expect(existsSync(settingsOf(h))).toBe(false)                    // no attribution.commit, no tap
+    // What came before the questions is in place, as the message says.
+    expect(readInstalled(h.paths)).not.toBeNull()
+    expect(keyLines(h)).toHaveLength(2)
+  }, 60_000)
+
+  test('y then n: the server is wired and attribution.commit set, but there is no knock line, and the run ends ✗ Not confirmed', () => {
+    const { h, claude, run } = world()
+    const r = run('y\nn\n')
+    expect(r.code).toBe(1)
+    expect(lastLine(r.stdout)).toStartWith('✗ Not confirmed')
+    expect(r.stdout).not.toContain('Done')
+    expect(r.stdout).toContain('✓ Collab tools wired')
+    expect(r.stdout).not.toContain('✓ knock line added')
+    expect(r.stdout.match(/\[y\/N\]/g)).toHaveLength(2)
+    expect(claude.calls().map((c) => c.argv.slice(0, 2).join(' '))).toEqual(['--version', 'mcp remove', 'mcp add-json'])
+    const s = JSON.parse(readFileSync(settingsOf(h), 'utf8'))
+    expect(s.attribution).toEqual({ commit: FIXTURE_TRAILER })
+    expect(s.hooks?.UserPromptSubmit).toBeUndefined()
+  }, 60_000)
+
+  test('a claude that cannot run on the installer\'s own PATH stops the run before anything is written', () => {
+    // An npm-installed claude starts with `#!/usr/bin/env node`, and node is not in /usr/bin:/bin:/usr/sbin:/sbin.
+    const h = summonReadyHome()
+    const trial = makeTrialRepo()
+    const b = makeInstallBundle({ airRepo: trial.repo, shares: [h.share] })
+    const bin = writeStub(temp('cb-claude-npm-'), 'claude', "echo 'env: node: No such file or directory' >&2\nexit 127")
+    const before = treeOf(h.home)
+    const r = runInstaller(b.dir, h.home, { answers: 'y\ny\n', extraEnv: { COLLAB_BRIDGE_BIN_CLAUDE: bin } })
+    expect(r.code).toBe(1)
+    expect(lastLine(r.stdout)).toBe('Nothing was changed.')
+    expect(r.stdout).toContain('✗ claude could not run')
+    expect(r.stdout).not.toContain('Done')
+    expect(treeOf(h.home)).toEqual(before)                           // no clone, no INSTALLED, no key line
+    for (const p of [h.paths.installed, h.paths.binary, h.paths.shares, h.share]) expect([p, existsSync(p)]).toEqual([p, false])
   }, 60_000)
 })

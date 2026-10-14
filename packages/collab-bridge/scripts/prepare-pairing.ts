@@ -34,8 +34,10 @@ const PLACEHOLDERS: Readonly<Record<keyof InstallerValues, string>> = {
  * Fills the template after checking every value against its pattern, and every share path against the gate's rule
  * (sharePathProblem: absolute and normalised, at most 1019 bytes, no ', !, \ or control character; bash's single quotes
  * carry any such path as it is, and share paths never go into the key line). The template must use every placeholder
- * and no other `__NAME__` word, which is checked before any value goes in, so a value can never look like a placeholder.
- * Values are inserted by a function, so `$&` or `$1` in a trailer stays literal.
+ * and no other `__NAME__` word, which is checked on the template alone before any value goes in. The values are then put
+ * in by ONE pass over the template (never over the output as it grows), so a value that looks like a placeholder, such as
+ * the trailer `X __SHARES__`, is inserted as it is and never filled again. A replacer function inserts them, so `$&` or
+ * `$1` in a trailer stays literal.
  */
 export function renderInstaller(tmpl: string, v: InstallerValues): string {
   for (const k of Object.keys(INSTALLER_VALUE_RES) as Scalar[]) {
@@ -47,12 +49,12 @@ export function renderInstaller(tmpl: string, v: InstallerValues): string {
     if (problem) throw new Error(`renderInstaller: share ${JSON.stringify(s)} ${problem}`)
   }
   const known = new Set(Object.values(PLACEHOLDERS))
-  for (const word of tmpl.match(/__[A-Z][A-Z_]*__/g) ?? []) if (!known.has(word)) throw new Error(`renderInstaller: unknown placeholder ${word}`)
-  let out = tmpl
+  const used = new Set(tmpl.match(/__[A-Z][A-Z_]*__/g) ?? [])
+  for (const word of used) if (!known.has(word)) throw new Error(`renderInstaller: unknown placeholder ${word}`)
+  for (const ph of known) if (!used.has(ph)) throw new Error(`renderInstaller: the template has no ${ph}`)
+  const valueFor: Record<string, string> = {}
   for (const [k, ph] of Object.entries(PLACEHOLDERS) as Array<[keyof InstallerValues, string]>) {
-    if (!out.includes(ph)) throw new Error(`renderInstaller: the template has no ${ph}`)
-    const value = k === 'shares' ? v.shares.map((s) => `'${s}'`).join(' ') : v[k] as string
-    out = out.replaceAll(ph, () => value)
+    valueFor[ph] = k === 'shares' ? v.shares.map((s) => `'${s}'`).join(' ') : v[k] as string
   }
-  return out
+  return tmpl.replace(/__[A-Z][A-Z_]*__/g, (w) => valueFor[w]!)
 }

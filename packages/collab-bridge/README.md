@@ -190,14 +190,16 @@ copy's sha256, removes the quarantine mark and runs only the copy. It checks eve
 the trial clone: macOS on Apple Silicon, not root, and the user the bundle was prepared for; Summon installed, with its
 keys-only record, its password-off drop-in and its ` summon-air` key line; the bundle's checksums; the key not expired
 and the bundle not older than what is installed; a silent `~/.zshenv`; a git with the lazy-fetch guard; `claude` on the
-Terminal's PATH; each shared folder inside an `access: edit` folder of Summon's allowlist, and never a citizen's folder
-or a folder in Desktop, Documents, Downloads or iCloud Drive. Then, in this order: the trial clone (only when the folder
-is not there yet), the program and `INSTALLED`, the seat key and `shares.json`, the state folders and the seeded tool
-list, and the one ` collab-air` key line. Last come two questions per shared folder: the Collab tools
-(`claude mcp add-json -s local agenttool-collab-hub …` and `attribution.commit` in `.claude/settings.local.json`) and
-the knock line (the UserPromptSubmit tap). The questions need a terminal: run without one, it stops at the start with
-`✗ Not confirmed`, having written nothing. It ends `Done`, or with a line starting `✗`. It asks for no password and
-never changes sshd, Summon's files or allowlist, or any user-level setting.
+Terminal's PATH, a native install that answers `--version` with only the system's folders on PATH (an npm-installed
+`claude`, which needs Node on PATH, is refused before anything is written); each shared folder inside an `access: edit`
+folder of Summon's allowlist, and never a citizen's folder or a folder in Desktop, Documents, Downloads or iCloud Drive.
+Then, in this order: the trial clone (only when the folder is not there yet), the program and `INSTALLED`, the seat key
+and `shares.json`, the state folders and the seeded tool list, and the one ` collab-air` key line. Last come two
+questions per shared folder: the Collab tools (`claude mcp add-json -s local agenttool-collab-hub …` and
+`attribution.commit` in `.claude/settings.local.json`) and the knock line (the UserPromptSubmit tap). The questions need
+a terminal: run without one, it stops at the start with `✗ Not confirmed`, having written nothing. It ends `Done`, or
+with a line starting `✗`. It asks for no password and never changes sshd, Summon's files or allowlist, or any user-level
+setting.
 
 **Rollback at Nuance** (spec §10.6). Each step stands alone; this order keeps every later step possible:
 
