@@ -10,10 +10,10 @@ import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
 import type { ChildPool } from '../src/air/pool.ts'
 import type { DeviceStatus } from '../src/air/status.ts'
 import { AttachTable, LinkSession, type LinkSessionDeps, type SeatHandlers, type SeatRef } from '../src/air/streams.ts'
-import type { LedgerFields } from '../src/ledger.ts'
+import { AIR_LEDGER_KEYS, type LedgerFields } from '../src/ledger.ts'
 import { encodeFrame, FRAME_TYPE, FrameDecoder, type Frame } from '../src/link/frame.ts'
 import {
-  decodeJson, encodeMessage, MAX_HUB_TO_PIPE, newLineage, type CallMsg, type HubKnockReportMsg, type KnocksMsg, type ResultMsg,
+  decodeJson, encodeMessage, MAX_HUB_TO_PIPE, MAX_PIPE_TO_HUB, newLineage, type CallMsg, type HubKnockReportMsg, type KnocksMsg, type ResultMsg, type ToolsGetMsg,
 } from '../src/link/messages.ts'
 import { generateSeatKey, signSeat } from '../src/nuance/seatkey.ts'
 import { cleanupTmps, temp } from './helpers.ts'
@@ -57,10 +57,12 @@ interface Relay {
   data(stream: number, m: object | Uint8Array): void
   close(stream: number): void
   pong(): void
+  raw(bytes: Uint8Array): void                          // bytes as they arrive off the wire, not framed by the helper
+  drop(): void                                          // the relay side goes away: ssh exits and `closed` resolves
   closedByHub(): boolean
 }
 
-function relay(o: { autoPong?: boolean } = {}): Relay {
+function relay(o: { autoPong?: boolean; failSend?: boolean } = {}): Relay {
   let onData: ((chunk: Uint8Array) => void) | null = null
   let shut = false
   let resolveClosed!: (v: { code: number | null; stderr: string }) => void
@@ -71,7 +73,7 @@ function relay(o: { autoPong?: boolean } = {}): Relay {
   const toHub = (type: 1 | 2 | 3 | 4 | 5, stream: number, payload?: Uint8Array) => { if (!shut) onData?.(encodeFrame(type, stream, payload)) }
   const link: DeviceLink = {
     send(bytes) {
-      if (shut) throw new Error('link closed')
+      if (shut || o.failSend) throw new Error('link closed')
       for (const f of decoder.push(bytes)) {
         sent.push(f)
         if (f.type === FRAME_TYPE.DATA) events.push(`data:${f.stream}:${String(decodeJson(f.payload)?.t)}`)
@@ -91,12 +93,14 @@ function relay(o: { autoPong?: boolean } = {}): Relay {
     data: (stream, m) => toHub(FRAME_TYPE.DATA, stream, m instanceof Uint8Array ? m : encodeMessage(m as { t: string })),
     close: (stream) => toHub(FRAME_TYPE.CLOSE, stream),
     pong: () => toHub(FRAME_TYPE.PONG, 0),
+    raw: (bytes) => { if (!shut) onData?.(bytes) },
+    drop: () => { if (!shut) { shut = true; resolveClosed({ code: 255, stderr: '' }) } },
     closedByHub: () => shut,
   }
 }
 
 interface Rig {
-  relay: Relay; session: LinkSession; store: LineageStore; attachments: AttachTable; pool: { live: number; calls: string[][] }
+  relay: Relay; session: LinkSession; store: LineageStore; attachments: AttachTable; pool: { live: number; attached: Set<string>; calls: string[][] }
   statuses: Array<Partial<DeviceStatus>>; ledger: LedgerFields[]; calls: Array<{ seat: SeatRef; m: CallMsg }>; cancels: string[]
   knocks: Array<{ seat: SeatRef; m: KnocksMsg }>; deps: LinkSessionDeps; run: Promise<void>
 }
@@ -106,11 +110,16 @@ function rig(o: { dev?: () => DeviceFile; store?: LineageStore; attachments?: At
   const r = o.relay ?? relay()
   const store = o.store ?? new LineageStore(join(temp('cb-streams-'), 'lineages.json'))
   store.load()                                         // a missing file is an empty store
-  const pool = { live: o.live ?? 0, calls: [] as string[][] }
+  // `live` stands for children that run without an attached stream (starting, or inside their window); on top of that the
+  // pool counts the device's store entries whose lineage is attached, as ChildPool.liveCount does.
+  const pool = { live: o.live ?? 0, attached: new Set<string>(), calls: [] as string[][] }
   const fakePool = {
-    liveCount: (d: string) => { pool.calls.push(['liveCount', d]); return pool.live },
-    attached: (l: string) => { pool.calls.push(['attached', l]) },
-    detached: (l: string) => { pool.calls.push(['detached', l]) },
+    liveCount: (d: string) => {
+      pool.calls.push(['liveCount', d])
+      return pool.live + store.all().filter((e) => e.device === d && pool.attached.has(e.lineage)).length
+    },
+    attached: (l: string) => { pool.calls.push(['attached', l]); pool.attached.add(l) },
+    detached: (l: string) => { pool.calls.push(['detached', l]); pool.attached.delete(l) },
   } as unknown as ChildPool
   const statuses: Array<Partial<DeviceStatus>> = []
   const ledger: LedgerFields[] = []
@@ -139,14 +148,32 @@ function attachMsg(lineage: string, o: Record<string, unknown> = {}) {
     tools_digest: 'b'.repeat(64), clock: NOW.toISOString(), ...o }
 }
 
+/** The prove step: a signature by `key` over the challenge the hub sent on `stream`; returns the last message on the stream. */
+function prove(r: Relay, stream: number, lineage: string, key: KeyObject = SEAT_PRIV) {
+  const challenge = r.messages(stream).find((m) => m.t === 'challenge')
+  if (challenge) r.data(stream, { t: 'prove', sig: signSeat(key, 'nuance', 'macair', lineage, challenge.nonce as string) })
+  return r.messages(stream).at(-1)
+}
+
 /** OPEN, attach, then a prove signed by `key` over the challenge; returns the last message the hub sent on the stream. */
 function handshake(r: Relay, stream: number, lineage: string, o: { key?: KeyObject; attach?: Record<string, unknown> } = {}) {
   r.open(stream)
   r.data(stream, attachMsg(lineage, o.attach))
-  const challenge = r.messages(stream).find((m) => m.t === 'challenge')
-  if (challenge) r.data(stream, { t: 'prove', sig: signSeat(o.key ?? SEAT_PRIV, 'nuance', 'macair', lineage, challenge.nonce as string) })
-  return r.messages(stream).at(-1)
+  return prove(r, stream, lineage, o.key)
 }
+
+/** A DATA frame whose declared payload is one byte over the pipe → hub limit (§6.6); the payload bytes follow in full. */
+const oversizedFrame = (stream: number) => encodeFrame(FRAME_TYPE.DATA, stream, new Uint8Array(MAX_PIPE_TO_HUB + 1))
+
+/** A frame header with a type no peer sends (§5.4): the decoder cannot trust the byte stream after it. */
+function malformedHeader(stream: number): Uint8Array {
+  const h = new Uint8Array(9)
+  new DataView(h.buffer).setUint8(4, 9)
+  new DataView(h.buffer).setUint32(5, stream)
+  return h
+}
+
+const linkEnds = (t: Rig) => t.ledger.filter((f) => f.event === 'link_end')
 
 const until = async (cond: () => boolean, ms = 2000) => {
   const end = performance.now() + ms
@@ -295,6 +322,104 @@ describe('the handshake', () => {
     t.relay.data(1, attachMsg(newLineage()))
     expect(t.relay.messages(1)).toEqual([{ t: 'refused', code: 'lineage_cap' }])
     expect(handshake(t.relay, 2, known)).toMatchObject({ t: 'ready' })
+    t.session.close('test')
+    await t.run
+  })
+
+  test('two new lineages that attach at 7 cannot both prove: the second is lineage_cap at prove (§6.6)', async () => {
+    const t = rig({ live: 7 })                         // 7 live: the attach step lets any number of new lineages through
+    const first = newLineage()
+    const second = newLineage()
+    t.relay.open(1)
+    t.relay.data(1, attachMsg(first))
+    t.relay.open(2)
+    t.relay.data(2, attachMsg(second))
+    expect(t.relay.messages(1).map((m) => m.t)).toEqual(['challenge'])
+    expect(t.relay.messages(2).map((m) => m.t)).toEqual(['challenge'])
+    expect(prove(t.relay, 1, first)).toMatchObject({ t: 'ready' })   // 7 live, then 8 with this one attached
+    expect(prove(t.relay, 2, second)).toEqual({ t: 'refused', code: 'lineage_cap' })
+    expect(t.relay.closes(2)).toBe(1)
+    expect(t.store.get(first)).toBeDefined()
+    expect(t.store.get(second)).toBeUndefined()        // no pending entry is written past the cap
+    expect(t.attachments.has(second)).toBe(false)
+    expect(t.pool.calls).not.toContainEqual(['attached', second])
+    expect(t.pool.attached.size).toBe(1)
+    expect(t.ledger.filter((f) => f.event === 'attach_refused')).toEqual([
+      { event: 'attach_refused', device: 'nuance', user: 'macair', lineage: second, code: 'lineage_cap' },
+    ])
+    t.session.close('test')
+    await t.run
+  })
+
+  test('a known lineage retired, or moved to another folder, between attach and prove is refused at prove', async () => {
+    const t = rig()
+    const retired = newLineage()
+    const moved = newLineage()
+    t.store.upsert(entry(retired))
+    t.store.upsert(entry(moved))
+    for (const [n, l] of [[1, retired], [2, moved]] as const) {
+      t.relay.open(n)
+      t.relay.data(n, attachMsg(l))
+      expect(t.relay.messages(n).map((m) => m.t)).toEqual(['challenge'])   // both pass the attach checks
+    }
+    // Within the 5 s step another stream retires one lineage and a concurrent stream records the other for another folder.
+    t.store.upsert(entry(retired, { state: 'retired', past_sessions: ['session_old'], detached_since: '2026-10-13T11:00:00.000Z' }))
+    t.store.upsert(entry(moved, { folder: '/Users/macair/Projects/other' }))
+    expect(prove(t.relay, 1, retired)).toEqual({ t: 'refused', code: 'seat_session_ended' })
+    expect(prove(t.relay, 2, moved)).toEqual({ t: 'refused', code: 'folder_not_shared' })
+    expect(t.relay.closes(1) + t.relay.closes(2)).toBe(2)
+    expect(t.attachments.has(retired) || t.attachments.has(moved)).toBe(false)
+    expect(t.pool.calls.filter((c) => c[0] === 'attached')).toEqual([])
+    expect(t.store.get(moved)!.folder).toBe('/Users/macair/Projects/other')   // the refusal changed nothing in the store
+    t.session.close('test')
+    await t.run
+  })
+
+  test('a known lineage still proves at 8 live lineages: the cap is for new ones', async () => {
+    const t = rig({ live: 8 })
+    const known = newLineage()
+    t.store.upsert(entry(known))
+    expect(handshake(t.relay, 1, known)).toMatchObject({ t: 'ready' })
+    expect(t.attachments.has(known)).toBe(true)
+    t.relay.open(2)
+    t.relay.data(2, attachMsg(newLineage()))
+    expect(t.relay.messages(2)).toEqual([{ t: 'refused', code: 'lineage_cap' }])   // a new one is still refused
+    t.session.close('test')
+    await t.run
+  })
+
+  test('every refused handshake writes one attach_refused line with its code, and only ledger keys', async () => {
+    let state: DeviceFile['state'] = 'paired'
+    const t = rig({ dev: () => device({ state, seat_public: state === 'paired' ? seat.publicHex : null }) })
+    const [pad, other, retired, foreign, impostor, bigProve, capped, away] = Array.from({ length: 8 }, () => newLineage())
+    t.store.upsert(entry(retired!, { state: 'retired', past_sessions: ['session_old'], detached_since: '2026-10-01T00:00:00.000Z' }))
+    t.store.upsert(entry(foreign!, { device: 'zerone', user: 'yu' }))
+    t.relay.open(1)
+    t.relay.data(1, attachMsg(pad!, { pad: 'x'.repeat(2048) }))                                   // too big: its lineage is never parsed
+    t.relay.open(2)
+    t.relay.data(2, attachMsg(other!, { folder: '/Users/macair/Projects/elsewhere' }))
+    t.relay.open(3)
+    t.relay.data(3, attachMsg(retired!))
+    t.relay.open(4)
+    t.relay.data(4, attachMsg(foreign!))
+    expect(handshake(t.relay, 5, impostor!, { key: OTHER_PRIV })).toEqual({ t: 'refused', code: 'seat_proof_failed' })
+    t.relay.open(6)
+    t.relay.data(6, attachMsg(bigProve!))
+    t.relay.data(6, { t: 'prove', sig: 'f'.repeat(128), pad: 'x'.repeat(1024) })
+    t.pool.live = 8
+    t.relay.open(7)
+    t.relay.data(7, attachMsg(capped!))
+    t.pool.live = 0
+    state = 'unpaired'
+    t.relay.open(8)
+    t.relay.data(8, attachMsg(away!))
+    const line = (lineage: string | undefined, code: string) => ({ event: 'attach_refused', device: 'nuance', user: 'macair', lineage, code })
+    expect(t.ledger.filter((f) => f.event === 'attach_refused')).toEqual([
+      line(undefined, 'frame_too_large'), line(other, 'folder_not_shared'), line(retired, 'seat_session_ended'), line(foreign, 'seat_proof_failed'),
+      line(impostor, 'seat_proof_failed'), line(bigProve, 'frame_too_large'), line(capped, 'lineage_cap'), line(away, 'hub_away'),
+    ])
+    for (const f of t.ledger) for (const k of Object.keys(f)) expect(AIR_LEDGER_KEYS as readonly string[]).toContain(k)
+    for (let n = 1; n <= 8; n++) expect(t.relay.closes(n)).toBe(1)
     t.session.close('test')
     await t.run
   })
@@ -532,5 +657,134 @@ describe('the link', () => {
     await t.run
     expect(t.relay.messages(1).at(-1)).toEqual({ t: 'notice', code: 'link_closing' })
     expect(t.relay.closedByHub()).toBe(true)
+  })
+
+  test('a first PING that cannot be written ends the link write_failed and leaves no interval running', async () => {
+    const live = new Set<ReturnType<typeof setInterval>>()
+    const realSet = globalThis.setInterval
+    const realClear = globalThis.clearInterval
+    globalThis.setInterval = ((...a: Parameters<typeof setInterval>) => { const h = realSet(...a); live.add(h); return h }) as typeof setInterval
+    globalThis.clearInterval = ((h?: Parameters<typeof clearInterval>[0]) => { live.delete(h as ReturnType<typeof setInterval>); realClear(h) }) as typeof clearInterval
+    try {
+      const t = rig({ relay: relay({ failSend: true }) })
+      await t.run
+      expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'write_failed' }])
+      expect(t.relay.closedByHub()).toBe(true)
+      expect(live.size).toBe(0)                        // an interval left here would tick every 15 s for the life of the hub
+    } finally {
+      for (const h of live) realClear(h)
+      globalThis.setInterval = realSet
+      globalThis.clearInterval = realClear
+    }
+  })
+
+  test('the relay side dropping the link ends it link_closed and detaches every ready stream', async () => {
+    const t = rig()
+    const ready = newLineage()
+    const waiting = newLineage()
+    expect(handshake(t.relay, 1, ready)).toMatchObject({ t: 'ready' })
+    t.relay.open(2)
+    t.relay.data(2, attachMsg(waiting))                // still in its handshake: nothing to detach
+    t.relay.drop()
+    await t.run
+    expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'link_closed' }])
+    expect(t.attachments.has(ready)).toBe(false)
+    expect(t.pool.calls.filter((c) => c[0] === 'detached')).toEqual([['detached', ready]])
+    expect(t.pool.attached.size).toBe(0)
+  })
+
+  test('relay_replaced, a close() reason and an unpaired device each write one link_end with their own code', async () => {
+    const replaced = rig()
+    replaced.relay.data(0, { t: 'relay_replaced' })
+    await replaced.run
+    expect(linkEnds(replaced)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'relay_replaced' }])
+
+    const closed = rig()
+    closed.session.close('hub_off')
+    closed.session.close('something_else')             // a second close changes nothing
+    closed.session.notice('collab_build_changed')      // and neither does a notice after the end
+    await closed.run
+    expect(linkEnds(closed)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'hub_off' }])
+
+    let state: DeviceFile['state'] = 'paired'
+    const unpaired = rig({ dev: () => device({ state, seat_public: state === 'paired' ? seat.publicHex : null }), deps: { pingMs: 10 } })
+    state = 'unpaired'
+    await unpaired.run
+    expect(linkEnds(unpaired)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'unpaired' }])
+  })
+})
+
+describe('frames over the limit and malformed frames', () => {
+  test('a frame over 2 MiB in the handshake is refused frame_too_large, and a later stream on the link still works', async () => {
+    const t = rig()
+    t.relay.open(1)
+    t.relay.raw(oversizedFrame(1))
+    expect(t.relay.messages(1)).toEqual([{ t: 'refused', code: 'frame_too_large' }])
+    expect(t.relay.closes(1)).toBe(1)
+    // The decoder skipped the payload and stays aligned on frame boundaries: the next stream completes its handshake.
+    expect(handshake(t.relay, 2, newLineage())).toMatchObject({ t: 'ready' })
+    expect(t.relay.closedByHub()).toBe(false)
+    expect(linkEnds(t)).toEqual([])
+    expect(t.ledger.filter((f) => f.event === 'attach_refused')).toEqual([
+      { event: 'attach_refused', device: 'nuance', user: 'macair', lineage: undefined, code: 'frame_too_large' },
+    ])
+    t.session.close('test')
+    await t.run
+  })
+
+  test('the same frame in three pieces is refused once, and the stream after it is read from the right byte', async () => {
+    const t = rig()
+    const bytes = oversizedFrame(1)
+    t.relay.open(1)
+    t.relay.raw(bytes.subarray(0, 4))                  // inside the 9-byte header
+    expect(t.relay.messages(1)).toEqual([])
+    t.relay.raw(bytes.subarray(4, 1 << 20))            // the header completes here, then 1 MiB of the payload
+    expect(t.relay.messages(1)).toEqual([{ t: 'refused', code: 'frame_too_large' }])
+    t.relay.raw(bytes.subarray(1 << 20))               // the rest of the payload is skipped without another answer
+    expect(t.relay.messages(1)).toEqual([{ t: 'refused', code: 'frame_too_large' }])
+    expect(t.relay.closes(1)).toBe(1)
+    expect(handshake(t.relay, 2, newLineage())).toMatchObject({ t: 'ready' })
+    expect(t.ledger.filter((f) => f.event === 'attach_refused')).toHaveLength(1)
+    t.session.close('test')
+    await t.run
+  })
+
+  test('the same frame on a ready stream closes only that stream and detaches its lineage', async () => {
+    const t = rig()
+    const big = newLineage()
+    const other = newLineage()
+    handshake(t.relay, 1, big)
+    handshake(t.relay, 2, other)
+    t.relay.raw(oversizedFrame(1))
+    expect(t.relay.closes(1)).toBe(1)
+    expect(t.relay.messages(1).at(-1)).toMatchObject({ t: 'ready' })   // no refused: ready streams are only closed
+    expect(t.attachments.has(big)).toBe(false)
+    expect(t.pool.calls.filter((c) => c[0] === 'detached')).toEqual([['detached', big]])
+    expect(t.relay.closes(2)).toBe(0)
+    expect(t.attachments.has(other)).toBe(true)
+    t.relay.data(2, { t: 'tools_get', digest: DIGEST })
+    expect(t.relay.messages(2).at(-1)).toEqual({ t: 'tools', digest: DIGEST, list: [] })
+    expect(t.relay.closedByHub()).toBe(false)
+    t.session.close('test')
+    await t.run
+  })
+
+  test('a malformed frame ends the link malformed, after the good frames that came with it were served', async () => {
+    const t = rig()
+    const lineage = newLineage()
+    handshake(t.relay, 1, lineage)
+    const toolsGet: ToolsGetMsg = { t: 'tools_get', digest: DIGEST }
+    const good = encodeFrame(FRAME_TYPE.DATA, 1, encodeMessage(toolsGet))
+    const bad = malformedHeader(1)
+    const both = new Uint8Array(good.byteLength + bad.byteLength)
+    both.set(good)
+    both.set(bad, good.byteLength)
+    t.relay.raw(both)
+    await t.run
+    expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'malformed' }])
+    expect(t.relay.messages(1).at(-1)).toEqual({ t: 'tools', digest: DIGEST, list: [] })
+    expect(t.relay.closedByHub()).toBe(true)
+    expect(t.attachments.has(lineage)).toBe(false)
+    expect(t.pool.calls).toContainEqual(['detached', lineage])
   })
 })

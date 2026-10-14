@@ -100,6 +100,7 @@ export class LinkSession {
     this.deps.link.onData((chunk) => this.onBytes(chunk))
     void this.deps.link.closed.then(() => this.end('link_closed'), () => this.end('link_closed'))
     this.mux.ping() // the first PING at once, so the relay and its pipes count freshness from now (§5.3)
+    if (this.ended) return this.done // that write failed: end() ran while pinger was still null, so no interval may start
     this.pinger = setInterval(() => this.tick(), this.pingMs)
     return this.done
   }
@@ -197,22 +198,28 @@ export class LinkSession {
     const d = this.currentDevice()
     if (d === null || d.state !== 'paired' || d.seat_public === null) return this.refuse(s, 'hub_away', a.lineage)
     if (!shareForFolder(d, a.folder)) return this.refuse(s, 'folder_not_shared', a.lineage)
-    const known = this.deps.store.get(a.lineage)
-    if (known) {
-      // A lineage belongs to one seat and one shared folder: its session is rooted at that folder's mirror.
-      if (known.device !== d.device || known.user !== d.user) return this.refuse(s, 'seat_proof_failed', a.lineage)
-      if (known.folder !== a.folder) return this.refuse(s, 'folder_not_shared', a.lineage)
-      if (known.state === 'retired') return this.refuse(s, 'seat_session_ended', a.lineage)
-    } else if (this.deps.pool.liveCount(d.device) >= RATES.lineagesPerDevice) {
-      // A reattach of a known lineage always comes before a new one (§6.6).
-      return this.refuse(s, 'lineage_cap', a.lineage)
-    }
+    const refusal = this.lineageRefusal(d, a)
+    if (refusal !== null) return this.refuse(s, refusal, a.lineage)
     this.ledger({ event: 'attach', device: d.device, user: d.user, lineage: a.lineage, code: a.entrypoint })
     s.attach = a
     s.nonce = newChallengeNonce()
     s.phase = 'prove'
     this.send(s, { t: 'challenge', nonce: s.nonce })
     this.arm(s)
+  }
+
+  /** What the store says against this lineage on this device, asked at attach and again at prove (§6.2, §6.6); null if nothing. */
+  private lineageRefusal(d: DeviceFile, a: AttachMsg): RefusedCode | null {
+    const known = this.deps.store.get(a.lineage)
+    if (known) {
+      // A lineage belongs to one seat and one shared folder: its session is rooted at that folder's mirror.
+      if (known.device !== d.device || known.user !== d.user) return 'seat_proof_failed'
+      if (known.folder !== a.folder) return 'folder_not_shared'
+      if (known.state === 'retired') return 'seat_session_ended'
+      return null
+    }
+    // A reattach of a known lineage always comes before a new one (§6.6).
+    return this.deps.pool.liveCount(d.device) >= RATES.lineagesPerDevice ? 'lineage_cap' : null
   }
 
   private onProve(s: Stream, payload: Uint8Array): void {
@@ -226,6 +233,10 @@ export class LinkSession {
     if (!verifySeat(d.seat_public, d.device, d.user, a.lineage, s.nonce!, p.sig)) return this.refuse(s, 'seat_proof_failed', a.lineage)
     const share = shareForFolder(d, a.folder)
     if (!share) return this.refuse(s, 'folder_not_shared', a.lineage) // the device file changed between the two steps
+    // Other streams ran during the step: the store and the live count are asked again, in the same synchronous step that
+    // writes the entry and calls pool.attached, so concurrent handshakes cannot together pass the cap or a retirement.
+    const refusal = this.lineageRefusal(d, a)
+    if (refusal !== null) return this.refuse(s, refusal, a.lineage)
     let entry = this.deps.store.get(a.lineage)
     if (!entry) {
       // The first proven attach records the lineage, so its first call finds its seat, folder and mirror (§6.2).
