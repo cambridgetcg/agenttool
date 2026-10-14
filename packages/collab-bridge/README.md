@@ -175,3 +175,41 @@ git -C "$C" worktree prune
 
 The mirrors' root paths stay in the append-only shared journal; `~/.local/share/agenttool/collab-shared/` can be
 archived whole. The Air's private journal is never touched.
+
+## Nuance: install and rollback
+
+Yu runs the installer at Nuance, in Terminal, as himself, after adding the printed allowlist entry and AirDropping the
+bundle (spec §10.3):
+
+```
+bash ~/Downloads/collab-bridge-nuance-bundle-<expiry>-<build>/collab-install.sh
+```
+
+It never runs anything inside the bundle folder: it copies `collab-bridge` to a fresh temporary folder, checks that
+copy's sha256, removes the quarantine mark and runs only the copy. It checks everything before it writes anything but
+the trial clone: macOS on Apple Silicon, not root, and the user the bundle was prepared for; Summon installed, with its
+keys-only record, its password-off drop-in and its ` summon-air` key line; the bundle's checksums; the key not expired
+and the bundle not older than what is installed; a silent `~/.zshenv`; a git with the lazy-fetch guard; `claude` on the
+Terminal's PATH; each shared folder inside an `access: edit` folder of Summon's allowlist, and never a citizen's folder
+or a folder in Desktop, Documents, Downloads or iCloud Drive. Then, in this order: the trial clone (only when the folder
+is not there yet), the program and `INSTALLED`, the seat key and `shares.json`, the state folders and the seeded tool
+list, and the one ` collab-air` key line. Last come two questions per shared folder: the Collab tools
+(`claude mcp add-json -s local agenttool-collab-hub …` and `attribution.commit` in `.claude/settings.local.json`) and
+the knock line (the UserPromptSubmit tap). The questions need a terminal: run without one, it stops at the start with
+`✗ Not confirmed`, having written nothing. It ends `Done`, or with a line starting `✗`. It asks for no password and
+never changes sshd, Summon's files or allowlist, or any user-level setting.
+
+**Rollback at Nuance** (spec §10.6). Each step stands alone; this order keeps every later step possible:
+
+1. Remove the key line first: `sed -i '' '/ collab-air$/d' ~/.ssh/authorized_keys` (only that line ends
+   ` collab-air`; Summon's ` summon-air` line stays).
+2. In each shared folder, unwire Claude: `cd ~/Projects/collab-trial && claude mcp remove -s local agenttool-collab-hub`.
+3. Remove exactly the tap entry and `attribution.commit`, never by restoring the backup:
+   `~/.local/share/collab-bridge/collab-bridge install unsettings --folder ~/Projects/collab-trial`.
+4. Delete `~/.local/share/collab-bridge`, `~/.config/collab-bridge` and `~/.local/state/collab-bridge`.
+5. If you want, remove the `~/Projects/collab-trial` entry from `~/.config/summon/allowlist.yaml`. The trial folder
+   itself, its `.claude/settings.local.json.collab-bridge-backup` (made only when that file existed before) and the
+   two lines the installer added to its `.git/info/exclude` stay until you delete them.
+
+Summon's own rollback deletes its drop-in and may turn Remote Login off. Skip those two steps while
+`grep -c ' collab-air$' ~/.ssh/authorized_keys` is not 0, that is, until step 1 above is done.

@@ -1,0 +1,143 @@
+#!/bin/bash
+# Collab bridge: the Nuance installer (cross-device Collab, Phase 1). Read this before running it.
+# Run it in Terminal as yourself; it needs no password and changes no system setting:
+#   bash ~/Downloads/collab-bridge-__DEVICE__-bundle-__EXPIRY__-__BUILD__/collab-install.sh
+# It checks this Mac first and writes nothing until every check passes. Then it clones the shared trial folder from
+# the bundle (only if it is not here yet), installs the collab-bridge program in ~/.local/share/collab-bridge, makes this
+# Mac's seat key, and adds one SSH key line ending " collab-air", whose only command is `collab-bridge gate`. Last, it
+# asks two questions per shared folder: wire Claude Code's Collab tools there (that folder only), and add the knock line.
+# It never touches sshd, Summon's files or allowlist, user-level Claude settings, or any citizen's folder.
+# Undo: "Nuance: install and rollback" in packages/collab-bridge/README.md on the Air. MANIFEST.txt, beside this file,
+# lists what this bundle installs.
+set -euo pipefail
+umask 077
+export LC_ALL=C
+DEVICE='__DEVICE__'
+PAIR_USER='__USER__'
+PUBKEY='__PUBKEY__'
+EXPIRY='__EXPIRY__'
+PREPARED_AT='__PREPARED_AT__'
+BUILD='__BUILD__'
+SHA_BINARY='__SHA_BINARY__'
+SHA_MANIFEST='__SHA_MANIFEST__'
+SHA_TOOLS='__SHA_TOOLS__'
+SHA_TRIAL_BUNDLE='__SHA_TRIAL_BUNDLE__'
+TRAILER='__TRAILER__'
+SHARES=(__SHARES__)
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Tests run with COLLAB_BRIDGE_HOME_OVERRIDE equal to a temporary HOME; only then are the two test knobs read (spec §12.1).
+TEST_MODE=0
+if [ -n "${COLLAB_BRIDGE_HOME_OVERRIDE:-}" ] && [ "$COLLAB_BRIDGE_HOME_OVERRIDE" = "${HOME:-}" ]; then TEST_MODE=1; fi
+# Your claude and git, as your Terminal finds them, before PATH is narrowed to the system's own folders.
+CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
+if [ "$TEST_MODE" = 1 ] && [ -n "${COLLAB_BRIDGE_BIN_CLAUDE:-}" ]; then CLAUDE_BIN="$COLLAB_BRIDGE_BIN_CLAUDE"; fi
+case "$CLAUDE_BIN" in /*) ;; *) CLAUDE_BIN="" ;; esac
+TERMINAL_GIT="$(command -v git 2>/dev/null || true)"
+case "$TERMINAL_GIT" in /*) ;; *) TERMINAL_GIT="" ;; esac
+TTY_SRC=/dev/tty
+if [ "$TEST_MODE" = 1 ] && [ -n "${COLLAB_BRIDGE_TTY:-}" ]; then TTY_SRC="$COLLAB_BRIDGE_TTY"; fi
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SHARE_DIR="$HOME/.local/share/collab-bridge"; AK="$HOME/.ssh/authorized_keys"
+STAGE=""; EXPLAINED=0
+finish() {
+  local code=$?
+  [ -z "$STAGE" ] || rm -rf "$STAGE"
+  [ "$code" = 0 ] || [ "$EXPLAINED" = 1 ] || echo "✗ the installer stopped unexpectedly (exit $code); nothing after the last ✓ line was done. Tell Ai."
+}
+trap finish EXIT
+stop() { printf '%s\n' "$@"; EXPLAINED=1; exit 1; }
+NOTHING="  Nothing was changed."
+
+[ "$(uname -s)" = Darwin ] || stop "✗ this installer is for macOS." "$NOTHING"
+[ "$(uname -m)" = arm64 ] || stop "✗ this installer is for Apple Silicon." "$NOTHING"
+[ "$(id -u)" != 0 ] || stop "✗ run it as your own user, not as root." "$NOTHING"
+[ "$(id -un)" = "$PAIR_USER" ] || stop "✗ this bundle was prepared for the user $PAIR_USER, and you are $(id -un)." "$NOTHING"
+# Your home folder goes into the SSH key line, which sshd runs through your shell: only plain path characters.
+case "$HOME" in
+  ''|*[!A-Za-z0-9._/+@=,-]*) stop "✗ your home folder's path has characters that cannot go safely into the SSH key line; tell Ai." "$NOTHING" ;;
+esac
+
+# ── The bundle: every file is the one prepare-pairing made on the Air. ──
+sha_of() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
+check() { [ "$(sha_of "$HERE/$1")" = "$2" ] || stop "✗ $1 does not match its checksum; do not install this bundle, and tell Ai." "$NOTHING"; }
+check MANIFEST.txt "$SHA_MANIFEST"; check collab-bridge "$SHA_BINARY"; check tools.json "$SHA_TOOLS"; check collab-trial.bundle "$SHA_TRIAL_BUNDLE"
+if ! grep -qx "expiry $EXPIRY" "$HERE/MANIFEST.txt" || ! grep -qx "prepared $PREPARED_AT" "$HERE/MANIFEST.txt" || ! grep -qx "build $BUILD" "$HERE/MANIFEST.txt"; then
+  stop "✗ MANIFEST.txt and this installer disagree; do not install this bundle, and tell Ai." "$NOTHING"
+fi
+echo "✓ the bundle matches its checksums (build $BUILD for $DEVICE, key expires $EXPIRY)"
+
+# ── Nothing inside the bundle folder is ever run (an AirDropped file is quarantined): a checked copy is. ──
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/collab-bridge-install.XXXXXX")"
+BIN="$STAGE/collab-bridge"
+cp "$HERE/collab-bridge" "$BIN"
+[ "$(sha_of "$BIN")" = "$SHA_BINARY" ] || stop "✗ the copy of collab-bridge does not match its checksum; tell Ai." "$NOTHING"
+chmod 700 "$BIN"
+xattr -d com.apple.quarantine "$BIN" 2>/dev/null || true
+# An arm64 program must carry a signature to run. The build gave it a valid ad hoc one, and the checksum proves these are
+# those bytes, so it is kept; only a copy with no signature is signed.
+codesign -d "$BIN" >/dev/null 2>&1 || codesign --force -s - "$BIN" >/dev/null 2>&1 || stop "✗ could not sign the copy of collab-bridge; tell Ai." "$NOTHING"
+
+# ── The two questions need a terminal; without one nothing at all is written (spec §12.1). ──
+TTY_OK=0
+if { exec 3<"$TTY_SRC"; } 2>/dev/null; then TTY_OK=1; fi
+[ "$TTY_OK" = 1 ] || stop "✗ Not confirmed (no terminal to answer on); nothing was changed. Run this installer in Terminal."
+
+# ── Checks first: every one of them runs, and nothing but the trial clone is written until all pass (§10.3 step 4). ──
+SHARE_ARGS=()
+for s in "${SHARES[@]}"; do SHARE_ARGS+=(--share "$s"); done
+CHECK_ARGS=(--bundle "$HERE" "${SHARE_ARGS[@]}" --terminal-git "$TERMINAL_GIT" --claude "$CLAUDE_BIN")
+"$BIN" install check "${CHECK_ARGS[@]}" >/dev/null || stop "✗ a check failed (the ✗ lines above say which)." "$NOTHING"
+
+# ── Install, in the order of §10.3 step 5. ──
+"$BIN" install clone "${CHECK_ARGS[@]}" >/dev/null ||
+  stop "✗ the trial folder could not be cloned and checked (see above); any clone this run made was removed." "$NOTHING"
+mkdir -p "$SHARE_DIR"; chmod 700 "$SHARE_DIR"
+# install(1) writes a temporary file and renames it, so a running pipe or gate keeps its old program (K47).
+install -m 755 "$BIN" "$SHARE_DIR/collab-bridge"
+xattr -d com.apple.quarantine "$SHARE_DIR/collab-bridge" 2>/dev/null || true
+codesign -d "$SHARE_DIR/collab-bridge" >/dev/null 2>&1 || codesign --force -s - "$SHARE_DIR/collab-bridge" >/dev/null 2>&1 || true
+if ! codesign --verify --strict "$SHARE_DIR/collab-bridge" >/dev/null 2>&1 || [ "$(sha_of "$SHARE_DIR/collab-bridge")" != "$SHA_BINARY" ]; then
+  stop "✗ the installed collab-bridge is not this bundle's signed program; tell Ai." "  The trial folder and the program are in place; nothing else was changed."
+fi
+echo "✓ collab-bridge installed in $SHARE_DIR"
+CLAUDE_VERSION="$("$CLAUDE_BIN" --version 2>/dev/null | head -n 1 || true)"
+"$BIN" install write "${CHECK_ARGS[@]}" --claude-version "$CLAUDE_VERSION" >/dev/null ||
+  stop "✗ INSTALLED, the seat key and the shares were not all written (see above); tell Ai." "  The program is in place; no key line was written."
+
+mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+touch "$AK"; chmod 600 "$AK"
+LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE_DIR/collab-bridge gate\" $PUBKEY"
+# Every line but an earlier collab-air one is kept as it is (Summon's summon-air line included). grep -v exits 1 when it
+# keeps no line, which is fine; 2 means it could not read the file, and going on would write a file holding only ours.
+grep -v ' collab-air$' "$AK" > "$AK.collab-tmp" || [ $? -eq 1 ] || { rm -f "$AK.collab-tmp"; stop "✗ could not read $AK; it was left as it is. Tell Ai."; }
+printf '%s\n' "$LINE" >> "$AK.collab-tmp"
+chmod 600 "$AK.collab-tmp"
+mv "$AK.collab-tmp" "$AK"
+echo "✓ authorized_keys: one restricted collab-air line (every other line untouched; expires $EXPIRY)"
+
+# ── Two questions per shared folder, answered on this Terminal (spec §10.3 step 6). ──
+MCP_JSON="{\"type\":\"stdio\",\"command\":\"$SHARE_DIR/collab-bridge\",\"args\":[\"pipe\"],\"timeout\":300000}"
+ask() { # ask <question>: true only for a typed y, read from the terminal opened on fd 3 above
+  local a=""
+  printf '%s [y/N] ' "$1"
+  IFS= read -r a <&3 || a=""
+  case "$a" in y|Y|yes|Yes|YES) return 0 ;; *) return 1 ;; esac
+}
+CONFIRMED=1
+for s in "${SHARES[@]}"; do
+  REAL="$(cd "$s" && pwd -P)"
+  if ! ask "Collab tools in $s? Claude Code there gets the agenttool-collab-hub server and the commit trailer."; then CONFIRMED=0; continue; fi
+  ( cd "$REAL" && "$CLAUDE_BIN" mcp remove -s local agenttool-collab-hub >/dev/null 2>&1 ) || true
+  ( cd "$REAL" && "$CLAUDE_BIN" mcp add-json -s local agenttool-collab-hub "$MCP_JSON" >/dev/null ) ||
+    stop "✗ claude mcp add-json failed in $s; everything above is in place. Tell Ai."
+  "$BIN" install settings --folder "$REAL" --trailer "$TRAILER" >/dev/null || stop "✗ could not write $s/.claude/settings.local.json; tell Ai."
+  echo "✓ Collab tools wired in $s (that folder only)"
+  if ! ask "Knock line in sessions there? One line at your next prompt when a note is addressed to you."; then CONFIRMED=0; continue; fi
+  "$BIN" install settings --folder "$REAL" --trailer "$TRAILER" --tap >/dev/null || stop "✗ could not add the knock line in $s; tell Ai."
+  echo "✓ knock line added in $s"
+done
+echo
+if [ "$CONFIRMED" = 1 ]; then echo "Done. You can delete this bundle folder now: $HERE"; exit 0; fi
+stop "✗ Not confirmed: Collab tools or the knock line were left out in a shared folder. Run this installer again to answer y, or tell Ai."
