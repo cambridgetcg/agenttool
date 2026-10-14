@@ -243,3 +243,21 @@ bytes) is refused, and Phase 1 shares one folder. Older bundle
 folders are listed with the command that removes them, never removed. Preparing again, to renew the key, writes the
 device file as `prepared` again: a running hub drops the device's link and stops its children, and dials it again only
 once it is pinned again and the hub has restarted.
+
+## Pinning a device (Ai, on the Air)
+
+After Yu's install at the device, from Terminal, which Local Network privacy exempts (K45):
+
+```sh
+cd / && /Users/yuai/.bun/bin/bun --no-env-file --config=/dev/null \
+  /Users/yuai/Projects/.worktrees/agenttool-collab-bridge/packages/collab-bridge/scripts/pin-device.ts nuance
+```
+
+It copies Summon's pinned `summon-nuance` line from `~/.ssh/summon/known_hosts` into `~/.ssh/collab-bridge/known_hosts`,
+writes `~/.ssh/collab-bridge/config` (spec §5.6, absolute paths), dials `hello` once (30 s at most) and checks it against
+the prepared device file: the device, the user, the build, the key's expiry, every share both ways, the seat key, a git
+with the lazy-fetch guard and a silent `~/.zshenv`. Then it creates, syncs and locks each share's mirror at
+`~/.local/share/agenttool/collab-shared/mirrors/<device>/<user>/<mirror_id>`, and only then records the device as
+`paired`, with the seat key, the git, the Summon baselines, each share's gitdir and its workspace id. On a `✗` line nothing
+is recorded as paired (the ssh config and the known_hosts copy may already be written): fix what it names and pin again.
+Pinning again keeps a healthy mirror as it is and keeps a workspace id the hub already confirmed.
