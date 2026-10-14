@@ -220,6 +220,56 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     expect(existsSync(specOf(u).mirrorPath)).toBe(false)
   }, T)
 
+  test('records nothing when the device file is unpaired or prepared again while the mirror is made', async () => {
+    const file = (w: PinWorld) => w.paths.deviceFile('nuance')
+    const later = '2026-10-13T13:00:00.000Z'
+    const cases: Array<[string, (d: DeviceFile) => DeviceFile]> = [
+      ['an unpair', (d) => ({ ...d, state: 'unpaired', seat_public: null })],
+      ['another build', (d) => ({ ...d, bundle_build: '12345678', prepared_at: later })],
+      ['the same build with a new key expiry', (d) => ({ ...d, key_expiry: '20270112' })],
+      ['the same build for another user', (d) => ({ ...d, user: 'someone' })],
+      ['the same build for another device', (d) => ({ ...d, device: 'zerone', host_alias: 'collab-zerone' })],
+      ['the same build with new size caps', (d) => ({ ...d, prepared_at: later, shares: d.shares.map((s) => ({ ...s, caps: { ...s.caps, maxEntries: 7 } })) })],
+      ['a new prepare stamp alone', (d) => ({ ...d, prepared_at: later })],
+    ]
+    for (const [name, change] of cases) {
+      const w = pinWorld()
+      let rewritten: string | null = null
+      // createMirror reads free space once before it fetches, so this runs mid-pin: after the hello was checked against the old file.
+      const deps: MirrorDeps = { ...w.deps, freeBytes: () => {
+        if (rewritten === null) { writeDevice(file(w), change(readDevice(file(w))!)); rewritten = readFileSync(file(w), 'utf8') }
+        return 1e15
+      } }
+      const r = await pinDevice({ paths: w.paths, device: 'nuance', ssh: w.fake.bin, mirrorDeps: deps, now: () => new Date(PIN_AT) })
+      expect(rewritten, name).not.toBeNull()
+      expect(rewritten, name).not.toBe(w.deviceText)
+      expect(r, name).toEqual({ ok: false, problems: [expect.stringContaining('changed while pinning')] })
+      expect(readFileSync(file(w), 'utf8'), name).toBe(rewritten!)
+    }
+  }, T)
+
+  test('pinning a paired device again keeps its workspace id and its locked mirror as they are', async () => {
+    const w = pinWorld()
+    const first = await pin(w)
+    if (!first.ok) throw new Error(first.problems.join('; '))
+    const file = w.paths.deviceFile('nuance')
+    const spec = specOf(w)
+    // The hub confirmed (or Collab corrected) another id after the first pin; a re-pin must not put the derived one back.
+    const confirmed = `ws_${'a'.repeat(24)}`
+    expect(confirmed).not.toBe(first.device.shares[0]!.workspace_id)
+    writeDevice(file, { ...first.device, shares: first.device.shares.map((s) => ({ ...s, workspace_id: confirmed })) })
+    const mirror = async () => ({ head: await mirrorHead(spec, w.deps), synced: await syncedOid(spec, w.deps),
+      worktrees: repoGit(w.airClone, ['worktree', 'list', '--porcelain']), refs: repoGit(w.airClone, ['for-each-ref', 'refs/collab']) })
+    const before = await mirror()
+    expect(before.worktrees).toContain(`worktree ${spec.mirrorPath}\nHEAD ${w.base}\ndetached\nlocked collab-bridge mirror`)
+    const again = await pin(w)
+    if (!again.ok) throw new Error(again.problems.join('; '))
+    expect(again.device.state).toBe('paired')
+    expect(again.device.shares[0]!.workspace_id).toBe(confirmed)
+    expect(readDevice(file)).toEqual(again.device)
+    expect(await mirror()).toEqual(before)
+  }, T)
+
   test('refuses a git without the guard', async () => {
     const w = pinWorld()
     writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })

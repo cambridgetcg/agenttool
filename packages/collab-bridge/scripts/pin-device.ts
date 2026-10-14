@@ -205,8 +205,11 @@ export async function pinDevice(o: { paths: AirPaths; device: string; ssh: strin
   let written: DeviceFile | null
   try {
     written = updateDevice(file, (cur) => {
-      // Re-read under the lock: a new prepare (another build) or an unpair since the read above wins, and nothing is written.
-      if (cur.state === 'unpaired' || cur.bundle_build !== d.bundle_build || cur.shares.length !== pinned.size) return null
+      // Re-read under the lock: an unpair, or a new prepare since the read above (another build, or the same build with a new
+      // key, user or share settings: every prepare writes a new prepared_at) wins, and nothing is written. hello was checked
+      // against the file as it was read above, so a file that is not that one is not recorded as paired from it.
+      if (cur.state === 'unpaired' || cur.device !== d.device || cur.user !== d.user || cur.bundle_build !== d.bundle_build
+        || cur.key_expiry !== d.key_expiry || cur.prepared_at !== d.prepared_at || cur.shares.length !== pinned.size) return null
       const shares: DeviceShare[] = []
       for (const s of cur.shares) {
         const p = pinned.get(s.remote_realpath)
