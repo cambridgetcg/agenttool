@@ -1,0 +1,391 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { TIMING } from '../src/timing.ts'
+import type { CallOutcome, CollabChild } from '../src/air/children.ts'
+import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
+import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool } from '../src/air/pool.ts'
+import { rolePrefix } from '../src/air/stamp.ts'
+import { newStartNonce } from '../src/link/messages.ts'
+import { COLLAB_DIST, temp, writeStub } from './helpers.ts'
+import { startCollabSession, tamperJournal } from './mcp-harness.ts'
+import { activeSessions, childOf, cleanupPools, entry, events, fresh, pool, world, type World } from './pool-world.ts'
+
+const DAY = 86_400_000
+const frozen: number[] = []
+afterEach(async () => {
+  // A failed assertion must never leave a SIGSTOPped child behind: thaw first, then stop every pool's children.
+  for (const pid of frozen.splice(0)) try { process.kill(pid, 'SIGCONT') } catch { /* already gone */ }
+  await cleanupPools()
+})
+
+/** SIGSTOPs a child so a request waits in its stdin pipe; afterEach thaws it whatever happens. */
+function freeze(c: CollabChild): void {
+  frozen.push(c.pid)
+  process.kill(c.pid, 'SIGSTOP')
+}
+
+const ref = (e: LineageEntry, n: number) => `${e.lineage}:0000abcd:${n}`
+/** What the forwarder sends Collab for a remote start: root_path injected, actor and role stamped with the start nonce. */
+const startArgs = (w: World, nonce: string, device = 'nuance', user = 'macair') =>
+  ({ root_path: w.mirror, actor: `${device}/${user} · self-declared: claude`, role: `${rolePrefix(device, user, nonce, 'claude')}tester` })
+
+/** Starts a session for `e` through the pool and returns its id. */
+async function live(w: World, p: ChildPool, e: LineageEntry, n = 1): Promise<string> {
+  const nonce = newStartNonce()
+  const out = await p.startSession(e.lineage, startArgs(w, nonce, e.device, e.user), ref(e, n), nonce, w.workspaceId)
+  if (!('outcome' in out) || out.outcome !== 'ok') throw new Error(`session_start: ${JSON.stringify(out)}`)
+  return w.store.get(e.lineage)!.session_id!
+}
+
+const outcome = (o: CallOutcome | { refuse: string }) => ('outcome' in o ? o.outcome : `refuse:${o.refuse}`)
+async function deadPid(): Promise<number> {
+  const p = Bun.spawn(['/usr/bin/true'], { stdio: ['ignore', 'ignore', 'ignore'] })
+  await p.exited
+  return p.pid
+}
+async function until(cond: () => boolean, ms = 5000): Promise<void> {
+  const end = Date.now() + ms
+  while (!cond()) {
+    if (Date.now() > end) throw new Error('timed out waiting')
+    await Bun.sleep(10)
+  }
+}
+
+describe('session_start at most once', () => {
+  test('the pending_start marker, with its workspace_id, is on disk before the forward and gone before the result', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const c = await childOf(p, e.lineage, true)
+    freeze(c) // the request waits in the pipe until the marker has been checked
+    const nonce = newStartNonce()
+    let seenAtResult: unknown = 'unset'
+    const run = p.startSession(e.lineage, startArgs(w, nonce), ref(e, 1), nonce, w.workspaceId)
+      .then((out) => { seenAtResult = fresh(w).get(e.lineage)!.pending_start; return out })
+    await until(() => fresh(w).get(e.lineage)!.pending_start !== null)
+    expect(fresh(w).get(e.lineage)!.pending_start).toMatchObject({ nonce, call_ref: ref(e, 1), child_pid: c.pid, workspace_id: w.workspaceId })
+    expect(fresh(w).get(e.lineage)!.pending_start!.child_lstart).toMatch(/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/)
+    expect(await activeSessions(w)).toEqual([]) // not forwarded yet
+    process.kill(c.pid, 'SIGCONT')
+    expect(outcome(await run)).toBe('ok')
+    expect(seenAtResult).toBeNull()
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', workspace_id: w.workspaceId })
+  }, 30_000)
+
+  test('a start whose child stopped after the pool handed it out is hub_away, with no marker and nothing sent', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const handOut = p.childFor.bind(p)
+    // The child stops in the gap between childFor's answer and the forward (a park, an end or a drain in that gap).
+    p.childFor = async (lineage, o) => {
+      const got = await handOut(lineage, o)
+      if (got.ok) await got.child.stop(2000)
+      return got
+    }
+    const nonce = newStartNonce()
+    const out = await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 1), nonce, w.workspaceId)
+    expect(out).toMatchObject({ refuse: 'hub_away' })
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(events(w, 'session_start')).toEqual([])
+    expect(await activeSessions(w)).toEqual([])
+  }, 30_000)
+
+  test('a start whose deadline passed while it waited in the pool writes no marker and sends nothing', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const nonce = newStartNonce()
+    const out = await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 1), nonce, w.workspaceId, w.clock.mono)
+    expect(out).toMatchObject({ refuse: 'hub_away' })
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(events(w, 'session_start')).toEqual([])
+    expect(await activeSessions(w)).toEqual([])
+  }, 30_000)
+
+  test('reconcile: no session clears the marker', async () => {
+    const w = world()
+    // A session exists in the workspace, but its role carries another nonce; and a marker for a workspace that never existed.
+    await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'other', role: `${rolePrefix('nuance', 'macair', newStartNonce(), 'claude')}x` })
+    const marker = async (e: LineageEntry, ws: string) => ({ nonce: newStartNonce(), call_ref: ref(e, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: ws, at: new Date(w.clock.now).toISOString() })
+    const a = entry(w)
+    w.store.upsert({ ...a, pending_start: await marker(a, w.workspaceId) })
+    const b = entry(w)
+    w.store.upsert({ ...b, pending_start: await marker(b, 'ws_000000000000000000000000') })
+    const p = pool(w)
+    await p.reconcile()
+    expect(fresh(w).get(a.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(fresh(w).get(b.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(events(w, 'reconcile').map((l) => l.outcome)).toEqual(['cleared', 'cleared'])
+  }, 30_000)
+
+  test('reconcile: a session with its credential is recorded, and the next session_start answers session_already_bound', async () => {
+    const w = world()
+    const nonce = newStartNonce()
+    const s = await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'nuance/macair · self-declared: claude', role: `${rolePrefix('nuance', 'macair', nonce, 'claude')}tester` })
+    const e = entry(w)
+    w.store.upsert({ ...e, pending_start: { nonce, call_ref: ref(e, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() } })
+    const p = pool(w)
+    await p.reconcile()
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', session_id: s.sessionId, credential_path: s.credentialFile, workspace_id: s.workspaceId, pending_start: null })
+    const n2 = newStartNonce()
+    const out = await p.startSession(e.lineage, startArgs(w, n2), ref(e, 2), n2, w.workspaceId)
+    expect(outcome(out)).toBe('error')
+    if (!('outcome' in out) || out.outcome !== 'error') throw new Error('unreachable')
+    expect(out.result.structuredContent?.error).toBe('session_already_bound')
+    expect((await activeSessions(w)).map((x) => x.id)).toEqual([s.sessionId])
+  }, 30_000)
+
+  test('reconcile: a session without its credential becomes orphan_session and a new start is allowed', async () => {
+    const w = world()
+    const nonce = newStartNonce()
+    const s = await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'nuance/macair · self-declared: claude', role: `${rolePrefix('nuance', 'macair', nonce, 'claude')}tester` })
+    rmSync(s.credentialFile) // killed between Collab's commit and its credential write (K23)
+    const e = entry(w)
+    w.store.upsert({ ...e, pending_start: { nonce, call_ref: ref(e, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() } })
+    const p = pool(w)
+    await p.reconcile()
+    expect(w.statuses).toContainEqual([e.lineage, `orphan_session ${s.sessionId}`])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    const n2 = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, n2), ref(e, 2), n2, w.workspaceId))).toBe('ok')
+    expect(await activeSessions(w)).toHaveLength(2)
+  }, 30_000)
+
+  test('reconcile keeps a marker whose recorded child still runs', async () => {
+    const w = world()
+    const e = entry(w)
+    const self = liveLstartOf('/bin/ps')(process.pid) // a pid that is certainly alive, with its real lstart
+    w.store.upsert({ ...e, pending_start: { nonce: newStartNonce(), call_ref: ref(e, 1), child_pid: process.pid, child_lstart: self, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() } })
+    const p = pool(w)
+    await p.reconcile()
+    expect(fresh(w).get(e.lineage)!.pending_start).not.toBeNull()
+    expect(events(w, 'reconcile').map((l) => [l.outcome, l.code])).toEqual([['kept', 'child_alive']])
+    expect(events(w, 'child_start')).toEqual([]) // nothing read the journal while the old child might still write
+    const nonce = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId))).toBe('refuse:hub_away')
+  }, 30_000)
+
+  test("a child SIGKILLed mid-session_start leaves exactly one active session after the agent's next start", async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w) // a brand-new lineage on a fresh shared journal
+    const c = await childOf(p, e.lineage, true)
+    freeze(c)
+    const n1 = newStartNonce()
+    const first = p.startSession(e.lineage, startArgs(w, n1), ref(e, 1), n1, w.workspaceId)
+    await until(() => fresh(w).get(e.lineage)!.pending_start !== null)
+    process.kill(c.pid, 'SIGKILL')
+    expect(await first).toMatchObject({ outcome: 'unknown', reason: 'exit' })
+    expect(fresh(w).get(e.lineage)!.pending_start?.nonce).toBe(n1) // the marker stays: the outcome is unknown
+    const n2 = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, n2), ref(e, 2), n2, w.workspaceId))).toBe('ok')
+    expect(events(w, 'reconcile').map((l) => l.outcome)).toEqual(['cleared'])
+    expect(await activeSessions(w)).toHaveLength(1)
+  }, 30_000)
+
+  test('a pool stopped during the lineage\'s first session_start, after the child committed and before the marker cleared, reconciles on restart: the session is recorded and the next start answers session_already_bound', async () => {
+    const w = world()
+    // The hub dies right where it would record the new session: Collab has committed it and written its credential.
+    class DyingStore extends LineageStore {
+      override upsert(e: LineageEntry): void {
+        if (e.pending_start === null && e.session_id !== null) throw new Error('the hub died here')
+        super.upsert(e)
+      }
+    }
+    w.store = new DyingStore(w.paths.lineages)
+    w.store.load()
+    const p1 = pool(w)
+    const e = entry(w)
+    const n1 = newStartNonce()
+    await expect(p1.startSession(e.lineage, startArgs(w, n1), ref(e, 1), n1, w.workspaceId)).rejects.toThrow('the hub died here')
+    await p1.stopAll()
+    expect(fresh(w).get(e.lineage)!.pending_start?.nonce).toBe(n1)
+    const [only] = await activeSessions(w)
+    expect(only).toBeDefined()
+    w.store = fresh(w)
+    const p2 = pool(w)
+    await p2.reconcile()
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', session_id: only!.id, pending_start: null })
+    const n2 = newStartNonce()
+    const out = await p2.startSession(e.lineage, startArgs(w, n2), ref(e, 2), n2, w.workspaceId)
+    expect('outcome' in out && out.outcome === 'error' && out.result.structuredContent?.error).toBe('session_already_bound')
+    expect((await activeSessions(w)).map((s) => s.id)).toEqual([only!.id])
+  }, 30_000)
+
+  test('with a pending_start and a tampered journal, reconcile keeps running, writes journal_invalid, keeps the marker and spawns no further child', async () => {
+    const w = world()
+    await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'air' })
+    tamperJournal(w.paths.sharedJournal)
+    const a = entry(w)
+    const b = entry(w)
+    for (const x of [a, b]) {
+      w.store.upsert({ ...x, pending_start: { nonce: newStartNonce(), call_ref: ref(x, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() } })
+    }
+    const p = pool(w)
+    await p.reconcile() // resolves: never throws
+    expect(w.statuses).toContainEqual([a.lineage, 'journal_invalid'])
+    expect(fresh(w).get(a.lineage)!.pending_start).not.toBeNull()
+    expect(fresh(w).get(b.lineage)!.pending_start).not.toBeNull()
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'journal_invalid']])
+    await p.reconcile() // once per hub start
+    expect(events(w, 'child_start')).toHaveLength(1)
+  }, 30_000)
+})
+
+describe('sessions across ends', () => {
+  test('after a host end, a session_start on the same lineage starts a new session', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const old = await live(w, p, e)
+    const oldChild = await childOf(p, e.lineage)
+    // Ai ends the session from the Air while its child still runs (T8).
+    const ended = await makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal: w.paths.sharedJournal, home: w.home })(
+      ['end', '--session-file', w.paths.credentialFile(old), '--reason', 'operator end', '--db', w.paths.sharedJournal], 30_000)
+    expect(ended.code).toBe(0)
+    const nonce = newStartNonce()
+    const out = await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId)
+    expect(outcome(out)).toBe('ok')
+    expect(oldChild.alive()).toBe(false)
+    const now = fresh(w).get(e.lineage)!
+    expect(now.state).toBe('live')
+    expect(now.session_id).not.toBe(old)
+    expect(now.past_sessions).toEqual([old])
+    expect((await activeSessions(w)).map((s) => s.id)).toEqual([now.session_id!])
+  }, 30_000)
+
+  test('after session_end, a new session_start starts a new session', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const old = await live(w, p, e)
+    const c = await childOf(p, e.lineage)
+    expect((await c.call('collab_session_end', { reason: 'done' })).outcome).toBe('ok')
+    p.sessionEnded(e.lineage)
+    const nonce = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId))).toBe('ok')
+    const now = fresh(w).get(e.lineage)!
+    expect(now.session_id).not.toBe(old)
+    expect(now.past_sessions).toEqual([old])
+    expect(c.alive()).toBe(false)
+    expect((await activeSessions(w)).map((s) => s.id)).toEqual([now.session_id!])
+  }, 30_000)
+
+  test('startSession refuses a lineage whose child failed to start, and a parked one, with no marker and nothing sent', async () => {
+    const w = world()
+    mkdirSync(w.paths.sharedJournal, { recursive: true }) // the store refuses a journal that is a directory
+    const p = pool(w)
+    const failed = entry(w)
+    const parked = entry(w, { parked: { cause: 'cursor_reset_required', details: {} } })
+    const tries: Array<[LineageEntry, string]> = [[failed, 'refuse:hub_away'], [failed, 'refuse:hub_away'], [parked, 'refuse:seat_recovery_required']]
+    for (const [i, [e, want]] of tries.entries()) {
+      const nonce = newStartNonce()
+      expect(outcome(await p.startSession(e.lineage, startArgs(w, nonce), ref(e, i + 1), nonce, w.workspaceId))).toBe(want)
+      expect(fresh(w).get(e.lineage)!.pending_start).toBeNull()
+    }
+    expect(w.statuses).toContainEqual([failed.lineage, 'child_start_failed'])
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'child_start_failed']]) // once, never respawned
+  }, 30_000)
+})
+
+describe('retirement', () => {
+  test('a lineage detached 6 days before a pool restart retires 1 day after it, read from detached_since', async () => {
+    const w = world()
+    const p1 = pool(w)
+    const e = entry(w)
+    const sid = await live(w, p1, e)
+    await p1.stopAll()
+    w.store.upsert({ ...w.store.get(e.lineage)!, detached_since: new Date(w.clock.now - 6 * DAY).toISOString() })
+    w.store = fresh(w)
+    w.clock.mono = 5 // a new boot: the monotonic clock knows nothing of the old run
+    const p2 = pool(w, { retireAfterMs: TIMING.lineageRetireMs })
+    await p2.reconcile()
+    expect(fresh(w).get(e.lineage)!.detached_since).toBe(new Date(w.clock.now - 6 * DAY).toISOString())
+    await p2.tick()
+    expect(fresh(w).get(e.lineage)!.state).toBe('live')
+    w.clock.now += DAY
+    await p2.tick()
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'retired', session_id: null, past_sessions: [sid] })
+    expect(w.hostCalls).toEqual([['end', '--session-file', w.paths.credentialFile(sid), '--reason', 'lineage retired', '--db', w.paths.sharedJournal]])
+  }, 30_000)
+
+  test('a lineage still attached when the hub stopped counts as detached from the next hub start', async () => {
+    const w = world()
+    const p1 = pool(w)
+    const e = entry(w)
+    await live(w, p1, e)
+    p1.attached(e.lineage)
+    await p1.stopAll() // the hub stops with the pipe attached: detached_since stays null on disk
+    expect(fresh(w).get(e.lineage)!.detached_since).toBeNull()
+    w.store = fresh(w)
+    const p2 = pool(w)
+    await p2.reconcile()
+    expect(fresh(w).get(e.lineage)!.detached_since).toBe(new Date(w.clock.now).toISOString())
+    w.clock.now += 7 * DAY
+    await p2.tick()
+    expect(fresh(w).get(e.lineage)!.state).toBe('retired')
+  }, 30_000)
+
+  test('after 7 days detached the lineage is ended without --release-leases and retired, and a late reattach gets seat_session_ended', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await live(w, p, e)
+    const c = await childOf(p, e.lineage)
+    p.detached(e.lineage)
+    w.clock.now += 7 * DAY
+    w.clock.mono += 7 * DAY
+    await p.tick()
+    expect(c.alive()).toBe(false)
+    expect(w.hostCalls).toHaveLength(1)
+    expect(w.hostCalls[0]).not.toContain('--release-leases')
+    expect(events(w, 'retire_end').at(-1)).toMatchObject({ outcome: 'ok', session_id: sid })
+    expect(await activeSessions(w)).toEqual([])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'retired', past_sessions: [sid] })
+    expect(fresh(w).sessionIndex().get(sid)).toEqual({ device: 'nuance', user: 'macair' })
+    p.attached(e.lineage)
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    const nonce = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId))).toBe('refuse:seat_session_ended')
+  }, 30_000)
+})
+
+describe('the hub way, always', () => {
+  test('liveProcAlive fails closed when ps fails', async () => {
+    const dir = temp('cb-ps-')
+    const broken = writeStub(dir, 'ps', 'exit 1')
+    expect(liveProcAlive(broken)(await deadPid(), null)).toBe(true)
+    const real = liveProcAlive('/bin/ps')
+    expect(real(process.pid, null)).toBe(true)
+    expect(real(await deadPid(), null)).toBe(false)
+    const own = liveLstartOf('/bin/ps')(process.pid)
+    expect(own).not.toBeNull()
+    expect(real(process.pid, own)).toBe(true)
+    expect(real(process.pid, 'Thu Jan 1 00:00:00 1970')).toBe(false)
+  })
+
+  test("the host CLI runs the children's way: the three-key env naming the shared journal, cwd /", async () => {
+    const dist = temp('cb-hostcli-')
+    const home = temp('cb-hostcli-home-')
+    writeFileSync(join(dist, 'agenttool-collab-host.js'),
+      'console.log(JSON.stringify({ env: Object.keys(process.env).sort(), db: process.env.AGENTOOL_COLLAB_DB, cwd: process.cwd(), args: process.argv.slice(2) }))\n')
+    const r = await makeHostCli({ bun: process.execPath, dist, journal: '/j/collab.sqlite', home })(['knocks', '--session', 'ses_1'], 5_000)
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({ env: ['AGENTOOL_COLLAB_DB', 'HOME', 'PATH'], db: '/j/collab.sqlite', cwd: '/', args: ['knocks', '--session', 'ses_1'] })
+  })
+
+  test('a host CLI call that leaves out --db still reads the shared journal, never the private one', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await live(w, p, e)
+    // Collab's default journal is the private one's place, which does not exist under the temp home: a CLI that fell back
+    // to it would answer nothing at all.
+    expect(existsSync(w.paths.privateJournal)).toBe(false)
+    const r = await makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal: w.paths.sharedJournal, home: w.home })(['knocks', '--session', sid], 5_000)
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.stdout.trim())).toMatchObject({ protocol: 'agenttool.collab-knock/1', session_id: sid, waiting: 0 })
+  }, 30_000)
+})

@@ -7,7 +7,7 @@ import { AIR_LEDGER_KEYS, appendLedger, readLedger, type LedgerEntry } from '../
 import { airPaths, type AirPaths } from '../src/paths.ts'
 import type { CollabChild } from '../src/air/children.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
-import { ChildPool, type PoolDeps } from '../src/air/pool.ts'
+import { ChildPool, liveLstartOf, liveProcAlive, makeHostCli, type HostCli, type PoolDeps } from '../src/air/pool.ts'
 import { rolePrefix } from '../src/air/stamp.ts'
 import { newLineage, newStartNonce } from '../src/link/messages.ts'
 import { COLLAB_DIST, cleanupTmps, temp } from './helpers.ts'
@@ -29,7 +29,7 @@ export function pathWorkspaceId(root: string): string {
 
 export interface World {
   home: string; paths: AirPaths; mirror: string; workspaceId: string; store: LineageStore
-  clock: { mono: number; now: number }; statuses: Array<[string, string | null]>
+  clock: { mono: number; now: number }; statuses: Array<[string, string | null]>; hostCalls: string[][]
   build: { changed: boolean }; deps(over?: Partial<PoolDeps>): PoolDeps
 }
 
@@ -42,14 +42,19 @@ export function world(): World {
   store.load()
   const clock = { mono: 1_000, now: Date.parse('2026-10-13T12:00:00.000Z') }
   const statuses: Array<[string, string | null]> = []
+  const hostCalls: string[][] = []
   const build = { changed: false }
+  // The real host CLI on the tracked dist, run the children's way, recording each argv.
+  const real = makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal: paths.sharedJournal, home })
+  const hostCli: HostCli = async (args, ms) => { hostCalls.push(args); return real(args, ms) }
   const w: World = {
-    home, paths, mirror, workspaceId: pathWorkspaceId(mirror), store, clock, statuses, build,
+    home, paths, mirror, workspaceId: pathWorkspaceId(mirror), store, clock, statuses, hostCalls, build,
     deps: (over = {}) => ({
       spec: { bun: process.execPath, dist: COLLAB_DIST, journal: paths.sharedJournal, home },
-      store: w.store, paths,
+      store: w.store, paths, hostCli,
       mono: () => clock.mono, now: () => new Date(clock.now),
       ledger: (f) => { appendLedger(paths.ledger, AIR_LEDGER_KEYS, f) },
+      procAlive: liveProcAlive('/bin/ps'), lstartOf: liveLstartOf('/bin/ps'),
       status: (l, n) => { statuses.push([l, n]) },
       buildChanged: () => build.changed,
       childWindowMs: 1_000,
