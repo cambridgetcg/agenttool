@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { CollabChild } from '../src/air/children.ts'
 import { readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
@@ -19,6 +19,7 @@ afterEach(cleanupTmps)
 const NOW = new Date('2026-10-13T12:00:00.000Z')
 const MIRROR_ID = '0123456789abcdef'
 const Z_MIRROR_ID = 'fedcba9876543210'
+const WS = 'ws_' + 'a'.repeat(24)
 const NUANCE_BLOCK = 'Host collab-nuance\n  HostName nuance.local\n  User macair\n  IdentityFile /Users/yuai/.ssh/collab-bridge/collab_nuance_ed25519\n\n'
 const ZERONE_BLOCK = 'Host collab-zerone\n  HostName zerone.local\n  User macair\n  IdentityFile /Users/yuai/.ssh/collab-bridge/collab_zerone_ed25519\n'
 
@@ -88,6 +89,7 @@ describe('unpair nuance against a real shared journal', () => {
   const out: string[] = []
   const hostCalls: string[][] = []
   let tripwire = ''
+  let makeDeps: (sink: string[], calls: string[][]) => UnpairDeps
 
   beforeAll(async () => {
     root = realpathSync(mkdtempSync(join(tmpdir(), 'cb-unpair-')))
@@ -154,14 +156,14 @@ describe('unpair nuance against a real shared journal', () => {
     process.env.COLLAB_BRIDGE_BIN_SSH = join(trip, 'ssh')
     process.env.PATH = `${trip}:${saved.path}`
     const real = makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal, home })
-    const deps: UnpairDeps = {
+    makeDeps = (sink, calls) => ({
       paths, store: new LineageStore(paths.lineages),
-      hostCli: async (args, timeoutMs) => { hostCalls.push(args); return real(args, timeoutMs) },
+      hostCli: async (args, timeoutMs) => { calls.push(args); return real(args, timeoutMs) },
       unboundChild: () => CollabChild.start({ bun: process.execPath, dist: COLLAB_DIST, journal, home }),
-      out: (l) => { out.push(l) }, now: () => NOW,
-    }
+      out: (l) => { sink.push(l) }, now: () => NOW,
+    })
     try {
-      code = await unpairDevice('nuance', deps)
+      code = await unpairDevice('nuance', makeDeps(out, hostCalls))
     } finally {
       process.env.COLLAB_BRIDGE_BIN_SSH = saved.knob
       process.env.PATH = saved.path
@@ -251,6 +253,231 @@ describe('unpair nuance against a real shared journal', () => {
       + "(there: sed -i '' '/ collab-air$/d' ~/.ssh/authorized_keys) or the key expires on 2027-01-11.")
     expect(out.indexOf(out.find((l) => l.startsWith('5. '))!)).toBeGreaterThan(out.indexOf(out.find((l) => l.startsWith('4. '))!))
   })
+
+  test('a second run lists the ended session as already ended, calls no host end and keeps the one real item', async () => {
+    const again: string[] = []
+    const calls: string[][] = []
+    expect(await unpairDevice('nuance', makeDeps(again, calls))).toBe(1)
+    expect(calls).toEqual([])
+    expect(again).toContain(`   - ${s.a.sessionId} had already ended (not active in ${ws}; its credential file is gone)`)
+    expect(again.filter((l) => l.includes('no credential file'))).toEqual([
+      `   - ${s.b.sessionId}: no credential file (${s.b.credentialFile}); it cannot be ended from the Air, and its expired claims wait for recovery from an Air session`])
+    expect(again.at(-1)).toBe('✗ nuance is unpaired on the Air, with 1 item(s) above for Ai.')
+    const ended = readLedger(join(paths.stateDir, 'ledger.20261013T120000Z-2.jsonl')).filter((e) => e.event === 'unpair_end')
+    expect(Object.fromEntries(ended.map((e) => [e.session_id, e.outcome]))).toEqual({ [s.a.sessionId]: 'already_ended', [s.b.sessionId]: 'no_credential' })
+  }, 30_000)
+})
+
+describe('unpair twice, the first run having ended every remote session', () => {
+  test('the second run lists them as already ended, calls no host end and exits 0', async () => {
+    const home = temp('cb-unpair-twice-')
+    const paths = airPaths(home)
+    mkdirSync(paths.sharedDir, { recursive: true, mode: 0o700 })
+    const airClone = join(home, 'Projects', 'collab-trial')
+    makeRepo(airClone)
+    const mirror = paths.mirrorDir('nuance', 'macair', MIRROR_ID)
+    repoGit(airClone, ['worktree', 'add', '-q', '--detach', mirror, 'HEAD'])
+    const journal = paths.sharedJournal
+    const start = (nonce: string) => startCollabSession({ journal, home, root: mirror, actor: `nuance/macair · self-declared: claude ${nonce[0]}`,
+      role: rolePrefix('nuance', 'macair', nonce, 'claude') + 'worker' })
+    const a = await start('a'.repeat(16))
+    const c = await start('c'.repeat(16))
+    writeDevice(paths.deviceFile('nuance'), device(paths, { device: 'nuance', airClone, mirrorId: MIRROR_ID, worktreeId: a.worktreeId, workspaceId: a.workspaceId }))
+    const store = new LineageStore(paths.lineages)
+    store.load()
+    store.upsert(lineage({ lineage: 'lin_' + 'a'.repeat(32), state: 'live', session_id: a.sessionId, credential_path: a.credentialFile, workspace_id: a.workspaceId }))
+    store.upsert(lineage({ lineage: 'lin_' + 'c'.repeat(32), state: 'live', session_id: c.sessionId, credential_path: c.credentialFile, workspace_id: a.workspaceId }))
+    const real = makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal, home })
+    const run = async (out: string[], calls: string[][]) => unpairDevice('nuance', {
+      paths, store: new LineageStore(paths.lineages), hostCli: async (args, t) => { calls.push(args); return real(args, t) },
+      unboundChild: () => CollabChild.start({ bun: process.execPath, dist: COLLAB_DIST, journal, home }), out: (l) => { out.push(l) }, now: () => NOW,
+    })
+    const first: string[] = []
+    const firstCalls: string[][] = []
+    expect(await run(first, firstCalls)).toBe(0)
+    expect(firstCalls).toHaveLength(2)
+    const second: string[] = []
+    const secondCalls: string[][] = []
+    expect(await run(second, secondCalls)).toBe(0)
+    expect(secondCalls).toEqual([])
+    for (const x of [a, c]) expect(second).toContain(`   - ${x.sessionId} had already ended (not active in ${a.workspaceId}; its credential file is gone)`)
+    expect(second.at(-1)).toBe('✓ nuance is unpaired on the Air.')
+    const ended = readLedger(join(paths.stateDir, 'ledger.20261013T120000Z-2.jsonl')).filter((e) => e.event === 'unpair_end')
+    expect(ended.map((e) => e.outcome)).toEqual(['already_ended', 'already_ended'])
+    expect(readLedger(join(paths.stateDir, 'ledger.20261013T120000Z-2.jsonl')).at(-1)).toMatchObject({ event: 'unpair', outcome: 'ok' })
+  }, 60_000)
+})
+
+/** A lineage session with a credential file, the shared journal replaced by a stub child, and a host CLI that records calls. */
+function scene(sessions: string[]) {
+  const home = temp('cb-unpair-fault-')
+  const paths = airPaths(home)
+  writeDevice(paths.deviceFile('nuance'), device(paths, { device: 'nuance', airClone: join(home, 'Projects', 'collab-trial'), mirrorId: MIRROR_ID, worktreeId: null, workspaceId: WS }))
+  const store = new LineageStore(paths.lineages)
+  store.load()
+  sessions.forEach((id, i) => {
+    mkdirSync(dirname(paths.credentialFile(id)), { recursive: true, mode: 0o700 })
+    writeFileSync(paths.credentialFile(id), '{}\n', { mode: 0o600 })
+    store.upsert(lineage({ lineage: 'lin_' + String(i + 1).repeat(32), state: 'live', session_id: id, credential_path: paths.credentialFile(id), workspace_id: WS }))
+  })
+  mkdirSync(paths.sshDir, { recursive: true, mode: 0o700 })
+  writeFileSync(paths.sshConfig, NUANCE_BLOCK, { mode: 0o600 })
+  writeFileSync(paths.sshKey('nuance'), 'private\n', { mode: 0o600 })
+  writeFileSync(`${paths.sshKey('nuance')}.pub`, 'public\n', { mode: 0o600 })
+  const out: string[] = []
+  const calls: string[][] = []
+  const deps = (over: Partial<UnpairDeps> = {}): UnpairDeps => ({
+    paths, store: new LineageStore(paths.lineages), hostCli: async (args) => { calls.push(args); return hostReceipt(0, { status: 'ended', released: [] }) },
+    unboundChild: async () => stubChild(view()), out: (l) => { out.push(l) }, now: () => NOW, ...over,
+  })
+  const archive = (n = 1) => join(paths.stateDir, n === 1 ? 'ledger.20261013T120000Z.jsonl' : `ledger.20261013T120000Z-${n}.jsonl`)
+  return { paths, out, calls, deps, archive }
+}
+
+const hostReceipt = (code: number | null, body: unknown) => ({ code, stdout: body === null ? '' : JSON.stringify(body) + '\n', stderr: '' })
+const view = (o: { expired_claims?: number; active?: string[] } = {}) => ({ pending_reviews: [], expired_claims: o.expired_claims ?? 0,
+  active_sessions: (o.active ?? []).map((id) => ({ id, worktree_id: 'wt-other', role: 'reviewer' })) })
+/** A stand-in for the unbound child: one workspace_status answer, or a throw; stop may throw too. */
+const stubChild = (answer: Record<string, unknown> | 'error' | Error, stop?: Error): CollabChild => ({
+  call: async () => {
+    if (answer instanceof Error) throw answer
+    if (answer === 'error') return { outcome: 'error', result: { content: [], structuredContent: { error: 'workspace_not_found' }, isError: true }, ms: 0, bytes: 0 }
+    return { outcome: 'ok', result: { content: [], structuredContent: answer }, ms: 0, bytes: 0 }
+  },
+  stop: async () => { if (stop) throw stop },
+}) as unknown as CollabChild
+const unpairEnds = (path: string): unknown[][] => readLedger(path).filter((e) => e.event === 'unpair_end').map((e) => [e.session_id, e.outcome, e.code])
+
+describe('unpair already-ended sessions (one lineage session, its credential file gone)', () => {
+  test('not active in a workspace that was read and holds no expired claim: already ended, no item, exit 0', async () => {
+    const f = scene(['sess-a'])
+    rmSync(f.paths.credentialFile('sess-a'))
+    expect(await unpairDevice('nuance', f.deps())).toBe(0)
+    expect(f.calls).toEqual([])
+    expect(f.out).toContain(`   - sess-a had already ended (not active in ${WS}; its credential file is gone)`)
+    expect(f.out.some((l) => l.includes('no credential file'))).toBe(false)
+    expect(f.out.at(-1)).toBe('✓ nuance is unpaired on the Air.')
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'already_ended', undefined]])
+  }, 20_000)
+
+  test('an expired claim in the workspace keeps the item', async () => {
+    const f = scene(['sess-a'])
+    rmSync(f.paths.credentialFile('sess-a'))
+    expect(await unpairDevice('nuance', f.deps({ unboundChild: async () => stubChild(view({ expired_claims: 1 })) }))).toBe(1)
+    expect(f.out.some((l) => l.startsWith('   - sess-a: no credential file'))).toBe(true)
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'no_credential', undefined]])
+  })
+
+  test('a workspace that could not be read keeps the item', async () => {
+    const f = scene(['sess-a'])
+    rmSync(f.paths.credentialFile('sess-a'))
+    expect(await unpairDevice('nuance', f.deps({ unboundChild: async () => stubChild('error') }))).toBe(1)
+    expect(f.out).toContain(`   workspace ${WS} could not be read (workspace_not_found)`)
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'no_credential', undefined]])
+  })
+
+  test('still active in the journal keeps the item', async () => {
+    const f = scene(['sess-a'])
+    rmSync(f.paths.credentialFile('sess-a'))
+    expect(await unpairDevice('nuance', f.deps({ unboundChild: async () => stubChild(view({ active: ['sess-a'] })) }))).toBe(1)
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'no_credential', undefined]])
+  })
+
+  test('a credential file that is still there gets its host end, whatever the journal says', async () => {
+    const f = scene(['sess-a'])
+    expect(await unpairDevice('nuance', f.deps())).toBe(0)
+    expect(f.calls).toHaveLength(1)
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'ended', undefined]])
+  })
+})
+
+describe('unpair ledgers what it printed', () => {
+  const cases: Array<{ name: string; reply: Awaited<ReturnType<UnpairDeps['hostCli']>>; line: string; outcome: string; code?: string; exit: number }> = [
+    { name: 'exit 0 with status ended', reply: hostReceipt(0, { status: 'ended', released: ['t1'] }), line: '   - ended sess-a (1 lease(s) released)', outcome: 'ended', exit: 0 },
+    { name: 'exit 0 with status already_ended', reply: hostReceipt(0, { status: 'already_ended' }), line: '   - sess-a had already ended', outcome: 'already_ended', exit: 0 },
+    { name: 'a non-zero exit with status ended', reply: hostReceipt(1, { status: 'ended', released: [] }), line: '   - sess-a: the host end failed (exit 1); the session may still be active', outcome: 'failed', exit: 1 },
+    { name: 'a non-zero exit with status already_ended', reply: hostReceipt(2, { status: 'already_ended' }), line: '   - sess-a: the host end failed (exit 2); the session may still be active', outcome: 'failed', exit: 1 },
+    { name: 'a timeout', reply: { code: null, stdout: '', stderr: '', cause: 'timeout' }, line: '   - sess-a: the host end failed (timeout); the session may still be active', outcome: 'failed', exit: 1 },
+    { name: 'an unknown status string', reply: hostReceipt(0, { status: 'sort_of_ended' }), line: '   - sess-a: the host end failed (exit 0); the session may still be active', outcome: 'failed', exit: 1 },
+    { name: "the receipt's error string", reply: hostReceipt(1, { status: 'failed', error: 'session_not_found' }), line: '   - sess-a: the host end failed (session_not_found); the session may still be active', outcome: 'failed', code: 'session_not_found', exit: 1 },
+  ]
+  for (const c of cases) {
+    test(`${c.name}: the printed line and the ledger outcome agree`, async () => {
+      const f = scene(['sess-a'])
+      expect(await unpairDevice('nuance', f.deps({ hostCli: async () => c.reply }))).toBe(c.exit)
+      expect(f.out).toContain(c.line)
+      expect(unpairEnds(f.archive())).toEqual([['sess-a', c.outcome, c.code]])
+    }, 20_000)
+  }
+})
+
+describe('unpair when a step throws', () => {
+  const reach5 = (out: string[]) => expect(out.find((l) => l.startsWith('5. Revocation is incomplete'))).toBeDefined()
+
+  test('a host end that throws becomes an item, is ledgered failed, and the later session is still ended', async () => {
+    const f = scene(['sess-a', 'sess-b'])
+    const hostCli: UnpairDeps['hostCli'] = async (args) => {
+      f.calls.push(args)
+      if (args.includes(f.paths.credentialFile('sess-a'))) throw new Error('boom\nsecond line')
+      return hostReceipt(0, { status: 'ended', released: [] })
+    }
+    expect(await unpairDevice('nuance', f.deps({ hostCli }))).toBe(1)
+    expect(f.out).toContain('   - sess-a: the host end failed (boom); the session may still be active')
+    expect(f.out).toContain('   - ended sess-b (0 lease(s) released)')
+    expect(f.out.some((l) => l.includes('second line'))).toBe(false)
+    expect(unpairEnds(f.archive())).toEqual([['sess-a', 'failed', undefined], ['sess-b', 'ended', undefined]])
+    expect(existsSync(f.paths.sshKey('nuance'))).toBe(false)
+    expect(existsSync(f.paths.sshConfig)).toBe(false)
+    reach5(f.out)
+    expect(f.out.at(-1)).toBe('✗ nuance is unpaired on the Air, with 1 item(s) above for Ai.')
+  }, 20_000)
+
+  test('a journal child that cannot start, a status call that throws and a stop that throws are items, and the run goes on', async () => {
+    const start = scene(['sess-a'])
+    expect(await unpairDevice('nuance', start.deps({ unboundChild: async () => { throw new Error('spawn boom') } }))).toBe(1)
+    expect(start.out).toContain('   Collab did not start on the shared journal (spawn boom): pending reviews and journal sessions were not read')
+    expect(start.calls).toHaveLength(1)
+    reach5(start.out)
+    const call = scene(['sess-a'])
+    expect(await unpairDevice('nuance', call.deps({ unboundChild: async () => stubChild(new Error('call boom'), new Error('stop boom')) }))).toBe(1)
+    expect(call.out).toContain(`   workspace ${WS} could not be read (call boom)`)
+    expect(call.out).toContain("   Collab's workspace reader could not be stopped (stop boom)")
+    expect(call.calls).toHaveLength(1)
+    expect(existsSync(call.paths.sshKey('nuance'))).toBe(false)
+    reach5(call.out)
+  }, 20_000)
+
+  test('an ssh config and a key path that cannot be changed are items, the other files are still removed, step 5 is printed', async () => {
+    const f = scene(['sess-a'])
+    rmSync(f.paths.sshConfig)
+    mkdirSync(f.paths.sshConfig)
+    rmSync(f.paths.sshKey('nuance'))
+    mkdirSync(f.paths.sshKey('nuance'))
+    expect(await unpairDevice('nuance', f.deps())).toBe(1)
+    expect(f.out.some((l) => l.startsWith(`   - ${f.paths.sshConfig} could not be read (`))).toBe(true)
+    expect(f.out.some((l) => l.startsWith(`   - ${f.paths.sshKey('nuance')} could not be removed (`))).toBe(true)
+    expect(existsSync(`${f.paths.sshKey('nuance')}.pub`)).toBe(false)
+    expect(existsSync(f.archive())).toBe(true)
+    reach5(f.out)
+    expect(f.out.at(-1)).toBe('✗ nuance is unpaired on the Air, with 2 item(s) above for Ai.')
+  }, 20_000)
+
+  test('a state directory that cannot be written: each ledger write and the archive are items, the files are still removed, step 5 is printed', async () => {
+    const f = scene(['sess-a'])
+    chmodSync(f.paths.stateDir, 0o500)
+    try {
+      expect(await unpairDevice('nuance', f.deps())).toBe(1)
+    } finally {
+      chmodSync(f.paths.stateDir, 0o700)
+    }
+    expect(f.out.some((l) => l.startsWith('   - the unpair_end ledger entry could not be written ('))).toBe(true)
+    expect(f.out.some((l) => l.startsWith('   - the unpair ledger entry could not be written ('))).toBe(true)
+    expect(f.out.some((l) => l.startsWith('   - the hub ledger could not be archived ('))).toBe(true)
+    expect(existsSync(f.paths.sshKey('nuance'))).toBe(false)
+    expect(existsSync(f.paths.sshConfig)).toBe(false)
+    reach5(f.out)
+    expect(f.out.at(-1)).toMatch(/^✗ nuance is unpaired on the Air, with \d+ item\(s\) above for Ai\.$/)
+  }, 20_000)
 })
 
 describe('unpair with nothing but the device file', () => {

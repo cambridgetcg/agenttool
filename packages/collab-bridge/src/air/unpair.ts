@@ -24,10 +24,11 @@ export const UNPAIR_REASON = 'device unpaired'
 export const HOST_END_TIMEOUT_MS = 60_000
 const DEVICE_RE = /^[a-z][a-z0-9-]{0,31}$/
 const TITLE_MAX = 120
+const FAILED = Symbol('failed')
 
 interface ActiveSession { id: string; worktree_id: string; role: string | null }
 interface PendingReview { id: string; title: string; reported_by_session_id: string | null }
-interface WorkspaceView { pending_reviews: PendingReview[]; active_sessions: ActiveSession[] }
+interface WorkspaceView { pending_reviews: PendingReview[]; active_sessions: ActiveSession[]; expired_claims: number | null }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const message = (e: unknown) => String((e as Error)?.message ?? e).split('\n')[0]!
@@ -69,20 +70,27 @@ function workspaceView(sc: unknown): WorkspaceView | null {
   const sessions = sc.active_sessions.filter(isRecord).filter((s) => typeof s.id === 'string' && typeof s.worktree_id === 'string').map((s) => ({
     id: s.id as string, worktree_id: s.worktree_id as string, role: typeof s.role === 'string' ? s.role : null,
   }))
-  return { pending_reviews: reviews, active_sessions: sessions }
+  return { pending_reviews: reviews, active_sessions: sessions, expired_claims: typeof sc.expired_claims === 'number' ? sc.expired_claims : null }
 }
 
-/** Each bound workspace's status, read once through one fresh unbound child on the shared journal (its caller stops it). */
+/** Each bound workspace's status, read once through one fresh unbound child; every failure is a problem line, never a throw. */
 async function readWorkspaces(ids: string[], deps: UnpairDeps, problems: string[]): Promise<Map<string, WorkspaceView>> {
   const views = new Map<string, WorkspaceView>()
   if (ids.length === 0) return views
-  const child = await deps.unboundChild()
-  if ('failed' in child) {
-    problems.push(`Collab did not start on the shared journal (${child.lastErrLine ?? `exit ${child.exitCode}`}): pending reviews and journal sessions were not read`)
+  const notStarted = (why: string) => problems.push(`Collab did not start on the shared journal (${why}): pending reviews and journal sessions were not read`)
+  let child: CollabChild | StartFailure
+  try {
+    child = await deps.unboundChild()
+  } catch (e) {
+    notStarted(message(e))
     return views
   }
-  try {
-    for (const id of ids) {
+  if ('failed' in child) {
+    notStarted(child.lastErrLine ?? `exit ${child.exitCode}`)
+    return views
+  }
+  for (const id of ids) {
+    try {
       const r = await child.call('collab_workspace_status', { workspace_id: id })
       const view = r.outcome === 'ok' ? workspaceView(r.result.structuredContent) : null
       if (view) views.set(id, view)
@@ -90,9 +98,14 @@ async function readWorkspaces(ids: string[], deps: UnpairDeps, problems: string[
         const code = r.outcome === 'unknown' ? r.reason : String(r.result.structuredContent?.error ?? 'error')
         problems.push(`workspace ${id} could not be read (${code})`)
       }
+    } catch (e) {
+      problems.push(`workspace ${id} could not be read (${message(e)})`)
     }
-  } finally {
+  }
+  try {
     await child.stop()
+  } catch (e) {
+    problems.push(`Collab's workspace reader could not be stopped (${message(e)})`)
   }
   return views
 }
@@ -103,9 +116,15 @@ export async function unpairDevice(device: string, deps: UnpairDeps): Promise<nu
     out(`✗ ${JSON.stringify(device).slice(0, 40)} is not a device name; nothing was changed`)
     return 1
   }
-  const ledger = (f: LedgerFields) => appendLedger(paths.ledger, AIR_LEDGER_KEYS, f, deps.now().getTime())
   const problems: string[] = []
   const report = (line: string) => { problems.push(line); out(line) }
+  // From step 1 on nothing below throws: a failure is an item for Ai, and the run always reaches step 5 (spec §9.10).
+  const ledger = (f: LedgerFields) => {
+    try { appendLedger(paths.ledger, AIR_LEDGER_KEYS, f, deps.now().getTime()) } catch (e) { report(`   - the ${f.event} ledger entry could not be written (${message(e)})`) }
+  }
+  const attempt = <T>(failure: string, fn: () => T): T | typeof FAILED => {
+    try { return fn() } catch (e) { report(`   - ${failure} (${message(e)})`); return FAILED }
+  }
 
   // 1. The device file: through updateDevice, so a hub writing the same file never puts the seat key back.
   let d: DeviceFile | null
@@ -139,7 +158,8 @@ export async function unpairDevice(device: string, deps: UnpairDeps): Promise<nu
   // The sessions to end: every lineage's session, and every active session the hub stamped for this seat in its mirror.
   const rolePrefix = `remote(${device}/${user};`
   const toEnd = new Map<string, string>()
-  for (const e of mine) if (e.session_id !== null && e.credential_path !== null) toEnd.set(e.session_id, e.credential_path)
+  const lineageWorkspace = new Map<string, string | null>()
+  for (const e of mine) if (e.session_id !== null && e.credential_path !== null) { toEnd.set(e.session_id, e.credential_path); lineageWorkspace.set(e.session_id, e.workspace_id) }
   const leftAlone: string[] = []
   for (const view of views.values()) {
     for (const s of view.active_sessions) {
@@ -167,25 +187,44 @@ export async function unpairDevice(device: string, deps: UnpairDeps): Promise<nu
   if (toEnd.size === 0 && leftAlone.length === 0) out(`3. No remote session of ${device} is active.`)
   else out(`3. Ending ${device}'s remote sessions with --release-leases:`)
   for (const [id, credential] of [...toEnd.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const record = (outcome: 'ended' | 'already_ended' | 'no_credential' | 'failed', code?: string) =>
+      ledger({ event: 'unpair_end', device, user, session_id: id, outcome, code })
     if (!existsSync(credential)) {
-      report(`   - ${id}: no credential file (${credential}); it cannot be ended from the Air, and its expired claims wait for recovery from an Air session`)
-      ledger({ event: 'unpair_end', device, user, session_id: id, outcome: 'no_credential' })
+      // Collab's end removes the credential (K23), so a missing one is an ended session only when the journal says so: the
+      // lineage's own workspace was read, the session is not among its active sessions, and no expired claim waits there.
+      const ws = lineageWorkspace.get(id) ?? null
+      const view = ws === null ? undefined : views.get(ws)
+      if (view && view.expired_claims === 0 && !view.active_sessions.some((x) => x.id === id)) {
+        out(`   - ${id} had already ended (not active in ${ws}; its credential file is gone)`)
+        record('already_ended')
+      } else {
+        report(`   - ${id}: no credential file (${credential}); it cannot be ended from the Air, and its expired claims wait for recovery from an Air session`)
+        record('no_credential')
+      }
       continue
     }
-    const r = await deps.hostCli(['end', '--session-file', credential, '--reason', UNPAIR_REASON, '--release-leases', '--db', paths.sharedJournal], HOST_END_TIMEOUT_MS)
-    let receipt: Record<string, unknown> | null = null
-    try { const v = JSON.parse(r.stdout.split('\n')[0] ?? ''); receipt = isRecord(v) ? v : null } catch { receipt = null }
-    const status = typeof receipt?.status === 'string' ? receipt.status : null
-    if (r.code === 0 && status === 'ended') {
-      const released = Array.isArray(receipt?.released) ? receipt.released.length : 0
-      out(`   - ended ${id} (${released} lease(s) released)`)
-    } else if (r.code === 0 && status === 'already_ended') {
-      out(`   - ${id} had already ended`)
-    } else {
-      const code = typeof receipt?.error === 'string' ? receipt.error : r.code === null ? 'timeout' : `exit ${r.code}`
-      report(`   - ${id}: the host end failed (${code}); the session may still be active`)
+    let outcome: 'ended' | 'already_ended' | 'failed' = 'failed' // what the printed line says, and nothing else
+    let code: string | undefined
+    try {
+      const r = await deps.hostCli(['end', '--session-file', credential, '--reason', UNPAIR_REASON, '--release-leases', '--db', paths.sharedJournal], HOST_END_TIMEOUT_MS)
+      let receipt: Record<string, unknown> | null = null
+      try { const v = JSON.parse(r.stdout.split('\n')[0] ?? ''); receipt = isRecord(v) ? v : null } catch { receipt = null }
+      const status = typeof receipt?.status === 'string' ? receipt.status : null
+      code = typeof receipt?.error === 'string' ? receipt.error : undefined
+      if (r.code === 0 && status === 'ended') {
+        outcome = 'ended'
+        const released = Array.isArray(receipt?.released) ? receipt.released.length : 0
+        out(`   - ended ${id} (${released} lease(s) released)`)
+      } else if (r.code === 0 && status === 'already_ended') {
+        outcome = 'already_ended'
+        out(`   - ${id} had already ended`)
+      } else {
+        report(`   - ${id}: the host end failed (${code ?? (r.code === null ? 'timeout' : `exit ${r.code}`)}); the session may still be active`)
+      }
+    } catch (e) {
+      report(`   - ${id}: the host end failed (${message(e)}); the session may still be active`)
     }
-    ledger({ event: 'unpair_end', device, user, session_id: id, outcome: status ?? 'failed', code: typeof receipt?.error === 'string' ? receipt.error : undefined })
+    record(outcome, code)
   }
   for (const id of leftAlone.sort()) out(`   - ${id} has a remote-looking role but is not in ${device}'s mirror; left alone`)
 
@@ -193,21 +232,27 @@ export async function unpairDevice(device: string, deps: UnpairDeps): Promise<nu
   out('4. Air files:')
   ledger({ event: 'unpair', device, user, outcome: problems.length === 0 ? 'ok' : 'incomplete', code: `${toEnd.size} session(s)` })
   const archive = archiveName(paths.stateDir, deps.now())
-  withLock(paths.ledger, () => renameSync(paths.ledger, archive)) // the hub appends under the same lock
-  chmodSync(archive, 0o600)
-  ledger({ event: 'ledger_archived', device, code: basename(archive) })
-  out(`   - the hub ledger is archived as ${archive}`)
+  // the hub appends under the same lock
+  if (attempt('the hub ledger could not be archived', () => withLock(paths.ledger, () => renameSync(paths.ledger, archive))) !== FAILED) {
+    attempt(`${archive} could not be made private`, () => chmodSync(archive, 0o600))
+    ledger({ event: 'ledger_archived', device, code: basename(archive) })
+    out(`   - the hub ledger is archived as ${archive}`)
+  }
   if (existsSync(paths.sshConfig)) {
-    const { text, removed } = withoutHostBlock(readFileSync(paths.sshConfig, 'utf8'), d.host_alias)
-    if (!removed) out(`   - no Host ${d.host_alias} block in ${paths.sshConfig}`)
-    else {
-      if (text.trim() === '') rmSync(paths.sshConfig)
-      else writeFileDurable(paths.sshConfig, text.endsWith('\n') ? text : `${text}\n`, 0o600)
-      out(`   - removed the Host ${d.host_alias} block from ${paths.sshConfig}`)
+    const config = attempt(`${paths.sshConfig} could not be read`, () => readFileSync(paths.sshConfig, 'utf8'))
+    if (config !== FAILED) {
+      const { text, removed } = withoutHostBlock(config, d.host_alias)
+      if (!removed) out(`   - no Host ${d.host_alias} block in ${paths.sshConfig}`)
+      else {
+        const changed = text.trim() === ''
+          ? attempt(`${paths.sshConfig} could not be removed`, () => rmSync(paths.sshConfig))
+          : attempt(`${paths.sshConfig} could not be rewritten`, () => writeFileDurable(paths.sshConfig, text.endsWith('\n') ? text : `${text}\n`, 0o600))
+        if (changed !== FAILED) out(`   - removed the Host ${d.host_alias} block from ${paths.sshConfig}`)
+      }
     }
   }
   for (const f of [paths.sshKey(device), `${paths.sshKey(device)}.pub`]) {
-    if (existsSync(f)) { rmSync(f); out(`   - removed ${f}`) }
+    if (existsSync(f) && attempt(`${f} could not be removed`, () => rmSync(f)) !== FAILED) out(`   - removed ${f}`)
   }
   out(`   - a running hub stops ${device}'s children at its next reload; with the hub off there are none`)
 
