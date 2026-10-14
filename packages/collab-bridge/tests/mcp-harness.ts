@@ -2,6 +2,9 @@
 // KN packages/collab/tests/mcp.test.ts:54-142), that also reads stderr and queues notifications. Task 37 adds
 // collabHarness here (the tracked Collab dist, spawned the hub's way). The env is exactly what the caller passes:
 // nothing is inherited from the test process.
+import { childArgv, childEnv } from '../src/air/children.ts'
+import { COLLAB_DIST } from './helpers.ts'
+
 export interface StdioHarness {
   pid: number
   request(method: string, params?: unknown): Promise<any>
@@ -125,4 +128,11 @@ export function stdioHarness(o: { argv: string[]; env: Record<string, string>; c
       return child.exitCode
     },
   }
+}
+
+/** A stdio harness on this tree's tracked Collab dist, run exactly the hub's way: its argv, its three-key env, cwd '/'.
+ *  The journal and home are always temp paths in tests (P35). */
+export function collabHarness(o: { journal: string; home: string; sessionFile?: string }): StdioHarness {
+  const spec = { bun: process.execPath, dist: COLLAB_DIST, journal: o.journal, home: o.home, sessionFile: o.sessionFile }
+  return stdioHarness({ argv: childArgv(spec), env: childEnv(spec), cwd: '/' })
 }
