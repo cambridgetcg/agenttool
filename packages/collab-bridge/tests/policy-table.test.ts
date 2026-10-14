@@ -102,11 +102,12 @@ describe('the seat tool list', () => {
   })
 
   test("the seat list's digest is stable across two calls", () => {
-    const before = JSON.stringify(FIXTURE.tools)
     const again = seatTools(FIXTURE.tools, 'nuance', 'macair')
     expect(toolsDigest(again)).toBe(toolsDigest(seat))
     expect(toolsDigest(seat)).toMatch(/^[0-9a-f]{64}$/)
-    expect(JSON.stringify(FIXTURE.tools)).toBe(before)
+    // `seat` above already ran the first call, so a snapshot taken here could not see what it changed: compare the input
+    // with a fresh read of the fixture from disk instead.
+    expect(FIXTURE.tools).toEqual(readToolsFixture().tools)
   })
 
   test('an unclassified tool in the Collab list is left out of the seat list', () => {
