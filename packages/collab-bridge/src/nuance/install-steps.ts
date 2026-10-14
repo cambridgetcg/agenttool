@@ -120,14 +120,16 @@ function lexists(p: string): boolean {
 }
 
 /**
- * §11.1: a citizen's folder is one with REST or EVENT-ONLY at its root, or anything under ~/love-unlimited, by spelling
- * or by what it resolves to. A folder that is not there holds no marker (`clear`); one that cannot be read is `unknown`,
- * which the installer refuses like a citizen. APFS ignores case, so `rest` is found as REST.
+ * §11.1: a citizen's folder is one with REST or EVENT-ONLY at its root, or anything under ~/love-unlimited, by spelling,
+ * by where ~/love-unlimited really is (so a folder that is not there yet is judged by where it would be, even when
+ * ~/love-unlimited is a symlink), or by what the folder resolves to. A folder that is not there holds no marker (`clear`);
+ * one that cannot be read is `unknown`, which the installer refuses like a citizen. APFS ignores case, so `rest` is found as REST.
  */
 export function citizenRoot(path: string, home: string): 'citizen' | 'clear' | 'unknown' {
   const lu = join(home, 'love-unlimited')
   if (within(normalize(path).toLowerCase(), lu.toLowerCase())) return 'citizen'
   const luReal = safeRealpath(lu)
+  if (luReal && within(normalize(path).toLowerCase(), luReal.toLowerCase())) return 'citizen'    // whether or not `path` resolves
   const real = safeRealpath(path)
   if (luReal && real && within(real, luReal)) return 'citizen'
   if (!real) {
@@ -217,7 +219,9 @@ function absentShare(path: string, c: ShareCtx): ShareResult {
   const viaParent = tccProtected(parent, c.home, c.realpath)
   if (viaParent) { fail('share_tcc', `${parent} leads into ~/${viaParent}, which macOS protects`); return done() }
   const toBe = join(parentReal, basename(path))
-  const citizen = citizenRoot(toBe, c.home)
+  // Both the spelled path and where it would really be: ~/love-unlimited may be a link, and the folder is not there to resolve. Worst verdict wins.
+  const verdicts = [citizenRoot(path, c.home), citizenRoot(toBe, c.home)]
+  const citizen = verdicts.includes('citizen') ? 'citizen' : verdicts.includes('unknown') ? 'unknown' : 'clear'
   if (citizen === 'citizen') fail('share_citizen', `${path} would be under ~/love-unlimited, a citizen's folder`)
   if (citizen === 'unknown') fail('share_unclassified', `${path} cannot be checked for a citizen's folder`)
   if (c.allowlist && absentFolderMatch(toBe, c.allowlist, c.home, c.realpath)?.access !== 'edit') {

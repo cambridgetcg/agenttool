@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  citizenRoot, dropinOwnerUidOf, installCheck, installClone, parseManifest, renderManifest, type CheckReport,
+  citizenRoot, dropinOwnerUidOf, INSTALL_USAGE, installCheck, installClone, parseManifest, renderManifest, type CheckReport,
 } from '../src/nuance/install-steps.ts'
 import { resolveGit } from '../src/nuance/git-resolve.ts'
 import { dropinStat, renderInstalled, summonKeySha256 } from '../src/nuance/installed.ts'
@@ -32,7 +32,24 @@ function verb(h: NuanceHome, args: string[]) {
   const r = Bun.spawnSync([process.execPath, '--no-env-file', '--config=/dev/null', `${PKG}/src/nuance/main.ts`, 'install', ...args],
     { env: h.env, cwd: '/', stdout: 'pipe', stderr: 'pipe' })
   const out = r.stdout.toString()
-  return { code: r.exitCode, json: out.trim() === '' ? null : JSON.parse(out.trim().split('\n').pop()!), stderr: r.stderr.toString() }
+  return { code: r.exitCode, stdout: out, json: out.trim() === '' ? null : JSON.parse(out.trim().split('\n').pop()!), stderr: r.stderr.toString() }
+}
+
+/** The verbs' full command line for a home, a bundle and its shares. */
+function verbArgs(name: 'check' | 'clone', b: { dir: string }, shares: string[]): string[] {
+  return [name, '--bundle', b.dir, ...shares.flatMap((s) => ['--share', s]), '--terminal-git', REAL_GIT, '--claude', claudeStub()]
+}
+
+/**
+ * A Nuance home whose ~/love-unlimited is a symlink to a citizen's real folder elsewhere (as when it lives on another
+ * volume), with ~/love-unlimited an `access: edit` entry and ~/Projects/lu a second link to the same folder.
+ */
+function linkedLoveUnlimited() {
+  const h = summonReadyHome({ allowlist: allowlistYaml([{ path: '~/love-unlimited', access: 'edit' }]) })
+  const realLu = temp('cb-lu-real-')
+  symlinkSync(realLu, join(h.home, 'love-unlimited'))
+  symlinkSync(realLu, join(h.home, 'Projects', 'lu'))
+  return { h, realLu, trial: makeTrialRepo(), spelled: [join(h.home, 'love-unlimited', 'collab-trial'), join(h.home, 'Projects', 'lu', 'collab-trial')] }
 }
 
 describe('MANIFEST', () => {
@@ -183,6 +200,91 @@ describe('install check', () => {
     expect(citizenRoot(join(h.home, 'Projects'), h.home)).toBe('clear')
   }, 30_000)
 
+  test('an absent share that would land in a symlinked ~/love-unlimited is refused, however it is spelled', () => {
+    const { h, realLu, trial, spelled } = linkedLoveUnlimited()
+    for (const share of spelled) {
+      const r = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [share] })))
+      expect(codes(r)).toEqual(['share_citizen'])
+      expect(r.shares).toEqual([])
+    }
+    // The folder-to-be is judged where it would really be, whether or not it resolves yet; a path that resolves is judged as before.
+    expect(citizenRoot(join(realLu, 'not-yet'), h.home)).toBe('citizen')
+    expect(citizenRoot(join(h.home, 'Projects', 'not-yet'), h.home)).toBe('clear')
+    expect(citizenRoot(realLu, h.home)).toBe('citizen')
+    expect(readdirSync(realLu)).toEqual([])
+  }, 30_000)
+
+  test('an absent share spelled under ~/love-unlimited is refused even when a link inside it leads out', () => {
+    const elsewhere = temp('cb-out-')
+    const h = summonReadyHome({ allowlist: allowlistYaml([{ path: '~/love-unlimited', access: 'edit' }, { path: elsewhere, access: 'edit' }]) })
+    mkdirSync(join(h.home, 'love-unlimited'))
+    symlinkSync(elsewhere, join(h.home, 'love-unlimited', 'out'))
+    const share = join(h.home, 'love-unlimited', 'out', 'collab-trial')                  // resolves to elsewhere/collab-trial, which alone looks clear
+    expect(citizenRoot(join(elsewhere, 'collab-trial'), h.home)).toBe('clear')
+    const r = installCheck(checkInput(h, writeCheckBundle({ trial: makeTrialRepo(), shares: [share] })))
+    expect(codes(r)).toEqual(['share_citizen'])
+    expect(r.shares).toEqual([])
+  }, 30_000)
+
+  test('a bundle file that differs from MANIFEST.txt, or is gone, is refused as a checksum failure', () => {
+    const { h, b } = world()
+    for (const name of ['collab-bridge', 'tools.json', 'collab-trial.bundle']) {
+      const p = join(b.dir, name)
+      const original = readFileSync(p)
+      appendFileSync(p, '\n')
+      const r = installCheck(checkInput(h, b))
+      expect(codes(r)).toEqual(['checksum'])
+      expect(r.failures[0]).toContain(`${name} does not match MANIFEST.txt`)
+      writeFileSync(p, original)
+      expect(installCheck(checkInput(h, b)).failures).toEqual([])
+    }
+    rmSync(join(b.dir, 'tools.json'))
+    const gone = installCheck(checkInput(h, b))
+    expect(codes(gone)).toEqual(['checksum'])
+    expect(gone.failures[0]).toContain('tools.json does not match MANIFEST.txt')
+  }, 60_000)
+
+  test('a drop-in that is not mode 600 is refused, and no Summon baseline is recorded', () => {
+    const { h, b } = world()
+    chmodSync(h.paths.summonDropin, 0o644)
+    const r = installCheck(checkInput(h, b))
+    expect(codes(r)).toEqual(['dropin_mode'])
+    expect(r.failures[0]).toContain('has mode 644, not 600')
+    expect(r.summon).toBeNull()
+  }, 20_000)
+
+  test('an absent share needs a parent folder that exists and is yours', () => {
+    const { h, trial, b } = world()
+    const missing = join(h.home, 'Projects', 'missing', 'collab-trial')
+    const gone = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [missing] })))
+    expect(codes(gone)).toEqual(['share_parent'])
+    expect(gone.failures[0]).toContain(`the folder ${join(h.home, 'Projects', 'missing')} does not exist`)
+    const notYours = installCheck(checkInput(h, b, { uid: process.getuid!() + 1 }))
+    expect(codes(notYours)).toEqual(['share_parent_owner'])
+    expect(notYours.shares).toEqual([])
+  }, 30_000)
+
+  test('an existing share whose .git is not the repository\'s own folder is refused: a linked worktree, a gitdir file, a symlink', () => {
+    const { h, trial, b } = world({ allowlist: allowlistYaml([{ path: '~/Projects', access: 'edit' }]) })
+    const refused = (): void => {
+      const r = installCheck(checkInput(h, b))
+      expect(codes(r)).toEqual(['share_gitdir'])
+      expect(r.shares).toEqual([])
+      rmSync(h.share, { recursive: true, force: true })
+    }
+    repoGit(trial.repo, ['worktree', 'add', '-q', '-b', 'linked', h.share])             // .git is a file naming the main repo's worktrees/ folder
+    refused()
+    repoGit('/', ['clone', '-q', '--separate-git-dir', join(temp('cb-sepgit-'), 'repo.git'), trial.repo, h.share])    // .git is a gitdir file
+    refused()
+    const elsewhere = join(temp('cb-gitlink-'), 'wt')
+    repoGit('/', ['clone', '-q', trial.repo, elsewhere])
+    mkdirSync(h.share)
+    symlinkSync(join(elsewhere, '.git'), join(h.share, '.git'))                           // .git is a symlink to a repository's folder
+    refused()
+    cloneAt(h, trial.repo)                                                                // and its own folder is accepted
+    expect(installCheck(checkInput(h, b)).failures).toEqual([])
+  }, 60_000)
+
   test('an absent folder with an exact edit entry is accepted', () => {
     const { h, b } = world({ allowlist: allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }]) })
     const r = installCheck(checkInput(h, b))
@@ -220,9 +322,15 @@ describe('install check', () => {
     const bad = verb(h, args)
     expect([bad.code, bad.json.ok]).toEqual([1, false])
     expect(bad.stderr).toContain('✗ zshenv: ')
-    expect(verb(h, ['check', '--bundle', b.dir]).code).toBe(1)
-    expect(verb(h, ['frobnicate']).code).toBe(1)
   }, 30_000)
+
+  test('a bad command line prints the usage line and {"ok":false,"failures":["usage"]}, and exits 1', () => {
+    const { h, b } = world()
+    for (const args of [['check'], ['check', '--bundle', b.dir], ['clone'], ['frobnicate'], [], ['check', ...verbArgs('check', b, [h.share]).slice(1), '--bundle', b.dir]]) {
+      const r = verb(h, args)
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '{"ok":false,"failures":["usage"]}\n', INSTALL_USAGE + '\n'])
+    }
+  }, 60_000)
 })
 
 describe('install clone', () => {
@@ -266,4 +374,35 @@ describe('install clone', () => {
     expect(readdirSync(join(h.home, 'Projects'))).toEqual(['collab-trial'])
     expect(rechecked).toBe(0)
   }, 30_000)
+
+  test('a share that would land in a symlinked ~/love-unlimited is never cloned: the checks fail first', () => {
+    const { h, realLu, trial, spelled } = linkedLoveUnlimited()
+    for (const share of spelled) {
+      const r = verb(h, verbArgs('clone', writeCheckBundle({ trial, shares: [share] }), [share]))
+      expect([r.code, r.json]).toEqual([1, { ok: false, reason: 'the checks failed; nothing was cloned', created: [] }])
+      expect(r.stderr).toContain('✗ share_citizen: ')
+      expect(readdirSync(realLu)).toEqual([])                       // not even a .partial folder was made in the citizen's folder
+    }
+  }, 60_000)
+
+  test('when a later share fails, the clones this run already made are removed', () => {
+    const { h, trial } = world({ allowlist: allowlistYaml([{ path: '~/Projects', access: 'edit' }, { path: '~/Locked', access: 'edit' }]) })
+    const locked = join(h.home, 'Locked')
+    mkdirSync(locked)
+    const second = join(locked, 'collab-trial')
+    const b = writeCheckBundle({ trial, shares: [h.share, second] })
+    writeFileSync(join(h.home, 'Projects', 'keep.txt'), 'mine\n')
+    chmodSync(locked, 0o500)                                         // the check passes (it only reads), the clone cannot make a folder here
+    try {
+      const r = verb(h, verbArgs('clone', b, [h.share, second]))
+      expect(r.code).toBe(1)
+      expect(r.json.ok).toBe(false)
+      expect(r.json.created).toEqual([])
+      expect(r.json.reason).toContain('git clone of the trial bundle failed')
+      expect(r.stderr).toContain(`✓ cloned the trial repo into ${h.share}`)
+      expect(existsSync(h.share)).toBe(false)
+      expect(readdirSync(join(h.home, 'Projects'))).toEqual(['keep.txt'])
+      expect(readdirSync(locked)).toEqual([])
+    } finally { chmodSync(locked, 0o700) }
+  }, 60_000)
 })
