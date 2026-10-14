@@ -33,6 +33,8 @@ describe('status lines', () => {
       [{ word: 'needs_yu', reason: 'host_key_mismatch' }, ['nuance: needs Yu: host_key_mismatch']],
       [{ word: 'needs_yu', reason: 'config' }, ['nuance: needs Yu: config']],
       [{ word: 'needs_yu', reason: 'login_shell_noise' }, ['nuance: needs Yu: login_shell_noise']],
+      [{ word: 'needs_yu', reason: 'login_shell_noise', hint: 'noise before the preamble; check ~/.zshenv' },
+        ['nuance: needs Yu: login_shell_noise (noise before the preamble; check ~/.zshenv)']],
       [{ word: 'unpaired' }, ['nuance: unpaired']],
       [{ word: 'up', relay_contested: true }, ['nuance: up', 'nuance: relay_contested']],
       [{ word: 'up', sticky: [warning(T)] }, ['nuance: up', `nuance: host key mismatch seen at ${T}, presented ${FP}`]],

@@ -104,7 +104,7 @@ function collect(link: DeviceLink): (want: number) => Promise<string> {
 
 /** runDialLoop with recorded status, sleeps and ledger, stopping after `sleeps` waits. */
 async function loop(air: Air, fake: FakeSsh, o: { sleeps?: number; probe?: TcpProbe; configExists?: () => boolean; ledger?: (f: LedgerFields) => void;
-  preambleMs?: number; onSleep?: (n: number) => void } = {}) {
+  preambleMs?: number; onSleep?: (n: number) => void; onLink?: (link: DeviceLink) => Promise<void> } = {}) {
   const statuses: Array<Partial<DeviceStatus>> = []
   const ledger: LedgerFields[] = []
   const sleeps: number[] = []
@@ -113,7 +113,7 @@ async function loop(air: Air, fake: FakeSsh, o: { sleeps?: number; probe?: TcpPr
     device: air.device, paths: air.paths, ssh: fake.bin,
     policy: new DialPolicy({ mono: () => performance.now(), now: () => new Date(), rand: () => 0.5 }),
     configExists: o.configExists ?? (() => true),
-    onLink: async (link) => { link.close(); await link.closed },
+    onLink: o.onLink ?? (async (link) => { link.close(); await link.closed }),
     status: (s) => statuses.push(s),
     ledger: (f) => { ledger.push(f); o.ledger?.(f) },
     tcpProbe: async (h, p, ms) => { probes.push([h, p, ms]); return o.probe ? o.probe(h, p, ms) : 'ok' },
@@ -379,6 +379,93 @@ describe('runDialLoop', () => {
     expect(sha256File(air.knownHosts)).toBe(pin)
     expect(readFileSync(air.paths.sshConfig, 'utf8')).toBe(config)
   }, 10_000)
+})
+
+describe('runDialLoop: a dial that cannot be built, a session that throws, the login_shell_noise stop', () => {
+  /** What a dial that never ran leaves (spec §5.5, Task 48): one refused/config line with ms 0, needs Yu, no probe and no ssh. */
+  function expectRefusedAsConfig(r: Awaited<ReturnType<typeof loop>>, fake: FakeSsh): void {
+    expect(r.result).toBe('needs_yu')
+    expect(r.ledger).toEqual([{ event: 'dial', device: 'nuance', outcome: 'refused', code: 'config', ms: 0 }])
+    expect(r.statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'config' })
+    expect(r.probes).toEqual([])
+    expect(fake.calls()).toEqual([])
+    expect(r.sleeps).toEqual([])
+  }
+
+  test('an ssh path that is not absolute stops as needs Yu: config instead of rejecting the loop', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    expectRefusedAsConfig(await loop(air, { ...fake, bin: 'ssh' }), fake)
+  }, 10_000)
+
+  test('a Host alias ssh would take for something else stops as needs Yu: config instead of rejecting the loop', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    // A config whose Host line is `Collab-Nuance` matches targetOfConfig, but dialArgv takes lowercase aliases only.
+    writeFileSync(air.paths.sshConfig, readFileSync(air.paths.sshConfig, 'utf8').replace('Host collab-nuance', 'Host Collab-Nuance'), { mode: 0o600 })
+    const odd: Air = { ...air, device: { ...air.device, host_alias: 'Collab-Nuance' } }
+    expectRefusedAsConfig(await loop(odd, fake), fake)
+  }, 10_000)
+
+  test('an alias that could be an ssh option stops as needs Yu: config instead of rejecting the loop', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    writeFileSync(air.paths.sshConfig, readFileSync(air.paths.sshConfig, 'utf8').replace('Host collab-nuance', 'Host -oProxyCommand=x'), { mode: 0o600 })
+    const odd: Air = { ...air, device: { ...air.device, host_alias: '-oProxyCommand=x' } }
+    expectRefusedAsConfig(await loop(odd, fake), fake)
+  }, 10_000)
+
+  test('an onLink that throws is ledgered as session_error with no message text, and the link is still closed before the policy decides', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    let link: DeviceLink | null = null
+    const r = await loop(air, fake, { onLink: async (l) => { link = l; throw new Error('hunter2-secret-token exploded in the framer') } })
+    expect(r.result).toBe('stopped')
+    expect(r.ledger.map((l) => l.event)).toEqual(['tcp_probe', 'dial', 'link_end'])
+    expect(r.ledger.at(-1)).toEqual({ event: 'link_end', device: 'nuance', user: 'macair', code: 'session_error' })
+    expect(JSON.stringify(r.ledger)).not.toContain('hunter2')
+    // The link was closed and awaited, and the policy then decided as for any drop: the immediate redial.
+    expect(await Promise.race([link!.closed.then(() => 'closed'), Bun.sleep(2_000).then(() => 'open')])).toBe('closed')
+    expect(r.statuses.map((s) => s.word)).toEqual(['connecting', 'up', 'connecting'])
+    expect(r.statuses.at(-1)).toMatchObject({ word: 'connecting', reason: 'link_dropped' })
+    expect(r.sleeps).toEqual([0])
+  }, 10_000)
+
+  test('a ledger that fails on the session_error line cannot skip the close', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    let link: DeviceLink | null = null
+    const r = await loop(air, fake, {
+      onLink: async (l) => { link = l; throw new Error('boom') },
+      ledger: (f) => { if (f.event === 'link_end') throw new Error('disk full') },
+    })
+    expect(r.result).toBe('stopped')
+    expect(await Promise.race([link!.closed.then(() => 'closed'), Bun.sleep(2_000).then(() => 'open')])).toBe('closed')
+    expect(r.statuses.at(-1)).toMatchObject({ word: 'connecting', reason: 'link_dropped' })
+    expect(r.sleeps).toEqual([0])
+  }, 10_000)
+
+  test('an onLink that returns normally appends no link_end line', async () => {
+    const air = makeAir()
+    const r = await loop(air, fakeWith(RELAY))
+    expect(r.ledger.filter((l) => l.event === 'link_end')).toEqual([])
+  }, 10_000)
+
+  test("login_shell_noise's stop names ~/.zshenv in the status hint; the other stops carry no hint", async () => {
+    const air = makeAir()
+    const noisy = fakeWith(RELAY)
+    noisy.setNoise('x'.repeat(70_000))
+    const r = await loop(air, noisy)
+    expect(r.result).toBe('needs_yu')
+    expect(r.statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'login_shell_noise', hint: 'noise before the preamble; check ~/.zshenv' })
+    // config (a gate refusal, a missing file) and auth_refused say nothing about ~/.zshenv.
+    const gate = fakeWith(GATE_REFUSES)
+    expect((await loop(air, gate)).statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'config', hint: null })
+    expect((await loop(air, fakeWith(RELAY), { configExists: () => false })).statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'config', hint: null })
+    const auth = fakeWith(RELAY)
+    auth.setFail255('macair@nuance.local: Permission denied (publickey).\r\n')
+    expect((await loop(air, auth)).statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'auth_refused', hint: null })
+  }, 20_000)
 })
 
 describe('classifyDialEnd', () => {

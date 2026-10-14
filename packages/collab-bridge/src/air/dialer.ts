@@ -21,6 +21,8 @@ export type DialOutcome = { ok: true; link: DeviceLink } | { ok: false; failure:
 
 /** The status hint after three silent dials in a row (spec §5.4). */
 export const ZSHENV_HINT = 'no preamble; check ~/.zshenv'
+/** The status hint of the login_shell_noise stop, which spec §5.4 and §5.5 say names ~/.zshenv. */
+const NOISE_HINT = 'noise before the preamble; check ~/.zshenv'
 /** How much of ssh's stderr is kept for the classifier: its own lines come last, after any remote noise. */
 const STDERR_KEEP = 256 * 1024
 /** How long a SIGTERMed ssh gets before SIGKILL. */
@@ -319,7 +321,7 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
     o.status({ word, reason, since, hint, sticky: o.policy.sticky() })
   }
   const needsYu = (reason: string): 'needs_yu' => {
-    report('needs_yu', reason, null)
+    report('needs_yu', reason, reason === 'login_shell_noise' ? NOISE_HINT : null)
     return 'needs_yu'
   }
 
@@ -330,6 +332,12 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
   let target: ReturnType<typeof targetOfConfig> = null
   try { target = targetOfConfig(readFileSync(config, 'utf8'), alias) } catch { target = null }
   if (!target?.host) {
+    o.ledger({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
+    return needsYu('config')
+  }
+  // A dial that cannot be built (an ssh or config path that is not absolute, an alias outside dialArgv's pattern) stops
+  // as config like a missing config: dialOnce would throw from dialArgv, which no later dial can heal.
+  try { dialArgv(o.ssh, config, alias, newRelayNonce()) } catch {
     o.ledger({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
     return needsYu('config')
   }
@@ -355,7 +363,12 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
       o.policy.onUp()
       linked = true
       report('up', null, null)
-      try { await o.onLink(out.link) } catch { /* the session ended: a drop like any other */ }
+      try { await o.onLink(out.link) } catch {
+        // The session threw instead of ending: the link is still closed and the policy decides as for any drop, but the
+        // ledger keeps a content-free record (no error text), so a deterministic crash is not silent churn. A ledger that
+        // fails here must not skip the close.
+        try { o.ledger({ event: 'link_end', device, user: o.device.user, code: 'session_error' }) } catch { /* the close still runs */ }
+      }
       out.link.close()
       await out.link.closed
       decision = o.policy.onDrop()

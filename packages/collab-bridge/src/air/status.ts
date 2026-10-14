@@ -158,7 +158,7 @@ function wordText(d: DeviceStatus): string {
     case 'connecting': return d.hint ? `connecting (${d.hint})` : 'connecting'
     case 'away': return `away since ${d.since}`
     case 'host_key_mismatch': return `host_key_mismatch (retrying since ${d.since})`
-    case 'needs_yu': return `needs Yu: ${d.reason ?? 'config'}`
+    case 'needs_yu': return `needs Yu: ${d.reason ?? 'config'}${d.hint ? ` (${d.hint})` : ''}` // login_shell_noise carries its ~/.zshenv hint (spec §5.4)
     case 'unpaired': return 'unpaired'
   }
 }
