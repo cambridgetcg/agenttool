@@ -67,8 +67,13 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   if (!bin) return finish(deps, s, { status: 'failed', detail: 'claude is not installed on this Mac' })
   let inv: Invocation
   // Phase 0.5: a build job runs the commands its folder entry lists, and only the admission at start can hand those over (it re-reads
-  // the allowlist: Task 3 wires that in). Until then there are none, and the harness refuses a build job without commands, so a
-  // build job ends failed here rather than run with a list nobody checked. Review and edit jobs use none.
+  // the allowlist). Design section 2 "Admission result" gives that re-run to the runner's start-up step, which is Task 3: it replaces
+  // this line with the start-time admission's `commands` (the same result that decides whether the job is refused), and rewrites the
+  // interim test in runner.test.ts that pins this state. Until then there are none, and the harness refuses a build job without
+  // commands, so a build job ends failed here rather than run with a list nobody checked. Review and edit jobs use none.
+  // LANDING: this is not shippable alone. The harness already points an edit or build job's TMPDIR at <cwdReal>/.summon-tmp/<job id>
+  // and nothing creates that directory until Task 3, so Tasks 2 and 3 land together: feat/summon-phase0 (the Air's summon) is never
+  // fast-forwarded to the Task 2 commit alone, and that commit is not bundled with prepare-pairing.ts.
   const commands: AllowlistCommand[] = []
   try { inv = claudeInvocation({ id, model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, commands, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
     return finish(deps, s, { status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
