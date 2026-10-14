@@ -63,6 +63,26 @@ describe('parseCli', () => {
     expect(parseCli(['nuance', 'claude', '--model', 'sonnet', '--cwd', '~/Projects/x', '--review', '--prompt-file', 't.md']))
       .toMatchObject({ kind: 'start', device: 'nuance', runtime: 'claude', model: 'sonnet', cwd: '~/Projects/x', access: 'review', promptFile: 't.md' })
   })
+  test('Phase 0.5: --build is the third access, and --review, --edit and --build are mutually exclusive', () => {
+    const base = ['nuance', 'claude', '--model', 'sonnet', '--cwd', '~/x', '--prompt-file', 't']
+    expect(parseCli([...base, '--build'])).toMatchObject({ kind: 'start', access: 'build' })
+    expect(parseCli([...base, '--build', '--timeout', '1h'])).toMatchObject({ access: 'build', timeoutS: 3600 })
+    for (const flags of [['--review', '--edit'], ['--edit', '--review'], ['--review', '--build'], ['--build', '--review'], ['--edit', '--build'], ['--build', '--edit'],
+      ['--build', '--build'], ['--edit', '--edit'], ['--review', '--review'], ['--review', '--edit', '--build']]) {
+      const r = parseCli([...base, ...flags]) as { error?: string }
+      expect([flags, r.error]).toEqual([flags, expect.stringContaining('--review, --edit and --build are mutually exclusive')])
+    }
+  })
+  test('Phase 0.5: a --build start sends access build, ledgers it as sent, and a conflict of flags sends nothing', () => {
+    const { bin, dir } = fakeSsh(0, '{"status":"admitted","handle":"nuance/x"}')
+    expect(runCli(startArgv(dir, ['--build']).filter((a) => a !== '--review'), deps(bin, dir))).toMatchObject({ code: 0, out: { status: 'admitted' } })
+    expect(JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))).toMatchObject({ access: 'build', cwd: '~/Projects/x' })
+    expect(lines(join(dir, 'ledger.jsonl'))[0]).toMatchObject({ event: 'sent', access: 'build' })
+    const other = fakeSsh(0, '{"status":"admitted"}')
+    expect(runCli(startArgv(other.dir, ['--build']), deps(other.bin, other.dir))).toMatchObject({ code: 2, out: { status: 'refused', reason: 'malformed' } })
+    expect(calls(other.dir)).toBe(0)
+    expect(existsSync(join(other.dir, 'ledger.jsonl'))).toBe(false)
+  })
   test('requires model, cwd and a prompt', () => {
     expect(parseCli(['nuance', 'claude', '--cwd', '~/x', '--prompt-file', 't'])).toHaveProperty('error')
     expect(parseCli(['nuance', 'claude', '--model', 'sonnet', '--prompt-file', 't'])).toHaveProperty('error')
@@ -84,7 +104,7 @@ describe('parseCli', () => {
   })
   test('final review M11: the usage names every flag a start parses, --effort and --provider included', () => {
     const usage = (parseCli([]) as { error: string }).error
-    for (const f of ['--model', '--provider', '--effort', '--cwd', '--prompt-file', '--timeout', '--expires', '--label', '--job', '--review', '--edit']) {
+    for (const f of ['--model', '--provider', '--effort', '--cwd', '--prompt-file', '--timeout', '--expires', '--label', '--job', '--review', '--edit', '--build']) {
       expect([f, usage.includes(f)]).toEqual([f, true])
     }
   })
@@ -269,7 +289,8 @@ describe('runCli', () => {
   test('the request carries the flags: timeout, expiry, label, provider, effort, access', () => {
     const { bin, dir } = fakeSsh(0, '{"status":"admitted"}')
     const now = Date.parse('2026-10-10T12:00:00Z')
-    runCli(startArgv(dir, ['--edit', '--timeout', '5m', '--expires', '2m', '--label', 'readme', '--provider', 'anthropic', '--effort', 'high']), deps(bin, dir, { nowMs: () => now }))
+    runCli(startArgv(dir, ['--edit', '--timeout', '5m', '--expires', '2m', '--label', 'readme', '--provider', 'anthropic', '--effort', 'high']).filter((a) => a !== '--review'),
+      deps(bin, dir, { nowMs: () => now }))
     const sent = JSON.parse(readFileSync(join(dir, 'stdin'), 'utf8'))
     expect(sent).toMatchObject({ v: 1, mode: 'job', access: 'edit', timeout_s: 300, label: 'readme', provider: 'anthropic', effort: 'high',
       issued_at: '2026-10-10T12:00:00.000Z', expires_at: '2026-10-10T12:02:00.000Z' })

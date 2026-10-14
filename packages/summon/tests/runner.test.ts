@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
-import { requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
+import { describeCommand, requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
 import { countActive, jobDir, readJson, readState, settleNeverReached, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
 import { markOrphans, processStartTime, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
-import { cleanupTmps, DEFAULT_ALLOWLIST, makeFakeClaude, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
+import { BUILD_ALLOWLIST, cleanupTmps, DEFAULT_ALLOWLIST, EDIT_ALLOWLIST, FLAGGED_ALLOWLIST, fakeGitRoot, makeFakeClaude, repoHome, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -420,7 +420,7 @@ describe('runOnce', () => {
     })
   })
 
-  describe('what the runner hands the harness (Phase 0.5 Task 2: pass-through only)', () => {
+  describe('what the runner hands the harness (Phase 0.5)', () => {
     const argvOf = () => JSON.parse(readFileSync(fake.argvOut, 'utf8')) as { argv: string[]; env: Record<string, string> }
     const flagOf = (argv: string[], name: string) => argv.filter((a) => a.startsWith(`--${name}=`)).map((a) => a.slice(name.length + 3))
     test('a review job: the review cap, no settings, and the env it always had', async () => {
@@ -436,7 +436,7 @@ describe('runOnce', () => {
       expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
     })
     test('an edit job: the edit cap, the sandbox settings, its own TMPDIR named by the job id, and the git env', async () => {
-      const h = targetHome()
+      const h = repoHome()
       const req = enqueue(h, { access: 'edit' })
       fake.setMode('ok')
       await runOnce(rdeps(h))
@@ -450,13 +450,24 @@ describe('runOnce', () => {
       expect(env.GIT_CONFIG_COUNT).toBe('6')
       expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
     })
-    test('a build job has no commands to run until the runner re-admits at start (Task 3), so it ends failed rather than run without them', async () => {
-      const h = targetHome()
-      const req = enqueue(h, { access: 'build' })
+    test('a build job runs with the commands of its folder entry, taken from the admission at start, and nothing it was not given', async () => {
+      const h = repoHome(BUILD_ALLOWLIST)
+      const req = admit(h, { access: 'build' })
       fake.setMode('ok')
       await runOnce(rdeps(h))
-      expect(existsSync(fake.argvOut)).toBe(false) // claude never ran
-      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
+      const { argv } = argvOf()
+      expect(flagOf(argv, 'max-turns')).toEqual(['60'])
+      const allowed = flagOf(argv, 'allowedTools')[0]!.split(',')
+      expect(allowed).toEqual(['Bash(git add:*)', 'Bash(git commit:*)', 'Bash(bun test)', 'Bash(bun test:*)', 'Bash(bun run typecheck)',
+        'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)', 'Bash(git rev-parse:*)'])
+      expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+    })
+    test('an edit job in a build folder gets the edit rules only: the entry\'s commands are for build jobs', async () => {
+      const h = repoHome(BUILD_ALLOWLIST)
+      admit(h, { access: 'edit' })
+      fake.setMode('ok')
+      await runOnce(rdeps(h))
+      expect(flagOf(argvOf().argv, 'allowedTools')).toEqual(['Bash(git add:*),Bash(git commit:*)'])
     })
     test('an access the harness does not know ends failed without running claude (a damaged state file never gains edit powers)', async () => {
       const h = targetHome()
@@ -465,9 +476,9 @@ describe('runOnce', () => {
       expect(existsSync(fake.argvOut)).toBe(false)
       expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
     })
-    test('the turn cap detail is the cap of the job\'s own access: 40 for review, 60 for edit', async () => {
-      for (const [access, cap] of [['review', 40], ['edit', 60]] as const) {
-        const h = targetHome()
+    test('the turn cap detail is the cap of the job\'s own access: 40 for review, 60 for edit and for build', async () => {
+      for (const [access, cap, al] of [['review', 40, DEFAULT_ALLOWLIST], ['edit', 60, EDIT_ALLOWLIST], ['build', 60, BUILD_ALLOWLIST]] as const) {
+        const h = repoHome(al)
         const req = enqueue(h, { access })
         fake.setMode('maxturns')
         await runOnce(rdeps(h))
@@ -489,13 +500,16 @@ describe('runOnce', () => {
       expect(existsSync(fake.argvOut)).toBe(false) // claude never ran
       return s
     }
-    test('an edit job whose folder has a comma ends failed (claudeInvocation throws)', async () => {
-      const h = targetHome(); mkdirSync(join(h, 'Projects/a,b'))
-      const req = enqueue(h, { access: 'edit', cwd_real: join(h, 'Projects/a,b') })
+    test('an edit job whose folder has a comma ends failed (claudeInvocation throws), before anything is made in the folder', async () => {
+      const h = targetHome(FLAGGED_ALLOWLIST.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/a,b\n    access: edit'))
+      const folder = fakeGitRoot(join(h, 'Projects/a,b')) // makes the directory too
+      const req = enqueue(h, { access: 'edit', cwd_real: folder })
       await runOnce(rdeps(h))
       const s = failedWith(h, req.id, 'could not start claude: the command could not be built for this folder')
       expect(JSON.stringify(s)).not.toContain(req.prompt)
       expect(JSON.stringify(ledgerOf(h))).not.toContain(req.prompt)
+      expect(readdirSync(folder)).toEqual(['.git'])
+      expect(existsSync(join(folder, '.git/info'))).toBe(false)
     })
     test('a job whose folder is a regular file ends failed (spawn throws)', async () => {
       const h = targetHome(); writeFileSync(join(h, 'Projects/afile'), '')
@@ -503,11 +517,18 @@ describe('runOnce', () => {
       await runOnce(rdeps(h))
       failedWith(h, req.id, /^could not start claude: E[A-Z]+$/)
     })
-    test('a job whose folder no longer exists ends failed (spawn reports the error later)', async () => {
+    test('a claude that cannot be started ends failed (spawn reports the error later), and the folder is left as it was', async () => {
+      const h = targetHome()
+      const req = enqueue(h)
+      await runOnce(rdeps(h, { claudeBin: () => join(h, 'no-such-claude') }))
+      failedWith(h, req.id, 'could not start claude: ENOENT')
+    })
+    test('a job whose folder no longer exists is refused at start, with the admission\'s reason (it cannot run there)', async () => {
       const h = targetHome()
       const req = enqueue(h, { cwd_real: join(h, 'Projects/gone') })
       await runOnce(rdeps(h))
-      failedWith(h, req.id, 'could not start claude: ENOENT')
+      expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'refused', reason: 'outside_allowlist', detail: expect.stringContaining('does not exist') })
+      expect(existsSync(fake.argvOut)).toBe(false)
     })
     test('a missing request.json ends failed', async () => {
       const h = targetHome()
@@ -531,6 +552,469 @@ describe('runOnce', () => {
       expect(readState(summonPaths(h), ids[1]!)?.status).toBe('completed') // the next job still runs
       expect(JSON.stringify(ledgerOf(h))).not.toContain('must not leak')
     })
+  })
+})
+
+
+// ── Phase 0.5, Task 3: re-admission at start, the job's temp directory, the fingerprint and the process sweep. ──
+
+const argvOf = () => JSON.parse(readFileSync(fake.argvOut, 'utf8')) as { argv: string[]; env: Record<string, string>; cwd: string; tmpdir: { directory: boolean; mode: number } | null;
+  exclude: string | null; pid: number; pgid: number }
+const setAllowlist = (h: string, text: string) => writeFileSync(join(h, '.config/summon/allowlist.yaml'), text)
+const SUMMON_TMP = '.summon-tmp'
+
+describe('re-admission at start (design section 2, "Admission result")', () => {
+  /** The job ended refused: with the admission's reason, never started, no claude, nothing left in the spool; the ledger says job_end refused. */
+  const refusedAtStart = (h: string, id: string, reason: string, detail: string | RegExp) => {
+    const st = readState(summonPaths(h), id)!
+    expect(st).toMatchObject({ status: 'refused', reason })
+    expect(st.detail).toMatch(detail instanceof RegExp ? detail : new RegExp(detail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    expect(resultOf(h, id)).toMatchObject({ status: 'refused', reason, detail: st.detail })
+    expect([st.started_at, st.pid, st.pid_lstart]).toEqual([undefined, undefined, undefined])
+    expect(existsSync(fake.argvOut)).toBe(false) // claude never ran
+    expect(readdirSync(summonPaths(h).spool)).toEqual([])
+    const mine = ledgerOf(h).filter((e) => e.id === id)
+    expect(mine.map((e) => e.event)).not.toContain('job_start')
+    expect(mine.find((e) => e.event === 'job_end')).toMatchObject({ status: 'refused', reason })
+    expect(verifyLedger(summonPaths(h).ledger).ok).toBe(true)
+    return st
+  }
+  test('a build entry removed while the job was queued revokes it: refused, not failed, and claude never runs', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); const req = admit(h, { access: 'build' })
+    setAllowlist(h, FLAGGED_ALLOWLIST) // Yu edited the allowlist on Nuance: ~/Projects is a review folder again
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'build is not allowed in ~/Projects (review)')
+  })
+  test('a build job whose entry is not there at all ends refused, where it used to end failed (the interim state is gone)', async () => {
+    const h = repoHome(DEFAULT_ALLOWLIST); const req = enqueue(h, { access: 'build' })
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'build is not allowed in ~/Projects (review)')
+  })
+  test('the refusal carries the admission\'s hint in the result text (a build refusal: a complete entry with commands)', async () => {
+    const h = repoHome(DEFAULT_ALLOWLIST); const req = enqueue(h, { access: 'build' })
+    await runOnce(rdeps(h))
+    expect(resultOf(h, req.id).result_text).toContain('commands:')
+    expect(statusOf(summonPaths(h), 'nuance', req.id, Date.now())).toMatchObject({ status: 'refused', reason: 'outside_allowlist', handle: `nuance/${req.id}` })
+  })
+  test('a folder that has stopped being a repository root revokes a queued edit job', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    rmSync(join(h, 'Projects/x/.git'), { recursive: true })
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', '.git')
+  })
+  test('a folder that has become nested (by a symlink the parser cannot see) revokes a queued build job', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); const req = admit(h, { access: 'build' })
+    symlinkSync(join(h, 'Projects'), join(h, 'Outer'))
+    setAllowlist(h, BUILD_ALLOWLIST.replace('  - path: ~/Projects/x\n', '  - path: ~/Outer\n    access: edit\n  - path: ~/Projects/x\n'))
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'overlaps another edit or build folder entry')
+  })
+  test('an allowlist that is gone or no longer parses refuses the queued job, as it refuses every request', async () => {
+    const h = repoHome(); const gone = admit(h, { access: 'edit' })
+    rmSync(join(h, '.config/summon/allowlist.yaml'))
+    await runOnce(rdeps(h))
+    refusedAtStart(h, gone.id, 'outside_allowlist', 'allowlist: missing')
+    const h2 = repoHome(); const bad = admit(h2, { access: 'edit' })
+    setAllowlist(h2, 'version: 2\n')
+    await runOnce(rdeps(h2))
+    refusedAtStart(h2, bad.id, 'outside_allowlist', 'allowlist: version must be 1')
+  })
+  test('the claude runtime losing reads_anywhere revokes a queued edit job', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    setAllowlist(h, EDIT_ALLOWLIST.replace('    reads_anywhere: true\n', ''))
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'edit jobs run git, which can read any file on this Mac')
+  })
+  test('every job is re-admitted, a review job too: its folder gone from the allowlist, it is refused (and one still allowed runs)', async () => {
+    const h = targetHome(); const req = admit(h)
+    setAllowlist(h, DEFAULT_ALLOWLIST.replace('~/Projects', '~/Elsewhere'))
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'is not allowed')
+    const h2 = targetHome(); const ok = admit(h2)
+    await runOnce(rdeps(h2))
+    expect(readState(summonPaths(h2), ok.id)?.status).toBe('completed')
+  })
+  test('a folder that now resolves somewhere else than where it was admitted is refused (a swapped symlink never moves a job)', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    renameSync(join(h, 'Projects/x'), join(h, 'Projects/x-moved'))
+    symlinkSync(join(h, 'Projects/x-moved'), join(h, 'Projects/x'))
+    await runOnce(rdeps(h))
+    refusedAtStart(h, req.id, 'outside_allowlist', 'resolves somewhere else than when the job was admitted')
+  })
+  test('a refused job is final: it is terminal, not active, and swept with the other finished jobs after 30 days', async () => {
+    const h = repoHome(DEFAULT_ALLOWLIST); const paths = summonPaths(h); const req = enqueue(h, { access: 'build' })
+    await runOnce(rdeps(h))
+    expect(countActive(paths, Date.now())).toBe(0)
+    expect(await runOnce(rdeps(h))).toBe(0)
+    expect(markOrphans(paths, Date.now(), () => false)).toBe(0)
+    expect(sweepJobs(paths, Date.now() + 31 * 86_400_000)).toBe(1)
+    expect(existsSync(jobDir(paths, req.id))).toBe(false)
+  })
+  test('nothing is ledgered for a job that passes: the review job\'s ledger is the three lines it always was', async () => {
+    const h = targetHome(); const req = admit(h)
+    await runOnce(rdeps(h))
+    expect(ledgerOf(h).filter((e) => e.id === req.id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_end'])
+  })
+})
+
+describe('the job\'s temp directory (design section 3, "Temp files")', () => {
+  const dirOf = (h: string) => join(h, 'Projects/x', SUMMON_TMP)
+  test('an edit job: <folder>/.summon-tmp/<job id> is a 0700 directory by the time claude starts, and TMPDIR names it', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    const seen = argvOf()
+    expect(seen.env.TMPDIR).toBe(join(dirOf(h), req.id))
+    expect(seen.tmpdir).toEqual({ directory: true, mode: 0o700 })
+    expect(seen.cwd).toBe(join(h, 'Projects/x'))
+  })
+  test('a build job gets the same', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); const req = admit(h, { access: 'build' })
+    await runOnce(rdeps(h))
+    expect(argvOf().env.TMPDIR).toBe(join(dirOf(h), req.id))
+    expect(argvOf().tmpdir).toEqual({ directory: true, mode: 0o700 })
+  })
+  test('a review job gets none: no directory, no exclude line, and the repository is not touched', async () => {
+    const h = targetHome(); fakeGitRoot(join(h, 'Projects/x')); admit(h)
+    await runOnce(rdeps(h))
+    expect(argvOf().env.TMPDIR).not.toContain(SUMMON_TMP) // the runner's own TMPDIR, as in Phase 0
+    expect(argvOf().exclude).toBeNull()
+    expect(existsSync(dirOf(h))).toBe(false)
+    expect(existsSync(join(h, 'Projects/x/.git/info'))).toBe(false)
+  })
+  test('the directory is gone after a normal end, and so is .summon-tmp, which held nothing else', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+    expect(existsSync(dirOf(h))).toBe(false)
+  })
+  test('the directory is gone after a failure, after a timeout, after a cancel, and after claude could not even be started', async () => {
+    const cases: Array<[string, Parameters<typeof admit>[1], () => void, Partial<RunnerDeps>, string]> = [
+      ['a failure', {}, () => fake.setMode('maxturns'), {}, 'failed'],
+      ['a timeout', { timeout_s: 1 }, () => fake.setMode('slow'), {}, 'timed_out'],
+      ['claude that cannot start', {}, () => fake.setMode('ok'), { claudeBin: () => '/no/such/claude' }, 'failed'],
+    ]
+    for (const [label, over, mode, deps, status] of cases) {
+      const h = repoHome(); const req = admit(h, { access: 'edit', ...over })
+      mode()
+      await runOnce(rdeps(h, deps))
+      expect([label, readState(summonPaths(h), req.id)?.status]).toEqual([label, status])
+      expect([label, existsSync(dirOf(h))]).toEqual([label, false])
+    }
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h))
+    await waitFor(() => existsSync(join(dirOf(h), req.id)))
+    requestCancel(paths, 'nuance', req.id, Date.now())
+    await p
+    expect(readState(paths, req.id)?.status).toBe('cancelled')
+    expect(existsSync(dirOf(h))).toBe(false)
+  }, 30_000)
+  test('.summon-tmp stays when something else is in it, and only this job\'s directory goes', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    mkdirSync(join(dirOf(h), 'someone-else'), { recursive: true })
+    await runOnce(rdeps(h))
+    expect(readdirSync(dirOf(h))).toEqual(['someone-else'])
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+  })
+  test('a .summon-tmp that an earlier job left as a symlink is replaced, never written through', async () => {
+    const h = repoHome(); const outside = join(h, 'outside'); mkdirSync(outside)
+    symlinkSync(outside, dirOf(h))
+    admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(argvOf().tmpdir).toEqual({ directory: true, mode: 0o700 })
+    expect(readdirSync(outside)).toEqual([])
+    expect(existsSync(dirOf(h))).toBe(false)
+  })
+  test('the exclude line /.summon-tmp/ is in .git/info/exclude before claude starts, is kept after the job, and is not repeated by the next', async () => {
+    const h = repoHome(); const exclude = join(h, 'Projects/x/.git/info/exclude')
+    mkdirSync(join(h, 'Projects/x/.git/info')); writeFileSync(exclude, '# mine\n*.log\n')
+    admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(argvOf().exclude).toBe('# mine\n*.log\n/.summon-tmp/\n')
+    expect(readFileSync(exclude, 'utf8')).toBe('# mine\n*.log\n/.summon-tmp/\n')
+    admit(h, { access: 'edit' })
+    await Bun.sleep(5)
+    expect(await runOnce(rdeps(h))).toBe(1)
+    expect(readFileSync(exclude, 'utf8')).toBe('# mine\n*.log\n/.summon-tmp/\n')
+  })
+  test('a watched git file too large to keep cannot be fingerprinted: the job ends failed, claude never starts, and the temp directory is gone', async () => {
+    const h = repoHome(); const root = join(h, 'Projects/x')
+    mkdirSync(join(root, '.git/hooks')); writeFileSync(join(root, '.git/hooks/huge'), Buffer.alloc(9 * 1024 * 1024))
+    const req = admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
+    expect(existsSync(fake.argvOut)).toBe(false)
+    expect(existsSync(dirOf(h))).toBe(false)
+  })
+  test('an edit job whose start cannot be ledgered is stopped, ends failed, and leaves no temp directory (the guard is closed on that path too)', async () => {
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    unlinkSync(paths.ledger); mkdirSync(paths.ledger) // from here every append fails (EISDIR)
+    await runOnce(rdeps(h))
+    expect(readState(paths, req.id)).toMatchObject({ status: 'failed', detail: 'runner error: EISDIR' })
+    expect(existsSync(dirOf(h))).toBe(false)
+  })
+  test('a folder whose .git/info is a symlink cannot be prepared: the job ends failed and nothing is written through the link', async () => {
+    const h = repoHome(); const outside = join(h, 'outside'); mkdirSync(outside)
+    symlinkSync(outside, join(h, 'Projects/x/.git/info'))
+    const req = admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
+    expect(existsSync(fake.argvOut)).toBe(false)
+    expect(readdirSync(outside)).toEqual([])
+    expect(existsSync(dirOf(h))).toBe(false)
+  })
+})
+
+describe('the fingerprint of the git files that can run code (design section 3, "Fingerprint")', () => {
+  /** An edit-folder repository with every watched file present (the attributes file only if asked), admitted as an edit job. */
+  function watched(opts: { al?: string; attributes?: boolean; access?: 'edit' | 'build'; timeout_s?: number } = {}) {
+    const access = opts.access ?? 'edit'
+    const h = repoHome(opts.al ?? (access === 'edit' ? EDIT_ALLOWLIST : BUILD_ALLOWLIST)); const root = join(h, 'Projects/x')
+    writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
+    mkdirSync(join(root, '.git/hooks'), { recursive: true }); writeFileSync(join(root, '.git/hooks/pre-commit.sample'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    chmodSync(join(root, '.git/hooks/pre-commit.sample'), 0o755)
+    writeFileSync(join(root, '.gitmodules'), '[submodule "a"]\n\tpath = a\n')
+    if (opts.attributes !== false) writeFileSync(join(root, '.gitattributes'), '*.png binary\n')
+    const req = admit(h, { access, ...(opts.timeout_s ? { timeout_s: opts.timeout_s } : {}) })
+    return { h, root, id: req.id, before: listing(root) }
+  }
+  /** What the watched files hold, by the name they are stored under: mode and contents. */
+  function listing(root: string) {
+    const out: Record<string, string> = {}
+    const walk = (rel: string) => {
+      for (const n of readdirSync(join(root, rel))) {
+        const r = rel ? `${rel}/${n}` : n
+        const lower = r.toLowerCase(); const st = lstatSync(join(root, r))
+        const inGit = lower === '.git' || lower.startsWith('.git/')
+        if (st.isDirectory()) { if (lower === '.git' || lower === '.git/hooks' || lower === '.git/info' || /^\.git\/(hooks|info)\//.test(lower)) walk(r); continue }
+        if (inGit && !(lower === '.git/config' || lower.startsWith('.git/hooks/') || lower.startsWith('.git/info/'))) continue
+        if (!inGit && lower !== '.gitattributes' && lower !== '.gitmodules') continue
+        out[r] = `${(st.mode & 0o777).toString(8)} ${st.isSymbolicLink() ? 'link' : readFileSync(join(root, r), 'utf8')}`
+      }
+    }
+    walk('')
+    return out
+  }
+  /** The runner writes the exclude line (and the file, if there was none) before it takes the baseline, so the baseline holds it. */
+  const withExclude = (before: Record<string, string>) => ({ '.git/info/exclude': '644 /.summon-tmp/\n', ...before })
+  const result = (h: string, id: string) => resultOf(h, id)
+  const firstLine = (h: string, id: string) => String(result(h, id).result_text).split('\n')[0]
+  const tamperLines = (h: string, id: string) => ledgerOf(h).filter((e) => e.id === id && e.event === 'job_tampered')
+  const PROMPT = 'echo: Read the README and summarise it.'
+
+  for (const [what, tampered, attributes] of [
+    ['config', '.git/config', true], ['hook', '.git/hooks/pre-commit', true], ['gitmodules', '.gitmodules', true], ['exclude', '.git/info/exclude', true],
+    ['chmod', '.git/hooks/pre-commit.sample', true], ['gitattributes', '.GitAttributes', false],
+  ] as const) {
+    test(`a job that changes ${what} is put back: the watched files are as they were, the result starts "tampered: ${tampered}", the ledger counts it`, async () => {
+      const { h, root, id, before } = watched({ attributes })
+      fake.setMode(`tamper:${what}`)
+      await runOnce(rdeps(h))
+      expect(listing(root)).toEqual(withExclude(before))
+      expect(readState(summonPaths(h), id)?.status).toBe('completed') // the restore does not change the job's status
+      expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ event: 'job_tampered', detail: 'tampered: 1 path(s)' })])
+      expect(JSON.stringify(ledgerOf(h))).not.toMatch(/\.git\/|gitattributes|gitmodules/i) // the paths stay in the 0600 result file
+      expect(ledgerOf(h).filter((e) => e.id === id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_tampered', 'job_end'])
+      expect(verifyLedger(summonPaths(h).ledger).ok).toBe(true)
+    })
+  }
+  test('the exclude line was in the baseline: a deleted .git/info/exclude comes back WITH the line', async () => {
+    const { h, root } = watched()
+    fake.setMode('tamper:exclude')
+    await runOnce(rdeps(h))
+    expect(readFileSync(join(root, '.git/info/exclude'), 'utf8')).toBe('/.summon-tmp/\n')
+  })
+  test('a .git/info swapped for a symlink to the job\'s temp directory is replaced by the real directory, with its file', async () => {
+    const { h, root, id, before } = watched()
+    fake.setMode('tamper:info-link')
+    await runOnce(rdeps(h))
+    expect(lstatSync(join(root, '.git/info')).isSymbolicLink()).toBe(false)
+    expect(listing(root)).toEqual(withExclude(before))
+    expect(firstLine(h, id)).toBe('tampered: .git/info, .git/info/exclude')
+  })
+  test('everything at once: five paths, one line, sorted, and the ledger counts five', async () => {
+    const { h, root, id, before } = watched({ attributes: false })
+    fake.setMode('tamper:all')
+    await runOnce(rdeps(h))
+    expect(listing(root)).toEqual(withExclude(before))
+    expect(firstLine(h, id)).toBe('tampered: .GitAttributes, .git/config, .git/hooks/pre-commit, .git/info/exclude, .gitmodules')
+    expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 5 path(s)' })])
+  })
+  test('an untouched job reports nothing: its result is the harness\'s text alone, and there is no tampered line in the ledger', async () => {
+    const { h, root, id, before } = watched()
+    fake.setMode('ok')
+    await runOnce(rdeps(h))
+    expect(listing(root)).toEqual(withExclude(before))
+    expect(result(h, id)).toMatchObject({ status: 'completed', result_text: PROMPT })
+    expect(tamperLines(h, id)).toEqual([])
+    expect(ledgerOf(h).filter((e) => e.id === id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_end'])
+  })
+  test('a job that ends by timeout is put right too, and still ends timed_out', async () => {
+    const { h, root, id, before } = watched({ timeout_s: 1 })
+    fake.setMode('tamper:config:slow')
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), id)).toMatchObject({ status: 'timed_out', detail: 'ran past 1s' })
+    expect(listing(root)).toEqual(withExclude(before))
+    expect(firstLine(h, id)).toBe('tampered: .git/config')
+    expect(result(h, id)).toMatchObject({ status: 'timed_out' })
+  }, 15_000)
+  test('a build job is put right too', async () => {
+    const { h, root, id, before } = watched({ access: 'build' })
+    fake.setMode('tamper:hook')
+    await runOnce(rdeps(h))
+    expect(listing(root)).toEqual(withExclude(before))
+    expect(firstLine(h, id)).toBe('tampered: .git/hooks/pre-commit')
+  })
+  test('a path with a newline in its name cannot make a second line: it is escaped', async () => {
+    const { h, id } = watched()
+    fake.setMode('tamper:newline-name')
+    await runOnce(rdeps(h))
+    expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/a\\x0ab', PROMPT])
+  })
+  test('a restore that cannot be done is said so on the second line, and counted in the ledger', async () => {
+    const { h, root, id } = watched()
+    fake.setMode('tamper:immutable')
+    try {
+      await runOnce(rdeps(h))
+      expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/config', 'not restored: .git/config', PROMPT])
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), 1 not restored' })])
+      expect(readState(summonPaths(h), id)?.status).toBe('completed')
+    } finally { Bun.spawnSync(['/usr/bin/chflags', 'nouchg', join(root, '.git/config')]) }
+  })
+  test('the listing is injected: the runner asks it for the folder, .git, hooks and info before and after the job, and for nothing else', async () => {
+    const { h, root } = watched(); const asked: string[] = []
+    fake.setMode('ok')
+    await runOnce(rdeps(h, { listDir: (d) => { asked.push(d.slice(root.length) || '/'); return readdirSync(d) } }))
+    expect(asked.sort()).toEqual(['/', '/', '/.git', '/.git', '/.git/hooks', '/.git/hooks', '/.git/info', '/.git/info'])
+  })
+  test('on a volume that ignores case, a repository stored as .Git/Config is still watched (the real listing, no injection)', async () => {
+    const { h, root, id } = watched()
+    if (!existsSync(join(root, '.GIT'))) return // a case-sensitive volume has no such spelling to follow
+    renameSync(join(root, '.git'), join(root, '.Git')); renameSync(join(root, '.Git/config'), join(root, '.Git/Config')); renameSync(join(root, '.Git/hooks'), join(root, '.Git/HOOKS'))
+    const before = listing(root)
+    fake.setMode('tamper:config')
+    await runOnce(rdeps(h))
+    expect(firstLine(h, id)).toBe('tampered: .Git/Config')
+    expect(Object.keys(listing(root)).sort()).toEqual(Object.keys({ ...before, '.Git/info/exclude': '' }).sort())
+    expect(readFileSync(join(root, '.Git/Config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+  })
+  test('a review job is not fingerprinted: it has no Bash tool, and its folder is not touched', async () => {
+    const h = targetHome(); fakeGitRoot(join(h, 'Projects/x')); const root = join(h, 'Projects/x')
+    writeFileSync(join(root, '.git/config'), 'a'); admit(h)
+    fake.setMode('tamper:config')
+    await runOnce(rdeps(h))
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('a[core]\n\tpager = evil\n') // nothing put back: review jobs are Phase 0's, byte for byte
+  })
+})
+
+describe('the process sweep (design section 3, "Process sweep", Ruling S3)', () => {
+  const SNAP: Partial<RunnerDeps> = { snapshotMs: 50 }
+  const noted = (): Record<string, number> => Object.fromEntries(readFileSync(fake.pidsOut, 'utf8').split('\n').filter(Boolean).map((l) => { const [k, p] = l.split(' '); return [k!, Number(p)] }))
+  const reap = () => { try { for (const p of Object.values(noted())) { try { process.kill(p, 'SIGKILL') } catch { /* gone */ } } } catch { /* nothing noted */ } }
+  afterEach(reap)
+  const ALL = 'group,setsid,reparent,cleared-env'
+  const goneIn = async (kids: Record<string, number>, want: string[]) => {
+    expect(Object.keys(kids).sort()).toEqual([...want].sort()) // the fake did leave them
+    for (const p of Object.values(kids)) expect(p).toBeGreaterThan(1)
+    await waitFor(() => Object.values(kids).every((p) => !alive(p)), 5000)
+  }
+
+  test('claude of an edit or build job runs in a process group of its own; a review job\'s does not (Phase 0, unchanged)', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); admit(h, { access: 'edit' })
+    await runOnce(rdeps(h))
+    expect(argvOf().pgid).toBe(argvOf().pid)
+    const h2 = repoHome(BUILD_ALLOWLIST); admit(h2, { access: 'build' })
+    await runOnce(rdeps(h2))
+    expect(argvOf().pgid).toBe(argvOf().pid)
+    const h3 = targetHome(); admit(h3)
+    await runOnce(rdeps(h3))
+    expect(argvOf().pgid).not.toBe(argvOf().pid)
+  })
+  test('after a normal end, a child in the group, a setsid child, a reparented child and one with a cleared environment are all gone', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    fake.setMode(`kids:${ALL}`)
+    await runOnce(rdeps(h, SNAP))
+    expect(readState(summonPaths(h), req.id)?.status).toBe('completed')
+    await goneIn(noted(), ['group', 'setsid', 'reparent', 'cleared-env'])
+  }, 20_000)
+  test('after a timeout, the same four are gone', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit', timeout_s: 1 })
+    fake.setMode(`kids:${ALL}:slow`)
+    await runOnce(rdeps(h, SNAP))
+    expect(readState(summonPaths(h), req.id)?.status).toBe('timed_out')
+    await goneIn(noted(), ['group', 'setsid', 'reparent', 'cleared-env'])
+  }, 20_000)
+  test('a build job\'s leftovers go too', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); admit(h, { access: 'build' })
+    fake.setMode(`kids:${ALL}`)
+    await runOnce(rdeps(h, SNAP))
+    await goneIn(noted(), ['group', 'setsid', 'reparent', 'cleared-env'])
+  }, 20_000)
+  test('the sweep comes before the fingerprint: a leftover that keeps rewriting .git/config is dead before the files are compared', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' }); const config = join(h, 'Projects/x/.git/config')
+    writeFileSync(config, '[core]\n\tbare = false\n')
+    fake.setMode('kids:writer')
+    await runOnce(rdeps(h, SNAP))
+    await Bun.sleep(300) // a writer still alive would have rewritten the restored file by now (and one alive during the comparison, before it)
+    expect(readFileSync(config, 'utf8')).toBe('[core]\n\tbare = false\n')
+    expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('tampered: .git/config')
+    await goneIn(noted(), ['writer'])
+  }, 20_000)
+  test('a process that is not the job\'s is left alone', async () => {
+    const bystander = Bun.spawn(['/bin/sleep', '600'], { stdout: 'ignore', stderr: 'ignore' })
+    try {
+      const h = repoHome(); admit(h, { access: 'edit' })
+      fake.setMode(`kids:${ALL}`)
+      await runOnce(rdeps(h, SNAP))
+      expect(alive(bystander.pid)).toBe(true)
+    } finally { bystander.kill('SIGKILL') }
+  }, 20_000)
+  test('RESIDUAL (accepted): a child that leaves its group and is reparented before any snapshot has seen it is not found; it stays sandboxed', async () => {
+    const h = repoHome(); admit(h, { access: 'edit' })
+    fake.setMode('kids:orphan')
+    await runOnce(rdeps(h, { snapshotMs: 60_000 })) // only the look at spawn and the last one before the sweep; the child lives between them
+    const orphan = noted().orphan!
+    try { expect(alive(orphan)).toBe(true) } finally { try { process.kill(orphan, 'SIGKILL') } catch { /* gone */ } }
+  }, 20_000)
+  test('with no process table to read (ps gives nothing) the group is still killed, and a child of its own session is not found', async () => {
+    const h = repoHome(); admit(h, { access: 'edit' })
+    fake.setMode('kids:group,setsid')
+    await runOnce(rdeps(h, { ...SNAP, ps: () => null }))
+    const kids = noted()
+    await waitFor(() => !alive(kids.group!), 5000)
+    expect(alive(kids.setsid!)).toBe(true) // the documented cost of a blind ps; the sandbox still confines it
+  }, 20_000)
+  test('review jobs are not swept: their leftovers are Phase 0\'s business (they have no Bash tool to leave any)', async () => {
+    const h = targetHome(); admit(h)
+    fake.setMode('kids:group')
+    await runOnce(rdeps(h, SNAP))
+    expect(alive(noted().group!)).toBe(true)
+  }, 20_000)
+})
+
+describe('every place that switches on Access (design section 6, runner): status, ledger and describeCommand', () => {
+  test('a build job through the real gate and runner: both ends\' ledger lines carry access build, and status and result answer for it', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const req = admit(h, { access: 'build' })
+    expect(ledgerOf(h).find((e) => e.event === 'admitted' && e.id === req.id)).toMatchObject({ access: 'build', cwd: '~/Projects/x' })
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'queued', handle: `nuance/${req.id}` })
+    await runOnce(rdeps(h))
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toEqual({ status: 'completed', handle: `nuance/${req.id}` })
+    expect(gateResult(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'completed', handle: `nuance/${req.id}`, result_text: `echo: ${req.prompt}` })
+    expect(readState(paths, req.id)?.access).toBe('build')
+  })
+  test('a refused build job answers refused with its reason, through status and through result, and the Air\'s own words come from the same answer', async () => {
+    const h = repoHome(DEFAULT_ALLOWLIST); const paths = summonPaths(h); const req = enqueue(h, { access: 'build' })
+    await runOnce(rdeps(h))
+    const said = { status: 'refused', reason: 'outside_allowlist', handle: `nuance/${req.id}`, detail: expect.stringContaining('build is not allowed') }
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject(said)
+    expect(gateResult(paths, 'nuance', req.id, Date.now())).toMatchObject(said)
+    expect(ledgerOf(h).find((e) => e.event === 'job_end' && e.id === req.id)).toMatchObject({ status: 'refused', reason: 'outside_allowlist' })
+  })
+  test('describeCommand names nothing of an access: a command that says --build, --edit or build shows its length and, for a word, only the word', () => {
+    expect(describeCommand('start --build')).toBe('len 13, first token "start"')
+    expect(describeCommand('--build --cwd ~/x')).toBe('len 17, first token not shown')
+    expect(describeCommand('build')).toBe('len 5, first token "build"')
   })
 })
 

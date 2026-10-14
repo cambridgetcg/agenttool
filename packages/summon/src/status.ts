@@ -7,9 +7,11 @@ export type RefusalReason = (typeof REFUSAL_REASONS)[number]
 export type BlockedReason = 'usage' | 'auth' | 'permission'
 export type JobStatus =
   | 'queued' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled' | 'timed_out' | 'expired' | 'unknown'
+  /** Phase 0.5: the runner re-ran admission when the job started, and the allowlist (or the folder) no longer allows it. Final. */
+  | 'refused'
 export type TransportStatus = 'unreachable' | 'auth_refused' | 'host_key_mismatch'
 export const TERMINAL: ReadonlySet<JobStatus> = new Set([
-  'completed', 'failed', 'blocked', 'cancelled', 'timed_out', 'expired', 'unknown',
+  'completed', 'failed', 'blocked', 'cancelled', 'timed_out', 'expired', 'unknown', 'refused',
 ])
 /**
  * The statuses an answer carries the heartbeat age for: a job still queued or running (a stale age shows a stalled one),

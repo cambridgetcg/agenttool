@@ -29,9 +29,10 @@ export type CliCommand =
 
 const USAGE = `usage:
   summon <device> inventory
-  summon <device> claude --model M [--effort E] [--provider P] [--job] --cwd '<path on target>' [--review|--edit] --prompt-file F|-
+  summon <device> claude --model M [--effort E] [--provider P] [--job] --cwd '<path on target>' [--review|--edit|--build] --prompt-file F|-
          [--timeout 15m] [--expires 15m] [--label L]
-  (--effort must be one the target's allowlist lists for that model; Phase 0 refuses --provider for claude)
+  (--effort must be one the target's allowlist lists for that model; Phase 0 refuses --provider for claude;
+   --review, --edit and --build are mutually exclusive, and review is the default)
   summon status|result|cancel <device>/smn_<id>`
 
 export function parseCli(argv: string[]): CliCommand | { error: string } {
@@ -45,14 +46,17 @@ export function parseCli(argv: string[]): CliCommand | { error: string } {
   if (!b || !(RUNTIMES as readonly string[]).includes(b)) return { error: USAGE }
   const flags: Record<string, string> = {}
   let access: Access = 'review'
+  let accessFlags = 0
   for (let i = 0; i < rest.length; i++) {
     const f = rest[i]!
-    if (f === '--review' || f === '--edit') { access = f === '--edit' ? 'edit' : 'review'; continue }
+    if (f === '--review' || f === '--edit' || f === '--build') { access = f.slice(2) as Access; accessFlags++; continue }
     if (f === '--job') continue // Phase 0's only mode, so naming it changes nothing (spec §2's command line names it)
     if (f === '--live') return { error: `--live: live sessions arrive in Phase 1; Phase 0 runs jobs only (--job)\n${USAGE}` }
     if (!['--model', '--provider', '--effort', '--cwd', '--prompt-file', '--timeout', '--expires', '--label'].includes(f) || rest[i + 1] === undefined) return { error: `unknown or incomplete flag ${f}\n${USAGE}` }
     flags[f] = rest[++i]!
   }
+  // One access, named once: a second flag (even the same one again) is a mistake to be corrected, not a choice for the CLI to make.
+  if (accessFlags > 1) return { error: `--review, --edit and --build are mutually exclusive: name one\n${USAGE}` }
   if (!flags['--model'] || !flags['--cwd'] || !flags['--prompt-file']) return { error: `--model, --cwd and --prompt-file are required\n${USAGE}` }
   // Checked as Nuance checks it, so the Air's `sent` entry and Nuance's `admitted` one record the same shape.
   if (flags['--effort'] !== undefined && !TOKEN_RE.test(flags['--effort'])) return { error: `--effort is a word such as low, medium or high\n${USAGE}` }

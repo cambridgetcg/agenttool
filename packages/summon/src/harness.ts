@@ -150,8 +150,7 @@ export function claudeInvocation(job: { id: string; model: string; effort?: stri
       `Edit(/${folder}/**/.git/**)`, `Write(/${folder}/**/.git/**)`, `Edit(/${folder}/**/.GIT/**)`, `Write(/${folder}/**/.GIT/**)`]
     args.push('--tools=Read,Write,Edit,Glob,Grep,Bash', `--allowedTools=${[...new Set(allow)].join(',')}`, `--disallowedTools=${deny.join(',')}`,
       `--settings=${SANDBOX_SETTINGS}`)
-    // TMPDIR names a folder only the runner creates (mode 0700, before spawn): Task 3. Until it lands, an edit or build job has no
-    // temp directory, so Tasks 2 and 3 land together and the Task 2 commit alone is never shipped (see the LANDING note in runner.ts).
+    // TMPDIR names a folder only the runner creates (mode 0700, before it spawns claude), and the runner removes it after the job.
     env = {
       ...env, PATH: path, TMPDIR: `${folder}/.summon-tmp/${job.id}`, ...gitConfigEnv(SANDBOXED_GIT_PAIRS),
       GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true', GIT_PAGER: 'cat', GIT_CEILING_DIRECTORIES: parent,

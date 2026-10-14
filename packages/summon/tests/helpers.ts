@@ -73,21 +73,38 @@ export function targetHome(allowlist: string = DEFAULT_ALLOWLIST): string {
   return h
 }
 
-export type FakeMode = 'ok' | 'warn' | 'slow' | 'auth' | 'flood' | 'denied' | 'badflag' | 'maxturns'
+/** The allowlist with the claude runtime allowed to read anywhere, which every edit or build folder needs. */
+export const FLAGGED_ALLOWLIST = DEFAULT_ALLOWLIST.replace('models: [{ model: sonnet }, { model: haiku }]', 'models: [{ model: sonnet }, { model: haiku }]\n    reads_anywhere: true')
+/** ~/Projects/x as an edit folder (and as a build folder with `bun test`, args allowed): the entry replaces the starter review folder. */
+export const EDIT_ALLOWLIST = FLAGGED_ALLOWLIST.replace('  - path: ~/Projects\n    access: review', '  - path: ~/Projects/x\n    access: edit')
+export const BUILD_ALLOWLIST = FLAGGED_ALLOWLIST.replace('  - path: ~/Projects\n    access: review',
+  '  - path: ~/Projects/x\n    access: build\n    commands:\n      - run: bun test\n        args: true\n      - run: bun run typecheck')
+
+/** targetHome() with ~/Projects/x a repository root (what an edit or build folder must be). */
+export function repoHome(allowlist: string = EDIT_ALLOWLIST): string {
+  const h = targetHome(allowlist)
+  fakeGitRoot(join(h, 'Projects/x'))
+  return h
+}
+
+export type FakeMode = 'ok' | 'warn' | 'slow' | 'auth' | 'flood' | 'denied' | 'badflag' | 'maxturns' | `tamper:${string}` | `kids:${string}`
 
 /**
  * A stand-in for the `claude` binary. The harness builds the child's env from scratch (no inherited PATH or FAKE_*),
  * so the fake runs through a bash wrapper that bakes in the absolute bun path, a mode file and an argv-out file.
- * The fake writes the argv and env it was given to `argvOut` as it starts, so a test can inspect what claude was handed.
+ * The fake writes the argv and env it was given to `argvOut` as it starts, so a test can inspect what claude was handed
+ * (and, for an edit or build job, what its TMPDIR and exclude file looked like by then). The `kids:` modes leave processes behind
+ * and note each one as `<kind> <pid>` in `pidsOut`; the `tamper:` modes change the git files the runner fingerprints.
  */
-export function makeFakeClaude(): { bin: string; argvOut: string; setMode(m: FakeMode): void } {
+export function makeFakeClaude(): { bin: string; argvOut: string; pidsOut: string; setMode(m: FakeMode): void } {
   const dir = trackTmp(mkdtempSync(join(tmpdir(), 'summon-fake-')))
   const bin = join(dir, 'fake-claude.sh')
   const modeFile = join(dir, 'mode')
   const argvOut = join(dir, 'argv-out.json')
+  const pidsOut = join(dir, 'pids-out.txt')
   writeFileSync(modeFile, 'ok')
-  writeFileSync(bin, `#!/bin/bash\nFAKE_MODE_FILE='${modeFile}' FAKE_ARGV_OUT='${argvOut}' exec '${process.execPath}' '${join(import.meta.dir, 'fake-claude.ts')}' "$@"\n`, { mode: 0o755 })
-  return { bin, argvOut, setMode: (m) => writeFileSync(modeFile, m) }
+  writeFileSync(bin, `#!/bin/bash\nFAKE_MODE_FILE='${modeFile}' FAKE_ARGV_OUT='${argvOut}' FAKE_PIDS_OUT='${pidsOut}' exec '${process.execPath}' '${join(import.meta.dir, 'fake-claude.ts')}' "$@"\n`, { mode: 0o755 })
+  return { bin, argvOut, pidsOut, setMode: (m) => writeFileSync(modeFile, m) }
 }
 
 /**

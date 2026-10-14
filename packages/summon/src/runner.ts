@@ -1,13 +1,16 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { AllowlistCommand } from './allowlist.ts'
+import { checkAdmission, loadAllowlist, type Admission } from './allowlist.ts'
+import { describePaths, restoreBaseline, takeBaseline, type Baseline, type ListDir } from './fingerprint.ts'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
+import { ensureExcluded, makeJobTmp, removeJobTmp } from './jobtmp.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
-import { CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
+import { ACCESSES, CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
 import { TERMINAL } from './status.ts'
+import { livePs, ProcessTracker, type PsSnapshot } from './sweep.ts'
 
 export interface RunnerDeps {
   paths: SummonPaths
@@ -23,8 +26,16 @@ export interface RunnerDeps {
   processStartTime(pid: number): string | null
   /** A monotonic clock for the timeout and heartbeat intervals; defaults to performance.now(). nowMs stamps what is written to disk. */
   monoMs?(): number
+  /** Edit and build jobs (Phase 0.5): how often the job's process tree is recorded. Defaults to 2 s. */
+  snapshotMs?: number
+  /** Edit and build jobs: the process table. Defaults to `/bin/ps -A -o pid=,ppid=,pgid=,lstart=`. */
+  ps?: PsSnapshot
+  /** Edit and build jobs: the listing the fingerprint finds the git files by, which must show names as stored. Defaults to readdirSync. */
+  listDir?: ListDir
 }
 
+const SNAPSHOT_MS = 2000
+const NOT_BUILT = 'could not start claude: the command could not be built for this folder'
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024
 /** Kept in memory only, to recognise a command line claude rejects; never written anywhere. */
 const STDERR_KEEP_BYTES = 4096
@@ -33,10 +44,14 @@ const iso = (ms: number) => new Date(ms).toISOString()
 
 const finish = (deps: RunnerDeps, s: JobState, o: Outcome, exitCode: number | null = null) => finishJob(deps.paths, deps.nowMs(), s, o, exitCode)
 
-/** Spawns claude. Bun reports some failures by throwing (ENOTDIR) and some later as an 'error' event with no pid (ENOENT). */
-function startChild(inv: Invocation, cwd: string): Promise<{ child: ChildProcess } | { error: string }> {
+/**
+ * Spawns claude. Bun reports some failures by throwing (ENOTDIR) and some later as an 'error' event with no pid (ENOENT).
+ * `ownGroup` (edit and build jobs) starts it as the leader of a process group and session of its own, so the end-of-job sweep can
+ * signal everything it left in that group at once. A review job is started exactly as in Phase 0.
+ */
+function startChild(inv: Invocation, cwd: string, ownGroup: boolean): Promise<{ child: ChildProcess } | { error: string }> {
   let child: ChildProcess
-  try { child = spawn(inv.bin, inv.args, { cwd, env: inv.env, stdio: ['pipe', 'pipe', 'pipe'] }) } catch (e) { return Promise.resolve({ error: errTag(e) }) }
+  try { child = spawn(inv.bin, inv.args, { cwd, env: inv.env, stdio: ['pipe', 'pipe', 'pipe'], ...(ownGroup ? { detached: true } : {}) }) } catch (e) { return Promise.resolve({ error: errTag(e) }) }
   if (child.pid !== undefined) {
     child.on('error', () => { /* a kill that did not land; the close event still decides */ })
     return Promise.resolve({ child })
@@ -53,6 +68,60 @@ function stoppedOutcome(stopped: Outcome, interpreted: Outcome): Outcome {
   return { result_text: interpreted.result_text, num_turns: interpreted.num_turns, cost_usd: interpreted.cost_usd, ...stopped }
 }
 
+/**
+ * Design section 2, "Admission result": the whole admission again, when the job starts, on what the job will run with (its state's
+ * runtime, model, effort, access and folder; the rest comes from the request the gate kept). A build entry removed while the job
+ * waited, a folder that stopped being a repository root or became nested, an allowlist that went missing or broke: each ends
+ * in a refusal. A folder that now resolves somewhere else than where the gate admitted it is refused too, so a swapped link never moves a job.
+ */
+function readmit(deps: RunnerDeps, s: JobState, req: SummonRequest): Admission {
+  const al = loadAllowlist(deps.paths.allowlist, deps.home)
+  if (!al.ok) {
+    return { ok: false, reason: 'outside_allowlist', detail: `allowlist: ${al.detail}`,
+      hint: `fix ~/.config/summon/allowlist.yaml on Nuance (${al.detail}); the installer's starter file is the reference` }
+  }
+  const adm = checkAdmission({ ...req, runtime: s.runtime, model: s.model, effort: s.effort, access: s.access, cwd: s.cwd_real }, al.allowlist, deps.home)
+  if (adm.ok && adm.cwdReal !== s.cwd_real) {
+    return { ok: false, reason: 'outside_allowlist', detail: 'the folder now resolves somewhere else than when the job was admitted',
+      hint: 'ask again: a new summon is admitted against the folder as it is now' }
+  }
+  return adm
+}
+
+/** What an edit or build job needs around it: its folder, its temp directory, the baseline of its git files, and (once it runs) its process tree. */
+interface Guard { cwd: string; id: string; baseline: Baseline; tracker?: ProcessTracker }
+
+/** Before claude is spawned: the temp directory, the exclude line (before the baseline), then the baseline. Throws, having cleaned up, if any of it cannot be done. */
+function prepareGuard(deps: RunnerDeps, cwd: string, id: string): Guard {
+  makeJobTmp(cwd, id)
+  try {
+    ensureExcluded(cwd)
+    return { cwd, id, baseline: takeBaseline(cwd, deps.listDir) }
+  } catch (e) { removeJobTmp(cwd, id); throw e }
+}
+
+/**
+ * When the job is over, in this order: sweep its processes (so nothing is left to change a file under us), compare the git files and
+ * put back what differs, remove the temp directory. Never throws.
+ */
+async function closeGuard(deps: RunnerDeps, g: Guard): Promise<{ changed: string[]; failed: string[] }> {
+  if (g.tracker) { try { await g.tracker.sweep() } catch { /* the sandbox still confines whatever was missed */ } }
+  let out: { changed: string[]; failed: string[] }
+  try { out = restoreBaseline(g.cwd, g.baseline, deps.listDir) } catch { out = { changed: [], failed: ['(the git files could not be compared)'] } }
+  removeJobTmp(g.cwd, g.id)
+  return out
+}
+
+/** The first line of the result says what was put back (and, on a second, what could not be); the ledger gets a fixed word and a count, never the paths. */
+function noteTamper(deps: RunnerDeps, id: string, o: Outcome, t: { changed: string[]; failed: string[] }): Outcome {
+  const paths = [...new Set([...t.changed, ...t.failed])]
+  const head = `tampered: ${describePaths(paths)}${t.failed.length > 0 ? `\nnot restored: ${describePaths(t.failed)}` : ''}`
+  try {
+    appendLedger(deps.paths.ledger, { event: 'job_tampered', id, detail: `tampered: ${paths.length} path(s)${t.failed.length > 0 ? `, ${t.failed.length} not restored` : ''}` }, deps.nowMs())
+  } catch { /* the result file carries it, and job_end is next */ }
+  return { ...o, result_text: o.result_text ? `${head}\n${o.result_text}` : head }
+}
+
 async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const dir = jobDir(deps.paths, id)
   const s = readState(deps.paths, id)
@@ -63,24 +132,30 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   if (existsSync(join(dir, 'cancel')) || deps.nowMs() > Date.parse(s.expires_at) + CLOCK_SKEW_MS) return finish(deps, s, notStartedOutcome(deps.paths, id))
   const req = readJson<SummonRequest>(join(dir, 'request.json'))
   if (!req || typeof req.prompt !== 'string') return finish(deps, s, { status: 'failed', detail: 'request file is missing or unreadable' })
+  // A state that names an access this runner does not know is damaged: it is never admitted, and never gains powers.
+  if (!(ACCESSES as readonly string[]).includes(s.access)) return finish(deps, s, { status: 'failed', detail: NOT_BUILT })
+  const adm = readmit(deps, s, req)
+  if (!adm.ok) return finish(deps, s, { status: 'refused', reason: adm.reason, detail: adm.detail, ...(adm.hint ? { result_text: adm.hint } : {}) })
   const bin = deps.claudeBin()
   if (!bin) return finish(deps, s, { status: 'failed', detail: 'claude is not installed on this Mac' })
   let inv: Invocation
-  // Phase 0.5: a build job runs the commands its folder entry lists, and only the admission at start can hand those over (it re-reads
-  // the allowlist). Design section 2 "Admission result" gives that re-run to the runner's start-up step, which is Task 3: it replaces
-  // this line with the start-time admission's `commands` (the same result that decides whether the job is refused), and rewrites the
-  // interim test in runner.test.ts that pins this state. Until then there are none, and the harness refuses a build job without
-  // commands, so a build job ends failed here rather than run with a list nobody checked. Review and edit jobs use none.
-  // LANDING: this is not shippable alone. The harness already points an edit or build job's TMPDIR at <cwdReal>/.summon-tmp/<job id>
-  // and nothing creates that directory until Task 3, so Tasks 2 and 3 land together: feat/summon-phase0 (the Air's summon) is never
-  // fast-forwarded to the Task 2 commit alone, and that commit is not bundled with prepare-pairing.ts.
-  const commands: AllowlistCommand[] = []
-  try { inv = claudeInvocation({ id, model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, commands, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
-    return finish(deps, s, { status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
+  try { inv = claudeInvocation({ id, model: s.model, effort: s.effort, access: s.access, cwdReal: adm.cwdReal, commands: adm.commands, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
+    return finish(deps, s, { status: 'failed', detail: NOT_BUILT })
   }
-  const started = await startChild(inv, s.cwd_real)
-  if ('error' in started) return finish(deps, s, { status: 'failed', detail: `could not start claude: ${started.error}` })
+  // Edit and build jobs run in the sandbox, in a folder they can write into: they get a temp directory, a baseline of the git files that
+  // could run code later, and (once spawned) a process group and a recorded process tree. Review jobs have none of it, as in Phase 0.
+  const sandboxed = s.access !== 'review'
+  let guard: Guard | null = null
+  if (sandboxed) {
+    try { guard = prepareGuard(deps, adm.cwdReal, id) } catch { return finish(deps, s, { status: 'failed', detail: 'could not start claude: the job folder could not be prepared' }) }
+  }
+  const started = await startChild(inv, adm.cwdReal, sandboxed)
+  if ('error' in started) {
+    if (guard) await closeGuard(deps, guard)
+    return finish(deps, s, { status: 'failed', detail: `could not start claude: ${started.error}` })
+  }
   const { child } = started
+  if (guard) guard.tracker = new ProcessTracker(child.pid!, deps.ps ?? livePs)
   const startedMs = deps.nowMs()
   // A job whose start cannot be recorded (state or ledger) is stopped at once: nothing runs on unrecorded.
   try {
@@ -89,6 +164,7 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     appendLedger(deps.paths.ledger, { event: 'job_start', id, status: 'running' }, startedMs)
   } catch (e) {
     try { child.kill('SIGKILL') } catch { /* gone */ }
+    if (guard) await closeGuard(deps, guard)
     throw e
   }
   // Keep the Mac awake exactly as long as the job (spec §2 step 3).
@@ -144,6 +220,10 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     if (existsSync(join(dir, 'cancel'))) stop({ status: 'cancelled', detail: 'cancelled by request' })
     if (m - startedMono > s.timeout_s * 1000) stop({ status: 'timed_out', detail: `ran past ${s.timeout_s}s` })
   }, deps.pollMs)
+  // The job's process tree, recorded now and then every 2 s while it runs (design section 3).
+  const tracker = guard?.tracker
+  tracker?.snapshot()
+  const snapTimer = tracker ? setInterval(() => tracker.snapshot(), deps.snapshotMs ?? SNAPSHOT_MS) : undefined
 
   // 'close' waits for the pipes; a grandchild holding one open must not hold the runner, so 'exit' gets a bounded wait.
   const code: number | null = await new Promise((resolve) => {
@@ -152,12 +232,17 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     child.once('exit', (c) => { exitTimer = setTimeout(() => resolve(c), deps.killGraceMs) })
   })
   clearInterval(timer)
+  clearInterval(snapTimer)
   clearTimeout(killTimer)
   child.stdout!.destroy(); child.stderr!.destroy()
+  // Whatever the job ended by: its processes first, then the git files, then the temp directory. The job's status is not changed by any of it.
+  const tamper = guard ? await closeGuard(deps, guard) : null
   if (buf) lines.push(buf)
   const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'), s.access)
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
-  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
+  let outcome = stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted
+  if (tamper && (tamper.changed.length > 0 || tamper.failed.length > 0)) outcome = noteTamper(deps, id, outcome, tamper)
+  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, outcome, code)
 }
 
 /** Last resort for a throw that escaped runJob: end the job failed (runner-authored detail) rather than leave it queued or running. */

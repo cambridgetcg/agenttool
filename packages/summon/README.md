@@ -4,7 +4,8 @@ Start a new agent session on another of Yu's Macs. Design: `docs/superpowers/spe
 
 Phase 0 (SSH at home): `summon nuance claude --model sonnet --cwd '~/Projects/x' --review --prompt-file task.md`,
 then `summon status|result nuance/smn_<id>`. `--job` may be given (it is Phase 0's only mode); `--live` is refused until
-Phase 1. Nuance runs `summon-gatekeeper` (SSH forced command) and
+Phase 1. `--edit` and `--build` ask for more than a review (see "Edit and build folders (Phase 0.5)" below); `--review`,
+`--edit` and `--build` are mutually exclusive, and a start names at most one. Nuance runs `summon-gatekeeper` (SSH forced command) and
 `summon-runner` (LaunchAgent in Yu's GUI session). Install: `bun scripts/prepare-pairing.ts`, AirDrop the bundle,
 `bash ~/Downloads/summon-nuance-bundle-<expiry>-<build id>/summon-install.sh` on Nuance, then `bun scripts/pin-nuance.ts`
 and the `summon` link on the Air.
@@ -88,7 +89,9 @@ folder sshd starts the gatekeeper in. The Air's `summon` ignores `.env` files in
 The drop-in is `010-`, not `100-`: sshd keeps the first value it reads, and macOS's own `100-macos.conf` would
 otherwise win. sshd is not reloaded: macOS starts it per connection, so the next login reads the file.
 
-**Rollback** (spec §7), each step independent:
+**Rollback** (spec §7), each step independent. **Remove every build entry from the allowlist before any rollback** (and
+before putting an older runner back): an older runner does not know `build`, so it refuses the whole allowlist over a build
+entry and then every job. That is definite, but total.
 
 1. On Nuance, unload and delete the runner: `launchctl bootout gui/$(id -u)/dev.summon.runner; rm ~/Library/LaunchAgents/dev.summon.runner.plist`
 2. Remove the one key line: `sed -i '' '/ summon-air$/d' ~/.ssh/authorized_keys` (no other line matches).
@@ -142,7 +145,7 @@ hint that says what is wrong.
   refused `runtime_unavailable` before the allowlist's admission check. A claude model entry may list `effort` values that
   `claude --help` accepts (`low`, `medium`, `high`, `xhigh`, `max`), and an admitted effort reaches claude as `--effort`.
 - **A review folder** gives the job Read, Glob and Grep, and Claude Code keeps those reads inside the folder.
-- **An edit folder also needs `reads_anywhere: true` on the claude runtime entry**, because an edit grant reaches well
+- **An edit or build folder also needs `reads_anywhere: true` on the claude runtime entry**, because an edit grant reaches well
   past its folder:
   1. The job can **read any file Yu can**, through git's own file options (`git commit -F <file>`,
      `git add --pathspec-from-file=<file>`), and return what it read in its result.
@@ -160,13 +163,129 @@ hint that says what is wrong.
 runtimes:
   - id: claude
     models: [{ model: sonnet }, { model: haiku }]
-    reads_anywhere: true      # needed by every edit folder below
+    reads_anywhere: true      # needed by every edit or build folder below
 folders:
   - path: ~/Projects
     access: review
   - path: ~/Projects/some-repo
     access: edit
 ```
+
+## Edit and build folders (Phase 0.5)
+
+`--edit` lets a job run `git add` and `git commit` in its folder. `--build` also lets it start the commands that the folder's
+**build entry** lists (`bun test`, say), so Nuance can do test-driven work. A job stops after 40 turns for review and 60 for
+edit and build; the job timeout (at most `job_timeout_max`, 24 h) is the time bound, as before.
+
+**The boundary is Claude Code's sandbox, not the command list.** The list says only what a job may *start*. A build job runs
+code from its folder as Yu's macOS user: its tests, its scripts, whatever the model wrote into the folder before running them.
+So every edit job and every build job runs under the sandbox, with no opt-out and no extra setting:
+
+- no network;
+- writes only inside the folder (`allowWrite` is empty), which is where the job's temp directory lives;
+- no local port binding and no Unix sockets;
+- `~/.ssh`, `~/.claude` and Summon's own `~/.config/summon`, `~/.local/share/summon` and `~/.local/state/summon` unreadable;
+- if the sandbox cannot start, the job fails rather than run unconfined.
+
+Review jobs have no `Bash` tool and no sandbox settings, as before.
+
+**A build entry** is edited only on Nuance, like every allowlist entry:
+
+```yaml
+runtimes:
+  - id: claude
+    models: [{ model: sonnet }, { model: haiku }]
+    reads_anywhere: true      # required: an edit or build job runs git, which can read any file Yu can
+folders:
+  - path: ~/Projects/collab-trial
+    access: build
+    commands:
+      - run: bun test
+        args: true            # optional; default false
+      - run: bun run typecheck
+```
+
+The parse rules. Any violation is a parse error, so the whole allowlist is refused (every summon is `outside_allowlist`), as
+for any malformed allowlist:
+
+- `commands` is required for `access: build` and refused on any other access; 1 to 16 entries, no `run` twice.
+- `run` is a program followed by up to seven plain words. The program is a lowercase name looked up on `PATH`, or an absolute
+  path. Each word starts with a letter or digit, so there are no flags, no quotes and no shell syntax; `:` and `=` are allowed
+  inside a word (`bun run test:unit`). No `..` path segment, no newline.
+- The program's basename is not one of `sh bash zsh dash ksh fish env xargs find git curl wget ssh scp sftp nc open osascript
+  sudo su launchctl python python3 perl ruby`.
+- `args` is the boolean `true` or `false`; the strings `"true"` and `"false"` are refused. With `false` the job may run the
+  command exactly as written; with `true` it may add anything after it. Either way the rule matches the command string, not
+  what the program then does: the sandbox is what confines that.
+- **`sandbox_write` and `local_binding` are not settings of this version.** An entry of any access that carries either one is a
+  parse error, so nobody believes a setting took effect that did not. Extra writable paths, local ports and Unix sockets are
+  deferred to Phase 1.
+- A build folder lies strictly inside `~` and is not, does not contain and does not lie within `~/.ssh`, `~/.claude`,
+  `~/.config`, `~/.local`, `~/Library`, Desktop, Documents, Downloads or iCloud Drive. This is checked on the entry as spelled,
+  and again on realpaths when a job is admitted.
+
+**Edit and build entries**, both:
+
+- The job's `cwd` is the entry itself (its realpath). A review job may still run anywhere inside an entry.
+- The folder is a **git repository root with a real `.git` directory** directly in it: not a gitfile, a worktree link, a symlink
+  or a parent's repository, and one that git itself would take (a `HEAD` naming a ref or an object, real `objects/` and `refs/`
+  directories, no `commondir`).
+- **No edit or build entry lies inside another edit or build entry.** Spelled paths are compared with `..` and doubled slashes
+  folded and case ignored; that is a parse error. A `~` spelling against an absolute one, and symlinks, are caught when a job is
+  admitted, on realpaths. A review entry may lie inside an edit or build entry.
+- A refusal names its reason and carries a hint holding the entry to add (for a build refusal, a complete entry with a
+  `commands:` line).
+
+**Absolute programs and `PATH`.** A job's `PATH` is the system directories. `run: /Users/yu/.bun/bin/bun test` appends
+`/Users/yu/.bun/bin` after them, so it never shadows `/usr/bin`; the rules for the bare form (`bun test`) are added only if `bun`,
+looked up on that final `PATH`, is the same program (same realpath). Otherwise only the absolute form is allowed. To run Bun
+projects on Nuance, install Bun there first (optional; Bun's own installer, `curl -fsSL https://bun.sh/install | bash`).
+
+**The runner checks again when the job starts.** The gate admits a request; the runner re-runs the whole admission when it takes
+the job and uses that result. A build entry removed while the job waited, a folder that has stopped being a repository root or has
+become nested, an allowlist that went missing or broke, or a folder that now resolves somewhere else: the job ends **`refused`**
+with the admission's reason (and its hint in the result text), and claude is never started. This holds for review jobs too.
+
+**What the runner does around an edit or build job.**
+
+1. **A temp directory.** The sandbox allows no temp root outside the folder, so the runner makes `<folder>/.summon-tmp/<job id>`
+   (mode 0700) and sets it as the job's `TMPDIR`. It adds the line `/.summon-tmp/` to `<folder>/.git/info/exclude` (creating
+   `.git/info` if needed, and doing nothing if the line is there), so git never sees the temp files. The line stays. When the job is
+   over, however it ended, the runner removes the job's directory, and `.summon-tmp` too if that leaves it empty. If `.git/info`
+   or the exclude file is a link, or the temp directory or the fingerprint cannot be made, the job ends `failed` before claude starts.
+2. **A fingerprint.** Inside the folder the sandbox cannot tell `src/` from `.git/config`, so the runner keeps a copy of the git
+   files that could run code later: `.git/config`, every file under `.git/hooks/` and `.git/info/`, and `.gitattributes` and
+   `.gitmodules` in the folder root (found by a case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are covered on
+   the Mac's volume). The copy is taken after the exclude line is written and is kept in the runner's memory, never on disk (a
+   `.git/config` can hold credentials). After the job it puts back any file whose contents or mode changed, removes any that
+   appeared and recreates any that vanished. **If it changed anything, the first line of the result is `tampered: <paths>`**
+   (a second line, `not restored: <paths>`, names what it could not put back), and the Nuance ledger gets one `job_tampered` line
+   with a count and no paths; the paths stay in the 0600 result file. The job's status is not changed by any of this.
+3. **A process sweep.** Claude is started as the leader of a process group of its own, and the runner records its process tree
+   every 2 s (`/bin/ps`, walked from the claude pid, keyed by pid *and* start time so a reused pid is never taken for a job
+   process). When the job ends, normally or by timeout, the runner kills the group, then every recorded process still alive with
+   the same start time (this catches a child that called `setsid`), and only then compares the fingerprint, restores and removes
+   the temp directory.
+
+**Known limits of Phase 0.5, accepted.**
+
+- A process that detaches and is reparented to launchd within one 2 s interval is not found. It stays sandboxed (no network,
+  writes only inside the folder). An environment marker cannot serve instead: `ps -E` shows no other process's environment on
+  this macOS.
+- A legitimate edit to `.git/config`, a hook, `.git/info/**`, `.gitattributes` or `.gitmodules` by a job is reverted and reported
+  as `tampered`. `.gitattributes` files below the folder root are not fingerprinted (the filter and textconv drivers they name are
+  defined in config files, and those are).
+- Test suites that need `/private/tmp` sockets or local ports (the collab-bridge suite is one) will not run as a build job here;
+  suites that respect `TMPDIR` will. A runner killed in the middle of a job leaves `.summon-tmp/<job id>` behind and puts nothing
+  back: the job ends `unknown`, so look at the folder before using it.
+- There is no spend bound yet (a `--max-budget-usd` is deferred): the job timeout and `starts_per_hour` are the bounds.
+
+**Updating an existing install.** Before the new runner goes on Nuance, check the allowlist already there: no edit entry may lie
+inside another edit entry (that is now a parse error, and a parse error refuses every job), and each edit entry should be a git
+repository root with a real `.git` directory (a job's `cwd` must be that root; otherwise edit jobs in that folder are refused until
+the entry is corrected). The installer never rewrites an edited allowlist. For a build folder, then: install Bun if Bun projects
+are wanted, add the folder entry above, and set `reads_anywhere: true` on the claude runtime if it is not set. A Nuance runner that
+has not been updated refuses `access: build` as `malformed`, which is a definite refusal.
 
 ## Known Phase 0 limits
 
