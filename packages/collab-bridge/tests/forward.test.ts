@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { CallRegistry } from '../src/air/calls.ts'
 import { readDevice, updateDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
-import { Forwarder, FORWARD_MESSAGES, type ForwardDeps } from '../src/air/forward.ts'
+import { Forwarder, FORWARD_MESSAGES, LedgerFailures, type ForwardDeps } from '../src/air/forward.ts'
 import { airGit } from '../src/air/git.ts'
 import { knockReportFor } from '../src/air/knocks.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
@@ -931,8 +931,35 @@ describe('ledger failures', () => {
     for (const r of value) expect(sc(r)).toMatchObject({ error: 'session_required', delivered: false }) // the call line and the result line fail each time
     expect(attempts).toBe(100)
     expect(hub).toEqual([
-      'collab-bridge hub: forwarder ledger append failed (1 so far): Error: ledger disk full ?\n',
-      'collab-bridge hub: forwarder ledger append failed (100 so far): Error: ledger disk full ?\n',
+      'collab-bridge hub: ledger append failed (Error; 1 so far)\n',
+      'collab-bridge hub: ledger append failed (Error; 100 so far)\n',
+    ])
+  }, T)
+
+  test('the line names the error code and never its message, which can carry a path; the 1st, 100th and 200th of 201 are logged', async () => {
+    const failures = new LedgerFailures()
+    const e = Object.assign(new Error("ENOSPC: no space left on device, open '/Users/someone/ledger.jsonl'"), { code: 'ENOSPC' })
+    const { hub } = await withStderr(async () => { for (let i = 0; i < 201; i++) failures.note(e) })
+    expect(hub).toEqual([
+      'collab-bridge hub: ledger append failed (ENOSPC; 1 so far)\n',
+      'collab-bridge hub: ledger append failed (ENOSPC; 100 so far)\n',
+      'collab-bridge hub: ledger append failed (ENOSPC; 200 so far)\n',
+    ])
+  })
+
+  test('the hub\'s other writers and the Forwarder count in one place: the 100th failure overall is the one that is logged', async () => {
+    const w = await world()
+    const s = w.seat()
+    const failures = new LedgerFailures()
+    const fwd = new Forwarder({ ...w.deps, ledger: () => { throw new Error('ledger disk full') }, ledgerFailures: failures })
+    const { hub } = await withStderr(async () => {
+      for (let i = 0; i < 98; i++) failures.note(new Error('a pool append')) // what the hub's own wrapper counts for the pool, dialer and mirror
+      const r = await fwd.call(s.ref, msg(s, 'collab_task_get', { task_id: 't0' })) // its call line is the 99th failure, its result line the 100th
+      expect(r).not.toBe('close')
+    })
+    expect(hub).toEqual([
+      'collab-bridge hub: ledger append failed (Error; 1 so far)\n',
+      'collab-bridge hub: ledger append failed (Error; 100 so far)\n',
     ])
   }, T)
 })

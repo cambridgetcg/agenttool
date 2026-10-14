@@ -556,7 +556,7 @@ describe('the lock itself', () => {
 })
 
 describe('an unwritable hub ledger', () => {
-  test('each failed append writes one stderr line naming the error code, all counted once in the forwarder\'s counter', async () => {
+  test('the first failed append writes one stderr line naming the error code, and the next ones in the run write none', async () => {
     const paths = airHome()
     mkdirSync(paths.ledger, { recursive: true, mode: 0o700 }) // a directory where the ledger file goes: every append fails
     const said: string[] = []
@@ -565,17 +565,12 @@ describe('an unwritable hub ledger', () => {
     try {
       const h = startHub(hubDeps(paths))
       await until(() => running(paths), 'the hub')
-      await until(() => said.join('').split('\n').filter((l) => l.includes('ledger append failed')).length >= 2, 'the hub_start append to fail')
-      expect(await stopHub(h)).toBe(0)
+      expect(await stopHub(h)).toBe(0) // the probe's append failed before the forwarder was built; hub_start's and hub_stop's after it
     } finally {
       process.stderr.write = write
     }
-    const failed = said.join('').split('\n')
-      .map((l) => /^collab-bridge hub: ledger append failed \(([A-Za-z0-9_]+); (\d+) so far\)$/.exec(l))
-      .filter((m): m is RegExpExecArray => m !== null)
-    expect(failed.length).toBeGreaterThanOrEqual(3) // the probe's, hub_start's and hub_stop's appends
-    expect(new Set(failed.map((m) => m[1])).size).toBe(1) // one error code, named on every line
-    expect(failed.map((m) => Number(m[2]))).toEqual(failed.map((_, i) => i + 1)) // one count across the start and the forwarder
+    const failed = said.join('').split('\n').filter((l) => l.includes('ledger append failed'))
+    expect(failed).toEqual(['collab-bridge hub: ledger append failed (EISDIR; 1 so far)']) // not one line per failed append
     expect(readHubStatus(paths)).toMatchObject({ word: 'stopped', runs: [{ clean: true }] })
   }, T)
 })

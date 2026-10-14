@@ -23,7 +23,7 @@ import { CallRegistry } from './calls.ts'
 import { probeCollabTools } from './children.ts'
 import { listDevices, type DeviceFile } from './devices.ts'
 import { DialPolicy, liveTcpProbe, runDialLoop, type TcpProbe } from './dialer.ts'
-import { Forwarder } from './forward.ts'
+import { Forwarder, LedgerFailures } from './forward.ts'
 import { airGit } from './git.ts'
 import { knockReportFor } from './knocks.ts'
 import { LineageStore } from './lineages.ts'
@@ -92,11 +92,6 @@ export function defaultHubDeps(env: Env): HubDeps {
 }
 
 const text = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/[^\x20-\x7e]/g, '?').slice(0, 200)
-/** The code of a failed ledger append, named as gate-main names it (the Task 24 rule): an uppercase code, else the error's name. */
-const errorCodeOf = (e: unknown): string => {
-  const c = (e as { code?: unknown } | null)?.code
-  return typeof c === 'string' && /^[A-Z0-9_]{1,40}$/.test(c) ? c : e instanceof Error ? e.name : 'unknown'
-}
 
 function privateDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
@@ -186,17 +181,14 @@ export async function runHub(deps: HubDeps): Promise<number> {
     }
 
     let finished = false
-    // A failed append never stops the hub, but it is never silent: it counts in the forwarder's one failure counter (an append
-    // before the forwarder exists, the probe's, is counted when the forwarder is built) and writes one stderr line naming the
-    // error code, as the gate does (the Task 24 rule).
-    let ledgerFailed: (() => number) | null = null
-    let failedBeforeForwarder = 0
+    // A failed append never stops the hub, but it is never silent: the one LedgerFailures counts it, whichever writer failed, and
+    // logs the 1st and every 100th (the Task 24 rule: the error code, never its message). The Forwarder is handed the append
+    // itself, which throws, and counts its own failures there; every other writer calls its ledger unguarded, so theirs is the
+    // wrapper, which catches.
+    const ledgerFailures = new LedgerFailures()
+    const append = (f: LedgerFields) => { if (!finished) appendLedger(paths.ledger, AIR_LEDGER_KEYS, f) }
     const ledger = (f: LedgerFields) => {
-      if (finished) return
-      try { appendLedger(paths.ledger, AIR_LEDGER_KEYS, f) } catch (e) {
-        const n = ledgerFailed ? ledgerFailed() : (failedBeforeForwarder += 1)
-        say(`ledger append failed (${errorCodeOf(e)}; ${n} so far)`)
-      }
+      try { append(f) } catch (e) { ledgerFailures.note(e) }
     }
 
     // (3) The policy table against what this Collab build really lists (§6.3: fail closed).
@@ -248,10 +240,8 @@ export async function runHub(deps: HubDeps): Promise<number> {
       mirrorDeps: liveMirrorDeps({ paths, git: airGit({ git: deps.git, home: paths.home }), ssh: deps.ssh, alias: 'collab-nuance' }),
       devices: () => current, devicePath: (d) => paths.deviceFile(d), seatTools: (d) => seatLists.get(d)?.list ?? [],
       knock: (sid, ms) => knockReportFor(sid, ms, { hostCli, journal: paths.sharedJournal, index: () => store.sessionIndex() }),
-      journal: paths.sharedJournal, ledger, mono: deps.mono, now: deps.now,
+      journal: paths.sharedJournal, ledger: append, ledgerFailures, mono: deps.mono, now: deps.now,
     })
-    ledgerFailed = () => forwarder.countLedgerFailure()
-    for (let i = 0; i < failedBeforeForwarder; i++) ledgerFailed()
     const attachments = new AttachTable()
 
     let fault!: (e: unknown) => void

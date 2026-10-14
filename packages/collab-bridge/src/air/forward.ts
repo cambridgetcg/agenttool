@@ -46,7 +46,9 @@ import type { MirrorHandle, MirrorRegistry } from './sync-points.ts'
 export interface ForwardDeps { pool: ChildPool; store: LineageStore; calls: CallRegistry; mirrors: MirrorRegistry; mirrorDeps: MirrorDeps;
   devices(): Map<string, DeviceFile>; devicePath(device: string): string; seatTools(device: string): ToolDef[];
   knock(sessionId: string, timeoutMs: number): Promise<HubKnockReportMsg>; journal: string;
-  ledger(f: LedgerFields): void; mono(): number; now(): Date }
+  ledger(f: LedgerFields): void; mono(): number; now(): Date
+  /** The hub's one count of failed ledger appends, shared with its other writers (Task 52); a Forwarder built without one counts alone. */
+  ledgerFailures?: LedgerFailures }
 
 const START = 'collab_session_start'
 const END = 'collab_session_end'
@@ -84,6 +86,27 @@ const causeOf = (e: unknown): string => (e instanceof Error ? `${e.name}: ${e.me
 function logLine(line: string): void {
   try { process.stderr.write(`collab-bridge hub: ${line}\n`) } catch { /* the ledger line or the answer that follows still stands */ }
 }
+/** A failure's code (ENOSPC) or class name, never its message: a message can carry a path, and a log line is no place for one (the gate's rule, Task 24). */
+const errorCodeOf = (e: unknown): string => {
+  const c = (e as { code?: unknown } | null)?.code
+  return typeof c === 'string' && /^[A-Z0-9_]{1,40}$/.test(c) ? c : e instanceof Error ? e.name : 'unknown'
+}
+
+/**
+ * The one count of failed ledger appends in a hub run, whichever writer failed: the Forwarder's own lines, and the pool, dialer,
+ * mirror and start-up lines that the hub's wrapper catches (Task 52). A failed append never fails the work it records, but a
+ * ledger that stopped writing is not silent: the 1st and every 100th failure is one line in hub.log, so a ledger that stays
+ * broken costs one line in a hundred writes and not one per write.
+ */
+export class LedgerFailures {
+  private count = 0
+
+  /** Counts one failed append and logs it when it is the 1st or the 100th, 200th and so on. Never throws. */
+  note(e: unknown): void {
+    this.count += 1
+    if (this.count === 1 || this.count % 100 === 0) logLine(`ledger append failed (${errorCodeOf(e)}; ${this.count} so far)`)
+  }
+}
 
 export class Forwarder implements SeatHandlers {
   private readonly inflight = new Map<string, number>()
@@ -94,9 +117,10 @@ export class Forwarder implements SeatHandlers {
   private readonly knockGap: MinInterval
   /** Lineages with a collab_session_end in flight: from the moment it is decided until its answer is settled (item 8). */
   private readonly ending = new Set<string>()
-  private ledgerFailures = 0
+  private readonly failures: LedgerFailures
 
   constructor(private readonly deps: ForwardDeps) {
+    this.failures = deps.ledgerFailures ?? new LedgerFailures()
     this.nextGap = new MinInterval(RATES.nextMinMs, () => deps.mono())
     this.verifyGap = new MinInterval(RATES.journalVerifyMinMs, () => deps.mono())
     this.knockGap = new MinInterval(RATES.knocksMinMs, () => deps.mono())
@@ -389,26 +413,16 @@ export class Forwarder implements SeatHandlers {
     } catch { /* a cause that cannot be printed changes nothing the agent is told */ }
   }
 
-  /** Counts one failed ledger append, whichever writer of the hub failed it (Task 52), and returns the running count. */
-  countLedgerFailure(): number {
-    this.ledgerFailures += 1
-    return this.ledgerFailures
-  }
-
   /**
    * The call, forward and result lines are the audit evidence (R18), but a failed append does not fail the call: it is
-   * counted, and the first and every 100th failure is logged, so a ledger that stopped writing is not silent.
+   * counted with the hub's other ledger failures, and the first and every 100th is logged, so a ledger that stopped writing
+   * is not silent.
    */
   private ledger(f: LedgerFields): void {
     try {
       this.deps.ledger(f)
     } catch (e) {
-      const n = this.countLedgerFailure()
-      if (n === 1 || n % 100 === 0) {
-        try {
-          logLine(`forwarder ledger append failed (${n} so far): ${printable(causeOf(e))}`)
-        } catch { /* nothing more can be said */ }
-      }
+      this.failures.note(e)
     }
   }
 }
