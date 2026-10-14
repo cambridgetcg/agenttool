@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CallRegistry } from '../src/air/calls.ts'
 import { readDevice, updateDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
-import { Forwarder, type ForwardDeps } from '../src/air/forward.ts'
+import { Forwarder, FORWARD_MESSAGES, type ForwardDeps } from '../src/air/forward.ts'
 import { airGit } from '../src/air/git.ts'
 import { knockReportFor } from '../src/air/knocks.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
@@ -724,5 +724,425 @@ describe('knock reads (T9)', () => {
     expect(k.started()).toBe(1)
     k.answer()
     expect(await r).toEqual(ONE)
+  }, T)
+})
+
+// ---- Task 51 fix round 1: the start path's deadline, failures after a write, ledger failures, lineage races, access refusals ----
+
+/** Everything written to process.stderr while `run` runs (kept out of the test output), and the hub's own lines. */
+async function withStderr<V>(run: () => Promise<V>): Promise<{ value: V; hub: string[] }> {
+  const written: string[] = []
+  const spy = spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+    written.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk))
+    return true
+  }) as typeof process.stderr.write)
+  try {
+    const value = await run()
+    return { value, hub: written.filter((l) => l.startsWith('collab-bridge hub: ')) }
+  } finally {
+    spy.mockRestore()
+  }
+}
+
+/** The argv of every git command the Forwarder runs from now on (the mirror reads of a start). */
+function recordGit(w: World): string[][] {
+  const runs: string[][] = []
+  const real = w.mirrorDeps.git
+  w.mirrorDeps.git = { path: real.path, records: (a, o) => real.records(a, o), run: (a, o) => { runs.push(a); return real.run(a, o) } }
+  return runs
+}
+
+/** What a refused call leaves behind: the agent's definite "not sent", and no child, no forward line, no journal. */
+function expectNotSent(w: World, r: ResultMsg, error: string, message: string): void {
+  expect(r.outcome).toBe('error')
+  expect(sc(r)).toMatchObject({ error, delivered: false, message })
+  expect(lines(w, 'child_start')).toEqual([])
+  expect(lines(w, 'forward')).toEqual([])
+  expect(existsSync(w.paths.sharedJournal)).toBe(false) // no child ever opened the shared journal
+}
+
+const START_ARGS = { actor: 'claude (Nuance account)', role: 'implementer' }
+const resultsOf = (w: World, callRef: string) => lines(w, 'result').filter((l) => l.call_ref === callRef).map((l) => [l.outcome, l.code])
+
+describe('the start path and its deadline', () => {
+  /** A session_start (60 s) queued behind the mirror lock, as another lineage's capture would hold it; the clock moves `waitedMs` before the lock frees. */
+  async function heldStart(w: World, s: Seat, waitedMs: number): Promise<{ r: ResultMsg; callRef: string }> {
+    let release: (() => void) | undefined
+    const held = w.mirrors.get('nuance', 'macair', w.spec.mirrorId)!.lock.run(() => new Promise<void>((res) => { release = res }))
+    await until(() => release !== undefined, 'the test to hold the mirror lock')
+    const m = msg(s, 'collab_session_start', START_ARGS)
+    const pending = w.fwd.call(s.ref, m)
+    w.clock.mono += waitedMs
+    release!()
+    await held
+    const r = await pending
+    if (r === 'close') throw new Error('collab_session_start: the stream was closed')
+    return { r, callRef: m.call_ref }
+  }
+
+  test('a session_start held on the mirror lock until too little of its timeout remains is refused deadline_passed before any git read or child', async () => {
+    const w = await world()
+    const s = w.seat()
+    const git = recordGit(w)
+    const { r, callRef } = await heldStart(w, s, 59_500)
+    expect(r.outcome).toBe('error')
+    expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false, reason: 'deadline_passed' })
+    expect(git).toEqual([])
+    expect(lines(w, 'child_start')).toEqual([])
+    expect(existsSync(w.paths.sharedJournal)).toBe(false)
+    expect(w.store.get(s.ref.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(lines(w, 'forward')).toEqual([])
+    expect(resultsOf(w, callRef)).toEqual([['refused', 'deadline_passed']])
+  }, T)
+
+  test('a session_start held on the mirror lock with more than a second left starts the session', async () => {
+    const w = await world()
+    const s = w.seat()
+    const { r, callRef } = await heldStart(w, s, 58_000)
+    expect(r.outcome).toBe('ok')
+    expect(w.store.get(s.ref.lineage)).toMatchObject({ state: 'live', pending_start: null })
+    expect(lines(w, 'forward').filter((l) => l.call_ref === callRef).length).toBe(1)
+  }, T)
+
+  test('a startSession that refuses after the clock passed the deadline is hub_away with reason and ledger code deadline_passed, keeping the pool\'s message', async () => {
+    const w = await world()
+    const s = w.seat()
+    const real = w.pool.startSession.bind(w.pool)
+    w.pool.startSession = (lineage, args, callRef, nonce, workspaceId, notAfterMono) => {
+      w.clock.mono += 60_000 // the start chain, a drain or a reconcile took the whole timeout
+      return real(lineage, args, callRef, nonce, workspaceId, notAfterMono)
+    }
+    const m = msg(s, 'collab_session_start', START_ARGS)
+    const r = await w.fwd.call(s.ref, m)
+    if (r === 'close') throw new Error('closed')
+    expect(r.outcome).toBe('error')
+    expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false, reason: 'deadline_passed' })
+    expect(sc(r).message).toStartWith('This collab_session_start waited on the Air past its deadline') // the pool's own words
+    expect(resultsOf(w, m.call_ref)).toEqual([['refused', 'deadline_passed']])
+    expect(lines(w, 'forward')).toEqual([])
+    expect(w.store.get(s.ref.lineage)!.pending_start).toBeNull()
+  }, T)
+
+  test('a hub_away from startSession with time left keeps its own cause and ledger code', async () => {
+    const w = await world()
+    const s = w.seat()
+    w.pool.startSession = async () => ({ refuse: 'hub_away', message: 'The shared Collab journal on the Air failed verification; nothing was sent.' })
+    const m = msg(s, 'collab_session_start', START_ARGS)
+    const r = await w.fwd.call(s.ref, m)
+    if (r === 'close') throw new Error('closed')
+    expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false })
+    expect(sc(r).reason).toBeUndefined()
+    expect(resultsOf(w, m.call_ref)).toEqual([['refused', 'hub_away']])
+  }, T)
+})
+
+describe('a failure after the request may have reached Collab is hub_outcome_unknown', () => {
+  test('a pool.startSession that throws is unknown, ledgered forwarder_fault without argument text, and logged', async () => {
+    const w = await world()
+    const s = w.seat()
+    w.pool.startSession = async () => { throw new Error('start blew up é') }
+    const m = msg(s, 'collab_session_start', { actor: 'ACTOR-SECRET-9', role: 'ROLE-SECRET-8' })
+    const { value: r, hub } = await withStderr(() => w.fwd.call(s.ref, m))
+    if (r === 'close') throw new Error('closed')
+    expect(r.outcome).toBe('unknown')
+    expect(sc(r)).toMatchObject({ error: 'hub_outcome_unknown', delivered: 'unknown', retry: 'never automatic' })
+    expect(resultsOf(w, m.call_ref)).toEqual([['unknown', 'forwarder_fault']])
+    expect(hub).toEqual(['collab-bridge hub: forward nuance/macair: Error: start blew up ?\n'])
+    for (const text of [readFileSync(w.paths.ledger, 'utf8'), hub.join('')]) {
+      expect(text).not.toContain('ACTOR-SECRET-9')
+      expect(text).not.toContain('ROLE-SECRET-8')
+    }
+  }, T)
+
+  test('a child call that throws is unknown on a plain forward, and the in-flight count is released', async () => {
+    const f = fakeWorld()
+    const handOut = f.pool.childFor.bind(f.pool)
+    let throwing = 5
+    f.pool.childFor = async (lineage, opts) => {
+      const got = await handOut(lineage, opts)
+      if (got.ok) {
+        const real = got.child.call.bind(got.child)
+        got.child.call = async (name, args) => {
+          if (throwing > 0) { throwing -= 1; throw new Error('pipe exploded') }
+          return real(name, args)
+        }
+      }
+      return got
+    }
+    const { value, hub } = await withStderr(async () => {
+      const out: ResultMsg[] = []
+      for (let i = 0; i < 5; i++) out.push(await fcall(f, 'collab_task_get', { task_id: `t${i}` }))
+      return out
+    })
+    for (const r of value) expect(sc(r)).toMatchObject({ error: 'hub_outcome_unknown', delivered: 'unknown' })
+    expect(hub).toEqual(Array.from({ length: 5 }, () => 'collab-bridge hub: forward nuance/macair: Error: pipe exploded\n'))
+    expect(readLedger(f.paths.ledger).filter((l) => l.event === 'result').map((l) => [l.outcome, l.code])).toEqual(Array.from({ length: 5 }, () => ['unknown', 'forwarder_fault']))
+    expect((await fcall(f, 'collab_task_get', { task_id: 'after' })).outcome).toBe('ok') // five throws did not leave five calls "in flight"
+  }, T)
+
+  test('a pool.park that throws after Collab answered cursor_reset_required still gives the agent Collab\'s answer', async () => {
+    const w = await world()
+    const s = w.seat()
+    await start(w, s)
+    w.pool.park = () => { throw new Error('lineages.json write failed') }
+    const m = msg(s, 'collab_next', { known_cursor: { epoch_id: 'epoch_x', sequence: 99, hash: 'a'.repeat(64) } })
+    const { value: r, hub } = await withStderr(() => w.fwd.call(s.ref, m))
+    if (r === 'close') throw new Error('closed')
+    expect(r.outcome).toBe('error')
+    expect(codeOf(r)).toBe('cursor_reset_required')
+    expect(resultsOf(w, m.call_ref)).toEqual([['error', 'cursor_reset_required']])
+    expect(hub).toEqual(['collab-bridge hub: forward nuance/macair: Error: lineages.json write failed\n'])
+  }, T)
+
+  test('a pool.sessionEnded that throws after Collab ended the session still gives the agent Collab\'s answer and leaves the lineage live', async () => {
+    const w = await world()
+    const s = w.seat()
+    await start(w, s)
+    w.pool.sessionEnded = () => { throw new Error('lineages.json write failed') }
+    const { value: r, hub } = await withStderr(() => call(w, s, 'collab_session_end', { reason: 'done' }))
+    expect(r.outcome).toBe('ok')
+    expect(hub).toEqual(['collab-bridge hub: forward nuance/macair: Error: lineages.json write failed\n'])
+    expect(w.store.get(s.ref.lineage)!.state).toBe('live') // exactly as a failed write leaves it today
+  }, T)
+
+  test('a binding record that throws after Collab started the session still gives the agent the session', async () => {
+    const w = await world()
+    const s = w.seat()
+    w.mirrors.set = () => { throw new Error('registry write failed') }
+    const { value: r, hub } = await withStderr(() => start(w, s))
+    expect(r.outcome).toBe('ok')
+    expect(w.store.get(s.ref.lineage)).toMatchObject({ state: 'live', session_id: sc(r).session.id })
+    expect(hub).toEqual(['collab-bridge hub: forward nuance/macair: Error: registry write failed\n'])
+    expect(lines(w, 'forward').length).toBe(1)
+  }, T)
+})
+
+describe('ledger failures', () => {
+  test('a ledger that throws never fails a call; the failures are counted and logged for the 1st and every 100th', async () => {
+    const w = await world()
+    const s = w.seat()
+    let attempts = 0
+    w.deps.ledger = () => { attempts += 1; throw new Error('ledger disk full é') }
+    const { value, hub } = await withStderr(async () => {
+      const out: ResultMsg[] = []
+      for (let i = 0; i < 50; i++) out.push(await call(w, s, 'collab_task_get', { task_id: `t${i}` }))
+      return out
+    })
+    for (const r of value) expect(sc(r)).toMatchObject({ error: 'session_required', delivered: false }) // the call line and the result line fail each time
+    expect(attempts).toBe(100)
+    expect(hub).toEqual([
+      'collab-bridge hub: forwarder ledger append failed (1 so far): Error: ledger disk full ?\n',
+      'collab-bridge hub: forwarder ledger append failed (100 so far): Error: ledger disk full ?\n',
+    ])
+  }, T)
+})
+
+describe('lineage state across long waits', () => {
+  test('two concurrent session_starts on one pending lineage start exactly one session; the second is answered by the live child', async () => {
+    const w = await world()
+    const s = w.seat()
+    let startSessions = 0
+    const real = w.pool.startSession.bind(w.pool)
+    w.pool.startSession = (lineage, args, callRef, nonce, workspaceId, notAfterMono) => {
+      startSessions += 1
+      return real(lineage, args, callRef, nonce, workspaceId, notAfterMono)
+    }
+    const [a, b] = await Promise.all([call(w, s, 'collab_session_start', START_ARGS), call(w, s, 'collab_session_start', START_ARGS)])
+    expect([a.outcome, b.outcome].sort()).toEqual(['error', 'ok'])
+    expect(codeOf(a.outcome === 'error' ? a : b)).toBe('session_already_bound')
+    expect(startSessions).toBe(1) // the second one saw the lineage live under the lock and never reached the start chain
+    const active = (await activeSessions(w)).filter((x) => roleNonce(x.role ?? '', 'nuance', 'macair') !== null)
+    expect(active.map((x) => x.id)).toEqual([sc(a.outcome === 'ok' ? a : b).session.id])
+    expect(lines(w, 'child_start').map((l) => l.code)).toEqual(['fresh'])
+    expect(lines(w, 'forward').length).toBe(2)
+  }, T)
+
+  test('a call that arrives while collab_session_end is in flight is refused hub_away and never sent; the lineage then ends', async () => {
+    const f = fakeWorld({ tools: { collab_session_end: { kind: 'wait_file', file: 'release' } } })
+    const ending = fcall(f, 'collab_session_end', { reason: 'done' })
+    // Without the barrier the second end would wait inside the child too; this frees it so that the assertions fail, not the test's clock.
+    const safety = setTimeout(() => f.release(), 5_000)
+    try {
+      await until(() => f.calls().length === 1, 'the end to be inside the child')
+      const next = await fcall(f, 'collab_next')
+      const again = await fcall(f, 'collab_session_end', { reason: 'again' })
+      const restart = await fcall(f, 'collab_session_start', { actor: 'claude (Nuance account)' })
+      for (const r of [next, again, restart]) {
+        expect(r.outcome).toBe('error')
+        expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false, message: FORWARD_MESSAGES.ending })
+      }
+      expect(f.calls()).toEqual(['collab_session_end']) // nothing else reached the child
+    } finally {
+      clearTimeout(safety)
+      f.release() // a failed assertion must not leave the end held inside the child
+    }
+    expect((await ending).outcome).toBe('ok')
+    expect(f.store.get(f.seat.ref.lineage)!.state).toBe('ended')
+    f.clock.mono += 1_000
+    expect(sc(await fcall(f, 'collab_next'))).toMatchObject({ error: 'seat_session_ended', delivered: false })
+    expect(f.calls()).toEqual(['collab_session_end'])
+  }, T)
+
+  /** Holds the first call that gets a child from the pool, after childFor answered: it has passed the arrival check but not yet its write. */
+  function holdFirstChildFor(f: FakeWorld): { taken(): boolean; letGo(): void } {
+    const handOut = f.pool.childFor.bind(f.pool)
+    let letGo!: () => void
+    let hold: Promise<void> | null = new Promise<void>((r) => { letGo = r })
+    let taken = false
+    f.pool.childFor = async (lineage, opts) => {
+      const got = await handOut(lineage, opts)
+      const h = hold
+      hold = null
+      if (h) { taken = true; await h }
+      return got
+    }
+    return { taken: () => taken, letGo: () => letGo() }
+  }
+
+  for (const [name, args] of [['collab_next', {}], ['collab_session_start', { actor: 'claude (Nuance account)' }]] as const) {
+    test(`a ${name} that passed the arrival check but reached its write after the end was written is not sent either`, async () => {
+      const f = fakeWorld({ tools: { collab_session_end: { kind: 'wait_file', file: 'release' } } })
+      const held = holdFirstChildFor(f)
+      const early = fcall(f, name, args)
+      await until(held.taken, `the ${name} to be held inside the hub`)
+      const ending = fcall(f, 'collab_session_end', { reason: 'done' })
+      try {
+        await until(() => f.calls().length === 1, 'the end to be inside the child')
+        held.letGo()
+        const r = await early
+        expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false, message: FORWARD_MESSAGES.ending })
+        expect(f.calls()).toEqual(['collab_session_end'])
+      } finally {
+        held.letGo()
+        f.release()
+      }
+      expect((await ending).outcome).toBe('ok')
+    }, T)
+  }
+
+  test('when the end answers an error the barrier is gone and the lineage is served normally', async () => {
+    const f = fakeWorld({ tools: { collab_session_end: { kind: 'error' } } })
+    const handOut = f.pool.childFor.bind(f.pool)
+    let letGo!: () => void
+    let hold: Promise<void> | null = null
+    f.pool.childFor = async (lineage, opts) => {
+      const h = hold // only the end takes the hold: it is set just before the end is sent
+      hold = null
+      if (h) await h
+      return handOut(lineage, opts)
+    }
+    hold = new Promise<void>((r) => { letGo = r })
+    const ending = fcall(f, 'collab_session_end', { reason: 'done' })
+    const meanwhile = await fcall(f, 'collab_task_get', { task_id: 't0' })
+    expect(sc(meanwhile)).toMatchObject({ error: 'hub_away', delivered: false, message: FORWARD_MESSAGES.ending })
+    expect(f.calls()).toEqual([])
+    letGo()
+    const r = await ending
+    expect(r.outcome).toBe('error')
+    expect(codeOf(r)).toBe('fake_error')
+    expect(f.store.get(f.seat.ref.lineage)!.state).toBe('live')
+    expect((await fcall(f, 'collab_task_get', { task_id: 't0' })).outcome).toBe('ok')
+    expect(f.calls()).toEqual(['collab_session_end', 'collab_task_get'])
+  }, T)
+})
+
+describe('access and refusal branches', () => {
+  test('a call on a lineage the hub does not know is hub_away and nothing is sent', async () => {
+    const w = await world()
+    const s = w.seat()
+    const ghost: Seat = { ref: { ...s.ref, lineage: newLineage() }, seq: 0 }
+    expectNotSent(w, await call(w, ghost, 'collab_next'), 'hub_away', FORWARD_MESSAGES.noLineage)
+  }, T)
+
+  test('a device that is not paired is hub_away and nothing is sent', async () => {
+    const missing = await world()
+    missing.deps.devices().delete('nuance')
+    expectNotSent(missing, await call(missing, missing.seat(), 'collab_next'), 'hub_away', FORWARD_MESSAGES.notPaired)
+    const unpaired = await world()
+    unpaired.deps.devices().set('nuance', { ...unpaired.device, state: 'unpaired', seat_public: null })
+    expectNotSent(unpaired, await call(unpaired, unpaired.seat(), 'collab_session_start', START_ARGS), 'hub_away', FORWARD_MESSAGES.notPaired)
+  }, T)
+
+  test('a folder that is not a share is folder_not_shared and nothing is sent', async () => {
+    const w = await world()
+    const s = w.seat()
+    const elsewhere: Seat = { ref: { ...s.ref, folder: join(w.nuance, 'Projects', 'elsewhere') }, seq: 0 }
+    expectNotSent(w, await call(w, elsewhere, 'collab_session_start', START_ARGS), 'folder_not_shared', FORWARD_MESSAGES.noShare)
+  }, T)
+
+  test('a share whose mirror_id differs from the lineage\'s is folder_not_shared and nothing is sent', async () => {
+    const w = await world()
+    const s = w.seat()
+    w.store.upsert({ ...w.store.get(s.ref.lineage)!, mirror_id: 'f'.repeat(16) })
+    expectNotSent(w, await call(w, s, 'collab_session_start', START_ARGS), 'folder_not_shared', FORWARD_MESSAGES.noShare)
+  }, T)
+
+  test('a retired lineage is seat_session_ended for every call, a session_start included, and nothing is sent', async () => {
+    const w = await world()
+    const s = w.seat()
+    w.store.upsert({ ...w.store.get(s.ref.lineage)!, state: 'retired' })
+    expectNotSent(w, await call(w, s, 'collab_next'), 'seat_session_ended', FORWARD_MESSAGES.ended)
+    expectNotSent(w, await call(w, s, 'collab_session_start', START_ARGS), 'seat_session_ended', FORWARD_MESSAGES.ended)
+  }, T)
+
+  test('a session_start on a live lineage whose credential vanished starts a new session; the old one is a past session (P53)', async () => {
+    const w = await world()
+    const s = w.seat()
+    const first = await start(w, s)
+    expect(first.outcome).toBe('ok')
+    rmSync(w.store.get(s.ref.lineage)!.credential_path!) // a host end (K23): Collab's credential file is gone
+    const second = await start(w, s)
+    expect(second.outcome).toBe('ok')
+    expect(sc(second).session.id).not.toBe(sc(first).session.id)
+    expect(w.store.get(s.ref.lineage)).toMatchObject({ state: 'live', session_id: sc(second).session.id, past_sessions: [sc(first).session.id], pending_start: null })
+    expect(lines(w, 'session_ended').map((l) => l.code)).toEqual(['credential_missing'])
+    expect(lines(w, 'child_start').map((l) => l.code)).toEqual(['fresh', 'fresh'])
+    expect(roleNonce(sc(second).session.role, 'nuance', 'macair')).not.toBe(roleNonce(sc(first).session.role, 'nuance', 'macair'))
+  }, T)
+})
+
+describe('the workspace id written back to the device file', () => {
+  const diskShare = (w: World) => readDevice(w.paths.deviceFile('nuance'))!.shares[0]!
+
+  test('a share with no workspace id on disk is recorded', async () => {
+    const w = await world()
+    const s = w.seat()
+    updateDevice(w.paths.deviceFile('nuance'), (d) => ({ ...d, shares: d.shares.map((x) => ({ ...x, workspace_id: null })) }))
+    const r = await start(w, s)
+    expect(r.outcome).toBe('ok')
+    expect(lines(w, 'workspace_id').map((l) => l.code)).toEqual(['recorded'])
+    expect(diskShare(w)).toMatchObject({ workspace_id: w.workspaceId, mirror_worktree_id: sc(r).worktree.id })
+  }, T)
+
+  test('a share with another workspace id on disk is corrected to Collab\'s', async () => {
+    const w = await world()
+    const s = w.seat()
+    const stale = `ws_${'9'.repeat(24)}`
+    updateDevice(w.paths.deviceFile('nuance'), (d) => ({ ...d, shares: d.shares.map((x) => ({ ...x, workspace_id: stale })) }))
+    const r = await start(w, s)
+    expect(r.outcome).toBe('ok')
+    expect(lines(w, 'workspace_id').map((l) => l.code)).toEqual(['corrected'])
+    expect(diskShare(w)).toMatchObject({ workspace_id: w.workspaceId, mirror_worktree_id: sc(r).worktree.id })
+  }, T)
+
+  test('a device file that cannot be updated is ledgered device_write_failed, left as it is, and the start still answers', async () => {
+    const w = await world()
+    const s = w.seat()
+    const path = w.paths.deviceFile('nuance')
+    writeFileSync(path, '{ this is not a device file\n')
+    const r = await start(w, s)
+    expect(r.outcome).toBe('ok')
+    expect(lines(w, 'workspace_id').map((l) => l.code)).toEqual(['device_write_failed'])
+    expect(readFileSync(path, 'utf8')).toBe('{ this is not a device file\n')
+    expect(w.mirrors.get('nuance', 'macair', w.spec.mirrorId)!.worktreeId).toBe(sc(r).worktree.id) // the registry gets it either way
+  }, T)
+
+  test('a share that already matches is not rewritten and not ledgered', async () => {
+    const w = await world()
+    const s = w.seat()
+    const first = await start(w, s)
+    expect(first.outcome).toBe('ok')
+    expect(lines(w, 'workspace_id').map((l) => l.code)).toEqual([]) // the file already named Collab's workspace; only the worktree id was new
+    expect(diskShare(w).mirror_worktree_id).toBe(sc(first).worktree.id)
   }, T)
 })

@@ -16,6 +16,12 @@
 //      respawn) past that is refused hub_away and never sent, so the agent's read after the pipe's unknown tells the truth
 //      (P49). This is not a cancel: nothing already written to a child is ever withdrawn (§9.3 item 4, K28, K65);
 //   7. knock reads run one at a time per lineage, at least RATES.knocksMinMs apart (T9): each one starts a host CLI.
+//   8. a collab_session_end holds its lineage from the moment it is decided until its answer has been settled: any call
+//      of that lineage meanwhile is refused hub_away and never sent, so nothing is forwarded to a Collab that has
+//      already unbound (P53, "there is no legacy mode");
+//   9. a fault of the hub's own after a call may have reached a child (a thrown store write, a bug) is hub_outcome_unknown,
+//      ledgered forwarder_fault and logged to stderr (hub.log, §10.4), never a rejection (R18); a write that fails after
+//      Collab has answered is logged and the answer still goes back.
 // Every refusal is an isError result with outcome `error` (P50), so "not sent" stays definite; anything after the
 // request reached a child without a definite answer is hub_outcome_unknown (§9.3 item 4). Nothing here retries.
 import { bridgeFailure, type AgentCode } from '../failure.ts'
@@ -32,7 +38,7 @@ import { runEditFlow } from './edit-flows.ts'
 import { MinInterval, RATES, TokenBucket } from './limits.ts'
 import type { LineageEntry, LineageStore } from './lineages.ts'
 import { mirrorHead, mirrorWorkspaceId, syncedOid, type MirrorDeps } from './mirror.ts'
-import { decide, isMutation, type SeatCtx } from './policy.ts'
+import { decide, isMutation, type Decision, type SeatCtx } from './policy.ts'
 import type { ChildPool } from './pool.ts'
 import type { SeatHandlers, SeatRef } from './streams.ts'
 import type { MirrorHandle, MirrorRegistry } from './sync-points.ts'
@@ -43,6 +49,7 @@ export interface ForwardDeps { pool: ChildPool; store: LineageStore; calls: Call
   ledger(f: LedgerFields): void; mono(): number; now(): Date }
 
 const START = 'collab_session_start'
+const END = 'collab_session_end'
 
 export const FORWARD_MESSAGES = {
   duplicate: 'This call_ref was already received in this hub run, so it was not run again; nothing was sent.',
@@ -57,6 +64,7 @@ export const FORWARD_MESSAGES = {
   tampered: 'The mirror of this folder on the Air is missing or not at its last synced commit; nothing was sent. Ai looks on the Air.',
   late: 'This call waited on the Air past its deadline and was not sent; nothing was applied.',
   stopped: 'This session\'s Collab child on the Air was stopping, so nothing was sent; call again if you choose.',
+  ending: 'A collab_session_end of this session is still in flight on the Air, so nothing was sent. Call again once it has answered.',
   unknown: 'The Collab call may or may not have taken effect on the Air. Never re-send it under a new idempotency_key: check with ' +
     'collab_task_get, collab_task_list, collab_next or collab_report_list, or replay it with the same key.',
 } as const
@@ -68,6 +76,14 @@ const errorOf = (r: ToolResult): string | null => (isObj(r.structuredContent) &&
 /** Silence for the tap: no read ran and nothing was marked (§8 item 4). */
 const quiet = (): HubKnockReportMsg => ({ t: 'knock_report', count: 0, origins: [], seqs: [] })
 const DEADLINE = { reason: 'deadline_passed' } as const
+// The ledger stays content-free, so the cause of a fault of the hub's own goes to its stderr, which launchd keeps as hub.log
+// (§10.4): one line of printable ASCII cut at 200 characters, like src/air/edit-flows.ts, never an argument or a body. A
+// stderr that cannot be written changes nothing the agent is told.
+const printable = (s: string) => s.replace(/[^\x20-\x7e]/g, '?').slice(0, 200)
+const causeOf = (e: unknown): string => (e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+function logLine(line: string): void {
+  try { process.stderr.write(`collab-bridge hub: ${line}\n`) } catch { /* the ledger line or the answer that follows still stands */ }
+}
 
 export class Forwarder implements SeatHandlers {
   private readonly inflight = new Map<string, number>()
@@ -76,6 +92,9 @@ export class Forwarder implements SeatHandlers {
   private readonly verifyGap: MinInterval
   private readonly knocking = new Set<string>()
   private readonly knockGap: MinInterval
+  /** Lineages with a collab_session_end in flight: from the moment it is decided until its answer is settled (item 8). */
+  private readonly ending = new Set<string>()
+  private ledgerFailures = 0
 
   constructor(private readonly deps: ForwardDeps) {
     this.nextGap = new MinInterval(RATES.nextMinMs, () => deps.mono())
@@ -95,6 +114,11 @@ export class Forwarder implements SeatHandlers {
     this.inflight.set(seat.lineage, (this.inflight.get(seat.lineage) ?? 0) + 1)
     try {
       return await this.run(seat, m, notAfter)
+    } catch (e) {
+      // Whatever threw, the call may already have reached a child: the agent is told "unknown", never a rejection (§9.3 item 4, R18).
+      this.fault(seat, e)
+      this.ledger({ event: 'result', device: seat.device, user: seat.user, lineage: seat.lineage, tool: m.name, call_ref: m.call_ref, outcome: 'unknown', code: 'forwarder_fault' })
+      return this.unknown(m)
     } finally {
       const n = (this.inflight.get(seat.lineage) ?? 1) - 1
       if (n > 0) this.inflight.set(seat.lineage, n)
@@ -153,6 +177,7 @@ export class Forwarder implements SeatHandlers {
     if (!share || share.mirror_id !== entry.mirror_id) return this.refused(seat, m, 'folder_not_shared', FORWARD_MESSAGES.noShare)
     // A retired lineage is never used again; an ended one may only start a new session (§9.2, P53).
     if (entry.state === 'retired' || (entry.state === 'ended' && m.name !== START)) return this.refused(seat, m, 'seat_session_ended', FORWARD_MESSAGES.ended)
+    if (this.ending.has(seat.lineage)) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.ending)
     const handle = this.deps.mirrors.get(seat.device, seat.user, entry.mirror_id) ?? null
     const nonce = m.name === START ? newStartNonce() : ''
     const ctx: SeatCtx = {
@@ -167,7 +192,19 @@ export class Forwarder implements SeatHandlers {
     const d = decide(ctx, m.name, m.arguments)
     if (d.kind === 'refuse') return this.refused(seat, m, d.code, d.message)
     if (d.kind === 'session_start') return this.sessionStart(seat, m, entry, device, share, handle, d.args, nonce, notAfter)
+    if (m.name !== END) return this.forwardBound(seat, m, entry, device, handle, d, notAfter)
+    // Synchronously after decide(), before the first await: the arrival check above holds every later call of this lineage.
+    this.ending.add(seat.lineage)
+    try {
+      return await this.forwardBound(seat, m, entry, device, handle, d, notAfter)
+    } finally {
+      this.ending.delete(seat.lineage)
+    }
+  }
 
+  /** A decided call on a lineage with a session: an edit flow under the mirror lock, or one tools/call on its child. */
+  private async forwardBound(seat: SeatRef, m: CallMsg, entry: LineageEntry, device: DeviceFile, handle: MirrorHandle | null,
+    d: Extract<Decision, { kind: 'forward' | 'edit_flow' }>, notAfter: number): Promise<ResultMsg> {
     const got = await this.deps.pool.childFor(seat.lineage)
     if (!got.ok) return this.refused(seat, m, got.code, got.message)
     const sessionId = entry.session_id!
@@ -185,34 +222,35 @@ export class Forwarder implements SeatHandlers {
       }
       return this.settle(seat, m, sessionId, flow.outcome)
     }
-    // In the same turn as the write: too little time left, or a child stopped since childFor answered, is not sent (§9.3 item 3).
+    // In the same turn as the write: too little time left, a child stopped since childFor answered, or a collab_session_end
+    // written meanwhile (the end itself is the one call that may pass) is not sent (§9.3 item 3).
     if (this.deps.mono() >= notAfter) return this.late(seat, m)
     if (!got.child.accepting()) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.stopped)
+    if (m.name !== END && this.ending.has(seat.lineage)) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.ending)
     return this.settle(seat, m, sessionId, await got.child.call(m.name, d.args))
   }
 
   /**
    * A remote session_start (§6.3 rewritten row, §9.3 item 8). A lineage with a session is forwarded to its own child,
    * resumed when needed, and Collab answers session_already_bound. Otherwise the start binds to the mirror only when its
-   * HEAD reads and equals the synced ref, through the pool's durable marker, never re-sent.
+   * HEAD reads and equals the synced ref, through the pool's durable marker, never re-sent. The lineage is read again under
+   * the mirror lock, after a wait that can last minutes: one that an earlier start bound meanwhile takes the live path.
    */
   private async sessionStart(seat: SeatRef, m: CallMsg, entry: LineageEntry, device: DeviceFile, share: DeviceShare,
     handle: MirrorHandle | null, args: Record<string, unknown>, nonce: string, notAfter: number): Promise<ResultMsg> {
     if (entry.state === 'live') {
-      const got = await this.deps.pool.childFor(seat.lineage)
-      if (got.ok) {
-        if (this.deps.mono() >= notAfter) return this.late(seat, m)
-        if (!got.child.accepting()) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.stopped)
-        return this.settle(seat, m, entry.session_id, await got.child.call(START, args))
-      }
-      // The credential was gone (a host end, K23): the pool has ended the lineage, so this start begins a new session (P53).
-      const now = this.deps.store.get(seat.lineage)
-      if (got.code !== 'seat_session_ended' || now?.state !== 'ended') return this.refused(seat, m, got.code, got.message)
-      entry = now
+      const live = await this.startOnLive(seat, m, entry.session_id, args, notAfter)
+      if (!('ended' in live)) return live
+      entry = live.ended
     }
     if (!handle) return this.refused(seat, m, 'mirror_tampered', FORWARD_MESSAGES.tampered)
     const mirrorDeps: MirrorDeps = { ...this.deps.mirrorDeps, alias: device.host_alias }
-    return handle.lock.run(async () => {
+    const out = await handle.lock.run(async (): Promise<ResultMsg | { live: LineageEntry }> => {
+      // First under the lock: a start that waited here past its deadline reads no git and starts no child (§5.4).
+      if (this.deps.mono() >= notAfter) return this.late(seat, m)
+      const now = this.deps.store.get(seat.lineage)
+      if (now?.state === 'live') return { live: now }
+      if (now) entry = now
       const head = await mirrorHead(handle.spec, mirrorDeps)
       const synced = await syncedOid(handle.spec, mirrorDeps)
       if (head === null || synced === null || head !== synced) return this.refused(seat, m, 'mirror_tampered', FORWARD_MESSAGES.tampered)
@@ -221,11 +259,45 @@ export class Forwarder implements SeatHandlers {
       const workspaceId = entry.workspace_id ?? share.workspace_id ?? await mirrorWorkspaceId(handle.spec, mirrorDeps)
       if (workspaceId === null) return this.refused(seat, m, 'mirror_tampered', FORWARD_MESSAGES.tampered)
       // The pool checks the deadline again after its own waits (the start chain, a drain, a reconcile), before the marker.
-      const out = await this.deps.pool.startSession(seat.lineage, args, m.call_ref, nonce, workspaceId, notAfter)
-      if ('refuse' in out) return this.refused(seat, m, out.refuse, out.message)
-      if (out.outcome === 'ok') this.recordBinding(seat, share, handle, out.result)
-      return this.settle(seat, m, this.deps.store.get(seat.lineage)?.session_id ?? null, out)
+      const started = await this.deps.pool.startSession(seat.lineage, args, m.call_ref, nonce, workspaceId, notAfter)
+      if ('refuse' in started) {
+        // A hub_away once the deadline has passed is the pool's deadline refusal (or hides behind it): say so in the answer and the ledger.
+        const late = started.refuse === 'hub_away' && this.deps.mono() >= notAfter
+        return this.refused(seat, m, started.refuse, started.message, late ? DEADLINE : undefined, late ? DEADLINE.reason : undefined)
+      }
+      if (started.outcome === 'ok') {
+        try {
+          this.recordBinding(seat, share, handle, started.result)
+        } catch (e) {
+          this.fault(seat, e) // Collab has bound the session; a failed record must not replace its answer
+        }
+      }
+      return this.settle(seat, m, this.deps.store.get(seat.lineage)?.session_id ?? null, started)
     })
+    if (!('live' in out)) return out
+    // Left the lock: the live path may wait on the child, and nothing below needs the mirror.
+    const live = await this.startOnLive(seat, m, out.live.session_id, args, notAfter)
+    return 'ended' in live ? this.refused(seat, m, live.code, live.message) : live
+  }
+
+  /**
+   * A start on a lineage that has a session: its own child, resumed when needed, answers session_already_bound; no marker,
+   * since nothing new can start. `ended` when the credential was gone (a host end, K23): the pool has ended the lineage, so
+   * a start that arrived first begins a new session (P53).
+   */
+  private async startOnLive(seat: SeatRef, m: CallMsg, sessionId: string | null, args: Record<string, unknown>, notAfter: number):
+    Promise<ResultMsg | { ended: LineageEntry; code: AgentCode; message: string }> {
+    const got = await this.deps.pool.childFor(seat.lineage)
+    if (got.ok) {
+      // In the same turn as the write, as for a plain forward.
+      if (this.deps.mono() >= notAfter) return this.late(seat, m)
+      if (!got.child.accepting()) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.stopped)
+      if (this.ending.has(seat.lineage)) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.ending)
+      return this.settle(seat, m, sessionId, await got.child.call(START, args))
+    }
+    const now = this.deps.store.get(seat.lineage)
+    if (got.code !== 'seat_session_ended' || now?.state !== 'ended') return this.refused(seat, m, got.code, got.message)
+    return { ended: now, code: got.code, message: got.message }
   }
 
   /**
@@ -279,9 +351,19 @@ export class Forwarder implements SeatHandlers {
     if (code === 'cursor_reset_required') {
       // §9.6 item 5: the lineage is parked until Ai repairs it; Collab's answer still goes back unchanged.
       const { error: _error, message: _message, ...details } = out.result.structuredContent as Obj
-      this.deps.pool.park(seat.lineage, 'cursor_reset_required', details)
+      try {
+        this.deps.pool.park(seat.lineage, 'cursor_reset_required', details)
+      } catch (e) {
+        this.fault(seat, e) // Collab answered: a failed lineage write is logged, and its answer still goes back
+      }
     }
-    if (out.outcome === 'ok' && m.name === 'collab_session_end') this.deps.pool.sessionEnded(seat.lineage)
+    if (out.outcome === 'ok' && m.name === END) {
+      try {
+        this.deps.pool.sessionEnded(seat.lineage)
+      } catch (e) {
+        this.fault(seat, e) // the lineage stays live in lineages.json; Collab's definite answer still goes back
+      }
+    }
     return msg
   }
 
@@ -300,7 +382,27 @@ export class Forwarder implements SeatHandlers {
     return { t: 'result', call_ref: m.call_ref, outcome: 'unknown', result: bridgeFailure('hub_outcome_unknown', FORWARD_MESSAGES.unknown, m.call_ref) }
   }
 
+  /** A fault of the hub's own while it handled one call: one line in hub.log, nothing of the call's arguments. */
+  private fault(seat: SeatRef, e: unknown): void {
+    try {
+      logLine(`forward ${printable(seat.device)}/${printable(seat.user)}: ${printable(causeOf(e))}`)
+    } catch { /* a cause that cannot be printed changes nothing the agent is told */ }
+  }
+
+  /**
+   * The call, forward and result lines are the audit evidence (R18), but a failed append does not fail the call: it is
+   * counted, and the first and every 100th failure is logged, so a ledger that stopped writing is not silent.
+   */
   private ledger(f: LedgerFields): void {
-    try { this.deps.ledger(f) } catch { /* the call goes on without its ledger line */ }
+    try {
+      this.deps.ledger(f)
+    } catch (e) {
+      this.ledgerFailures += 1
+      if (this.ledgerFailures === 1 || this.ledgerFailures % 100 === 0) {
+        try {
+          logLine(`forwarder ledger append failed (${this.ledgerFailures} so far): ${printable(causeOf(e))}`)
+        } catch { /* nothing more can be said */ }
+      }
+    }
   }
 }
