@@ -7,6 +7,7 @@ import { readPs, ttyOf } from '../proc.ts'
 import { systemBin, type Env } from '../sysbin.ts'
 import { scaled, TIMING } from '../timing.ts'
 import { runGate, type GateIo } from './gate-main.ts'
+import { runInstallVerb } from './install-steps.ts'
 import { readInstalled } from './installed.ts'
 import { bunConnect } from './link-client.ts'
 import { runPipe, type PipeDeps } from './pipe.ts'
@@ -119,6 +120,9 @@ export async function runNuanceCli(argv: string[], env: Env, io: GateIo): Promis
       if (out !== null) io.stdout.write(out)
       return 0
     }
+    case 'install':
+      // The installer's hidden verbs (P21): one JSON line on stdout, human lines on stderr, exit 0 or 1.
+      return runInstallVerb(rest, env, io)
     case 'status': {
       if (rest.length > 0) break
       const paths = nuancePaths(homeOf(env), env)

@@ -1,0 +1,269 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  citizenRoot, dropinOwnerUidOf, installCheck, installClone, parseManifest, renderManifest, type CheckReport,
+} from '../src/nuance/install-steps.ts'
+import { resolveGit } from '../src/nuance/git-resolve.ts'
+import { dropinStat, renderInstalled, summonKeySha256 } from '../src/nuance/installed.ts'
+import { checkInput, claudeStub, makeTrialRepo, summonReadyHome, writeCheckBundle, type NuanceHome } from './install-fixtures.ts'
+import { allowlistYaml } from './nuance-home.ts'
+import { cleanupTmps, commitFiles, PKG, REAL_GIT, repoGit, temp, writeStub } from './helpers.ts'
+
+afterEach(cleanupTmps)
+
+const codes = (r: CheckReport) => r.failures.map((f) => f.slice(0, f.indexOf(':')))
+
+/** A Nuance home, the trial repo and a bundle for the trial share: every check passes until a test changes one thing. */
+function world(o: { files?: Record<string, string>; allowlist?: string; expiry?: string; prepared?: string } = {}) {
+  const h = summonReadyHome({ allowlist: o.allowlist })
+  const trial = makeTrialRepo({ files: o.files })
+  const b = writeCheckBundle({ trial, shares: [h.share], expiry: o.expiry, prepared: o.prepared })
+  return { h, trial, b }
+}
+
+/** A clone of the trial repo at the share, as the installer's clone step leaves it. */
+function cloneAt(h: NuanceHome, trialRepo: string, at = h.share): void {
+  repoGit('/', ['clone', '-q', trialRepo, at])
+}
+
+/** The verbs as the installer runs them: the Nuance entry from source, in the home's own test env. */
+function verb(h: NuanceHome, args: string[]) {
+  const r = Bun.spawnSync([process.execPath, '--no-env-file', '--config=/dev/null', `${PKG}/src/nuance/main.ts`, 'install', ...args],
+    { env: h.env, cwd: '/', stdout: 'pipe', stderr: 'pipe' })
+  const out = r.stdout.toString()
+  return { code: r.exitCode, json: out.trim() === '' ? null : JSON.parse(out.trim().split('\n').pop()!), stderr: r.stderr.toString() }
+}
+
+describe('MANIFEST', () => {
+  test('round-trips and refuses an unknown or malformed line', () => {
+    const { b } = world()
+    const text = renderManifest(b.manifest)
+    expect(parseManifest(text)).toEqual(b.manifest)
+    expect(text.split('\n').slice(0, 6).map((l) => l.split(' ')[0])).toEqual(['device', 'build', 'prepared', 'expiry', 'trial_commit', 'tools_digest'])
+    expect(parseManifest(text + 'colour blue\n')).toBeNull()
+    expect(parseManifest(text.replace(/^expiry \d{8}$/m, 'expiry 2099-12-31'))).toBeNull()
+    expect(parseManifest(text.replace(/^sha256 [0-9a-f]{64} collab-bridge$/m, ''))).toBeNull()
+    expect(() => renderManifest({ ...b.manifest, binary_sha256: 'f'.repeat(64) })).toThrow()
+    // The share rule is the gate's (§5.2): a space is servable, a ' is not.
+    const spaced = { ...b.manifest, shares: ['/Users/macair/Projects/my trial'] }
+    expect(parseManifest(renderManifest(spaced))).toEqual(spaced)
+    expect(() => renderManifest({ ...b.manifest, shares: ["/Users/macair/it's"] })).toThrow()
+  })
+})
+
+describe('install check', () => {
+  test('a home with Summon live, a fresh bundle and the trial folder absent passes', () => {
+    const { h, b } = world()
+    const r = installCheck(checkInput(h, b))
+    expect(r.failures).toEqual([])
+    expect(r.ok).toBe(true)
+    expect(r.shares).toEqual([{ path: h.share, state: 'absent', realpath: h.share, gitdir: join(h.share, '.git') }])
+    expect(r.git && r.git.path.startsWith('/')).toBe(true)
+    expect(r.manifest).toEqual(b.manifest)
+  }, 20_000)
+
+  test('refuses root, a non-Darwin or non-arm64 platform', () => {
+    const { h, b } = world()
+    expect(codes(installCheck(checkInput(h, b, { uid: 0 })))).toContain('root')
+    expect(codes(installCheck(checkInput(h, b, { platform: 'linux' })))).toContain('platform')
+    expect(codes(installCheck(checkInput(h, b, { arch: 'x64' })))).toContain('platform')
+  }, 20_000)
+
+  test('refuses when Summon is not installed or keys-only is missing', () => {
+    const { h, b } = world()
+    rmSync(h.paths.summonInstalled)
+    expect(codes(installCheck(checkInput(h, b)))).toContain('summon_not_installed')
+    writeFileSync(h.paths.summonInstalled, 'build 5c09726b\n')
+    rmSync(h.paths.summonKeysOnly)
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['summon_keys_only'])
+    writeFileSync(h.paths.summonKeysOnly, '')
+    writeFileSync(h.paths.authorizedKeys, '')
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['summon_key_missing'])
+  }, 20_000)
+
+  test('refuses when the password-off drop-in is missing', () => {
+    const { h, b } = world()
+    rmSync(h.paths.summonDropin)
+    const r = installCheck(checkInput(h, b))
+    expect(codes(r)).toEqual(['dropin_missing'])
+    expect(r.summon).toBeNull()
+  }, 20_000)
+
+  test('a drop-in owned by the user is refused when root is expected', () => {
+    const { h, b } = world()
+    expect(codes(installCheck(checkInput(h, b, { dropinOwnerUid: 0 })))).toEqual(['dropin_owner'])
+  }, 20_000)
+
+  test('the drop-in owner knob is ignored without the override', () => {
+    const home = temp('cb-knob-')
+    const knob = { HOME: home, COLLAB_BRIDGE_DROPIN_OWNER_UID: '502' }
+    expect(dropinOwnerUidOf(knob)).toBe(0)
+    expect(dropinOwnerUidOf({ ...knob, COLLAB_BRIDGE_HOME_OVERRIDE: '/somewhere/else' })).toBe(0)
+    expect(dropinOwnerUidOf({ ...knob, COLLAB_BRIDGE_HOME_OVERRIDE: home })).toBe(502)
+  })
+
+  test('refuses an expired key and an older bundle (by prepared and by the key line\'s expiry)', () => {
+    const { h, trial, b } = world()
+    const today = checkInput(h, b).today
+    const expired = writeCheckBundle({ trial, shares: [h.share], expiry: today })
+    expect(codes(installCheck(checkInput(h, expired)))).toEqual(['expired'])
+    const r0 = installCheck(checkInput(h, b))
+    mkdirSync(join(h.home, '.local', 'share', 'collab-bridge'), { recursive: true })
+    writeFileSync(h.paths.installed, renderInstalled({ device: 'nuance', build: 'abcdef12', prepared: '20261014000000', expiry: '20991231',
+      binary_sha256: 'a'.repeat(64), tools_seed: 'b'.repeat(64), git: r0.git!, summon_key_sha256: r0.summon!.key_sha256,
+      summon_dropin_stat: r0.summon!.dropin_stat, claude_version: null, installed_at: '2026-10-14T00:00:00.000Z' }))
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['older_bundle'])
+    rmSync(h.paths.installed)
+    writeFileSync(h.paths.authorizedKeys, readFileSync(h.paths.authorizedKeys, 'utf8') +
+      `restrict,from="192.168.50.0/24",expiry-time="21000101",command="${h.home}/.local/share/collab-bridge/collab-bridge gate" ssh-ed25519 AAAAold collab-air\n`)
+    const older = installCheck(checkInput(h, b))
+    expect(codes(older)).toEqual(['older_bundle'])
+    expect(older.failures[0]).toContain('2100-01-01')
+    writeFileSync(h.paths.installed, 'build 1\n')
+    expect(codes(installCheck(checkInput(h, b)))).toContain('installed_unreadable')
+  }, 30_000)
+
+  test('refuses a noisy ~/.zshenv', () => {
+    const { h, b } = world()
+    writeFileSync(join(h.home, '.zshenv'), 'echo welcome back\n')
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['zshenv'])
+  }, 20_000)
+
+  test('refuses a git without the guard and a missing claude', () => {
+    const { h, b } = world()
+    const bin = temp('cb-oldgit-')
+    const noXcrun = writeStub(bin, 'xcrun', 'exit 1')
+    const oldGit = writeStub(bin, 'git', 'echo "git version 2.39.5 (Apple Git-154)"')
+    const r = installCheck(checkInput(h, b, { xcrun: noXcrun, terminalGit: oldGit, claude: null }))
+    expect(codes(r)).toContain('git_unsafe')
+    expect(codes(r)).toContain('claude')
+    expect(r.git).toEqual(expect.objectContaining({ version: '2.39.5', apple: true, guard: false }))
+    expect(codes(installCheck(checkInput(h, b, { xcrun: noXcrun, terminalGit: null })))).toContain('git')
+    expect(codes(installCheck(checkInput(h, b, { claude: join(bin, 'no-such-claude') })))).toEqual(['claude'])
+  }, 20_000)
+
+  test('an existing share must be a repo root holding the trial commit, in an edit folder', () => {
+    const { h, trial, b } = world()
+    cloneAt(h, trial.repo)
+    const ok = installCheck(checkInput(h, b))
+    expect(ok.failures).toEqual([])
+    expect(ok.shares).toEqual([{ path: h.share, state: 'exists', realpath: h.share, gitdir: join(h.share, '.git') }])
+
+    const sub = join(h.share, 'notes')
+    const subBundle = writeCheckBundle({ trial, shares: [sub] })
+    writeFileSync(h.paths.summonAllowlist, allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }]))
+    expect(codes(installCheck(checkInput(h, subBundle)))).toEqual(['share_not_repo_root'])
+
+    const other = join(h.home, 'Projects', 'collab-trial-2')
+    repoGit('/', ['init', '-q', '-b', 'main', other])
+    commitFiles(other, { 'README.md': 'not the trial\n' }, 'unrelated')
+    writeFileSync(h.paths.summonAllowlist, allowlistYaml([{ path: '~/Projects', access: 'edit' }]))
+    const otherBundle = writeCheckBundle({ trial, shares: [other] })
+    expect(codes(installCheck(checkInput(h, otherBundle)))).toEqual(['share_missing_commit'])
+
+    writeFileSync(h.paths.summonAllowlist, allowlistYaml([{ path: '~/Projects', access: 'review' }]))
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['share_not_edit'])
+  }, 30_000)
+
+  test('refuses a citizen root (REST, EVENT-ONLY, under ~/love-unlimited)', () => {
+    for (const marker of ['REST', 'EVENT-ONLY']) {
+      const { h, trial, b } = world({ files: { 'README.md': 'collab trial\n', [marker]: '' } })
+      cloneAt(h, trial.repo)
+      expect(codes(installCheck(checkInput(h, b)))).toEqual(['share_citizen'])
+    }
+    const h = summonReadyHome({ allowlist: allowlistYaml([{ path: '~/love-unlimited', access: 'edit' }]) })
+    const trial = makeTrialRepo()
+    const lu = join(h.home, 'love-unlimited', 'collab-trial')
+    mkdirSync(join(h.home, 'love-unlimited'))
+    expect(codes(installCheck(checkInput(h, writeCheckBundle({ trial, shares: [lu] }))))).toEqual(['share_citizen'])
+    cloneAt(h, trial.repo, lu)
+    expect(codes(installCheck(checkInput(h, writeCheckBundle({ trial, shares: [lu] }))))).toEqual(['share_citizen'])
+    expect(citizenRoot(lu, h.home)).toBe('citizen')
+    expect(citizenRoot(join(h.home, 'Projects'), h.home)).toBe('clear')
+  }, 30_000)
+
+  test('an absent folder with an exact edit entry is accepted', () => {
+    const { h, b } = world({ allowlist: allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }]) })
+    const r = installCheck(checkInput(h, b))
+    expect(r.failures).toEqual([])
+    expect(r.shares).toEqual([{ path: h.share, state: 'absent', realpath: h.share, gitdir: join(h.share, '.git') }])
+  }, 20_000)
+
+  test('an absent folder under a review-only parent is refused', () => {
+    const { h, b } = world({ allowlist: allowlistYaml([{ path: '~/Projects', access: 'review' }]) })
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['share_not_edit'])
+  }, 20_000)
+
+  test('an absent folder whose parent is a symlink into a TCC folder is refused', () => {
+    const h = summonReadyHome({ allowlist: allowlistYaml([{ path: '~/Work/collab-trial', access: 'edit' }]) })
+    mkdirSync(join(h.home, 'Documents', 'work'), { recursive: true })
+    symlinkSync(join(h.home, 'Documents', 'work'), join(h.home, 'Work'))
+    const b = writeCheckBundle({ trial: makeTrialRepo(), shares: [join(h.home, 'Work', 'collab-trial')] })
+    expect(codes(installCheck(checkInput(h, b)))).toEqual(['share_tcc'])
+    const spelled = writeCheckBundle({ trial: makeTrialRepo(), shares: [join(h.home, 'Downloads', 'collab-trial')] })
+    expect(codes(installCheck(checkInput(h, spelled)))).toContain('share_tcc')
+  }, 20_000)
+
+  test('records the Summon key hash and the drop-in stat', () => {
+    const { h, b } = world()
+    const r = installCheck(checkInput(h, b))
+    expect(r.summon).toEqual({ key_sha256: summonKeySha256(readFileSync(h.paths.authorizedKeys, 'utf8')), dropin_stat: dropinStat(h.paths.summonDropin)! })
+  }, 20_000)
+
+  test('install check prints one JSON line and a ✗ line per failure', () => {
+    const { h, b } = world()
+    const args = ['check', '--bundle', b.dir, '--share', h.share, '--terminal-git', REAL_GIT, '--claude', claudeStub()]
+    const ok = verb(h, args)
+    expect([ok.code, ok.json.ok]).toEqual([0, true])
+    writeFileSync(join(h.home, '.zshenv'), 'echo hi\n')
+    const bad = verb(h, args)
+    expect([bad.code, bad.json.ok]).toEqual([1, false])
+    expect(bad.stderr).toContain('✗ zshenv: ')
+    expect(verb(h, ['check', '--bundle', b.dir]).code).toBe(1)
+    expect(verb(h, ['frobnicate']).code).toBe(1)
+  }, 30_000)
+})
+
+describe('install clone', () => {
+  test('the clone holds the trial commit and shares history with the Air repo', () => {
+    const { h, trial, b } = world()
+    writeFileSync(join(h.home, 'Projects', 'keep.txt'), 'mine\n')
+    const r = verb(h, ['clone', '--bundle', b.dir, '--share', h.share, '--terminal-git', REAL_GIT, '--claude', claudeStub()])
+    expect([r.code, r.json]).toEqual([0, { ok: true, created: [h.share] }])
+    expect(repoGit(h.share, ['rev-parse', 'HEAD'])).toBe(trial.commit)
+    expect(repoGit(h.share, ['merge-base', 'HEAD', trial.commit])).toBe(trial.commit)
+    expect(repoGit(h.share, ['remote'])).toBe('')
+    expect(readdirSync(join(h.home, 'Projects')).sort()).toEqual(['collab-trial', 'keep.txt'])
+    const again = installCheck(checkInput(h, b))
+    expect(again.ok).toBe(true)
+    expect(again.shares[0]!.state).toBe('exists')
+  }, 30_000)
+
+  test('a failed re-check after the clone removes only the new clone', () => {
+    const { h, b } = world({ files: { 'README.md': 'collab trial\n', REST: '' } })
+    writeFileSync(join(h.home, 'Projects', 'keep.txt'), 'mine\n')
+    const r = verb(h, ['clone', '--bundle', b.dir, '--share', h.share, '--terminal-git', REAL_GIT, '--claude', claudeStub()])
+    expect(r.code).toBe(1)
+    expect(r.json.ok).toBe(false)
+    expect(r.json.reason).toContain('share_citizen')
+    expect(existsSync(h.share)).toBe(false)
+    expect(readdirSync(join(h.home, 'Projects'))).toEqual(['keep.txt'])
+  }, 30_000)
+
+  test('a target that appears before the rename is refused and left alone', () => {
+    const { h, trial, b } = world()
+    const g = resolveGit({ xcrun: '/usr/bin/xcrun', terminalGit: REAL_GIT, home: h.home })
+    if (!g.ok) throw new Error(g.reason)
+    let rechecked = 0
+    const r = installClone({
+      bundle: b.dir, share: h.share, git: g.git, trialCommit: trial.commit, home: h.home,
+      rand: () => { mkdirSync(h.share); writeFileSync(join(h.share, 'theirs.txt'), 'theirs\n'); return '0123abcd' },
+      recheck: () => { rechecked++; return [] },
+    })
+    expect(r.ok).toBe(false)
+    expect(readdirSync(h.share)).toEqual(['theirs.txt'])
+    expect(readdirSync(join(h.home, 'Projects'))).toEqual(['collab-trial'])
+    expect(rechecked).toBe(0)
+  }, 30_000)
+})
