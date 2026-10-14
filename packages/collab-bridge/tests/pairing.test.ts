@@ -152,6 +152,34 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
     }
   }, T)
 
+  test('refuses any share count but one, and leaves the home empty', async () => {
+    // parsePrepareArgs takes --share repeated; prepareBundle is where Phase 1's one shared folder (R34) is enforced.
+    const two = parsePrepareArgs(['--device', 'nuance', '--user', 'macair', '--share', `${NUANCE_SHARE}=/a`, '--share', '/Users/macair/Projects/other=/b',
+      '--trailer', TRAILER])
+    expect(two).toMatchObject({ shares: [{ remote: NUANCE_SHARE, airClone: '/a' }, { remote: '/Users/macair/Projects/other', airClone: '/b' }] })
+    for (const count of [0, 2]) {
+      const o = input()
+      o.shares = Array.from({ length: count }, (_, i) => ({ remote: `${NUANCE_SHARE}${i}`, airClone: join(o.home, 'Projects', `collab-trial${i}`) }))
+      await expect(prepareBundle(o)).rejects.toThrow('prepare: Phase 1 pairs exactly one shared folder')
+      expect(readdirSync(o.home)).toEqual([])
+    }
+  }, T)
+
+  test('a template with a missing or an unknown placeholder is refused before anything is written', async () => {
+    const tmpl = readFileSync(join(PKG, 'nuance', 'install.sh.tmpl'), 'utf8')
+    const broken: Array<[string, string]> = [
+      ['__TRAILER__', tmpl.replaceAll('__TRAILER__', 'x')], // a placeholder the template lacks
+      ['__BOGUS__', `${tmpl}\n# __BOGUS__\n`], // a __NAME__ word that is not a placeholder
+    ]
+    for (const [word, text] of broken) {
+      const repo = temp('cb-pair-repo-')
+      makeRepo(repo, { 'packages/collab-bridge/nuance/install.sh.tmpl': text }) // committed, so the tree is clean and only the template is wrong
+      const o = input({ repo })
+      await expect(prepareBundle(o)).rejects.toThrow(new RegExp(`^prepare: .*${word}`))
+      expect(readdirSync(o.home)).toEqual([]) // no trial repo, key, device file or bundle
+    }
+  }, T)
+
   test('every template value is regex-checked', async () => {
     const bad: Array<Partial<PrepareInput>> = [
       { device: 'Nuance' }, { device: 'nu ance' }, { user: 'MacAir' }, { user: 'mac air' }, { user: '-oProxyCommand=x' },
