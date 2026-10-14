@@ -2,6 +2,7 @@
 // KN packages/collab/tests/mcp.test.ts:54-142), that also reads stderr and queues notifications. Task 37 adds
 // collabHarness here (the tracked Collab dist, spawned the hub's way). The env is exactly what the caller passes:
 // nothing is inherited from the test process.
+import { dirname, join } from 'node:path'
 import { childArgv, childEnv } from '../src/air/children.ts'
 import { COLLAB_DIST } from './helpers.ts'
 
@@ -135,4 +136,27 @@ export function stdioHarness(o: { argv: string[]; env: Record<string, string>; c
 export function collabHarness(o: { journal: string; home: string; sessionFile?: string }): StdioHarness {
   const spec = { bun: process.execPath, dist: COLLAB_DIST, journal: o.journal, home: o.home, sessionFile: o.sessionFile }
   return stdioHarness({ argv: childArgv(spec), env: childEnv(spec), cwd: '/' })
+}
+
+/** Starts one real Collab session through the hub-way harness and closes the harness; the session stays active and its
+ *  credential stays beside the journal, as Collab writes it (K22). */
+export async function startCollabSession(o: { journal: string; home: string; root: string; actor: string; role?: string }):
+  Promise<{ sessionId: string; workspaceId: string; worktreeId: string; credentialFile: string }> {
+  const h = collabHarness({ journal: o.journal, home: o.home })
+  try {
+    await h.initialize()
+    const r = await h.callTool('collab_session_start', { root_path: o.root, actor: o.actor, ...(o.role === undefined ? {} : { role: o.role }) })
+    if (r.isError) throw new Error(`collab_session_start failed: ${r.content[0].text}`)
+    const sc = r.structuredContent
+    return { sessionId: sc.session.id, workspaceId: sc.workspace.id, worktreeId: sc.worktree.id,
+      credentialFile: join(dirname(o.journal), 'collab-sessions', `${sc.session.id}.json`) }
+  } finally {
+    await h.close()
+  }
+}
+
+/** Breaks a temp journal's hash chain the way Collab's own tests do, through the system sqlite3 (never a real journal). */
+export function tamperJournal(journal: string): void {
+  const r = Bun.spawnSync(['/usr/bin/sqlite3', journal, `UPDATE events SET hash = '${'0'.repeat(64)}' WHERE sequence = 1`], { env: { PATH: '/usr/bin:/bin' } })
+  if (r.exitCode !== 0) throw new Error(`sqlite3 failed: ${r.stderr.toString()}`)
 }
