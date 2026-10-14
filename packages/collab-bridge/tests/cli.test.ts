@@ -76,9 +76,10 @@ function spawnBin(home: string, argv: string[], extra: Record<string, string> = 
 
 /**
  * A launchctl stand-in: it appends each call's arguments to <dir>/launchctl.calls, prints <dir>/list.txt for `list`
- * (tab-separated, with launchctl's header), exits 113 for `print` (no such service) and 0 for everything else.
+ * (tab-separated, with launchctl's header), exits 113 for `print` (no such service) and 0 for everything else. `over`
+ * makes `bootout` fail with its code (a real launchctl says why on stderr) or `print` exit with its code (0: still loaded).
  */
-function fakeLaunchctl(dir: string, labels: string[]): { bin: string; calls(): string[]; setLabels(l: string[]): void } {
+function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; print?: number } = {}): { bin: string; calls(): string[]; setLabels(l: string[]): void } {
   const setLabels = (l: string[]) =>
     writeFileSync(join(dir, 'list.txt'), ['PID\tStatus\tLabel', ...l.map((label, i) => `${i % 2 === 0 ? '-' : String(400 + i)}\t0\t${label}`)].join('\n') + '\n')
   setLabels(labels)
@@ -88,7 +89,8 @@ function fakeLaunchctl(dir: string, labels: string[]): { bin: string; calls(): s
     `printf '%s\\n' "$*" >> '${dir}/launchctl.calls'`,
     'case "$1" in',
     `  list) cat '${dir}/list.txt' ;;`,
-    "  print) echo 'Could not find service' >&2; exit 113 ;;",
+    over.print === 0 ? "  print) echo 'dev.agenttool.collab-bridge = {'; exit 0 ;;" : `  print) echo 'Could not find service' >&2; exit ${over.print ?? 113} ;;`,
+    over.bootout ? `  bootout) echo 'Boot-out failed: 5: Input/output error' >&2; exit ${over.bootout} ;;` : '  bootout) exit 0 ;;',
     '  *) exit 0 ;;',
     'esac',
     '',
@@ -123,12 +125,12 @@ interface Cli { deps: AirCliDeps; out: string[]; err: string[]; asked: string[];
 
 /** The CLI over a temp home with the pinned bundle and a signed launcher in place, as Task 66 leaves them, and every side effect recorded. */
 function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | null; answer?: string | null; ask?: AirCliDeps['ask'];
-  build?: BuildInfo | null; runHub?: () => Promise<number> } = {}): Cli {
+  build?: BuildInfo | null; runHub?: () => Promise<number>; launchctl?: { bootout?: number; print?: number }; now?: () => Date } = {}): Cli {
   const home = temp('cb-cli-')
   const paths = airPaths(home)
   const stubs = join(home, 'stubs')
   mkdirSync(stubs)
-  const launchctl = fakeLaunchctl(stubs, BASE_LABELS)
+  const launchctl = fakeLaunchctl(stubs, BASE_LABELS, o.launchctl)
   mkdirSync(paths.hubDir(SHA), { recursive: true })
   writeFileSync(paths.hubJs(SHA), '// the pinned hub bundle\n')
   signedApp(paths.launcherApp)
@@ -140,7 +142,7 @@ function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | nul
     ask: o.ask ?? ((prompt) => { asked.push(prompt); return o.answer === undefined ? 'y' : o.answer }),
     launchctl: launchctl.bin, codesign: '/usr/bin/codesign', bun: BUN, hubSha: SHA,
     build: o.build === undefined ? sourceBuild(COLLAB_DIST) : o.build, collabDist: COLLAB_DIST,
-    runHub: o.runHub ?? (async () => 0), out: (l) => { out.push(l) }, err: (l) => { err.push(l) }, now: () => NOW,
+    runHub: o.runHub ?? (async () => 0), out: (l) => { out.push(l) }, err: (l) => { err.push(l) }, now: o.now ?? (() => NOW),
   }
   return { deps, out, err, asked, launchctl, paths, home }
 }
@@ -300,6 +302,45 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     for (const x of [r, n]) expect(x.launchctl.calls()).toEqual([])
   }, 20_000)
 
+  test('hub off after a bootout that failed: a hub still loaded, or one that cannot be checked, is a ✗ and exit 1; only a print that fails too is "not loaded"', async () => {
+    const leftPlist = (c: Cli) => {
+      mkdirSync(dirname(c.paths.plist), { recursive: true })
+      writeFileSync(c.paths.plist, 'plist left by hub on\n')
+    }
+    const off = (c: Cli) => runAirCli(['hub', 'off'], c.deps)
+    const notOff = (c: Cli) => expect(c.out.join('\n')).not.toContain('✓ Hub off')
+    // bootout failed and print still finds the service: it may be serving, so Yu is told so and the exit is 1
+    const loaded = cli({ launchctl: { bootout: 5, print: 0 } })
+    leftPlist(loaded)
+    expect(await off(loaded)).toBe(1)
+    expect(loaded.launchctl.calls()).toEqual([`bootout ${SERVICE}`, `print ${SERVICE}`])
+    const loadedErr = loaded.err.join('\n')
+    expect(loadedErr).toContain(`✗ Hub off:`)
+    expect(loadedErr).toContain(SERVICE)
+    expect(loadedErr).toContain('Boot-out failed: 5: Input/output error')
+    expect(loadedErr).toContain('may still be serving')
+    expect(loadedErr).toContain('hub off again')
+    notOff(loaded)
+    expect(existsSync(loaded.paths.plist)).toBe(false) // the plist is removed first either way
+    // bootout failed and print cannot be run (launchctl itself will not start): nothing confirms it is gone, so also a ✗
+    const unspawnable = cli()
+    unspawnable.deps.launchctl = join(unspawnable.home, 'no-such-launchctl')
+    leftPlist(unspawnable)
+    expect(await off(unspawnable)).toBe(1)
+    expect(unspawnable.err.join('\n')).toContain(`✗ Hub off:`)
+    expect(unspawnable.err.join('\n')).toContain(SERVICE)
+    notOff(unspawnable)
+    expect(existsSync(unspawnable.paths.plist)).toBe(false)
+    // bootout failed and print fails too with a real code: the service is not loaded, which is the state Yu asked for
+    const gone = cli({ launchctl: { bootout: 113, print: 113 } })
+    leftPlist(gone)
+    expect(await off(gone)).toBe(0)
+    expect(gone.launchctl.calls()).toEqual([`bootout ${SERVICE}`, `print ${SERVICE}`])
+    expect(gone.out.at(-1)).toBe(`✓ Hub off: ${HUB_LABEL} was not loaded in gui/502; its plist is removed.`)
+    expect(gone.err).toEqual([])
+    expect(existsSync(gone.paths.plist)).toBe(false)
+  }, 20_000)
+
   test('every launchctl call names gui/502', async () => {
     const c = cli()
     pairedDevice(c.paths)
@@ -401,6 +442,33 @@ describe('hub status and hub doctor', () => {
     c.out.length = 0
     expect(await runAirCli(['hub', 'status'], c.deps)).toBe(0)
     expect(c.out).not.toContain(sticky)
+  }, 20_000)
+
+  test('hub doctor --ack-host-key acknowledges what was seen before the question: a mismatch recorded while it is open stays', async () => {
+    let clock = NOW
+    let c!: Cli
+    const answered = new Date('2026-10-13T12:05:00.000Z')
+    c = cli({
+      now: () => clock,
+      ask: (prompt) => {
+        c.asked.push(prompt)
+        // the prompt sits open: five minutes pass, and the hub records a second key that was presented meanwhile
+        clock = answered
+        writeDeviceStatus(c.paths, deviceStatus({ sticky: [{ kind: 'host_key_mismatch', at: '2026-10-13T12:03:00.000Z', fingerprint: 'SHA256:bmV3ZXJrZXk' }] }))
+        return 'y'
+      },
+    })
+    pairedDevice(c.paths)
+    writePins(c.paths, PIN, PIN)
+    writeDeviceStatus(c.paths, deviceStatus({ sticky: [{ kind: 'host_key_mismatch', at: '2026-10-13T11:10:00.000Z', fingerprint: 'SHA256:Zm9yZ2Vka2V5' }] }))
+    expect(await runAirCli(['hub', 'doctor', '--ack-host-key'], c.deps)).toBe(1)
+    // the ack is stamped when the command began, not when Yu answered
+    expect(readHostKeyAck(c.paths, 'nuance')).toBe(NOW.toISOString())
+    expect(c.out[0]).toBe("✓ Acknowledged nuance's host-key warning(s) at 2026-10-13T12:00:00.000Z; they are gone from the status file, and no later status write brings them back.")
+    // the warning he was shown is gone, and the one he never saw is still there, in the file and in what hub doctor prints
+    expect(readDeviceStatus(c.paths, 'nuance')!.sticky).toEqual([{ kind: 'host_key_mismatch', at: '2026-10-13T12:03:00.000Z', fingerprint: 'SHA256:bmV3ZXJrZXk' }])
+    expect(c.out).toContain('nuance: host key mismatch seen at 2026-10-13T12:03:00.000Z, presented SHA256:bmV3ZXJrZXk')
+    expect(c.out.join('\n')).not.toContain('SHA256:Zm9yZ2Vka2V5')
   }, 20_000)
 
   test("hub doctor --ack-host-key is Yu's: refused inside a harness, and nothing is acknowledged without his y", async () => {

@@ -263,10 +263,20 @@ async function hubOn(deps: AirCliDeps): Promise<number> {
 
 async function hubOff(deps: AirCliDeps): Promise<number> {
   if (!yuConfirms(deps, 'Turn the Collab bridge hub off? [y/N] ')) return 1
-  const out = launchctl(deps, 'bootout', SERVICE) // not loaded is fine: off is the state Yu asked for
+  const out = launchctl(deps, 'bootout', SERVICE)
   rmSync(deps.paths.plist, { force: true })
-  deps.out(out.code === 0 ? `✓ Hub off: ${HUB_LABEL} is booted out of ${DOMAIN} and its plist removed.`
-    : `✓ Hub off: ${HUB_LABEL} was not loaded in ${DOMAIN}; its plist is removed.`)
+  if (out.code === 0) {
+    deps.out(`✓ Hub off: ${HUB_LABEL} is booted out of ${DOMAIN} and its plist removed.`)
+    return 0
+  }
+  // A failed bootout is not "not loaded" until launchd agrees: a hub still serving must not be reported as off.
+  // Only a print that runs and fails means the service is gone, which is the state Yu asked for.
+  const still = launchctl(deps, 'print', SERVICE)
+  if (still.code === null || still.code === 0) {
+    deps.err(`✗ Hub off: launchctl bootout ${SERVICE} failed (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}; ${HUB_LABEL} may still be serving in ${DOMAIN}; its plist is removed; run hub off again`)
+    return 1
+  }
+  deps.out(`✓ Hub off: ${HUB_LABEL} was not loaded in ${DOMAIN}; its plist is removed.`)
   return 0
 }
 
@@ -309,13 +319,15 @@ async function hubDoctor(deps: AirCliDeps, ack: boolean): Promise<number> {
   const warnings: string[] = []
   const devices = devicesOrNote(deps, warnings)
   if (ack) {
+    // Stamped before the status is read for the question: the prompt can sit open, and a mismatch the hub records
+    // meanwhile is newer than this stamp, so the ack (P52) leaves it for Yu to see.
+    const at = deps.now().toISOString()
     const owed = devices.filter((d) => (shownStatus(paths, d.device)?.sticky.length ?? 0) > 0)
     if (owed.length === 0) {
       deps.out('No host-key warning to acknowledge.')
     } else {
       const names = owed.map((d) => d.device).join(', ')
       if (!yuConfirms(deps, `Acknowledge the host-key warning(s) of ${names}? [y/N] `)) return 1
-      const at = deps.now().toISOString()
       for (const d of owed) {
         writeHostKeyAck(paths, d.device, at)
         // writeDeviceStatus drops every warning at or before the ack, so this rewrite clears them from the file at once,
