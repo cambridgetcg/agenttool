@@ -4,18 +4,21 @@
 // run by the staged, de-quarantined copy of the binary (Review Focus 1). Each verb prints one JSON line on stdout and
 // human lines on stderr, and exits 0 or 1.
 import { randomBytes } from 'node:crypto'
-import { accessSync, constants, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs'
+import { accessSync, chmodSync, constants, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join, normalize } from 'node:path'
 import { expandHome, loadAllowlist, longestFolderMatch, safeRealpath, tccProtected, type Allowlist, type AllowlistFolder } from '../allowlist.ts'
-import { passwdOfSelf } from '../native.ts'
+import { passwdOfSelf, writeFileDurable } from '../native.ts'
 import { homeOf, nuancePaths, type NuancePaths } from '../paths.ts'
 import { sharePathProblem } from '../share-path.ts'
 import { knobInt, systemBin, type Env } from '../sysbin.ts'
+import { readToolsFile } from '../tools-digest.ts'
 import { gitEnv } from './fetch-gate.ts'
 import type { GateIo } from './gate-main.ts'
 import { zshenvClean } from './gate.ts'
 import { gitAcceptable, resolveGit, runCmd, sha256File, type ResolvedGit, type Run } from './git-resolve.ts'
-import { dropinStat, parseInstalled, summonKeySha256 } from './installed.ts'
+import { dropinStat, parseInstalled, readInstalled, readShares, renderInstalled, summonKeySha256, writeShares } from './installed.ts'
+import { writeSeatKeyIfAbsent } from './seatkey.ts'
+import { seedTools } from './tools-cache.ts'
 
 // ---- MANIFEST.txt ----
 
@@ -376,9 +379,182 @@ export function installClone(o: { bundle: string; share: string; git: ResolvedGi
   return { ok: true, created: target }
 }
 
-// ---- The verbs the bash installer runs (Task 55: check, clone; Task 56 adds write, settings, unsettings) ----
+// ---- the writes of §10.3 step 5 and the settings of step 6 ----
 
-export const INSTALL_USAGE = 'usage: collab-bridge install check|clone --bundle <dir> --share <path>… --terminal-git <path> --claude <path>'
+const privateDir = (d: string) => { mkdirSync(d, { recursive: true, mode: 0o700 }); chmodSync(d, 0o700) }
+
+/** Claude's own version line as INSTALLED can hold it (P23): its first line, printable ASCII, at most 128; empty is null. */
+function cleanVersion(v: string | null): string | null {
+  const line = (v ?? '').split('\n')[0]!.replace(/[^\x20-\x7e]/g, '').trim().slice(0, 128)
+  return line === '' || line === '-' ? null : line
+}
+
+/**
+ * Writes, in the order of §10.3 step 5 and only after a passing check with every share in place: INSTALLED (the binary's
+ * sha256 read from where bash installed it, and refused unless it is this bundle's), the seat key (made once, P34) and
+ * shares.json, the state dirs run, pipes, lineages and tools (0700), then the seeded tool list. tools.json is read first:
+ * unreadable, or not the list MANIFEST names, refuses before anything is written.
+ */
+export function installWrite(o: { paths: NuancePaths; report: CheckReport; bundle: string; claudeVersion: string | null; now: Date }):
+  { ok: true; seat_public: string; created_seat: boolean } | { ok: false; reason: string } {
+  const { paths, report } = o
+  const m = report.manifest
+  if (!report.ok || !m || !report.git || !report.summon) return { ok: false, reason: 'the install checks did not pass; nothing was written' }
+  if (report.shares.length !== m.shares.length || report.shares.some((s) => s.state !== 'exists')) {
+    return { ok: false, reason: 'every shared folder must be in place before install write; nothing was written' }
+  }
+  const tools = readToolsFile(join(o.bundle, 'tools.json'))
+  if (!tools || tools.digest !== m.tools_digest) return { ok: false, reason: 'tools.json is unreadable or not the tool list MANIFEST.txt names; nothing was written' }
+  let binarySha: string
+  try { binarySha = sha256File(paths.binary) } catch { return { ok: false, reason: `${paths.binary} is missing; nothing was written` } }
+  if (binarySha !== m.binary_sha256) return { ok: false, reason: `${paths.binary} is not this bundle's collab-bridge; nothing was written` }
+  const installed = renderInstalled({
+    device: m.device, build: m.build, prepared: m.prepared, expiry: m.expiry, binary_sha256: binarySha, tools_seed: m.tools_digest,
+    git: report.git, summon_key_sha256: report.summon.key_sha256, summon_dropin_stat: report.summon.dropin_stat,
+    claude_version: cleanVersion(o.claudeVersion), installed_at: o.now.toISOString(),
+  })
+  privateDir(paths.share)
+  writeFileDurable(paths.installed, installed, 0o600)
+  const seat = writeSeatKeyIfAbsent(paths)
+  writeShares(paths, report.shares.map((s) => ({ realpath: s.realpath, gitdir: s.gitdir })))
+  for (const d of [paths.state, paths.sockRoot, paths.run, paths.pipes, paths.lineages, paths.tools]) privateDir(d)
+  seedTools(paths, tools.list, tools.digest)
+  return { ok: true, seat_public: seat.publicHex, created_seat: seat.created }
+}
+
+/** The UserPromptSubmit hook's command (§8): the installed binary, never a PATH lookup. */
+export function tapCommand(paths: NuancePaths): string {
+  return `${paths.binary} tap --host claude`
+}
+
+/** Where the one backup of a share's local settings goes, beside it (taken before the first change only). */
+export const SETTINGS_BACKUP_SUFFIX = '.collab-bridge-backup'
+const SETTINGS_REL = '.claude/settings.local.json'
+/** Kept out of git: the settings file and its backup are never part of a commit (a commit touching .claude is refused, §7.3). */
+const EXCLUDED = [SETTINGS_REL, SETTINGS_REL + SETTINGS_BACKUP_SUFFIX]
+
+type Json = Record<string, unknown>
+const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v)
+type Settings = { ok: true; file: string; obj: Json; text: string | null; mode: number | null } | { ok: false; reason: string }
+
+function readSettings(folder: string): Settings {
+  const file = join(folder, SETTINGS_REL)
+  let text: string | null = null
+  let mode: number | null = null
+  try {
+    const st = lstatSync(file)
+    if (!st.isFile()) return { ok: false, reason: `${file} is not a regular file` }
+    mode = st.mode & 0o777
+    text = readFileSync(file, 'utf8')
+  } catch (e) {
+    if (errnoOf(e) !== 'ENOENT') return { ok: false, reason: `${file} cannot be read` }
+  }
+  if (text === null) return { ok: true, file, obj: {}, text: null, mode: null }
+  let obj: unknown
+  try { obj = JSON.parse(text) } catch { return { ok: false, reason: `${file} is not valid JSON; it was left as it is` } }
+  if (!isObj(obj)) return { ok: false, reason: `${file} is not a JSON object; it was left as it is` }
+  return { ok: true, file, obj, text, mode }
+}
+
+const tapHook = (paths: NuancePaths) => ({ type: 'command', command: tapCommand(paths), timeout: 5 })
+const hasTap = (groups: unknown[], command: string) =>
+  groups.some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((x) => isObj(x) && x.command === command))
+
+/** Adds each excluded path to the repo's info/exclude unless `git check-ignore` already ignores it (recorded git, scrubbed env). */
+function excludeFromGit(folder: string, git: ResolvedGit, home: string): string | null {
+  const run = (args: string[]) => runCmd(git.path, ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', folder, ...args],
+    { env: gitEnv(home), timeoutMs: 10_000 })
+  const missing: string[] = []
+  for (const rel of EXCLUDED) {
+    const ci = run(['check-ignore', '-q', rel])
+    if (ci.code === 1) missing.push(rel)
+    else if (ci.code !== 0) return `git check-ignore failed in ${folder}`
+  }
+  if (missing.length === 0) return null
+  const where = run(['rev-parse', '--path-format=absolute', '--git-path', 'info/exclude'])
+  const exclude = where.stdout.trim()
+  if (where.code !== 0 || !exclude.startsWith('/')) return `could not find ${folder}'s .git/info/exclude`
+  let before = ''
+  let mode = 0o644
+  try { before = readFileSync(exclude, 'utf8'); mode = statSync(exclude).mode & 0o777 } catch (e) { if (errnoOf(e) !== 'ENOENT') return `${exclude} cannot be read` }
+  mkdirSync(dirname(exclude), { recursive: true, mode: 0o700 })
+  const sep = before === '' || before.endsWith('\n') ? '' : '\n'
+  writeFileDurable(exclude, before + sep + missing.map((rel) => rel + '\n').join(''), mode)
+  return null
+}
+
+/**
+ * <folder>/.claude/settings.local.json (§8, §10.3 step 6, K69): `attribution.commit` set to the pairing's trailer and, with
+ * `tap`, one UserPromptSubmit entry running the tap, merged without touching any other key or hook; idempotent. The file is
+ * kept out of git first; a backup is taken before its first change; the write is atomic and keeps the file's mode.
+ */
+export function installSettings(o: { folder: string; trailer: string; tap: boolean; paths: NuancePaths; git: ResolvedGit }):
+  { ok: true; changed: boolean } | { ok: false; reason: string } {
+  const s = readSettings(o.folder)
+  if (!s.ok) return s
+  const next = JSON.parse(JSON.stringify(s.obj)) as Json
+  if (next.attribution !== undefined && !isObj(next.attribution)) return { ok: false, reason: `${s.file}: attribution is not an object; it was left as it is` }
+  next.attribution = { ...(next.attribution as Json | undefined), commit: o.trailer }
+  if (o.tap) {
+    if (next.hooks !== undefined && !isObj(next.hooks)) return { ok: false, reason: `${s.file}: hooks is not an object; it was left as it is` }
+    const hooks = (next.hooks ?? {}) as Json
+    if (hooks.UserPromptSubmit !== undefined && !Array.isArray(hooks.UserPromptSubmit)) return { ok: false, reason: `${s.file}: hooks.UserPromptSubmit is not a list; it was left as it is` }
+    const groups = (hooks.UserPromptSubmit ?? []) as unknown[]
+    if (!hasTap(groups, tapCommand(o.paths))) hooks.UserPromptSubmit = [...groups, { hooks: [tapHook(o.paths)] }]
+    next.hooks = hooks
+  }
+  const problem = excludeFromGit(o.folder, o.git, o.paths.home)
+  if (problem) return { ok: false, reason: problem }
+  if (JSON.stringify(next) === JSON.stringify(s.obj)) return { ok: true, changed: false }
+  const backup = s.file + SETTINGS_BACKUP_SUFFIX
+  if (s.text !== null && !lexists(backup)) writeFileDurable(backup, s.text, 0o600)
+  if (!lexists(dirname(s.file))) mkdirSync(dirname(s.file), { mode: 0o700 })
+  writeFileDurable(s.file, JSON.stringify(next, null, 2) + '\n', s.mode ?? 0o600)
+  return { ok: true, changed: true }
+}
+
+/**
+ * The Nuance rollback's settings step (§10.6): removes exactly the tap entry (by its command) and the attribution.commit
+ * key, and the containers they leave empty; every other key and hook stays as it was. Never restores the backup.
+ */
+export function uninstallSettings(o: { folder: string; paths: NuancePaths }): { ok: true; changed: boolean } | { ok: false; reason: string } {
+  const s = readSettings(o.folder)
+  if (!s.ok) return s
+  if (s.text === null) return { ok: true, changed: false }
+  const next = JSON.parse(JSON.stringify(s.obj)) as Json
+  const command = tapCommand(o.paths)
+  if (isObj(next.hooks) && Array.isArray(next.hooks.UserPromptSubmit)) {
+    const hooks = next.hooks
+    const kept: unknown[] = []
+    for (const g of hooks.UserPromptSubmit as unknown[]) {
+      if (!isObj(g) || !Array.isArray(g.hooks) || !g.hooks.some((x) => isObj(x) && x.command === command)) { kept.push(g); continue }
+      const rest = g.hooks.filter((x) => !(isObj(x) && x.command === command))
+      if (rest.length > 0) kept.push({ ...g, hooks: rest })
+    }
+    if (kept.length > 0) hooks.UserPromptSubmit = kept
+    else delete hooks.UserPromptSubmit
+    if (Object.keys(hooks).length === 0) delete next.hooks
+  }
+  if (isObj(next.attribution) && 'commit' in next.attribution) {
+    delete next.attribution.commit
+    if (Object.keys(next.attribution).length === 0) delete next.attribution
+  }
+  if (JSON.stringify(next) === JSON.stringify(s.obj)) return { ok: true, changed: false }
+  writeFileDurable(s.file, JSON.stringify(next, null, 2) + '\n', s.mode ?? 0o600)
+  return { ok: true, changed: true }
+}
+
+// ---- The verbs the bash installer runs ----
+
+export const INSTALL_USAGE = [
+  'usage: collab-bridge install check|clone --bundle <dir> --share <path>… --terminal-git <path> --claude <path>',
+  '       collab-bridge install write <the same flags> --claude-version <text>',
+  '       collab-bridge install settings --folder <share> --trailer <text> [--tap]',
+  '       collab-bridge install unsettings --folder <share>',
+].join('\n')
+
+/** The pairing's trailer as the installer's single quotes and INSTALLED can carry it: printable ASCII but ', at most 200. */
+export const TRAILER_RE = /^[ -&(-~]{1,200}$/
 
 type FlagSpec = Record<string, 'one' | 'many' | 'flag'>
 type Flags = Map<string, string[]>
@@ -403,6 +579,13 @@ function parseFlags(args: string[], spec: FlagSpec): Flags | null {
 }
 
 const CHECK_FLAGS: FlagSpec = { '--bundle': 'one', '--share': 'many', '--terminal-git': 'one', '--claude': 'one' }
+const VERB_FLAGS: Record<string, FlagSpec> = {
+  check: CHECK_FLAGS,
+  clone: CHECK_FLAGS,
+  write: { ...CHECK_FLAGS, '--claude-version': 'one' },
+  settings: { '--folder': 'one', '--trailer': 'one', '--tap': 'flag' },
+  unsettings: { '--folder': 'one' },
+}
 
 /** installCheck's input from the flags and this process: the passwd user (never $USER), the systemBin zsh and xcrun. */
 function checkInputOf(f: Flags, env: Env, paths: NuancePaths): CheckInput {
@@ -417,10 +600,28 @@ function checkInputOf(f: Flags, env: Env, paths: NuancePaths): CheckInput {
 export async function runInstallVerb(argv: string[], env: Env, io: GateIo): Promise<number> {
   const [verb, ...args] = argv
   const answer = (o: object, ok: boolean) => { io.stdout.write(JSON.stringify(o) + '\n'); return ok ? 0 : 1 }
-  const usage = () => { io.stderr.write(INSTALL_USAGE + '\n'); return answer({ ok: false, failures: ['usage'] }, false) }
-  const flags = verb === 'check' || verb === 'clone' ? parseFlags(args, CHECK_FLAGS) : null
-  if (!flags) return usage()
+  const refuse = (reason: string) => { io.stderr.write(`✗ ${reason}\n`); return answer({ ok: false, reason }, false) }
+  const spec = verb === undefined ? undefined : VERB_FLAGS[verb]
+  const flags = spec ? parseFlags(args, spec) : null
+  if (!flags) { io.stderr.write(INSTALL_USAGE + '\n'); return answer({ ok: false, failures: ['usage'] }, false) }
   const paths = nuancePaths(homeOf(env), env)
+  const one = (k: string) => flags.get(k)![0]!
+
+  if (verb === 'settings' || verb === 'unsettings') {
+    const folder = safeRealpath(one('--folder'))
+    if (verb === 'unsettings') {
+      if (!folder) return refuse(`${one('--folder')} does not exist`)
+      const u = uninstallSettings({ folder, paths })
+      return u.ok ? answer(u, true) : refuse(u.reason)
+    }
+    const installed = readInstalled(paths)
+    if (!installed) return refuse('INSTALLED is missing or malformed; run install write first')
+    if (!folder || !(readShares(paths) ?? []).some((s) => s.realpath === folder)) return refuse(`${one('--folder')} is not a shared folder in shares.json`)
+    if (!TRAILER_RE.test(one('--trailer'))) return refuse('the trailer must be printable ASCII without \', at most 200 characters')
+    const r = installSettings({ folder, trailer: one('--trailer'), tap: flags.has('--tap'), paths, git: installed.git })
+    return r.ok ? answer(r, true) : refuse(r.reason)
+  }
+
   const input = checkInputOf(flags, env, paths)
   const report = installCheck(input)
   for (const f of report.failures) io.stderr.write(`✗ ${f}\n`)
@@ -430,6 +631,13 @@ export async function runInstallVerb(argv: string[], env: Env, io: GateIo): Prom
       for (const s of report.shares) io.stderr.write(s.state === 'exists' ? `✓ ${s.path}: a repository holding the trial commit\n` : `✓ ${s.path}: will be cloned from the bundle\n`)
     }
     return answer(report, report.ok)
+  }
+  if (verb === 'write') {
+    if (!report.ok) return answer({ ok: false, reason: 'the checks failed; nothing was written' }, false)
+    const r = installWrite({ paths, report, bundle: input.bundle, claudeVersion: one('--claude-version'), now: new Date() })
+    if (!r.ok) return refuse(r.reason)
+    io.stderr.write(`✓ INSTALLED, the seat key, shares.json and the tool list are in place (${r.created_seat ? 'a new seat key' : 'the seat key kept'})\n`)
+    return answer(r, true)
   }
   if (!report.ok) return answer({ ok: false, reason: 'the checks failed; nothing was cloned', created: [] }, false)
   const created: string[] = []
