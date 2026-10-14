@@ -38,6 +38,8 @@ const MAX_TIMER_MS = 2_147_483_647
 const DEFAULT_START_TIMEOUT_MS = 60_000 // two chain passes and a resume; far above a small journal's start (K21)
 const STDERR_LINE_MAX = 4096
 const DRAIN_AFTER_EXIT_MS = 2_000
+/** How long a distrusted child gets between SIGTERM and SIGKILL. */
+const KILL_AFTER_TERM_MS = 5_000
 
 type UnknownReason = Extract<CallOutcome, { outcome: 'unknown' }>['reason']
 interface Pending {
@@ -104,7 +106,9 @@ export class CollabChild {
       return proc.exitCode
     })
     this.stderrDone = this.readStderr().catch(() => {})
-    const stdoutDone = this.readStdout(new LineReader(maxReplyBytes)).catch(() => {})
+    // A stdout read that fails (a stream error, a throwing push or onLine) is not the child's silence: nothing would read its
+    // replies again, so the child is distrusted instead of left accepting calls it would answer into the void.
+    const stdoutDone = this.readStdout(new LineReader(maxReplyBytes)).catch(() => this.distrust('unparsable'))
     // What is still pending is settled only once stdout has drained: a reply written just before the exit still counts.
     void this.exited.then(() => within(stdoutDone, DRAIN_AFTER_EXIT_MS)).then(() => {
       this.initWaiter?.(null)
@@ -254,13 +258,25 @@ export class CollabChild {
     for (const id of [...this.pending.keys()]) this.settleUnknown(id, reason)
   }
 
+  /** A child whose stdout can no longer be read as replies takes no further call: closed first (accepting() is false at
+   *  once), every call in flight answered `reason`, then SIGTERM, then SIGKILL if it is still there after KILL_AFTER_TERM_MS. */
+  private distrust(reason: UnknownReason): void {
+    this.closed = true
+    this.failAll(reason)
+    if (this.dead) return
+    try { this.proc.kill('SIGTERM') } catch { /* already gone */ }
+    void within(this.exited, KILL_AFTER_TERM_MS).then(() => {
+      if (this.dead) return
+      try { this.proc.kill('SIGKILL') } catch { /* already gone */ }
+    })
+  }
+
   private onLine(line: string): void {
     const parsed = parseJsonRpc(line)
     if (parsed.kind === 'invalid') {
       // A line no one can attribute: every call in flight may have been its subject, so they all become unknown, and a
       // child whose stdout carries garbage is not trusted with another call.
-      this.failAll('unparsable')
-      if (!this.dead) this.proc.kill('SIGTERM')
+      this.distrust('unparsable')
       return
     }
     if (parsed.kind !== 'response') return // Collab sends its client no requests or notifications (K2)
@@ -294,21 +310,34 @@ export class CollabChild {
     }
   }
 
-  /** Keeps reading stderr so the child never blocks on it, remembering only its last `✖ ` line (K64). */
+  /** Keeps reading stderr so the child never blocks on it, remembering only its last `✖ ` line (K64). A line that passes
+   *  STDERR_LINE_MAX before its newline is judged on its head, prefix included, and the rest of it up to the newline is dropped. */
   private async readStderr(): Promise<void> {
+    const note = (line: string): void => { if (line.startsWith('✖ ')) this.lastErr = line.slice(0, STDERR_LINE_MAX) }
     const dec = new TextDecoder()
     let buf = ''
+    let skipping = false // the current line is past the cap and already judged: drop its rest
     for await (const chunk of this.proc.stderr) {
-      buf += dec.decode(chunk, { stream: true })
+      let text = dec.decode(chunk, { stream: true })
+      if (skipping) {
+        const nl = text.indexOf('\n')
+        if (nl < 0) continue
+        text = text.slice(nl + 1)
+        skipping = false
+      }
+      buf += text
       let i: number
       while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i)
+        note(buf.slice(0, i))
         buf = buf.slice(i + 1)
-        if (line.startsWith('✖ ')) this.lastErr = line.slice(0, STDERR_LINE_MAX)
       }
-      if (buf.length > STDERR_LINE_MAX) buf = buf.slice(-STDERR_LINE_MAX)
+      if (buf.length > STDERR_LINE_MAX) {
+        note(buf.slice(0, STDERR_LINE_MAX))
+        buf = ''
+        skipping = true
+      }
     }
-    if (buf.startsWith('✖ ')) this.lastErr = buf.slice(0, STDERR_LINE_MAX)
+    note(buf)
   }
 }
 

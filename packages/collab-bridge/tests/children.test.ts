@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { readdirSync } from 'node:fs'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   CHILD_MAX_REPLY_BYTES, CHILD_REQUEST_TIMEOUT_MS, childArgv, childEnv, CollabChild, probeCollabTools, type ChildSpec, type StartFailure,
 } from '../src/air/children.ts'
+import { LineReader } from '../src/jsonrpc.ts'
 import { COLLAB_DIST, cleanupTmps, temp } from './helpers.ts'
 import { collabHarness } from './mcp-harness.ts'
 import { fakeLog, plantBunConfig, writeFakeCollab, type FakeScript } from './fake-collab.ts'
@@ -174,7 +175,8 @@ describe('CollabChild against the fake bin', () => {
   test('a garbage reply is unknown unparsable, a reply over the cap is unknown oversized', async () => {
     const g = await started(fakeSpec({ tools: { fake_slow: { kind: 'garbage' } } }))
     expect(await g.call('fake_slow', {})).toMatchObject({ outcome: 'unknown', reason: 'unparsable' })
-    await g.exited // a child that wrote a line no one can attribute is not trusted again
+    expect(g.accepting()).toBe(false) // a child that wrote a line no one can attribute takes no further call, before it has even exited
+    await g.exited
     const big = fakeSpec({ tools: { fake_slow: { kind: 'big', bytes: 5 * 1024 * 1024 } } })
     const b = await started(big)
     expect(await b.call('fake_slow', {})).toMatchObject({ outcome: 'unknown', reason: 'oversized' })
@@ -223,6 +225,109 @@ describe('CollabChild against the fake bin', () => {
     expect(h).toEqual({ failed: true, lastErrLine: null, exitCode: null })
     const missing = await CollabChild.start({ ...realSpec(), bun: '/nonexistent/bun' })
     expect(missing).toEqual({ failed: true, lastErrLine: null, exitCode: null })
+  }, 20_000)
+})
+
+/** Writes a hand-made program as `<dir>/agenttool-collab-mcp.js` (the fake bin stays as Task 51 expects it); returns `dir`. */
+function writeProgram(dir: string, source: string): string {
+  writeFileSync(join(dir, 'agenttool-collab-mcp.js'), source, { mode: 0o755 })
+  return dir
+}
+
+/** Answers initialize properly, writes a line that is not JSON for every tools/call, and ignores SIGTERM. Logs what it sees. */
+const STUBBORN = `import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
+const log = (s) => appendFileSync(join(import.meta.dir, 'stubborn.log'), s + '\\n')
+process.on('SIGTERM', () => log('sigterm'))
+let buf = ''
+const dec = new TextDecoder()
+for await (const chunk of Bun.stdin.stream()) {
+  buf += dec.decode(chunk, { stream: true })
+  let i
+  while ((i = buf.indexOf('\\n')) >= 0) {
+    const line = buf.slice(0, i); buf = buf.slice(i + 1)
+    if (!line.trim()) continue
+    const m = JSON.parse(line)
+    log(m.method ?? 'reply')
+    if (m.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'stubborn', version: '0' } } }) + '\\n')
+    else if (m.method === 'tools/call') process.stdout.write('this is not json\\n')
+  }
+}
+`
+
+/** Fails to start: an older ✖ line, then a ✖ line of 4500 chars in one write and 600 more in a second, then exit 1. */
+const LONG_STDERR = `process.stderr.write('· starting\\n✖ an older line\\n')
+process.stderr.write('✖ ' + 'a'.repeat(4500))
+await Bun.sleep(150)
+process.stderr.write('b'.repeat(600) + '\\n')
+process.exit(1)
+`
+
+/** The same long line in three pieces, then a newer short ✖ line in a read of its own: reading resumes after the newline. */
+const LONG_THEN_SHORT_STDERR = `process.stderr.write('✖ ' + 'a'.repeat(4500))
+await Bun.sleep(150)
+process.stderr.write('b'.repeat(600))
+await Bun.sleep(150)
+process.stderr.write('c'.repeat(10) + '\\n')
+await Bun.sleep(150)
+process.stderr.write('✖ the newest line\\n')
+process.exit(1)
+`
+
+describe('a child that can no longer be trusted', () => {
+  test('after an unparsable line a child that ignores SIGTERM takes no call at once and is SIGKILLed after about 5 s', async () => {
+    const dist = writeProgram(temp('cb-stubborn-'), STUBBORN)
+    const home = temp('cb-stubborn-home-')
+    const c = await started({ bun: process.execPath, dist, journal: join(home, 'collab.sqlite'), home })
+    const t0 = performance.now()
+    expect(await c.call('anything', {})).toMatchObject({ outcome: 'unknown', reason: 'unparsable' })
+    expect(c.accepting()).toBe(false) // at once, while the child still runs
+    expect(c.alive()).toBe(true)
+    // A call handed out now is answered as never written, and the child never sees it.
+    expect(await c.call('anything', {})).toMatchObject({ outcome: 'unknown', reason: 'exit', ms: 0 })
+    await Bun.sleep(300)
+    expect(c.alive()).toBe(true) // SIGTERM alone does not end it
+    expect(await c.exited).toBeNull() // killed by a signal, not a clean exit
+    const waited = performance.now() - t0
+    expect(waited).toBeGreaterThanOrEqual(4500)
+    expect(waited).toBeLessThan(15_000)
+    const seen = readFileSync(join(dist, 'stubborn.log'), 'utf8').split('\n').filter(Boolean)
+    expect(seen).toEqual(['initialize', 'notifications/initialized', 'tools/call', 'sigterm'])
+  }, 30_000)
+
+  test('a stdout read that fails closes the child, answers the call in flight unknown unparsable and terminates it', async () => {
+    const spec = fakeSpec()
+    const c = await started(spec)
+    const realPush = LineReader.prototype.push
+    let armed = false
+    const spy = spyOn(LineReader.prototype, 'push').mockImplementation(function (this: LineReader, chunk: Uint8Array) {
+      if (armed) throw new Error('stdout read failed')
+      return realPush.call(this, chunk)
+    })
+    try {
+      armed = true
+      expect(await c.call('fake_echo', {})).toMatchObject({ outcome: 'unknown', reason: 'unparsable' })
+      expect(c.accepting()).toBe(false)
+      await c.exited // SIGTERM ends the fake
+      expect(c.alive()).toBe(false)
+      expect(await c.call('fake_echo', {})).toMatchObject({ outcome: 'unknown', reason: 'exit', ms: 0 })
+      expect(fakeLog(spec.dir).filter((l) => l.method === 'tools/call')).toHaveLength(1)
+    } finally {
+      spy.mockRestore()
+    }
+  }, 20_000)
+
+  test('a ✖ line over 4096 chars written in two pieces gives its first 4096 chars with the prefix, not an older line', async () => {
+    const dist = writeProgram(temp('cb-longerr-'), LONG_STDERR)
+    const home = temp('cb-longerr-home-')
+    const r = await CollabChild.start({ bun: process.execPath, dist, journal: join(home, 'collab.sqlite'), home })
+    const head = ('✖ ' + 'a'.repeat(4500)).slice(0, 4096)
+    expect(r).toEqual({ failed: true, lastErrLine: head, exitCode: 1 })
+    expect(head).toHaveLength(4096)
+    // The rest of a long line is dropped up to its newline, then the next line is judged as usual.
+    const resumed = writeProgram(temp('cb-longerr2-'), LONG_THEN_SHORT_STDERR)
+    expect(await CollabChild.start({ bun: process.execPath, dist: resumed, journal: join(home, 'collab2.sqlite'), home }))
+      .toEqual({ failed: true, lastErrLine: '✖ the newest line', exitCode: 1 })
   }, 20_000)
 })
 
