@@ -1,0 +1,640 @@
+// The stamped edit flows end to end on this Mac (spec §7.2–§7.7, §12.2 Git, Diff and size, Replays, One-task rule): a
+// temp "Nuance" home whose ~/Projects/collab-trial is shared for edit, the real gate from source behind the fake ssh,
+// a real mirror made by createMirror, and two real Collab children on one temp shared journal (the remote seat's,
+// rooted at the mirror, and an Air session's, rooted at the Air clone).
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { mirrorBusy } from '../src/air/busy.ts'
+import { CollabChild } from '../src/air/children.ts'
+import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
+import { FLOW_MESSAGES, runEditFlow, type EditFlowCtx, type EditFlowOutcome } from '../src/air/edit-flows.ts'
+import { airGit, type GitRunner } from '../src/air/git.ts'
+import { createMirror, mirrorIdOf, mirrorRefs, MirrorLock, type MirrorDeps, type MirrorSpec } from '../src/air/mirror.ts'
+import type { MirrorHandle } from '../src/air/sync-points.ts'
+import { readTask } from '../src/air/tasks.ts'
+import type { LedgerFields } from '../src/ledger.ts'
+import type { Declared } from '../src/link/messages.ts'
+import { hasLazyFetchGuard, parseGitVersion, sha256File, type ResolvedGit } from '../src/nuance/git-resolve.ts'
+import { renderInstalled, writeShares } from '../src/nuance/installed.ts'
+import { airPaths, nuancePaths } from '../src/paths.ts'
+import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
+import { cleanupTmps, COLLAB_DIST, commitFiles, makeRepo, REAL_GIT, repoGit, temp, testEnv } from './helpers.ts'
+import { collabHarness, type StdioHarness } from './mcp-harness.ts'
+
+const running: Array<() => Promise<unknown>> = []
+afterEach(async () => {
+  for (const stop of running.splice(0).reverse()) await stop()
+  cleanupTmps()
+})
+
+const T = 60_000 // a world is two repos, one fetch through the source gate and two Collab children
+
+/** The git Nuance's INSTALLED records: the Air's own Homebrew git by its Cellar realpath, as `install check` would. */
+function nuanceGit(): ResolvedGit {
+  const path = realpathSync(REAL_GIT)
+  const v = parseGitVersion(Bun.spawnSync([path, '--version'], { env: { PATH: '/usr/bin:/bin' } }).stdout.toString())!
+  return { path, version: v.version, sha256: sha256File(path), guard: hasLazyFetchGuard(path), apple: v.apple }
+}
+
+const ALLOWLIST = ['version: 1', 'device: nuance', 'peers: [air]', 'runtimes:', '  - id: claude', '    models:', '      - model: sonnet',
+  'folders:', '  - path: ~/Projects', '    access: review', '  - path: ~/Projects/collab-trial', '    access: edit',
+  'limits:', '  max_concurrent: 1', '  starts_per_hour: 6', '  job_timeout_max: 30m', ''].join('\n')
+
+/**
+ * Collab's minimum lease is 30 s and its store reads its own wall clock, so no test can wait for an expiry within its
+ * 10 s budget. This moves one temp journal's lease into the past with the sqlite3 CLI, under the write guard Collab's
+ * own v0.2 writes use (inserted and removed in the same transaction); the event chain is untouched.
+ */
+function expireLease(journal: string, taskId: string): void {
+  if (!/^[A-Za-z0-9_-]+$/.test(taskId)) throw new Error('expireLease: test task ids are plain words')
+  const sql = "BEGIN IMMEDIATE; INSERT INTO v2_write_guard (nonce, enabled) VALUES ('collab-bridge-test', 1); " +
+    `UPDATE tasks SET lease_expires_at = '2000-01-01T00:00:00.000Z' WHERE id = '${taskId}'; ` +
+    "DELETE FROM v2_write_guard WHERE nonce = 'collab-bridge-test'; COMMIT;"
+  const r = Bun.spawnSync(['/usr/bin/sqlite3', '-cmd', '.timeout 5000', journal, sql], { env: { PATH: '/usr/bin:/bin' }, stdout: 'pipe', stderr: 'pipe' })
+  if (r.exitCode !== 0) throw new Error(`expireLease: ${r.stderr.toString()}`)
+}
+
+/** Faults a test can arm on the mirror's git runner: the next checkout of `checkoutOf` fails once. */
+interface Faults { checkoutOf: string | null }
+
+function faulty(g: GitRunner, faults: Faults): GitRunner {
+  return {
+    path: g.path,
+    records: (args, o) => g.records(args, o),
+    run: async (args, o) => {
+      const target = faults.checkoutOf
+      if (target !== null && args.includes('checkout') && args.some((a) => a.includes(target))) {
+        faults.checkoutOf = null
+        return { code: 1, stdout: new Uint8Array(), stderr: 'error: injected checkout failure\n', timedOut: false }
+      }
+      return g.run(args, o)
+    },
+  }
+}
+
+interface World {
+  airHome: string; airClone: string; nuanceHome: string; share: string; base: string; journal: string
+  fake: FakeSsh; spec: MirrorSpec; deps: MirrorDeps; ledger: LedgerFields[]; faults: Faults; handle: MirrorHandle
+  remote: CollabChild; air: StdioHarness; ws: string; sessionId: string
+}
+
+async function world(): Promise<World> {
+  const root = temp('cb-flows-')
+  const airHome = join(root, 'air-home')
+  mkdirSync(airHome)
+  const airClone = join(root, 'Projects', 'collab-trial')
+  const base = makeRepo(airClone)
+
+  // Nuance: the trial clone shares the Air's first commit (§10.3 step 5), with INSTALLED, shares.json and Yu's edit entry.
+  const nuanceHome = temp('cb-nuance-')
+  const nenv = testEnv(nuanceHome)
+  const np = nuancePaths(nuanceHome, nenv)
+  const share = join(nuanceHome, 'Projects', 'collab-trial')
+  mkdirSync(dirname(share))
+  repoGit(dirname(share), ['clone', '-q', airClone, share])
+  mkdirSync(np.share, { recursive: true, mode: 0o700 })
+  writeFileSync(np.installed, renderInstalled({ device: 'nuance', build: 'abcdef01', prepared: '20261013120000', expiry: '20270111',
+    binary_sha256: 'a'.repeat(64), tools_seed: 'b'.repeat(64), git: nuanceGit(), summon_key_sha256: 'c'.repeat(64),
+    summon_dropin_stat: '1 2 3 0 600', claude_version: null, installed_at: '2026-10-13T12:00:00.000Z' }), { mode: 0o600 })
+  writeShares(np, [{ realpath: share, gitdir: join(share, '.git') }])
+  mkdirSync(dirname(np.summonAllowlist), { recursive: true })
+  writeFileSync(np.summonAllowlist, ALLOWLIST)
+  const fake = makeFakeSsh({ nuanceHome, target: gateFromSource(), env: nenv })
+
+  const ap = airPaths(airHome)
+  const mirrorId = mirrorIdOf(share)
+  const spec: MirrorSpec = { device: 'nuance', user: 'macair', mirrorId, mirrorPath: ap.mirrorDir('nuance', 'macair', mirrorId), airClone,
+    remoteGitdir: join(share, '.git'), caps: DEFAULT_CAPS }
+  const ledger: LedgerFields[] = []
+  const faults: Faults = { checkoutOf: null }
+  const deps: MirrorDeps = { git: faulty(airGit({ git: REAL_GIT, home: airHome }), faults), sshBin: fake.bin, sshConfig: ap.sshConfig,
+    alias: 'collab-nuance', freeBytes: () => Number.MAX_SAFE_INTEGER, fetchedToday: () => 0, ledger: (f) => { ledger.push(f) } }
+  const made = await createMirror(spec, deps)
+  if (!made.ok) throw new Error(`createMirror: ${made.code} ${made.message}`)
+  expect(made.oid).toBe(base)
+
+  const journal = ap.sharedJournal
+  const remote = await CollabChild.start({ bun: process.execPath, dist: COLLAB_DIST, journal, home: airHome })
+  if (!(remote instanceof CollabChild)) throw new Error(`the remote child did not start: ${remote.lastErrLine}`)
+  running.push(() => remote.stop())
+  const started = await ok(remote, 'collab_session_start', { root_path: spec.mirrorPath, actor: 'nuance/macair · self-declared: flow test' })
+  const air = collabHarness({ journal, home: airHome })
+  running.push(() => air.close())
+  await air.initialize()
+  const airStart = await airOk(air, 'collab_session_start', { root_path: airClone, actor: 'air reviewer' })
+  expect(airStart.workspace.id).toBe(started.workspace.id)
+  const handle: MirrorHandle = { spec, lock: new MirrorLock(), worktreeId: started.worktree.id }
+  return { airHome, airClone, nuanceHome, share, base, journal, fake, spec, deps, ledger, faults, handle, remote, air,
+    ws: started.workspace.id, sessionId: started.session.id }
+}
+
+async function ok(child: CollabChild, name: string, args: Record<string, unknown>): Promise<any> {
+  const o = await child.call(name, args)
+  if (o.outcome === 'unknown') throw new Error(`${name}: no answer (${o.reason})`)
+  if (o.outcome === 'error') throw new Error(`${name}: ${JSON.stringify(o.result.structuredContent)}`)
+  return o.result.structuredContent
+}
+
+async function airOk(air: StdioHarness, name: string, args: Record<string, unknown>): Promise<any> {
+  const r = await air.callTool(name, args)
+  if (r.isError) throw new Error(`${name}: ${JSON.stringify(r.structuredContent)}`)
+  return r.structuredContent
+}
+
+let n = 0
+const key = () => `flow-key-${++n}`
+
+const fetches = (w: World) => w.fake.calls().length
+const mirrorAt = (w: World) => repoGit(w.spec.mirrorPath, ['rev-parse', 'HEAD'])
+const syncedAt = (w: World) => repoGit(w.airClone, ['rev-parse', mirrorRefs(w.spec).synced])
+const tasksRef = (w: World, id: string): string | null => {
+  try { return repoGit(w.airClone, ['rev-parse', '--verify', '-q', mirrorRefs(w.spec).task(id)]) } catch { return null }
+}
+/** What the pipe would declare for the shared folder right now (§7.5). */
+const declaredOf = (w: World, dirty = false): Declared => ({ head: repoGit(w.share, ['rev-parse', 'HEAD']), branch: 'main', dirty })
+
+function createEdit(w: World, id: string, o: { base?: string | null; policy?: 'accepted' | 'reported'; scopes?: string[] } = {}): Promise<any> {
+  const base = o.base === undefined ? w.base : o.base
+  return airOk(w.air, 'collab_task_create', { workspace_id: w.ws, idempotency_key: key(), task_id: id, title: `task ${id}`, work_mode: 'edit',
+    completion_policy: o.policy ?? 'accepted', path_scopes: o.scopes ?? ['notes'], ...(base === null ? {} : { expected_base_sha: base }) }).then((r) => r.task)
+}
+
+function ctxOf(w: World, flow: EditFlowCtx['flow'], name: string, args: Record<string, unknown>, declared: Declared | undefined,
+  o: { child?: CollabChild; nowMs?: number; notAfterMono?: number; mono?: () => number } = {}): EditFlowCtx {
+  return { flow, name, args, declared, device: 'nuance', user: 'macair', sessionId: w.sessionId, workspaceId: w.ws,
+    child: o.child ?? w.remote, mirror: w.handle, mirrorDeps: w.deps, nowMs: o.nowMs ?? Date.now(),
+    notAfterMono: o.notAfterMono ?? null, mono: o.mono ?? (() => performance.now()) }
+}
+
+const claimArgs = (w: World, t: any, o: { key?: string; ttl?: number } = {}) => ({ workspace_id: w.ws, task_id: t.id,
+  idempotency_key: o.key ?? key(), expected_version: t.version, ...(o.ttl === undefined ? {} : { ttl_seconds: o.ttl }) })
+const completeArgs = (w: World, t: any, o: { key?: string; limits?: string } = {}) => ({ workspace_id: w.ws, task_id: t.id,
+  lease_id: t.lease_id, idempotency_key: o.key ?? key(), expected_version: t.version, summary: 'edited notes', ...(o.limits === undefined ? {} : { limits: o.limits }) })
+const takeoverArgs = (w: World, t: { id: string; version: number }, note: string) => ({ workspace_id: w.ws, task_id: t.id,
+  idempotency_key: key(), expected_version: t.version, recovery_note: note })
+
+const claim = (w: World, t: any, declared: Declared | undefined, o: { key?: string; ttl?: number; child?: CollabChild } = {}) =>
+  runEditFlow(ctxOf(w, 'claim', 'collab_task_claim', claimArgs(w, t, o), declared, o))
+const complete = (w: World, t: any, declared: Declared | undefined, o: { key?: string; limits?: string; child?: CollabChild } = {}) =>
+  runEditFlow(ctxOf(w, 'complete', 'collab_task_complete', completeArgs(w, t, o), declared, o))
+const takeover = (w: World, t: { id: string; version: number }, declared: Declared | undefined, note: string, o: { child?: CollabChild } = {}) =>
+  runEditFlow(ctxOf(w, 'takeover', 'collab_task_recover', takeoverArgs(w, t, note), declared, o))
+
+/** The task of a flow that reached Collab and succeeded. */
+function taskOf(r: EditFlowOutcome): any {
+  if (r.kind !== 'outcome') throw new Error(`refused: ${r.code} ${r.message}`)
+  const o = r.outcome
+  if (o.outcome === 'unknown') throw new Error(`no answer from Collab (${o.reason})`)
+  if (o.outcome === 'error') throw new Error(`Collab: ${JSON.stringify(o.result.structuredContent)}`)
+  return o.result.structuredContent!.task
+}
+
+/** Collab's own refusal code for a flow that reached Collab and was refused there. */
+function collabError(r: EditFlowOutcome): string {
+  if (r.kind !== 'outcome' || r.outcome.outcome !== 'error') throw new Error(`expected a Collab refusal, got ${JSON.stringify(r)}`)
+  return String(r.outcome.result.structuredContent!.error)
+}
+
+async function claimed(w: World, id = 'T', o: { base?: string | null; scopes?: string[]; ttl?: number } = {}): Promise<any> {
+  return taskOf(await claim(w, await createEdit(w, id, o), declaredOf(w), { ttl: o.ttl }))
+}
+
+async function completionLimits(w: World, t: any): Promise<string | null> {
+  const reports = (await airOk(w.air, 'collab_report_list', { workspace_id: w.ws, task_id: t.id })).reports as any[]
+  return reports.find((r) => r.id === t.completion_report_id)?.limits ?? null
+}
+
+const airReview = (w: World, t: any, outcome: 'accept' | 'request_changes') =>
+  airOk(w.air, 'collab_task_review', { workspace_id: w.ws, task_id: t.id, idempotency_key: key(), expected_version: t.version,
+    outcome, summary: outcome === 'accept' ? 'read the diff; it holds' : 'please change' }).then((r) => r.task)
+
+/** A view of `child` that records every call, and can run something of its own just before one named call. */
+function recording(child: CollabChild, before?: { name: string; run(): Promise<void> }) {
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = []
+  let armed = before
+  const proxy = new Proxy(child, {
+    get(target, prop) {
+      if (prop === 'call') {
+        return async (name: string, args: Record<string, unknown>) => {
+          calls.push({ name, args: structuredClone(args) })
+          if (armed && armed.name === name) {
+            const b = armed
+            armed = undefined
+            await b.run()
+          }
+          return target.call(name, args)
+        }
+      }
+      const v = Reflect.get(target, prop, target)
+      return typeof v === 'function' ? v.bind(target) : v
+    },
+  })
+  return { child: proxy as CollabChild, calls }
+}
+
+const stampOf = (oid: string, o: { equalsBase?: boolean; seat?: string } = {}) =>
+  `hub-observed: fetched ${oid} from nuance/macair via git-upload-pack v0; remote clean self-declared` +
+  (o.equalsBase ? '; HEAD equals base' : '') + (o.seat ? `\nremote self-declared: ${o.seat}` : '')
+
+describe('claim', () => {
+  test('a claim syncs and passes its base check', async () => {
+    const w = await world()
+    const before = fetches(w)
+    const t = taskOf(await claim(w, await createEdit(w, 'T'), declaredOf(w)))
+    expect([t.status, t.claim_worktree_id, t.base_checkpoint.head_sha]).toEqual(['claimed', w.handle.worktreeId, w.base])
+    expect(fetches(w)).toBe(before + 1)
+    expect(mirrorAt(w)).toBe(w.base)
+  }, T)
+
+  test('a claim whose declared head is not the expected base is refused before fetching', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'T')
+    commitFiles(w.share, { 'notes/a.md': 'early\n' }, 'work before the claim')
+    const before = fetches(w)
+    expect(await claim(w, task, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'expected_base_mismatch' })
+    expect(fetches(w)).toBe(before)
+    expect((await readTask(w.remote, w.ws, 'T'))?.status).toBe('open')
+  }, T)
+
+  test('a claim refused by Collab after its sync (a lost race to another claim; path_scope_conflict) leaves the mirror free for the next task', async () => {
+    const w = await world()
+    // path_scope_conflict: an Air session already holds notes/ in the same repository (K12).
+    const held = await createEdit(w, 'HELD')
+    await airOk(w.air, 'collab_task_claim', { workspace_id: w.ws, task_id: 'HELD', idempotency_key: key(), expected_version: held.version })
+    const a = await createEdit(w, 'A')
+    let before = fetches(w)
+    expect(collabError(await claim(w, a, declaredOf(w)))).toBe('path_scope_conflict')
+    expect(fetches(w)).toBe(before + 1) // it synced first, then Collab refused
+    // A lost race: the task was open when the hub read it, and an Air session claimed it before the forward. The
+    // seat's expected_version predates that claim, so Collab answers version_conflict (its CAS runs first).
+    const b = await createEdit(w, 'B', { scopes: ['docs'] })
+    const race = recording(w.remote, { name: 'collab_task_claim', run: async () => {
+      await airOk(w.air, 'collab_task_claim', { workspace_id: w.ws, task_id: 'B', idempotency_key: key(), expected_version: b.version })
+    } })
+    before = fetches(w)
+    expect(collabError(await claim(w, b, declaredOf(w), { child: race.child }))).toBe('version_conflict')
+    expect(fetches(w)).toBe(before + 1)
+    expect(await mirrorBusy(w.remote, w.ws, w.handle.worktreeId, 'C')).toEqual({ busy: false })
+    expect(taskOf(await claim(w, await createEdit(w, 'C', { scopes: ['src'] }), declaredOf(w))).status).toBe('claimed')
+  }, T)
+
+  test('a claim while another edit task awaits review from the mirror is mirror_busy, and nothing is fetched', async () => {
+    const w = await world()
+    const a = await claimed(w, 'A')
+    commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    taskOf(await complete(w, a, declaredOf(w)))
+    const b = await createEdit(w, 'B', { scopes: ['docs'], base: null })
+    const before = fetches(w)
+    expect(await claim(w, b, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'mirror_busy', extra: { holder_task_id: 'A', reason: 'pending_review' } })
+    expect(fetches(w)).toBe(before)
+  }, T)
+
+  test('after request_changes a re-claim of the old task is expected_base_mismatch', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'first try\n' }, 'first try')
+    const done = taskOf(await complete(w, t, declaredOf(w)))
+    const back = await airReview(w, done, 'request_changes')
+    expect([back.status, back.expected_base_sha]).toEqual(['open', w.base])
+    expect(await claim(w, back, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'expected_base_mismatch' })
+    // The creator reissues on the rejected commit (§7.2); the old task holds nothing, so the reissue is not mirror_busy.
+    const again = taskOf(await claim(w, await createEdit(w, 'T2', { base: n1 }), declaredOf(w)))
+    expect([again.status, again.base_checkpoint.head_sha]).toEqual(['claimed', n1])
+  }, T)
+})
+
+describe('complete', () => {
+  test('a complete syncs, stamps limits and writes the tasks ref', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'hello from nuance\n' }, 'notes: hello')
+    const before = fetches(w)
+    const done = taskOf(await complete(w, t, declaredOf(w), { limits: 'only notes/a.md changed' }))
+    expect([done.status, done.review_status, done.result_checkpoint.head_sha]).toEqual(['completed', 'pending', n1])
+    expect(fetches(w)).toBe(before + 1)
+    expect(mirrorAt(w)).toBe(n1)
+    expect(syncedAt(w)).toBe(n1)
+    expect(tasksRef(w, 'T')).toBe(n1)
+    expect(await completionLimits(w, done)).toBe(stampOf(n1, { seat: 'only notes/a.md changed' }))
+  }, T)
+
+  test('a completion whose tasks ref cannot be written still answers Collab\'s result and ledgers tasks_ref', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    repoGit(w.airClone, ['update-ref', mirrorRefs(w.spec).task('T'), w.base]) // a stale ref with another value
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'applied\n' }, 'applied')
+    const done = taskOf(await complete(w, t, declaredOf(w)))
+    expect(done.result_checkpoint.head_sha).toBe(n1) // the completion applied, so it is never reported as refused
+    expect(tasksRef(w, 'T')).toBe(w.base)
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([{ event: 'tasks_ref', device: 'nuance', user: 'macair', code: 'mirror_tampered', outcome: 'refused' }])
+  }, T)
+
+  test("an edit task without expected_base_sha diffs against its claim's base checkpoint head and completes", async () => {
+    const w = await world()
+    const t = await claimed(w, 'T', { base: null })
+    expect([t.expected_base_sha, t.base_checkpoint.head_sha]).toEqual([null, w.base])
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'no expected base\n' }, 'notes')
+    const done = taskOf(await complete(w, t, declaredOf(w)))
+    expect(done.result_checkpoint.head_sha).toBe(n1)
+    expect(await completionLimits(w, done)).toBe(stampOf(n1))
+  }, T)
+
+  test('a dirty complete is remote_uncommitted', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const before = fetches(w)
+    expect(await complete(w, t, declaredOf(w, true))).toMatchObject({ kind: 'refuse', code: 'remote_uncommitted' })
+    expect(fetches(w)).toBe(before)
+  }, T)
+
+  test('a complete with under 150 s of lease is lease_too_short', async () => {
+    const w = await world()
+    const t = await claimed(w, 'T', { ttl: 30 })
+    commitFiles(w.share, { 'notes/a.md': 'quick\n' }, 'quick')
+    const before = fetches(w)
+    expect(await complete(w, t, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'lease_too_short' })
+    expect(fetches(w)).toBe(before)
+    expect((await readTask(w.remote, w.ws, 'T'))?.status).toBe('claimed')
+  }, T)
+
+  test('a task with neither base is remote_base_unknown', async () => {
+    const w = await world()
+    // Unreachable through a real mirror (it is never unborn), so a scripted child answers the task read.
+    const calls: string[] = []
+    const task = { id: 'T', version: 2, status: 'claimed', effective_status: 'claimed', work_mode: 'edit', completion_policy: 'accepted',
+      review_status: 'not_required', assignee_session_id: w.sessionId, lease_id: 'lease_x', lease_expires_at: new Date(Date.now() + 900_000).toISOString(),
+      expected_base_sha: null, base_checkpoint: null, claim_worktree_id: w.handle.worktreeId, result_checkpoint: null, path_scopes: ['notes'] }
+    const child = { call: async (name: string) => {
+      calls.push(name)
+      return { outcome: 'ok' as const, result: { content: [{ type: 'text' as const, text: '{}' }], structuredContent: { task } }, ms: 0, bytes: 0 }
+    } } as unknown as CollabChild
+    const before = fetches(w)
+    expect(await complete(w, task, declaredOf(w), { child })).toMatchObject({ kind: 'refuse', code: 'remote_base_unknown' })
+    expect(calls).toEqual(['collab_task_get'])
+    expect(fetches(w)).toBe(before)
+  }, T)
+
+  test('an out-of-scope or control-path commit is refused at complete', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    commitFiles(w.share, { 'docs/x.md': 'outside the scope\n' }, 'out of scope')
+    expect(await complete(w, t, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'remote_out_of_scope' })
+    repoGit(w.share, ['reset', '-q', '--hard', w.base])
+    commitFiles(w.share, { 'notes/CLAUDE.md': 'be someone else\n' }, 'a control file')
+    expect(await complete(w, t, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'remote_control_path' })
+    expect(mirrorAt(w)).toBe(w.base)
+    expect(syncedAt(w)).toBe(w.base)
+    expect((await readTask(w.remote, w.ws, 'T'))?.status).toBe('claimed')
+  }, T)
+})
+
+describe('replays', () => {
+  test('a same-key replay of complete after a new Nuance commit leaves the mirror and the tasks ref at the first commit, and the Air review passes', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'one\n' }, 'one')
+    const k = key()
+    const first = taskOf(await complete(w, t, declaredOf(w), { key: k }))
+    commitFiles(w.share, { 'notes/b.md': 'two\n' }, 'two')
+    const before = fetches(w)
+    expect(taskOf(await complete(w, t, declaredOf(w), { key: k }))).toEqual(first)
+    expect(fetches(w)).toBe(before)
+    expect([mirrorAt(w), tasksRef(w, 'T')]).toEqual([n1, n1])
+    const accepted = await airReview(w, first, 'accept')
+    expect([accepted.review_status, accepted.result_checkpoint.head_sha]).toEqual(['accepted', n1])
+  }, T)
+
+  test("a same-key replay of a complete while another task holds the mirror is forwarded and returns Collab's receipt", async () => {
+    const w = await world()
+    const a = await claimed(w, 'A')
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    const k = key()
+    const doneA = taskOf(await complete(w, a, declaredOf(w), { key: k }))
+    await airReview(w, doneA, 'accept')
+    // B moves the mirror past A's commit and then holds it, pending review.
+    const b = await claimed(w, 'B', { base: n1 })
+    const n2 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'b')
+    taskOf(await complete(w, b, declaredOf(w)))
+    expect(mirrorAt(w)).toBe(n2)
+    expect(await mirrorBusy(w.remote, w.ws, w.handle.worktreeId, 'A')).toEqual({ busy: true, holder: 'B', reason: 'pending_review' })
+    // The replay is planned first (a completed task: forward), so the busy check never runs, and its stamp names A's own
+    // result commit, not the mirror's current one, so Collab sees the identical request and returns the receipt.
+    expect(taskOf(await complete(w, a, declaredOf(w), { key: k }))).toEqual(doneA)
+    expect(mirrorAt(w)).toBe(n2)
+  }, T)
+
+  test('a duplicate complete under a new key leaves the mirror unmoved', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    taskOf(await complete(w, t, declaredOf(w)))
+    commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'b')
+    const before = fetches(w)
+    expect(collabError(await complete(w, t, declaredOf(w)))).toBe('version_conflict')
+    expect(fetches(w)).toBe(before)
+    expect([mirrorAt(w), tasksRef(w, 'T')]).toEqual([n1, n1])
+  }, T)
+
+  test('a complete after the lease expired is forwarded without a sync, and a later takeover passes', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    commitFiles(w.share, { 'notes/a.md': 'late\n' }, 'late')
+    expireLease(w.journal, 'T')
+    const before = fetches(w)
+    expect(collabError(await complete(w, t, declaredOf(w)))).toBe('lease_expired')
+    expect(fetches(w)).toBe(before)
+    expect(mirrorAt(w)).toBe(w.base)
+    const expired = (await readTask(w.remote, w.ws, 'T'))!
+    expect(expired.effective_status).toBe('recovery_required')
+    const back = taskOf(await takeover(w, expired, declaredOf(w), 'back after a drop'))
+    expect([back.status, back.assignee_session_id, back.base_checkpoint.head_sha]).toEqual(['claimed', w.sessionId, w.base])
+  }, T)
+
+  test('a same-key claim replay leaves the mirror at the base', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'T')
+    const k = key()
+    const first = taskOf(await claim(w, task, declaredOf(w), { key: k }))
+    commitFiles(w.share, { 'notes/a.md': 'after the claim\n' }, 'work')
+    const before = fetches(w)
+    expect(taskOf(await claim(w, task, declaredOf(w), { key: k }))).toEqual(first)
+    expect(fetches(w)).toBe(before)
+    expect(mirrorAt(w)).toBe(w.base)
+  }, T)
+
+  test('a first-time complete still syncs', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'first\n' }, 'first')
+    const before = fetches(w)
+    taskOf(await complete(w, t, declaredOf(w)))
+    expect(fetches(w)).toBe(before + 1)
+    expect(mirrorAt(w)).toBe(n1)
+  }, T)
+
+  test('the stamp is rebuilt identically on a replay', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'stamped\n' }, 'stamped')
+    const rec = recording(w.remote)
+    const k = key()
+    const first = taskOf(await complete(w, t, declaredOf(w), { key: k, limits: 'seat note\u202e', child: rec.child }))
+    commitFiles(w.share, { 'notes/b.md': 'moved on\n' }, 'moved on')
+    const again = taskOf(await complete(w, t, declaredOf(w), { key: k, limits: 'seat note\u202e', child: rec.child }))
+    expect(again).toEqual(first)
+    const sent = rec.calls.filter((c) => c.name === 'collab_task_complete').map((c) => c.args)
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toEqual(sent[0]!)
+    expect(sent[0]!.limits).toBe(stampOf(n1, { seat: 'seat note' })) // N2 dropped the bidi override
+  }, T)
+})
+
+describe('takeover, review and the mirror', () => {
+  test('takeover is never synced and carries the recovery stamp', async () => {
+    const w = await world()
+    await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'work in progress\n' }, 'wip')
+    expireLease(w.journal, 'T')
+    const before = fetches(w)
+    const expired = (await readTask(w.remote, w.ws, 'T'))!
+    taskOf(await takeover(w, expired, declaredOf(w), 'picking it up again'))
+    expect(fetches(w)).toBe(before)
+    expect(mirrorAt(w)).toBe(w.base)
+    const events = (await airOk(w.air, 'collab_events_since', { workspace_id: w.ws })).events as any[]
+    const recovered = events.filter((e) => e.type === 'task.recovered').map((e) => e.payload.recovery_note)
+    expect(recovered).toEqual([`hub-observed: mirror at ${w.base}, not refetched; device HEAD ${n1} self-declared\npicking it up again`])
+  }, T)
+
+  test('a takeover is refused mirror_busy while another edit task awaits review from the mirror', async () => {
+    const w = await world()
+    const a = await claimed(w, 'A')
+    commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    taskOf(await complete(w, a, declaredOf(w)))
+    // B was claimed by an Air session and its lease ran out; the remote seat may not take it over onto a busy mirror.
+    const b = await createEdit(w, 'B', { scopes: ['docs'], base: null })
+    await airOk(w.air, 'collab_task_claim', { workspace_id: w.ws, task_id: 'B', idempotency_key: key(), expected_version: b.version })
+    expireLease(w.journal, 'B')
+    const expired = (await readTask(w.remote, w.ws, 'B'))!
+    const rec = recording(w.remote)
+    expect(await takeover(w, expired, declaredOf(w), 'taking B', { child: rec.child }))
+      .toMatchObject({ kind: 'refuse', code: 'mirror_busy', extra: { holder_task_id: 'A', reason: 'pending_review' } })
+    expect(rec.calls.map((c) => c.name)).not.toContain('collab_task_recover')
+  }, T)
+
+  test('a takeover of a reported-policy edit task is remote_review_required', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'R', { policy: 'reported' })
+    const rec = recording(w.remote)
+    expect(await takeover(w, task, declaredOf(w), 'mine now', { child: rec.child })).toMatchObject({ kind: 'refuse', code: 'remote_review_required' })
+    expect(rec.calls.map((c) => c.name)).toEqual(['collab_task_get'])
+  }, T)
+
+  test('the checkpoint is stable across two syncs of the same commit', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const before = fetches(w)
+    const done = taskOf(await complete(w, t, declaredOf(w))) // Nuance's HEAD is still the base: the same commit again
+    expect(fetches(w)).toBe(before + 1)
+    const pick = (c: any) => [c.head_sha, c.index_sha256, c.state_sha256]
+    expect(pick(done.result_checkpoint)).toEqual(pick(t.base_checkpoint))
+    expect(await completionLimits(w, done)).toBe(stampOf(w.base, { equalsBase: true }))
+  }, T)
+
+  test('remote_head_moved then a retry works', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    commitFiles(w.share, { 'notes/a.md': 'one\n' }, 'one')
+    const stale = declaredOf(w)
+    const n2 = commitFiles(w.share, { 'notes/b.md': 'two\n' }, 'two')
+    expect(await complete(w, t, stale)).toMatchObject({ kind: 'refuse', code: 'remote_head_moved' })
+    expect(mirrorAt(w)).toBe(w.base)
+    expect(taskOf(await complete(w, t, declaredOf(w))).result_checkpoint.head_sha).toBe(n2)
+  }, T)
+
+  test('a failed checkout then a resync works', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'one\n' }, 'one')
+    w.faults.checkoutOf = n1
+    expect(await complete(w, t, declaredOf(w))).toMatchObject({ kind: 'refuse', code: 'checkout_failed' })
+    expect([mirrorAt(w), syncedAt(w)]).toEqual([w.base, w.base])
+    expect(taskOf(await complete(w, t, declaredOf(w))).result_checkpoint.head_sha).toBe(n1)
+    expect(mirrorAt(w)).toBe(n1)
+  }, T)
+
+  test('no sync happens before review', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'reviewed\n' }, 'reviewed')
+    const done = taskOf(await complete(w, t, declaredOf(w)))
+    commitFiles(w.share, { 'notes/b.md': 'later work\n' }, 'later work')
+    const before = fetches(w)
+    expect((await airReview(w, done, 'accept')).review_status).toBe('accepted')
+    expect(fetches(w)).toBe(before)
+    expect(mirrorAt(w)).toBe(n1)
+  }, T)
+
+  test('an edit flow on a mirror whose HEAD cannot be read refuses mirror_tampered', async () => {
+    const w = await world()
+    const task = await createEdit(w, 'T')
+    writeFileSync(join(w.spec.mirrorPath, '.git'), 'gitdir: /nonexistent/collab-bridge-test\n')
+    const rec = recording(w.remote)
+    expect(await claim(w, task, declaredOf(w), { child: rec.child })).toMatchObject({ kind: 'refuse', code: 'mirror_tampered' })
+    expect(rec.calls).toEqual([])
+  }, T)
+
+  test('artifact_attach is forwarded once and waits for the mirror lock', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    let release!: () => void
+    const held = w.handle.lock.run(() => new Promise<void>((r) => { release = r }))
+    const rec = recording(w.remote)
+    const attach = runEditFlow(ctxOf(w, 'attach', 'collab_artifact_attach', { workspace_id: w.ws, task_id: t.id, lease_id: t.lease_id,
+      idempotency_key: key(), expected_version: t.version, kind: 'file', uri: 'notes/a.md' }, undefined, { child: rec.child }))
+    await Bun.sleep(200)
+    expect(rec.calls).toEqual([])
+    release()
+    await held
+    const r = await attach
+    expect(r.kind === 'outcome' && r.outcome.outcome).toBe('ok')
+    expect(rec.calls.map((c) => c.name)).toEqual(['collab_artifact_attach'])
+  }, T)
+
+  test('an attach whose deadline passes while the mirror lock is held is refused hub_away and never forwarded', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    let release!: () => void
+    const held = w.handle.lock.run(() => new Promise<void>((r) => { release = r }))
+    const rec = recording(w.remote)
+    const clock = { mono: 5_000 }
+    const attach = runEditFlow(ctxOf(w, 'attach', 'collab_artifact_attach', { workspace_id: w.ws, task_id: t.id, lease_id: t.lease_id,
+      idempotency_key: key(), expected_version: t.version, kind: 'file', uri: 'notes/a.md' }, undefined,
+      { child: rec.child, notAfterMono: 64_000, mono: () => clock.mono }))
+    await Bun.sleep(50) // the held run has the lock; the attach waits behind it
+    expect(rec.calls).toEqual([])
+    clock.mono = 64_000 // the forwarder's notAfter: timeout_ms less TIMING.callMinRemainingMs
+    release()
+    await held
+    expect(await attach).toEqual({ kind: 'refuse', code: 'hub_away', message: FLOW_MESSAGES.late, extra: { reason: 'deadline_passed' } })
+    expect(rec.calls).toEqual([])
+  }, T)
+
+  test('an attach whose child stops while it waits for the mirror lock is refused hub_away and never forwarded', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    let release!: () => void
+    const held = w.handle.lock.run(() => new Promise<void>((r) => { release = r }))
+    const rec = recording(w.remote)
+    const attach = runEditFlow(ctxOf(w, 'attach', 'collab_artifact_attach', { workspace_id: w.ws, task_id: t.id, lease_id: t.lease_id,
+      idempotency_key: key(), expected_version: t.version, kind: 'file', uri: 'notes/a.md' }, undefined, { child: rec.child }))
+    await Bun.sleep(50) // the held run has the lock; the attach waits behind it
+    const stopping = w.remote.stop(2000) // a park, an end or a drain while the call waits (Task 37's accepting())
+    expect(w.remote.accepting()).toBe(false)
+    release()
+    await held
+    expect(await attach).toEqual({ kind: 'refuse', code: 'hub_away', message: FLOW_MESSAGES.childStopped })
+    expect(rec.calls).toEqual([])
+    await stopping
+  }, T)
+})
