@@ -227,3 +227,20 @@ export function makeRepo(dir: string, files: Record<string, string> = { 'README.
   repoGit(dir, ['init', '-q', '-b', 'main'])
   return commitFiles(dir, files, 'trial base')
 }
+
+// ---- Task 42 fix round 1: a process that must not outlive its caller ----
+
+/** True once no process has this pid (polled, since a SIGKILLed process takes a moment to leave the table). */
+export async function pidGone(pid: number, withinMs: number): Promise<boolean> {
+  const until = Date.now() + withinMs
+  for (;;) {
+    try { process.kill(pid, 0) } catch { return true }
+    if (Date.now() >= until) return false
+    await Bun.sleep(50)
+  }
+}
+
+/** Best-effort SIGKILL, for a test's `finally`: a failed assertion must not leave a stray sleep behind. */
+export function killQuietly(pid: number): void {
+  try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ }
+}

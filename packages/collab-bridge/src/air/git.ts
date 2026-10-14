@@ -7,7 +7,8 @@ import { TIMING } from '../timing.ts'
 export interface GitResult { code: number | null; stdout: Uint8Array; stderr: string; timedOut: boolean }
 export interface GitRunner {
   path: string
-  run(args: string[], o?: { timeoutMs?: number; prefix?: string[]; env?: Record<string, string> }): Promise<GitResult>
+  /** `ownGroup`: spawn in a process group of its own and signal that whole group on a timeout (the fetch: ssh, index-pack). */
+  run(args: string[], o?: { timeoutMs?: number; prefix?: string[]; env?: Record<string, string>; ownGroup?: boolean }): Promise<GitResult>
   records(args: string[], o?: { timeoutMs?: number }): AsyncIterable<string>
 }
 
@@ -32,8 +33,28 @@ export function airGitEnv(home: string): Record<string, string> {
 
 type Proc = ReturnType<typeof Bun.spawn>
 
-/** SIGTERM now (git removes its lock and temp files on it), SIGKILL if it is still there after the grace. */
-function stop(proc: Proc): void {
+function signalGroup(pgid: number, signal: 'SIGTERM' | 'SIGKILL'): void {
+  try { process.kill(-pgid, signal) } catch { /* the group is already gone */ }
+}
+
+/** False once the group is empty (ESRCH), or holds nothing but a zombie (EPERM on macOS): a group this process made is its own. */
+function groupAlive(pgid: number): boolean {
+  try { process.kill(-pgid, 0); return true } catch { return false }
+}
+
+/**
+ * SIGTERM now (git removes its lock and temp files on it), SIGKILL if it is still there after the grace. With `ownGroup`
+ * the child leads a process group of its own (spawned detached), and both signals go to the whole group: the fetch's ssh
+ * and index-pack die with it, and a member that outlives git itself, or holds its pipes, is SIGKILLed after the grace.
+ */
+function stop(proc: Proc, ownGroup = false): void {
+  if (ownGroup) {
+    const pgid = proc.pid // detached: a session leader, so its pid is the group id
+    signalGroup(pgid, 'SIGTERM')
+    const hard = setTimeout(() => signalGroup(pgid, 'SIGKILL'), KILL_GRACE_MS)
+    void proc.exited.then(() => { if (!groupAlive(pgid)) clearTimeout(hard) })
+    return
+  }
   if (proc.exitCode !== null || proc.signalCode !== null) return
   proc.kill('SIGTERM')
   const hard = setTimeout(() => { if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL') }, KILL_GRACE_MS)
@@ -101,25 +122,26 @@ async function drainText(stream: ReadableStream<Uint8Array>, max: number): Promi
 export function airGit(o: { git: string; home: string; defaultTimeoutMs?: number }): GitRunner {
   const base = airGitEnv(o.home)
   const defaultTimeout = o.defaultTimeoutMs ?? TIMING.gitCallMs
-  const spawn = (argv: string[], env: Record<string, string>) =>
-    Bun.spawn(argv, { cwd: '/', env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  const spawn = (argv: string[], env: Record<string, string>, ownGroup = false) =>
+    Bun.spawn(argv, { cwd: '/', env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', detached: ownGroup })
 
   return {
     path: o.git,
 
     async run(args, opts = {}) {
       let proc: Proc
+      const ownGroup = opts.ownGroup === true
       try {
-        proc = spawn([...(opts.prefix ?? []), o.git, ...args], { ...base, ...(opts.env ?? {}) })
+        proc = spawn([...(opts.prefix ?? []), o.git, ...args], { ...base, ...(opts.env ?? {}) }, ownGroup)
       } catch (e) {
         // A missing or unrunnable binary is a failed call, never a throw: callers turn code null into a definite refusal.
         return { code: null, stdout: new Uint8Array(0), stderr: `airGit: could not start ${o.git}: ${String(e)}\n`, timedOut: false }
       }
       let timedOut = false
-      const timer = setTimeout(() => { timedOut = true; stop(proc) }, opts.timeoutMs ?? defaultTimeout)
+      const timer = setTimeout(() => { timedOut = true; stop(proc, ownGroup) }, opts.timeoutMs ?? defaultTimeout)
       try {
         const [out, stderr] = await Promise.all([
-          readCapped(proc.stdout as ReadableStream<Uint8Array>, GIT_STDOUT_MAX, () => stop(proc)),
+          readCapped(proc.stdout as ReadableStream<Uint8Array>, GIT_STDOUT_MAX, () => stop(proc, ownGroup)),
           drainText(proc.stderr as ReadableStream<Uint8Array>, GIT_STDERR_MAX),
         ])
         await proc.exited

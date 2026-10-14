@@ -4,6 +4,12 @@
 // ambiguous failure is refused once and never retried. Nothing here takes the per-mirror lock: the caller holds it for
 // the whole flow, from the sync until the forwarded call returns (Task 45, P25). No harness and no bun ever has its cwd in
 // a mirror (R27): git runs with `-C` from cwd '/'.
+//
+// Accepted Phase 1 limit (Task 42 ruling): the Air clone is a working repository, and a failed bridge fetch removes the
+// new `tmp_*` files in its objects/pack and counts the new pack bytes, both found by comparing the directory before and
+// after. A concurrent Air-side `git fetch` in the same clone, during a failed bridge fetch, may therefore lose its own
+// temporary pack (that fetch fails) and have its bytes count toward the bridge's daily budget. It fails closed and a
+// re-run succeeds; the in-process lock below serialises only the bridge's own fetches.
 import { createHash } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statfsSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
@@ -217,7 +223,8 @@ async function fetchIncomingNow(spec: MirrorSpec, deps: MirrorDeps): Promise<Syn
   const before = new Set(listPackDir(packDir))
   const { prefix, args } = parts
   const t0 = performance.now()
-  const r = await deps.git.run(args, { prefix, timeoutMs: deps.fetchTimeoutMs ?? TIMING.fetchMs })
+  // ownGroup: a timeout signals the whole group, so the fetch's ssh and index-pack die with git (R19, §7.3 step 4).
+  const r = await deps.git.run(args, { prefix, timeoutMs: deps.fetchTimeoutMs ?? TIMING.fetchMs, ownGroup: true })
   const fresh = listPackDir(packDir).filter((n) => !before.has(n))
   let bytes = 0
   let capped = false
@@ -228,7 +235,12 @@ async function fetchIncomingNow(spec: MirrorSpec, deps: MirrorDeps): Promise<Syn
     if (n.startsWith('tmp_pack_') && size >= wireCap) capped = true
   }
   const ok = r.code === 0
-  if (!ok) for (const n of fresh) if (n.startsWith('tmp_')) rmSync(join(packDir, n), { force: true })
+  if (!ok) {
+    for (const n of fresh) {
+      if (!n.startsWith('tmp_')) continue
+      try { rmSync(join(packDir, n), { force: true }) } catch { /* left in place: the fetch is refused below either way */ }
+    }
+  }
   try {
     deps.ledger({ event: 'fetch', device: spec.device, user: spec.user, code: spec.mirrorId, bytes,
       outcome: ok ? 'ok' : r.timedOut ? 'timeout' : 'failed', ms: Math.max(0, Math.round(performance.now() - t0)) })
@@ -332,7 +344,9 @@ async function removeNewWorktree(spec: MirrorSpec, deps: MirrorDeps): Promise<vo
 async function ensureLocked(spec: MirrorSpec, deps: MirrorDeps): Promise<boolean> {
   const list = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'worktree', 'list', '--porcelain'])
   if (list.code !== 0) return false
-  const block = new TextDecoder().decode(list.stdout).split('\n\n').find((b) => b.split('\n')[0] === `worktree ${realpathSync(spec.mirrorPath)}`)
+  let real: string
+  try { real = realpathSync(spec.mirrorPath) } catch { return false }
+  const block = new TextDecoder().decode(list.stdout).split('\n\n').find((b) => b.split('\n')[0] === `worktree ${real}`)
   if (block === undefined) return false
   if (block.split('\n').some((l) => l === 'locked' || l.startsWith('locked '))) return true
   const lock = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'worktree', 'lock', '--reason', 'collab-bridge mirror', spec.mirrorPath])
@@ -360,9 +374,13 @@ export async function createMirror(spec: MirrorSpec, deps: MirrorDeps): Promise<
     return { ok: true, oid: (await syncedOid(spec, deps))! }
   }
   // Git would make these 0755, and Collab tightens the journal's parent only when it created it (KN src/store.ts:402-407).
-  for (const dir of levels) {
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    chmodSync(dir, 0o700)
+  try {
+    for (const dir of levels) {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      chmodSync(dir, 0o700)
+    }
+  } catch {
+    return refuse('mirror_tampered', 'a directory above the mirror could not be made or tightened to 0700; Ai looks at it on the Air')
   }
   const filters = await filterReason(spec.airClone, deps) // 2
   if (filters !== null) return refuse('mirror_filters_present', filters)
@@ -392,7 +410,12 @@ export async function createMirror(spec: MirrorSpec, deps: MirrorDeps): Promise<
     await removeNewWorktree(spec, deps)
     return refuse('checkout_failed', 'the first checkout of the mirror failed; nothing was kept')
   }
-  chmodSync(spec.mirrorPath, 0o700)
+  try {
+    chmodSync(spec.mirrorPath, 0o700)
+  } catch {
+    await removeNewWorktree(spec, deps)
+    return refuse('checkout_failed', 'the new mirror could not be tightened to 0700; nothing was kept')
+  }
   const lock = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'worktree', 'lock', '--reason', 'collab-bridge mirror', spec.mirrorPath])
   if (lock.code !== 0) {
     await removeNewWorktree(spec, deps)

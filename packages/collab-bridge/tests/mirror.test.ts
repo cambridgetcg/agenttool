@@ -12,7 +12,7 @@ import {
 import { AIR_LEDGER_KEYS, appendLedger, readLedger } from '../src/ledger.ts'
 import { airPaths, type AirPaths } from '../src/paths.ts'
 import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
-import { cleanupTmps, commitFiles, makeRepo, modeOf, REAL_GIT, repoGit, temp } from './helpers.ts'
+import { cleanupTmps, commitFiles, killQuietly, makeRepo, modeOf, pidGone, REAL_GIT, repoGit, temp, writeStub } from './helpers.ts'
 import { collabHarness } from './mcp-harness.ts'
 import { installedNuanceHome } from './nuance-home.ts'
 
@@ -159,6 +159,67 @@ describe('createMirror', () => {
     rmSync(join(w.air, '.gitconfig'))
     expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base })
   }, T)
+
+  test('a level that is a regular file answers mirror_tampered and never throws, before anything is fetched', async () => {
+    const w = world()
+    mkdirSync(w.paths.sharedDir, { recursive: true })
+    writeFileSync(w.paths.mirrorsRoot, 'a file where the mirrors directory belongs\n')
+    const r = await createMirror(w.spec, w.deps)
+    expect(r.ok === false && r.code).toBe('mirror_tampered')
+    expect(w.fake.calls().length).toBe(0)
+    expect(existsSync(w.spec.mirrorPath)).toBe(false)
+    rmSync(w.paths.mirrorsRoot)
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base }) // nothing was left half done
+  }, T)
+
+  test('a chmod that fails after the first checkout removes the new worktree and answers checkout_failed', async () => {
+    const w = world()
+    const userDir = join(w.paths.mirrorsRoot, 'nuance', 'macair')
+    const real = w.deps.git
+    const calls: string[][] = []
+    const shut: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        calls.push(a)
+        if (a.includes('worktree') && a.includes('remove')) chmodSync(userDir, 0o700) // let the cleanup see the mirror again
+        const r = await real.run(a, o)
+        if (a.includes('checkout')) chmodSync(userDir, 0o000) // the parent can no longer be searched: chmod of the mirror fails
+        return r
+      },
+    }
+    try {
+      const r = await createMirror(w.spec, { ...w.deps, git: shut })
+      expect(r.ok === false && r.code).toBe('checkout_failed')
+    } finally {
+      chmodSync(userDir, 0o700)
+    }
+    const checkout = calls.findIndex((a) => a.includes('checkout'))
+    const remove = calls.findIndex((a) => a.includes('worktree') && a.includes('remove'))
+    expect(checkout).toBeGreaterThan(-1)
+    expect(remove).toBeGreaterThan(checkout)
+    expect(calls.some((a) => a.includes('lock'))).toBe(false)
+    expect(existsSync(w.spec.mirrorPath)).toBe(false)
+    expect(repoGit(w.airClone, ['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length).toBe(1)
+    expect(await syncedOid(w.spec, w.deps)).toBeNull()
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base }) // the name is free again
+  }, T)
+
+  test('an existing mirror that vanishes while it is being locked answers mirror_tampered and never throws', async () => {
+    const w = await created()
+    const real = w.deps.git
+    const vanishing: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        const r = await real.run(a, o)
+        if (a.includes('worktree') && a.includes('list')) rmSync(w.spec.mirrorPath, { recursive: true, force: true })
+        return r
+      },
+    }
+    const r = await createMirror(w.spec, { ...w.deps, git: vanishing })
+    expect(r.ok === false && r.code).toBe('mirror_tampered')
+  }, T)
 })
 
 describe('syncMirror', () => {
@@ -274,6 +335,49 @@ describe('syncMirror', () => {
     expect(last.bytes as number).toBeGreaterThanOrEqual(1024 * 1024) // the cut pack counts against the day's budget
   }, T)
 
+  test('a temp pack that cannot be removed does not turn a refused fetch into a throw', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/noise.txt': randomBytes(1536 * 1024).toString('base64') }, 'a 2 MiB note')
+    const packDir = join(w.airClone, '.git', 'objects', 'pack')
+    const real = w.deps.git
+    const sealing: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        const r = await real.run(a, o)
+        if (a.includes('fetch')) chmodSync(packDir, 0o500) // the cut pack is there, and its directory no longer lets a file go
+        return r
+      },
+    }
+    try {
+      const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, git: sealing, wireCapBytes: 1024 * 1024 })
+      expect(r.ok === false && [r.code, r.message]).toEqual(['fetch_failed', 'the fetched pack passed the 1 MiB limit for one sync'])
+      expect(fetchLines(w).at(-1)!.outcome).toBe('failed') // still ledgered, so the day's budget counts it
+    } finally {
+      chmodSync(packDir, 0o700)
+    }
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+  }, T)
+
+  test('a fetch past its timeout is stopped with everything it started, and is fetch_failed', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    const dir = temp('cb-mirror-ssh-')
+    // An ssh that never answers and leaves a child of its own behind that holds no pipe.
+    const ssh = writeStub(dir, 'ssh', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
+    try {
+      const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, sshBin: ssh, fetchTimeoutMs: 400 })
+      expect(r.ok === false && [r.code, r.message]).toEqual(['fetch_failed', 'the fetch from the device took longer than 60 s and was stopped'])
+      expect(fetchLines(w).at(-1)!.outcome).toBe('timeout')
+      expect(await pidGone(Number(readFileSync(join(dir, 'child'), 'utf8')), 3000)).toBe(true)
+    } finally {
+      try { killQuietly(Number(readFileSync(join(dir, 'child'), 'utf8'))) } catch { /* it never started */ }
+    }
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(packTemps(w)).toEqual([])
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 }) // a re-run succeeds
+  }, T)
+
   test('the production cap is ulimit -f 131072', () => {
     expect(ulimitBlocks(WIRE_CAP_BYTES)).toBe(131072)
     expect(ulimitBlocks(1024 * 1024)).toBe(1024)
@@ -331,6 +435,18 @@ describe('syncMirror', () => {
     const r3 = await syncMirror(w.spec, { declaredHead: good, atComplete: { base: airOnly, scopes: ['notes'] } }, w.deps)
     expect(r3.ok === false && r3.code).toBe('remote_base_not_ancestor')
     expect(await mirrorHead(w.spec, w.deps)).toBe(good)
+  }, T)
+
+  test('an at-complete base the clone does not have is fetch_failed, not a refusal about the base (§7.3 step 7)', async () => {
+    const w = await created()
+    const good = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'in scope')
+    // git merge-base --is-ancestor exits 128 on an object it lacks, and step 7 says anything but 0 and 1 is fetch_failed;
+    // remote_base_unknown is Task 44's answer when neither base is known, never this step's.
+    const absent = 'deadbeef'.repeat(5)
+    const r = await syncMirror(w.spec, { declaredHead: good, atComplete: { base: absent, scopes: ['notes'] } }, w.deps)
+    expect(r.ok === false && [r.code, r.message]).toEqual(['fetch_failed', "the commit could not be checked against the task's base"])
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(existsSync(join(w.spec.mirrorPath, 'notes', 'a.md'))).toBe(false)
   }, T)
 
   test('a failed checkout restores the mirror and answers checkout_failed', async () => {

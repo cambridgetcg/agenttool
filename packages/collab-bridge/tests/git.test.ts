@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { airGit, airGitEnv, GIT_STDERR_MAX, GIT_STDOUT_MAX, MIRROR_GIT_FLAGS, OID_RE } from '../src/air/git.ts'
-import { cleanupTmps, makeRepo, REAL_GIT, temp, writeStub } from './helpers.ts'
+import { cleanupTmps, killQuietly, makeRepo, pidGone, REAL_GIT, temp, writeStub } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -153,4 +153,43 @@ describe('airGit', () => {
     expect(error).toContain('exit 128: remote: first line')
     expect(error).not.toContain('timed out')
   }, 40_000)
+  test('a call with ownGroup that times out takes down everything git started, not only git (Task 42 ruling, item 4)', async () => {
+    const dir = temp('cb-git-stub-')
+    // git's own child (ssh, index-pack) holds no pipe here, so only a signal to the whole group can end it.
+    const git = writeStub(dir, 'git', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300, ownGroup: true })
+    const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
+    try {
+      expect([r.timedOut, r.code]).toEqual([true, null])
+      expect(await pidGone(child, 2000)).toBe(true)
+    } finally {
+      killQuietly(child)
+    }
+  })
+
+  test('a member of the group that ignores SIGTERM is SIGKILLed after the grace, even once git itself is gone', async () => {
+    const dir = temp('cb-git-stub-')
+    const git = writeStub(dir, 'git', `(trap '' TERM; exec /bin/sleep 60) >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300, ownGroup: true })
+    const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
+    try {
+      expect(r.timedOut).toBe(true)
+      expect(await pidGone(child, 8000)).toBe(true)
+    } finally {
+      killQuietly(child)
+    }
+  }, 20_000)
+
+  test('without ownGroup a timeout still signals only git itself', async () => {
+    const dir = temp('cb-git-stub-')
+    const git = writeStub(dir, 'git', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300 })
+    const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
+    try {
+      expect(r.timedOut).toBe(true)
+      expect(await pidGone(child, 500)).toBe(false) // the default is unchanged: nothing outside git's own pid is signalled
+    } finally {
+      killQuietly(child)
+    }
+  })
 })
