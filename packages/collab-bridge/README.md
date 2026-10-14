@@ -215,3 +215,31 @@ setting.
 
 Summon's own rollback deletes its drop-in and may turn Remote Login off. Skip those two steps while
 `grep -c ' collab-air$' ~/.ssh/authorized_keys` is not 0, that is, until step 1 above is done.
+
+## Pairing a device (Ai, on the Air)
+
+`scripts/prepare-pairing.ts` makes everything a device needs, under the Air's home, run from Terminal with cwd `/` (spec
+§10.2 step 1). It refuses a worktree with uncommitted changes, because the binary it ships must be a reviewed commit's:
+
+```sh
+cd / && /Users/yuai/.bun/bin/bun --no-env-file --config=/dev/null \
+  /Users/yuai/Projects/.worktrees/agenttool-collab-bridge/packages/collab-bridge/scripts/prepare-pairing.ts \
+  --device nuance --user macair --share /Users/macair/Projects/collab-trial=/Users/yuai/Projects/collab-trial \
+  --trailer "Co-Authored-By: The Fable of the Eternal Universe <Yu@Ai-love.cc>"
+```
+
+In this order: `~/Projects/collab-trial` when it is not there (a repository on `main` with one commit: `README.md`, which
+holds the rules for Air sessions there, and `notes/.gitkeep`; the commit's message ends with the trailer, and it is the
+shared base on both Macs; an existing repository is kept as it is); `~/.ssh/collab-bridge/collab_nuance_ed25519` once, with the comment `collab-air`;
+one Nuance binary; the seat tool list, from a probe of the installed Collab on a throwaway journal; the AirDrop folder
+`~/collab-bridge-nuance-bundle-<expiry>-<build>/` (0700: `collab-install.sh`, `collab-bridge`, `MANIFEST.txt`,
+`tools.json`, `collab-trial.bundle`); and `~/.config/collab-bridge/devices/nuance.json` in state `prepared`. It prints the
+bundle, the key's expiry (the pairing date plus 90 days), the two lines Yu adds under `folders:` in Nuance's
+`~/.config/summon/allowlist.yaml`, and the line Yu runs there.
+
+Every value that goes into the installer is checked before anything is written: a share path the gate's form cannot
+carry (one with `'`, `!`, `\` or a control character, one that is not absolute and normalised, or one longer than 1019
+bytes) is refused, and Phase 1 shares one folder. Older bundle
+folders are listed with the command that removes them, never removed. Preparing again, to renew the key, writes the
+device file as `prepared` again: a running hub drops the device's link and stops its children, and dials it again only
+once it is pinned again and the hub has restarted.
