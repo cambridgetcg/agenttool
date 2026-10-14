@@ -4,7 +4,8 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { readLedger } from '../src/ledger.ts'
-import type { ToolDef, ToolResult } from '../src/link/messages.ts'
+import { encodeFrame, FRAME_TYPE, FrameDecoder } from '../src/link/frame.ts'
+import { decodeJson, encodeMessage, type ToolDef, type ToolResult } from '../src/link/messages.ts'
 import { writeFileDurable } from '../src/native.ts'
 import { nuancePaths, type NuancePaths } from '../src/paths.ts'
 import type { ProcRecord, ProcTable } from '../src/proc.ts'
@@ -13,7 +14,7 @@ import { renderInstalled, writeShares, type InstalledInfo } from '../src/nuance/
 import type { PipeDeps } from '../src/nuance/pipe.ts'
 import { writeSeatKeyIfAbsent } from '../src/nuance/seatkey.ts'
 import { seedTools } from '../src/nuance/tools-cache.ts'
-import { makeRepo, REAL_GIT, temp, testEnv } from './helpers.ts'
+import { makeRepo, PKG, REAL_GIT, temp, testEnv } from './helpers.ts'
 import { testInstalled as nuanceInstalled } from './nuance-home.ts'
 
 const tool = (name: string, description: string): ToolDef => ({
@@ -116,3 +117,40 @@ export const ledgerEvents = (paths: NuancePaths): string[] => {
   try { return readLedger(paths.ledger).map((e) => e.event) } catch { return [] }
 }
 
+/** `collab-bridge pipe` from source, as Claude runs it (bun with no .env and no bunfig, like the compiled binary). */
+export const PIPE_ARGV = [process.execPath, '--no-env-file', '--config=/dev/null', `${PKG}/src/nuance/main.ts`, 'pipe']
+
+export interface TapExchange { frames: string[]; report: { count: number; origins: string[] } | null }
+
+/**
+ * One tap exchange on a pipe's socket, as the hook makes it: DATA {t:'knocks'}, then every frame until the pipe's CLOSE
+ * or the connection's end. closeAfterMs makes the tap leave early, as a hook whose budget ran out does.
+ */
+export async function tapExchange(sockPath: string, o: { closeAfterMs?: number; timeoutMs?: number } = {}): Promise<TapExchange> {
+  const frames: string[] = []
+  let report: TapExchange['report'] = null
+  const dec = new FrameDecoder(64 * 1024)
+  await new Promise<void>((resolve, reject) => {
+    let done = false
+    const finish = () => { if (!done) { done = true; resolve() } }
+    const t = setTimeout(finish, o.timeoutMs ?? 6000)
+    Bun.connect({ unix: sockPath, socket: {
+      open(s) {
+        s.write(encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage({ t: 'knocks' })))
+        if (o.closeAfterMs !== undefined) setTimeout(() => { s.end(); clearTimeout(t); finish() }, o.closeAfterMs)
+      },
+      data(s, d) {
+        for (const f of dec.push(d)) {
+          if (f.type === FRAME_TYPE.CLOSE) { frames.push('CLOSE'); s.end(); clearTimeout(t); finish(); return }
+          if (f.type !== FRAME_TYPE.DATA) continue
+          const m = decodeJson(f.payload)
+          frames.push(String(m?.t))
+          if (m?.t === 'knock_report') report = { count: m.count as number, origins: m.origins as string[] }
+        }
+      },
+      close() { clearTimeout(t); finish() },
+      error() { clearTimeout(t); finish() },
+    } }).catch(reject)
+  })
+  return { frames, report }
+}

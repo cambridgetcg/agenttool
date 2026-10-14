@@ -1,14 +1,43 @@
 // The one compiled Nuance program (P20). sshd's forced command runs `collab-bridge gate`; Claude runs `collab-bridge pipe`
 // and its hook `collab-bridge tap --host claude` (Tasks 31, 32); Yu runs `collab-bridge status`; the installer runs the
 // hidden `install …` verbs (Tasks 55, 56). Nothing Air-side is in here.
-import { monoNowMs } from '../native.ts'
+import { monoNowMs, passwdOfSelf } from '../native.ts'
 import { homeOf, nuancePaths } from '../paths.ts'
-import type { Env } from '../sysbin.ts'
+import { readPs, ttyOf } from '../proc.ts'
+import { systemBin, type Env } from '../sysbin.ts'
 import { scaled, TIMING } from '../timing.ts'
 import { runGate, type GateIo } from './gate-main.ts'
+import { readInstalled } from './installed.ts'
+import { bunConnect } from './link-client.ts'
+import { runPipe, type PipeDeps } from './pipe.ts'
 import { nuanceStatus, renderNuanceStatus } from './status.ts'
 
-export const NUANCE_USAGE = 'usage: collab-bridge gate | status'
+export const NUANCE_USAGE = 'usage: collab-bridge gate | pipe | status'
+
+/**
+ * The pipe's deps from the env Claude gave it: this Mac's paths, INSTALLED, the real process table (`ps` by systemBin, so a
+ * test's P43 stub), the monotonic clock that counts sleep, the passwd user name (never $USER, F3) and this process's stdio.
+ * A missing or malformed INSTALLED throws: the binary is not installed, and Claude shows the server as failed.
+ */
+export function livePipeDeps(env: Env): PipeDeps {
+  const paths = nuancePaths(homeOf(env), env)
+  const installed = readInstalled(paths)
+  if (!installed) throw new Error('INSTALLED is missing or malformed; run the installer again')
+  const ps = systemBin('ps', env)
+  return {
+    paths, env, cwd: process.cwd(), selfPid: process.pid,
+    table: () => readPs(ps),
+    ttyOf: (pid) => ttyOf(pid, ps),
+    mono: monoNowMs,
+    now: () => new Date(),
+    rand: Math.random,
+    stdin: Bun.stdin.stream(),
+    write: (line) => { try { process.stdout.write(line) } catch { /* Claude is gone */ } },
+    installed,
+    user: passwdOfSelf().name,
+    connect: bunConnect,
+  }
+}
 
 /** The part of a Node/Bun writable the sink needs; process.stdout has it, and a test can stand in. */
 export interface WritableLike {
@@ -72,6 +101,10 @@ export async function runNuanceCli(argv: string[], env: Env, io: GateIo): Promis
   switch (verb) {
     case 'gate':
       if (rest.length === 0) return runGate(env, io)
+      break
+    case 'pipe':
+      // Claude's MCP server (§6.2): JSON-RPC on this process's stdio until stdin ends.
+      if (rest.length === 0) return runPipe({ ...livePipeDeps(env), stdin: io.stdin, write: (line) => io.stdout.write(line) })
       break
     case 'status': {
       if (rest.length > 0) break

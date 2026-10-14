@@ -1,7 +1,9 @@
-// The Claude MCP pipe on Nuance (C4, spec §6.2, §9.1–§9.4). It answers the harness itself from the cached tool list, so
-// initialize and tools/list work with the hub away (R16), and sends each tools/call once over its link to the Air hub.
+// The Claude MCP pipe on Nuance (C4, spec §6.2, §8, §9.1–§9.4). It answers the harness itself from the cached tool list,
+// so initialize and tools/list work with the hub away (R16), and sends each tools/call once over its link to the Air hub.
 // "Not sent" ends at the write to the relay socket (§9.3 item 3): every refusal before that write is delivered:false;
 // after it, the answer is the hub's result or hub_outcome_unknown, never a JSON-RPC error (R17) and never a resend (R18).
+// It also serves its Claude's knock tap on pipes/<host_pid>-<pipe_pid>.sock (tap-server.ts) and relays each tap's
+// question to the hub as one bounded knocks request (§8 items 3–5).
 import { realpathSync } from 'node:fs'
 import { basename } from 'node:path'
 import { bridgeFailure, deliveredOf, withPriorUnknown, type AgentCode } from '../failure.ts'
@@ -10,7 +12,8 @@ import { LineReader, LineTooLong, type JsonRpcId } from '../jsonrpc.ts'
 import { FRAME_HEADER_BYTES } from '../link/frame.ts'
 import {
   encodeMessage, LABEL_TOKEN_RE, MAX_FOLDER_BYTES, MAX_PIPE_TO_HUB, newPipeInstance,
-  type AttachMsg, type CallMsg, type Declared, type NoticeMsg, type ReadyMsg, type ResultMsg, type ToolDef, type ToolResult, type ToolsMsg,
+  type AttachMsg, type CallMsg, type Declared, type HubKnockReportMsg, type NoticeMsg, type ReadyMsg, type ResultMsg, type ToolDef,
+  type ToolResult, type ToolsMsg,
 } from '../link/messages.ts'
 import type { NuancePaths } from '../paths.ts'
 import type { ProcTable } from '../proc.ts'
@@ -23,6 +26,7 @@ import { findHost, interactiveCheck, openLineage, SESSION_ID_RE, sweepLineages, 
 import { bunConnect, LinkClient, type Connect } from './link-client.ts'
 import { McpLocalServer } from './mcp-local.ts'
 import { loadSeatPrivate, signSeat } from './seatkey.ts'
+import { makePendingKnocks, TapServer, type KnockShow } from './tap-server.ts'
 import { acceptHubTools, readCurrentTools, type ToolsVerdict } from './tools-cache.ts'
 
 /** Claim and complete may fetch, check and check out on the Air: 150 s instead of 60 (§9.4). */
@@ -42,6 +46,12 @@ export interface PipeDeps {
 }
 
 interface InFlight { tool: string; idempotencyKey: string | null; requestId: JsonRpcId; resolve(r: ToolResult): void; timer: ReturnType<typeof setTimeout> | null }
+interface KnockWait { resolve(r: KnockShow | null): void; timer: ReturnType<typeof setTimeout> }
+
+/** The margin the pipe keeps between a tap's budget and the timeout it gives the hub (2000 → 1800, §8 item 3). */
+const KNOCKS_MARGIN_MS = 200
+/** Results that mean the agent has read its notes, so a kept knock report is dropped (§8 item 5). */
+const READS_NOTES: ReadonlySet<string> = new Set(['collab_next', 'collab_cursor_ack'])
 
 /** The agent-facing sentence for each refusal the pipe itself makes. */
 const MESSAGES = {
@@ -111,6 +121,9 @@ export class Pipe {
   private readonly inflight = new Map<string, InFlight>()
   private readonly server: McpLocalServer
   private readonly timeouts: { default: number; long: number }
+  private readonly pending = makePendingKnocks()
+  private knockWaits: KnockWait[] = []
+  private tap: TapServer | null = null
 
   constructor(private readonly deps: PipeDeps) {
     this.timeouts = deps.callTimeouts ?? { default: scaled(TIMING.callDefaultMs, deps.env), long: scaled(TIMING.callLongMs, deps.env) }
@@ -145,18 +158,45 @@ export class Pipe {
     this.shared = this.folder !== null && Buffer.byteLength(this.folder, 'utf8') <= MAX_FOLDER_BYTES && shares.some((s) => s.realpath === this.folder)
     this.tools = readCurrentTools(deps.paths)
     this.ledger({ event: 'pipe_start', lineage: this.lineage ?? undefined, outcome: this.shared ? 'shared' : 'not_shared' })
+    if (this.host && this.lineage) await this.startTap(this.host)
     // A folder outside shares.json never dials (§9.2 folder_not_shared); nor does a pipe with no lineage or no tool list.
     if (this.lineage && this.host && this.shared && this.tools) this.startLink(this.host, this.lineage)
   }
 
   async stop(): Promise<void> {
+    this.tap?.stop()
+    this.tap = null
     this.link?.stop()
     this.link = null
     for (const ref of [...this.inflight.keys()]) this.settleUnknown(ref, 'stopped')
+    for (const w of this.knockWaits.splice(0)) { clearTimeout(w.timer); w.resolve(null) }
   }
 
   lineageId(): string | null {
     return this.lineage
+  }
+
+  /**
+   * One tap's question (§8 item 3). With no fresh link the answer is silence, and a kept report waits for a later tap.
+   * Otherwise one knocks request goes to the hub with at most 2000 ms, 200 ms under the budget (1800 for the tap's 2000);
+   * an expired report or no answer within the budget is silence, and a later answer is kept for the next tap.
+   */
+  requestKnocks(budgetMs: number): Promise<KnockShow | null> {
+    const link = this.link
+    if (!link || !link.fresh()) return Promise.resolve(null)
+    const timeout = Math.min(TIMING.knocksMaxMs, Math.floor(budgetMs) - KNOCKS_MARGIN_MS)
+    if (timeout < 1) return Promise.resolve(null)
+    if (link.send({ t: 'knocks', timeout_ms: timeout }) !== 'written') return Promise.resolve(null)
+    return new Promise<KnockShow | null>((resolve) => {
+      const w: KnockWait = {
+        resolve,
+        timer: setTimeout(() => {
+          this.knockWaits = this.knockWaits.filter((x) => x !== w)
+          resolve(null)
+        }, budgetMs),
+      }
+      this.knockWaits.push(w)
+    })
   }
 
   /** One JSON-RPC line from the harness, answered by the local MCP server (Task 28). */
@@ -272,10 +312,10 @@ export class Pipe {
         ready: (r) => this.onReady(r),
         result: (r) => this.onResult(r),
         tools: (t) => this.onTools(t),
-        knockReport: () => {},
+        knockReport: (k) => this.onKnockReport(k),
         notice: (n) => this.onNotice(n),
-        refused: () => {},
-        lost: () => this.onLost(),
+        refused: () => this.tap?.writeJson(),
+        lost: () => { this.tap?.writeJson(); this.onLost() },
       },
       connect: deps.connect ?? bunConnect,
       reattachMs: scaled(TIMING.reattachMs, deps.env),
@@ -285,7 +325,33 @@ export class Pipe {
     this.link.start()
   }
 
+  private async startTap(host: HostInfo): Promise<void> {
+    const tap = new TapServer({
+      paths: this.deps.paths, host, pipePid: this.deps.selfPid,
+      lineage: () => this.lineage,
+      state: () => this.link?.state() ?? 'detached',
+      refused: () => this.link?.lastRefused() ?? null,
+      ask: (budgetMs) => this.requestKnocks(budgetMs),
+      giveBack: (r) => this.pending.add({ seqs: r.seqs ?? [], origins: r.origins }),
+    })
+    try {
+      await tap.start()
+      this.tap = tap
+    } catch {
+      this.ledger({ event: 'tap_socket_failed', lineage: this.lineage ?? undefined })   // calls still work; the tap is silent
+    }
+  }
+
+  private onKnockReport(k: HubKnockReportMsg): void {
+    if (!('expired' in k) && k.count > 0) this.pending.add({ seqs: k.seqs, origins: k.origins })
+    const w = this.knockWaits.shift()
+    if (!w) return   // late: it waits in pending and shows once at the next tap (§8 item 5)
+    clearTimeout(w.timer)
+    w.resolve('expired' in k ? null : this.pending.take())
+  }
+
   private onReady(r: ReadyMsg): void {
+    this.tap?.writeJson()
     // The hub's view of this lineage's session (P66): null when none is live, so no earlier unknown is advised for a replay.
     this.session = r.session_hint?.session_id ?? null
     if (this.tools && r.tools_digest !== this.tools.digest) this.link?.send({ t: 'tools_get', digest: r.tools_digest })
@@ -348,6 +414,7 @@ export class Pipe {
       this.clearRecords(this.key, r.call_ref, own ? f.idempotencyKey : null)
       if (settlesKeyless(f.tool, result, own)) this.clearTool(this.key, f.tool)
     }
+    if (r.outcome === 'ok' && READS_NOTES.has(f.tool)) this.pending.clear()
     this.afterAnswer(f.tool, result, own)
     f.resolve(this.withPrior(result))
   }
