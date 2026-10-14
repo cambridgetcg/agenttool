@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { airGit, airGitEnv, GIT_STDOUT_MAX, MIRROR_GIT_FLAGS, OID_RE } from '../src/air/git.ts'
+import { airGit, airGitEnv, GIT_STDERR_MAX, GIT_STDOUT_MAX, MIRROR_GIT_FLAGS, OID_RE } from '../src/air/git.ts'
 import { cleanupTmps, makeRepo, REAL_GIT, temp, writeStub } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -115,4 +115,42 @@ describe('airGit', () => {
     }
     expect(tornError).toContain('unterminated')
   })
+
+  test('run keeps only the first GIT_STDERR_MAX bytes of stderr, drains the rest, and says it truncated', async () => {
+    const note = `airGit: stderr truncated after ${GIT_STDERR_MAX} bytes\n`
+    const dir = temp('cb-git-stub-')
+    // 4 MiB of stderr between a first line and a last line, then exit 128: an undrained pipe would block git until the timeout.
+    const flood = writeStub(dir, 'git', "echo 'remote: first line' >&2\n/usr/bin/head -c 4194304 /dev/zero | /usr/bin/tr '\\0' x >&2\necho 'fatal: the real error comes last' >&2\nexit 128")
+    const r = await airGit({ git: flood, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 20_000 })
+    expect([r.code, r.timedOut]).toEqual([128, false])
+    expect(r.stderr.startsWith('remote: first line\n')).toBe(true)
+    expect(r.stderr).toContain('stderr truncated')
+    expect(r.stderr.endsWith(note)).toBe(true)
+    expect(r.stderr).not.toContain('the real error comes last')
+    expect(r.stderr.length).toBeLessThanOrEqual(GIT_STDERR_MAX + 1 + note.length)
+    // Exactly GIT_STDERR_MAX bytes come back whole; one byte more keeps the first GIT_STDERR_MAX and adds the note.
+    const exact = writeStub(temp('cb-git-stub-'), 'git', `/usr/bin/head -c ${GIT_STDERR_MAX} /dev/zero | /usr/bin/tr '\\0' x >&2\nexit 3`)
+    const whole = await airGit({ git: exact, home: temp('cb-git-home-') }).run(['x'], { timeoutMs: 20_000 })
+    expect(whole.code).toBe(3)
+    expect(whole.stderr).toBe('x'.repeat(GIT_STDERR_MAX))
+    const over = writeStub(temp('cb-git-stub-'), 'git', `/usr/bin/head -c ${GIT_STDERR_MAX + 1} /dev/zero | /usr/bin/tr '\\0' x >&2\nexit 3`)
+    const cut = await airGit({ git: over, home: temp('cb-git-home-') }).run(['x'], { timeoutMs: 20_000 })
+    expect(cut.code).toBe(3)
+    expect(cut.stderr).toBe(`${'x'.repeat(GIT_STDERR_MAX)}\n${note}`)
+  }, 40_000)
+
+  test('records drains a stderr flood, yields its record, and fails with the first stderr line', async () => {
+    const dir = temp('cb-git-stub-')
+    const flood = writeStub(dir, 'git', "printf 'one\\0'\necho 'remote: first line' >&2\n/usr/bin/head -c 4194304 /dev/zero | /usr/bin/tr '\\0' x >&2\necho 'fatal: the real error comes last' >&2\nexit 128")
+    const seen: string[] = []
+    let error = ''
+    try {
+      for await (const rec of airGit({ git: flood, home: temp('cb-git-home-') }).records(['ls-tree'], { timeoutMs: 20_000 })) seen.push(rec)
+    } catch (e) {
+      error = String(e)
+    }
+    expect(seen).toEqual(['one'])
+    expect(error).toContain('exit 128: remote: first line')
+    expect(error).not.toContain('timed out')
+  }, 40_000)
 })

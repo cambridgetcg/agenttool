@@ -20,6 +20,9 @@ export const OID_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 /** run() keeps at most this much stdout; past it git is stopped and the call fails (code null). */
 export const GIT_STDOUT_MAX = 64 * 1024 * 1024
 
+/** run() and records() keep at most this much stderr: the first bytes, which hold the first line every caller reads. */
+export const GIT_STDERR_MAX = 64 * 1024
+
 /** A SIGTERMed git gets this long to clean up its temporary files before SIGKILL. */
 const KILL_GRACE_MS = 5_000
 
@@ -67,6 +70,34 @@ async function readCapped(stream: ReadableStream<Uint8Array>, max: number, over:
   return { bytes, over: tooMuch }
 }
 
+/**
+ * Reads a stream to its end but keeps only its first `max` bytes, as text. The rest is still read so git is never blocked
+ * on a full pipe, and a note says bytes were dropped. It never rejects: a stream error ends what it has.
+ */
+async function drainText(stream: ReadableStream<Uint8Array>, max: number): Promise<string> {
+  const kept: Uint8Array[] = []
+  let size = 0
+  let dropped = false
+  try {
+    for await (const chunk of stream) {
+      if (chunk.byteLength === 0) continue
+      const room = max - size
+      if (chunk.byteLength > room) {
+        dropped = true
+        if (room > 0) { kept.push(chunk.subarray(0, room)); size = max }
+        continue
+      }
+      kept.push(chunk)
+      size += chunk.byteLength
+    }
+  } catch { /* the stream broke: what was read so far is all there is */ }
+  const bytes = new Uint8Array(size)
+  let off = 0
+  for (const c of kept) { bytes.set(c, off); off += c.byteLength }
+  const text = new TextDecoder().decode(bytes)
+  return dropped ? `${text}${text.endsWith('\n') ? '' : '\n'}airGit: stderr truncated after ${max} bytes\n` : text
+}
+
 export function airGit(o: { git: string; home: string; defaultTimeoutMs?: number }): GitRunner {
   const base = airGitEnv(o.home)
   const defaultTimeout = o.defaultTimeoutMs ?? TIMING.gitCallMs
@@ -89,7 +120,7 @@ export function airGit(o: { git: string; home: string; defaultTimeoutMs?: number
       try {
         const [out, stderr] = await Promise.all([
           readCapped(proc.stdout as ReadableStream<Uint8Array>, GIT_STDOUT_MAX, () => stop(proc)),
-          new Response(proc.stderr as ReadableStream<Uint8Array>).text(),
+          drainText(proc.stderr as ReadableStream<Uint8Array>, GIT_STDERR_MAX),
         ])
         await proc.exited
         const failed = timedOut || out.over
@@ -111,7 +142,7 @@ export function airGit(o: { git: string; home: string; defaultTimeoutMs?: number
           const proc = spawn([o.git, ...args], base)
           let timedOut = false
           const timer = setTimeout(() => { timedOut = true; stop(proc) }, timeoutMs)
-          const stderr = new Response(proc.stderr as ReadableStream<Uint8Array>).text()
+          const stderr = drainText(proc.stderr as ReadableStream<Uint8Array>, GIT_STDERR_MAX)
           const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
           const decoder = new TextDecoder()
           let finished = false
