@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TIMING } from '../src/timing.ts'
-import type { CallOutcome, CollabChild } from '../src/air/children.ts'
+import { CollabChild, type CallOutcome } from '../src/air/children.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
-import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool } from '../src/air/pool.ts'
+import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool, type HostCli } from '../src/air/pool.ts'
 import { rolePrefix } from '../src/air/stamp.ts'
 import { newStartNonce } from '../src/link/messages.ts'
 import { COLLAB_DIST, temp, writeStub } from './helpers.ts'
 import { startCollabSession, tamperJournal } from './mcp-harness.ts'
-import { activeSessions, childOf, cleanupPools, entry, events, fresh, pool, world, type World } from './pool-world.ts'
+import { activeSessions, childOf, cleanupPools, deferred, entry, events, fresh, pool, world, type World } from './pool-world.ts'
 
 const DAY = 86_400_000
 const frozen: number[] = []
@@ -388,4 +388,275 @@ describe('the hub way, always', () => {
     expect(r.code).toBe(0)
     expect(JSON.parse(r.stdout.trim())).toMatchObject({ protocol: 'agenttool.collab-knock/1', session_id: sid, waiting: 0 })
   }, 30_000)
+})
+
+describe('after journal_invalid or a failed child start, a marker is kept for the next hub start (Task 40b review)', () => {
+  const marker = async (w: World, x: LineageEntry) =>
+    ({ nonce: newStartNonce(), call_ref: ref(x, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() })
+
+  test('after a failed reconcile, every session_start on a lineage with a marker is refused with the journal message and spawns no child', async () => {
+    const w = world()
+    await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'air' })
+    tamperJournal(w.paths.sharedJournal)
+    const a = entry(w)
+    const b = entry(w)
+    for (const x of [a, b]) w.store.upsert({ ...x, pending_start: await marker(w, x) })
+    const p = pool(w)
+    await p.reconcile()
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'journal_invalid']])
+    for (const [i, x] of [a, b, a].entries()) {
+      const nonce = newStartNonce()
+      const out = await p.startSession(x.lineage, startArgs(w, nonce), ref(x, i + 2), nonce, w.workspaceId)
+      expect(out).toMatchObject({ refuse: 'hub_away', message: expect.stringContaining('failed verification') })
+    }
+    expect(events(w, 'child_start')).toHaveLength(1) // the broken journal is never re-verified per start (P64, §9.6 item 4)
+    expect(fresh(w).get(a.lineage)!.pending_start).not.toBeNull()
+    expect(fresh(w).get(b.lineage)!.pending_start).not.toBeNull()
+  }, 30_000)
+
+  test('a journal_invalid found by the start itself while it settles the marker is not re-verified by the next start', async () => {
+    const w = world()
+    await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'air' })
+    tamperJournal(w.paths.sharedJournal)
+    const a = entry(w)
+    const b = entry(w)
+    for (const x of [a, b]) w.store.upsert({ ...x, pending_start: await marker(w, x) })
+    const p = pool(w) // no reconcile: the first session_start is what meets the broken journal
+    const tries: LineageEntry[] = [a, a, b]
+    for (const [i, x] of tries.entries()) {
+      const nonce = newStartNonce()
+      const out = await p.startSession(x.lineage, startArgs(w, nonce), ref(x, i + 2), nonce, w.workspaceId)
+      expect(out).toMatchObject({ refuse: 'hub_away', message: expect.stringContaining('failed verification') })
+    }
+    expect(w.statuses).toContainEqual([a.lineage, 'journal_invalid'])
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'journal_invalid']])
+    expect(fresh(w).get(a.lineage)!.pending_start).not.toBeNull()
+    expect(fresh(w).get(b.lineage)!.pending_start).not.toBeNull()
+  }, 30_000)
+
+  test('only a marker whose recorded child still runs asks the agent to call again shortly', async () => {
+    const w = world()
+    const a = entry(w)
+    w.store.upsert({ ...a, pending_start: { ...(await marker(w, a)), child_pid: process.pid, child_lstart: liveLstartOf('/bin/ps')(process.pid) } })
+    const p = pool(w)
+    const nonce = newStartNonce()
+    const out = await p.startSession(a.lineage, startArgs(w, nonce), ref(a, 2), nonce, w.workspaceId)
+    expect(out).toMatchObject({ refuse: 'hub_away', message: expect.stringContaining('again shortly') })
+    expect(events(w, 'child_start')).toEqual([])
+  }, 30_000)
+
+  test('a child that could not start while settling a marker is not respawned by the next start of that lineage', async () => {
+    const w = world()
+    mkdirSync(w.paths.sharedJournal, { recursive: true }) // the store refuses a journal that is a directory: child_start_failed
+    const a = entry(w)
+    w.store.upsert({ ...a, pending_start: await marker(w, a) })
+    const p = pool(w)
+    await p.reconcile()
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'child_start_failed']])
+    for (const i of [2, 3]) {
+      const nonce = newStartNonce()
+      const out = await p.startSession(a.lineage, startArgs(w, nonce), ref(a, i), nonce, w.workspaceId)
+      expect(out).toMatchObject({ refuse: 'hub_away', message: expect.stringContaining('could not start') })
+    }
+    expect(events(w, 'child_start')).toHaveLength(1)
+    expect(fresh(w).get(a.lineage)!.pending_start).not.toBeNull()
+  }, 30_000)
+})
+
+describe('a hub-start reconcile never undoes a start that is newer (Task 40b review)', () => {
+  /** Holds the first collab_workspace_status call (the hub-start reconcile's) until the test releases it. */
+  function holdFirstStatusCall() {
+    const real = CollabChild.prototype.call
+    const gate = deferred()
+    let held = false
+    const spy = spyOn(CollabChild.prototype, 'call').mockImplementation(function (this: CollabChild, name: string, args: Record<string, unknown>) {
+      if (name === 'collab_workspace_status' && !held) {
+        held = true
+        return gate.promise.then(() => real.call(this, name, args))
+      }
+      return real.call(this, name, args)
+    })
+    return { release: () => gate.resolve(), isHeld: () => held, restore: () => spy.mockRestore() }
+  }
+  const pend = async (w: World, e: LineageEntry, n: number) =>
+    ({ nonce: newStartNonce(), call_ref: ref(e, n), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() })
+
+  test("a marker replaced while the reconcile waited on the journal is left alone: neither cleared nor recorded", async () => {
+    const w = world()
+    const e = entry(w)
+    const m1 = await pend(w, e, 1)
+    w.store.upsert({ ...e, pending_start: m1 })
+    const hold = holdFirstStatusCall()
+    try {
+      const p = pool(w)
+      const rec = p.reconcile()
+      await until(hold.isHeld)
+      const m2 = await pend(w, e, 2) // a newer start wrote its own marker meanwhile
+      w.store.upsert({ ...w.store.get(e.lineage)!, pending_start: m2 })
+      hold.release()
+      await rec
+      expect(fresh(w).get(e.lineage)!.pending_start?.nonce).toBe(m2.nonce)
+      expect(events(w, 'reconcile').map((l) => [l.outcome, l.code])).toEqual([['kept', 'marker_changed']])
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+
+  test('a session_start waits behind the hub-start reconcile of its lineage, then settles nothing twice', async () => {
+    const w = world()
+    const e = entry(w)
+    const m1 = await pend(w, e, 1)
+    w.store.upsert({ ...e, pending_start: m1 })
+    const hold = holdFirstStatusCall()
+    try {
+      const p = pool(w)
+      const rec = p.reconcile()
+      await until(hold.isHeld)
+      const nonce = newStartNonce()
+      let done = false
+      const run = p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId).then((o) => { done = true; return o })
+      await Bun.sleep(1500) // long enough for an unchained start to settle the marker and finish
+      expect(done).toBe(false)
+      expect(fresh(w).get(e.lineage)!.pending_start?.nonce).toBe(m1.nonce)
+      expect(events(w, 'reconcile')).toEqual([])
+      hold.release()
+      await rec
+      expect(outcome(await run)).toBe('ok')
+      expect(events(w, 'reconcile').map((l) => l.outcome)).toEqual(['cleared'])
+      expect(await activeSessions(w)).toHaveLength(1)
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+})
+
+describe('a retirement whose end fails (Task 40b review)', () => {
+  const failing = (r: Awaited<ReturnType<HostCli>>): HostCli => async () => r
+  async function retireWith(hostCli: HostCli): Promise<{ w: World; e: LineageEntry; sid: string }> {
+    const w = world()
+    const p = pool(w, { hostCli })
+    const e = entry(w)
+    const sid = await live(w, p, e)
+    p.detached(e.lineage)
+    w.clock.now += 7 * DAY
+    w.clock.mono += 7 * DAY
+    await p.tick()
+    return { w, e, sid }
+  }
+
+  test('a non-zero exit raises orphan_session for the session, labels the exit code, and the lineage still retires', async () => {
+    const { w, e, sid } = await retireWith(failing({ code: 1, stdout: '', stderr: 'refused' }))
+    expect(w.statuses).toContainEqual([e.lineage, `orphan_session ${sid}`])
+    expect(events(w, 'retire_end').at(-1)).toMatchObject({ outcome: 'error', code: '1', session_id: sid })
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'retired', session_id: null, past_sessions: [sid] })
+    expect(existsSync(w.paths.credentialFile(sid))).toBe(true) // the credential is left for Ai's host end
+  }, 30_000)
+
+  for (const cause of ['timeout', 'signal', 'spawn_failed'] as const) {
+    test(`a host CLI that never exited (${cause}) is labelled ${cause}, never a bare timeout`, async () => {
+      const { w, e, sid } = await retireWith(failing({ code: null, stdout: '', stderr: '', cause }))
+      expect(events(w, 'retire_end').at(-1)).toMatchObject({ outcome: 'error', code: cause })
+      expect(w.statuses).toContainEqual([e.lineage, `orphan_session ${sid}`])
+    }, 30_000)
+  }
+
+  test('a successful end raises no status', async () => {
+    const { w } = await retireWith(failing({ code: 0, stdout: '', stderr: '' }))
+    expect(events(w, 'retire_end').at(-1)).toMatchObject({ outcome: 'ok', code: '0' })
+    expect(w.statuses).toEqual([])
+  }, 30_000)
+})
+
+describe('retirement guards its lineage while it ends the session (Task 40b review)', () => {
+  test('while the host end runs, a reattach and a call get seat_session_ended and no child is resumed', async () => {
+    const w = world()
+    const entered = deferred()
+    const release = deferred()
+    const hostCli: HostCli = async () => { entered.resolve(); await release.promise; return { code: 0, stdout: '', stderr: '' } }
+    const p = pool(w, { hostCli })
+    const e = entry(w)
+    await live(w, p, e)
+    const c = await childOf(p, e.lineage)
+    p.detached(e.lineage)
+    w.clock.now += 7 * DAY
+    w.clock.mono += 7 * DAY
+    const ticking = p.tick()
+    await entered.promise
+    p.attached(e.lineage) // the pipe comes back in the window
+    const starts = events(w, 'child_start').length
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    const nonce = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, nonce), ref(e, 2), nonce, w.workspaceId))).toBe('refuse:seat_session_ended')
+    release.resolve()
+    await ticking
+    expect(events(w, 'child_start')).toHaveLength(starts)
+    expect(c.alive()).toBe(false)
+    expect(fresh(w).get(e.lineage)!.state).toBe('retired')
+  }, 30_000)
+
+  test('a child that is still starting when retirement begins is stopped, not left attached to a retired lineage', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await live(w, p, e)
+    p.detached(e.lineage)
+    w.clock.mono += 1_000
+    await p.tick() // the detached child is drained and stopped; the next call must spawn a resume
+    const real = CollabChild.start
+    const gate = deferred()
+    const created: CollabChild[] = []
+    let entered = false
+    const spy = spyOn(CollabChild, 'start').mockImplementation(async (...args: Parameters<typeof CollabChild.start>) => {
+      entered = true
+      await gate.promise
+      const c = await real.apply(CollabChild, args)
+      if (!('failed' in c)) created.push(c)
+      return c
+    })
+    try {
+      const got = p.childFor(e.lineage)
+      await until(() => entered)
+      w.clock.now += 7 * DAY
+      const ticking = p.tick() // retirement begins while the spawn is still starting
+      await Bun.sleep(50)
+      gate.resolve()
+      expect(await got).toMatchObject({ ok: false, code: 'seat_session_ended' })
+      await ticking
+      expect(created).toHaveLength(1)
+      expect(created[0]!.alive()).toBe(false)
+      expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'retired', past_sessions: [sid] })
+      expect(await activeSessions(w)).toEqual([])
+    } finally {
+      spy.mockRestore()
+    }
+  }, 30_000)
+})
+
+describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
+  const hostWith = (script: string, bun = process.execPath) => {
+    const dist = temp('cb-hostcli-')
+    writeFileSync(join(dist, 'agenttool-collab-host.js'), script)
+    return makeHostCli({ bun, dist, journal: '/j/collab.sqlite', home: temp('cb-hostcli-home-') })
+  }
+
+  test('an exit code has no cause', async () => {
+    const r = await hostWith('process.exit(3)\n')(['x'], 5_000)
+    expect(r.code).toBe(3)
+    expect(r.cause).toBeUndefined()
+  })
+
+  test('a timeout is a timeout', async () => {
+    const r = await hostWith('setTimeout(() => {}, 60000)\n')(['x'], 300)
+    expect(r).toMatchObject({ code: null, cause: 'timeout' })
+  }, 30_000)
+
+  test('death by a signal is a signal', async () => {
+    const r = await hostWith("process.kill(process.pid, 'SIGKILL')\n")(['x'], 5_000)
+    expect(r).toMatchObject({ code: null, cause: 'signal' })
+  })
+
+  test('a host CLI that could not be started is spawn_failed', async () => {
+    const r = await hostWith('', '/nonexistent/bun')(['x'], 5_000)
+    expect(r).toMatchObject({ code: null, cause: 'spawn_failed' })
+  })
 })

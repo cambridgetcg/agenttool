@@ -112,3 +112,18 @@ export async function activeSessions(w: World): Promise<Array<{ id: string; role
 
 export const events = (w: World, event: string): LedgerEntry[] => readLedger(w.paths.ledger).filter((l) => l.event === event)
 export const fresh = (w: World): LineageStore => { const s = new LineageStore(w.paths.lineages); s.load(); return s }
+
+/** A promise the test settles by hand, to hold a pool at a chosen await. */
+export function deferred<T = void>(): { promise: Promise<T>; resolve(v: T): void } {
+  let resolve!: (v: T) => void
+  const promise = new Promise<T>((r) => { resolve = r })
+  return { promise, resolve }
+}
+
+export async function until(cond: () => boolean, ms = 5000): Promise<void> {
+  const end = Date.now() + ms
+  while (!cond()) {
+    if (Date.now() > end) throw new Error('timed out waiting')
+    await Bun.sleep(10)
+  }
+}

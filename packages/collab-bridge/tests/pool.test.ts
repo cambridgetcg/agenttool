@@ -1,12 +1,13 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { CollabChild } from '../src/air/children.ts'
 import { ChildPool } from '../src/air/pool.ts'
 import type { LineageEntry } from '../src/air/lineages.ts'
 import { COLLAB_DIST, temp } from './helpers.ts'
 import { writeFakeCollab } from './fake-collab.ts'
 import { tamperJournal } from './mcp-harness.ts'
-import { activeSessions, childOf, cleanupPools, entry, events, fresh, pool, seedLive, world, type World } from './pool-world.ts'
+import { activeSessions, childOf, cleanupPools, deferred, entry, events, fresh, pool, seedLive, until, world, type World } from './pool-world.ts'
 
 afterEach(cleanupPools)
 
@@ -466,4 +467,155 @@ describe('the hub way, always', () => {
     expect(() => new ChildPool(w.deps({ spec: { bun: process.execPath, dist: COLLAB_DIST, journal: w.paths.privateJournal, home: w.home } })))
       .toThrow('shared journal')
   })
+})
+
+/** A lineage whose old child is draining with a call in flight, so the next childFor must wait (up to 1.5 s here) for the
+ *  old child to exit before it spawns (§9.6 item 3); the returned `wait` is that childFor, begun but not yet answered. */
+async function respawnWaiting(): Promise<{ w: World; p: ChildPool; e: LineageEntry; wait: ReturnType<ChildPool['childFor']>; call: Promise<unknown> }> {
+  const { w, p, e } = slowWorld()
+  const c = await childOf(p, e.lineage)
+  const call = c.call('fake_slow', {})
+  await Bun.sleep(50)
+  p.detached(e.lineage)
+  w.clock.mono += 1_000
+  await p.tick() // marks the child draining; its call is still in flight
+  const wait = p.childFor(e.lineage)
+  await Bun.sleep(50)
+  expect(c.alive()).toBe(true) // the spawn is waiting on the old child
+  return { w, p, e, wait, call }
+}
+
+/** Holds every CollabChild.start until released, and records the children it returned. */
+function holdStarts() {
+  const real = CollabChild.start
+  const gate = deferred()
+  const created: CollabChild[] = []
+  let entered = 0
+  const spy = spyOn(CollabChild, 'start').mockImplementation(async (...args: Parameters<typeof CollabChild.start>) => {
+    entered += 1
+    await gate.promise
+    const c = await real.apply(CollabChild, args)
+    if (!('failed' in c)) created.push(c)
+    return c
+  })
+  return { release: () => gate.resolve(), created, entered: () => entered, restore: () => spy.mockRestore() }
+}
+
+describe('a spawn re-checks its lineage after every wait (Task 40a ruling, §9.6 items 3 and 5, §10.4)', () => {
+  test('a park while the spawn waits for the old child: seat_recovery_required, and no new child starts', async () => {
+    const { w, p, e, wait, call } = await respawnWaiting()
+    p.park(e.lineage, 'cursor_reset_required', {})
+    expect(await wait).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+    await call
+    expect(events(w, 'child_start')).toHaveLength(1)
+  }, 30_000)
+
+  test('a build change while the spawn waits for the old child: collab_build_changed, and no new child starts', async () => {
+    const { w, e, wait, call } = await respawnWaiting()
+    w.build.changed = true
+    expect(await wait).toMatchObject({ ok: false, code: 'collab_build_changed' })
+    expect(w.statuses).toContainEqual([e.lineage, 'collab_build_changed'])
+    await call
+    expect(events(w, 'child_start')).toHaveLength(1)
+  }, 30_000)
+
+  test('a stopAll while the spawn waits for the old child: hub_away, and no new child starts', async () => {
+    const { w, p, wait, call } = await respawnWaiting()
+    const stopped = p.stopAll()
+    expect(await wait).toMatchObject({ ok: false, code: 'hub_away' })
+    await stopped
+    await call
+    expect(events(w, 'child_start')).toHaveLength(1)
+  }, 30_000)
+
+  test('a lineage parked while the new child is starting: the new child is stopped, not handed out', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    await seedLive(w, e)
+    const hold = holdStarts()
+    try {
+      const got = p.childFor(e.lineage)
+      await until(() => hold.entered() === 1)
+      p.park(e.lineage, 'cursor_reset_required', {})
+      hold.release()
+      expect(await got).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+      expect(hold.created).toHaveLength(1)
+      expect(hold.created[0]!.alive()).toBe(false)
+      expect(p.liveCount('nuance')).toBe(0)
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+
+  test('a lineage that ended while the new child is starting: the new child is stopped, not handed out', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    await seedLive(w, e)
+    const hold = holdStarts()
+    try {
+      const got = p.childFor(e.lineage)
+      await until(() => hold.entered() === 1)
+      p.sessionEnded(e.lineage) // session_end through another path while the resume is starting
+      hold.release()
+      expect(await got).toMatchObject({ ok: false, code: 'seat_session_ended' })
+      expect(hold.created[0]!.alive()).toBe(false)
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+})
+
+describe('stopAll and stopDevice wait for a child that is starting (Task 40a ruling, §9.10 step 4)', () => {
+  test('a child starting during stopAll is stopped by the time stopAll resolves, and the closed pool answers hub_away', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    await seedLive(w, e)
+    const hold = holdStarts()
+    try {
+      const got = p.childFor(e.lineage)
+      await until(() => hold.entered() === 1)
+      const stopped = p.stopAll()
+      hold.release()
+      await stopped
+      expect(hold.created).toHaveLength(1)
+      expect(hold.created[0]!.alive()).toBe(false)
+      expect(await got).toMatchObject({ ok: false, code: 'hub_away' })
+      // Closed for good: no lineage gets a child, and a session_start writes no marker.
+      expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'hub_away' })
+      const starts = events(w, 'child_start').length
+      const out = await p.startSession(e.lineage, { root_path: w.mirror }, `${e.lineage}:0000abcd:1`, 'nonce-unused', w.workspaceId)
+      expect(out).toMatchObject({ refuse: 'hub_away' })
+      expect(events(w, 'child_start')).toHaveLength(starts)
+      expect(fresh(w).get(e.lineage)!.pending_start).toBeNull()
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+
+  test("a child starting during stopDevice is stopped by the time stopDevice resolves, and another device's child is untouched", async () => {
+    const w = world()
+    const p = pool(w)
+    const n = entry(w)
+    const z = entry(w, { device: 'zerone', user: 'yu' })
+    await seedLive(w, n)
+    await seedLive(w, z)
+    const zc = await childOf(p, z.lineage)
+    const hold = holdStarts()
+    try {
+      const got = p.childFor(n.lineage)
+      await until(() => hold.entered() === 1)
+      const stopped = p.stopDevice('nuance')
+      hold.release()
+      await stopped
+      expect(hold.created).toHaveLength(1)
+      expect(hold.created[0]!.alive()).toBe(false)
+      await got
+      expect(zc.alive()).toBe(true)
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
 })

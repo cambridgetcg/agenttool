@@ -9,6 +9,9 @@
 //   unknown outcome is settled from Collab's own journal, by the start nonce in the role stamp, never by re-sending
 //   (§9.3 item 8, P55, P64).
 // - A lineage whose session ended may start a new one; a lineage 7 days detached is retired for good (§6.2, P53).
+// - A wait inside the pool never outlives the facts it started from: a spawn re-runs childFor's checks after the old child
+//   exited and again after the new one started, a retirement refuses its lineage from its first step, a closed pool (after
+//   stopAll) hands out nothing, and stopAll, stopDevice and retirement wait for a child that is still starting (§9.10 step 4).
 // Every age in memory reads the injected monotonic clock (CLOCK_MONOTONIC in the hub, which counts sleep); the 7-day
 // retirement reads the wall-clock detached_since kept in lineages.json, so it survives restarts (Review Focus 4).
 import { existsSync } from 'node:fs'
@@ -22,7 +25,9 @@ import type { LineageEntry, LineageStore } from './lineages.ts'
 import { roleNonce } from './stamp.ts'
 import { classifyStart } from './startup.ts'
 
-export type HostCli = (args: string[], timeoutMs: number) => Promise<{ code: number | null; stdout: string; stderr: string }>
+/** `cause` says why there is no exit code (additive; absent when the CLI exited with one): it was killed at the timeout, died
+ *  by a signal, or could not be started at all. */
+export type HostCli = (args: string[], timeoutMs: number) => Promise<{ code: number | null; stdout: string; stderr: string; cause?: 'timeout' | 'signal' | 'spawn_failed' }>
 
 const MAX_TIMER_MS = 2_147_483_647
 const HOST_OUTPUT_MAX = 1024 * 1024
@@ -49,7 +54,7 @@ export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>): HostCli {
         cwd: '/', env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
       })
     } catch {
-      return { code: null, stdout: '', stderr: 'the host CLI could not be started' }
+      return { code: null, stdout: '', stderr: 'the host CLI could not be started', cause: 'spawn_failed' }
     }
     let timedOut = false
     const timer = setTimeout(() => { timedOut = true; proc.kill('SIGTERM') }, Math.min(MAX_TIMER_MS, Math.max(1, Math.floor(timeoutMs))))
@@ -59,7 +64,8 @@ export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>): HostCli {
     ])
     await proc.exited
     clearTimeout(timer)
-    return { code: timedOut ? null : proc.exitCode, stdout, stderr }
+    const code = timedOut ? null : proc.exitCode
+    return code === null ? { code, stdout, stderr, cause: timedOut ? 'timeout' : 'signal' } : { code, stdout, stderr }
   }
 }
 
@@ -88,8 +94,11 @@ export interface PoolDeps {
   childWindowMs?: number; retireAfterMs?: number; requestTimeoutMs?: number
   lstartOf?(pid: number): string | null
 }
-export type ChildFor = { ok: true; child: CollabChild } | { ok: false; code: AgentCode; message: string }
+type Refused = { ok: false; code: AgentCode; message: string }
+export type ChildFor = { ok: true; child: CollabChild } | Refused
 type Refusal = { refuse: AgentCode; message: string }
+/** childFor's checks: a refusal, or the entry as it stands (and the live child that may keep forwarding, when asked for). */
+type Gate = { refusal: Refused } | { e: LineageEntry; child: CollabChild | null }
 
 /** What the pool knows about one lineage in this hub run; lineages.json holds everything that must outlive it. */
 interface Runtime {
@@ -100,7 +109,8 @@ interface Runtime {
   attached: boolean
   detachedAt: number | null // monotonic
   startFailed: boolean // child_start_failed: not respawned for this lineage until the hub restarts
-  startChain: Promise<unknown> // session_starts of one lineage run one at a time
+  startChain: Promise<unknown> // session_starts, and the hub-start reconcile step, of one lineage run one at a time
+  retiring: boolean // retirement has begun: childFor refuses from here on, before any await
 }
 
 const MSG = {
@@ -115,15 +125,17 @@ const MSG = {
   pending: 'An earlier collab_session_start of this session has no known outcome yet; nothing was sent. Call collab_session_start again shortly.',
   stopped: "This session's Collab child on the Air was stopping, so nothing was sent; call again if you choose.",
   late: 'This collab_session_start waited on the Air past its deadline and was not sent; nothing was applied.',
+  closed: 'The hub is shutting down; nothing was sent.',
 } as const
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const refuse = (code: AgentCode, message: string): ChildFor => ({ ok: false, code, message })
+const refuse = (code: AgentCode, message: string): Refused => ({ ok: false, code, message })
 
 export class ChildPool {
   private readonly rts = new Map<string, Runtime>()
   private journalInvalid = false // P64: no new child for any lineage until the hub restarts
   private reconciled = false
+  private closed = false // stopAll has run: no child for any lineage, ever again in this run
   private ticking = false
   private readonly windowMs: number
   private readonly retireMs: number
@@ -140,7 +152,7 @@ export class ChildPool {
   private rt(lineage: string): Runtime {
     let r = this.rts.get(lineage)
     if (!r) {
-      r = { child: null, starting: null, stopping: null, draining: false, attached: false, detachedAt: null, startFailed: false, startChain: Promise.resolve() }
+      r = { child: null, starting: null, stopping: null, draining: false, attached: false, detachedAt: null, startFailed: false, startChain: Promise.resolve(), retiring: false }
       this.rts.set(lineage, r)
     }
     return r
@@ -149,29 +161,45 @@ export class ChildPool {
   async childFor(lineage: string, o: { forStart?: boolean } = {}): Promise<ChildFor> {
     const rt = this.rt(lineage)
     if (rt.starting) return rt.starting
-    let e = this.deps.store.get(lineage)
-    if (!e) return refuse('hub_away', MSG.unknownLineage)
-    if (e.state === 'retired') return refuse('seat_session_ended', MSG.retired)
-    if (e.parked) return refuse('seat_recovery_required', MSG.parked)
-    // A session whose credential is gone was ended from outside (a host end, K23): the lineage has ended (P53).
-    if (e.state === 'live' && !existsSync(e.credential_path!)) e = this.markEnded(e, 'credential_missing')
-    const c = rt.child
-    // A live child keeps forwarding, even after a Collab reinstall (§10.4).
-    if (c && c.alive() && !rt.draining && !rt.stopping && (e.state === 'live' || o.forStart)) return { ok: true, child: c }
-    if (e.state !== 'live' && !o.forStart) return e.state === 'ended' ? refuse('seat_session_ended', MSG.ended) : refuse('session_required', MSG.required)
-    if (this.journalInvalid) return refuse('hub_away', MSG.journal)
-    if (rt.startFailed) return refuse('hub_away', MSG.startFailed)
-    if (this.deps.buildChanged()) {
-      this.deps.status(lineage, 'collab_build_changed')
-      return refuse('collab_build_changed', MSG.build)
-    }
-    rt.starting = this.spawn(lineage, rt, e).finally(() => { rt.starting = null })
+    const g = this.gate(lineage, rt, o, true)
+    if ('refusal' in g) return g.refusal
+    if (g.child) return { ok: true, child: g.child }
+    rt.starting = this.spawn(lineage, rt, o).finally(() => { rt.starting = null })
     return rt.starting
   }
 
-  /** A fresh child, or a resume of the lineage's session; only after any old child of the lineage has exited. */
-  private async spawn(lineage: string, rt: Runtime, e: LineageEntry): Promise<ChildFor> {
+  /** The refusals that apply to a child for `lineage` right now, on the entry as it stands. With `reuse`, a live child that may
+   *  keep forwarding is answered before the checks that only a new child needs (§10.4: even after a Collab reinstall). spawn
+   *  runs it again after each wait, so a park, an end, a retirement, a closed pool, a broken journal or a changed build that
+   *  came meanwhile is honoured (§9.6 items 3 and 5). */
+  private gate(lineage: string, rt: Runtime, o: { forStart?: boolean }, reuse: boolean): Gate {
+    if (this.closed) return { refusal: refuse('hub_away', MSG.closed) }
+    let e = this.deps.store.get(lineage)
+    if (!e) return { refusal: refuse('hub_away', MSG.unknownLineage) }
+    if (e.state === 'retired' || rt.retiring) return { refusal: refuse('seat_session_ended', MSG.retired) }
+    if (e.parked) return { refusal: refuse('seat_recovery_required', MSG.parked) }
+    // A session whose credential is gone was ended from outside (a host end, K23): the lineage has ended (P53).
+    if (e.state === 'live' && !existsSync(e.credential_path!)) e = this.markEnded(e, 'credential_missing')
+    const c = rt.child
+    if (reuse && c && c.alive() && !rt.draining && !rt.stopping && (e.state === 'live' || o.forStart)) return { e, child: c }
+    if (e.state !== 'live' && !o.forStart) return { refusal: e.state === 'ended' ? refuse('seat_session_ended', MSG.ended) : refuse('session_required', MSG.required) }
+    if (this.journalInvalid) return { refusal: refuse('hub_away', MSG.journal) }
+    if (rt.startFailed) return { refusal: refuse('hub_away', MSG.startFailed) }
+    if (this.deps.buildChanged()) {
+      this.deps.status(lineage, 'collab_build_changed')
+      return { refusal: refuse('collab_build_changed', MSG.build) }
+    }
+    return { e, child: null }
+  }
+
+  /** A fresh child, or a resume of the lineage's session; only after any old child of the lineage has exited. The wait for the
+   *  old child can be long (its calls in flight), and so can the start: the gate runs again after each, on the entry as it
+   *  stands then, and a child that is no longer wanted is stopped, never handed out. */
+  private async spawn(lineage: string, rt: Runtime, o: { forStart?: boolean }): Promise<ChildFor> {
     if (rt.child) await this.stopChild(rt)
+    const g = this.gate(lineage, rt, o, false)
+    if ('refusal' in g) return g.refusal
+    const e = g.e
     const resume = e.state === 'live'
     const spec: ChildSpec = resume ? { ...this.deps.spec, sessionFile: e.credential_path! } : { ...this.deps.spec }
     const started = await CollabChild.start(spec, { requestTimeoutMs: this.requestTimeoutMs })
@@ -182,9 +210,6 @@ export class ChildPool {
       return this.startFailed(lineage, rt, cls, started)
     }
     this.deps.ledger({ ...base, outcome: 'ok', code: resume ? 'resume' : 'fresh' })
-    rt.child = started
-    rt.draining = false
-    rt.stopping = null
     void started.exited.then((code) => {
       this.deps.ledger({ event: 'child_exit', device: e.device, user: e.user, lineage, outcome: code === 0 ? 'ok' : 'error', code: code === null ? 'signal' : String(code) })
       if (rt.child === started) {
@@ -192,6 +217,14 @@ export class ChildPool {
         rt.draining = false
       }
     })
+    const after = this.gate(lineage, rt, o, false)
+    if ('refusal' in after) {
+      await started.stop()
+      return after.refusal
+    }
+    rt.child = started
+    rt.draining = false
+    rt.stopping = null
     return { ok: true, child: started }
   }
 
@@ -243,8 +276,14 @@ export class ChildPool {
   }
 
   startSession(lineage: string, args: Record<string, unknown>, callRef: string, nonce: string, workspaceId: string, notAfterMono?: number): Promise<CallOutcome | Refusal> {
+    return this.chained(lineage, () => this.start(lineage, args, callRef, nonce, workspaceId, notAfterMono))
+  }
+
+  /** Runs `fn` after everything queued before it on this lineage: session_starts, and the hub-start reconcile of its marker,
+   *  never overlap (§9.3 item 8). `fn` must not queue on the same lineage itself. */
+  private chained<T>(lineage: string, fn: () => Promise<T>): Promise<T> {
     const rt = this.rt(lineage)
-    const run = rt.startChain.then(() => this.start(lineage, args, callRef, nonce, workspaceId, notAfterMono))
+    const run = rt.startChain.then(fn)
     rt.startChain = run.catch(() => {})
     return run
   }
@@ -253,6 +292,7 @@ export class ChildPool {
     // The forwarder's deadline (§5.4): a start that waited here (the start chain, a drain, a reconcile) until too little of
     // its timeout_ms remained is never sent, so no marker is left for it. A start already written is never withdrawn.
     const late = () => notAfterMono !== undefined && this.deps.mono() >= notAfterMono
+    if (this.closed) return { refuse: 'hub_away', message: MSG.closed }
     let e = this.deps.store.get(lineage)
     if (!e) return { refuse: 'hub_away', message: MSG.unknownLineage }
     if (e.state === 'retired') return { refuse: 'seat_session_ended', message: MSG.retired }
@@ -261,7 +301,12 @@ export class ChildPool {
     if (e.pending_start) {
       // An earlier start of this lineage has no known outcome: settle it from Collab's own state, never re-send it.
       if (rt.child) await this.stopChild(rt)
-      if ((await this.reconcileOne(lineage)) === 'kept') return { refuse: 'hub_away', message: MSG.pending }
+      // A marker kept because the journal is broken or no child can start is kept for the next hub start: the agent is told
+      // that, not to call again shortly (P64, §9.6 item 4).
+      const settled = await this.reconcileOne(lineage)
+      if (settled === 'journal_invalid') return { refuse: 'hub_away', message: MSG.journal }
+      if (settled === 'start_failed') return { refuse: 'hub_away', message: MSG.startFailed }
+      if (settled === 'kept') return { refuse: 'hub_away', message: MSG.pending }
       e = this.deps.store.get(lineage)!
     }
     if (e.state === 'live' && !existsSync(e.credential_path!)) e = this.markEnded(e, 'credential_missing')
@@ -373,21 +418,35 @@ export class ChildPool {
     }
   }
 
-  private async retire(e: LineageEntry): Promise<void> {
-    const rt = this.rt(e.lineage)
-    if (rt.child) await this.stopChild(rt)
-    let past = e.past_sessions
-    if (e.state === 'live' && e.session_id) {
-      // Every lease has expired by now (the TTL maximum is 3600 s, K26). No --release-leases: the store refuses an end
-      // only for unexpired leases, and expired claims stay recoverable (§6.2).
-      if (existsSync(e.credential_path!)) {
-        const r = await this.deps.hostCli(['end', '--session-file', e.credential_path!, '--reason', 'lineage retired', '--db', this.deps.spec.journal], TIMING.callDefaultMs)
-        this.deps.ledger({ event: 'retire_end', device: e.device, user: e.user, lineage: e.lineage, session_id: e.session_id, outcome: r.code === 0 ? 'ok' : 'error', code: r.code === null ? 'timeout' : String(r.code) })
+  private async retire(due: LineageEntry): Promise<void> {
+    const rt = this.rt(due.lineage)
+    rt.retiring = true // before the first await: from here childFor answers seat_session_ended, so no child is resumed on the session being ended
+    try {
+      await this.quiesce(rt) // a child still starting is waited for, then stopped
+      const e = this.deps.store.get(due.lineage)
+      if (!e || e.state === 'retired') return
+      let past = e.past_sessions
+      let orphan: string | null = null
+      if (e.state === 'live' && e.session_id) {
+        // Every lease has expired by now (the TTL maximum is 3600 s, K26). No --release-leases: the store refuses an end
+        // only for unexpired leases, and expired claims stay recoverable (§6.2).
+        if (existsSync(e.credential_path!)) {
+          const r = await this.deps.hostCli(['end', '--session-file', e.credential_path!, '--reason', 'lineage retired', '--db', this.deps.spec.journal], TIMING.callDefaultMs)
+          const code = r.code === null ? (r.cause ?? 'no_exit_code') : String(r.code)
+          this.deps.ledger({ event: 'retire_end', device: e.device, user: e.user, lineage: e.lineage, session_id: e.session_id, outcome: r.code === 0 ? 'ok' : 'error', code })
+          if (r.code !== 0) orphan = e.session_id
+        }
+        if (!past.includes(e.session_id)) past = [...past, e.session_id]
       }
-      if (!past.includes(e.session_id)) past = [...past, e.session_id]
+      this.deps.store.upsert({ ...this.deps.store.get(e.lineage)!, state: 'retired', session_id: null, credential_path: null, past_sessions: past })
+      // The session is still active in the shared journal and nothing in the hub will end it: Ai decides, with the credential
+      // file (left where it is) and the host CLI (§9.2, as for a session killed before its credential was written).
+      if (orphan) this.deps.status(e.lineage, `orphan_session ${orphan}`)
+      this.deps.ledger({ event: 'retire', device: e.device, user: e.user, lineage: e.lineage, outcome: 'ok' })
+    } catch (err) {
+      rt.retiring = false // not retired after all: the lineage is usable again, and the next tick tries again
+      throw err
     }
-    this.deps.store.upsert({ ...this.deps.store.get(e.lineage)!, state: 'retired', session_id: null, credential_path: null, past_sessions: past })
-    this.deps.ledger({ event: 'retire', device: e.device, user: e.user, lineage: e.lineage, outcome: 'ok' })
   }
 
   /** Once per hub start; never throws and never loops (P64). */
@@ -408,7 +467,8 @@ export class ChildPool {
       if (!e.pending_start) continue
       if (this.journalInvalid) break // a broken journal is never re-verified in a loop (§9.6 item 4)
       try {
-        await this.reconcileOne(e.lineage)
+        // Through the lineage's start chain: a session_start that arrives meanwhile waits, and never settles the same marker.
+        await this.chained(e.lineage, () => this.reconcileOne(e.lineage))
       } catch {
         this.deps.status(e.lineage, 'reconcile_failed')
       }
@@ -416,7 +476,7 @@ export class ChildPool {
   }
 
   /** Settles one pending_start from Collab's journal: confirm the child is gone, then look for the start nonce. */
-  private async reconcileOne(lineage: string): Promise<'cleared' | 'recorded' | 'orphan' | 'kept'> {
+  private async reconcileOne(lineage: string): Promise<'cleared' | 'recorded' | 'orphan' | 'kept' | 'journal_invalid' | 'start_failed'> {
     const e = this.deps.store.get(lineage)
     if (!e?.pending_start) return 'cleared'
     const m = e.pending_start
@@ -426,19 +486,37 @@ export class ChildPool {
       note('kept', { code: 'child_alive' })
       return 'kept'
     }
+    // A broken journal, or a child that cannot start, is not retried by every session_start: the marker waits for the next
+    // hub start (P64, §9.6 item 4).
+    const rt = this.rt(lineage)
+    if (this.journalInvalid) {
+      note('kept', { code: 'journal_invalid' })
+      return 'journal_invalid'
+    }
+    if (rt.startFailed) {
+      note('kept', { code: 'child_start_failed' })
+      return 'start_failed'
+    }
     const u = await this.unboundChild()
     if ('failed' in u) {
       const cls = classifyStart(u.lastErrLine)
       if (cls === 'journal_invalid') this.journalInvalid = true
+      else rt.startFailed = true
       this.deps.status(lineage, cls === 'journal_invalid' ? 'journal_invalid' : 'child_start_failed')
       note('kept', { code: cls })
-      return 'kept'
+      return cls === 'journal_invalid' ? 'journal_invalid' : 'start_failed'
     }
     let out: CallOutcome
     try {
       out = await u.call('collab_workspace_status', { workspace_id: m.workspace_id })
     } finally {
       await u.stop()
+    }
+    // Only the marker this settling began with is cleared or recorded: a start that ran while the journal was being read may
+    // have written its own, and that one is never undone from here (§9.3 item 8, §12.2). Nothing below awaits.
+    if (this.deps.store.get(lineage)?.pending_start?.nonce !== m.nonce) {
+      note('kept', { code: 'marker_changed' })
+      return 'kept'
     }
     const clear = () => this.deps.store.upsert({ ...this.deps.store.get(lineage)!, pending_start: null })
     if (out.outcome === 'error' && out.result.structuredContent?.error === 'workspace_not_found') {
@@ -496,12 +574,19 @@ export class ChildPool {
     return 'ok'
   }
 
-  /** Drains that device's children to zero in flight, then stops them (§9.10 step 4). */
+  /** Waits for a spawn in progress, then drains the lineage's child to zero in flight and stops it: a child that was still
+   *  starting is never left running behind a shutdown (§9.10 step 4). */
+  private async quiesce(rt: Runtime): Promise<void> {
+    while (rt.starting) await rt.starting.catch(() => {})
+    if (rt.child) await this.stopChild(rt)
+  }
+
+  /** Drains that device's children to zero in flight, then stops them (§9.10 step 4); a child still starting is waited for. */
   async stopDevice(device: string): Promise<void> {
     const stops: Promise<void>[] = []
     for (const e of this.deps.store.all()) {
       const rt = this.rts.get(e.lineage)
-      if (e.device === device && rt?.child) stops.push(this.stopChild(rt))
+      if (e.device === device && rt) stops.push(this.quiesce(rt))
     }
     await Promise.all(stops)
   }
@@ -515,7 +600,9 @@ export class ChildPool {
     return c
   }
 
+  /** The end of the pool: it answers hub_away from here on, and resolves once every child, one still starting included, has exited. */
   async stopAll(): Promise<void> {
-    await Promise.all([...this.rts.values()].map((rt) => this.stopChild(rt)))
+    this.closed = true
+    await Promise.all([...this.rts.values()].map((rt) => this.quiesce(rt)))
   }
 }
