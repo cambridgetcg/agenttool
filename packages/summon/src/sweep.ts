@@ -30,6 +30,28 @@ export const livePs: PsSnapshot = () => {
 }
 
 const realKill: Kill = (pid, signal) => { process.kill(pid, signal) }
+
+/**
+ * What a later runner needs to find a job whose runner died: claude's pid, its process group (claude leads it, so the same number),
+ * the start time claude had, and each process recorded under the start time it had. Written to the job's private state directory
+ * (0600) at spawn and whenever the recorded set changes; the pids are checked against their start times before anything is signalled.
+ */
+export interface TrackerRecord { pid: number; pgid: number; start: string | null; seen: Array<[number, string]> }
+
+/** A pid is only ever signalled if it is above init's and a whole number: 0, 1, negatives and fractions would name init, a group or everyone. */
+const goodPid = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 1
+
+/** Reads a record back from the job's state directory; null for anything that is not exactly one. */
+export function parseTrackerRecord(x: unknown): TrackerRecord | null {
+  const r = x as Partial<TrackerRecord> | null
+  if (!r || typeof r !== 'object' || Array.isArray(r) || !goodPid(r.pid) || r.pgid !== r.pid || !(r.start === null || typeof r.start === 'string') || !Array.isArray(r.seen)) return null
+  const seen: Array<[number, string]> = []
+  for (const e of r.seen as unknown[]) {
+    if (!Array.isArray(e) || e.length !== 2 || !goodPid(e[0]) || typeof e[1] !== 'string') return null
+    seen.push([e[0], e[1]])
+  }
+  return { pid: r.pid, pgid: r.pgid, start: r.start, seen }
+}
 const SWEEP_ROUNDS = 3
 const SETTLE_MS = 30
 
@@ -39,8 +61,23 @@ export class ProcessTracker {
   private rootStart: string | null = null
   private readonly seen = new Map<number, string>()
 
+  /**
+   * `strict` is for a tracker rebuilt from a record by a runner that did not spawn claude: it holds no child handle, so a pid it finds
+   * alive is claude only if its start time is the recorded one, and a record without a start time proves nothing.
+   */
   constructor(private readonly root: number, private readonly ps: PsSnapshot = livePs, private readonly kill: Kill = realKill,
-    private readonly sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms)) {}
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms), private readonly strict = false) {}
+
+  /** A tracker that carries on from a record (see TrackerRecord): the sweep a runner owes a job whose own runner died. */
+  static restore(rec: TrackerRecord, ps: PsSnapshot = livePs, kill: Kill = realKill, sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms)): ProcessTracker {
+    const t = new ProcessTracker(rec.pid, ps, kill, sleep, true)
+    t.rootStart = rec.start
+    for (const [pid, start] of rec.seen) t.seen.set(pid, start)
+    return t
+  }
+
+  /** What to save so another runner can sweep this job (see TrackerRecord). */
+  toRecord(): TrackerRecord { return { pid: this.root, pgid: this.root, start: this.rootStart, seen: [...this.seen] } }
 
   /** Records every process whose parent chain reaches claude, or a process already recorded (so what a detached child starts later is found). */
   snapshot(): void {
@@ -52,7 +89,7 @@ export class ProcessTracker {
     const byPid = new Map(rows.map((r) => [r.pid, r]))
     const roots: number[] = []
     const me = byPid.get(this.root)
-    if (me && this.rootStart === null) this.rootStart = me.lstart
+    if (me && this.rootStart === null && !this.strict) this.rootStart = me.lstart
     if (me && me.lstart === this.rootStart) roots.push(this.root)
     for (const [pid, start] of this.seen) {
       if (byPid.get(pid)?.lstart === start) roots.push(pid)
@@ -87,8 +124,9 @@ export class ProcessTracker {
     const first = this.ps()
     if (first) this.record(first)
     const me = first?.find((r) => r.pid === this.root)
-    const members = first ? first.some((r) => r.pgid === this.root) : true
-    const ours = me ? this.rootStart === null || me.lstart === this.rootStart : members
+    // With no table to read, the runner that spawned claude still signals the group it made; one rebuilt from a record cannot know the number is still claude's.
+    const members = first ? first.some((r) => r.pgid === this.root) : !this.strict
+    const ours = me ? (this.rootStart === null ? !this.strict : me.lstart === this.rootStart) : members
     const groupKilled = ours
     if (groupKilled) this.tryKill(-this.root)
     let killed = 0

@@ -2,6 +2,7 @@
 // Test double for `claude -p`. Reads the prompt from stdin like the real CLI.
 import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, chmodSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
 const mode = process.env.FAKE_MODE_FILE ? (await Bun.file(process.env.FAKE_MODE_FILE).text()).trim() : 'ok'
 const prompt = await new Response(Bun.stdin.stream()).text()
 const emit = (o: object) => process.stdout.write(JSON.stringify(o) + '\n')
@@ -27,8 +28,18 @@ function tamper(what: string) {
   if (what === 'chmod') chmodSync('.git/hooks/pre-commit.sample', 0o644)
   if (what === 'info-link') { rmSync('.git/info', { recursive: true }); symlinkSync(process.env.TMPDIR!, '.git/info') }
   if (what === 'newline-name') { mkdirSync('.git/hooks', { recursive: true }); writeFileSync('.git/hooks/a\nb', 'x') }
-  // An immutable file cannot be replaced, even by its owner: a restore that cannot be done.
-  if (what === 'immutable') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); spawnSync('/usr/bin/chflags', ['uchg', '.git/config']) }
+  // Ways a job can try to keep a change: a user flag, a deny ACL, a mode of 000. The owner (the runner) can undo every one without root.
+  const flag = (p: string, f = 'uchg') => spawnSync('/usr/bin/chflags', [f, p])
+  const deny = (p: string, rights: string) => spawnSync('/bin/chmod', ['+a', `${userInfo().username} deny ${rights}`, p])
+  const evilHook = () => { mkdirSync('.git/hooks', { recursive: true }); writeFileSync('.git/hooks/pre-commit', '#!/bin/sh\necho evil\n', { mode: 0o755 }) }
+  if (what === 'immutable') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); flag('.git/config') }
+  if (what === 'locked-hook') { evilHook(); flag('.git/hooks/pre-commit'); flag('.git/hooks') }
+  if (what === 'acl') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); deny('.git/config', 'read,write,append,delete,readattr,writeattr,readextattr,writeextattr,writesecurity,chown'); evilHook(); deny('.git/hooks', 'list,search,add_file,add_subdirectory,delete_child,writesecurity') }
+  if (what === 'dir-000') { evilHook(); chmodSync('.git/hooks', 0o000) }
+  if (what === 'new-dir-000') { mkdirSync('.git/info/evil'); writeFileSync('.git/info/evil/x', 'x'); chmodSync('.git/info/evil', 0o000) }
+  if (what === 'unreadable') { appendFileSync('.git/config', '[core]\n\tpager = evil\n'); chmodSync('.git/config', 0o000) }
+  // The one thing that cannot be put back: a special file in the baseline (the test made it) that the job removed.
+  if (what === 'fifo-gone') rmSync('.git/hooks/pre-push')
 }
 
 const note = (what: string, pid: number | undefined) => appendFileSync(process.env.FAKE_PIDS_OUT!, `${what} ${pid}\n`)

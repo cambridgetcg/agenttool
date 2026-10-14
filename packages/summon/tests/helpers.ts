@@ -44,8 +44,20 @@ export function trackTmp(dir: string): string {
   return dir
 }
 
+/**
+ * Removes a temp tree. A test that exercises a job's hostile tricks (user flags, ACLs, modes) may leave a tree it cannot remove if the
+ * code under test failed, so a first failure is answered by taking those away and trying once more; it never hides the test's own failure.
+ */
+function removeTree(dir: string): void {
+  try { rmSync(dir, { recursive: true, force: true }); return } catch { /* locked: unlock below */ }
+  Bun.spawnSync(['/usr/bin/chflags', '-R', 'nouchg,nouappnd', dir]) // -R alone does not follow links; chflags refuses -R with -h
+  Bun.spawnSync(['/bin/chmod', '-R', '-N', dir])
+  Bun.spawnSync(['/bin/chmod', '-R', 'u+rwx', dir])
+  try { rmSync(dir, { recursive: true, force: true }) } catch { /* left for the OS temp cleaner */ }
+}
+
 export function cleanupTmps(): void {
-  for (const d of tmps) rmSync(d, { recursive: true, force: true })
+  for (const d of tmps) removeTree(d)
   tmps.length = 0
 }
 

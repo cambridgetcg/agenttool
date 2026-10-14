@@ -256,16 +256,42 @@ with the admission's reason (and its hint in the result text), and claude is nev
 2. **A fingerprint.** Inside the folder the sandbox cannot tell `src/` from `.git/config`, so the runner keeps a copy of the git
    files that could run code later: `.git/config`, every file under `.git/hooks/` and `.git/info/`, and `.gitattributes` and
    `.gitmodules` in the folder root (found by a case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are covered on
-   the Mac's volume). The copy is taken after the exclude line is written and is kept in the runner's memory, never on disk (a
-   `.git/config` can hold credentials). After the job it puts back any file whose contents or mode changed, removes any that
-   appeared and recreates any that vanished. **If it changed anything, the first line of the result is `tampered: <paths>`**
+   the Mac's volume). The copy is taken after the exclude line is written. The runner keeps it in memory and also as `guard.json`,
+   a 0600 file in the job's private state directory (`~/.local/state/summon/jobs/<job id>/`, mode 0700, which the job's sandbox
+   cannot read); it holds file contents, so a `.git/config` that holds credentials is on disk there for as long as the job runs,
+   and the file is deleted when the job is closed. After the job the runner puts back any file whose contents, type or mode
+   changed, removes any that appeared and recreates any that vanished, and puts each watched directory (and `.git` itself) back
+   to its mode. **If it changed anything, the first line of the result is `tampered: <paths>`**
    (a second line, `not restored: <paths>`, names what it could not put back), and the Nuance ledger gets one `job_tampered` line
    with a count and no paths; the paths stay in the 0600 result file. The job's status is not changed by any of this.
+   A job cannot keep a change by making it hard to undo. The folder belongs to the runner's user, and the owner can clear all of
+   these without root, so the restore does: a mode of 000 on a file or directory (it is opened, and a changed path is compared
+   without being read, so a huge file a job planted costs nothing), a user flag (`chflags uchg`, `uappnd`) and a deny ACL (the
+   restore clears them with `/usr/bin/chflags -h nouchg,nouappnd` and `/bin/chmod -N` on the path and its parent before it
+   replaces or removes the path), and a directory the job made unreadable (it is removed with what is in it). Only a failure that
+   is really outside the owner's power, such as a pipe or socket that was in the baseline and is gone, ends as `not restored`.
+   The restore puts back contents and mode, not timestamps or extended attributes, and a user flag or ACL on a path it replaces
+   is gone with the old copy.
 3. **A process sweep.** Claude is started as the leader of a process group of its own, and the runner records its process tree
    every 2 s (`/bin/ps`, walked from the claude pid, keyed by pid *and* start time so a reused pid is never taken for a job
    process). When the job ends, normally or by timeout, the runner kills the group, then every recorded process still alive with
    the same start time (this catches a child that called `setsid`), and only then compares the fingerprint, restores and removes
    the temp directory.
+4. **A runner that is stopped or dies.** Claude runs in a session of its own, so stopping the runner no longer takes it down with
+   it (launchd cleans up only the runner's own process group). Three things cover that:
+   - The runner keeps `procs.json` (0600, next to `guard.json`): claude's pid, its process group, its start time and the
+     recorded processes with theirs. It is written before the job is marked running and again whenever the recorded set changes,
+     and deleted when the job is closed.
+   - **SIGTERM** (`launchctl bootout`, logout, a reinstall): the runner stops the running job as a cancel does, then sweeps,
+     restores and cleans up as above, and ends it `unknown` (`runner stopped mid-job`) before it exits 0. No other job is
+     started. It has launchd's exit timeout (20 s by default); claude gets a 5 s grace before SIGKILL.
+   - **SIGKILL, a crash, power loss**: the next runner start does the same work first, before it settles any job or claims any:
+     for a running job whose runner is gone (its recorded pid is dead, or alive with another start time) it kills the group and
+     the recorded processes, but only those whose start time still matches the record, compares the git files with the saved
+     baseline and puts them back, removes the temp directory, and writes the result's first line (`tampered: <paths>`, or
+     `fingerprint not checked: <why>` if the saved baseline is missing or unreadable; a further line `processes not swept: <why>`
+     if the process record is). The job then ends `unknown`, as before. A runner that is still alive owns its job and is left
+     alone.
 
 **Known limits of Phase 0.5, accepted.**
 
@@ -276,8 +302,14 @@ with the admission's reason (and its hint in the result text), and claude is nev
   as `tampered`. `.gitattributes` files below the folder root are not fingerprinted (the filter and textconv drivers they name are
   defined in config files, and those are).
 - Test suites that need `/private/tmp` sockets or local ports (the collab-bridge suite is one) will not run as a build job here;
-  suites that respect `TMPDIR` will. A runner killed in the middle of a job leaves `.summon-tmp/<job id>` behind and puts nothing
-  back: the job ends `unknown`, so look at the folder before using it.
+  suites that respect `TMPDIR` will.
+- A runner that is killed (SIGKILL, a crash, power loss) rather than stopped cannot clean up at once. launchd starts the runner only
+  when something is in the spool, so claude, with its job's sandbox but no timeout, can keep running until the next request of
+  any kind arrives (`summon nuance inventory` is the quick way to start the runner); that start does the sweep and the restore
+  before anything else. Until then the git files stay as the job left them, and the job still says `running`. Also unrecoverable:
+  a runner that dies in the instant between spawning claude and saving `procs.json` (nothing is saved to find it by), a claude
+  whose start time was never read (`ps` failed, so a live pid proves nothing and is not signalled), and a detached child that was
+  never recorded (the same residual as above).
 - There is no spend bound yet (a `--max-budget-usd` is deferred): the job timeout and `starts_per_hour` are the bounds.
 
 **Updating an existing install.** Before the new runner goes on Nuance, check the allowlist already there: no edit entry may lie

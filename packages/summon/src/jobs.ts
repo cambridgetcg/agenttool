@@ -53,7 +53,7 @@ export function jobDir(paths: SummonPaths, id: string): string {
 export function writeJsonAtomic(path: string, obj: unknown): void {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
   writeFileSync(tmp, JSON.stringify(obj), { mode: 0o600 })
-  renameSync(tmp, path)
+  try { renameSync(tmp, path) } catch (e) { rmSync(tmp, { force: true }); throw e } // a rename that fails leaves no half-written copy behind
 }
 
 export function readJson<T>(path: string): T | null {

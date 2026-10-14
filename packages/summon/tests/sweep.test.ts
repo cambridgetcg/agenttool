@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { spawn } from 'node:child_process'
-import { livePs, parsePs, ProcessTracker, type PsRow } from '../src/sweep.ts'
+import { livePs, parsePs, parseTrackerRecord, ProcessTracker, type PsRow, type TrackerRecord } from '../src/sweep.ts'
 
 const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
 async function waitUntil(fn: () => boolean, ms = 6000) {
@@ -136,6 +136,65 @@ describe('ProcessTracker: the job\'s process tree, keyed by pid and start time',
     tracker.snapshot()
     await tracker.sweep()
     expect(t.rows.map((r) => r.pid)).toEqual([101])
+  })
+})
+
+describe('ProcessTracker: its record, for a runner that comes after the one that died', () => {
+  test('toRecord() holds claude\'s pid, its group (the same number: claude leads it), its start time and every recorded process with its start time', () => {
+    const t = table([row(100, 1, 100, L(5)), row(101, 100, 100, L(6)), row(102, 101, 102, L(7))])
+    const tracker = new ProcessTracker(100, t.ps, t.kill, t.sleep)
+    tracker.snapshot()
+    expect(tracker.toRecord()).toEqual({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)], [102, L(7)]] })
+  })
+  test('a tracker restored from a record kills the group and the recorded processes, as the one that made it would', async () => {
+    const t = table([row(100, 1, 100, L(5)), row(101, 100, 100, L(6)), row(102, 101, 102, L(7)), row(300, 1, 300)])
+    const first = new ProcessTracker(100, t.ps, t.kill, t.sleep); first.snapshot()
+    const restored = ProcessTracker.restore(JSON.parse(JSON.stringify(first.toRecord())), t.ps, t.kill, t.sleep)
+    await restored.sweep()
+    expect(t.kills[0]).toEqual([-100, 'SIGKILL'])
+    expect(t.rows.map((r) => r.pid)).toEqual([300]) // the bystander stays
+  })
+  test('a restored tracker finds what claude started after the record was made, from a recorded process that is still there (claude itself is gone)', async () => {
+    const t = table([row(101, 1, 101, L(6)), row(150, 101, 150, L(9))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, t.ps, t.kill, t.sleep)
+    await restored.sweep()
+    expect(t.rows).toEqual([])
+  })
+  test('a restored tracker does not signal a group whose leader pid now has another start time: that is a stranger\'s', async () => {
+    const t = table([row(100, 1, 100, L(40)), row(101, 100, 100, L(41))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [] }, t.ps, t.kill, t.sleep)
+    const out = await restored.sweep()
+    expect(out).toEqual({ groupKilled: false, killed: 0 })
+    expect(t.kills).toEqual([])
+    expect(t.rows).toHaveLength(2)
+  })
+  test('a restored tracker with no start time on record cannot tell claude from a stranger: while the pid is alive it signals nothing', async () => {
+    const t = table([row(100, 1, 100, L(40))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: null, seen: [] }, t.ps, t.kill, t.sleep)
+    await restored.sweep()
+    expect(t.kills).toEqual([])
+    expect(t.rows).toHaveLength(1)
+  })
+  test('a restored tracker that cannot read the process table signals nothing: with no table, the number could be anyone\'s now', async () => {
+    const t = table([row(100, 1, 100, L(5)), row(101, 100, 101, L(6))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, () => null, t.kill, t.sleep)
+    expect(await restored.sweep()).toEqual({ groupKilled: false, killed: 0 })
+    expect(t.kills).toEqual([])
+  })
+  test('a recorded process whose pid is another process now is not killed by a restored tracker', async () => {
+    const t = table([row(101, 1, 101, L(59))])
+    const restored = ProcessTracker.restore({ pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }, t.ps, t.kill, t.sleep)
+    await restored.sweep()
+    expect(t.kills).toEqual([])
+  })
+  test('parseTrackerRecord accepts what toRecord() makes, and refuses a pid that could name init, a group or everything, and any wrong shape', () => {
+    const good: TrackerRecord = { pid: 100, pgid: 100, start: L(5), seen: [[101, L(6)]] }
+    expect(parseTrackerRecord(JSON.parse(JSON.stringify(good)))).toEqual(good)
+    expect(parseTrackerRecord({ ...good, start: null })).toEqual({ ...good, start: null })
+    for (const bad of [{ ...good, pid: 1 }, { ...good, pid: 0 }, { ...good, pid: -5 }, { ...good, pid: 1.5 }, { ...good, pid: '100' }, { ...good, pgid: 99 }, { ...good, start: 7 },
+      { ...good, seen: [[1, L(6)]] }, { ...good, seen: [[-3, L(6)]] }, { ...good, seen: [[101]] }, { ...good, seen: [[101, 5]] }, { ...good, seen: 'x' }, { pid: 100 }, null, 'x', [], 7]) {
+      expect(parseTrackerRecord(bad)).toBeNull()
+    }
   })
 })
 

@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { checkAdmission, loadAllowlist, type Admission } from './allowlist.ts'
-import { describePaths, restoreBaseline, takeBaseline, type Baseline, type ListDir } from './fingerprint.ts'
+import { describePaths, parseBaseline, restoreBaseline, serializeBaseline, takeBaseline, type Baseline, type ListDir } from './fingerprint.ts'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { ensureExcluded, makeJobTmp, removeJobTmp } from './jobtmp.ts'
@@ -10,7 +10,7 @@ import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
 import { ACCESSES, CLOCK_SKEW_MS, ID_RE, type SummonRequest } from './request.ts'
 import { TERMINAL } from './status.ts'
-import { livePs, ProcessTracker, type PsSnapshot } from './sweep.ts'
+import { livePs, parseTrackerRecord, ProcessTracker, type PsSnapshot } from './sweep.ts'
 
 export interface RunnerDeps {
   paths: SummonPaths
@@ -32,7 +32,36 @@ export interface RunnerDeps {
   ps?: PsSnapshot
   /** Edit and build jobs: the listing the fingerprint finds the git files by, which must show names as stored. Defaults to readdirSync. */
   listDir?: ListDir
+  /** Set by runner-main on SIGTERM (launchctl bootout, logout): the job that runs is stopped and closed, and no other is started. */
+  halt?: HaltSignal
 }
+
+/**
+ * A runner that is asked to stop (launchd sends SIGTERM and allows about 20 s, `ExitTimeOut`, before SIGKILL). Idle, it exits at once.
+ * During a job it does not: it stops claude the way a cancel does, so the job is swept, restored and cleaned up before the process
+ * ends. Claude runs in a session of its own, so launchd's cleanup of the runner's process group never reaches it.
+ */
+export class HaltSignal {
+  requested = false
+  private stopJob: (() => void) | null = null
+  private inJob = false
+  constructor(private readonly exitNow: () => void) {}
+  request(): void {
+    this.requested = true
+    if (this.stopJob) this.stopJob()
+    else if (!this.inJob) this.exitNow()
+  }
+  beginJob(): void { this.inJob = true }
+  endJob(): void { this.inJob = false; this.stopJob = null }
+  /** Called once claude runs: how to stop it. A halt that came in before that stops it now. */
+  onRunning(stop: () => void): void {
+    this.stopJob = stop
+    if (this.requested) stop()
+  }
+}
+
+/** The detail of a job the runner did not live to see through, whether it stopped on SIGTERM or died: the same words either way. */
+const RUNNER_STOPPED = 'runner stopped mid-job'
 
 const SNAPSHOT_MS = 2000
 const NOT_BUILT = 'could not start claude: the command could not be built for this folder'
@@ -89,40 +118,82 @@ function readmit(deps: RunnerDeps, s: JobState, req: SummonRequest): Admission {
 }
 
 /** What an edit or build job needs around it: its folder, its temp directory, the baseline of its git files, and (once it runs) its process tree. */
-interface Guard { cwd: string; id: string; baseline: Baseline; tracker?: ProcessTracker }
+interface Guard { cwd: string; id: string; baseline: Baseline; tracker?: ProcessTracker; procsText?: string }
 
-/** Before claude is spawned: the temp directory, the exclude line (before the baseline), then the baseline. Throws, having cleaned up, if any of it cannot be done. */
+/**
+ * The two files that let a runner which did not see a job through (SIGKILL, a crash, power) clean up after it, both 0600 in the job's
+ * private state directory and gone when the job is closed. guard.json: who runs the job and the git baseline (it holds file contents:
+ * a `.git/config` can hold credentials, which is why the job's sandbox denies reading this directory and why it is deleted at the end).
+ * procs.json: claude's pid, its group and start time, and the processes recorded under theirs.
+ */
+const GUARD_FILE = 'guard.json'
+const PROCS_FILE = 'procs.json'
+const guardFile = (paths: SummonPaths, id: string) => join(jobDir(paths, id), GUARD_FILE)
+const procsFile = (paths: SummonPaths, id: string) => join(jobDir(paths, id), PROCS_FILE)
+function dropGuardFiles(paths: SummonPaths, id: string): void {
+  for (const f of [guardFile(paths, id), procsFile(paths, id)]) { try { rmSync(f, { force: true }) } catch { /* the next start tries again */ } }
+}
+
+/** Saves the process record if the tree it holds changed since the last save. Throws if it cannot be written. */
+function saveProcs(deps: RunnerDeps, g: Guard): void {
+  if (!g.tracker) return
+  const record = g.tracker.toRecord(); const text = JSON.stringify(record)
+  if (text === g.procsText) return
+  writeJsonAtomic(procsFile(deps.paths, g.id), record)
+  g.procsText = text
+}
+
+/**
+ * Before claude is spawned: the temp directory, the exclude line (before the baseline), the baseline, and the saved copy of it
+ * (guard.json). Throws, having cleaned up, if any of it cannot be done.
+ */
 function prepareGuard(deps: RunnerDeps, cwd: string, id: string): Guard {
   makeJobTmp(cwd, id)
   try {
     ensureExcluded(cwd)
-    return { cwd, id, baseline: takeBaseline(cwd, deps.listDir) }
-  } catch (e) { removeJobTmp(cwd, id); throw e }
+    const baseline = takeBaseline(cwd, deps.listDir)
+    writeJsonAtomic(guardFile(deps.paths, id), { v: 1, runner: { pid: process.pid, lstart: deps.processStartTime(process.pid) }, baseline: serializeBaseline(baseline) })
+    return { cwd, id, baseline }
+  } catch (e) { removeJobTmp(cwd, id); dropGuardFiles(deps.paths, id); throw e }
 }
 
 /**
  * When the job is over, in this order: sweep its processes (so nothing is left to change a file under us), compare the git files and
- * put back what differs, remove the temp directory. Never throws.
+ * put back what differs, remove the temp directory, drop the saved guard files. Never throws.
  */
 async function closeGuard(deps: RunnerDeps, g: Guard): Promise<{ changed: string[]; failed: string[] }> {
   if (g.tracker) { try { await g.tracker.sweep() } catch { /* the sandbox still confines whatever was missed */ } }
   let out: { changed: string[]; failed: string[] }
   try { out = restoreBaseline(g.cwd, g.baseline, deps.listDir) } catch { out = { changed: [], failed: ['(the git files could not be compared)'] } }
   removeJobTmp(g.cwd, g.id)
+  dropGuardFiles(deps.paths, g.id)
   return out
 }
 
-/** The first line of the result says what was put back (and, on a second, what could not be); the ledger gets a fixed word and a count, never the paths. */
-function noteTamper(deps: RunnerDeps, id: string, o: Outcome, t: { changed: string[]; failed: string[] }): Outcome {
-  const paths = [...new Set([...t.changed, ...t.failed])]
-  const head = `tampered: ${describePaths(paths)}${t.failed.length > 0 ? `\nnot restored: ${describePaths(t.failed)}` : ''}`
+type Tamper = { changed: string[]; failed: string[] }
+/** The first line of a result says what was put back (and, on a second, what could not be). */
+function tamperHead(t: Tamper): string {
+  return `tampered: ${describePaths([...new Set([...t.changed, ...t.failed])])}${t.failed.length > 0 ? `\nnot restored: ${describePaths(t.failed)}` : ''}`
+}
+/** The ledger gets a fixed word and a count, never the paths. */
+function ledgerTamper(deps: RunnerDeps | OrphanDeps, id: string, t: Tamper): void {
+  const n = new Set([...t.changed, ...t.failed]).size
   try {
-    appendLedger(deps.paths.ledger, { event: 'job_tampered', id, detail: `tampered: ${paths.length} path(s)${t.failed.length > 0 ? `, ${t.failed.length} not restored` : ''}` }, deps.nowMs())
+    appendLedger(deps.paths.ledger, { event: 'job_tampered', id, detail: `tampered: ${n} path(s)${t.failed.length > 0 ? `, ${t.failed.length} not restored` : ''}` }, deps.nowMs())
   } catch { /* the result file carries it, and job_end is next */ }
+}
+function noteTamper(deps: RunnerDeps, id: string, o: Outcome, t: Tamper): Outcome {
+  const head = tamperHead(t)
+  ledgerTamper(deps, id, t)
   return { ...o, result_text: o.result_text ? `${head}\n${o.result_text}` : head }
 }
 
 async function runJob(deps: RunnerDeps, id: string): Promise<void> {
+  deps.halt?.beginJob()
+  try { await runJobBody(deps, id) } finally { deps.halt?.endJob() }
+}
+
+async function runJobBody(deps: RunnerDeps, id: string): Promise<void> {
   const dir = jobDir(deps.paths, id)
   const s = readState(deps.paths, id)
   if (!s) { appendLedger(deps.paths.ledger, { event: 'spool_discard', id, detail: 'job state unreadable' }, deps.nowMs()); return }
@@ -155,11 +226,13 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     return finish(deps, s, { status: 'failed', detail: `could not start claude: ${started.error}` })
   }
   const { child } = started
-  if (guard) guard.tracker = new ProcessTracker(child.pid!, deps.ps ?? livePs)
+  if (guard) { guard.tracker = new ProcessTracker(child.pid!, deps.ps ?? livePs); guard.tracker.snapshot() }
   const startedMs = deps.nowMs()
-  // A job whose start cannot be recorded (state or ledger) is stopped at once: nothing runs on unrecorded.
+  // A job whose start cannot be recorded (state or ledger) is stopped at once: nothing runs on unrecorded. The process record comes
+  // first, so a job that looks started is one a later runner could find.
   try {
     const lstart = deps.processStartTime(child.pid!)
+    if (guard) saveProcs(deps, guard)
     writeState(deps.paths, { ...s, status: 'running', started_at: iso(startedMs), pid: child.pid, ...(lstart ? { pid_lstart: lstart } : {}) })
     appendLedger(deps.paths.ledger, { event: 'job_start', id, status: 'running' }, startedMs)
   } catch (e) {
@@ -187,6 +260,7 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     try { child.kill('SIGTERM') } catch { /* gone */ }
     killTimer = setTimeout(() => { try { child.kill('SIGKILL') } catch { /* gone */ } }, deps.killGraceMs)
   }
+  deps.halt?.onRunning(() => stop({ status: 'unknown', detail: RUNNER_STOPPED }))
   child.stdout!.setEncoding('utf8')
   child.stdout!.on('data', (chunk: string) => {
     bytes += Buffer.byteLength(chunk)
@@ -220,10 +294,9 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     if (existsSync(join(dir, 'cancel'))) stop({ status: 'cancelled', detail: 'cancelled by request' })
     if (m - startedMono > s.timeout_s * 1000) stop({ status: 'timed_out', detail: `ran past ${s.timeout_s}s` })
   }, deps.pollMs)
-  // The job's process tree, recorded now and then every 2 s while it runs (design section 3).
+  // The job's process tree, recorded at spawn and then every 2 s while it runs (design section 3), and saved when it changes.
   const tracker = guard?.tracker
-  tracker?.snapshot()
-  const snapTimer = tracker ? setInterval(() => tracker.snapshot(), deps.snapshotMs ?? SNAPSHOT_MS) : undefined
+  const snapTimer = tracker ? setInterval(() => { try { tracker.snapshot(); saveProcs(deps, guard!) } catch { /* a missed look is the residual the sweep already accepts */ } }, deps.snapshotMs ?? SNAPSHOT_MS) : undefined
 
   // 'close' waits for the pipes; a grandchild holding one open must not hold the runner, so 'exit' gets a bounded wait.
   const code: number | null = await new Promise((resolve) => {
@@ -301,6 +374,7 @@ export async function runOnce(deps: RunnerDeps): Promise<number> {
   let ran = 0
   let claimError: unknown
   for (const id of names.filter((n) => ID_RE.test(n))) {
+    if (deps.halt?.requested) break // asked to stop: what is left stays in the spool for the next start
     const marker = join(deps.paths.spool, id)
     const note = claimFailedNote(deps.paths, id)
     try { renameSync(marker, join(jobDir(deps.paths, id), 'claimed')) } catch (e) {
@@ -347,15 +421,17 @@ function jobIds(paths: SummonPaths): string[] {
  * A `running` job is alive only while its pid is alive AND still has the start time recorded at spawn; a pid whose start
  * time differs belongs to another process, so it is never probed or signalled, and the job is orphaned.
  */
+const pidAlive = (pid: number): boolean => { try { process.kill(pid, 0); return true } catch { return false } }
+
 export function markOrphans(paths: SummonPaths, nowMs: number,
-  isAlive: (pid: number) => boolean = (pid) => { try { process.kill(pid, 0); return true } catch { return false } },
+  isAlive: (pid: number) => boolean = pidAlive,
   startTimeOf: (pid: number) => string | null = processStartTime): number {
   const stillOurs = (s: JobState) => !!s.pid && !!s.pid_lstart && startTimeOf(s.pid) === s.pid_lstart && isAlive(s.pid)
   let n = 0
   for (const id of jobIds(paths)) {
     const s = readState(paths, id)
     let detail: string | undefined
-    if (s?.status === 'running' && !stillOurs(s)) detail = 'runner stopped mid-job'
+    if (s?.status === 'running' && !stillOurs(s)) detail = RUNNER_STOPPED
     else if (s?.status === 'queued' && existsSync(join(jobDir(paths, id), 'claimed'))) detail = 'runner stopped before the job started'
     if (!s || !detail) continue
     // result.json is written atomically and before state.json, so one that parses is the job's whole outcome.
@@ -367,6 +443,71 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
     n++
   }
   return n
+}
+
+/** What recoverOrphans needs of a runner. */
+export type OrphanDeps = Pick<RunnerDeps, 'paths' | 'nowMs' | 'processStartTime'> & Partial<Pick<RunnerDeps, 'ps' | 'listDir'>>
+
+/**
+ * The runner that took an edit or build job may not have lived to see it through (SIGKILL, a crash, power; a SIGTERM it handles
+ * itself). Claude runs in a session of its own, so it outlives that runner, with no timeout and nothing to sweep, restore or clean up
+ * after it. This is called first when a runner starts, before markOrphans settles the job and before any job is claimed. For each job
+ * that has guard files and whose runner is gone it:
+ *   1. sweeps the job's processes: the group and the recorded tree, each only where the start time still matches the one recorded;
+ *   2. compares the git files with the saved baseline and puts back what differs;
+ *   3. removes the job's temp directory and the guard files;
+ *   4. if it put anything back (or could not check), writes the job's result.json (`unknown`, first line `tampered: <paths>` or
+ *      `fingerprint not checked: <why>`), so markOrphans settles the job from it.
+ * A runner that is still alive (same pid and start time as recorded) owns its job: nothing is touched. A job that already ended only
+ * has its leftover guard files dropped. Returns the number of jobs recovered.
+ */
+export async function recoverOrphans(deps: OrphanDeps, isAlive: (pid: number) => boolean = pidAlive): Promise<number> {
+  let n = 0
+  for (const id of jobIds(deps.paths)) {
+    try { if (await recoverOne(deps, id, isAlive)) n++ } catch { /* left for the next start; the guard files stay until the work is done */ }
+  }
+  return n
+}
+
+async function recoverOne(deps: OrphanDeps, id: string, isAlive: (pid: number) => boolean): Promise<boolean> {
+  const dir = jobDir(deps.paths, id)
+  const gPath = guardFile(deps.paths, id); const pPath = procsFile(deps.paths, id)
+  if (!existsSync(gPath) && !existsSync(pPath)) return false
+  const s = readState(deps.paths, id)
+  if (!s || TERMINAL.has(s.status)) { dropGuardFiles(deps.paths, id); return false } // its job is over; nothing here is still needed
+  if (!(s.status === 'running' || (s.status === 'queued' && existsSync(join(dir, 'claimed'))))) return false
+  const guard = readJson<{ v?: unknown; runner?: { pid?: unknown; lstart?: unknown }; baseline?: unknown }>(gPath)
+  // The runner that took the job, if it is still there (same pid, same start time), is running it. With no start time on record, a live pid is taken as the owner.
+  const owner = guard?.runner
+  if (owner && typeof owner.pid === 'number' && Number.isInteger(owner.pid) && owner.pid > 0 && isAlive(owner.pid)
+    && (typeof owner.lstart !== 'string' || deps.processStartTime(owner.pid) === owner.lstart)) return false
+
+  const notes: string[] = []
+  // 1. Its processes. The record is procs.json; before that exists, the pid and start time the runner put in the job's state at spawn.
+  let record = parseTrackerRecord(readJson(pPath))
+  if (!record && existsSync(pPath)) notes.push('processes not swept: the record is not usable')
+  if (!record && !existsSync(pPath) && s.pid) record = parseTrackerRecord({ pid: s.pid, pgid: s.pid, start: s.pid_lstart ?? null, seen: [] })
+  if (record) {
+    const tracker = ProcessTracker.restore({ ...record, start: record.start ?? s.pid_lstart ?? null }, deps.ps ?? livePs)
+    try { await tracker.sweep() } catch { notes.push('processes not swept: the sweep failed') }
+  }
+  // 2. The git files.
+  let tamper: Tamper = { changed: [], failed: [] }
+  let baseline: Baseline | null = null
+  if (!guard) notes.unshift(existsSync(gPath) ? 'fingerprint not checked: the saved baseline is not usable' : 'fingerprint not checked: no baseline was saved')
+  else { try { baseline = parseBaseline(guard.baseline, s.cwd_real) } catch { notes.unshift('fingerprint not checked: the saved baseline is not usable') } }
+  if (baseline) tamper = restoreBaseline(s.cwd_real, baseline, deps.listDir)
+  // 3. The temp directory, and 4. what the next reader of the job should see first.
+  removeJobTmp(s.cwd_real, id)
+  const found = tamper.changed.length > 0 || tamper.failed.length > 0
+  const lines = [...(found ? [tamperHead(tamper)] : []), ...notes]
+  const resultPath = join(dir, 'result.json')
+  if (lines.length > 0 && !(readJson<JobResult>(resultPath)?.status && TERMINAL.has(readJson<JobResult>(resultPath)!.status))) {
+    writeJsonAtomic(resultPath, { status: 'unknown', detail: s.status === 'running' ? RUNNER_STOPPED : 'runner stopped before the job started', result_text: lines.join('\n'), exit_code: null })
+    if (found) ledgerTamper(deps, id, tamper)
+  }
+  dropGuardFiles(deps.paths, id)
+  return true
 }
 
 /** Finished jobs older than maxAge (from `ended_at`, else admission) are deleted. The ledger keeps their history. */

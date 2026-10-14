@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gateStart } from '../src/gate.ts'
 import { describeCommand, requestCancel, resultOf as gateResult, statusOf } from '../src/gatekeeper.ts'
+import { serializeBaseline, takeBaseline } from '../src/fingerprint.ts'
 import { countActive, jobDir, readJson, readState, settleNeverReached, writeJsonAtomic, writeState, type JobState } from '../src/jobs.ts'
+import { ensureExcluded, makeJobTmp } from '../src/jobtmp.ts'
 import { verifyLedger } from '../src/ledger.ts'
 import { summonPaths } from '../src/paths.ts'
 import { CLOCK_SKEW_MS, newRequestId } from '../src/request.ts'
-import { markOrphans, processStartTime, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
+import { HaltSignal, markOrphans, processStartTime, recoverOrphans, runOnce, sweepJobs, type RunnerDeps } from '../src/runner.ts'
+import { livePs } from '../src/sweep.ts'
 import { BUILD_ALLOWLIST, cleanupTmps, DEFAULT_ALLOWLIST, EDIT_ALLOWLIST, FLAGGED_ALLOWLIST, fakeGitRoot, makeFakeClaude, repoHome, runGatekeeper, sampleRequest, targetHome } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -872,16 +876,33 @@ describe('the fingerprint of the git files that can run code (design section 3, 
     await runOnce(rdeps(h))
     expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/a\\x0ab', PROMPT])
   })
-  test('a restore that cannot be done is said so on the second line, and counted in the ledger', async () => {
-    const { h, root, id } = watched()
-    fake.setMode('tamper:immutable')
-    try {
-      await runOnce(rdeps(h))
-      expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/config', 'not restored: .git/config', PROMPT])
-      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), 1 not restored' })])
-      expect(readState(summonPaths(h), id)?.status).toBe('completed')
-    } finally { Bun.spawnSync(['/usr/bin/chflags', 'nouchg', join(root, '.git/config')]) }
+  test('a restore that really cannot be done (a special file in the baseline that the job removed) is said so on the second line, and counted in the ledger', async () => {
+    const { h, root, id, before } = watched()
+    expect(Bun.spawnSync(['/usr/bin/mkfifo', join(root, '.git/hooks/pre-push')]).exitCode).toBe(0)
+    fake.setMode('tamper:fifo-gone')
+    await runOnce(rdeps(h))
+    expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/pre-push', 'not restored: .git/hooks/pre-push', PROMPT])
+    expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s), 1 not restored' })])
+    expect(readState(summonPaths(h), id)?.status).toBe('completed')
+    expect(listing(root)).toEqual(withExclude(before)) // everything else is as it was
   })
+  // A sandboxed job can set flags and ACLs and take a mode away on what it writes. None of it keeps a change: the runner owns the files and undoes it.
+  for (const [what, tampered] of [
+    ['immutable', '.git/config'], ['locked-hook', '.git/hooks/pre-commit'], ['acl', '.git/config, .git/hooks/pre-commit'], ['unreadable', '.git/config'],
+    ['dir-000', '.git/hooks, .git/hooks/pre-commit'], ['new-dir-000', '.git/info/evil/x'],
+  ] as const) {
+    test(`a job that makes its change hard to undo (${what}) still has it undone: restored, said "tampered: ${tampered}", and nothing is "not restored"`, async () => {
+      const { h, root, id, before } = watched()
+      fake.setMode(`tamper:${what}`)
+      await runOnce(rdeps(h))
+      expect(listing(root)).toEqual(withExclude(before))
+      expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: `tampered: ${tampered.split(', ').length} path(s)` })])
+      expect(Bun.spawnSync(['/usr/bin/stat', '-f', '%Sf', join(root, '.git/config')]).stdout.toString().trim()).toBe('-') // no flag left
+      expect(readdirSync(join(root, '.git/hooks')).sort()).toEqual(['pre-commit.sample'])
+      expect(readdirSync(join(root, '.git/info')).sort()).toEqual(['exclude'])
+    })
+  }
   test('the listing is injected: the runner asks it for the folder, .git, hooks and info before and after the job, and for nothing else', async () => {
     const { h, root } = watched(); const asked: string[] = []
     fake.setMode('ok')
@@ -991,6 +1012,350 @@ describe('the process sweep (design section 3, "Process sweep", Ruling S3)', () 
     await runOnce(rdeps(h, SNAP))
     expect(alive(noted().group!)).toBe(true)
   }, 20_000)
+})
+
+const GUARD = 'guard.json'
+const PROCS = 'procs.json'
+const privateFile = (h: string, id: string, name: string) => join(summonPaths(h).jobs, id, name)
+
+describe('what the runner keeps for a job it may not live to finish (guard.json, procs.json)', () => {
+  test('while an edit job runs: guard.json holds the runner\'s identity and the baseline, procs.json claude\'s pid, group and start time; both are 0600', async () => {
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h, { processStartTime }))
+    await waitFor(() => existsSync(privateFile(h, req.id, PROCS)) && readState(paths, req.id)?.status === 'running')
+    const st = readState(paths, req.id)!
+    const procs = readJson<any>(privateFile(h, req.id, PROCS))!
+    expect(procs).toMatchObject({ pid: st.pid, pgid: st.pid, start: st.pid_lstart })
+    expect(typeof procs.start).toBe('string')
+    const guard = readJson<any>(privateFile(h, req.id, GUARD))!
+    expect(guard).toMatchObject({ v: 1, runner: { pid: process.pid, lstart: processStartTime(process.pid) } })
+    expect(guard.baseline.files.map((f: any) => f.rel)).toContain('.git/info/exclude') // taken after the exclude line was written
+    for (const name of [GUARD, PROCS]) expect([name, statSync(privateFile(h, req.id, name)).mode & 0o777]).toEqual([name, 0o600])
+    requestCancel(paths, 'nuance', req.id, Date.now())
+    await p
+  }, 15_000)
+  test('a review job keeps neither file: it has no baseline and no group of its own', async () => {
+    const h = targetHome(); const paths = summonPaths(h); const req = admit(h)
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h))
+    await waitFor(() => readState(paths, req.id)?.status === 'running')
+    await Bun.sleep(100)
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    requestCancel(paths, 'nuance', req.id, Date.now())
+    await p
+  }, 15_000)
+  test('procs.json follows the tree: a child that claude leaves is in it after a snapshot', async () => {
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    fake.setMode('kids:group:slow')
+    const p = runOnce(rdeps(h, { snapshotMs: 50 }))
+    try {
+      const kid = () => { try { return Number(readFileSync(fake.pidsOut, 'utf8').split(' ')[1]) } catch { return NaN } }
+      await waitFor(() => (readJson<any>(privateFile(h, req.id, PROCS))?.seen ?? []).some((e: [number, string]) => e[0] === kid()))
+      expect(readJson<any>(privateFile(h, req.id, PROCS)).seen.map((e: any) => e[0])).toContain(kid())
+    } finally { requestCancel(paths, 'nuance', req.id, Date.now()); await p }
+  }, 15_000)
+  test('both files are gone when the job ends, however it ends: normally, failed, timed out, cancelled, claude that cannot start, a start that cannot be ledgered', async () => {
+    const cases: Array<[string, Parameters<typeof admit>[1], () => void, Partial<RunnerDeps>, string]> = [
+      ['normal', {}, () => fake.setMode('ok'), {}, 'completed'],
+      ['a failure', {}, () => fake.setMode('maxturns'), {}, 'failed'],
+      ['a timeout', { timeout_s: 1 }, () => fake.setMode('slow'), {}, 'timed_out'],
+      ['claude that cannot start', {}, () => fake.setMode('ok'), { claudeBin: () => '/no/such/claude' }, 'failed'],
+    ]
+    for (const [label, over, mode, deps, status] of cases) {
+      const h = repoHome(); const req = admit(h, { access: 'edit', ...over })
+      mode()
+      await runOnce(rdeps(h, deps))
+      expect([label, readState(summonPaths(h), req.id)?.status]).toEqual([label, status])
+      expect([label, ...[GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))]).toEqual([label, false, false])
+    }
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' })
+    unlinkSync(paths.ledger); mkdirSync(paths.ledger) // from here every append fails
+    await runOnce(rdeps(h))
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    const h2 = repoHome(); const paths2 = summonPaths(h2); const req2 = admit(h2, { access: 'edit' })
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h2))
+    await waitFor(() => existsSync(privateFile(h2, req2.id, PROCS)))
+    requestCancel(paths2, 'nuance', req2.id, Date.now())
+    await p
+    expect(readState(paths2, req2.id)?.status).toBe('cancelled')
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h2, req2.id, n)))).toEqual([false, false])
+  }, 40_000)
+  test('a job whose guard cannot be saved does not start: failed, claude never ran, no temp directory or file left', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' })
+    mkdirSync(privateFile(h, req.id, GUARD)); writeFileSync(join(privateFile(h, req.id, GUARD), 'x'), '') // the rename onto a directory fails
+    await runOnce(rdeps(h))
+    expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'failed', detail: 'could not start claude: the job folder could not be prepared' })
+    expect(existsSync(fake.argvOut)).toBe(false)
+    expect(existsSync(join(h, 'Projects/x', SUMMON_TMP))).toBe(false)
+    expect(readdirSync(jobDir(summonPaths(h), req.id)).filter((n) => n.includes('.tmp-'))).toEqual([])
+  })
+})
+
+describe('a runner that is stopped (launchctl bootout, logout): SIGTERM', () => {
+  test('HaltSignal: idle, a halt exits at once; during a job it does not exit, it stops the job', async () => {
+    let exits = 0
+    const idle = new HaltSignal(() => { exits++ })
+    idle.request()
+    expect([idle.requested, exits]).toEqual([true, 1])
+    const h = repoHome(); const req = admit(h, { access: 'edit' }); const busy = new HaltSignal(() => { exits++ })
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h, { halt: busy }))
+    await waitFor(() => readState(summonPaths(h), req.id)?.status === 'running')
+    busy.request()
+    expect(await p).toBe(1)
+    expect(exits).toBe(1) // the second halt did not exit: the job was still being closed
+    expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+  }, 15_000)
+  test('a halt during an edit job stops claude, sweeps, restores and flags the git files, removes the temp directory and the guard files, and ends the job unknown', async () => {
+    const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const root = join(h, 'Projects/x')
+    writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
+    const req = admit(h, { access: 'build' }); const halt = new HaltSignal(() => {})
+    fake.setMode('tamper:config:slow')
+    const p = runOnce(rdeps(h, { halt, snapshotMs: 50 }))
+    await waitFor(() => readFileSync(join(root, '.git/config'), 'utf8').includes('evil'))
+    const pid = readState(paths, req.id)!.pid!
+    halt.request()
+    await p
+    expect(alive(pid)).toBe(false)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+    expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+    expect(resultOf(h, req.id).result_text.split('\n')[0]).toBe('tampered: .git/config')
+    expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    expect(ledgerOf(h).filter((e) => e.id === req.id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_tampered', 'job_end'])
+  }, 20_000)
+  test('a halt stops the queue: the job after the one running is not claimed and stays queued in the spool', async () => {
+    const h = repoHome(); const paths = summonPaths(h); const first = admit(h, { access: 'edit' }); const second = enqueue(h, { access: 'edit' }) // the gate would call the second busy
+    const halt = new HaltSignal(() => {})
+    fake.setMode('slow')
+    const p = runOnce(rdeps(h, { halt }))
+    await waitFor(() => readState(paths, first.id)?.status === 'running')
+    halt.request()
+    expect(await p).toBe(1)
+    expect(readState(paths, second.id)?.status).toBe('queued')
+    expect(readdirSync(paths.spool)).toEqual([second.id])
+    expect(existsSync(join(jobDir(paths, second.id), 'claimed'))).toBe(false)
+  }, 15_000)
+  test('a halt asked before the first job is claimed claims nothing', async () => {
+    const h = repoHome(); const paths = summonPaths(h); const req = admit(h, { access: 'edit' }); const halt = new HaltSignal(() => {})
+    halt.request()
+    expect(await runOnce(rdeps(h, { halt }))).toBe(0)
+    expect(readState(paths, req.id)?.status).toBe('queued')
+  })
+  test('a halt that arrives just as claude is spawned stops it as soon as it runs', async () => {
+    const h = repoHome(); const req = admit(h, { access: 'edit' }); const halt = new HaltSignal(() => {})
+    const bin = fake.bin; fake.setMode('slow')
+    // asked from inside claudeBin(), i.e. after the job was claimed and before it runs
+    expect(await runOnce(rdeps(h, { halt, claudeBin: () => { halt.request(); return bin } }))).toBe(1)
+    expect(readState(summonPaths(h), req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+  }, 15_000)
+
+  describe('the real runner process (runner-main), a fresh process as launchd starts it', () => {
+    const envOf = (h: string) => ({ PATH: process.env.PATH!, HOME: h, SUMMON_HOME_OVERRIDE: h, SUMMON_CLAUDE_BIN: fake.bin })
+    const startRunner = (h: string) => Bun.spawn([process.execPath, RUNNER_MAIN], { env: envOf(h), stdout: 'pipe', stderr: 'pipe' })
+    /** A build job with a claude that edits .git/config and hangs, under a runner process; returns once it has done so. */
+    async function runningUnderRunner() {
+      const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const root = join(h, 'Projects/x')
+      writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
+      const req = admit(h, { access: 'build' })
+      fake.setMode('tamper:config:slow')
+      const runner = startRunner(h)
+      await waitFor(() => readState(paths, req.id)?.status === 'running' && existsSync(privateFile(h, req.id, PROCS)) && readFileSync(join(root, '.git/config'), 'utf8').includes('evil'))
+      return { h, paths, root, req, runner, pid: readState(paths, req.id)!.pid! }
+    }
+    test('SIGTERM: the job is closed within the exit timeout, the process exits 0, and nothing is left running or tampered', async () => {
+      const { h, paths, root, req, runner, pid } = await runningUnderRunner()
+      try {
+        const t0 = Date.now()
+        runner.kill('SIGTERM')
+        expect(await runner.exited).toBe(0)
+        expect(Date.now() - t0).toBeLessThan(8000) // launchd's ExitTimeOut is 20 s by default
+        expect(alive(pid)).toBe(false)
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+        expect(resultOf(h, req.id).result_text.split('\n')[0]).toBe('tampered: .git/config')
+        expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+        expect(verifyLedger(paths.ledger).ok).toBe(true)
+      } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
+    }, 30_000)
+    test('SIGKILL leaves claude running; the next runner start sweeps it, restores the git files, flags the job tampered, and only then settles it unknown', async () => {
+      const { h, paths, root, req, runner, pid } = await runningUnderRunner()
+      let second: ReturnType<typeof startRunner> | undefined
+      try {
+        runner.kill('SIGKILL'); await runner.exited
+        expect(alive(pid)).toBe(true) // the problem: claude has a session of its own, so nothing took it down with the runner
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil')
+        expect(readState(paths, req.id)?.status).toBe('running')
+        fake.setMode('ok')
+        second = startRunner(h)
+        expect(await second.exited).toBe(0)
+        await waitFor(() => !alive(pid), 3000)
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+        expect(resultOf(h, req.id)).toMatchObject({ status: 'unknown' })
+        expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('tampered: .git/config')
+        expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+        expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+        expect(ledgerOf(h).filter((e) => e.id === req.id).map((e) => e.event)).toEqual(['admitted', 'job_start', 'job_tampered', 'job_end'])
+        expect(verifyLedger(paths.ledger).ok).toBe(true)
+      } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
+    }, 30_000)
+    test('a job queued behind an orphan starts only after the orphan is dealt with: recovery is the first thing the runner does', async () => {
+      const { h, paths, root, req, runner, pid } = await runningUnderRunner()
+      try {
+        runner.kill('SIGKILL'); await runner.exited
+        fake.setMode('ok')
+        const next = enqueue(h, { access: 'edit' }) // the gate would call the orphan active and refuse it; a job already queued is the runner's to decide on
+        const second = startRunner(h)
+        expect(await second.exited).toBe(0)
+        expect(alive(pid)).toBe(false)
+        expect(readState(paths, next.id)?.status).toBe('completed')
+        expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe('[core]\n\tbare = false\n')
+        expect(readState(paths, req.id)?.status).toBe('unknown')
+        expect(Date.parse(readState(paths, next.id)!.started_at!)).toBeGreaterThanOrEqual(Date.parse(readState(paths, req.id)!.ended_at!) - 1)
+      } finally { try { process.kill(pid, 'SIGKILL') } catch { /* gone */ } }
+    }, 30_000)
+  })
+})
+
+describe('recoverOrphans: a runner that finds a job its predecessor left (design section 3, after the runner died)', () => {
+  const spawned: number[] = []
+  afterEach(() => { for (const p of spawned.splice(0)) { try { process.kill(-p, 'SIGKILL') } catch { /* gone */ } try { process.kill(p, 'SIGKILL') } catch { /* gone */ } } })
+  const startOf = (pid: number) => livePs()!.find((r) => r.pid === pid)!.lstart
+  const GOOD = '[core]\n\tbare = false\n'
+  /** A job its runner left: running (or claimed), a real process group standing in for claude (a shell with two sleepers), the guard files, a tampered config. */
+  async function orphan(o: { runner?: 'dead' | 'alive' | 'reused'; state?: Partial<JobState>; guard?: 'ok' | 'corrupt' | 'none'; procs?: 'ok' | 'wrong-start' | 'no-start' | 'pid1' | 'none'; tamper?: boolean; claude?: boolean; stateStart?: boolean } = {}) {
+    const h = repoHome(BUILD_ALLOWLIST); const paths = summonPaths(h); const root = join(h, 'Projects/x')
+    writeFileSync(join(root, '.git/config'), GOOD)
+    const req = enqueue(h, { access: 'build', cwd_real: root, status: 'running', ...o.state })
+    unlinkSync(join(paths.spool, req.id))
+    makeJobTmp(root, req.id); ensureExcluded(root)
+    const baseline = takeBaseline(root)
+    const runner = o.runner === 'alive' ? { pid: process.pid, lstart: `fake-lstart-${process.pid}` } : o.runner === 'reused' ? { pid: process.pid, lstart: 'Mon Jan  1 00:00:00 2001' } : { pid: 999_998, lstart: 'Mon Jan  1 00:00:00 2001' }
+    if (o.guard !== 'none') writeJsonAtomic(privateFile(h, req.id, GUARD), o.guard === 'corrupt' ? { v: 1, runner, baseline: { v: 1, files: 'x', dirs: [] } } : { v: 1, runner, baseline: serializeBaseline(baseline) })
+    let pid: number | undefined; let kids: number[] = []
+    if (o.claude !== false) {
+      const c = spawn('/bin/sh', ['-c', '/bin/sleep 600 & /bin/sleep 600 & wait'], { detached: true, stdio: 'ignore' }); c.unref()
+      pid = c.pid!; spawned.push(pid)
+      await waitFor(() => livePs()!.filter((r) => r.ppid === pid).length === 2, 3000) // the shell has started both sleepers
+      kids = livePs()!.filter((r) => r.ppid === pid).map((r) => r.pid)
+      const start = startOf(pid)
+      const rec = { pid, pgid: pid, start: o.procs === 'wrong-start' ? 'Mon Jan  1 00:00:00 2001' : o.procs === 'no-start' ? null : start, seen: [] as Array<[number, string]> }
+      if (o.procs !== 'none') writeJsonAtomic(privateFile(h, req.id, PROCS), o.procs === 'pid1' ? { ...rec, pid: 1, pgid: 1 } : rec)
+      writeState(paths, { ...readState(paths, req.id)!, pid, ...(o.stateStart === false ? {} : { pid_lstart: processStartTime(pid)! }) })
+    }
+    if (o.tamper !== false) appendFileSync(join(root, '.git/config'), '[core]\n\tpager = evil\n')
+    return { h, paths, root, req, pid: pid!, kids }
+  }
+  const deps = (h: string) => rdeps(h, { processStartTime: (pid) => (pid === process.pid ? `fake-lstart-${pid}` : processStartTime(pid)) })
+
+  test('a dead runner\'s job: the group and its sleepers are killed, the git files restored, the temp directory and guard files removed, and the result says tampered', async () => {
+    const o = await orphan(); const { h, paths, root, req, pid, kids } = o
+    expect(kids).toHaveLength(2)
+    expect(await recoverOrphans(deps(h))).toBe(1)
+    await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    expect(resultOf(h, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job', result_text: 'tampered: .git/config' })
+    expect(ledgerOf(h).filter((e) => e.id === req.id && e.event === 'job_tampered')).toEqual([expect.objectContaining({ detail: 'tampered: 1 path(s)' })])
+    // the state still says running until markOrphans, the next step, settles it from that result
+    expect(readState(paths, req.id)?.status).toBe('running')
+    expect(markOrphans(paths, Date.now())).toBe(1)
+    expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+    expect(statusOf(paths, 'nuance', req.id, Date.now())).toMatchObject({ status: 'unknown' })
+    expect(gateResult(paths, 'nuance', req.id, Date.now())).toMatchObject({ result_text: 'tampered: .git/config' })
+    expect(countActive(paths, Date.now())).toBe(0)
+  }, 20_000)
+  test('it kills the group by the start time recorded at spawn, not the pid alone: a pid that is a stranger\'s now is left alone, and the files are restored anyway', async () => {
+    const { h, root, req, pid, kids } = await orphan({ procs: 'wrong-start' })
+    await recoverOrphans(deps(h))
+    expect([pid, ...kids].map(alive)).toEqual([true, true, true])
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(resultOf(h, req.id).result_text).toBe('tampered: .git/config')
+  }, 20_000)
+  test('a record with no start time falls back to the start time the runner put in the job\'s state at spawn', async () => {
+    const { h, root, pid, kids } = await orphan({ procs: 'no-start' })
+    await recoverOrphans(deps(h))
+    await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+  }, 20_000)
+  test('no start time anywhere proves nothing, so nothing is signalled while the pid is alive; the files are restored', async () => {
+    const { h, root, pid, kids } = await orphan({ procs: 'no-start', stateStart: false })
+    await recoverOrphans(deps(h))
+    expect([pid, ...kids].map(alive)).toEqual([true, true, true])
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+  }, 20_000)
+  test('a record naming pid 1 is never signalled; the files are restored and the result says the processes were not swept', async () => {
+    const { h, root, req } = await orphan({ procs: 'pid1' })
+    await recoverOrphans(deps(h))
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(String(resultOf(h, req.id).result_text).split('\n')).toEqual(['tampered: .git/config', 'processes not swept: the record is not usable'])
+  }, 20_000)
+  test('a runner that is still alive owns its job: nothing is killed, restored or removed', async () => {
+    const { h, root, req, pid, kids } = await orphan({ runner: 'alive' })
+    expect(await recoverOrphans(deps(h))).toBe(0)
+    expect([pid, ...kids].map(alive)).toEqual([true, true, true])
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil')
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([true, true])
+    expect(existsSync(join(root, SUMMON_TMP, req.id))).toBe(true)
+  }, 20_000)
+  test('a runner pid that is alive with another start time is not the owner (the number was reused): the job is recovered', async () => {
+    const { h, root, pid, kids } = await orphan({ runner: 'reused' })
+    expect(await recoverOrphans(deps(h))).toBe(1)
+    await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+  }, 20_000)
+  test('a guard file that cannot be read: claude is still swept from procs.json, and the result says the fingerprint was not checked', async () => {
+    const { h, root, req, pid, kids } = await orphan({ guard: 'corrupt' })
+    await recoverOrphans(deps(h))
+    await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil') // nothing to compare with, so nothing is changed
+    expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('fingerprint not checked: the saved baseline is not usable')
+    expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+  }, 20_000)
+  test('no guard file but a process record (the runner died while preparing): swept, and said not checked', async () => {
+    const { h, req, pid, kids } = await orphan({ guard: 'none' })
+    await recoverOrphans(deps(h))
+    await waitFor(() => !alive(pid) && kids.every((k) => !alive(k)), 3000)
+    expect(String(resultOf(h, req.id).result_text).split('\n')[0]).toBe('fingerprint not checked: no baseline was saved')
+  }, 20_000)
+  test('nothing tampered: no result file is written and nothing is ledgered; markOrphans ends the job unknown as it always did', async () => {
+    const { h, paths, req, pid } = await orphan({ tamper: false })
+    expect(await recoverOrphans(deps(h))).toBe(1)
+    await waitFor(() => !alive(pid), 3000)
+    expect(resultOf(h, req.id)).toBeNull()
+    expect(ledgerOf(h).filter((e) => e.event === 'job_tampered')).toEqual([])
+    markOrphans(paths, Date.now())
+    expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped mid-job' })
+  }, 20_000)
+  test('a job claimed by the dead runner and not yet started (it died while preparing) gets its temp directory removed and its files compared', async () => {
+    const { h, paths, root, req } = await orphan({ claude: false, state: { status: 'queued' } })
+    writeFileSync(join(jobDir(paths, req.id), 'claimed'), '')
+    expect(await recoverOrphans(deps(h))).toBe(1)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toBe(GOOD)
+    expect(existsSync(join(root, SUMMON_TMP))).toBe(false)
+    markOrphans(paths, Date.now())
+    expect(readState(paths, req.id)).toMatchObject({ status: 'unknown', detail: 'runner stopped before the job started' })
+  })
+  test('a job that already ended keeps its result: leftover guard files are dropped, and nothing is killed or restored', async () => {
+    const { h, paths, root, req, pid } = await orphan({ state: { status: 'completed' } })
+    writeJsonAtomic(join(jobDir(paths, req.id), 'result.json'), { status: 'completed', result_text: 'done', exit_code: 0 })
+    expect(await recoverOrphans(deps(h))).toBe(0)
+    expect(alive(pid)).toBe(true)
+    expect(readFileSync(join(root, '.git/config'), 'utf8')).toContain('evil')
+    expect([GUARD, PROCS].map((n) => existsSync(privateFile(h, req.id, n)))).toEqual([false, false])
+    expect(resultOf(h, req.id)).toMatchObject({ status: 'completed', result_text: 'done' })
+  }, 20_000)
+  test('a job with no guard files at all (a review job, or Phase 0\'s) is not touched', async () => {
+    const h = targetHome(); const paths = summonPaths(h)
+    const req = enqueue(h, { status: 'running', pid: process.pid, pid_lstart: 'x' }); unlinkSync(join(paths.spool, req.id))
+    expect(await recoverOrphans(deps(h))).toBe(0)
+    expect(readState(paths, req.id)?.status).toBe('running')
+  })
 })
 
 describe('every place that switches on Access (design section 6, runner): status, ledger and describeCommand', () => {
