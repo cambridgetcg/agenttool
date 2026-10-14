@@ -59,6 +59,18 @@ function launchdPs(dir: string): string {
   return p
 }
 
+/**
+ * pin-device's ssh config with its one `HostName nuance.local` line pointed at 127.0.0.1, so the hub's own TCP probe (P56)
+ * stays on this Mac. Keeps the line's indentation; throws unless exactly one line matched, because a config text that
+ * pin-device changed would otherwise leave the probe going to the real nuance.local:22 with every test still green.
+ */
+export function loopbackHostName(config: string): string {
+  let hits = 0
+  const out = config.replace(/^(\s*)HostName nuance\.local$/gm, (_line, indent: string) => { hits++; return `${indent}HostName 127.0.0.1` })
+  if (hits !== 1) throw new Error(`world: expected exactly one "HostName nuance.local" line in the ssh config pin-device wrote, found ${hits}; the hub's TCP probe would not stay on this Mac`)
+  return out
+}
+
 /** A clean git repo standing in for the bridge worktree: prepare reads the installer template from it and needs it clean. */
 function bridgeRepo(): string {
   const repo = temp('cb-world-repo-')
@@ -105,7 +117,7 @@ export async function makeWorld(o: { compiled?: NuanceBuild; timeScale?: number 
   if (!pinned.ok) throw new Error(`world: pin-device refused: ${pinned.problems.join('; ')}`)
   // The hub's own TCP connect before each dial loop (P56) must stay on this Mac: only HostName changes; the fake ssh
   // ignores it, and the dial is still `ssh -F <config> collab-nuance relay 1 <nonce>`.
-  writeFileDurable(ap.sshConfig, readFileSync(ap.sshConfig, 'utf8').replace('  HostName nuance.local\n', '  HostName 127.0.0.1\n'), 0o600)
+  writeFileDurable(ap.sshConfig, loopbackHostName(readFileSync(ap.sshConfig, 'utf8')), 0o600)
 
   // The hub: from source, as `collab-bridge hub run`, the fake ssh as its ssh, the real ps for its pid checks with its
   // parent shown as launchd, so its start check passes under a harness (Task 53, P43).
