@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ChildPool } from '../src/air/pool.ts'
 import type { LineageEntry } from '../src/air/lineages.ts'
@@ -190,6 +190,53 @@ describe('sessions across stops and ends', () => {
     expect(events(w, 'session_ended').at(-1)).toMatchObject({ session_id: sid, code: 'credential_missing' })
   }, 30_000)
 
+  test('a missing credential on a session_start call ends the old session and starts a fresh child with no session file', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    rmSync(w.paths.credentialFile(sid)) // a host end removes it (K23)
+    const started = await childOf(p, e.lineage, true)
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', session_id: null, credential_path: null, past_sessions: [sid] })
+    expect(events(w, 'session_ended').at(-1)).toMatchObject({ session_id: sid, code: 'credential_missing' })
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['ok', 'fresh']])
+    expect(envOf(started.pid)).toContain(`AGENTOOL_COLLAB_DB=${w.paths.sharedJournal}`)
+    expect(envOf(started.pid)).not.toContain('AGENTOOL_COLLAB_SESSION_FILE') // unbound: it resumes nothing
+  }, 30_000)
+
+  test('a missing credential drains the child that was bound to it, and the call is seat_session_ended', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    const c = await childOf(p, e.lineage)
+    rmSync(w.paths.credentialFile(sid))
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(await c.exited).toBe(0) // stdin EOF, not a signal
+    expect(c.alive()).toBe(false)
+    expect(events(w, 'child_start')).toHaveLength(1) // no respawn
+    expect(events(w, 'session_ended').at(-1)).toMatchObject({ session_id: sid, code: 'credential_missing' })
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', session_id: null, credential_path: null, past_sessions: [sid] })
+  }, 30_000)
+
+  test('a session_start call after session_end gets a fresh child with no session file, after the old child has exited', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    const c = await childOf(p, e.lineage)
+    expect((await c.call('collab_session_end', { reason: 'done' })).outcome).toBe('ok')
+    p.sessionEnded(e.lineage)
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' }) // every other call
+    const next = await childOf(p, e.lineage, true) // a new session_start may begin
+    expect(next.pid).not.toBe(c.pid)
+    expect(c.alive()).toBe(false) // a respawn only after the old child has exited
+    expect(await c.exited).toBe(0)
+    expect(events(w, 'child_start').at(-1)).toMatchObject({ outcome: 'ok', code: 'fresh' })
+    expect(envOf(next.pid)).not.toContain('AGENTOOL_COLLAB_SESSION_FILE')
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', session_id: null, past_sessions: [sid] }) // the new session is not bound until session_start returns
+  }, 30_000)
+
   test('after session_end, a call is seat_session_ended and the child is drained', async () => {
     const w = world()
     const p = pool(w)
@@ -265,6 +312,50 @@ describe('start-up failures and the build check', () => {
     expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'child_start_failed']])
   }, 30_000)
 
+  test('a resume the host refuses for its cursor parks the lineage as seat_recovery_required, and Ai\'s repair lets it resume', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    const credentialPath = w.store.get(e.lineage)!.credential_path!
+    const original = readFileSync(credentialPath, 'utf8')
+    const credential = JSON.parse(original)
+    credential.last_cursor = { ...credential.last_cursor, sequence: credential.last_cursor.sequence + 1000 }
+    writeFileSync(credentialPath, JSON.stringify(credential)) // an existing file keeps its 0600
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'seat_recovery_required']])
+    expect(events(w, 'park').at(-1)).toMatchObject({ lineage: e.lineage, session_id: sid, code: 'cursor_reset_required' })
+    expect(w.statuses).toContainEqual([e.lineage, `needs Ai: seat_recovery ${sid}`])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', session_id: sid, parked: { cause: 'cursor_reset_required' } }) // the session itself is not ended
+    // Parked: every later call is refused without another spawn, a session_start call included.
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+    expect(await p.childFor(e.lineage, { forStart: true })).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+    expect(events(w, 'child_start')).toHaveLength(1)
+    // After the repair (here: the credential as it was) the lineage unparks and the next call resumes the session.
+    writeFileSync(credentialPath, original)
+    expect(p.unpark(e.lineage)).toBe('ok')
+    const again = await childOf(p, e.lineage)
+    expect(events(w, 'child_start').at(-1)).toMatchObject({ outcome: 'ok', code: 'resume', session_id: sid })
+    expect((await again.call('collab_next', { workspace_id: w.workspaceId })).outcome).toBe('ok')
+  }, 30_000)
+
+  test('a credential the child refuses as invalid ends the lineage, which is not sticky: a session_start call may begin again', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    writeFileSync(w.store.get(e.lineage)!.credential_path!, JSON.stringify({ format: 'agenttool.collab/session-file/0' }))
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'seat_session_ended']])
+    expect(events(w, 'session_ended').at(-1)).toMatchObject({ session_id: sid, code: 'credential_invalid' })
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', session_id: null, credential_path: null, past_sessions: [sid] })
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(events(w, 'child_start')).toHaveLength(1) // no second spawn, and no child_start_failed mark
+    const next = await childOf(p, e.lineage, true)
+    expect(events(w, 'child_start').at(-1)).toMatchObject({ outcome: 'ok', code: 'fresh' })
+    expect(envOf(next.pid)).not.toContain('AGENTOOL_COLLAB_SESSION_FILE')
+  }, 30_000)
+
   test('after journal_invalid no lineage gets a new child until a new pool starts', async () => {
     const w = world()
     const p = pool(w)
@@ -301,6 +392,38 @@ describe('start-up failures and the build check', () => {
     await p.tick()
     expect(await p.childFor(a.lineage)).toMatchObject({ ok: false, code: 'collab_build_changed' })
   }, 30_000)
+})
+
+describe('refusals that never spawn', () => {
+  test('a lineage with no session is session_required for every call but the session_start one', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w) // pending: attached, no session yet
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'session_required' })
+    expect(events(w, 'child_start')).toEqual([])
+    expect(fresh(w).get(e.lineage)!.state).toBe('pending')
+    // The session_start call is the one that may start a child.
+    expect((await childOf(p, e.lineage, true)).alive()).toBe(true)
+  }, 30_000)
+
+  test('a lineage the hub has no entry for is hub_away', async () => {
+    const w = world()
+    const p = pool(w)
+    expect(await p.childFor('lin_unknown')).toMatchObject({ ok: false, code: 'hub_away' })
+    expect(await p.childFor('lin_unknown', { forStart: true })).toMatchObject({ ok: false, code: 'hub_away' })
+    expect(events(w, 'child_start')).toEqual([])
+    expect(fresh(w).get('lin_unknown')).toBeUndefined()
+  })
+
+  test('a retired lineage is seat_session_ended, a session_start call included', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w, { state: 'retired', detached_since: new Date(w.clock.now).toISOString() })
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(await p.childFor(e.lineage, { forStart: true })).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(events(w, 'child_start')).toEqual([])
+    expect(fresh(w).get(e.lineage)!.state).toBe('retired')
+  })
 })
 
 describe('the hub way, always', () => {
