@@ -1,9 +1,13 @@
 // Phase 0.5 §3 "Fingerprint". Inside its folder the sandbox cannot tell `src/` from `.git/config`, so the runner (which is not
 // sandboxed) keeps a copy of the git files that could run code later, and puts them back when an edit or build job ends:
-//   .git/config, everything under .git/hooks/ and .git/info/, and .gitattributes and .gitmodules in the folder root.
-// The names are found by listing the folder, `.git/` and those two directories, and matching without regard to case, so every
-// spelling the Mac's case-insensitive volume answers to (`.Git`, `.GitAttributes`, `Config`) is covered. The baseline holds each
-// file's contents. It is outside the folder; while the job runs the runner also keeps it as a 0600 file in the job's private state
+//   .git/config, .git/config.worktree and .git/commondir (the last two send git to other configuration), everything under
+//   .git/hooks/ and .git/info/, and .gitattributes and .gitmodules in the folder root; and under .git/modules/** (the git directories
+//   of absorbed submodules, which `git status` in the superproject enters) every config, config.worktree, commondir, hooks/** and
+//   info/** at any depth, plus any link there, whatever its name (Ruling S6). A `.git` that turns from a directory into a file or a link
+//   during the job counts as changed and is replaced by a directory holding the watched files.
+// The names are found by listing the folder, `.git/`, `.git/modules/**` and the hooks and info directories, and matching without
+// regard to case, so every spelling the Mac's case-insensitive volume answers to (`.Git`, `.GitAttributes`, `Config`) is covered. The
+// baseline holds each file's contents. It is outside the folder; while the job runs the runner also keeps it as a 0600 file in the job's private state
 // directory (serializeBaseline / parseBaseline), so a runner that dies mid-job can still be followed by a restore. Everything here
 // treats the folder as written by a sandboxed job: no link is followed, no special file is opened, and a path is replaced
 // (removed, then made new) rather than written through.
@@ -26,6 +30,9 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024
 
 export class FingerprintError extends Error {}
+
+/** The files of a git directory that hold configuration or name where it is: `commondir` makes git take config, hooks and info from the directory it names. */
+const CONFIG_FILES: ReadonlySet<string> = new Set(['config', 'config.worktree', 'commondir'])
 
 /** What a comparison names when it could not even list the folder. */
 const FOLDER = '(the folder)'
@@ -158,17 +165,38 @@ function scan(root: string, list: ListDir, base?: Baseline): Scan {
     dirs.set(rel, st.mode & 0o7777)
     for (const name of listOpen(join(root, rel))) guard(`${rel}/${name}`, () => tree(`${rel}/${name}`))
   }
+  /**
+   * `.git/modules/**`: `rel` is a directory git may be told to use as a git directory. Watches, in it, every config, config.worktree and
+   * commondir, its hooks and info trees, and any link whatever its name (a submodule's git directory can be a link into the folder), and
+   * goes into every other directory (`modules/<name>`, `objects`, `refs`: the same names can be one level down). A directory that holds
+   * or leads to a watched entry is recorded with its mode, so one that vanishes comes back and one the job made is removed when empty.
+   */
+  const gitdirs = (rel: string, self: Stats): boolean => {
+    let found = false
+    for (const name of listOpen(join(root, rel))) {
+      const l = name.toLowerCase(); const child = `${rel}/${name}`
+      const st = guard(child, () => lstatOpen(join(root, child)))
+      if (!st) continue
+      if (st.isSymbolicLink() || CONFIG_FILES.has(l)) { guard(child, () => leaf(child, st)); found = true }
+      else if (l === 'hooks' || l === 'info') { guard(child, () => tree(child)); found = true }
+      else if (st.isDirectory() && guard(child, () => gitdirs(child, st))) found = true
+    }
+    if (found) dirs.set(rel, self.mode & 0o7777)
+    return found
+  }
   for (const name of guard(FOLDER, () => listOpen(root)) ?? []) {
     const lower = name.toLowerCase()
     if (lower === '.gitattributes' || lower === '.gitmodules') guard(name, () => leaf(name, lstatOpen(join(root, name))))
     if (lower !== '.git') continue
     const st = guard(name, () => lstatOpen(join(root, name)))
-    if (!st || !st.isDirectory()) continue // a link or file named .git is not entered; a comparison reports the repository as gone
+    if (!st) continue
+    if (!st.isDirectory()) { guard(name, () => leaf(name, st)); continue } // a gitfile or link is an entry of its own and is not entered: where a directory was, it is a change
     dirs.set(name, st.mode & 0o7777)
     for (const inner of guard(name, () => listOpen(join(root, name))) ?? []) {
       const l = inner.toLowerCase(); const rel = `${name}/${inner}`
-      if (l === 'config') guard(rel, () => leaf(rel, lstatOpen(join(root, rel))))
+      if (CONFIG_FILES.has(l)) guard(rel, () => leaf(rel, lstatOpen(join(root, rel))))
       if (l === 'hooks' || l === 'info') guard(rel, () => tree(rel))
+      if (l === 'modules') guard(rel, () => { const m = lstatOpen(join(root, rel)); if (m.isDirectory()) gitdirs(rel, m); else leaf(rel, m) })
     }
   }
   return { files, dirs, failed }
@@ -211,9 +239,14 @@ export function restoreBaseline(root: string, base: Baseline, list: ListDir = re
   const modeFix: string[] = []
   for (const [rel, mode] of base.dirs) { const seen = post.dirs.get(rel); if (seen !== undefined && seen !== mode) { changed.push(rel); modeFix.push(rel) } }
 
-  // .git itself is not rebuilt out of three directories: if it is gone or is a link, say so and leave it as found.
-  const gitName = [...base.files.keys(), ...base.dirs.keys()].map((r) => r.split('/')[0]!).find((n) => n.toLowerCase() === '.git')
-  const gitGone = gitName !== undefined && !(statOrNull(join(root, gitName))?.isDirectory())
+  // A .git that was a directory and is now a file or a link (a gitfile, or a link to a directory the job controls) counts as changed (the scan
+  // shows it as an entry that appeared): it is removed, never followed, and made a directory again, with the watched files in it. That is all
+  // a restore can give back; the rest of the repository is not watched and is not rebuilt. A .git that is gone altogether is different: nothing
+  // planted can survive in it, there is nothing to redirect git, and a directory of three watched folders is no repository, so it is said and left.
+  const gitName = [...base.dirs.keys()].find((n) => !n.includes('/') && n.toLowerCase() === '.git')
+  const gitStat = gitName === undefined ? null : statOrNull(join(root, gitName))
+  const gitGone = gitName !== undefined && gitStat === null
+  const gitSwapped = gitName !== undefined && gitStat !== null && !gitStat.isDirectory()
   const underMissingGit = (rel: string) => gitGone && rel.split('/')[0] === gitName && rel.includes('/')
   if (gitGone) failed.push(gitName!)
 
@@ -227,10 +260,11 @@ export function restoreBaseline(root: string, base: Baseline, list: ListDir = re
   unlock([...touched].sort((a, b) => depth(a) - depth(b) || (a < b ? -1 : 1)).map((rel) => (rel === '' ? root : join(root, rel))))
 
   const attempt = (rel: string, fn: () => void) => { try { fn() } catch { failed.push(rel) } }
+  const made: string[] = []
   for (const rel of toClear) if (!underMissingGit(rel)) attempt(rel, () => clear(join(root, rel)))
+  if (gitSwapped) attempt(gitName!, () => { mkdirSync(join(root, gitName!), { mode: 0o700 }); made.push(gitName!) }) // its baseline mode goes on last, with the other made directories
   // Directories first, shallowest first: one that vanished, or that was swapped for a link (cleared above), is made again. Their baseline
   // modes are put back last, so a mode that forbids writing cannot stop the files going in.
-  const made: string[] = []
   for (const dir of [...base.dirs.keys()].filter((d) => d.includes('/')).sort((a, b) => depth(a) - depth(b))) {
     if (underMissingGit(dir) || unreadable(dir)) continue
     attempt(dir, () => {

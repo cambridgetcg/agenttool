@@ -254,14 +254,22 @@ with the admission's reason (and its hint in the result text), and claude is nev
    over, however it ended, the runner removes the job's directory, and `.summon-tmp` too if that leaves it empty. If `.git/info`
    or the exclude file is a link, or the temp directory or the fingerprint cannot be made, the job ends `failed` before claude starts.
 2. **A fingerprint.** Inside the folder the sandbox cannot tell `src/` from `.git/config`, so the runner keeps a copy of the git
-   files that could run code later: `.git/config`, every file under `.git/hooks/` and `.git/info/`, and `.gitattributes` and
-   `.gitmodules` in the folder root (found by a case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are covered on
-   the Mac's volume). The copy is taken after the exclude line is written. The runner keeps it in memory and also as `guard.json`,
-   a 0600 file in the job's private state directory (`~/.local/state/summon/jobs/<job id>/`, mode 0700, which the job's sandbox
-   cannot read); it holds file contents, so a `.git/config` that holds credentials is on disk there for as long as the job runs,
+   files that could run code later: `.git/config`, `.git/config.worktree` and `.git/commondir` (git takes its config, hooks and
+   info from the directory a `commondir` names, and reads `config.worktree` when `extensions.worktreeConfig` is on), every file
+   under `.git/hooks/` and `.git/info/`, and `.gitattributes` and `.gitmodules` in the folder root. Under `.git/modules/` (the git
+   directories of absorbed submodules, which `git status` enters) it also keeps, at any depth, every `config`, `config.worktree`
+   and `commondir`, every file under `hooks/` and `info/`, and any link there whatever its name. They are found by a
+   case-insensitive listing, so `.Git`, `.GitAttributes` and `Config` are covered on the Mac's volume. Admission already refuses a
+   folder whose `.git/commondir` is there at the start; the fingerprint catches one a job writes. The copy is taken after the
+   exclude line is written. The runner keeps it in memory and also as `guard.json`, a 0600 file in the job's private state
+   directory (`~/.local/state/summon/jobs/<job id>/`, mode 0700, which the job's sandbox cannot read); it holds file contents, so a `.git/config` that holds credentials is on disk there for as long as the job runs,
    and the file is deleted when the job is closed. After the job the runner puts back any file whose contents, type or mode
    changed, removes any that appeared and recreates any that vanished, and puts each watched directory (and `.git` itself) back
-   to its mode. **If it changed anything, the first line of the result is `tampered: <paths>`**
+   to its mode. A `.git` that has turned from a directory into a file or a link (a gitfile, or a link to a directory the job
+   controls) counts as changed: it is removed without being followed and made a directory again, holding the watched files. That
+   is all a restore can give back: the rest of the repository (objects, refs, a repository the job moved aside) is not watched
+   and is not rebuilt, so admission will refuse that folder until it is repaired. A `.git` that is gone altogether is reported as
+   `not restored: .git`, and nothing is made. **If it changed anything, the first line of the result is `tampered: <paths>`**
    (a second line, `not restored: <paths>`, names what it could not put back), and the Nuance ledger gets one `job_tampered` line
    with a count and no paths; the paths stay in the 0600 result file. The job's status is not changed by any of this.
    A job cannot keep a change by making it hard to undo. The folder belongs to the runner's user, and the owner can clear all of
@@ -298,9 +306,13 @@ with the admission's reason (and its hint in the result text), and claude is nev
 - A process that detaches and is reparented to launchd within one 2 s interval is not found. It stays sandboxed (no network,
   writes only inside the folder). An environment marker cannot serve instead: `ps -E` shows no other process's environment on
   this macOS.
-- A legitimate edit to `.git/config`, a hook, `.git/info/**`, `.gitattributes` or `.gitmodules` by a job is reverted and reported
-  as `tampered`. `.gitattributes` files below the folder root are not fingerprinted (the filter and textconv drivers they name are
-  defined in config files, and those are).
+- A legitimate edit to a watched file (`.git/config`, a hook, `.git/info/**`, `.gitattributes`, `.gitmodules`, or any of the
+  files watched under `.git/modules/`) by a job is reverted and reported as `tampered`. In a repository with many submodules the
+  scan of `.git/modules/` makes the fingerprint slower.
+- `.gitattributes` files below the folder root are not fingerprinted. The filter and textconv drivers they name are defined in git
+  configuration, and the repository's own configuration is watched: `.git/config`, `.git/config.worktree`, `.git/commondir`
+  (which could send git to other configuration) and the same files in the submodules' git directories under `.git/modules/`.
+  The user's and the system's git configuration lie outside the folder, where the sandbox cannot write.
 - Test suites that need `/private/tmp` sockets or local ports (the collab-bridge suite is one) will not run as a build job here;
   suites that respect `TMPDIR` will.
 - A runner that is killed (SIGKILL, a crash, power loss) rather than stopped cannot clean up at once. launchd starts the runner only

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Test double for `claude -p`. Reads the prompt from stdin like the real CLI.
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, chmodSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 const mode = process.env.FAKE_MODE_FILE ? (await Bun.file(process.env.FAKE_MODE_FILE).text()).trim() : 'ok'
 const prompt = await new Response(Bun.stdin.stream()).text()
@@ -28,6 +28,14 @@ function tamper(what: string) {
   if (what === 'chmod') chmodSync('.git/hooks/pre-commit.sample', 0o644)
   if (what === 'info-link') { rmSync('.git/info', { recursive: true }); symlinkSync(process.env.TMPDIR!, '.git/info') }
   if (what === 'newline-name') { mkdirSync('.git/hooks', { recursive: true }); writeFileSync('.git/hooks/a\nb', 'x') }
+  // Ruling S6: the files that send git to other configuration, a submodule's git directory, and a .git that stops being a directory.
+  const evilConfig = '[core]\n\tfsmonitor = evil\n'
+  if (what === 'commondir') { writeFileSync('.git/commondir', '../.x\n'); mkdirSync('.x'); writeFileSync('.x/config', evilConfig) }
+  if (what === 'worktree-config') writeFileSync('.git/config.worktree', evilConfig)
+  if (what === 'module') { mkdirSync('.git/modules/evil/hooks', { recursive: true }); writeFileSync('.git/modules/evil/config', evilConfig); writeFileSync('.git/modules/evil/hooks/pre-commit', '#!/bin/sh\necho evil\n', { mode: 0o755 }) }
+  if (what === 'module-config') appendFileSync('.git/modules/a/config', evilConfig)
+  if (what === 'gitfile') { rmSync('.git', { recursive: true }); writeFileSync('.git', 'gitdir: .x\n'); mkdirSync('.x'); writeFileSync('.x/config', evilConfig) }
+  if (what === 'git-link') { renameSync('.git', '.real'); symlinkSync('.real', '.git'); appendFileSync('.real/config', evilConfig) }
   // Ways a job can try to keep a change: a user flag, a deny ACL, a mode of 000. The owner (the runner) can undo every one without root.
   const flag = (p: string, f = 'uchg') => spawnSync('/usr/bin/chflags', [f, p])
   const deny = (p: string, rights: string) => spawnSync('/bin/chmod', ['+a', `${userInfo().username} deny ${rights}`, p])

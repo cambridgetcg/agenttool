@@ -31,8 +31,13 @@ const keysOf = (b: ReturnType<typeof takeBaseline>) => [...b.files.keys()].sort(
 describe('takeBaseline: what is watched, and under every case spelling', () => {
   test('the config, every hook, everything under info, and .gitattributes and .gitmodules in the root, and nothing else', () => {
     const root = repo()
-    put(root, '.git/HEAD.bak', 'x'); put(root, '.git/config.worktree', 'x'); put(root, '.gitignore', 'x'); put(root, 'sub/.gitattributes', 'x')
+    put(root, '.git/HEAD.bak', 'x'); put(root, '.gitignore', 'x'); put(root, 'sub/.gitattributes', 'x'); put(root, '.git/index', 'x'); put(root, '.git/refs/heads/main', 'x')
     expect(keysOf(takeBaseline(root))).toEqual(['.git/config', '.git/hooks/commit-msg', '.git/hooks/pre-commit.sample', '.git/info/exclude', '.gitattributes', '.gitmodules'])
+  })
+  test('the two files that send git to other configuration: .git/commondir and .git/config.worktree (Ruling S6)', () => {
+    const root = repo()
+    put(root, '.git/commondir', '../.x\n'); put(root, '.git/config.worktree', '[core]\n\tpager = x\n')
+    expect(keysOf(takeBaseline(root))).toEqual(['.git/commondir', '.git/config', '.git/config.worktree', '.git/hooks/commit-msg', '.git/hooks/pre-commit.sample', '.git/info/exclude', '.gitattributes', '.gitmodules'])
   })
   test('walks nested directories under hooks and info', () => {
     const root = repo()
@@ -177,15 +182,6 @@ describe('restoreBaseline: whatever changed, appeared or vanished is put back', 
     rmSync(join(root, '.git/config')); mkdirSync(join(root, '.git/config')); put(root, '.git/config/inner', 'x')
     restoreBaseline(root, base)
     expect(read(root, '.git/config')).toBe('[core]\n\tbare = false\n')
-  })
-  test('.git itself gone or swapped for a link is not rebuilt: it is reported as not restored', () => {
-    const root = repo(); const base = takeBaseline(root); const outside = dirOf()
-    rmSync(join(root, '.git'), { recursive: true }); symlinkSync(outside, join(root, '.git'))
-    const out = restoreBaseline(root, base)
-    expect(out.failed).toContain('.git')
-    expect(lstatSync(join(root, '.git')).isSymbolicLink()).toBe(true) // left as found
-    expect(readdirSync(outside)).toEqual([])
-    expect(out.changed).toContain('.git/config')
   })
   test('a listing that fails after the job is reported as not restored, not thrown', () => {
     const root = repo(); const base = takeBaseline(root)
@@ -411,5 +407,245 @@ describe('describePaths: the first line of a result, safe to print', () => {
     const text = describePaths(many)
     expect(text.split(', ')).toHaveLength(21)
     expect(text.endsWith('and 5 more')).toBe(true)
+  })
+})
+
+// ── Ruling S6: git's redirecting files, the submodules' git directories, and a .git that is no longer a directory ──────────────────────────────
+// git reads `<gitdir>/commondir` in any git directory and takes config, hooks and info from the directory it names; `config.worktree` is read when
+// `extensions.worktreeConfig` is on; `git status` in the superproject runs status in each submodule, which reads that submodule's own git
+// directory under `.git/modules/`. A sandboxed job can write all of them, and none of them may survive the job.
+const CONFIG = '[core]\n\tbare = false\n'
+/** The repository with one absorbed submodule `a` (and `b` inside it): every kind of file a git directory holds, watched or not. */
+function withModules() {
+  const root = repo()
+  put(root, '.git/modules/a/config', '[core]\n\tworktree = ../../../a\n'); put(root, '.git/modules/a/config.worktree', '[core]\n\tpager = a\n')
+  put(root, '.git/modules/a/HEAD', 'ref: refs/heads/main\n'); put(root, '.git/modules/a/index', 'i'); put(root, '.git/modules/a/refs/heads/main', 'abc\n')
+  put(root, '.git/modules/a/objects/ab/cdef', 'obj'); put(root, '.git/modules/a/objects/pack/p.pack', 'pack')
+  put(root, '.git/modules/a/hooks/pre-commit.sample', '#!/bin/sh\nexit 0\n', 0o755); put(root, '.git/modules/a/info/exclude', '# a\n')
+  put(root, '.git/modules/a/modules/b/config', '[core]\n\tworktree = ../../../../../a/b\n'); put(root, '.git/modules/a/modules/b/hooks/commit-msg', '#!/bin/sh\nexit 0\n', 0o755)
+  put(root, '.git/modules/a/modules/b/HEAD', 'ref: refs/heads/main\n')
+  return root
+}
+const MODULE_FILES = ['.git/modules/a/config', '.git/modules/a/config.worktree', '.git/modules/a/hooks/pre-commit.sample', '.git/modules/a/info/exclude', '.git/modules/a/modules/b/config', '.git/modules/a/modules/b/hooks/commit-msg']
+
+describe('takeBaseline: .git/modules/** (Ruling S6)', () => {
+  test('every config, config.worktree, commondir, hooks/** and info/** at any depth under .git/modules, and nothing else there (not HEAD, index, refs, objects)', () => {
+    const root = withModules()
+    put(root, '.git/modules/a/commondir', '../x\n'); put(root, '.git/modules/a/modules/b/commondir', '../x\n'); put(root, '.git/modules/a/modules/b/info/deep/er', 'x')
+    expect(keysOf(takeBaseline(root)).filter((k) => k.startsWith('.git/modules/'))).toEqual([
+      '.git/modules/a/commondir', '.git/modules/a/config', '.git/modules/a/config.worktree', '.git/modules/a/hooks/pre-commit.sample', '.git/modules/a/info/exclude',
+      '.git/modules/a/modules/b/commondir', '.git/modules/a/modules/b/config', '.git/modules/a/modules/b/hooks/commit-msg', '.git/modules/a/modules/b/info/deep/er',
+    ])
+  })
+  test('a file directly in .git/modules is watched by the same names (a gitfile can name .git/modules itself)', () => {
+    const root = repo(); put(root, '.git/modules/config', 'c'); put(root, '.git/modules/commondir', 'x'); put(root, '.git/modules/readme', 'r')
+    expect(keysOf(takeBaseline(root)).filter((k) => k.startsWith('.git/modules/'))).toEqual(['.git/modules/commondir', '.git/modules/config'])
+  })
+  test('the names match without regard to case: .Git/MODULES/A/CONFIG, /Config.Worktree, /CommonDir, /HOOKS/x, /Info/y, and a nested /MODULES/B/Config', () => {
+    const root = dirOf()
+    put(root, '.Git/MODULES/A/CONFIG', 'c'); put(root, '.Git/MODULES/A/Config.Worktree', 'w'); put(root, '.Git/MODULES/A/CommonDir', 'd')
+    put(root, '.Git/MODULES/A/HOOKS/x', 'h', 0o755); put(root, '.Git/MODULES/A/Info/y', 'i'); put(root, '.Git/MODULES/A/MODULES/B/Config', 'bc'); put(root, '.Git/MODULES/A/HEAD', 'no')
+    expect(keysOf(takeBaseline(root))).toEqual(['.Git/MODULES/A/CONFIG', '.Git/MODULES/A/CommonDir', '.Git/MODULES/A/Config.Worktree', '.Git/MODULES/A/HOOKS/x', '.Git/MODULES/A/Info/y', '.Git/MODULES/A/MODULES/B/Config'])
+  })
+  test('the listing is the injected one all the way down: root, .git, modules, each module directory, hooks (and nothing outside .git/modules but the usual)', () => {
+    const root = fakeGitRoot(dirOf()); put(root, '.git/modules/a/config', 'c'); put(root, '.git/modules/a/hooks/h', 'h'); put(root, '.git/modules/a/modules/b/config', 'c')
+    const asked: string[] = []
+    takeBaseline(root, (d) => { asked.push(d.slice(root.length) || '/'); return readdirSync(d) })
+    expect(asked.sort()).toEqual(['/', '/.git', '/.git/modules', '/.git/modules/a', '/.git/modules/a/hooks', '/.git/modules/a/modules', '/.git/modules/a/modules/b'])
+  })
+  test('a link under .git/modules is a watched entry whatever its name, and is not followed (a submodule git directory can be a link into the folder)', () => {
+    const root = withModules(); const outside = dirOf(); put(outside, 'config', 'secret')
+    symlinkSync(outside, join(root, '.git/modules/c')); symlinkSync(join(outside, 'config'), join(root, '.git/modules/a/modules/b/info.link'))
+    const keys = keysOf(takeBaseline(root))
+    expect(keys).toEqual(expect.arrayContaining(['.git/modules/c', '.git/modules/a/modules/b/info.link']))
+    expect(keys.some((k) => k.startsWith('.git/modules/c/'))).toBe(false)
+  })
+  test('.git/modules itself as a link is one watched entry, not entered', () => {
+    const root = repo(); const outside = dirOf(); put(outside, 'a/config', 'c')
+    symlinkSync(outside, join(root, '.git/modules'))
+    const keys = keysOf(takeBaseline(root))
+    expect(keys).toContain('.git/modules')
+    expect(keys.some((k) => k.startsWith('.git/modules/'))).toBe(false)
+  })
+  test('a watched file there that is too large to keep refuses the job, as anywhere else', () => {
+    const root = withModules(); put(root, '.git/modules/a/hooks/big', 'x'.repeat(9 * 1024 * 1024))
+    expect(() => takeBaseline(root)).toThrow(FingerprintError)
+  })
+})
+
+describe('restoreBaseline: git\'s redirecting files and the submodules\' git directories do not survive the job (Ruling S6)', () => {
+  test('a commondir the job writes is removed (the config it points at is not read from anywhere)', () => {
+    const root = repo(); const base = takeBaseline(root)
+    put(root, '.git/commondir', '../.x\n'); put(root, '.x/config', '[core]\n\tfsmonitor = evil\n')
+    expect(restoreBaseline(root, base)).toEqual({ changed: ['.git/commondir'], failed: [] })
+    expect(existsSync(join(root, '.git/commondir'))).toBe(false)
+  })
+  test('a config.worktree the job writes is removed, and one that was there and is edited comes back', () => {
+    const root = repo(); const base = takeBaseline(root)
+    put(root, '.git/config.worktree', '[core]\n\tfsmonitor = evil\n')
+    expect(restoreBaseline(root, base)).toEqual({ changed: ['.git/config.worktree'], failed: [] })
+    expect(existsSync(join(root, '.git/config.worktree'))).toBe(false)
+    put(root, '.git/config.worktree', 'a'); const base2 = takeBaseline(root)
+    put(root, '.git/config.worktree', 'b')
+    expect(restoreBaseline(root, base2)).toEqual({ changed: ['.git/config.worktree'], failed: [] })
+    expect(read(root, '.git/config.worktree')).toBe('a')
+  })
+  test('a commondir or config.worktree under a case spelling the volume answers to is removed too', () => {
+    const root = repo(); const base = takeBaseline(root)
+    put(root, '.git/CommonDir', '../.x\n'); put(root, '.git/Config.Worktree', 'x')
+    expect(restoreBaseline(root, base)).toEqual({ changed: ['.git/CommonDir', '.git/Config.Worktree'], failed: [] })
+    expect(readdirSync(join(root, '.git')).map((n) => n.toLowerCase()).filter((n) => n === 'commondir' || n === 'config.worktree')).toEqual([])
+  })
+  test('an edited submodule config, a hook added to a submodule, an edited submodule info/exclude and a nested submodule\'s config are all put back', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    appendFileSync(join(root, '.git/modules/a/config'), '[core]\n\tfsmonitor = evil\n'); put(root, '.git/modules/a/hooks/pre-commit', '#!/bin/sh\nevil\n', 0o755)
+    put(root, '.git/modules/a/info/exclude', '# evil\n'); appendFileSync(join(root, '.git/modules/a/modules/b/config'), '[core]\n\tfsmonitor = evil\n')
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git/modules/a/config', '.git/modules/a/hooks/pre-commit', '.git/modules/a/info/exclude', '.git/modules/a/modules/b/config'], failed: [] })
+    expect(read(root, '.git/modules/a/config')).toBe('[core]\n\tworktree = ../../../a\n')
+    expect(read(root, '.git/modules/a/info/exclude')).toBe('# a\n')
+    expect(existsSync(join(root, '.git/modules/a/hooks/pre-commit'))).toBe(false)
+  })
+  test('a commondir and a config.worktree planted in a submodule\'s git directory, and in the nested one, are removed', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    put(root, '.git/modules/a/commondir', '../x\n'); put(root, '.git/modules/a/modules/b/commondir', '../x\n'); put(root, '.git/modules/a/modules/b/config.worktree', 'w')
+    expect(restoreBaseline(root, base)).toEqual({ changed: ['.git/modules/a/commondir', '.git/modules/a/modules/b/commondir', '.git/modules/a/modules/b/config.worktree'], failed: [] })
+    expect(readdirSync(join(root, '.git/modules/a/modules/b')).sort()).toEqual(['HEAD', 'config', 'hooks'])
+  })
+  test('a vanished submodule config comes back with its mode, and so does a submodule git directory that was deleted with its hooks', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    rmSync(join(root, '.git/modules/a/config')); rmSync(join(root, '.git/modules/a/modules'), { recursive: true })
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git/modules/a/config', '.git/modules/a/modules/b/config', '.git/modules/a/modules/b/hooks/commit-msg'], failed: [] })
+    expect(read(root, '.git/modules/a/modules/b/config')).toBe('[core]\n\tworktree = ../../../../../a/b\n')
+    expect(modeOf(root, '.git/modules/a/modules/b/hooks/commit-msg')).toBe(0o755)
+  })
+  test('a whole submodule git directory the job makes (config, hooks, nested) is removed, down to the empty directories', () => {
+    const root = repo(); const base = takeBaseline(root)
+    put(root, '.git/modules/evil/config', '[core]\n\tfsmonitor = evil\n'); put(root, '.git/modules/evil/hooks/pre-commit', '#!/bin/sh\nevil\n', 0o755)
+    put(root, '.git/modules/evil/modules/inner/config', 'x'); put(root, '.git/modules/evil/info/exclude', 'x')
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git/modules/evil/config', '.git/modules/evil/hooks/pre-commit', '.git/modules/evil/info/exclude', '.git/modules/evil/modules/inner/config'], failed: [] })
+    expect(existsSync(join(root, '.git/modules/evil'))).toBe(false)
+  })
+  test('a submodule git directory swapped for a link to a directory in the folder: the link goes, the directory returns with its watched files, the target is not touched', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    put(root, '.x/config', '[core]\n\tfsmonitor = evil\n')
+    rmSync(join(root, '.git/modules/a'), { recursive: true }); symlinkSync(join(root, '.x'), join(root, '.git/modules/a'))
+    const out = restoreBaseline(root, base)
+    expect(out.failed).toEqual([])
+    expect(out.changed).toEqual(['.git/modules/a', ...MODULE_FILES])
+    expect(lstatSync(join(root, '.git/modules/a')).isDirectory()).toBe(true)
+    expect(read(root, '.git/modules/a/config')).toBe('[core]\n\tworktree = ../../../a\n')
+    expect(readdirSync(join(root, '.x'))).toEqual(['config'])
+  })
+  test('.git/modules turned into a link, or made new by the job, is put right', () => {
+    const root = repo(); const base = takeBaseline(root); const outside = dirOf()
+    symlinkSync(outside, join(root, '.git/modules'))
+    expect(restoreBaseline(root, base)).toEqual({ changed: ['.git/modules'], failed: [] })
+    expect(existsSync(join(root, '.git/modules'))).toBe(false)
+    expect(readdirSync(outside)).toEqual([])
+  })
+  test('what git does in a submodule while a job works (HEAD, index, refs, objects) is not a change, and is not touched', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    put(root, '.git/modules/a/HEAD', 'ref: refs/heads/other\n'); put(root, '.git/modules/a/index', 'j'); put(root, '.git/modules/a/refs/heads/new', 'def\n')
+    put(root, '.git/modules/a/objects/cd/ef01', 'new object'); rmSync(join(root, '.git/modules/a/objects/ab'), { recursive: true })
+    expect(restoreBaseline(root, base)).toEqual({ changed: [], failed: [] })
+    expect(read(root, '.git/modules/a/HEAD')).toBe('ref: refs/heads/other\n')
+    expect(read(root, '.git/modules/a/objects/cd/ef01')).toBe('new object')
+  })
+  test('an untouched repository with submodules reports nothing and writes nothing', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    const before = statSync(join(root, '.git/modules/a/config')).mtimeMs
+    expect(restoreBaseline(root, base)).toEqual({ changed: [], failed: [] })
+    expect(statSync(join(root, '.git/modules/a/config')).mtimeMs).toBe(before)
+  })
+  test('a submodule hook made immutable and a submodule git directory made unreadable are undone, like anywhere else', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    put(root, '.git/modules/a/hooks/pre-commit', '#!/bin/sh\nevil\n', 0o755); lock(join(root, '.git/modules/a/hooks/pre-commit')); lock(join(root, '.git/modules/a/hooks'))
+    const mode = dirModeOf(root, '.git/modules/a/modules/b')
+    appendFileSync(join(root, '.git/modules/a/modules/b/config'), 'x'); chmodSync(join(root, '.git/modules/a/modules/b'), 0o000)
+    const out = restoreBaseline(root, base)
+    expect(out.failed).toEqual([])
+    expect(out.changed).toEqual(['.git/modules/a/hooks/pre-commit', '.git/modules/a/modules/b', '.git/modules/a/modules/b/config'])
+    expect(dirModeOf(root, '.git/modules/a/modules/b')).toBe(mode)
+    expect(readdirSync(join(root, '.git/modules/a/hooks'))).toEqual(['pre-commit.sample'])
+    expect(read(root, '.git/modules/a/modules/b/config')).toBe('[core]\n\tworktree = ../../../../../a/b\n')
+  })
+  test('the baseline as data covers them: a copy read back from JSON restores a planted commondir and a submodule\'s edited config', () => {
+    const root = withModules(); put(root, '.git/commondir', 'x'); const base = takeBaseline(root)
+    const copy = parseBaseline(JSON.parse(JSON.stringify(serializeBaseline(base))), root)
+    rmSync(join(root, '.git/commondir')); appendFileSync(join(root, '.git/modules/a/config'), 'x')
+    expect(restoreBaseline(root, copy)).toEqual({ changed: ['.git/commondir', '.git/modules/a/config'], failed: [] })
+    expect(read(root, '.git/commondir')).toBe('x')
+  })
+})
+
+describe('restoreBaseline: a .git that turns from a directory into a file or a link is a change, and is restored (Ruling S6)', () => {
+  const GIT_FILES = ['.git/config', '.git/hooks/commit-msg', '.git/hooks/pre-commit.sample', '.git/info/exclude']
+  test('a gitfile where .git was: it goes, .git is a directory again, and every watched file in it is back with its mode', () => {
+    const root = repo(); const base = takeBaseline(root)
+    rmSync(join(root, '.git'), { recursive: true }); writeFileSync(join(root, '.git'), 'gitdir: .x\n'); put(root, '.x/config', '[core]\n\tfsmonitor = evil\n')
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git', ...GIT_FILES], failed: [] })
+    expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
+    expect(read(root, '.git/config')).toBe(CONFIG)
+    expect(modeOf(root, '.git/hooks/commit-msg')).toBe(0o755)
+    expect(read(root, '.x/config')).toBe('[core]\n\tfsmonitor = evil\n') // outside the watched set: not touched
+  })
+  test('a link to a directory outside the folder where .git was: the link goes, nothing is written through it, and .git is a directory again', () => {
+    const root = repo(); const base = takeBaseline(root); const outside = dirOf(); put(outside, 'config', 'theirs')
+    rmSync(join(root, '.git'), { recursive: true }); symlinkSync(outside, join(root, '.git'))
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git', ...GIT_FILES], failed: [] })
+    expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
+    expect(read(root, '.git/config')).toBe(CONFIG)
+    expect(readdirSync(outside)).toEqual(['config'])
+    expect(read(outside, 'config')).toBe('theirs')
+  })
+  test('the real git directory moved aside and a link put in its place: the link goes, and the moved directory is left where the job put it', () => {
+    const root = repo(); const base = takeBaseline(root)
+    renameSync(join(root, '.git'), join(root, '.real')); symlinkSync('.real', join(root, '.git'))
+    appendFileSync(join(root, '.real/config'), '[core]\n\tfsmonitor = evil\n')
+    const out = restoreBaseline(root, base)
+    expect(out).toEqual({ changed: ['.git', ...GIT_FILES], failed: [] })
+    expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
+    expect(read(root, '.git/config')).toBe(CONFIG)
+    expect(read(root, '.real/config')).toBe(`${CONFIG}[core]\n\tfsmonitor = evil\n`)
+  })
+  test('.git gets its baseline mode back, not the mode it was made with', () => {
+    const root = repo(); chmodSync(join(root, '.git'), 0o750); const base = takeBaseline(root)
+    chmodSync(join(root, '.git'), 0o755); rmSync(join(root, '.git'), { recursive: true }); writeFileSync(join(root, '.git'), 'gitdir: .x\n')
+    restoreBaseline(root, base)
+    expect(dirModeOf(root, '.git')).toBe(0o750)
+  })
+  test('a gitfile that is immutable, and a folder that is, are cleared and replaced', () => {
+    const root = repo(); const base = takeBaseline(root)
+    rmSync(join(root, '.git'), { recursive: true }); writeFileSync(join(root, '.git'), 'gitdir: .x\n'); lock(join(root, '.git')); lock(root)
+    const out = restoreBaseline(root, base)
+    expect(out.failed).toEqual([])
+    expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
+    expect(flagsOf(root)).toBe('-')
+  })
+  test('the same from a baseline read back from JSON (the recovery of a job whose runner died)', () => {
+    const root = withModules(); const base = takeBaseline(root)
+    const copy = parseBaseline(JSON.parse(JSON.stringify(serializeBaseline(base))), root)
+    rmSync(join(root, '.git'), { recursive: true }); writeFileSync(join(root, '.git'), 'gitdir: .x\n')
+    const out = restoreBaseline(root, copy)
+    expect(out.failed).toEqual([])
+    expect(out.changed).toEqual(['.git', ...GIT_FILES, ...MODULE_FILES].sort())
+    expect(read(root, '.git/modules/a/modules/b/config')).toBe('[core]\n\tworktree = ../../../../../a/b\n')
+  })
+  test('a .git that is gone altogether is still not rebuilt: reported as not restored, and nothing is made', () => {
+    const root = repo(); const base = takeBaseline(root)
+    rmSync(join(root, '.git'), { recursive: true })
+    const out = restoreBaseline(root, base)
+    expect(out.failed).toEqual(['.git'])
+    expect(out.changed).toEqual(GIT_FILES)
+    expect(existsSync(join(root, '.git'))).toBe(false)
+  })
+  test('a .git that is a file in the baseline too is compared like any watched file (an unadmitted case, but nothing may throw)', () => {
+    const root = dirOf(); writeFileSync(join(root, '.git'), 'gitdir: .y\n')
+    expect(restoreBaseline(root, takeBaseline(root))).toEqual({ changed: [], failed: [] })
   })
 })

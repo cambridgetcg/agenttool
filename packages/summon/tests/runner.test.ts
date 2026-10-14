@@ -771,7 +771,7 @@ describe('the job\'s temp directory (design section 3, "Temp files")', () => {
 
 describe('the fingerprint of the git files that can run code (design section 3, "Fingerprint")', () => {
   /** An edit-folder repository with every watched file present (the attributes file only if asked), admitted as an edit job. */
-  function watched(opts: { al?: string; attributes?: boolean; access?: 'edit' | 'build'; timeout_s?: number } = {}) {
+  function watched(opts: { al?: string; attributes?: boolean; access?: 'edit' | 'build'; timeout_s?: number; modules?: boolean } = {}) {
     const access = opts.access ?? 'edit'
     const h = repoHome(opts.al ?? (access === 'edit' ? EDIT_ALLOWLIST : BUILD_ALLOWLIST)); const root = join(h, 'Projects/x')
     writeFileSync(join(root, '.git/config'), '[core]\n\tbare = false\n')
@@ -779,20 +779,32 @@ describe('the fingerprint of the git files that can run code (design section 3, 
     chmodSync(join(root, '.git/hooks/pre-commit.sample'), 0o755)
     writeFileSync(join(root, '.gitmodules'), '[submodule "a"]\n\tpath = a\n')
     if (opts.attributes !== false) writeFileSync(join(root, '.gitattributes'), '*.png binary\n')
+    if (opts.modules) { // an absorbed submodule: its git directory under .git/modules, with HEAD and objects that are not watched
+      mkdirSync(join(root, '.git/modules/a/hooks'), { recursive: true }); mkdirSync(join(root, '.git/modules/a/objects'), { recursive: true })
+      writeFileSync(join(root, '.git/modules/a/config'), '[core]\n\tworktree = ../../../a\n'); writeFileSync(join(root, '.git/modules/a/HEAD'), 'ref: refs/heads/main\n')
+      writeFileSync(join(root, '.git/modules/a/hooks/pre-commit.sample'), '#!/bin/sh\nexit 0\n', { mode: 0o755 }); chmodSync(join(root, '.git/modules/a/hooks/pre-commit.sample'), 0o755)
+    }
     const req = admit(h, { access, ...(opts.timeout_s ? { timeout_s: opts.timeout_s } : {}) })
     return { h, root, id: req.id, before: listing(root) }
   }
   /** What the watched files hold, by the name they are stored under: mode and contents. */
   function listing(root: string) {
     const out: Record<string, string> = {}
+    const CONFIGS = new Set(['config', 'config.worktree', 'commondir'])
+    /** Design section 3 with Ruling S6: in .git, the three config files, hooks/** and info/**; under .git/modules/** the same, at any depth. */
+    const watchedInGit = (parts: string[]): boolean => {
+      const [first, ...rest] = parts
+      if (first === 'hooks' || first === 'info') return true
+      if (CONFIGS.has(first!)) return rest.length === 0
+      return first === 'modules' && rest.some((p, i) => (CONFIGS.has(p) && i === rest.length - 1) || ((p === 'hooks' || p === 'info') && i < rest.length - 1))
+    }
     const walk = (rel: string) => {
       for (const n of readdirSync(join(root, rel))) {
         const r = rel ? `${rel}/${n}` : n
         const lower = r.toLowerCase(); const st = lstatSync(join(root, r))
-        const inGit = lower === '.git' || lower.startsWith('.git/')
-        if (st.isDirectory()) { if (lower === '.git' || lower === '.git/hooks' || lower === '.git/info' || /^\.git\/(hooks|info)\//.test(lower)) walk(r); continue }
-        if (inGit && !(lower === '.git/config' || lower.startsWith('.git/hooks/') || lower.startsWith('.git/info/'))) continue
-        if (!inGit && lower !== '.gitattributes' && lower !== '.gitmodules') continue
+        const parts = lower.split('/'); const inGit = parts[0] === '.git'
+        if (st.isDirectory()) { if (inGit && (parts.length === 1 || ['hooks', 'info', 'modules'].includes(parts[1]!))) walk(r); continue }
+        if (inGit ? !watchedInGit(parts.slice(1)) : lower !== '.gitattributes' && lower !== '.gitmodules') continue
         out[r] = `${(st.mode & 0o777).toString(8)} ${st.isSymbolicLink() ? 'link' : readFileSync(join(root, r), 'utf8')}`
       }
     }
@@ -876,6 +888,37 @@ describe('the fingerprint of the git files that can run code (design section 3, 
     await runOnce(rdeps(h))
     expect(result(h, id).result_text.split('\n')).toEqual(['tampered: .git/hooks/a\\x0ab', PROMPT])
   })
+  // Ruling S6: git's redirecting files and the submodules' git directories are watched, and a .git that stops being a directory is put right.
+  for (const [what, tampered, modules] of [
+    ['commondir', '.git/commondir', false], ['worktree-config', '.git/config.worktree', false], ['module', '.git/modules/evil/config, .git/modules/evil/hooks/pre-commit', true],
+    ['module-config', '.git/modules/a/config', true],
+  ] as const) {
+    test(`a job that writes ${what} is put back: the watched files are as they were, the result starts "tampered: ${tampered}", the ledger counts it`, async () => {
+      const { h, root, id, before } = watched({ modules })
+      fake.setMode(`tamper:${what}`)
+      await runOnce(rdeps(h))
+      expect(listing(root)).toEqual(withExclude(before))
+      expect(existsSync(join(root, '.git/modules/evil'))).toBe(false)
+      expect(result(h, id)).toMatchObject({ status: 'completed', result_text: `tampered: ${tampered}\n${PROMPT}` })
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: `tampered: ${tampered.split(', ').length} path(s)` })])
+      if (modules) expect(readFileSync(join(root, '.git/modules/a/HEAD'), 'utf8')).toBe('ref: refs/heads/main\n') // what is not watched is left as it is
+    })
+  }
+  for (const [what, setup] of [['gitfile', 'a gitfile'], ['git-link', 'a link to the real git directory moved aside']] as const) {
+    test(`a job that replaces .git by ${setup} has the directory back with every watched file, said "tampered: .git, ...", and nothing is "not restored"`, async () => {
+      const { h, root, id, before } = watched({ modules: true })
+      fake.setMode(`tamper:${what}`)
+      await runOnce(rdeps(h))
+      expect(lstatSync(join(root, '.git')).isDirectory()).toBe(true)
+      expect(listing(root)).toEqual(withExclude(before))
+      const lines = result(h, id).result_text.split('\n')
+      expect(lines[0]).toBe('tampered: .git, .git/config, .git/hooks/pre-commit.sample, .git/info/exclude, .git/modules/a/config, .git/modules/a/hooks/pre-commit.sample')
+      expect(lines.slice(1)).toEqual([PROMPT])
+      expect(readState(summonPaths(h), id)?.status).toBe('completed')
+      expect(tamperLines(h, id)).toEqual([expect.objectContaining({ detail: 'tampered: 6 path(s)' })])
+      expect(existsSync(join(root, what === 'gitfile' ? '.x' : '.real'))).toBe(true) // outside the watched set: left where the job put it
+    })
+  }
   test('a restore that really cannot be done (a special file in the baseline that the job removed) is said so on the second line, and counted in the ledger', async () => {
     const { h, root, id, before } = watched()
     expect(Bun.spawnSync(['/usr/bin/mkfifo', join(root, '.git/hooks/pre-push')]).exitCode).toBe(0)

@@ -112,12 +112,13 @@ Review jobs have no `Bash` tool and get no `--settings`, as today.
 **Temp files.** The sandbox allows no temp root outside the folder, so each edit or build job gets its own. Before the job starts, the runner creates `<cwdReal>/.summon-tmp/<job id>` (mode 0700) and sets it as `TMPDIR`. It also adds the line `/.summon-tmp/` to `<cwdReal>/.git/info/exclude`, creating `.git/info` if needed and doing nothing if the line is already there, so git never sees the temp files. That line stays; it is written before the fingerprint baseline is taken. After the job, whether it ended normally, failed or timed out, and after the process sweep, the runner removes the job's directory, and removes `.summon-tmp` too if it is then empty.
 
 **Fingerprint.** Before each edit or build job (after the exclude line) and after it (after the sweep), the runner fingerprints these files, with the sha256 of each:
-- `.git/config`;
+- `.git/config`, `.git/config.worktree` and `.git/commondir` (git takes config, hooks and info from the directory a `commondir` names, and reads `config.worktree` when `extensions.worktreeConfig` is on; admission already refuses a `.git/commondir` that is there at the start, so this catches one a job writes);
 - every file under `.git/hooks/`;
 - every file under `.git/info/`;
+- under `.git/modules/` (the git directories of absorbed submodules, which `git status` in the superproject enters), at any depth: every `config`, `config.worktree` and `commondir`, every file under `hooks/` and `info/`, and any link, whatever its name;
 - `.gitattributes` and `.gitmodules` in the folder root.
 
-The names are found by a case-insensitive listing of the folder root, of `.git/` and of those subdirectories, so every case spelling (`.Git`, `.gIt`, `.GitAttributes`, `Config`) is covered on the Mac's case-insensitive volume. The baseline keeps each file's contents, outside the folder, in the runner's private state for the job. After the job, any file whose hash differs from the baseline, that has appeared, or that has vanished is restored from the baseline: contents and mode rewritten, new files removed, vanished files recreated. The first line of the job's result file then says `tampered: <paths>`. A ledger line records it too, with a fixed word and the number of paths; the paths themselves stay in the 0600 result file, as every harness-derived string does. The job's status is not changed by the restore.
+The names are found by a case-insensitive listing of the folder root, of `.git/`, of `.git/modules/**` and of the hooks and info subdirectories, so every case spelling (`.Git`, `.gIt`, `.GitAttributes`, `Config`) is covered on the Mac's case-insensitive volume. The baseline keeps each file's contents, outside the folder, in the runner's private state for the job. After the job, any file whose hash differs from the baseline, that has appeared, or that has vanished is restored from the baseline: contents and mode rewritten, new files removed, vanished files recreated. A `.git` that was a directory and has become a file or a link counts as changed: it is removed without being followed and made a directory again, holding the watched files (the rest of the repository is not watched and is not rebuilt). A `.git` that is gone altogether is reported as not restored, and nothing is made. The first line of the job's result file then says `tampered: <paths>`. A ledger line records it too, with a fixed word and the number of paths; the paths themselves stay in the 0600 result file, as every harness-derived string does. The job's status is not changed by the restore.
 
 **Process sweep.** The runner starts claude for an edit or build job in its own process group. While the job runs, the runner records the job's process tree every 2 s: every process whose parent chain reaches the claude process (`/bin/ps -A -o pid=,ppid=,pgid=,lstart=`, walked in memory), keyed by pid and start time so a reused pid is never mistaken for a job process. When the job ends, normally or by timeout, the runner:
 1. kills the whole process group;
@@ -189,8 +190,8 @@ The Air's `~/.local/bin/summon` keeps pointing at `feat/summon-phase0`. That bra
 **runner:**
 - admission re-run at job start revokes a queued build job, and a queued job whose folder has stopped being a repository root;
 - the temp dir: created 0700, `TMPDIR` points at it, the exclude line is written once and before the baseline, and the dir is gone after a normal end, a failure and a timeout;
-- the fingerprint: a fake harness that edits `.git/config`, adds a hook, edits `.gitmodules`, adds `.GitAttributes` or deletes `.git/info/exclude` is restored each time, the result file starts with `tampered: <paths>` and a ledger line records it; an untouched job reports nothing. The case-insensitive listing is injected, and one test also runs on the real temp directory;
-- the process sweep: a fake harness leaves (1) a child in the group, (2) a child that calls `setsid` and (3) a child reparented to launchd, and all three are gone afterwards, after a normal end and after a timeout. A fourth child that clears its env is not swept; the test documents that residual;
+- the fingerprint: a fake harness that edits `.git/config`, adds a hook, edits `.gitmodules`, adds `.GitAttributes`, deletes `.git/info/exclude`, writes `.git/commondir` or `.git/config.worktree`, edits a submodule's git directory under `.git/modules/`, or replaces `.git` by a gitfile or a link is restored each time, the result file starts with `tampered: <paths>` and a ledger line records it; an untouched job reports nothing. The case-insensitive listing is injected, and one test also runs on the real temp directory;
+- the process sweep: a fake harness leaves (1) a child in the group, (2) a child that calls `setsid` and (3) a child reparented to launchd, and all three are gone afterwards, after a normal end and after a timeout. A fourth child that leaves the group and is reparented to launchd before any snapshot has seen it is not swept (the residual of §3 and §7); the test documents it;
 - every place that switches on `Access`: status, ledger and `describeCommand`.
 
 **cli:** `--build`, and the three access flags are mutually exclusive.
@@ -216,7 +217,7 @@ The Air's `~/.local/bin/summon` keeps pointing at `feat/summon-phase0`. That bra
 - The collab-bridge suite's `/private/tmp` sockets. That suite will not run as a Nuance build job in Phase 0.5; ordinary suites that respect `TMPDIR` will. The cost if this is wrong: Nuance build jobs serve fewer projects until Phase 1.
 
 **Residual risks, accepted in Phase 0.5:**
-- A detached child that cleared its env is not found by the sweep. It stays sandboxed.
+- A process that detaches and is reparented to launchd within one 2 s interval is not found by the sweep. It stays sandboxed.
 - A legitimate edit to `.git/config`, a hook, `.git/info/**`, `.gitattributes` or `.gitmodules` by a job is reverted and reported as `tampered`. Phase 0.5 prefers safety to breadth.
 - `.gitattributes` files below the folder root are not fingerprinted. The filter and textconv drivers they name are defined in config files, and the config files are.
 
@@ -285,7 +286,7 @@ R1 to R18 are the re-review's numbered findings, in its order; N1 to N5 are its 
 - N2. `sandbox_write` can open the escapes finding 2 closed. Settled by (b): nothing outside the folder is writable, and the refusals of `/opt/homebrew`, `/usr/local` and allowlisted folders are kept in §7 for Phase 1.
 - N3. "Edit job in a build folder" is undefined. Settled by (a) and (c): the term is gone because every edit job is sandboxed, and an edit entry nested inside a build repo is a parse error, with a realpath re-check at admission.
 - N4. `allowAllUnixSockets` is tied to `local_binding`. Settled by (b): both are false in the settings JSON, and §7 returns them as separate opt-ins with a path list.
-- N5. The sweep cannot work as worded. Settled by (e): the sweep goes by the `SUMMON_JOB_ID` marker in the process environment, which survives reparenting to launchd and `setsid`; a detached child that cleared its env stays sandboxed and is accepted as a residual (§7).
+- N5. The sweep cannot work as worded. Settled by (e) and Ruling S3: the sweep is the process group plus 2 s snapshots of the job's process tree, keyed by pid and start time (the `SUMMON_JOB_ID` marker this entry first named cannot be read on this macOS, §10); a process that detaches and is reparented to launchd within one 2 s interval is not found, stays sandboxed, and is accepted as a residual (§7).
 
 ## 10. Second re-review (smn_01a1374e…, Opus xhigh)
 
