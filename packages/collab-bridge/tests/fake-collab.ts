@@ -9,6 +9,7 @@ import type { ToolDef } from '../src/link/messages.ts'
 export type FakeTool =
   | { kind: 'reply' } | { kind: 'error' } | { kind: 'delay'; ms: number } | { kind: 'stall' }
   | { kind: 'die' } | { kind: 'garbage' } | { kind: 'big'; bytes: number }
+  | { kind: 'wait_file'; file: string } // answers `reply` once <dist>/<file> exists (Task 51)
 export interface FakeScript {
   startup?: { kind: 'ok' } | { kind: 'fail'; line: string; code: number } | { kind: 'hang' }
   tools?: Record<string, FakeTool>
@@ -24,7 +25,7 @@ export const FAKE_TOOLS: ToolDef[] = [
 ]
 
 const PROGRAM = `// fake Collab MCP bin (tests/fake-collab.ts)
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 const here = import.meta.dir
 const script = JSON.parse(readFileSync(join(here, 'fake-collab.json'), 'utf8'))
@@ -54,6 +55,7 @@ function onMessage(m) {
     else if (t.kind === 'die') process.exit(9)
     else if (t.kind === 'garbage') process.stdout.write('this is not json\\n')
     else if (t.kind === 'big') out({ jsonrpc: '2.0', id: m.id, result: { content: [{ type: 'text', text: 'x'.repeat(t.bytes) }] } })
+    else if (t.kind === 'wait_file') { const iv = setInterval(() => { if (existsSync(join(here, t.file))) { clearInterval(iv); out({ jsonrpc: '2.0', id: m.id, result: ok }) } }, 10); iv.unref() }
   }
 }
 let buf = ''
