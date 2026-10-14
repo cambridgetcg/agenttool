@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { writeDevice, type DeviceFile } from '../src/air/devices.ts'
+import { readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
 import { sourceBuild, type BuildInfo } from '../src/air/hub.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
@@ -125,7 +125,7 @@ interface Cli { deps: AirCliDeps; out: string[]; err: string[]; asked: string[];
 
 /** The CLI over a temp home with the pinned bundle and a signed launcher in place, as Task 66 leaves them, and every side effect recorded. */
 function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | null; answer?: string | null; ask?: AirCliDeps['ask'];
-  build?: BuildInfo | null; runHub?: () => Promise<number>; launchctl?: { bootout?: number; print?: number }; now?: () => Date } = {}): Cli {
+  build?: BuildInfo | null; runHub?: () => Promise<number>; launchctl?: { bootout?: number; print?: number }; now?: () => Date; unpair?: (device: string) => Promise<number> } = {}): Cli {
   const home = temp('cb-cli-')
   const paths = airPaths(home)
   const stubs = join(home, 'stubs')
@@ -143,6 +143,7 @@ function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | nul
     launchctl: launchctl.bin, codesign: '/usr/bin/codesign', bun: BUN, hubSha: SHA,
     build: o.build === undefined ? sourceBuild(COLLAB_DIST) : o.build, collabDist: COLLAB_DIST,
     runHub: o.runHub ?? (async () => 0), out: (l) => { out.push(l) }, err: (l) => { err.push(l) }, now: o.now ?? (() => NOW),
+    unpair: o.unpair ?? (async () => { throw new Error('unpair must not run in this test') }),
   }
   return { deps, out, err, asked, launchctl, paths, home }
 }
@@ -672,4 +673,48 @@ describe('the bin: run and hub run from source', () => {
       expect(readLedger(paths.ledger).filter((e) => e.event === 'hub_stop').map((e) => e.outcome)).toEqual(['ok'])
     }
   }, 60_000)
+})
+
+describe('unpair', () => {
+  test('unpair asks y/N and runs unpairDevice', async () => {
+    const ran: string[] = []
+    const record = async (device: string) => { ran.push(device); return 0 }
+    const c = cli({ unpair: record })
+    expect(await runAirCli(['unpair', 'nuance'], c.deps)).toBe(0)
+    expect(c.asked).toEqual(['Unpair nuance? Its link, seat key and remote sessions end now. [y/N] '])
+    expect(ran).toEqual(['nuance'])
+    // the same refusals and question as hub off, and a device name or nothing
+    for (const o of [{ env: { CLAUDECODE: '1' } }, { uid: 501 }, { answer: 'n' }, { answer: null }]) {
+      const r = cli({ ...o, unpair: record })
+      expect(await runAirCli(['unpair', 'nuance'], r.deps)).toBe(1)
+    }
+    for (const argv of [['unpair'], ['unpair', '../nuance'], ['unpair', 'Nuance'], ['unpair', 'nuance', 'zerone']]) {
+      expect([argv, await runAirCli(argv, c.deps)]).toEqual([argv, 2])
+    }
+    expect(ran).toEqual(['nuance'])
+
+    // Through the bin, the live deps run the real unpairDevice: a ps stub with no harness above the CLI, Yu's y in the
+    // answers file, and a device that never bound a workspace, so no Collab child starts and nothing is dialled.
+    const home = temp('cb-unpair-bin-')
+    pairedDevice(airPaths(home))
+    const stubs = join(home, 'stubs')
+    mkdirSync(stubs)
+    writeFileSync(join(stubs, 'ps'), "#!/bin/bash\nprintf '%5d %5d %s     %s\\n' \"$PPID\" 1 'Tue Oct 13 11:33:11 2026' 'bun'\n")
+    chmodSync(join(stubs, 'ps'), 0o755)
+    writeFileSync(join(home, 'answers'), 'y\n')
+    const r = Bun.spawnSync([process.execPath, '--no-env-file', '--config=/dev/null', join(PKG, 'bin', 'collab-bridge.ts'), 'unpair', 'nuance'],
+      { cwd: '/', env: testEnv(home, { COLLAB_BRIDGE_BIN_PS: join(stubs, 'ps'), COLLAB_BRIDGE_TTY: join(home, 'answers') }) })
+    const lines = r.stdout.toString().split('\n').filter(Boolean)
+    if (process.getuid!() === 502) {
+      expect(r.exitCode).toBe(0)
+      expect(lines[0]).toStartWith('1. nuance is marked unpaired on the Air')
+      expect(lines.at(-1)).toBe('✓ nuance is unpaired on the Air.')
+      expect(readDevice(airPaths(home).deviceFile('nuance'))!.state).toBe('unpaired')
+    } else {
+      // the hub's verbs belong to uid 502 alone (P10), so on another account the bin refuses before anything changes
+      expect(r.exitCode).toBe(1)
+      expect(r.stderr.toString()).toContain(`✗ refused: this is uid ${process.getuid!()}`)
+      expect(readDevice(airPaths(home).deviceFile('nuance'))!.state).toBe('paired')
+    }
+  }, 20_000)
 })

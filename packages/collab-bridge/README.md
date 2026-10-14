@@ -117,3 +117,61 @@ which the running hub applies at its next reload (or its next start), refused wh
 ## Limits
 
 - **Shared Air clone.** A concurrent Air-side `git fetch` in the same clone during a failed bridge fetch may fail, and its bytes count toward the bridge's daily budget; it fails closed and a re-run succeeds.
+
+## Unpair a device
+
+`collab-bridge unpair <device>` is Yu's: the same refusals and y/N question as `hub off`
+(`Unpair nuance? Its link, seat key and remote sessions end now. [y/N]`). It works with the device away, because
+nothing in it dials the device (spec §9.10). In order:
+
+1. The device file goes `unpaired` and loses its seat key; a running hub closes the link, stops that device's
+   children and refuses its attaches at its next reload.
+2. The device's pending reviews are listed, and none is decided: an Air session reviews each, accepting only while the
+   mirror is still at the completed commit, else requesting changes.
+3. Every remote session of the device (each lineage's, and each active session whose role starts
+   `remote(<device>/<user>;` in that device's mirror) is ended with
+   `agenttool-collab-host end --session-file <credential> --reason "device unpaired" --release-leases --db <shared journal>`.
+   A session whose credential file is gone cannot be ended from the Air; it is reported, never skipped.
+4. The hub ledger is archived as `~/.local/state/collab-bridge/ledger.<UTC stamp>.jsonl` (0600), and the device's
+   `Host collab-<device>` block and its `collab_<device>_ed25519` key pair are removed from `~/.ssh/collab-bridge/`.
+5. Revocation stays incomplete until the ` collab-air` line is removed on the device, or the key expires. On the
+   device, in Terminal:
+
+```sh
+sed -i '' '/ collab-air$/d' ~/.ssh/authorized_keys
+```
+
+It exits 0 when every step completed, and 1 when it listed items for Ai (a session it could not end, a workspace it
+could not read).
+
+## Rollback on the Air
+
+Each step stands alone, and none needs sudo (spec §10.6). Yu runs the first two; the rest is Ai's.
+
+```sh
+collab-bridge unpair nuance
+collab-bridge hub off
+cd /Users/yuai/Projects/collab-trial && claude mcp remove -s local agenttool-collab
+mkdir -p -m 700 /Users/yuai/.cache/agenttool/collab-bridge-archive
+cp -p /Users/yuai/.local/state/collab-bridge/ledger*.jsonl /Users/yuai/.local/state/collab-bridge/hub.log /Users/yuai/.cache/agenttool/collab-bridge-archive/
+rm -rf /Users/yuai/.local/state/collab-bridge
+rm -rf /Users/yuai/.ssh/collab-bridge /Users/yuai/.config/collab-bridge /Users/yuai/.local/share/collab-bridge
+rm -f /Users/yuai/.local/bin/collab-bridge
+rm -rf /Users/yuai/Applications/CollabBridgeHub.app /Users/yuai/collab-bridge-*-bundle-*
+```
+
+The mirrors go last, and only after every session that used them has ended and their pending reviews are resolved.
+Keeping the bridge refs first is optional (the `bundle create` line):
+
+```sh
+C=/Users/yuai/Projects/collab-trial
+for m in $(git -C "$C" worktree list --porcelain | sed -n 's#^worktree \(/Users/yuai/.local/share/agenttool/collab-shared/mirrors/.*\)#\1#p'); do
+  git -C "$C" worktree unlock "$m"; git -C "$C" worktree remove "$m"
+done
+git -C "$C" bundle create /Users/yuai/.cache/agenttool/collab-bridge-archive/collab-refs.bundle --glob=refs/collab
+git -C "$C" for-each-ref --format='delete %(refname)' refs/collab/ | git -C "$C" update-ref --stdin
+git -C "$C" worktree prune
+```
+
+The mirrors' root paths stay in the append-only shared journal; `~/.local/share/agenttool/collab-shared/` can be
+archived whole. The Air's private journal is never touched.

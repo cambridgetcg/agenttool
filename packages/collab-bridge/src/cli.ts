@@ -1,9 +1,10 @@
 // The Air's verbs (C14). `hub on` and `hub off` are Yu's: they refuse inside any agent harness and read his y from
 // /dev/tty, so only Yu turns the hub on or off (spec §10.3 step 7, §10.4). `hub doctor --ack-host-key` is his too: it
-// acknowledges a security warning (§5.5). `hub status`, `hub doctor` and `version` only read. The bare `run` is
-// launchd's verb (the plist's ProgramArguments end `…/hub.js`, `run`: C7, §10.4) and `hub run` is the Terminal fallback
-// (C14, §10.4); both are refused inside any agent harness and for any uid but 502, with no question, so no agent starts
-// a hub that serves seats without Yu. `hub unpark` is Ai's repair step after a seat recovery (§9.6 item 5, P54).
+// acknowledges a security warning (§5.5). So is `unpair <device>`, which revokes a device (§9.10, §10.6). `hub status`,
+// `hub doctor` and `version` only read. The bare `run` is launchd's verb (the plist's ProgramArguments end `…/hub.js`,
+// `run`: C7, §10.4) and `hub run` is the Terminal fallback (C14, §10.4); both are refused inside any agent harness and
+// for any uid but 502, with no question, so no agent starts a hub that serves seats without Yu. `hub unpark` is Ai's
+// repair step after a seat recovery (§9.6 item 5, P54).
 // Every side effect comes through AirCliDeps; bin/collab-bridge.ts is the only place that builds the live ones.
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
@@ -31,14 +32,18 @@ export interface AirCliDeps {
   paths: AirPaths; env: Env; selfPid: number; uid(): number; table(): ProcTable | null; ask(prompt: string): string | null
   launchctl: string; codesign: string; bun: string; hubSha: string | null; build: BuildInfo | null; collabDist: string
   runHub(): Promise<number>; out(line: string): void; err(line: string): void; now(): Date
+  unpair(device: string): Promise<number>
 }
 
 export const USAGE: readonly string[] = [
   'usage: collab-bridge hub on | hub off | hub status [--json] | hub doctor [--ack-host-key] | hub run | hub unpark <lineage>',
+  '       collab-bridge unpair <device>',
   '       collab-bridge version | run (launchd only)',
 ]
 
 const SHA_RE = /^[0-9a-f]{64}$/
+/** Summon's device names, the ones the device files carry (Task 47). */
+const DEVICE_RE = /^[a-z][a-z0-9-]{0,31}$/
 /** Per-run launchd entries: apps Yu opens and one-shot jobs come and go between the baseline and any later check. */
 const PER_RUN: readonly RegExp[] = [/^application\./, /^\[0x/, /^com\.apple\.xpc\.launchd\.oneshot\./]
 const REPLY_MAX_BYTES = 256
@@ -408,6 +413,12 @@ function hubUnpark(deps: AirCliDeps, lineage: string): number {
   return 0
 }
 
+/** §9.10: Yu's verb, behind the same refusals and question as `hub off`; the work is unpairDevice (Task 54). */
+async function unpair(deps: AirCliDeps, device: string): Promise<number> {
+  if (!yuConfirms(deps, `Unpair ${device}? Its link, seat key and remote sessions end now. [y/N] `)) return 1
+  return deps.unpair(device)
+}
+
 /**
  * `run` (launchd's) and `hub run` (the Terminal fallback): the hub starts only where `hub on` could be answered, so an
  * agent cannot start one that dials devices and serves seats without Yu. No question, since launchd has no tty, and
@@ -435,6 +446,7 @@ export async function runAirCli(argv: string[], deps: AirCliDeps): Promise<numbe
   }
   // launchd's verb: the plist's ProgramArguments end '…/hub.js', 'run' (spec C7, §10.4)
   if (verb === 'run' && sub === undefined) return startHub(deps)
+  if (verb === 'unpair') return sub !== undefined && rest.length === 0 && DEVICE_RE.test(sub) ? unpair(deps, sub) : usage(deps)
   if (verb !== 'hub') return usage(deps)
   if (sub === 'on' && rest.length === 0) return hubOn(deps)
   if (sub === 'off' && rest.length === 0) return hubOff(deps)

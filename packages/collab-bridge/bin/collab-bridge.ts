@@ -4,6 +4,7 @@
 // bun --no-env-file --config=/dev/null from cwd / (R39). Exit codes: 0 done; 1 refused or failed; 2 a usage error.
 import { basename } from 'node:path'
 import { defaultHubDeps, embeddedBuild, runHub } from '../src/air/hub.ts'
+import { liveUnpairDeps, unpairDevice } from '../src/air/unpair.ts'
 import { runAirCli, ttyAsk, type AirCliDeps } from '../src/cli.ts'
 import { getuid } from '../src/native.ts'
 import { airPaths, collabDist, homeOf } from '../src/paths.ts'
@@ -18,6 +19,9 @@ export function defaultAirDeps(): AirCliDeps {
   const env = process.env
   const paths = airPaths(homeOf(env))
   const dir = basename(import.meta.dir)
+  const bun = systemBin('bun', env)
+  const dist = collabDist(env)
+  const out = (line: string) => { process.stdout.write(`${line}\n`) }
   return {
     paths,
     env,
@@ -27,10 +31,10 @@ export function defaultAirDeps(): AirCliDeps {
     ask: ttyAsk(env),
     launchctl: systemBin('launchctl', env),
     codesign: systemBin('codesign', env),
-    bun: systemBin('bun', env),
+    bun,
     hubSha: SHA_DIR_RE.test(dir) ? dir : null,
     build: embeddedBuild(),
-    collabDist: collabDist(env),
+    collabDist: dist,
     // `run` and `hub run` only, installed before the hub starts: SIGTERM (`hub off`'s bootout, which the launcher
     // forwards; logout under launchd), SIGINT (Ctrl-C) and SIGHUP (the fallback's Terminal window closing, or logout)
     // reach runHub's clean stop, so the run is recorded clean and hub_stop is ledgered (P58). `once`: a second signal
@@ -43,9 +47,10 @@ export function defaultAirDeps(): AirCliDeps {
         for (const s of STOP_SIGNALS) process.off(s, stop)
       })
     },
-    out: (line) => { process.stdout.write(`${line}\n`) },
+    out,
     err: (line) => { process.stderr.write(`${line}\n`) },
     now: () => new Date(),
+    unpair: (device) => unpairDevice(device, liveUnpairDeps({ paths, bun, dist, out })),
   }
 }
 
