@@ -96,6 +96,37 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
     expect(existsSync(join(ok.bundle, 'collab-install.sh'))).toBe(true)
   }, T)
 
+  test('refuses to bundle when the Air clone moved off the trial commit while the key, the build and the probe ran: a new commit, another branch or a detached HEAD (Task 63 installer-1-4 fix-diff)', async () => {
+    // The bundle names HEAD and its branch, and MANIFEST pins trial_commit from step 3; between them the clone is a live folder
+    // where Air sessions work. A moved HEAD would ship Air-only work, or a bundle that no longer holds trial_commit.
+    const moves: Array<[string, (clone: string) => void]> = [
+      ['a new commit on the base branch', (clone) => { commitFiles(clone, { 'later.txt': 'committed during the build\n' }, 'later') }],
+      ['another branch checked out, with Air-only work', (clone) => {
+        repoGit(clone, ['checkout', '-q', '-b', 'air-only'])
+        commitFiles(clone, { 'air-only-secret.txt': 'a branch nobody shared\n' }, 'air only')
+      }],
+      ['a detached HEAD on a new commit', (clone) => {
+        repoGit(clone, ['checkout', '-q', '--detach'])
+        commitFiles(clone, { 'detached-secret.txt': 'a detached commit nobody shared\n' }, 'detached')
+      }],
+    ]
+    for (const [name, move] of moves) {
+      const o = input()
+      const stand = standInBuild()
+      o.build = () => { move(cloneOf(o)); return stand() }
+      await expect(prepareBundle(o), name).rejects.toThrow(/moved off the trial commit/)
+      // Nothing of the bundle exists: no folder, no bundle file, no device file.
+      expect(readdirSync(o.home).filter((n) => n.startsWith('collab-bridge-')), name).toEqual([])
+      expect(existsSync(airPaths(o.home).deviceFile('nuance')), name).toBe(false)
+    }
+    // A clone that stayed on the trial commit bundles as before, and only HEAD and its branch (both at trial_commit) are in it.
+    const o = input()
+    const stand = standInBuild()
+    o.build = () => { repoGit(cloneOf(o), ['branch', 'air-only']); return stand() } // a new branch at the same commit moves nothing
+    const ok = await prepareBundle(o)
+    expect(repoGit(cloneOf(o), ['bundle', 'list-heads', join(ok.bundle, 'collab-trial.bundle')]).split('\n').map((l) => l.split(' ')[0])).toEqual([ok.trialCommit, ok.trialCommit])
+  }, T)
+
   test('expiry is the pairing date + 90 days, YYYYMMDD', async () => {
     const a = await prepareBundle(input())
     expect([a.expiry, a.preparedAt]).toEqual(['20270111', '20261013123456'])

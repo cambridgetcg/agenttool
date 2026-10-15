@@ -279,6 +279,20 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   const unknown = unclassified(list.map((t) => t.name))
   if (unknown.length > 0) throw new Error(`prepare: the Collab build exposes tools the policy table does not classify (policy_unclassified_tool): ${unknown.join(', ')}`)
 
+  // The shared base, read and checked before anything of the bundle is written. MANIFEST pins trial_commit from step 3, but the key,
+  // the compile and the probe have run since, and the Air clone is a live folder where Air sessions work: if HEAD, or the branch it
+  // names, is no longer that commit, the bundle would ship other (possibly Air-only) work, or lack trial_commit altogether.
+  const sym = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'symbolic-ref', '-q', 'HEAD'], { env: o.gitEnv ?? {} })
+  if (sym.code === null || sym.code > 1) throw new Error(`prepare: git symbolic-ref in ${airClone} failed: ${firstLine(sym.stderr)}`)
+  const baseRef = sym.code === 0 ? new TextDecoder().decode(sym.stdout).trim() : null
+  if (sym.code === 0 && !/^refs\/heads\/[^\s]+$/.test(baseRef ?? '')) throw new Error(`prepare: HEAD of ${airClone} names ${JSON.stringify(baseRef)}, not a branch`)
+  for (const ref of baseRef === null ? ['HEAD'] : ['HEAD', baseRef]) {
+    const at = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { env: o.gitEnv ?? {} })
+    if (at.code !== 0 || new TextDecoder().decode(at.stdout).trim() !== trialCommit) {
+      throw new Error(`prepare: ${ref} of ${airClone} moved off the trial commit ${trialCommit} while the key, the build and the probe ran; nothing was bundled. Run prepare again`)
+    }
+  }
+
   // 6. The bundle folder: 0700, the binary 0700, every other file 0600, even when they already exist.
   const folder = `collab-bridge-${o.device}-bundle-${expiry}-${built.build}`
   const bundle = join(o.home, folder)
@@ -291,12 +305,9 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   const tools = writeToolsFile(join(bundle, 'tools.json'), seatTools(list, o.device, o.user))
   const trialBundle = join(bundle, 'collab-trial.bundle')
   rmSync(trialBundle, { force: true })
-  // Only the shared base: the branch HEAD names, and HEAD (a detached HEAD bundles just the commit it is on). Never --all: the
-  // Air clone also holds Air-only branches, stashes (with untracked files) and refs/collab/*, none of which leaves the Air.
-  const sym = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'symbolic-ref', '-q', 'HEAD'], { env: o.gitEnv ?? {} })
-  if (sym.code === null || sym.code > 1) throw new Error(`prepare: git symbolic-ref in ${airClone} failed: ${firstLine(sym.stderr)}`)
-  const baseRef = sym.code === 0 ? new TextDecoder().decode(sym.stdout).trim() : null
-  if (sym.code === 0 && !/^refs\/heads\/[^\s]+$/.test(baseRef ?? '')) throw new Error(`prepare: HEAD of ${airClone} names ${JSON.stringify(baseRef)}, not a branch`)
+  // Only the shared base: the branch HEAD names, and HEAD (a detached HEAD bundles just the commit it is on), both checked above
+  // to be trial_commit. Never --all: the Air clone also holds Air-only branches, stashes (with untracked files) and refs/collab/*,
+  // none of which leaves the Air.
   const b = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'bundle', 'create', '--quiet', trialBundle, ...(baseRef === null ? [] : [baseRef]), 'HEAD'],
     { env: o.gitEnv ?? {}, timeoutMs: 60_000 })
   if (b.code !== 0) throw new Error(`prepare: git bundle create failed: ${firstLine(b.stderr)}`)
