@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { airGit, airGitEnv, GIT_STDERR_MAX, GIT_STDOUT_MAX, MIRROR_GIT_FLAGS, OID_RE } from '../src/air/git.ts'
-import { cleanupTmps, killQuietly, makeRepo, pidGone, REAL_GIT, temp, writeStub } from './helpers.ts'
+import { cleanupTmps, killQuietly, makeRepo, pidGone, REAL_GIT, STUB_START_MS, temp, writeStub } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -179,7 +179,7 @@ describe('airGit', () => {
     const dir = temp('cb-git-stub-')
     // git's own child (ssh, index-pack) holds no pipe here, so only a signal to the whole group can end it.
     const git = writeStub(dir, 'git', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
-    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300, ownGroup: true })
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: STUB_START_MS, ownGroup: true })
     const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
     try {
       expect([r.timedOut, r.code]).toEqual([true, null])
@@ -192,7 +192,7 @@ describe('airGit', () => {
   test('a member of the group that ignores SIGTERM is SIGKILLed after the grace, even once git itself is gone', async () => {
     const dir = temp('cb-git-stub-')
     const git = writeStub(dir, 'git', `(trap '' TERM; exec /bin/sleep 60) >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
-    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300, ownGroup: true })
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: STUB_START_MS, ownGroup: true })
     const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
     try {
       expect(r.timedOut).toBe(true)
@@ -205,7 +205,7 @@ describe('airGit', () => {
   test('without ownGroup a timeout still signals only git itself', async () => {
     const dir = temp('cb-git-stub-')
     const git = writeStub(dir, 'git', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
-    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: 300 })
+    const r = await airGit({ git, home: temp('cb-git-home-') }).run(['fetch'], { timeoutMs: STUB_START_MS })
     const child = Number(readFileSync(join(dir, 'child'), 'utf8'))
     try {
       expect(r.timedOut).toBe(true)

@@ -75,6 +75,14 @@ export function testEnv(home: string, extra: Record<string, string> = {}): Recor
   }
 }
 
+/**
+ * How long a test gives a freshly written bash stub to start and write its child's pid before the code under test times it
+ * out. A first exec of a new script took 170-260 ms on the Air (probed) and now and then seconds, so 300-400 ms lost the race
+ * one run in three, and the test then read a `child` file that did not exist yet. A test parameter only: no product limit is
+ * raised by it (the longest user, the SIGTERM-ignoring group test, takes this plus the 5 s kill grace, inside its 20 s).
+ */
+export const STUB_START_MS = 4000
+
 /** A logging stub: every call appends `<name> <args>` to $STUB_LOG (to /dev/null when unset), then runs `body`. */
 export function writeStub(dir: string, name: string, body: string): string {
   if (!/^[A-Za-z0-9._-]+$/.test(name)) throw new Error(`writeStub: bad stub name ${JSON.stringify(name)}`)

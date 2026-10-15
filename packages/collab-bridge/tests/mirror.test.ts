@@ -12,7 +12,7 @@ import {
 import { AIR_LEDGER_KEYS, appendLedger, readLedger } from '../src/ledger.ts'
 import { airPaths, type AirPaths } from '../src/paths.ts'
 import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
-import { cleanupTmps, commitFiles, commitIndexEntries, killQuietly, makeRepo, modeOf, pidGone, REAL_GIT, repoGit, temp, writeStub } from './helpers.ts'
+import { cleanupTmps, commitFiles, commitIndexEntries, killQuietly, makeRepo, modeOf, pidGone, REAL_GIT, repoGit, STUB_START_MS, temp, writeStub } from './helpers.ts'
 import { collabHarness } from './mcp-harness.ts'
 import { installedNuanceHome } from './nuance-home.ts'
 
@@ -473,7 +473,7 @@ describe('syncMirror', () => {
     // An ssh that never answers and leaves a child of its own behind that holds no pipe.
     const ssh = writeStub(dir, 'ssh', `/bin/sleep 60 >/dev/null 2>&1 &\necho $! > '${dir}/child'\nwait`)
     try {
-      const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, sshBin: ssh, fetchTimeoutMs: 400 })
+      const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, sshBin: ssh, fetchTimeoutMs: STUB_START_MS })
       expect(r.ok === false && [r.code, r.message]).toEqual(['fetch_failed', 'the fetch from the device took longer than 60 s and was stopped'])
       expect(fetchLines(w).at(-1)!.outcome).toBe('timeout')
       expect(await pidGone(Number(readFileSync(join(dir, 'child'), 'utf8')), 3000)).toBe(true)
