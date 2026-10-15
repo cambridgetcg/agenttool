@@ -160,7 +160,15 @@ async function tamperReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string 
   if (head !== synced) return "the mirror's HEAD is not its last synced commit"
   const sym = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'symbolic-ref', '-q', 'HEAD'])
   if (sym.code !== 1) return 'the mirror is not on a detached HEAD'
-  // Ignored and untracked files count: a forced checkout would clobber them without a word (T16).
+  return statusReason(spec, deps)
+}
+
+/**
+ * Null when the mirror's work tree is exactly its HEAD; else why not. Ignored and untracked files count: a forced
+ * checkout would clobber them without a word (T16). After a checkout it is also the proof that the file system took
+ * every name as the commit wrote it (Task 63 gate-1-3).
+ */
+async function statusReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string | null> {
   const st = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored'])
   if (st.code !== 0) return 'git status failed in the mirror'
   if (st.stdout.byteLength > 0) return 'the mirror has local changes or extra files'
@@ -262,7 +270,7 @@ async function treeAndDisk(spec: MirrorSpec, oid: string, deps: MirrorDeps): Pro
     const where = t.path === undefined ? '' : ` (${t.path})`
     return refuse(t.code, t.code === 'remote_too_large'
       ? `the fetched tree is over this share's size caps${where}`
-      : t.code === 'remote_non_regular_path' ? `the fetched tree holds a gitlink${where}` : 'the fetched tree could not be read')
+      : t.code === 'remote_non_regular_path' ? `the fetched tree holds a gitlink, a symlink or two paths one Air file name would hold${where}` : 'the fetched tree could not be read')
   }
   let free: number
   try { free = deps.freeBytes(spec.airClone) } catch { return refuse('mirror_low_disk', 'the Air could not read its free disk space') }
@@ -315,11 +323,19 @@ export async function syncMirror(spec: MirrorSpec, o: { declaredHead: string; at
   }
   const co = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'checkout', '--detach', '-f', '--no-recurse-submodules', oid],
     { timeoutMs: deps.checkoutTimeoutMs ?? TIMING.checkoutMs }) // 8
-  if (co.code !== 0) {
+  // A checkout can exit 0 and still not write the commit (two names one Air file name holds, a file the system would not
+  // take): synced would then move to a tree the mirror does not hold, and the reviewer would read other bytes than the
+  // ones the stamp names. So the work tree must read clean against the new HEAD before synced moves.
+  const unlike = co.code === 0 ? await statusReason(spec, deps) : null
+  if (co.code !== 0 || unlike !== null) {
     const back = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'checkout', '--detach', '-f', '--no-recurse-submodules', synced],
       { timeoutMs: deps.checkoutTimeoutMs ?? TIMING.checkoutMs })
     const clean = back.code === 0 ? await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'clean', '-ffdxq']) : back
-    if (back.code === 0 && clean.code === 0) return refuse('checkout_failed', 'the checkout of the fetched commit failed; the mirror was restored')
+    if (back.code === 0 && clean.code === 0) {
+      return refuse('checkout_failed', unlike === null
+        ? 'the checkout of the fetched commit failed; the mirror was restored'
+        : 'the checkout did not leave the mirror exactly at the fetched commit; the mirror was restored')
+    }
     return refuse('mirror_tampered', 'the checkout failed and the mirror could not be restored; Ai repairs it on the Air')
   }
   // 9: compare and swap. A crash between 8 and 9 shows as mirror_tampered at the next sync (HEAD is not synced).

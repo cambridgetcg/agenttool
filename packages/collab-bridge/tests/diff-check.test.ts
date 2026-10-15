@@ -4,7 +4,7 @@ import { symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { ancestorCheck, checkDiff, checkTree, CONTROL_SEGMENTS, DEFAULT_CAPS, inScopes, isControlPath, type TreeCaps } from '../src/air/diff-check.ts'
 import { airGit, type GitRunner } from '../src/air/git.ts'
-import { cleanupTmps, commitFiles, makeRepo, REAL_GIT, repoGit, temp } from './helpers.ts'
+import { cleanupTmps, commitFiles, commitIndexEntries, makeRepo, REAL_GIT, repoGit, temp } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -78,7 +78,40 @@ describe('modes', () => {
     repoGit(repo, ['-c', 'user.name=Collab Test', '-c', 'user.email=test@collab-bridge.invalid', 'commit', '-q', '-m', 'a gitlink'])
     const gitlink = repoGit(repo, ['rev-parse', 'HEAD'])
     expect(await checkDiff(git, repo, linked, gitlink, ['notes'], caps())).toEqual({ ok: false, code: 'remote_non_regular_path', path: 'notes/sub' })
-    expect(await checkTree(git, repo, gitlink, caps())).toEqual({ ok: false, code: 'remote_non_regular_path', path: 'notes/sub' })
+    // The whole tree still holds the symlink (Task 63 conformance-4-3), the first non-regular entry in tree order.
+    expect(await checkTree(git, repo, gitlink, caps())).toEqual({ ok: false, code: 'remote_non_regular_path', path: 'notes/link' })
+    repoGit(repo, ['rm', '-q', '--cached', 'notes/link'])
+    repoGit(repo, ['-c', 'user.name=Collab Test', '-c', 'user.email=test@collab-bridge.invalid', 'commit', '-q', '-m', 'only the gitlink'])
+    expect(await checkTree(git, repo, repoGit(repo, ['rev-parse', 'HEAD']), caps())).toEqual({ ok: false, code: 'remote_non_regular_path', path: 'notes/sub' })
+  })
+
+  test('a symlink anywhere in the fetched tree is non-regular, so a claim sync cannot check one out of the device (Task 63 conformance-4-3)', async () => {
+    const { repo, git, base } = setup()
+    // A symlink already in the base is never in the complete-time diff, so the full-tree check at every sync refuses it.
+    const linked = commitIndexEntries(repo, [{ path: 'notes/link.md', content: '/Users/yuai/.ssh/collab-bridge/collab_nuance_ed25519', mode: '120000' }], 'an absolute symlink')
+    expect(await checkTree(git, repo, base, caps())).toMatchObject({ ok: true })
+    expect(await checkTree(git, repo, linked, caps())).toEqual({ ok: false, code: 'remote_non_regular_path', path: 'notes/link.md' })
+  })
+
+  test('paths that one Air file name would hold, by case or by Unicode form, are non-regular: checkout could write only one (Task 63 gate-1-3)', async () => {
+    const { repo, git, base } = setup()
+    const pairs: Array<[string, string, string]> = [
+      ['src/a.ts', 'src/A.ts', 'case'],
+      ['notes/caf\u00e9.md', 'notes/cafe\u0301.md', 'NFC and NFD'],
+      ['notes/\u212Aelvin.md', 'notes/kelvin.md', 'Kelvin sign'],
+      ['notes/\u017Fam.md', 'notes/SAM.md', 'long s'],
+      ['Docs/readme.md', 'docs/README.MD', 'a directory and a file name both differing'],
+    ]
+    for (const [one, two, why] of pairs) {
+      const oid = commitIndexEntries(repo, [{ path: one, content: 'one\n' }, { path: two, content: 'two\n' }], `colliding: ${why}`)
+      const r = await checkTree(git, repo, oid, caps())
+      expect([why, r.ok === false && r.code]).toEqual([why, 'remote_non_regular_path'])
+      repoGit(repo, ['reset', '-q', '--soft', base])
+      repoGit(repo, ['reset', '-q'])
+    }
+    // Names that only look alike are fine: the same file name in two directories, and distinct names.
+    const fine = commitIndexEntries(repo, [{ path: 'a/x.ts', content: '1' }, { path: 'b/x.ts', content: '2' }, { path: 'a/y.ts', content: '3' }, { path: 'caf\u00e9.md', content: '4' }, { path: 'cafes.md', content: '5' }], 'distinct')
+    expect(await checkTree(git, repo, fine, caps())).toMatchObject({ ok: true })
   })
 
   test('a deletion is regular', async () => {

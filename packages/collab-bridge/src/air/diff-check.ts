@@ -37,6 +37,16 @@ export function isControlPath(path: string): boolean {
   return false
 }
 
+/**
+ * The name two paths share when one Air file name would hold both: the Air's APFS compares names without regard to case
+ * or Unicode form, so `src/a.ts` and `src/A.ts`, or `caf\u00e9` spelled NFC and NFD, are one file there. NFD, the
+ * upper-then-lower round trip (which also folds \u017F and the Kelvin sign) and NFD again, as isControlPath folds; a few
+ * more exotic spellings counting as one is the safe direction.
+ */
+export function foldedPath(path: string): string {
+  return path.normalize('NFD').toUpperCase().toLowerCase().normalize('NFD')
+}
+
 /** Collab's own rule (KN `src/store.ts:6799`, K67): exact, case-sensitive, a literal prefix. `notes/**` is not a glob. */
 export function inScopes(path: string, scopes: readonly string[]): boolean {
   return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`))
@@ -51,12 +61,16 @@ const TREE_RECORD = /^([0-7]{6}) (blob|tree|commit) ([0-9a-f]{40,64}) +([0-9]+|-
 
 /**
  * §7.3 step 6: streams the whole tree of `oid` and stops at the first refusal. Sizes are summed per path entry, so many
- * paths to one blob count fully (K70: checkout writes every path in full). A gitlink is non-regular.
+ * paths to one blob count fully (K70: checkout writes every path in full). A gitlink is non-regular, and so is a symlink:
+ * the complete-time diff sees only what a task changed, so a link already in the base (or in a claim's fetch) would
+ * otherwise be written into the mirror unseen, pointing anywhere on the Air. So are two paths that one Air file name
+ * would hold (foldedPath): checkout writes one over the other and exits 0, and the mirror would no longer be the commit.
  */
 export async function checkTree(git: GitRunner, repo: string, oid: string, caps: TreeCaps): Promise<TreeCheck> {
   if (!OID_RE.test(oid)) return { ok: false, code: 'fetch_failed' }
   let entries = 0
   let totalBytes = 0
+  const names = new Set<string>()
   try {
     for await (const rec of git.records(['-C', repo, ...MIRROR_GIT_FLAGS, 'ls-tree', '-r', '-z', '-l', '--full-tree', oid])) {
       const m = TREE_RECORD.exec(rec)
@@ -64,7 +78,10 @@ export async function checkTree(git: GitRunner, repo: string, oid: string, caps:
       const [, mode, type, , size, path] = m as unknown as [string, string, string, string, string, string]
       entries += 1
       if (entries > caps.maxEntries) return { ok: false, code: 'remote_too_large', path }
-      if (mode === '160000' || type === 'commit') return { ok: false, code: 'remote_non_regular_path', path }
+      if (mode === '160000' || mode === '120000' || type === 'commit') return { ok: false, code: 'remote_non_regular_path', path }
+      const folded = foldedPath(path)
+      if (names.has(folded)) return { ok: false, code: 'remote_non_regular_path', path }
+      names.add(folded)
       const bytes = Number(size)
       if (!Number.isSafeInteger(bytes)) return { ok: false, code: 'fetch_failed' }
       if (bytes > caps.maxBlobBytes) return { ok: false, code: 'remote_too_large', path }

@@ -12,7 +12,7 @@ import {
 import { AIR_LEDGER_KEYS, appendLedger, readLedger } from '../src/ledger.ts'
 import { airPaths, type AirPaths } from '../src/paths.ts'
 import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
-import { cleanupTmps, commitFiles, killQuietly, makeRepo, modeOf, pidGone, REAL_GIT, repoGit, temp, writeStub } from './helpers.ts'
+import { cleanupTmps, commitFiles, commitIndexEntries, killQuietly, makeRepo, modeOf, pidGone, REAL_GIT, repoGit, temp, writeStub } from './helpers.ts'
 import { collabHarness } from './mcp-harness.ts'
 import { installedNuanceHome } from './nuance-home.ts'
 
@@ -513,6 +513,61 @@ describe('syncMirror', () => {
     expect(readFileSync(join(w.spec.mirrorPath, 'README.md'), 'utf8')).toBe('collab trial\n')
     expect(existsSync(join(w.spec.mirrorPath, 'partial.tmp'))).toBe(false)
     expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+  }, T)
+
+  test('a device HEAD that holds a symlink is refused at a claim sync too, before anything is checked out (Task 63 conformance-4-3)', async () => {
+    const w = await created()
+    // No atComplete: a claim sync checks out the device's whole tree, and the complete-time diff would never see a link
+    // that is already in the base. The target is the Air's own key.
+    const linked = commitIndexEntries(w.share, [{ path: 'notes.md', content: join(w.air, '.ssh', 'collab-bridge', 'collab_nuance_ed25519'), mode: '120000' }], 'notes.md is a symlink')
+    const r = await syncMirror(w.spec, { declaredHead: linked }, w.deps)
+    expect(r.ok === false && [r.code, r.message]).toEqual(['remote_non_regular_path', 'the fetched tree holds a gitlink, a symlink or two paths one Air file name would hold (notes.md)'])
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(readdirSync(w.spec.mirrorPath).sort()).toEqual(['.git', 'README.md', 'notes'])
+  }, T)
+
+  test('two paths one Air file name would hold are refused before the checkout, so synced never moves to a tree the mirror cannot hold (Task 63 gate-1-3)', async () => {
+    const w = await created()
+    const collide = commitIndexEntries(w.share, [{ path: 'notes/a.md', content: 'harmless\n' }, { path: 'notes/A.md', content: 'different\n' }], 'a.md and A.md')
+    for (const atComplete of [undefined, { base: w.base, scopes: ['notes'] }]) {
+      const r = await syncMirror(w.spec, atComplete === undefined ? { declaredHead: collide } : { declaredHead: collide, atComplete }, w.deps)
+      expect(r.ok === false && r.code).toBe('remote_non_regular_path')
+      expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+      expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+      expect(readdirSync(join(w.spec.mirrorPath, 'notes'))).toEqual(['.gitkeep'])
+    }
+    // The next honest commit still syncs: nothing was left half done.
+    repoGit(w.share, ['reset', '-q', '--hard', w.base])
+    const fine = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'a plain note')
+    expect(await syncMirror(w.spec, { declaredHead: fine }, w.deps)).toEqual({ ok: true, oid: fine })
+  }, T)
+
+  test('a checkout that exits 0 but leaves the mirror unlike the commit is restored and refused, and synced does not move (Task 63 gate-1-3)', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n', 'README.md': 'changed\n' }, 'two files')
+    const real = w.deps.git
+    // As if the file system wrote one name over another: git says all is well, and the tree is not the commit.
+    const silent: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        const r = await real.run(a, o)
+        if (a.includes('checkout') && a.includes(c2)) {
+          expect(r.code).toBe(0)
+          writeFileSync(join(w.spec.mirrorPath, 'README.md'), 'overwritten by a colliding name\n')
+          writeFileSync(join(w.spec.mirrorPath, 'notes', 'extra.tmp'), 'x')
+        }
+        return r
+      },
+    }
+    const r = await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, git: silent })
+    expect(r.ok === false && r.code).toBe('checkout_failed')
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await syncedOid(w.spec, w.deps)).toBe(w.base)
+    expect(readFileSync(join(w.spec.mirrorPath, 'README.md'), 'utf8')).toBe('collab trial\n')
+    expect(existsSync(join(w.spec.mirrorPath, 'notes', 'extra.tmp'))).toBe(false)
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 }) // the mirror was healthy again
   }, T)
 
   test('the tasks ref is written once and only when it equals the mirror\'s HEAD', async () => {

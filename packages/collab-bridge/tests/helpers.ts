@@ -244,3 +244,25 @@ export async function pidGone(pid: number, withinMs: number): Promise<boolean> {
 export function killQuietly(pid: number): void {
   try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ }
 }
+
+// ---- Task 63 fold (mirror batch): exact git paths, whatever this Mac's file system makes of their names ----
+
+/**
+ * Commits the given index entries on top of HEAD without touching the work tree, so paths that APFS (case- and
+ * normalisation-insensitive) would merge into one file, such as `a.ts` and `A.ts`, or a symlink, can be committed
+ * together. Every name reaches git exactly as written: core.ignorecase and core.precomposeunicode are off in `repo`.
+ * Returns the new HEAD.
+ */
+export function commitIndexEntries(repo: string, entries: Array<{ path: string; content: string; mode?: string }>, message: string): string {
+  repoGit(repo, ['config', 'core.ignorecase', 'false'])
+  repoGit(repo, ['config', 'core.precomposeunicode', 'false'])
+  const dir = temp('cb-blob-')
+  entries.forEach((e, i) => {
+    const file = join(dir, `blob-${i}`)
+    writeFileSync(file, e.content)
+    const oid = repoGit(repo, ['hash-object', '-w', file])
+    repoGit(repo, ['update-index', '--add', '--cacheinfo', `${e.mode ?? '100644'},${oid},${e.path}`])
+  })
+  repoGit(repo, ['-c', 'user.name=Collab Test', '-c', 'user.email=test@collab-bridge.invalid', 'commit', '-q', '--allow-empty', '-m', message])
+  return repoGit(repo, ['rev-parse', 'HEAD'])
+}
