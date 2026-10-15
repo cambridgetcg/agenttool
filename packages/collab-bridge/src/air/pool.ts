@@ -113,10 +113,13 @@ interface Runtime {
   retiring: boolean // retirement has begun: childFor refuses from here on, before any await
 }
 
+/** What a parked lineage is told (§9.6 item 5): the pool's gate answers it, and the forwarder's hold (holdOf) answers it for a flow that waited. */
+export const PARKED_MESSAGE = 'This Collab session needs a cursor repair on the Air before it can continue; nothing was sent.'
+
 const MSG = {
   unknownLineage: 'The hub has no record of this Collab session; nothing was sent.',
   retired: 'This Collab session was retired after 7 days detached; start a new Claude session.',
-  parked: 'This Collab session needs a cursor repair on the Air before it can continue; nothing was sent.',
+  parked: PARKED_MESSAGE,
   ended: 'This Collab session has ended; start a new one with collab_session_start.',
   required: 'Start a Collab session first with collab_session_start; nothing was sent.',
   journal: 'The shared Collab journal on the Air failed verification; nothing was sent.',

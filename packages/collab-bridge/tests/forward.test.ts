@@ -1124,6 +1124,31 @@ describe('lineage state across long waits', () => {
     expect(lines2(f, 'forward').map((l) => l.tool)).toEqual(['collab_session_end'])
   }, T)
 
+  test('an edit flow queued on the mirror lock while its lineage is parked is refused seat_recovery_required and never sent (Task 63 round 1: holdOf)', async () => {
+    const f = fakeWorld({}, { mirror: true })
+    const held = await attachBehindLock(f)
+    f.pool.park(f.seat.ref.lineage, 'cursor_reset_required', {}) // another call of the lineage answered cursor_reset_required meanwhile (§9.6 item 5)
+    expect(f.store.get(f.seat.ref.lineage)).toMatchObject({ state: 'live', parked: { cause: 'cursor_reset_required' } }) // a park leaves the session live
+    held.free()
+    const r = await held.attach
+    expect(sc(r)).toMatchObject({ error: 'seat_recovery_required', delivered: false, message: FORWARD_MESSAGES.parked })
+    expect(f.calls()).toEqual([])
+    // The same answer a call that arrives now gets from the pool's gate.
+    expect(sc(await fcall(f, 'collab_next'))).toMatchObject({ error: 'seat_recovery_required', delivered: false, message: FORWARD_MESSAGES.parked })
+  }, T)
+
+  test('an edit flow queued on a lineage that ended and was parked is seat_session_ended, as a call that arrives now is (run() answers an ended lineage first)', async () => {
+    const f = fakeWorld({}, { mirror: true })
+    const held = await attachBehindLock(f)
+    expect((await fcall(f, 'collab_session_end', { reason: 'done' })).outcome).toBe('ok')
+    f.pool.park(f.seat.ref.lineage, 'cursor_reset_required', {})
+    expect(f.store.get(f.seat.ref.lineage)).toMatchObject({ state: 'ended', parked: { cause: 'cursor_reset_required' } })
+    held.free()
+    expect(sc(await held.attach)).toMatchObject({ error: 'seat_session_ended', delivered: false, message: FORWARD_MESSAGES.ended })
+    expect(sc(await fcall(f, 'collab_next'))).toMatchObject({ error: 'seat_session_ended', delivered: false, message: FORWARD_MESSAGES.ended })
+    expect(f.calls()).toEqual(['collab_session_end'])
+  }, T)
+
   test('when the end answers an error the barrier is gone and the lineage is served normally', async () => {
     const f = fakeWorld({ tools: { collab_session_end: { kind: 'error' } } })
     const handOut = f.pool.childFor.bind(f.pool)

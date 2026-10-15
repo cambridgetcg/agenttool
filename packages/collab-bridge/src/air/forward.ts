@@ -40,7 +40,7 @@ import { MinInterval, RATES, TokenBucket } from './limits.ts'
 import type { LineageEntry, LineageStore } from './lineages.ts'
 import { mirrorHead, mirrorWorkspaceId, syncedOid, type MirrorDeps } from './mirror.ts'
 import { decide, isMutation, type Decision, type SeatCtx } from './policy.ts'
-import type { ChildPool } from './pool.ts'
+import { PARKED_MESSAGE, type ChildPool } from './pool.ts'
 import type { SeatHandlers, SeatRef } from './streams.ts'
 import type { MirrorHandle, MirrorRegistry } from './sync-points.ts'
 
@@ -67,6 +67,7 @@ export const FORWARD_MESSAGES = {
   tampered: 'The mirror of this folder on the Air is missing or not at its last synced commit; nothing was sent. Ai looks on the Air.',
   late: 'This call waited on the Air past its deadline and was not sent; nothing was applied.',
   stopped: 'This session\'s Collab child on the Air was stopping, so nothing was sent; call again if you choose.',
+  parked: PARKED_MESSAGE,
   ending: 'A collab_session_end of this session is still in flight on the Air, so nothing was sent. Call again once it has answered.',
   unknown: 'The Collab call may or may not have taken effect on the Air. Never re-send it under a new idempotency_key: check with ' +
     'collab_task_get, collab_task_list, collab_next or collab_report_list, or replay it with the same key.',
@@ -262,16 +263,19 @@ export class Forwarder implements SeatHandlers {
   }
 
   /**
-   * What keeps a write off this lineage's child right now (item 8, P53): a collab_session_end in flight (hub_away), or a
-   * lineage that is no longer live on `sessionId` (ended, retired, or a later session: seat_session_ended). The edit flows read
-   * it in the same turn as each write, because they wait behind the mirror lock or a fetch for up to a minute, after the plain
-   * path's own check could have been made.
+   * What keeps a write off this lineage's child right now (item 8, P53): a collab_session_end in flight (hub_away), a
+   * lineage that is no longer live on `sessionId` (ended, retired, or a later session: seat_session_ended), or a lineage parked
+   * for Ai's cursor repair (seat_recovery_required; a park leaves the session live and only stops its child, §9.6 item 5). The
+   * order is the one a call that arrives now is answered in: run() answers an ended or retired lineage before the pool's gate
+   * answers a parked one. The edit flows read it in the same turn as each write, because they wait behind the mirror lock or a
+   * fetch for up to a minute, after the plain path's own check could have been made.
    */
   private holdOf(lineage: string, sessionId: string): { code: AgentCode; message: string } | null {
     if (this.ending.has(lineage)) return { code: 'hub_away', message: FORWARD_MESSAGES.ending }
     const now = this.deps.store.get(lineage)
     if (!now) return { code: 'hub_away', message: FORWARD_MESSAGES.noLineage }
     if (now.state !== 'live' || now.session_id !== sessionId) return { code: 'seat_session_ended', message: FORWARD_MESSAGES.ended }
+    if (now.parked) return { code: 'seat_recovery_required', message: FORWARD_MESSAGES.parked }
     return null
   }
 

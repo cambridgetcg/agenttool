@@ -30,9 +30,9 @@ export interface EditFlowCtx { flow: 'claim' | 'complete' | 'takeover' | 'attach
   /** The forwarder's deadline on the hub's monotonic clock (§5.4): past it nothing is sent. null: no deadline. */
   notAfterMono: number | null; mono: () => number
   /** A refusal that holds this lineage right now, or null (a collab_session_end in flight or settled, a session that is no
-   *  longer this flow's: the forwarder's item 8, P53). Read in the same synchronous turn as every write to the child, and
-   *  once under the lock before anything is read or fetched, so a flow that waited behind another capture is never sent to a
-   *  Collab that has already unbound. */
+   *  longer this flow's, a park for Ai's cursor repair: the forwarder's item 8, P53). Read in the same synchronous turn as
+   *  every write to the child, and once under the lock before anything is read or fetched, so a flow that waited behind
+   *  another capture is never sent to a Collab that has already unbound. */
   barrier(): { code: AgentCode; message: string } | null }
 export type EditFlowOutcome = { kind: 'outcome'; outcome: CallOutcome } | { kind: 'refuse'; code: AgentCode; message: string; extra?: Record<string, unknown> }
 
