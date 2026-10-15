@@ -3,7 +3,7 @@
 // build, tools.json, the trial repo and its git bundle, MANIFEST.txt and the device file).
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { probeCollabTools } from '../src/air/children.ts'
@@ -259,9 +259,8 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
 
   // 5. One Nuance binary, and the seat tool list from the Collab build the hub will run.
   const build = o.build ?? (() => {
-    const out = join(o.repo, 'packages', 'collab-bridge', 'dist', 'nuance') // dist/ is git-ignored, so the tree stays clean
-    mkdirSync(out, { recursive: true })
-    return buildNuance(out)
+    // dist/ is git-ignored, so the tree stays clean; buildNuance makes the folder (0700)
+    return buildNuance(join(o.repo, 'packages', 'collab-bridge', 'dist', 'nuance'))
   })
   const built = build()
   // The check above came before the trial repo, the key and the compile; sessions share this worktree. The binary ships only

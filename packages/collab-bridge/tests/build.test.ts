@@ -2,10 +2,10 @@
 // afterAll removes (it is not tracked: afterEach(cleanupTmps) would delete it after the first test). The reproducibility
 // test compiles once more, from another folder, and removes that copy at once.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { buildNuance, cutAfterLinkedit, linkeditEnd, NUANCE_BUILD_FLAGS, type NuanceBuild } from '../scripts/build-nuance.ts'
+import { buildNuance, cutAfterLinkedit, ensureOutDir, linkeditEnd, nuanceCompileArgs, NUANCE_BUILD_FLAGS, type NuanceBuild } from '../scripts/build-nuance.ts'
 import { readLedger } from '../src/ledger.ts'
 import { encodeFrame, FRAME_TYPE, FrameDecoder, PreambleScanner, type Frame } from '../src/link/frame.ts'
 import { MAX_PIPE_TO_HUB } from '../src/link/messages.ts'
@@ -60,6 +60,31 @@ describe('Mach-O helpers', () => {
   test('the build flags are the arm64 compile and the four autoload refusals', () => {
     expect([...NUANCE_BUILD_FLAGS]).toEqual(['--compile', '--target=bun-darwin-arm64', '--no-compile-autoload-dotenv',
       '--no-compile-autoload-bunfig', '--no-compile-autoload-tsconfig', '--no-compile-autoload-package-json'])
+  })
+})
+
+describe('the compile and its output folder (Task 63 installer-1-6, installer-1-13)', () => {
+  test('the compile reads no .env file and no bunfig of the package: --no-env-file and --config=/dev/null come before `build`', () => {
+    const args = nuanceCompileArgs('/out/collab-bridge')
+    expect(args.slice(0, 3)).toEqual(['--no-env-file', '--config=/dev/null', 'build'])
+    expect(args.slice(3, 3 + NUANCE_BUILD_FLAGS.length)).toEqual([...NUANCE_BUILD_FLAGS])
+    expect(args.slice(-2)).toEqual(['--outfile', '/out/collab-bridge'])
+    expect(args[args.length - 3]).toMatch(/\/src\/nuance\/main\.ts$/)
+  })
+
+  test('the output folder and every folder made for it are 0700, and one that was there is tightened', () => {
+    const root = temp('cb-outdir-')
+    chmodSync(root, 0o755)                                // the checkout itself keeps its mode
+    const out = join(root, 'dist', 'nuance')
+    ensureOutDir(out)
+    expect([modeOf(root), modeOf(join(root, 'dist')), modeOf(out)]).toEqual([0o755, 0o700, 0o700])
+    // A folder an earlier prepare made with the umask's 0755 (mkdirSync without a mode) is the output folder's own to tighten.
+    const old = join(root, 'old', 'nuance')
+    mkdirSync(old, { recursive: true, mode: 0o755 })
+    chmodSync(old, 0o755)
+    ensureOutDir(old)
+    expect(modeOf(old)).toBe(0o700)
+    expect(() => ensureOutDir('relative/nuance')).toThrow('absolute')
   })
 })
 

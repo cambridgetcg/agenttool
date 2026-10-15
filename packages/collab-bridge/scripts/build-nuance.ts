@@ -6,14 +6,15 @@
 // package and the bytes are the same wherever the build is started from; Bun leaves zero bytes after __LINKEDIT and a
 // signature `codesign --verify --strict` rejects, so the tail is cut and the file signed ad hoc again. Three changes from
 // Summon: the compile goes straight to the final basename `collab-bridge`, because Bun embeds `/$bunfs/root/<basename>`
-// (F14); it runs with `--config=/dev/null` and a fresh empty home, because `bun build` inlines a cwd bunfig's [define] (F5,
-// P15) and nothing of the caller's may steer it (P14); and the signature gets the fixed identifier
+// (F14); it runs with `--no-env-file --config=/dev/null` and a fresh empty home, because `bun build` inlines a cwd bunfig's
+// [define] (F5, P15) and nothing of the caller's, or of a git-ignored .env in the package, may steer it (P14); and the signature gets the fixed identifier
 // dev.agenttool.collab-bridge instead of codesign's name-plus-UUID default.
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
+import { mkdirPrivate } from '../src/private-dir.ts'
 import { systemBin } from '../src/sysbin.ts'
 
 const PKG = join(import.meta.dir, '..')
@@ -69,14 +70,31 @@ function tool(cmd: string, args: string[], o: { cwd: string; home: string }): vo
   }
 }
 
+/**
+ * The compiler's argv. Like every bun the bridge runs it gets `--no-env-file --config=/dev/null` (R39): a git-ignored .env in
+ * the package is invisible to prepare's clean-tree check, so nothing of it may reach the compile.
+ */
+export function nuanceCompileArgs(binary: string): string[] {
+  return ['--no-env-file', '--config=/dev/null', 'build', ...NUANCE_BUILD_FLAGS, ENTRY, '--outfile', binary]
+}
+
+/**
+ * The output folder: every folder made for it is 0700 (Global Constraints, Modes), and the folder itself is tightened when an
+ * earlier run made it 0755 (a mode passed to mkdir applies only to a folder it creates).
+ */
+export function ensureOutDir(outDir: string): void {
+  mkdirPrivate(outDir)
+  chmodSync(outDir, 0o700)
+}
+
 export function buildNuance(outDir: string): NuanceBuild {
   if (!isAbsolute(outDir)) throw new Error(`buildNuance: the output dir must be absolute: ${outDir}`)
-  mkdirSync(outDir, { recursive: true, mode: 0o700 })
+  ensureOutDir(outDir)
   const binary = join(outDir, BINARY_NAME)
   // The tools get a fresh empty home, never the caller's: nothing in a home can steer the compile or the signing.
   const home = mkdtempSync(join(tmpdir(), 'cb-build-home-'))
   try {
-    tool(process.execPath, ['--config=/dev/null', 'build', ...NUANCE_BUILD_FLAGS, ENTRY, '--outfile', binary], { cwd: PKG, home })
+    tool(process.execPath, nuanceCompileArgs(binary), { cwd: PKG, home })
     cutAfterLinkedit(binary)
     const codesign = systemBin('codesign')
     tool(codesign, ['--force', '-s', '-', '-i', SIGNING_IDENTIFIER, binary], { cwd: '/', home })
