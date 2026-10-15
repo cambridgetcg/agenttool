@@ -39,6 +39,12 @@ const prompt = await new Response(Bun.stdin.stream()).text()
 const emit = (o) => console.log(JSON.stringify(o))
 emit({type:'thread.started', thread_id:'fixture'})
 emit({type:'turn.started'})
+if (mode === 'partial-reply-stall') {
+  process.on('SIGTERM', () => process.exit(0))
+  process.stderr.write('private-stderr-marker'.repeat(300))
+  emit({type:'item.completed',item:{id:'private-item-id',type:'agent_message',text:'private-partial-reply'}})
+  await Bun.sleep(30000)
+}
 if (mode === 'slow' || mode === 'descendant' || mode === 'finished-descendant') {
   if (mode === 'descendant' || mode === 'finished-descendant') {
     const p = spawn('/bin/sh', ['-c', 'trap "" TERM; while :; do sleep 1; done'], {stdio:'ignore'})

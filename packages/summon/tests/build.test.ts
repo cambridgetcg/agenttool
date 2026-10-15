@@ -132,7 +132,9 @@ describe('the real build', () => {
     const runner = Bun.spawnSync([built.runner], { env, cwd: '/', timeout: 15_000 })
     expect(runner.exitCode).toBe(0)
     const result = Bun.spawnSync([built.gatekeeper], { env: { ...env, SSH_ORIGINAL_COMMAND: `result ${req.id}` } })
-    expect(JSON.parse(result.stdout.toString())).toMatchObject({ status: 'completed', result_text: 'echo: compiled-codex-fixture', exit_code: 0 })
+    expect(JSON.parse(result.stdout.toString())).toMatchObject({ status: 'completed', result_text: 'echo: compiled-codex-fixture', exit_code: 0,
+      codex_diagnostics: { parser_status: 'completed', exit: { code: 0, signal: null, after_stop: false },
+        events: { 'turn.completed': { count: 1 } } } })
     expect(readFileSync(join(home, '.local/state/summon/ledger.jsonl'), 'utf8')).not.toContain(req.prompt)
   }, 30_000)
 })

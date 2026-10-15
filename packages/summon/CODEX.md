@@ -39,6 +39,16 @@ exit code zero, completion and a nonempty final agent message. Tool output is no
 the reply. Unsupported event/error shapes fail; Codex authentication and quota
 errors are not yet classified into dedicated statuses.
 
+The optional `codex_diagnostics` in the private result records stdout/stderr byte
+counts, first-output offsets, bounded counts/timings for fixed event and item
+types, the stop request, and the actual child's exit code/signal/order. Unknown
+event/item names become `other`; payloads, IDs, commands and error text are never
+copied. The parser's classification is retained even when timeout or cancellation
+wins. These diagnostics do not decide success and are not written to state or
+the ledger. They are returned at settlement, not live, and are unavailable after
+a supervisor crash. See [collector](src/codex-progress.ts),
+[privacy tests](tests/codex-progress.test.ts) and [runner tests](tests/codex-runtime.test.ts).
+
 [Runner supervision](src/runner.ts) and [group identity checks](src/process-group.ts)
 handle cancellation and timeout while the runner is alive. Restart recovery can
 terminate an identified orphan group when its original leader survives, then
@@ -69,8 +79,8 @@ the native agent from reading them. The target's broad-read opt-in is required.
    explicit Astra hello completes through Summon. No silent model fallback.
 
 The target runtime entry is below; merge it into the existing allowlist without
-replacing other runtimes or folders. It has not been applied: the first live
-request was refused because `codex` was absent. The hello uses the already
+replacing other runtimes or folders. Yu saved it after initial requests were
+refused because `codex` was absent; a later request was admitted. The hello uses the already
 allowlisted `~/Projects/collab-trial` working folder.
 
 ```yaml
@@ -116,12 +126,18 @@ compiled runner or prove that this account can use the model.
 - Sonnet follow-up `nuance/smn_01a13f45ff2d7ab1a5429ef4645c5566` confirmed that
   correction and found no further blocker in the supplied change. This is source
   review evidence, not an independent execution receipt.
-- Final local Summon suite: **556 passed, 0 failed** across 15 files using Bun
+- Base adapter local Summon suite: **556 passed, 0 failed** across 15 files using Bun
   **1.3.5**. The suite includes compiled arm64 programs, signature verification
   and fixture installation. New/changed documentation links and `git diff --check`
   also passed. The broader repository `preflight.sh packages` could not start:
   the HF training host test environment is missing. Its result is not a passing
   repository-wide gate; no unrelated dependency preparation was performed.
+- Diagnostic extension: **563 passed, 0 failed**, 4,268 assertions across 16
+  files on Bun **1.3.5**, including the compiled-pair result. A stalled fixture
+  emits a partial reply and private stderr, then exits zero on SIGTERM; its
+  result remains timed out and retains content-free stage/termination evidence.
+  A separate source review found no blocker. Documentation links and diff
+  whitespace checks passed. This does not add live Nuance evidence.
 
 ## Nuance installation and first request (2026-10-15)
 
@@ -140,14 +156,31 @@ model availability.
 The first review hello explicitly selected `gpt-6-astra`, no effort/provider
 override, and `~/Projects/collab-trial`. Admission returned
 `refused(outside_allowlist): runtime codex is not allowed`; no model job was
-started. The target runtime entry above still needs to be added locally on
-Nuance before a new hello can be admitted.
+started. Yu subsequently supplied the saved Codex entry, with the original
+Claude runtime/folders/limits retained and a local backup.
+
+The first admitted request, `nuance/smn_01a13f6fc3f2785e9a0c264808b28ae8`,
+started at `2026-10-15T12:00:51.698Z` with a 300-second deadline. It ended
+`timed_out` (`ran past 300s`), exit code zero and empty `result_text`. A fresh
+heartbeat proved supervisor activity only. Exit zero after termination does not
+mean completion; empty parsed text does not establish an empty native stream.
+The installed `073508aa` runner did not preserve event-stage diagnostics.
+
+Nuance Opus xhigh source diagnosis
+`nuance/smn_01a13f7656d97c2e9375586cb69b3fd1` completed in one turn. It identified
+the missing stage evidence but established no cause. Yu confirmed direct native
+Astra on Nuance can reply normally. Inventory's normal-config `login status` and
+the job's `--ignore-user-config` execution do not establish identical auth-store
+selection. The offline probe exercised a local unauthenticated provider with
+compression disabled, not the native account/network path. Auth-store, network
+and stream-timeout explanations remain hypotheses. No automatic replay followed.
 
 Official references: [non-interactive JSONL](https://learn.chatgpt.com/docs/non-interactive-mode),
 [CLI flags](https://learn.chatgpt.com/docs/developer-commands?surface=cli),
 [configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
-Implementation, local Summon verification, the native isolation probe and remote
-source review are complete. Nuance installation is user-reported and native
-version/login are observed through authenticated inventory. The target allowlist
-and live Astra reply remain pending. Do not describe this route as connected yet.
+The base adapter is installed (user receipt), native version/login are observed
+through authenticated inventory, and Codex admission is verified. The diagnostic
+extension above is local source only until a newer installation receipt exists.
+A live Astra reply through Summon remains pending; do not describe this route as
+connected yet.

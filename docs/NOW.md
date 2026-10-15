@@ -21,9 +21,11 @@
 
 The isolated `feat/summon-codex-review-20261015` branch adds a native Codex review
 adapter to Summon's existing job transport. The [contract](../packages/summon/CODEX.md)
-tracks verification and remaining installation/live evidence. Nuance Claude's
-design consultation completed; that is not evidence of a Nuance Astra reply.
-The installed transport and held Collab Phase 1 trial remain unchanged.
+tracks verification and live evidence. Nuance's updated runner and Codex allowlist
+admitted the first Astra hello, which timed out after 300 seconds. Yu confirms
+direct Astra works; the Summon execution context still needs diagnosis. A local
+extension preserves content-free event progress in results. The SSH transport
+and held Collab Phase 1 trial remain unchanged.
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 

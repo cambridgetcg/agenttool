@@ -41,6 +41,7 @@ export interface JobResult {
   num_turns?: number
   cost_usd?: number
   resets_at?: string
+  codex_diagnostics?: Outcome['codex_diagnostics']
 }
 
 /** Content-free tag for an error: an errno-style code (ENOENT, ENOTDIR...) or a fixed word. Never the message. */
@@ -79,7 +80,8 @@ export function finishJob(paths: SummonPaths, nowMs: number, s: JobState, o: Out
   const result: JobResult = { status: o.status, ...(o.reason ? { reason: o.reason } : {}), ...(o.detail ? { detail: o.detail } : {}),
     ...(o.result_text !== undefined ? { result_text: o.result_text } : {}), exit_code: exitCode,
     ...(o.num_turns !== undefined ? { num_turns: o.num_turns } : {}), ...(o.cost_usd !== undefined ? { cost_usd: o.cost_usd } : {}),
-    ...(o.resets_at ? { resets_at: o.resets_at } : {}) }
+    ...(o.resets_at ? { resets_at: o.resets_at } : {}),
+    ...(o.codex_diagnostics ? { codex_diagnostics: o.codex_diagnostics } : {}) }
   writeJsonAtomic(join(jobDir(paths, s.id), 'result.json'), result)
   settleJob(paths, nowMs, s, o)
 }

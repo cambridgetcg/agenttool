@@ -44,7 +44,12 @@ describe('Codex native review route', () => {
     const f = fixture()
     expect(gateStart(JSON.stringify(f.request), f.gate).status).toBe('admitted')
     expect(await runOnce(f.deps)).toBe(1)
-    expect(resultOf(f.paths, 'nuance', f.request.id, Date.now())).toMatchObject({ status: 'completed', result_text: 'echo: fixture-private-prompt', exit_code: 0 })
+    const result = resultOf(f.paths, 'nuance', f.request.id, Date.now())
+    expect(result).toMatchObject({ status: 'completed', result_text: 'echo: fixture-private-prompt', exit_code: 0,
+      codex_diagnostics: { parser_status: 'completed', stop_requested_ms: null, exit: { code: 0, signal: null },
+        events: { 'thread.started': { count: 1 }, 'turn.started': { count: 1 }, 'turn.completed': { count: 1 } },
+        items: { agent_message: { count: 1 } } } })
+    expect(JSON.stringify(result.codex_diagnostics)).not.toContain('fixture-private-prompt')
     const record = JSON.parse(readFileSync(f.fake.record, 'utf8'))
     expect(record.argv).toContain('gpt-6-astra')
     expect(record.argv).toContain('model_reasoning_effort="high"')
@@ -58,6 +63,8 @@ describe('Codex native review route', () => {
     expect(record.env).not.toHaveProperty('CODEX_HOME')
     expect(readFileSync(f.paths.ledger, 'utf8')).not.toContain(f.request.prompt)
     expect(readFileSync(f.paths.ledger, 'utf8')).not.toContain('echo:')
+    expect(readFileSync(f.paths.ledger, 'utf8')).not.toContain('codex_diagnostics')
+    expect(readState(f.paths, f.request.id)).not.toHaveProperty('codex_diagnostics')
     expect(gateStart(JSON.stringify(f.request), f.gate)).toMatchObject({ status: 'refused', reason: 'replayed' })
   })
 
@@ -103,10 +110,23 @@ describe('Codex native review route', () => {
   })
 
   test('timeout settles a Codex job without claiming completion', async () => {
-    const f = fixture(); f.fake.setMode('slow'); f.request.timeout_s = 1
+    const f = fixture(); f.fake.setMode('partial-reply-stall'); f.request.timeout_s = 1
     expect(gateStart(JSON.stringify(f.request), f.gate).status).toBe('admitted')
     await runOnce(f.deps)
-    expect(resultOf(f.paths, 'nuance', f.request.id, Date.now()).status).toBe('timed_out')
+    const result = resultOf(f.paths, 'nuance', f.request.id, Date.now())
+    expect(result).toMatchObject({ status: 'timed_out', exit_code: 0, result_text: '',
+      codex_diagnostics: { parser_status: 'failed', parser_detail: 'codex did not finish with a reply',
+        exit: { code: 0, signal: null }, stderr_bytes: 'private-stderr-marker'.length * 300,
+        events: { 'thread.started': { count: 1 }, 'turn.started': { count: 1 } }, items: { agent_message: { count: 1 } } } })
+    const progress = result.codex_diagnostics as any
+    expect(progress.stdout_bytes).toBeGreaterThan(0)
+    expect(progress.stop_requested_ms).toBeGreaterThanOrEqual(1000)
+    expect(progress.exit.at_ms).toBeGreaterThanOrEqual(progress.stop_requested_ms)
+    expect(progress.events).not.toHaveProperty('turn.completed')
+    for (const marker of ['private-stderr-marker', 'private-partial-reply', 'private-item-id']) {
+      expect(JSON.stringify(result)).not.toContain(marker)
+      expect(readFileSync(f.paths.ledger, 'utf8')).not.toContain(marker)
+    }
     expect(readState(f.paths, f.request.id)?.pid).toBeUndefined()
   })
 

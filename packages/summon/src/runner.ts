@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
 import { codexInvocation, codexReady } from './codex.ts'
 import { interpretCodexStream } from './codex-output.ts'
+import { createCodexProgress } from './codex-progress.ts'
 import { groupMembers, signalOwnedGroup, type GroupMembers } from './process-group.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
@@ -83,9 +84,14 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   try { inv = (isCodex ? codexInvocation : claudeInvocation)({ model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
     return finish(deps, s, { status: 'failed', detail: `could not start ${runtime}: the command could not be built for this folder` })
   }
+  const mono = deps.monoMs ?? (() => performance.now())
+  const spawnMono = mono()
+  const progress = isCodex ? createCodexProgress(() => mono() - spawnMono) : null
   const started = await startChild(inv, s.cwd_real, isCodex)
   if ('error' in started) return finish(deps, s, { status: 'failed', detail: `could not start ${runtime}: ${started.error}` })
   const { child } = started
+  // Native process progress is separate from the supervisor heartbeat and the result parser.
+  child.once('exit', (code, signal) => progress?.exit(code, signal))
   const childStart = deps.processStartTime(child.pid!)
   let knownGroup: GroupMembers = new Map(childStart ? [[child.pid!, childStart]] : [])
   const observeGroup = () => {
@@ -132,31 +138,35 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const stop = (o: Outcome) => {
     if (stopped) return
     stopped = o
+    progress?.stop()
     signalChild('SIGTERM')
     killTimer = setTimeout(() => signalChild('SIGKILL'), deps.killGraceMs)
   }
   child.stdout!.setEncoding('utf8')
   child.stdout!.on('data', (chunk: string) => {
-    bytes += Buffer.byteLength(chunk)
+    const chunkBytes = Buffer.byteLength(chunk)
+    bytes += chunkBytes
+    progress?.stdout(chunkBytes)
     if (bytes > MAX_STDOUT_BYTES) return stop({ status: 'failed', detail: 'output over 8 MiB' })
     buf += chunk
     let i: number
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i); buf = buf.slice(i + 1)
       lines.push(line)
+      progress?.line(line)
       if (!isCodex && usageWarning(line)) stop({ status: 'blocked', reason: 'usage' })
     }
   })
   const stderrHead: Buffer[] = []
   let stderrBytes = 0
   child.stderr!.on('data', (chunk: Buffer) => {
+    progress?.stderr(chunk.length)
     if (stderrBytes >= STDERR_KEEP_BYTES) return
     const part = chunk.subarray(0, STDERR_KEEP_BYTES - stderrBytes)
     stderrHead.push(part); stderrBytes += part.length
   })
 
   // Intervals are measured on a monotonic clock, so a wall-clock step (NTP) neither pauses the heartbeat nor moves the timeout.
-  const mono = deps.monoMs ?? (() => performance.now())
   const beat = () => { try { writeFileSync(join(dir, 'heartbeat'), String(deps.nowMs()), { mode: 0o600 }) } catch { /* dir swept */ } }
   const startedMono = mono()
   beat()
@@ -194,12 +204,17 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     }
   }
   child.stdout!.destroy(); child.stderr!.destroy()
-  if (buf) lines.push(buf)
+  if (buf) { lines.push(buf); progress?.line(buf) }
   const interpreted = (isCodex ? interpretCodexStream : interpretClaudeStream)(lines, code, Buffer.concat(stderrHead).toString('utf8'))
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
-  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, cleanupUnverified
+  const outcome: Outcome = cleanupUnverified
     ? { status: 'unknown', detail: 'Codex process group cleanup could not be verified' }
-    : stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
+    : stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted
+  // Keep the parser classification even when timeout/cancel wins. No raw stream fields enter this receipt.
+  const diagnostics = progress ? { ...progress.snapshot(), parser_status: interpreted.status,
+    ...(interpreted.detail ? { parser_detail: interpreted.detail } : {}) } : undefined
+  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) },
+    { ...outcome, ...(diagnostics ? { codex_diagnostics: diagnostics } : {}) }, code)
 }
 
 /** Last resort for a throw that escaped runJob: end the job failed (runner-authored detail) rather than leave it queued or running. */

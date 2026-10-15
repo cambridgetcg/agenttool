@@ -2,6 +2,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Access } from './request.ts'
 import type { JobStatus } from './status.ts'
+import type { CodexProgress } from './codex-progress.ts'
 
 export function isExecutable(p: string): boolean {
   try { accessSync(p, constants.X_OK); return statSync(p).isFile() } catch { return false }
@@ -32,6 +33,8 @@ export interface Outcome {
   num_turns?: number
   cost_usd?: number
   resets_at?: string
+  /** Fixed vocabulary and counts only; private result file, never the ledger or job state. See CODEX.md. */
+  codex_diagnostics?: CodexProgress & { parser_status: JobStatus; parser_detail?: string }
 }
 
 // A folder spelled with these would split or reinterpret the comma-separated `--disallowedTools` rule built from it.
