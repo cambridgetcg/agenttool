@@ -45,6 +45,15 @@ function writeEnd(p: unknown, ms: number): Promise<'done' | 'failed' | 'late'> {
   })
 }
 
+/**
+ * A reply the gate does not wait for: if its promise is rejected the reader has gone, and that is not the gate's failure, so
+ * the rejection is taken here and never left unhandled (it could add a stderr line or change the exit code). Whether the
+ * bytes arrived is the sink's business (main.ts flushes it before exit). A write that throws at once is still the caller's.
+ */
+function unawaited(p: void | Promise<void>): void {
+  void Promise.resolve(p).catch(() => {})
+}
+
 export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; now?: () => Date } = {}): Promise<number> {
   const mono = o.mono ?? monoNowMs
   const now = o.now ?? (() => new Date())
@@ -58,7 +67,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
     // The one invocation that cannot be ledgered: the ledger lives under the home, and this is the case where no home could be
     // built. A passwd-derived fallback would put a line where the Nuance paths do not point (and, in a test, in a real home),
     // so the stderr line is the whole record. git still gets its reason (Task 63 gate-1-8).
-    if (uploadPackShaped(raw)) { try { io.stdout.write(pktLineErr('config')) } catch { /* the client is gone */ } }
+    if (uploadPackShaped(raw)) { try { unawaited(io.stdout.write(pktLineErr('config'))) } catch { /* the client is gone */ } }
     say(`refused: ${e instanceof Error ? e.message : String(e)}`)
     return GATE_REFUSED_EXIT
   }
@@ -91,7 +100,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
   try {
     const cmd = parseGateCommand(raw)
     if (!cmd) {
-      if (uploadPackShaped(raw)) out.write(pktLineErr('bad_command'))
+      if (uploadPackShaped(raw)) unawaited(out.write(pktLineErr('bad_command')))
       say("refused: the only forms are hello, relay 1 <nonce> and git-upload-pack '<path>'")
       record('bad', 'refused', describeCommand(raw))   // its length and, for a listed program only, its name; never a word the client chose
       return GATE_REFUSED_EXIT
@@ -106,7 +115,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
           record('hello', 'refused', 'hello_unavailable')
           return GATE_REFUSED_EXIT
         }
-        out.write(JSON.stringify(h) + '\n')
+        unawaited(out.write(JSON.stringify(h) + '\n'))
         record('hello', 'ok')
         return 0
       }
@@ -120,7 +129,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
       case 'upload-pack': {
         const installed = readInstalled(paths)
         if (!installed) {
-          out.write(pktLineErr('not_installed'))
+          unawaited(out.write(pktLineErr('not_installed')))
           say('upload-pack: collab-bridge is not installed on this Mac')
           record('upload-pack', 'refused', 'not_installed')
           return GATE_REFUSED_EXIT
@@ -150,7 +159,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
       }
     }
   } catch (e) {
-    if (uploadPackShaped(raw)) { try { out.write(pktLineErr('exception')) } catch { /* the client is gone */ } }
+    if (uploadPackShaped(raw)) { try { unawaited(out.write(pktLineErr('exception'))) } catch { /* the client is gone */ } }
     try { say(`${formSeen}: unexpected failure (${errorCode(e)})`) } catch { /* stderr is gone as well */ }
     if (!recorded) record(formSeen, 'error', 'exception')
     return GATE_EXCEPTION_EXIT

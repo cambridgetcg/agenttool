@@ -308,6 +308,66 @@ describe('gate entry: no paths (Task 63 gate-1-8)', () => {
   })
 })
 
+describe('gate entry: a reply to a reader that has gone (Task 63 gate-1-8 round 1)', () => {
+  /**
+   * runGate in this process with a stdout whose every write is rejected, the way a sink reports a reader that has gone
+   * (GateIo.write may return a promise). The rejections nobody handled are collected: a reply the gate does not wait for
+   * must not leave one behind, or it could add a stderr line or change the exit code.
+   */
+  async function runGone(env: Record<string, string>) {
+    const unhandled: unknown[] = []
+    const onUnhandled = (e: unknown) => { unhandled.push(e) }
+    const tried: Buffer[] = []
+    let err = ''
+    const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }),
+      stdout: { write(b: Uint8Array | string) { tried.push(Buffer.from(b)); return Promise.reject(new Error('EPIPE')) } },
+      stderr: { write(s: string) { err += s } } }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const code = await runGate(env, io)
+      await Bun.sleep(30)                                // an unhandled rejection is reported once the microtasks have drained
+      return { code, err, unhandled, tried: Buffer.concat(tried) }
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  }
+
+  test('the pkt-line ERR for paths that cannot be built is tried, and its rejection is not left unhandled', async () => {
+    const r = await runGone({ HOME: 'not/absolute', SSH_ORIGINAL_COMMAND: "git-upload-pack '/Users/macair/Projects/collab-trial/.git'" })
+    expect(Array.from(r.tried)).toEqual(Array.from(pktLineErr('config')))
+    expect(r.unhandled).toEqual([])
+    expect(r.code).toBe(64)
+    expect(lines(r.err)).toHaveLength(1)
+  })
+
+  test('the ERR bad_command, the hello answer and the ERR not_installed are the same: tried, ledgered, nothing unhandled', async () => {
+    const n = nuance()
+    const bad = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: "git-upload-pack 'relative/path'" })
+    expect([bad.code, bad.unhandled, Array.from(bad.tried)]).toEqual([64, [], Array.from(pktLineErr('bad_command'))])
+    const notInstalled = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: "git-upload-pack '/Users/macair/Projects/collab-trial/.git'" })
+    expect([notInstalled.code, notInstalled.unhandled, Array.from(notInstalled.tried)]).toEqual([64, [], Array.from(pktLineErr('not_installed'))])
+    installForHello(n.paths)
+    const hello = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: 'hello' })
+    expect([hello.code, hello.unhandled, JSON.parse(hello.tried.toString('utf8')).v]).toEqual([0, [], 1])
+    expect(hello.err).toBe('')
+    expect(gateTriples(n.paths)).toEqual([['bad', 'refused', expect.any(String)], ['upload-pack', 'refused', 'not_installed'], ['hello', 'ok', undefined]])
+  })
+
+  test('the ERR exception is the same: tried, ledgered, exit 70, nothing unhandled', async () => {
+    const dir = temp('cb-nonexec-')
+    const notGit = join(dir, 'git')
+    writeFileSync(notGit, '#!/bin/sh\nexit 0\n', { mode: 0o644 })
+    const h = installedNuanceHome({ share: join('Projects', 'collab-trial'),
+      git: { path: notGit, version: '2.52.0', sha256: sha256File(notGit), guard: true, apple: false } })
+    secretBranchRepo(h.share, h.home)
+    const r = await runGone({ ...h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${join(h.share, '.git')}'` })
+    expect(r.unhandled).toEqual([])
+    expect(r.code).toBe(70)
+    expect(Array.from(r.tried)).toEqual(Array.from(pktLineErr('exception')))
+    expect(gateTriples(h.paths)).toEqual([['upload-pack', 'error', 'exception']])
+  }, 30_000)
+})
+
 describe('gate entry: failures stay on the record (Task 24 review)', () => {
   test('a throw in the hello dispatch still appends the ledger line, and exits 70 with one stderr line', async () => {
     const n = nuance()
