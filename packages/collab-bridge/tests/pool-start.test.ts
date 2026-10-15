@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TIMING } from '../src/timing.ts'
 import { CollabChild, type CallOutcome } from '../src/air/children.ts'
@@ -707,13 +707,27 @@ describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
     expect(Date.now() - t0).toBeLessThan(4_000)
   }, 30_000)
 
+  // Round 1 of the same item: the CLI here starts slowly, as it does on a loaded runner (700 ms, past the 300 ms this test first used),
+  // and the 3 s timeout leaves it a wide margin, so the exit under test is always the CLI's own and never a SIGTERM that beat it. The
+  // sleeper's pid is written to a file so the test can stop it: nothing outlives the test.
   test('a grandchild that keeps the output pipes open cannot hold the answer past the deadline', async () => {
+    const pidFile = join(temp('cb-hostcli-pid-'), 'grandchild.pid')
+    // The CLI exits 0 after its slow start; a sleeping grandchild inherits its stdout and stderr and holds both open for 30 s.
+    const script = [
+      "import { writeFileSync } from 'node:fs'",
+      'await Bun.sleep(700)',
+      "const g = Bun.spawn(['/bin/sleep', '30'], { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })",
+      `writeFileSync(${JSON.stringify(pidFile)}, String(g.pid))`,
+      'process.exit(0)',
+    ].join('\n') + '\n'
     const t0 = Date.now()
-    // The CLI itself exits 0 at once; a sleeping grandchild inherits its stdout and stderr and holds both open for 8 s.
-    const script = "Bun.spawn(['/bin/sleep', '8'], { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })\nprocess.exit(0)\n"
-    const r = await hostWith(script, process.execPath, { killGraceMs: 200, reapGraceMs: 200 })(['x'], 300)
-    expect(r.code).toBe(0) // the exit status it really had stands; only the unread rest of its output is given up
-    expect(Date.now() - t0).toBeLessThan(4_000)
+    try {
+      const r = await hostWith(script, process.execPath, { killGraceMs: 200, reapGraceMs: 200 })(['x'], 3_000)
+      expect(r.code).toBe(0) // the exit status it really had stands; only the unread rest of its output is given up
+      expect(Date.now() - t0).toBeLessThan(10_000) // the answer came at the deadline plus the graces, long before the sleeper ended
+    } finally {
+      try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL') } catch { /* no sleeper was started, or it is gone */ }
+    }
   }, 30_000)
 })
 
