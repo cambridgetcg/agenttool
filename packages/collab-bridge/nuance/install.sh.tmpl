@@ -119,9 +119,11 @@ echo "✓ collab-bridge installed in $SHARE_DIR"
 mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
 touch "$AK"; chmod 600 "$AK"
 LINE="restrict,from=\"192.168.50.0/24\",expiry-time=\"$EXPIRY\",command=\"$SHARE_DIR/collab-bridge gate\" $PUBKEY"
-# Every line but an earlier collab-air one is kept as it is (Summon's summon-air line included). grep -v exits 1 when it
-# keeps no line, which is fine; 2 means it could not read the file, and going on would write a file holding only ours.
-grep -v ' collab-air$' "$AK" > "$AK.collab-tmp" || [ $? -eq 1 ] || { rm -f "$AK.collab-tmp"; stop "✗ could not read $AK; it was left as it is. Tell Ai."; }
+# Every line but an earlier collab-air one is kept as it is (Summon's summon-air line included). -a: a file with a NUL byte in
+# it is binary to grep, which would print only "Binary file … matches" for -v and exit 0, and the rename would then drop
+# every other key. grep -v exits 1 when it keeps no line, which is fine; 2 means it could not read the file, and going on
+# would write a file holding only ours.
+grep -a -v ' collab-air$' "$AK" > "$AK.collab-tmp" || [ $? -eq 1 ] || { rm -f "$AK.collab-tmp"; stop "✗ could not read $AK; it was left as it is. Tell Ai."; }
 printf '%s\n' "$LINE" >> "$AK.collab-tmp"
 chmod 600 "$AK.collab-tmp"
 mv "$AK.collab-tmp" "$AK"

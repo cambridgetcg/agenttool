@@ -180,6 +180,21 @@ describe('the bash installer', () => {
     expect(keyLines(h)).toEqual([summonLine(h.home), other, expectedKeyLine({ home: h.home, pubkey: FIXTURE_PUBKEY, expiry: b.values.expiry })])
   }, 60_000)
 
+  test('an authorized_keys that holds a NUL byte keeps every line but the collab-air one, byte for byte (Task 63 installer-1-9)', () => {
+    // BSD grep reads such a file as binary: without -a, `grep -v` prints only "Binary file … matches" and exits 0, and the
+    // rename would then leave that sentence and the collab-air line in place of Summon's key.
+    const { h, b, run } = world()
+    const summon = Buffer.from(summonLine(h.home) + '\n')
+    const pasted = Buffer.concat([Buffer.from('# pasted from a UTF-16 source: '), Buffer.from([0]), Buffer.from('x\n')])
+    const other = Buffer.from('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherKeyOtherKeyOtherKeyOtherKeyOtherKeyOther yu@elsewhere\n')
+    const stale = Buffer.from(`restrict,from="192.168.50.0/24",expiry-time="20261201",command="${h.home}/.local/share/collab-bridge/collab-bridge gate" ssh-ed25519 AAAAstale collab-air\n`)
+    writeFileSync(h.paths.authorizedKeys, Buffer.concat([summon, pasted, stale, other]))
+    const r = run()
+    expect([r.code, lastLine(r.stdout)]).toEqual([0, expect.stringMatching(/^Done\. /)])
+    const want = Buffer.concat([summon, pasted, other, Buffer.from(expectedKeyLine({ home: h.home, pubkey: FIXTURE_PUBKEY, expiry: b.values.expiry }) + '\n')])
+    expect(readFileSync(h.paths.authorizedKeys).equals(want)).toBe(true)
+  }, 60_000)
+
   test('a failed re-check after the clone ends with no shares.json, no INSTALLED and no collab-air line', () => {
     const { h, run } = world({ files: { 'README.md': 'collab trial\n', REST: '' } })
     const keysBefore = readFileSync(h.paths.authorizedKeys, 'utf8')
