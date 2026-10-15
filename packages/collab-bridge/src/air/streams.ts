@@ -78,6 +78,7 @@ export class LinkSession {
   private readonly pongDropMs: number
   private lastPong = 0
   private pinger: ReturnType<typeof setInterval> | null = null
+  private dropper: ReturnType<typeof setTimeout> | null = null
   private started = false
   private ended = false
   private resolveDone!: () => void
@@ -102,6 +103,7 @@ export class LinkSession {
     this.mux.ping() // the first PING at once, so the relay and its pipes count freshness from now (§5.3)
     if (this.ended) return this.done // that write failed: end() ran while pinger was still null, so no interval may start
     this.pinger = setInterval(() => this.tick(), this.pingMs)
+    this.armDrop()
     return this.done
   }
 
@@ -123,8 +125,28 @@ export class LinkSession {
     const d = this.currentDevice()
     if (d !== null && (d.state !== 'paired' || d.seat_public === null)) return this.close('unpaired')
     // §9.7: a Mac asleep or gone stops answering; mono counts sleep, so a long sleep drops the link at once.
-    if (this.deps.mono() - this.lastPong > this.pongDropMs) return this.end('no_pong')
+    if (this.silent()) return this.end('no_pong')
     this.mux.ping()
+  }
+
+  private silent(): boolean {
+    return this.deps.mono() - this.lastPong > this.pongDropMs
+  }
+
+  /**
+   * P47: the link is dropped pongDropMs after its last PONG. The check on the PING tick alone cannot keep that: a PONG lands
+   * a few ms after its PING, so the tick pongDropMs later sees a hair under pongDropMs of silence and the drop waited one
+   * more PING period (60 s, not 45 s). This timer wakes at lastPong + pongDropMs; if a PONG came meanwhile it sleeps again
+   * for the rest. The tick keeps its own check, which is what drops a link at once after a long sleep (Task 63 relay-1-8).
+   */
+  private armDrop(): void {
+    const wait = Math.max(1, this.lastPong + this.pongDropMs - this.deps.mono() + 1)
+    this.dropper = setTimeout(() => {
+      this.dropper = null
+      if (this.ended) return
+      if (this.silent()) return this.end('no_pong')
+      this.armDrop()
+    }, wait)
   }
 
   /**
@@ -395,6 +417,7 @@ export class LinkSession {
     if (this.ended) return
     this.ended = true
     if (this.pinger !== null) { clearInterval(this.pinger); this.pinger = null }
+    if (this.dropper !== null) { clearTimeout(this.dropper); this.dropper = null }
     try {
       for (const s of [...this.streams.values()]) {
         try { this.finish(s) } catch { /* the other streams still detach */ }

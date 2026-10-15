@@ -612,6 +612,35 @@ describe('the link', () => {
     expect(silent.ledger).toContainEqual({ event: 'link_end', device: 'nuance', user: 'macair', code: 'no_pong' })
   })
 
+  test('a link that goes silent after its last PONG is dropped pongDropMs after that PONG, not at the next PING tick (Task 63 relay-1-8)', async () => {
+    // The PONG for a PING arrives a few ms after the PING, so the tick that lands exactly pongDropMs after the PING sees
+    // slightly less than pongDropMs of silence and the drop used to wait one more PING period (P47: 45 s, not 60 s).
+    // PING every 300 ms, drop after 120 ms of silence: the check on the PING tick alone would drop at about 300 ms.
+    const t = rig({ deps: { pingMs: 300, pongDropMs: 120 } })
+    const started = performance.now()
+    await Bun.sleep(10)
+    t.relay.pong()                                     // the one PONG; then the relay is silent and the connection stays open
+    await t.run
+    const took = performance.now() - started
+    expect(took).toBeGreaterThanOrEqual(120)
+    expect(took).toBeLessThan(220)
+    expect(t.relay.closedByHub()).toBe(true)
+    expect(t.relay.sent.filter((f) => f.type === FRAME_TYPE.PING)).toHaveLength(1) // dropped before the second PING tick
+    expect(t.ledger).toContainEqual({ event: 'link_end', device: 'nuance', user: 'macair', code: 'no_pong' })
+  })
+
+  test('a PONG that keeps arriving postpones the silence timer: the link stays up past the first deadline and no timer outlives it (Task 63 relay-1-8)', async () => {
+    const t = rig({ deps: { pingMs: 40, pongDropMs: 120 } })
+    for (let i = 0; i < 8; i++) { await Bun.sleep(40); t.relay.pong() }   // 320 ms, well past the first 120 ms deadline
+    expect(t.relay.closedByHub()).toBe(false)
+    t.session.close('test')
+    await t.run
+    const closed = t.ledger.filter((f) => f.event === 'link_end')
+    await Bun.sleep(200)                               // a timer left running would end the session again after the deadline
+    expect(t.ledger.filter((f) => f.event === 'link_end')).toEqual(closed)
+    expect(closed).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'test' }])
+  })
+
   test('a 30-minute jump of the monotonic clock drops the link at the next tick', async () => {
     // Review Focus 4: mono counts sleep, so a Mac that slept with the link up drops it at once instead of trusting it.
     let jump = 0
