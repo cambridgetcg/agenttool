@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { appendFileSync, closeSync, existsSync, openSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, openSync, readdirSync, readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { canonicalJson } from '../src/json.ts'
-import { AIR_LEDGER_KEYS, appendLedger, LEDGER_VALUE_MAX, NUANCE_LEDGER_KEYS, readLedger, verifyLedger, withLock } from '../src/ledger.ts'
+import { AIR_LEDGER_KEYS, appendLedger, breakLock, LEDGER_VALUE_MAX, NUANCE_LEDGER_KEYS, readLedger, verifyLedger, withLock } from '../src/ledger.ts'
 import { cleanupTmps, temp } from './helpers.ts'
 
 afterEach(cleanupTmps)
@@ -198,5 +198,87 @@ describe('withLock', () => {
     utimesSync(p + '.lock', old, old)
     expect(withLock(p, () => 'ran')).toBe('ran')
     expect(existsSync(p + '.lock')).toBe(false)
+  })
+
+  test('the 3 s deadline is monotonic: a wall clock stepped back during a contended wait does not stretch it (Task 63 relay-1-6)', () => {
+    const p = join(temp('cb-lock-'), 'devices.json')
+    closeSync(openSync(p + '.lock', 'wx', 0o600)) // held by someone else, and fresh
+    const realNow = Date.now
+    let calls = 0
+    // The first reading is the real time; every later one is 5 s earlier, as after an NTP step back. On the wall clock that
+    // adds 5 s to the wait, spinning the hub's event loop (no PINGs go out) the whole time.
+    Date.now = () => (++calls === 1 ? realNow() : realNow() - 5_000)
+    const t0 = performance.now()
+    try {
+      expect(() => withLock(p, () => 'never', { timeoutMs: 300 })).toThrow('ledger lock timeout')
+    } finally {
+      Date.now = realNow
+    }
+    expect(performance.now() - t0).toBeLessThan(1_500)
+  }, 15_000)
+
+  test('releases only the lock it made: one that was broken and replaced meanwhile stays with its holder (Task 63 relay-1-6)', () => {
+    const p = join(temp('cb-lock-'), 'devices.json')
+    const lock = p + '.lock'
+    // fn ran past the 10 s mark, a waiter broke its lock, and another holder made its own; ours must not remove that one.
+    withLock(p, () => { unlinkSync(lock); writeFileSync(lock, 'another-holders-token', { flag: 'wx', mode: 0o600 }) })
+    expect(readFileSync(lock, 'utf8')).toBe('another-holders-token')
+    // A lock of ours that is still ours is removed, also when fn throws.
+    unlinkSync(lock)
+    expect(() => withLock(p, () => { throw new Error('inside') })).toThrow('inside')
+    expect(existsSync(lock)).toBe(false)
+  })
+
+  test('a holder writes its own token into the lock file, which is what its release checks', () => {
+    const p = join(temp('cb-lock-'), 'devices.json')
+    expect(withLock(p, () => readFileSync(p + '.lock', 'utf8').length)).toBeGreaterThan(0) // a holder writes its token into the file
+    expect(existsSync(p + '.lock')).toBe(false)
+  })
+})
+
+describe('breakLock', () => {
+  const staleFile = (file: string, body = '') => {
+    writeFileSync(file, body, { flag: 'wx', mode: 0o600 })
+    const old = (Date.now() - 20_000) / 1000
+    utimesSync(file, old, old)
+  }
+
+  test('removes a lock older than 10 s, and takes its gate away again', () => {
+    const dir = temp('cb-lock-')
+    const lock = join(dir, 'x.json.lock')
+    staleFile(lock, 'dead-holders-token')
+    expect(breakLock(lock)).toBe(true)
+    expect(readdirSync(dir)).toEqual([])
+    expect(breakLock(lock)).toBe(false)                // already gone: another waiter broke it first
+    expect(readdirSync(dir)).toEqual([])
+  })
+
+  test('re-reads the lock\'s age under the gate: a live lock that replaced the stale one is left alone (Task 63 relay-1-6)', () => {
+    const dir = temp('cb-lock-')
+    const lock = join(dir, 'x.json.lock')
+    staleFile(lock)
+    // A faster waiter broke the stale lock and made its own after this waiter had judged the old one.
+    unlinkSync(lock)
+    writeFileSync(lock, 'live-holders-token', { flag: 'wx', mode: 0o600 })
+    expect(breakLock(lock)).toBe(false)
+    expect(readFileSync(lock, 'utf8')).toBe('live-holders-token')
+    expect(readdirSync(dir)).toEqual(['x.json.lock'])
+  })
+
+  test('a waiter that finds the gate taken breaks nothing, so two waiters on one dead lock cannot both break it (Task 63 relay-1-6)', () => {
+    const p = join(temp('cb-lock-'), 'devices.json')
+    staleFile(p + '.lock', 'dead-holders-token')
+    writeFileSync(p + '.lock.break', '', { flag: 'wx', mode: 0o600 })      // another waiter is breaking it right now
+    expect(() => withLock(p, () => 'never', { timeoutMs: 200 })).toThrow('ledger lock timeout')
+    expect(readFileSync(p + '.lock', 'utf8')).toBe('dead-holders-token')
+    expect(existsSync(p + '.lock.break')).toBe(true)                      // and it did not take the other waiter's gate away
+  })
+
+  test('a gate left by a breaker that died is removed once it is old, and the lock is then broken', () => {
+    const p = join(temp('cb-lock-'), 'devices.json')
+    staleFile(p + '.lock', 'dead-holders-token')
+    staleFile(p + '.lock.break')
+    expect(withLock(p, () => 'ran')).toBe('ran')
+    expect(readdirSync(join(p, '..'))).toEqual([])
   })
 })

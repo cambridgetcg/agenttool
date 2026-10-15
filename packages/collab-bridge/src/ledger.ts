@@ -3,9 +3,10 @@
 // Values are clipped and reduced to printable ASCII, so even a key that is allowed cannot carry prompt text, control
 // characters or a bidi trick into a line someone reads in a terminal.
 import { chmodSync, closeSync, existsSync, fchmodSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { dirname } from 'node:path'
 import { canonicalJson } from './json.ts'
+import { monoNowMs } from './native.ts'
 
 export const AIR_LEDGER_KEYS = ['event', 'device', 'user', 'lineage', 'session_id', 'tool', 'call_ref', 'outcome', 'journal', 'bytes', 'ms', 'code', 'fingerprint'] as const
 export const NUANCE_LEDGER_KEYS = ['event', 'form', 'outcome', 'code', 'lineage', 'call_ref', 'tool', 'bytes', 'ms'] as const
@@ -81,22 +82,68 @@ function tail(path: string, keys: readonly string[], nowMs: number): { prev: str
   return { prev: marker.hash, before: (text.endsWith('\n') ? '' : '\n') + JSON.stringify(marker) + '\n' }
 }
 
+const LOCK_STALE_MS = 10_000
+
 /**
- * Runs fn while holding `path + '.lock'`, created O_EXCL. Waits up to 3 s, and breaks a lock older than 10 s.
- * The ledger uses it per file; the device file uses it to re-read and write under one lock (Task 47).
+ * Breaks a lock older than `staleMs`, one waiter at a time. Waiters that wait on the same dead holder's lock all see it
+ * go stale together; if each stats it and then unlinks it by path, a slow one removes the live lock that a faster one has
+ * just made, and two holders are inside at once. So breaking takes a gate file (`<lock>.break`, created O_EXCL) first, and
+ * the lock's age is read again under the gate: a waiter that finds the gate taken breaks nothing and waits as before, and a
+ * lock that is no longer old when the gate is held (someone else broke it and made their own) is left alone. A gate left by
+ * a breaker that died is removed once it is `staleMs` old. Returns whether this call removed the lock (Task 63 relay-1-6).
  */
-export function withLock<T>(path: string, fn: () => T): T {
+export function breakLock(lock: string, staleMs: number = LOCK_STALE_MS): boolean {
+  const gate = lock + '.break'
+  try {
+    closeSync(openSync(gate, 'wx', 0o600))
+  } catch {
+    try { if (Date.now() - statSync(gate).mtimeMs > staleMs) unlinkSync(gate) } catch { /* gone */ }
+    return false
+  }
+  try {
+    if (Date.now() - statSync(lock).mtimeMs <= staleMs) return false
+    unlinkSync(lock)
+    return true
+  } catch {
+    return false // gone already
+  } finally {
+    try { unlinkSync(gate) } catch { /* gone */ }
+  }
+}
+
+/**
+ * Runs fn while holding `path + '.lock'`, created O_EXCL with this holder's own random token inside. Waits up to 3 s on the
+ * monotonic clock (a wall clock stepped back must not stretch a wait that spins the hub's event loop), and breaks a lock
+ * older than 10 s by its mtime (the file's time is wall-clock; a lock held that long is a dead holder's), through breakLock's
+ * gate so that only one waiter breaks it. The release removes
+ * the lock only while it still holds this holder's token, so a lock that was broken and replaced during a long fn is left to
+ * its new holder. The ledger uses it per file; the device file uses it to re-read and write under one lock (Task 47).
+ * `o.timeoutMs` lets a test shorten the wait.
+ */
+export function withLock<T>(path: string, fn: () => T, o: { timeoutMs?: number } = {}): T {
   const lock = path + '.lock'
-  const deadline = Date.now() + 3000
+  const deadline = monoNowMs() + (o.timeoutMs ?? 3000)
+  const token = randomBytes(16).toString('hex')
   for (;;) {
-    try { closeSync(openSync(lock, 'wx', 0o600)); break } catch (e: any) {
+    try {
+      const fd = openSync(lock, 'wx', 0o600)
+      try { writeSync(fd, token) } catch (e) {
+        closeSync(fd)
+        try { unlinkSync(lock) } catch { /* gone */ }
+        throw e
+      }
+      closeSync(fd)
+      break
+    } catch (e: any) {
       if (e.code !== 'EEXIST') throw e
-      try { if (Date.now() - statSync(lock).mtimeMs > 10_000) unlinkSync(lock) } catch { /* raced */ }
-      if (Date.now() > deadline) throw new Error('ledger lock timeout')
+      try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) breakLock(lock) } catch { /* gone meanwhile: the next open decides */ }
+      if (monoNowMs() > deadline) throw new Error('ledger lock timeout')
       Bun.sleepSync(20)
     }
   }
-  try { return fn() } finally { try { unlinkSync(lock) } catch { /* gone */ } }
+  try { return fn() } finally {
+    try { if (readFileSync(lock, 'utf8') === token) unlinkSync(lock) } catch { /* gone, or not ours to read */ }
+  }
 }
 
 /**
