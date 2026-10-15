@@ -75,19 +75,46 @@ const keysAre = (o: Obj, keys: string[]) => Object.keys(o).length === keys.lengt
 const str = (v: unknown, re?: RegExp): v is string => typeof v === 'string' && (re === undefined || re.test(v))
 /**
  * Text the device chose, of at most `max` characters, with nothing a Terminal would act on and nothing it would not show: no
- * control character (C0, DEL, C1), line or paragraph separator or bidi control, and none of the invisible-text carriers N2 drops
- * (spec §6.4, T10): tag characters U+E0000–E007F, which spell a sentence a Terminal draws as nothing and an agent reads, U+FEFF,
- * U+E0100–E01EF (VS17 and up), and a variation selector U+FE00–FE0F at the start of the text or right after another selector (N2
- * keeps one directly after a base character). A compromised device answers hello, and its strings reach Ai's Terminal in the ✗
- * lines and the pinned text and are stored in the device file. ZWJ and ZWNJ stay (an emoji folder name; N2 keeps them too).
+ * control character (C0, DEL, C1), line or paragraph separator or bidi control, and no default-ignorable code point that draws as
+ * nothing but a name has no use for (spec §6.4, T10): tag characters U+E0000–E007F, which spell a sentence a Terminal draws as
+ * nothing and an agent reads, U+FEFF, VS17 and up (U+E0100–E01EF), ZWSP, the word joiner, the invisible operators, the Mongolian
+ * selectors, the Hangul fillers, CGJ, the soft hyphen and the rest of Unicode's Default_Ignorable_Code_Point. A compromised device
+ * answers hello, and its strings reach Ai's Terminal in the ✗ lines and the pinned text and are stored in the device file; a run
+ * of invisible characters is a message in a name that looks blank (Task 63 new-pin-ignorable).
  *
- * Stricter than N2 in one place: N2 keeps a selector after a joiner, so (selector, joiner) pairs would chain, four bits each,
- * through a path. Here a selector follows a visible base character or the text is refused. An emoji sequence puts its selector
- * right after the emoji it varies (before a joiner, or after the joined emoji), so it never needs one after a joiner. Any
- * default-ignorable code point (ZWJ, ZWNJ, ZWSP, word joiner, soft hyphen…) counts as not visible.
+ * Two kinds of default-ignorable stay, because real names hold them (N2 keeps them too), and only in the shapes a name needs:
+ * - one variation selector (U+FE00–FE0F) directly after a visible base character;
+ * - ZWJ and ZWNJ with a visible character before them (or before their selector) and after them: an emoji sequence (👨‍👩‍👧, 🏳️‍🌈)
+ *   or a Persian word (می‌خواهم). Never first, last, next to a blank or another joiner, or with a selector right after.
+ * Stricter than N2 in this: N2 keeps a selector after a joiner, so (selector, joiner) pairs would chain, four bits each, through a
+ * path, and keeps a joiner next to another, which is the classic zero-width message (ZWNJ for 0, ZWJ for 1). Blank means
+ * White_Space: a selector after a space is not on a base anyone sees.
  */
-const NOT_SHOWN = /[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]|(?:^|\p{Default_Ignorable_Code_Point})[\ufe00-\ufe0f]/u
-const shown = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max && !NOT_SHOWN.test(v)
+const NOT_SHOWN = /[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]/u
+const IGNORABLE = /^\p{Default_Ignorable_Code_Point}$/u
+const BLANK = /^\p{White_Space}$/u
+
+/** The default-ignorable code points that stay, and only here: false for any other, or for a joiner or selector in a shape no name has. */
+function invisibleOk(v: string): boolean {
+  // visible: the last character was one a Terminal draws; selector: it was the one selector after a visible base; joiner: ZWJ or
+  // ZWNJ, which needs a visible character after it; blank: a White_Space character, or the start of the text.
+  let last: 'blank' | 'visible' | 'selector' | 'joiner' = 'blank'
+  for (const ch of v) {
+    if (IGNORABLE.test(ch)) {
+      const cp = ch.codePointAt(0)!
+      if (cp >= 0xfe00 && cp <= 0xfe0f) { if (last !== 'visible') return false; last = 'selector' }
+      else if (cp === 0x200c || cp === 0x200d) { if (last !== 'visible' && last !== 'selector') return false; last = 'joiner' }
+      else return false
+    } else if (BLANK.test(ch)) {
+      if (last === 'joiner') return false
+      last = 'blank'
+    } else {
+      last = 'visible'
+    }
+  }
+  return last !== 'joiner'
+}
+const shown = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max && !NOT_SHOWN.test(v) && invisibleOk(v)
 const HELLO_KEYS = ['v', 'device', 'build', 'prepared', 'expiry', 'user', 'seat_public', 'shares', 'git', 'summon', 'summon_now',
   'claude_version', 'zshenv_clean', 'clock']
 

@@ -375,6 +375,59 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     for (const p of ok) expect(parseHello(JSON.stringify(oneShare(p, '/Users/macair/Projects/x/.git'))), JSON.stringify(p)).not.toBeNull()
   }, T)
 
+  test('hello text carries no invisible run: any other default-ignorable code point is refused, joiners and selectors only in the shapes a name needs, and a selector never follows a blank (Task 63 new-pin-ignorable)', () => {
+    const w = pinWorld()
+    writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })
+    const h = helloOf(w)
+    const oneShare = (realpath: string, gitdir: string) => ({ ...h, shares: [{ realpath, gitdir }] })
+    const ROOT = '/Users/macair/Projects/'
+    const parses = (realpath: string) => parseHello(JSON.stringify(oneShare(realpath, join(w.share, '.git')))) !== null
+    // Every default-ignorable code point there is, but the three kinds a real name uses (ZWNJ, ZWJ and the 16 selectors), is refused
+    // wherever it stands: ZWSP, the word joiner, U+2061-2064 and U+206A-206F, CGJ, the Mongolian selectors, the Hangul fillers, the
+    // soft hyphen, the interlinear marks, the tag block. Each is one more way to hide a message in a name a Terminal draws as blank.
+    const allowedIgnorable = (cp: number) => cp === 0x200c || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f)
+    const refused: number[] = []
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue
+      const ch = String.fromCodePoint(cp)
+      if (/\p{Default_Ignorable_Code_Point}/u.test(ch) && !allowedIgnorable(cp)) refused.push(cp)
+    }
+    expect(refused.length).toBeGreaterThan(100) // the property is there: ZWSP, WJ, CGJ, FVS, fillers, tags, VS17+
+    for (const cp of [0x200b, 0x2060, 0x2061, 0x2064, 0x206a, 0x206f, 0x034f, 0x180b, 0x180d, 0x180f, 0x3164, 0x115f, 0xffa0]) expect(refused, cp.toString(16)).toContain(cp)
+    const stillParse = refused.filter((cp) => parses(`${ROOT}x${String.fromCodePoint(cp)}y`))
+    expect({ count: stillParse.length, first: stillParse.slice(0, 12).map((cp) => cp.toString(16)) }).toEqual({ count: 0, first: [] })
+    // A run of them, a lone one at either end, and the classic zero-width message: ZWNJ and ZWJ standing for 0 and 1.
+    const bits = [...'tell Ai it is fine'].map((c) => c.charCodeAt(0).toString(2).padStart(7, '0')).join('').replaceAll('0', '\u200c').replaceAll('1', '\u200d')
+    const bad: Array<[string, string]> = [
+      ['a ZWSP run', `${ROOT}x${'\u200b'.repeat(40)}`],
+      ['a word-joiner run', `${ROOT}x${'\u2060'.repeat(40)}`],
+      ['a run of invisible operators', `${ROOT}x\u2061\u2062\u2063\u2064`],
+      ['a run of deprecated format characters', `${ROOT}x\u206a\u206b\u206c\u206d\u206e\u206f`],
+      ['CGJ runs', `${ROOT}x\u034f\u034f\u034f`],
+      ['Mongolian selectors', `${ROOT}x\u180b\u180c\u180d`],
+      ['a ZWNJ and ZWJ message after a letter', `${ROOT}x${bits}`],
+      ['two joiners side by side', `${ROOT}a\u200d\u200db`],
+      ['a ZWNJ then a ZWJ', `${ROOT}a\u200c\u200db`],
+      ['a joiner at the start', '\u200d/Users/macair/Projects/x'],
+      ['a joiner at the end', `${ROOT}x\u200d`],
+      ['a joiner before a space', `${ROOT}x\u200d y`],
+      ['a joiner after a space', `${ROOT}x \u200dy`],
+      ['a selector after a space', `${ROOT}x \ufe0f`],
+      ['a selector after a no-break space', `${ROOT}x\u00a0\ufe0e`],
+      ['a selector after an ideographic space', `${ROOT}\u3000\ufe0f`],
+      ['a selector after an em space', `${ROOT}x\u2003\ufe0f`],
+      ['a selector between two spaces', `${ROOT}x \ufe0f y`],
+      ['a selector run after a space', `${ROOT}x \ufe0f\u200d\ufe0e`],
+      ['a selector after a selector', `${ROOT}x\ufe0f\ufe0e`],
+      ['a selector after a joiner after a selector', `${ROOT}x\ufe0f\u200d\ufe0e`],
+    ]
+    for (const [name, p] of bad) expect(parses(p), name).toBe(false)
+    // What names really hold still parses: emoji sequences with joiners and selectors, a keycap, Persian ZWNJ, accents.
+    const ok = [`${ROOT}\u{1f469}\u200d\u{1f4bb}`, `${ROOT}\u{1f468}\u200d\u{1f469}\u200d\u{1f467}\u200d\u{1f466}`, `${ROOT}\u{1f3f3}\ufe0f\u200d\u26a7\ufe0f`,
+      `${ROOT}#\ufe0f\u20e3 1\ufe0f\u20e3`, `${ROOT}\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645`, `${ROOT}caf\u00e9 e\u0301`, `${ROOT}\u2764\ufe0f x \u263a\ufe0e`]
+    for (const p of ok) expect(parses(p), JSON.stringify(p)).toBe(true)
+  }, T)
+
   test('refuses a git without the guard', async () => {
     const w = pinWorld()
     writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })
