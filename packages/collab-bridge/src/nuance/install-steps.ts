@@ -313,7 +313,9 @@ export function installCheck(o: CheckInput): CheckReport {
   else {
     git = g.git
     if (!gitAcceptable(g.git)) {
-      fail('git_unsafe', `${g.git.path} is git ${g.git.version}${g.git.apple ? ' (Apple)' : ''}${g.git.guard ? '' : ' without the GIT_NO_LAZY_FETCH guard'}; the fetch gate needs git 2.45.1 or later, or Apple git 2.39.5 or later with the guard`)
+      const named = (x: ResolvedGit) => `${x.path} is git ${x.version}${x.apple ? ' (Apple)' : ''}${x.guard ? '' : ' without the GIT_NO_LAZY_FETCH guard'}`
+      const others = (g.alternatives ?? []).map((x) => ` (the Terminal's git is no better: ${named(x)})`).join('')
+      fail('git_unsafe', `${named(g.git)}${others}; the fetch gate needs git 2.45.1 or later, or Apple git 2.39.5 or later with the guard`)
     }
   }
   let claudeOk = false

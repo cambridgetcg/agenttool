@@ -90,10 +90,13 @@ function candidate(p: string | null, env: Record<string, string>, run: Run): Can
 /**
  * `xcrun --find git` first (the Command Line Tools), else the realpath of the git on Yu's Terminal PATH (for Homebrew,
  * the Cellar binary). Every command runs with env exactly {PATH: /usr/bin:/bin, HOME}: a stray DEVELOPER_DIR makes xcrun
- * fail or find another toolchain. Whether the result is safe to serve with is gitAcceptable's question, not this one's.
+ * fail or find another toolchain. An xcrun git that gitAcceptable refuses (older Command Line Tools) does not shadow a
+ * Terminal git it accepts: the Terminal one is asked only then, and used if acceptable (Task 63 gate-2-2). When neither is
+ * acceptable the first one found is still returned, with the other in `alternatives`, so the install can name both; whether
+ * the result is safe to serve with stays gitAcceptable's question, asked by the installer and by every fetch.
  */
 export function resolveGit(o: { xcrun: string; terminalGit: string | null; home: string; run?: Run }):
-  { ok: true; git: ResolvedGit } | { ok: false; reason: string } {
+  { ok: true; git: ResolvedGit; alternatives?: ResolvedGit[] } | { ok: false; reason: string } {
   const run = o.run ?? runCmd
   const env = { PATH: '/usr/bin:/bin', HOME: o.home }
   const x = run(o.xcrun, ['--find', 'git'], { env, timeoutMs: 5_000 })
@@ -101,8 +104,10 @@ export function resolveGit(o: { xcrun: string; terminalGit: string | null; home:
   const fromXcrun: Candidate = x.code !== 0 ? { ok: false, why: `exit ${x.code}` }
     : !found || found.includes('\n') ? { ok: false, why: 'no single path' }
     : candidate(found, env, run)
-  if (fromXcrun.ok) return fromXcrun
+  if (fromXcrun.ok && gitAcceptable(fromXcrun.git)) return fromXcrun
   const fromTerminal = candidate(o.terminalGit, env, run)
+  if (fromTerminal.ok && gitAcceptable(fromTerminal.git)) return fromTerminal
+  if (fromXcrun.ok) return fromTerminal.ok && fromTerminal.git.path !== fromXcrun.git.path ? { ...fromXcrun, alternatives: [fromTerminal.git] } : fromXcrun
   if (fromTerminal.ok) return fromTerminal
   return { ok: false, reason: `git not resolved (xcrun: ${fromXcrun.why}; terminal: ${fromTerminal.why})` }
 }

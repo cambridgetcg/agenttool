@@ -97,6 +97,50 @@ describe('resolveGit', () => {
       else process.env.DEVELOPER_DIR = saved
     }
   })
+  const OLD_CLT_LINE = 'git version 2.39.3 (Apple Git-146)\n'      // older Command Line Tools: below 2.39.5, whatever its binary holds
+
+  test('an xcrun git that is not acceptable does not shadow an acceptable Terminal git (Task 63 gate-2-2)', () => {
+    const g = fakeGits()
+    const home = temp('cb-home-')
+    const run = stubRun((cmd, args) => {
+      if (cmd === '/usr/bin/xcrun') return { code: 0, stdout: g.clt + '\n' }
+      if (cmd === g.clt && args.join(' ') === '--version') return { code: 0, stdout: OLD_CLT_LINE }
+      if (cmd === g.cellar && args.join(' ') === '--version') return { code: 0, stdout: BREW_LINE }
+      return undefined
+    })
+    const r = resolveGit({ xcrun: '/usr/bin/xcrun', terminalGit: g.brew, home, run: run.run })
+    expect(r).toEqual({ ok: true, git: { path: g.cellar, version: '2.52.0', sha256: sha256File(g.cellar), guard: true, apple: false } })
+    if (r.ok) expect(gitAcceptable(r.git)).toBe(true)
+    for (const c of run.calls) expect(c.env).toEqual({ PATH: '/usr/bin:/bin', HOME: home })
+  })
+
+  test('an acceptable xcrun git is used without asking the Terminal git anything (Task 63 gate-2-2)', () => {
+    const g = fakeGits()
+    const run = stubRun((cmd, args) => {
+      if (cmd === '/usr/bin/xcrun') return { code: 0, stdout: g.clt + '\n' }
+      if (cmd === g.clt && args.join(' ') === '--version') return { code: 0, stdout: APPLE_LINE }
+      return undefined
+    })
+    expect(resolveGit({ xcrun: '/usr/bin/xcrun', terminalGit: g.brew, home: temp('cb-home-'), run: run.run })).toMatchObject({ ok: true, git: { path: g.clt } })
+    expect(run.calls.map((c) => c.cmd)).toEqual(['/usr/bin/xcrun', g.clt])
+  })
+
+  test('when neither git is acceptable the xcrun one is still returned, with the other named, so the install can say why (Task 63 gate-2-2)', () => {
+    const g = fakeGits()
+    const both = stubRun((cmd, args) => {
+      if (cmd === '/usr/bin/xcrun') return { code: 0, stdout: g.clt + '\n' }
+      if (cmd === g.clt && args.join(' ') === '--version') return { code: 0, stdout: OLD_CLT_LINE }
+      if (cmd === g.cellar && args.join(' ') === '--version') return { code: 0, stdout: 'git version 2.44.0\n' }
+      return undefined
+    })
+    const r = resolveGit({ xcrun: '/usr/bin/xcrun', terminalGit: g.brew, home: temp('cb-home-'), run: both.run })
+    expect(r).toMatchObject({ ok: true, git: { path: g.clt, version: '2.39.3' }, alternatives: [{ path: g.cellar, version: '2.44.0' }] })
+    if (r.ok) expect(gitAcceptable(r.git)).toBe(false)
+    // With no Terminal git at all, the old answer is unchanged: just the xcrun git, nothing else claimed.
+    const alone = resolveGit({ xcrun: '/usr/bin/xcrun', terminalGit: null, home: temp('cb-home-'), run: both.run })
+    expect(alone).toEqual({ ok: true, git: expect.objectContaining({ path: g.clt, version: '2.39.3' }) })
+  })
+
   test('never records /usr/bin/git, even when xcrun fails', () => {
     const home = temp('cb-home-')
     const link = join(temp('cb-git-'), 'git')

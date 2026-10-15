@@ -160,6 +160,24 @@ describe('install check', () => {
     expect(codes(installCheck(checkInput(h, b, { claude: join(bin, 'no-such-claude') })))).toEqual(['claude'])
   }, 20_000)
 
+  test('an old Command Line Tools git does not hide an acceptable Terminal git, and when both are old the refusal names both (Task 63 gate-2-2)', () => {
+    const { h, b } = world()
+    const bin = temp('cb-oldclt-')
+    const oldClt = writeStub(bin, 'git', 'echo "git version 2.39.3 (Apple Git-146)"')
+    const xcrunOld = writeStub(bin, 'xcrun', `echo '${oldClt}'`)
+    const viaTerminal = installCheck(checkInput(h, b, { xcrun: xcrunOld }))          // terminalGit is the suite's Homebrew git
+    expect(codes(viaTerminal)).not.toContain('git_unsafe')
+    expect(codes(viaTerminal)).not.toContain('git')
+    expect(viaTerminal.git).toEqual(expect.objectContaining({ apple: false }))
+    expect(viaTerminal.git!.path).not.toBe(oldClt)
+    const oldTerminal = writeStub(bin, 'terminal-git', 'echo "git version 2.44.0"')
+    const bothOld = installCheck(checkInput(h, b, { xcrun: xcrunOld, terminalGit: oldTerminal }))
+    expect(codes(bothOld)).toContain('git_unsafe')
+    const message = bothOld.failures.find((f) => f.includes('git 2.39.3'))!
+    expect(message).toContain(oldClt)
+    expect(message).toContain(`${oldTerminal} is git 2.44.0`)
+  }, 20_000)
+
   test('an existing share must be a repo root holding the trial commit, in an edit folder', () => {
     const { h, trial, b } = world()
     cloneAt(h, trial.repo)
