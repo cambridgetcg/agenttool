@@ -222,6 +222,35 @@ describe('dialOnce', () => {
   }, 10_000)
 })
 
+describe('dialOnce: the ssh stdin pipe breaking under a pending write', () => {
+  /** A relay stand-in that prints the preamble, then closes its stdin and stays up, as ssh does when it stops reading (Task 63 relay-1-4). */
+  const STDIN_GONE = RELAY.replace('exec /bin/cat', 'exec 0<&-\nexec /bin/sleep 0.5')
+
+  test('a rejected stdin write or flush is not left as an unhandled rejection, and later sends and the close stay quiet (Task 63 relay-1-4)', async () => {
+    const air = makeAir()
+    const fake = fakeWith(STDIN_GONE)
+    const rejected: unknown[] = []
+    const note = (r: unknown) => { rejected.push(r) }
+    process.on('unhandledRejection', note)
+    try {
+      const out = await dial(air, fake)
+      if (!out.ok) throw new Error(JSON.stringify(out.failure))
+      await Bun.sleep(150) // the stand-in has exec'd and closed its stdin
+      // 4 MiB is a hub-to-pipe frame at its limit. Bun's FileSink answers a write it cannot finish with a promise, and rejects
+      // it with EPIPE once the pipe has no reader; the try/catch around the call only sees a throw at once.
+      out.link.send(new Uint8Array(4 * 1024 * 1024))
+      await Bun.sleep(100)
+      out.link.send(new Uint8Array(64 * 1024))
+      out.link.close() // stdin.end() is a sink call too
+      await out.link.closed
+      await Bun.sleep(300)
+    } finally {
+      process.off('unhandledRejection', note)
+    }
+    expect(rejected).toEqual([])
+  }, 10_000)
+})
+
 describe('runDialLoop', () => {
   test('links after zshenv junk, and redials at once after the drop', async () => {
     const air = makeAir()

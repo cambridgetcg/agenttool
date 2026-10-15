@@ -29,6 +29,15 @@ const STDERR_KEEP = 256 * 1024
 const KILL_GRACE_MS = 2_000
 const ALIAS_RE = /^[a-z][a-z0-9-]{0,63}$/
 
+/**
+ * Bun's FileSink answers a write, flush or end it cannot finish at once with a promise, and rejects it with EPIPE when
+ * ssh has no reader left. Nobody awaits those (the exit is seen through `closed`), and Bun ends the whole process on an
+ * unhandled rejection, which would take the hub and every child with it (Task 63 relay-1-4).
+ */
+const quiet = (r: unknown): void => {
+  if (r instanceof Promise) r.catch(() => { /* the exit is seen through closed */ })
+}
+
 /** The one command the hub ever runs on a device (spec §5.5): the -F path absolute (ssh opens it as given, never expanding ~). */
 export function dialArgv(ssh: string, config: string, alias: string, nonce: string): string[] {
   if (!ssh.startsWith('/')) throw new Error('dialer: ssh must be an absolute path')
@@ -83,14 +92,14 @@ export function dialOnce(o: { ssh: string; config: string; alias: string; nonce:
     const link: DeviceLink = {
       send(bytes) {
         if (ended) return
-        try { proc.stdin.write(bytes); proc.stdin.flush() } catch { /* the exit is seen through closed */ }
+        try { quiet(proc.stdin.write(bytes)); quiet(proc.stdin.flush()) } catch { /* the exit is seen through closed */ }
       },
       onData(cb) {
         consumer = cb
         for (const c of pending.splice(0)) cb(c)
       },
       close() {
-        try { proc.stdin.end() } catch { /* already closed */ }
+        try { quiet(proc.stdin.end()) } catch { /* already closed */ }
         kill()
       },
       closed,
