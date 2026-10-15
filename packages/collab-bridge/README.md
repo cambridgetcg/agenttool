@@ -242,7 +242,8 @@ carry (one with `'`, `!`, `\` or a control character, one that is not absolute a
 bytes) is refused, and Phase 1 shares one folder. Older bundle
 folders are listed with the command that removes them, never removed. Preparing again, to renew the key, writes the
 device file as `prepared` again: a running hub drops the device's link and stops its children, and dials it again only
-once it is pinned again and the hub has restarted.
+once it is pinned again and the hub has restarted. The workspace id and mirror worktree id the hub confirmed for a share,
+and its caps, stay with the same share (same user, Nuance folder and Air clone).
 
 ## Pinning a device (Ai, on the Air)
 

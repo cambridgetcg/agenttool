@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { readDevice } from '../src/air/devices.ts'
+import { readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS, isControlPath } from '../src/air/diff-check.ts'
 import { mirrorIdOf } from '../src/air/mirror.ts'
 import { seatTools } from '../src/air/policy-table.ts'
@@ -242,6 +242,45 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
       prepared_at: new Date(NOW).toISOString(), paired_at: null,
     })
     expect([modeOf(paths.deviceFile('nuance')), modeOf(paths.devicesDir)]).toEqual([0o600, 0o700])
+  }, T)
+
+  test('preparing a paired device again keeps what the hub confirmed for the same share: its workspace id, mirror worktree id and caps', async () => {
+    // The 90-day renewal (README, Pinning a device): the file becomes `prepared` again and is pinned again, but the ids Collab
+    // answered at the first session_start belong to the mirror, not to the bundle (Task 63 installer-1-2).
+    const o = input()
+    await prepareBundle(o)
+    const paths = airPaths(o.home)
+    const file = paths.deviceFile('nuance')
+    const first = readDevice(file)!
+    const workspace = `ws_${'a'.repeat(24)}`
+    const worktree = `wt_${'b'.repeat(24)}`
+    const caps = { ...DEFAULT_CAPS, maxEntries: 123 }
+    const paired = (over: Partial<DeviceFile> = {}): DeviceFile => ({ ...first, state: 'paired', seat_public: 'c'.repeat(64), paired_at: '2026-10-13T13:00:00.000Z',
+      git: { path: '/opt/homebrew/Cellar/git/2.52.0/bin/git', version: '2.52.0', sha256: 'd'.repeat(64), guard: true, apple: false },
+      summon: { key_sha256: 'e'.repeat(64), dropin_stat: '1 2 3 0 600' },
+      shares: first.shares.map((x) => ({ ...x, remote_gitdir: `${NUANCE_SHARE}/.git`, mirror_worktree_id: worktree, workspace_id: workspace, caps })), ...over })
+    writeDevice(file, paired())
+    const later = Date.UTC(2026, 11, 20, 9, 0, 0)
+    const r = await prepareBundle({ ...o, now: later })
+    const again = readDevice(file)!
+    // Re-pairing still starts over (plan Task 60): prepared, no seat key, git, baselines or gitdir until the next pin ...
+    expect([again.state, again.seat_public, again.git, again.summon, again.paired_at, again.shares[0]!.remote_gitdir])
+      .toEqual(['prepared', null, null, null, null, null])
+    expect([again.key_expiry, again.prepared_at, again.bundle_build]).toEqual([r.expiry, new Date(later).toISOString(), r.build])
+    // ... but the ids the hub confirmed and the caps stay with the same share.
+    expect(again.shares[0]).toMatchObject({ workspace_id: workspace, mirror_worktree_id: worktree, caps })
+    // Another user, or another Air clone, is another mirror: nothing is carried to it.
+    const others: Array<[string, Partial<PrepareInput>]> = [['another user', { user: 'someoneelse' }],
+      ['another Air clone', { shares: [{ remote: NUANCE_SHARE, airClone: join(o.home, 'Projects', 'other-clone') }] }]]
+    for (const [name, change] of others) {
+      writeDevice(file, paired())
+      await prepareBundle({ ...o, ...change, now: later })
+      expect(readDevice(file)!.shares[0], name).toMatchObject({ workspace_id: null, mirror_worktree_id: null, caps: DEFAULT_CAPS })
+    }
+    // A damaged file is replaced as it always was.
+    writeFileSync(file, '{ not json')
+    await prepareBundle({ ...o, now: later })
+    expect(readDevice(file)!.shares[0]).toMatchObject({ workspace_id: null, mirror_worktree_id: null, caps: DEFAULT_CAPS })
   }, T)
 
   test('prints the two-line allowlist entry and the exact install line', async () => {

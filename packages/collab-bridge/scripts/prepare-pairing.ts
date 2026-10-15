@@ -7,7 +7,7 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync,
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { probeCollabTools } from '../src/air/children.ts'
-import { preparedStamp, writeDevice, type DeviceFile } from '../src/air/devices.ts'
+import { preparedStamp, readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
 import { airGit, MIRROR_GIT_FLAGS, OID_RE, type GitRunner } from '../src/air/git.ts'
 import { mirrorIdOf } from '../src/air/mirror.ts'
@@ -307,7 +307,17 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   }
   mkdirPrivate(paths.devicesDir)
   const file = paths.deviceFile(o.device)
-  withLock(file, () => writeDevice(file, device)) // the lock updateDevice takes, so a running hub never writes over it
+  // The lock updateDevice takes, so a running hub never writes over it. A re-prepare (the 90-day renewal) starts the file over
+  // as `prepared`, but what Collab and Ai settled for this very mirror is not the bundle's to reset: the workspace id and worktree
+  // id the first session_start confirmed (Task 51), and the share's caps. They are kept for the same user, Nuance folder and Air
+  // clone (one mirror directory), and for no other.
+  withLock(file, () => {
+    const prev = readDevice(file)
+    const same = prev !== null && prev.device === o.device && prev.user === o.user
+      ? prev.shares.find((s) => s.remote_realpath === share.remote && s.air_clone === airClone) : undefined
+    writeDevice(file, same === undefined ? device : { ...device, shares: device.shares.map((s) => ({ ...s,
+      mirror_worktree_id: same.mirror_worktree_id, workspace_id: same.workspace_id, caps: { ...same.caps } })) })
+  })
 
   const older = readdirSync(o.home).filter((n) => n.startsWith(`collab-bridge-${o.device}-bundle-`) && n !== folder)
     // lstat: a link, even a dangling one, is not a bundle folder
