@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  citizenRoot, dropinOwnerUidOf, INSTALL_USAGE, installCheck, installClone, parseManifest, renderManifest, type CheckReport,
+  citizenRoot, dropinOwnerUidOf, INSTALL_USAGE, installCheck, installClone, parseManifest, renderManifest, runInstallVerb, type CheckReport,
 } from '../src/nuance/install-steps.ts'
+import { loadAllowlist } from '../src/allowlist.ts'
 import { resolveGit, runCmd, type Run } from '../src/nuance/git-resolve.ts'
 import { dropinStat, renderInstalled, summonKeySha256 } from '../src/nuance/installed.ts'
 import { checkInput, claudeStub, makeTrialRepo, summonReadyHome, writeCheckBundle, type NuanceHome } from './install-fixtures.ts'
@@ -448,6 +449,27 @@ describe('install clone', () => {
     expect(existsSync(h.share)).toBe(false)
     expect(readdirSync(join(h.home, 'Projects'))).toEqual(['keep.txt'])
   }, 30_000)
+
+  test('an allowlist that cannot be loaded at the clone is a refusal before anything is cloned, not a re-check that skips the edit-folder test (Task 63 installer-2-5)', async () => {
+    const { h, b } = world()
+    const args = [...verbArgs('clone', b, [h.share]).slice(1)]
+    const out: string[] = []
+    const err: string[] = []
+    const io = { stdin: new ReadableStream<Uint8Array>(), stdout: { write: (x: Uint8Array | string) => { out.push(String(x)) } }, stderr: { write: (x: string) => { err.push(x) } } }
+    // installCheck reads Summon's allowlist once; the clone verb reads it again straight after, and that read fails.
+    let reads = 0
+    const flaky = (path: string) => (++reads === 1 ? loadAllowlist(path) : { ok: false as const, detail: 'unreadable' })
+    const code = await runInstallVerb(['clone', ...args], h.env, io, { loadAllowlist: flaky })
+    expect(code).toBe(1)
+    expect(JSON.parse(out.join('').trim())).toMatchObject({ ok: false, created: [] })
+    expect(err.join('')).toContain('allowlist')
+    expect(existsSync(h.share)).toBe(false)
+    expect(readdirSync(join(h.home, 'Projects'))).toEqual([])      // no folder, not even a .partial one
+    // The control: the same verb with a loader that keeps working clones.
+    const good = await runInstallVerb(['clone', ...args], h.env, io, { loadAllowlist })
+    expect(good).toBe(0)
+    expect(existsSync(join(h.share, '.git'))).toBe(true)
+  }, 60_000)
 
   test('a target that appears before the rename is refused and left alone', () => {
     const { h, trial, b } = world()

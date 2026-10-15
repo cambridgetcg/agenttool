@@ -269,7 +269,9 @@ function absentShare(path: string, c: ShareCtx): ShareResult {
 }
 
 export interface CheckInput { bundle: string; shares: string[]; terminalGit: string | null; claude: string | null; paths: NuancePaths;
-  uid: number; user: string; platform: string; arch: string; zsh: string; xcrun: string; today: string; dropinOwnerUid: number; run?: Run }
+  uid: number; user: string; platform: string; arch: string; zsh: string; xcrun: string; today: string; dropinOwnerUid: number; run?: Run;
+  /** Reads Summon's allowlist; the real reader unless a test gives another (the verbs read it twice: the check, then the clone). */
+  loadAllowlist?: typeof loadAllowlist }
 
 /** The share checks with the context installCheck built: install clone's re-check after it cloned (§10.3 step 5). */
 function shareCtxOf(o: CheckInput, allowlist: Allowlist | null, git: ResolvedGit | null, trialCommit: string | null): ShareCtx {
@@ -357,7 +359,7 @@ export function installCheck(o: CheckInput): CheckReport {
   try { claudeOk = !!o.claude && o.claude.startsWith('/') && statSync(o.claude).isFile() && (accessSync(o.claude, constants.X_OK), true) } catch { claudeOk = false }
   if (!claudeOk) fail('claude', 'Claude Code (claude) was not found on your Terminal PATH')
 
-  const al = loadAllowlist(paths.summonAllowlist)
+  const al = (o.loadAllowlist ?? loadAllowlist)(paths.summonAllowlist)
   if (!al.ok) fail('allowlist', `Summon's allowlist ${paths.summonAllowlist} cannot be used (${al.detail})`)
   // A git that failed the safety check is not run in any share: a partial clone's promisor, core.sshCommand or credential helper
   // would run with it (lazy fetch for a missing commit), and the run fails on git_unsafe anyway.
@@ -640,16 +642,20 @@ const VERB_FLAGS: Record<string, FlagSpec> = {
 }
 
 /** installCheck's input from the flags and this process: the passwd user (never $USER), the systemBin zsh and xcrun. */
-function checkInputOf(f: Flags, env: Env, paths: NuancePaths): CheckInput {
+function checkInputOf(f: Flags, env: Env, paths: NuancePaths, deps: InstallDeps): CheckInput {
   const one = (k: string) => f.get(k)![0]!
   return {
     bundle: one('--bundle'), shares: f.get('--share')!, terminalGit: one('--terminal-git') || null, claude: one('--claude') || null,
     paths, uid: process.getuid!(), user: passwdOfSelf().name, platform: process.platform, arch: process.arch,
     zsh: systemBin('zsh', env), xcrun: systemBin('xcrun', env), today: localYmd(new Date()), dropinOwnerUid: dropinOwnerUidOf(env),
+    ...(deps.loadAllowlist ? { loadAllowlist: deps.loadAllowlist } : {}),
   }
 }
 
-export async function runInstallVerb(argv: string[], env: Env, io: GateIo): Promise<number> {
+/** What a test may replace in the verbs: nothing else is injectable. */
+export interface InstallDeps { loadAllowlist?: typeof loadAllowlist }
+
+export async function runInstallVerb(argv: string[], env: Env, io: GateIo, deps: InstallDeps = {}): Promise<number> {
   const [verb, ...args] = argv
   const answer = (o: object, ok: boolean) => { io.stdout.write(JSON.stringify(o) + '\n'); return ok ? 0 : 1 }
   const refuse = (reason: string) => { io.stderr.write(`✗ ${reason}\n`); return answer({ ok: false, reason }, false) }
@@ -674,7 +680,7 @@ export async function runInstallVerb(argv: string[], env: Env, io: GateIo): Prom
     return r.ok ? answer(r, true) : refuse(r.reason)
   }
 
-  const input = checkInputOf(flags, env, paths)
+  const input = checkInputOf(flags, env, paths, deps)
   const report = installCheck(input)
   for (const f of report.failures) io.stderr.write(`✗ ${f}\n`)
   if (verb === 'check') {
@@ -693,8 +699,15 @@ export async function runInstallVerb(argv: string[], env: Env, io: GateIo): Prom
   }
   if (!report.ok) return answer({ ok: false, reason: 'the checks failed; nothing was cloned', created: [] }, false)
   const created: string[] = []
-  const al = loadAllowlist(paths.summonAllowlist)
-  const ctx = shareCtxOf(input, al.ok ? al.allowlist : null, report.git, report.manifest!.trial_commit)
+  const al = (input.loadAllowlist ?? loadAllowlist)(paths.summonAllowlist)
+  // The re-check after each clone judges "inside an `access: edit` folder" by this allowlist, and skips that test when it is null:
+  // an allowlist that cannot be read now is a refusal before anything is cloned, never a clone kept on an unchecked folder.
+  if (!al.ok) {
+    const reason = `Summon's allowlist ${paths.summonAllowlist} cannot be used now (${al.detail}); nothing was cloned`
+    io.stderr.write(`✗ allowlist: ${reason}\n`)
+    return answer({ ok: false, reason, created: [] }, false)
+  }
+  const ctx = shareCtxOf(input, al.allowlist, report.git, report.manifest!.trial_commit)
   for (const s of report.shares) {
     if (s.state !== 'absent') continue
     const r = installClone({ bundle: input.bundle, share: s.path, git: report.git!, trialCommit: report.manifest!.trial_commit, home: paths.home,
