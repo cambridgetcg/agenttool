@@ -36,8 +36,9 @@ const HOST_OUTPUT_MAX = 1024 * 1024
 const HOST_KILL_GRACE_MS = 1_000
 const HOST_REAP_GRACE_MS = 1_000
 
-/** The graces of makeHostCli; the tests shorten them. */
-export interface HostCliOptions { killGraceMs?: number; reapGraceMs?: number }
+/** The graces of makeHostCli, which the tests shorten, and `refused`: asked at each call, and while it is true the CLI is not
+ *  started (the hub passes "the Collab build changed", so it never runs a host.js it has not verified, §10.4). */
+export interface HostCliOptions { killGraceMs?: number; reapGraceMs?: number; refused?: () => boolean }
 
 /** Reads a stream to EOF, keeping at most `max` bytes. `text()` is what has arrived so far; `stop()` gives the rest up. */
 function capture(stream: ReadableStream<Uint8Array>, max: number): { done: Promise<void>; text(): string; stop(): void } {
@@ -68,6 +69,7 @@ export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>, o: HostCliOpti
   const killGrace = Math.max(1, Math.floor(o.killGraceMs ?? HOST_KILL_GRACE_MS))
   const reapGrace = Math.max(1, Math.floor(o.reapGraceMs ?? HOST_REAP_GRACE_MS))
   return async (args, timeoutMs) => {
+    if (o.refused?.()) return { code: null, stdout: '', stderr: 'the Collab build changed under the hub, so the host CLI was not run', cause: 'spawn_failed' }
     let proc: ReturnType<typeof Bun.spawn>
     try {
       proc = Bun.spawn([spec.bun, '--no-env-file', '--config=/dev/null', `${spec.dist}/agenttool-collab-host.js`, ...args], {
@@ -461,6 +463,9 @@ export class ChildPool {
 
   /** A lineage detached for 7 days by the wall clock, read from detached_since so it survives restarts, is retired (§6.2). */
   private async retireDue(): Promise<void> {
+    // Ending a session runs the host CLI, which after a Collab reinstall is a build the hub has not verified: the lineage stays
+    // due, with no orphan note, until the restarted hub has the rebuilt bundle (§10.4, Task 63 conformance-3-2).
+    if (this.deps.buildChanged()) return
     const now = this.deps.now().getTime()
     for (const e of this.deps.store.all()) {
       if (e.state === 'retired' || e.detached_since === null || e.pending_start !== null) continue

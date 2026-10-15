@@ -275,7 +275,8 @@ export async function runHub(deps: HubDeps): Promise<number> {
       if (e.parked) seatNotes.set(e.lineage, { lineage: e.lineage, device: e.device, user: e.user, session_id: e.session_id, note: `needs Ai: seat_recovery ${e.session_id ?? e.lineage}` })
     }
     status({ seats: [...seatNotes.values()] })
-    const hostCli = makeHostCli({ bun: deps.bun, dist: deps.collabDist, journal: paths.sharedJournal, home: paths.home })
+    // After a Collab reinstall the host CLI is a host.js the hub has not verified (checkDist): knock reads and retirement run none (§10.4).
+    const hostCli = makeHostCli({ bun: deps.bun, dist: deps.collabDist, journal: paths.sharedJournal, home: paths.home }, { refused: () => buildChanged })
     const pool = new ChildPool({
       spec: { bun: deps.bun, dist: deps.collabDist, journal: paths.sharedJournal, home: paths.home },
       store, paths, hostCli, mono: deps.mono, now: deps.now, ledger, procAlive: liveProcAlive(deps.ps), lstartOf: liveLstartOf(deps.ps),

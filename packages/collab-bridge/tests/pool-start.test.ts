@@ -390,6 +390,29 @@ describe('retirement', () => {
   }, 30_000)
 })
 
+describe('a Collab build change defers retirement (Task 63 conformance-3-2)', () => {
+  test('no host CLI runs for a lineage due after the build changed, the lineage stays live with no orphan note, and it retires once the hub has restarted', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await live(w, p, e)
+    p.detached(e.lineage)
+    w.clock.now += 7 * DAY
+    w.clock.mono += 7 * DAY
+    w.build.changed = true // a Collab reinstall under the running hub: its host.js is no longer the one the hub verified
+    await p.tick()
+    expect(w.hostCalls).toEqual([])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', session_id: sid })
+    expect(w.statuses.filter(([, n]) => n?.startsWith('orphan_session'))).toEqual([])
+    expect(events(w, 'retire_end')).toEqual([])
+    // the restarted hub has the rebuilt bundle: the lineage that was due is retired then
+    w.build.changed = false
+    await p.tick()
+    expect(w.hostCalls).toHaveLength(1)
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'retired', past_sessions: [sid] })
+  }, 30_000)
+})
+
 describe('the hub way, always', () => {
   test('liveProcAlive fails closed when ps fails', async () => {
     const dir = temp('cb-ps-')
@@ -697,6 +720,24 @@ describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
     const r = await hostWith('', '/nonexistent/bun')(['x'], 5_000)
     expect(r).toMatchObject({ code: null, cause: 'spawn_failed' })
   })
+
+  // Task 63 conformance-3-2: after a Collab reinstall the hub runs no host.js it has not verified, so the caller can refuse it.
+  test('a host CLI the caller refuses is never started, and the refusal is read at each call', async () => {
+    const marker = join(temp('cb-hostcli-marker-'), 'ran')
+    const script = `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'ran\\n')\n`
+    let refused = false
+    const cli = hostWith(script, process.execPath, { refused: () => refused })
+    expect((await cli(['x'], 5_000)).code).toBe(0)
+    expect(readFileSync(marker, 'utf8')).toBe('ran\n')
+    refused = true
+    const r = await cli(['x'], 5_000)
+    expect(r).toMatchObject({ code: null, cause: 'spawn_failed' })
+    expect(r.stderr).toContain('not run')
+    expect(readFileSync(marker, 'utf8')).toBe('ran\n') // not run a second time
+    refused = false
+    expect((await cli(['x'], 5_000)).code).toBe(0)
+    expect(readFileSync(marker, 'utf8')).toBe('ran\nran\n')
+  }, 30_000)
 
   // Task 63 conformance-4-10: the timeout is a deadline, not a request. Both stubs end by themselves after 8 s, so a build that
   // waits for them leaves no process behind, and fails the elapsed-time check instead of hanging the suite.

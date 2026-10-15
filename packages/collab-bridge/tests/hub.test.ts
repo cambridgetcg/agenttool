@@ -10,7 +10,7 @@ import { mirrorIdOf } from '../src/air/mirror.ts'
 import { seatTools } from '../src/air/policy-table.ts'
 import { readDeviceStatus, readHubStatus, writeDeviceStatus, writeHostKeyAck, writeHubStatus } from '../src/air/status.ts'
 import { readLedger, type LedgerEntry } from '../src/ledger.ts'
-import { newLineage, newStartNonce, type NoticeMsg, type ReadyMsg, type RefusedCode, type ResultMsg, type ToolDef } from '../src/link/messages.ts'
+import { newLineage, newStartNonce, type HubKnockReportMsg, type NoticeMsg, type ReadyMsg, type RefusedCode, type ResultMsg, type ToolDef } from '../src/link/messages.ts'
 import { monoNowMs, tryFlock } from '../src/native.ts'
 import { LinkClient } from '../src/nuance/link-client.ts'
 import { generateSeatKey, signSeat } from '../src/nuance/seatkey.ts'
@@ -94,7 +94,7 @@ function writeSshConfig(paths: AirPaths): void {
   writeFileSync(paths.sshConfig, ['Host collab-nuance', '  HostName nuance.local', '  User macair', `  IdentityFile ${paths.sshKey('nuance')}`, ''].join('\n'), { mode: 0o600 })
 }
 
-interface Seat { c: LinkClient; readies: ReadyMsg[]; notices: NoticeMsg[]; results: ResultMsg[]; refusals: (RefusedCode | 'unparsable')[]; losses(): number }
+interface Seat { c: LinkClient; readies: ReadyMsg[]; notices: NoticeMsg[]; results: ResultMsg[]; knocks: HubKnockReportMsg[]; refusals: (RefusedCode | 'unparsable')[]; losses(): number }
 interface Linked { paths: AirPaths; nuance: string; share: string; fake: FakeSsh; sock: string; seat(lineage: string): Seat; deps(over?: Partial<HubDeps>): HubDeps }
 
 /**
@@ -120,20 +120,20 @@ function linked(): Linked {
     paths, nuance, share, fake, sock,
     deps: (over = {}) => hubDeps(paths, { ssh: fake.bin, ...over }),
     seat(lineage) {
-      const s = { readies: [] as ReadyMsg[], notices: [] as NoticeMsg[], results: [] as ResultMsg[], refusals: [] as (RefusedCode | 'unparsable')[], lost: 0 }
+      const s = { readies: [] as ReadyMsg[], notices: [] as NoticeMsg[], results: [] as ResultMsg[], knocks: [] as HubKnockReportMsg[], refusals: [] as (RefusedCode | 'unparsable')[], lost: 0 }
       const c = new LinkClient({
         sockPath: sock,
         attach: () => ({ t: 'attach', v: 1, lineage, harness: 'claude', entrypoint: 'cli', folder: share, pipe_build: 'abcdef01', tools_digest: digest, clock: new Date().toISOString() }),
         sign: (nonce) => signSeat(priv, 'nuance', 'macair', lineage, nonce),
         mono: monoNowMs, rand: Math.random, hostAlive: () => true,
         on: {
-          ready: (r) => s.readies.push(r), result: (r) => s.results.push(r), tools: () => {}, knockReport: () => {},
+          ready: (r) => s.readies.push(r), result: (r) => s.results.push(r), tools: () => {}, knockReport: (k) => s.knocks.push(k),
           notice: (n) => s.notices.push(n), refused: (code) => s.refusals.push(code), lost: () => { s.lost++ },
         },
       })
       clients.push(c)
       c.start()
-      return { c, readies: s.readies, notices: s.notices, results: s.results, refusals: s.refusals, losses: () => s.lost }
+      return { c, readies: s.readies, notices: s.notices, results: s.results, knocks: s.knocks, refusals: s.refusals, losses: () => s.lost }
     },
   }
 }
@@ -520,6 +520,33 @@ describe('a linked device', () => {
     await until(() => s.results.length === 1, 'the result')
     expect(s.results[0]!.result?.structuredContent).toMatchObject({ error: 'collab_build_changed', delivered: false })
     expect(lines(w.paths, 'child_start')).toEqual([])
+    expect(await stopHub(h)).toBe(0)
+  }, T)
+})
+
+describe('after collab_build_changed the hub runs no host CLI it has not verified (Task 63 conformance-3-2)', () => {
+  test('a knock read spawns the installed host.js before a Collab reinstall and not after, and answers count 0 then', async () => {
+    const w = linked()
+    const e = await liveLineage(w)
+    const dist = temp('cb-hub-dist-')
+    for (const f of ['agenttool-collab-mcp.js', 'agenttool-collab-host.js']) copyFileSync(join(COLLAB_DIST, f), join(dist, f))
+    // the installed host.js is a stub that records each run; the build the hub verifies is made from it
+    const marker = join(temp('cb-hub-marker-'), 'runs')
+    writeFileSync(join(dist, 'agenttool-collab-host.js'), `require('node:fs').appendFileSync(${JSON.stringify(marker)}, process.argv.slice(2)[0] + '\\n')\n`)
+    const runs = () => (existsSync(marker) ? readFileSync(marker, 'utf8').split('\n').filter(Boolean) : [])
+    const h = startHub(w.deps({ collabDist: dist, build: sourceBuild(dist) }))
+    const s = w.seat(e.lineage)
+    await until(() => s.readies.length === 1, 'the seat to be ready')
+    expect(s.c.send({ t: 'knocks', timeout_ms: 2_000 })).toBe('written')
+    await until(() => s.knocks.length === 1, 'the first knock report')
+    expect(runs()).toEqual(['knocks'])
+    appendFileSync(join(dist, 'agenttool-collab-mcp.js'), '\n// reinstalled\n') // a Collab reinstall under the running hub
+    await until(() => readHubStatus(w.paths)?.code === 'collab_build_changed', 'the dist check')
+    await Bun.sleep(1_100) // knock reads are at least 1 s apart per lineage
+    expect(s.c.send({ t: 'knocks', timeout_ms: 2_000 })).toBe('written')
+    await until(() => s.knocks.length === 2, 'the second knock report')
+    expect(s.knocks[1]).toMatchObject({ t: 'knock_report', count: 0, origins: [], seqs: [] })
+    expect(runs()).toEqual(['knocks']) // the changed build was never run
     expect(await stopHub(h)).toBe(0)
   }, T)
 })
