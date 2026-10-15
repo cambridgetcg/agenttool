@@ -42,7 +42,7 @@ export function uploadPackShaped(raw: string | undefined): boolean {
 const KNOWN_PROGRAMS: ReadonlySet<string> = new Set([
   'hello', 'relay', 'git-upload-pack', 'git-receive-pack', 'git-upload-archive',
   'scp', 'sftp', 'sftp-server', 'internal-sftp', 'rsync',
-  'ssh', 'sh', 'bash', 'zsh', 'ls', 'cat', 'id', 'env', 'uname', 'whoami', 'echo', 'sudo', 'curl', 'claude',
+  'ssh', 'sh', 'bash', 'zsh', 'ls', 'cat', 'id', 'env', 'uname', 'whoami', 'echo', 'curl', 'claude',
 ])
 
 /**
