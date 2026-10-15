@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { symlinkSync } from 'node:fs'
+import { chmodSync, copyFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { knobInt, knobName, NEVER_REAL, overrideActive, PRODUCTION_BINS, systemBin } from '../src/sysbin.ts'
 import { cleanupTmps, PKG, temp } from './helpers.ts'
@@ -43,6 +43,30 @@ describe('systemBin', () => {
     expect(() => systemBin('launchctl', on(h, { COLLAB_BRIDGE_BIN_LAUNCHCTL: link }))).toThrow('systemBin: launchctl knob names the real binary')
     // The other knobs may name the real binaries: tests need real git upload-pack and real builds (P42).
     expect(systemBin('ps', on(h, { COLLAB_BRIDGE_BIN_PS: '/bin/ps' }))).toBe('/bin/ps')
+  })
+
+  test('a different real ssh or launchctl is refused too: a copy, another binary, or a link out of the test roots (Task 63 conformance-9-2)', () => {
+    const h = temp('cb-sysbin-')
+    // A copy of the real binary has another inode, so the same-file test alone lets it through; it is not a script stub.
+    for (const [name, real] of [['ssh', '/usr/bin/ssh'], ['launchctl', '/bin/launchctl']] as const) {
+      const copy = join(h, `${name}-copy`)
+      copyFileSync(real, copy)
+      chmodSync(copy, 0o755)
+      expect(() => systemBin(name, on(h, { [knobName(name)]: copy }))).toThrow(`systemBin: ${name} knob is not a script stub`)
+    }
+    // Another real ssh on this Mac (Homebrew's, on many): a path outside the override home and the temp roots.
+    expect(() => systemBin('ssh', on(h, { COLLAB_BRIDGE_BIN_SSH: '/bin/ls' }))).toThrow('systemBin: ssh knob lies outside the test roots')
+    // And a link that sits in a temp root but leads out of it.
+    const link = join(h, 'ssh-link')
+    symlinkSync('/bin/ls', link)
+    expect(() => systemBin('ssh', on(h, { COLLAB_BRIDGE_BIN_SSH: link }))).toThrow('systemBin: ssh knob lies outside the test roots')
+    // A script stub in the override home or a temp root is what the suite uses, and passes; so does a path where nothing exists yet.
+    const stub = join(h, 'ssh')
+    writeFileSync(stub, '#!/bin/bash\nexit 255\n', { mode: 0o755 })
+    expect(systemBin('ssh', on(h, { COLLAB_BRIDGE_BIN_SSH: stub }))).toBe(stub)
+    expect(systemBin('launchctl', on(h, { COLLAB_BRIDGE_BIN_LAUNCHCTL: join(h, 'no-such-launchctl') }))).toBe(join(h, 'no-such-launchctl'))
+    // The knobs that may name real binaries are not held to this (P42).
+    expect(systemBin('git', on(h, { COLLAB_BRIDGE_BIN_GIT: '/bin/ls' }))).toBe('/bin/ls')
   })
 
   test('refuses under NODE_ENV=test without the override', () => {

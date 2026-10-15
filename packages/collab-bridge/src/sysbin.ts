@@ -2,7 +2,8 @@
 // Tests point each binary at a knob, and only under COLLAB_BRIDGE_HOME_OVERRIDE === HOME; under the override a missing
 // knob throws instead of falling back to the real binary, and NODE_ENV=test without the override refuses outright
 // (unlike Summon's ungated SUMMON_SSH_BIN, K39).
-import { statSync } from 'node:fs'
+import { closeSync, openSync, readSync, realpathSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 
 /** An environment as the bridge reads it: process.env, or one a caller built. */
 export type Env = Record<string, string | undefined>
@@ -23,7 +24,7 @@ export const PRODUCTION_BINS: Readonly<Record<SystemBinName, string>> = Object.f
   id: '/usr/bin/id',
 })
 
-/** Knobs that may never name the real binary, even under the override: ssh reaches other Macs and launchctl reaches launchd (P42). */
+/** Knobs that may never name the real binary, even under the override: ssh reaches other Macs and launchctl reaches launchd (P42). Nor another real one: see neverRealProblem. */
 export const NEVER_REAL: ReadonlySet<SystemBinName> = new Set<SystemBinName>(['ssh', 'launchctl'])
 
 export function knobName(name: SystemBinName): string {
@@ -57,6 +58,38 @@ function sameFile(a: string, b: string): boolean {
   }
 }
 
+/** `p` and its realpath when that exists, else just `p` (a root that is not there holds nothing). */
+function realOr(p: string): string {
+  try { return realpathSync(p) } catch { return p }
+}
+
+const within = (p: string, root: string) => p === root || p.startsWith(root.endsWith('/') ? root : `${root}/`)
+
+/**
+ * What a NEVER_REAL knob must be beyond "not the production file" (P42, spec §12.1: no real ssh or launchctl in a test):
+ * wherever it really lives, it is inside the override home or a temp root, and it is a `#!` script. A copy of the real
+ * binary, or Homebrew's ssh, has another inode and passes the same-file test; a copy fails the script test and any other
+ * installed binary fails the root test (Task 63 conformance-9-2). A path where nothing exists runs nothing, so it passes.
+ */
+function neverRealProblem(name: SystemBinName, path: string, env: Env): string | null {
+  let real: string
+  try { real = realpathSync(path) } catch { return null }
+  // $TMPDIR may be missing in a scrubbed child env (tmpdir() is then /tmp), so this Mac's per-user temp root is named too.
+  const roots = [env.HOME, tmpdir(), '/tmp', '/var/folders'].filter((r): r is string => typeof r === 'string' && r.startsWith('/')).map(realOr)
+  if (!roots.some((r) => within(real, r))) return `systemBin: ${name} knob lies outside the test roots`
+  let head = ''
+  try {
+    const fd = openSync(real, 'r')
+    try {
+      const buf = Buffer.alloc(2)
+      head = buf.subarray(0, readSync(fd, buf, 0, 2, 0)).toString('latin1')
+    } finally {
+      closeSync(fd)
+    }
+  } catch { return `systemBin: ${name} knob is not a script stub` }
+  return head === '#!' ? null : `systemBin: ${name} knob is not a script stub`
+}
+
 export function systemBin(name: SystemBinName, env: Env = process.env): string {
   const real = PRODUCTION_BINS[name]
   if (overrideActive(env)) {
@@ -64,7 +97,11 @@ export function systemBin(name: SystemBinName, env: Env = process.env): string {
     const path = env[knob]
     if (!path) throw new Error(`systemBin: ${knob} is not set under the test override`)
     if (!path.startsWith('/')) throw new Error(`systemBin: ${knob} must be an absolute path`)
-    if (NEVER_REAL.has(name) && sameFile(path, real)) throw new Error(`systemBin: ${name} knob names the real binary`)
+    if (NEVER_REAL.has(name)) {
+      if (sameFile(path, real)) throw new Error(`systemBin: ${name} knob names the real binary`)
+      const problem = neverRealProblem(name, path, env)
+      if (problem) throw new Error(problem)
+    }
     return path
   }
   if (env.NODE_ENV === 'test') throw new Error(`systemBin: ${name} refused under NODE_ENV=test without the override`)
