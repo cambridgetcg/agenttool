@@ -49,12 +49,20 @@ export function withPriorUnknown(r: ToolResult, prior: PriorUnknown[]): ToolResu
   if (prior.length === 0) return r
   const named = (ps: PriorUnknown[]) => ps.map((p) => `${p.tool} (call_ref ${p.call_ref}, ${p.idempotency_key === null ? 'no idempotency_key' : `idempotency_key ${p.idempotency_key}`})`).join('; ')
   const live = prior.filter((p) => !p.session_ended)
+  const keyed = live.filter((p) => p.idempotency_key !== null)
+  const keyless = live.filter((p) => p.idempotency_key === null)
   const ended = prior.filter((p) => p.session_ended)
   const notes: string[] = []
-  if (live.length > 0) {
-    notes.push(`Earlier Collab calls from this session have no known outcome and may have taken effect: ${named(live)}. ` +
+  if (keyed.length > 0) {
+    notes.push(`Earlier Collab calls from this session have no known outcome and may have taken effect: ${named(keyed)}. ` +
       'Never re-send one under a new idempotency_key: check with collab_task_get, collab_task_list, collab_next or collab_report_list, ' +
       'or replay it with the same key.')
+  }
+  // A call sent with no idempotency_key has no receipt for a replay to meet: Collab would run it again, so "the same key" is no advice.
+  if (keyless.length > 0) {
+    notes.push(`Earlier Collab calls from this session have no known outcome and may have taken effect: ${named(keyless)}. ` +
+      'They carry no idempotency_key, so a replay would not be recognised as the same call: ' +
+      'check with collab_task_get, collab_task_list, collab_next or collab_report_list; never replay or re-send them.')
   }
   if (ended.length > 0) {
     notes.push(`Earlier Collab calls have no known outcome and may have taken effect: ${named(ended)}. ` +

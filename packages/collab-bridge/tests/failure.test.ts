@@ -124,6 +124,23 @@ describe('prior_unknown', () => {
     expect(text.indexOf('replay it with the same key')).toBeLessThan(text.indexOf('k-old'))
   })
 
+  test('a call that had no idempotency_key is never advised for a replay "with the same key", whatever its session (Task 63 conformance-6-1)', () => {
+    const keyless = { call_ref: `lin_${'a'.repeat(32)}:0123abcd:7`, tool: 'collab_task_create', idempotency_key: null, session_ended: false }
+    const only = withPriorUnknown(COLLAB_OK, [keyless])
+    expect(only.structuredContent!.prior_unknown).toEqual([keyless])
+    const note = only.content[1]!.text
+    for (const s of ['collab_task_create', keyless.call_ref, 'no idempotency_key', 'collab_task_get', 'never replay or re-send']) expect(note).toContain(s)
+    expect(note).not.toContain('replay it with the same key')
+    expect(note).not.toContain('session has since ended')
+    // Mixed: the keyed call keeps its advice, the keyless one gets its own, and no replay advice sits next to the keyless call.
+    const mixed = withPriorUnknown(COLLAB_OK, [prior[0]!, keyless])
+    expect(mixed.content.length).toBe(2)
+    const text = mixed.content[1]!.text
+    expect(text.indexOf('k-report-1')).toBeLessThan(text.indexOf('replay it with the same key'))
+    expect(text.indexOf('replay it with the same key')).toBeLessThan(text.indexOf(keyless.call_ref))
+    expect(text.slice(text.indexOf(keyless.call_ref))).not.toContain('replay it with the same key')
+  })
+
   test('a bridge failure keeps its own fields under prior_unknown', () => {
     const f = withPriorUnknown(bridgeFailure('hub_away', 'x.', REF), prior)
     expect(deliveredOf(f)).toBe(false)
