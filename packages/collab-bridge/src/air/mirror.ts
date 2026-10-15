@@ -472,18 +472,19 @@ export async function mirrorWorkspaceId(spec: MirrorSpec, deps: Pick<MirrorDeps,
 }
 
 /**
- * `…/tasks/<task_id>`, written once for a new completion and only when `head` is the mirror's HEAD (§7.2). The same
- * value again is a no-op; a different value is mirror_tampered and the ref stays. A task id git cannot hold as a ref
- * name (`taskRefOk`) writes nothing and answers 'ok': the mirror is fine, and the reviewer reads the task's result
- * checkpoint head instead (§7.7).
+ * `…/tasks/<task_id>`, written once for a completion the hub first sees applied and only when `head` is the mirror's HEAD
+ * (§7.2). The same value again is a no-op, whatever the mirror holds by then (a replay long after it moved on); a
+ * different value is mirror_tampered and the ref stays. A task id git cannot hold as a ref name (`taskRefOk`) writes
+ * nothing and answers 'ok': the mirror is fine, and the reviewer reads the task's result checkpoint head instead (§7.7).
  */
 export async function writeTaskRef(spec: MirrorSpec, taskId: string, head: string, deps: MirrorDeps): Promise<'ok' | 'mirror_tampered'> {
   if (!OID_RE.test(head)) return 'mirror_tampered'
+  const ref = taskRefOk(taskId) ? mirrorRefs(spec).task(taskId) : null
+  const existing = ref === null ? null : await commitAt(deps, spec.airClone, ref)
+  if (existing === head) return 'ok'
   if ((await mirrorHead(spec, deps)) !== head) return 'mirror_tampered'
-  if (!taskRefOk(taskId)) return 'ok'
-  const ref = mirrorRefs(spec).task(taskId)
-  const existing = await commitAt(deps, spec.airClone, ref)
-  if (existing !== null) return existing === head ? 'ok' : 'mirror_tampered'
+  if (ref === null) return 'ok'
+  if (existing !== null) return 'mirror_tampered'
   const r = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'update-ref', ref, head, ''])
   if (r.code === 0) return 'ok'
   return (await commitAt(deps, spec.airClone, ref)) === head ? 'ok' : 'mirror_tampered'

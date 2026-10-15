@@ -13,7 +13,8 @@
 //      replay sends identical bytes. A takeover's note names the mirror's last synced oid and the head the pipe declared,
 //      and Collab holds neither, so its replay is byte-identical only while both are unchanged; once either has moved,
 //      Collab answers idempotency_conflict (K24), a refusal that writes nothing and proves the key was used;
-//   7. one forward, never retried (R18), and the tasks ref for a new completion.
+//   7. one forward, never retried (R18), and the tasks ref for a new completion (or for the same-key replay of one whose
+//      first answer was lost, which is the first time the hub sees it applied).
 // Every refusal before the forward is a definite "not sent".
 import type { AgentCode } from '../failure.ts'
 import type { Declared } from '../link/messages.ts'
@@ -154,9 +155,12 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   if (!ctx.child.accepting()) return stoppedRefusal()
   const outcome = await ctx.child.call(ctx.name, args)
 
-  if (ctx.flow === 'complete' && plan.kind === 'sync' && outcome.outcome === 'ok') {
-    // Written once, for a new completion only, from what Collab captured; the call has already applied, so a refusal
-    // here is ledgered and the reviewer reads the result checkpoint's head instead (§7.7).
+  if (ctx.flow === 'complete' && outcome.outcome === 'ok' && (plan.kind === 'sync' || task.work_mode === 'edit')) {
+    // Written once, for a completion first seen applied, from what Collab captured: a new one (plan 'sync'), or the
+    // same-key replay of one whose first forward answered unknown after Collab committed (plan 'forward': the task reads
+    // completed, so nothing syncs and Collab returns its stored receipt). writeTaskRef is a no-op when the ref is already
+    // there and writes only while the mirror still holds the head. The call has already applied, so a refusal here is
+    // ledgered and the reviewer reads the result checkpoint's head instead (§7.7).
     const done = taskFromResult(outcome.result)
     const resultHead = done?.result_checkpoint?.head_sha ?? null
     let ref: 'ok' | 'mirror_tampered' | 'missing' = 'missing'

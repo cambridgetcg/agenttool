@@ -435,6 +435,50 @@ describe('replays', () => {
     expect([accepted.review_status, accepted.result_checkpoint.head_sha]).toEqual(['accepted', n1])
   }, T)
 
+  test('a same-key replay of a complete whose first answer was lost writes the tasks ref the first forward never got to (Task 63 conformance-2-3)', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'one\n' }, 'one')
+    const k = key()
+    // Collab commits the completion, and the hub hears nothing back: unknown, so no tasks ref and no ledger line yet.
+    const lost = recording(w.remote, undefined, { rewrite: { name: 'collab_task_complete', to: () => ({ outcome: 'unknown', reason: 'timeout', ms: 0 }) } })
+    const first = await complete(w, t, declaredOf(w), { key: k, child: lost.child })
+    expect(first.kind === 'outcome' && first.outcome.outcome).toBe('unknown')
+    expect((await readTask(w.remote, w.ws, 'T'))?.status).toBe('completed')
+    expect([tasksRef(w, 'T'), w.ledger.filter((f) => f.event === 'tasks_ref')]).toEqual([null, []])
+    // The agent replays with the same key: no sync (the task is completed), Collab's receipt, and now the reviewer's ref.
+    const before = fetches(w)
+    const replay = taskOf(await complete(w, t, declaredOf(w), { key: k }))
+    expect(replay.result_checkpoint.head_sha).toBe(n1)
+    expect(fetches(w)).toBe(before)
+    expect(tasksRef(w, 'T')).toBe(n1)
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([])
+    // Once is enough: another replay finds the ref there and says nothing.
+    expect(taskOf(await complete(w, t, declaredOf(w), { key: k }))).toEqual(replay)
+    expect([tasksRef(w, 'T'), w.ledger.filter((f) => f.event === 'tasks_ref')]).toEqual([n1, []])
+    const accepted = await airReview(w, replay, 'accept')
+    expect([accepted.review_status, accepted.result_checkpoint.head_sha]).toEqual(['accepted', n1])
+  }, T)
+
+  test('a replay of a lost completion after the mirror moved on cannot write the ref, and says so in the ledger (Task 63 conformance-2-3)', async () => {
+    const w = await world()
+    const a = await claimed(w, 'A')
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    const k = key()
+    const lost = recording(w.remote, undefined, { rewrite: { name: 'collab_task_complete', to: () => ({ outcome: 'unknown', reason: 'timeout', ms: 0 }) } })
+    await complete(w, a, declaredOf(w), { key: k, child: lost.child })
+    const doneA = (await readTask(w.remote, w.ws, 'A'))!
+    await airReview(w, doneA, 'accept')
+    // B moves the mirror past A's commit; A's ref was never written, and the mirror no longer holds A's head.
+    const b = await claimed(w, 'B', { base: n1 })
+    commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'b')
+    taskOf(await complete(w, b, declaredOf(w)))
+    const replay = taskOf(await complete(w, a, declaredOf(w), { key: k }))
+    expect(replay.result_checkpoint.head_sha).toBe(n1)
+    expect(tasksRef(w, 'A')).toBeNull() // never written from a mirror that no longer holds the head
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref' && f.code === 'mirror_tampered')).toHaveLength(1) // visible, not silent
+  }, T)
+
   test("a same-key replay of a complete while another task holds the mirror is forwarded and returns Collab's receipt", async () => {
     const w = await world()
     const a = await claimed(w, 'A')
@@ -452,6 +496,8 @@ describe('replays', () => {
     // result commit, not the mirror's current one, so Collab sees the identical request and returns the receipt.
     expect(taskOf(await complete(w, a, declaredOf(w), { key: k }))).toEqual(doneA)
     expect(mirrorAt(w)).toBe(n2)
+    // A's ref already holds its head, so the replay finds nothing to write and nothing to report, though the mirror moved.
+    expect([tasksRef(w, 'A'), w.ledger.filter((f) => f.event === 'tasks_ref')]).toEqual([n1, []])
   }, T)
 
   test('a duplicate complete under a new key leaves the mirror unmoved', async () => {
