@@ -567,6 +567,59 @@ describe('a spawn re-checks its lineage after every wait (Task 40a ruling, §9.6
   }, 30_000)
 })
 
+describe("a caller that shares a spawn in progress is held to its own checks (Task 63 pipe-2-1, conformance-4-1)", () => {
+  for (const [state, code] of [['ended', 'seat_session_ended'], ['pending', 'session_required']] as const) {
+    test(`a call on a ${state} lineage that arrives while a session_start spawns its unbound child is ${code}, not that child`, async () => {
+      const w = world()
+      const p = pool(w)
+      const e = entry(w, { state })
+      const hold = holdStarts()
+      try {
+        const forStart = p.childFor(e.lineage, { forStart: true })
+        await until(() => hold.entered() === 1)
+        const other = p.childFor(e.lineage) // a non-start call: it may not be handed the sessionless child
+        hold.release()
+        expect(await other).toMatchObject({ ok: false, code })
+        const started = await forStart
+        expect(started.ok).toBe(true) // the start itself is served by the one child
+        expect(hold.created).toHaveLength(1)
+        expect(events(w, 'child_start')).toHaveLength(1)
+      } finally {
+        hold.restore()
+      }
+    }, 30_000)
+  }
+
+  test('two start calls that arrive together still share the one child', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w, { state: 'ended' })
+    const [a, b] = await Promise.all([childOf(p, e.lineage, true), childOf(p, e.lineage, true)])
+    expect(a.pid).toBe(b.pid)
+    expect(events(w, 'child_start')).toHaveLength(1)
+  }, 30_000)
+
+  test('a caller waiting on a spawn that fails is told by its own checks, and no second child starts', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    await seedLive(w, e)
+    const hold = holdStarts()
+    try {
+      const first = p.childFor(e.lineage)
+      await until(() => hold.entered() === 1)
+      const second = p.childFor(e.lineage)
+      p.park(e.lineage, 'cursor_reset_required', {})
+      hold.release()
+      expect(await first).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+      expect(await second).toMatchObject({ ok: false, code: 'seat_recovery_required' })
+      expect(hold.created).toHaveLength(1)
+    } finally {
+      hold.restore()
+    }
+  }, 30_000)
+})
+
 describe('stopAll and stopDevice wait for a child that is starting (Task 40a ruling, §9.10 step 4)', () => {
   test('a child starting during stopAll is stopped by the time stopAll resolves, and the closed pool answers hub_away', async () => {
     const w = world()

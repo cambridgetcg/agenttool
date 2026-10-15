@@ -160,7 +160,12 @@ export class ChildPool {
 
   async childFor(lineage: string, o: { forStart?: boolean } = {}): Promise<ChildFor> {
     const rt = this.rt(lineage)
-    if (rt.starting) return rt.starting
+    if (rt.starting) {
+      // The spawn in progress ran the checks of the caller that began it. A caller that shares the wait is held to its own,
+      // on the entry as it stands afterwards: a non-start call is never handed the sessionless child a session_start asked for.
+      await rt.starting
+      return this.childFor(lineage, o)
+    }
     const g = this.gate(lineage, rt, o, true)
     if ('refusal' in g) return g.refusal
     if (g.child) return { ok: true, child: g.child }
