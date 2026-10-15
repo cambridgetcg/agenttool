@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { installCheck, installSettings, installWrite, tapCommand, uninstallSettings } from '../src/nuance/install-steps.ts'
 import { readInstalled, readShares } from '../src/nuance/installed.ts'
@@ -7,7 +7,7 @@ import { readSeatPublicHex } from '../src/nuance/seatkey.ts'
 import { readCurrentTools, seededNames } from '../src/nuance/tools-cache.ts'
 import { writeToolsFile } from '../src/tools-digest.ts'
 import { checkInput, claudeStub, FIXTURE_TOOLS, FIXTURE_TRAILER, summonReadyHome, makeTrialRepo, writeCheckBundle, type NuanceHome } from './install-fixtures.ts'
-import { cleanupTmps, commitFiles, modeOf, PKG, REAL_GIT, repoGit } from './helpers.ts'
+import { cleanupTmps, commitFiles, modeOf, PKG, REAL_GIT, repoGit, temp } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -175,6 +175,30 @@ describe('install settings', () => {
     installSettings({ folder: fresh.share, trailer: FIXTURE_TRAILER, tap: true, paths: fresh.paths, git: freshReport.git! })
     uninstallSettings({ folder: fresh.share, paths: fresh.paths })
     expect(readJson(settingsOf(fresh.share))).toEqual({})
+  }, 30_000)
+
+  test('a .claude that is a link to another folder is never read or written through, by settings or unsettings (Task 63 installer-2-3)', () => {
+    const { h, report } = ready()
+    const other = temp('cb-other-claude-')   // another project's, or a citizen's, .claude
+    const theirs = JSON.stringify({ permissions: { allow: ['Read'] }, attribution: { commit: 'their trailer' },
+      hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: `${h.paths.binary} tap --host claude`, timeout: 5 }] }] } }, null, 2) + '\n'
+    writeFileSync(join(other, 'settings.local.json'), theirs)
+    symlinkSync(other, join(h.share, '.claude'))
+    const before = exclude(h.share)
+    expect(uninstallSettings({ folder: h.share, paths: h.paths }).ok).toBe(false)
+    expect(readFileSync(join(other, 'settings.local.json'), 'utf8')).toBe(theirs)
+    const set = installSettings({ folder: h.share, trailer: FIXTURE_TRAILER, tap: true, paths: h.paths, git: report.git! })
+    expect(set.ok).toBe(false)
+    if (!set.ok) expect(set.reason).toContain('.claude')
+    expect(readFileSync(join(other, 'settings.local.json'), 'utf8')).toBe(theirs)
+    expect(existsSync(join(other, 'settings.local.json.collab-bridge-backup'))).toBe(false)
+    expect(exclude(h.share)).toBe(before)
+    // A link to nothing is no folder of ours either.
+    rmSync(join(h.share, '.claude'))
+    symlinkSync(join(other, 'gone'), join(h.share, '.claude'))
+    expect(installSettings({ folder: h.share, trailer: FIXTURE_TRAILER, tap: true, paths: h.paths, git: report.git! }).ok).toBe(false)
+    expect(uninstallSettings({ folder: h.share, paths: h.paths }).ok).toBe(false)
+    expect(existsSync(join(other, 'gone'))).toBe(false)
   }, 30_000)
 
   test('a settings file that is not a JSON object is refused and left alone', () => {

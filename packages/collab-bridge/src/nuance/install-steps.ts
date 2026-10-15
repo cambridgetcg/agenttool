@@ -481,6 +481,14 @@ type Settings = { ok: true; file: string; obj: Json; text: string | null; mode: 
 
 function readSettings(folder: string): Settings {
   const file = join(folder, SETTINGS_REL)
+  // lstat on the file stops only at its last part, so a .claude that is a link would be followed into another folder, a
+  // citizen's or another project's, and installSettings or uninstallSettings would rewrite that folder's settings.
+  const claudeDir = dirname(file)
+  try {
+    if (!lstatSync(claudeDir).isDirectory()) return { ok: false, reason: `${claudeDir} is not a plain folder (a link or a file); it was left as it is` }
+  } catch (e) {
+    if (errnoOf(e) !== 'ENOENT') return { ok: false, reason: `${claudeDir} cannot be read` }
+  }
   let text: string | null = null
   let mode: number | null = null
   try {
