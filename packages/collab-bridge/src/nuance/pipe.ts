@@ -60,7 +60,9 @@ const MESSAGES = {
   folder_not_shared: "This folder is not shared with the Air; start Claude at a shared folder's root.",
   harness_not_interactive: 'Collab through the Air hub is only for an interactive Claude session.',
   hub_away: 'The Air hub is not reachable now; nothing was sent.',
-  seat_session_ended: 'This Collab session has ended on the Air; start a new session.',
+  // Only an attach the hub refused reaches this sentence (a retired lineage, §6.2): the link client stops for good on it, so
+  // no call of this pipe is ever forwarded and collab_session_start cannot begin a new session. A new Claude has a new lineage.
+  seat_session_ended: 'This Claude session can no longer use Collab on the Air (its lineage has ended for good); nothing was sent. Restart Claude to begin a new Collab session.',
   lineage_cap: 'Too many Claude sessions on this Mac are attached to the Air hub; close another session first.',
   frame_too_large: 'This call is larger than a call may be; nothing was sent.',
   rate_limited: 'Too many earlier calls of this session have no known outcome; check them with a read tool, or replay one with its own idempotency_key.',

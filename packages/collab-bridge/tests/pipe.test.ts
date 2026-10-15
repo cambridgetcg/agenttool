@@ -212,6 +212,24 @@ describe('refusals from the hub', () => {
     expect(r.structuredContent!.delivered).toBe(false)
   })
 
+  test('a retired lineage is told to restart Claude, not to call collab_session_start, which this pipe can never make work (Task 63 conformance-8-2)', async () => {
+    const f = nuanceFixture()
+    await link(f, { refuse: 'seat_session_ended' })
+    const p = await started(pipeDeps(f))
+    await callUntil(p, 'seat_session_ended')
+    // The hub refused the attach, and the link client stops for good on that code: no call of this pipe is ever forwarded,
+    // collab_session_start included, so advice to "start a new session" would send the agent round the same refusal.
+    for (const [name, args] of [['collab_session_start', { actor: 'a' }], ['collab_task_list', {}]] as const) {
+      const r = await p.handleCall(1, name, args)
+      expect(codeOf(r)).toBe('seat_session_ended')
+      expect(r.structuredContent).toMatchObject({ delivered: false })
+      const message = String(r.structuredContent!.message)
+      expect(message).toMatch(/restart Claude/i)
+      expect(message).not.toMatch(/start a new session/i)
+      expect(message).not.toMatch(/collab_session_start/)
+    }
+  })
+
   test('lineage_cap from the hub answers lineage_cap', async () => {
     const f = nuanceFixture()
     await link(f, { refuse: 'lineage_cap' })
