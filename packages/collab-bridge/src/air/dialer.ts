@@ -316,6 +316,10 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
   const alias = o.device.host_alias
   const config = o.paths.sshConfig
   const preambleMs = o.preambleMs ?? scaled(TIMING.preambleMs)
+  // A ledger or status write that fails (a held ledger lock after 3 s, ENOSPC, a read-only disk) never decides anything
+  // here: the loop's job is the link, and a throw from either would skip the session, the close and the next dial, and
+  // end this device's loop for good (Task 63 relay-1-3). The hub counts the failure in its own wrapper.
+  const note = (f: LedgerFields) => { try { o.ledger(f) } catch { /* the loop runs without its ledger line */ } }
   let lastWord: DeviceWord | null = null
   let since = new Date().toISOString()
   let downSince: string | null = null
@@ -327,7 +331,7 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
       since = word === 'connecting' || word === 'away' ? downSince! : t
       lastWord = word
     }
-    o.status({ word, reason, since, hint, sticky: o.policy.sticky() })
+    try { o.status({ word, reason, since, hint, sticky: o.policy.sticky() }) } catch { /* status only: the file is rewritten at the next word */ }
   }
   const needsYu = (reason: string): 'needs_yu' => {
     report('needs_yu', reason, reason === 'login_shell_noise' ? NOISE_HINT : null)
@@ -335,19 +339,19 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
   }
 
   if (!o.configExists()) {
-    o.ledger({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
+    note({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
     return needsYu('config')
   }
   let target: ReturnType<typeof targetOfConfig> = null
   try { target = targetOfConfig(readFileSync(config, 'utf8'), alias) } catch { target = null }
   if (!target?.host) {
-    o.ledger({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
+    note({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
     return needsYu('config')
   }
   // A dial that cannot be built (an ssh or config path that is not absolute, an alias outside dialArgv's pattern) stops
   // as config like a missing config: dialOnce would throw from dialArgv, which no later dial can heal.
   try { dialArgv(o.ssh, config, alias, newRelayNonce()) } catch {
-    o.ledger({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
+    note({ event: 'dial', device, outcome: 'refused', code: 'config', ms: 0 })
     return needsYu('config')
   }
   const ctx: SshContext = { ...target, config }
@@ -360,7 +364,7 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
       probeNext = false
       const t0 = monoNowMs()
       const r = await o.tcpProbe(target.host, 22, 5_000).catch(() => 'error')
-      o.ledger({ event: 'tcp_probe', device, outcome: r === 'ok' ? 'ok' : 'failed', code: r === 'ok' ? undefined : r, ms: Math.round(monoNowMs() - t0) })
+      note({ event: 'tcp_probe', device, outcome: r === 'ok' ? 'ok' : 'failed', code: r === 'ok' ? undefined : r, ms: Math.round(monoNowMs() - t0) })
       if (o.stopped()) break
     }
     const t0 = monoNowMs()
@@ -368,23 +372,22 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
     const ms = Math.round(monoNowMs() - t0)
     let decision: DialDecision
     if (out.ok) {
-      o.ledger({ event: 'dial', device, outcome: 'up', ms })
+      note({ event: 'dial', device, outcome: 'up', ms })
       o.policy.onUp()
       linked = true
       report('up', null, null)
       try { await o.onLink(out.link) } catch {
         // The session threw instead of ending: the link is still closed and the policy decides as for any drop, but the
-        // ledger keeps a content-free record (no error text), so a deterministic crash is not silent churn. A ledger that
-        // fails here must not skip the close.
-        try { o.ledger({ event: 'link_end', device, user: o.device.user, code: 'session_error' }) } catch { /* the close still runs */ }
+        // ledger keeps a content-free record (no error text), so a deterministic crash is not silent churn.
+        note({ event: 'link_end', device, user: o.device.user, code: 'session_error' })
       }
       out.link.close()
       await out.link.closed
       decision = o.policy.onDrop()
     } else {
       const f = out.failure
-      o.ledger({ event: 'dial', device, outcome: 'failed', code: failureCode(f), ms })
-      if ('status' in f && f.status === 'host_key_mismatch') o.ledger({ event: 'host_key_mismatch', device, fingerprint: f.fingerprint ?? undefined })
+      note({ event: 'dial', device, outcome: 'failed', code: failureCode(f), ms })
+      if ('status' in f && f.status === 'host_key_mismatch') note({ event: 'host_key_mismatch', device, fingerprint: f.fingerprint ?? undefined })
       decision = o.policy.onFailure(f)
       if ('status' in f && f.status === 'unreachable' && f.reason === 'no_route') probeNext = true
     }

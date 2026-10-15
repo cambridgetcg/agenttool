@@ -104,7 +104,7 @@ function collect(link: DeviceLink): (want: number) => Promise<string> {
 
 /** runDialLoop with recorded status, sleeps and ledger, stopping after `sleeps` waits. */
 async function loop(air: Air, fake: FakeSsh, o: { sleeps?: number; probe?: TcpProbe; configExists?: () => boolean; ledger?: (f: LedgerFields) => void;
-  preambleMs?: number; onSleep?: (n: number) => void; onLink?: (link: DeviceLink) => Promise<void> } = {}) {
+  preambleMs?: number; onSleep?: (n: number) => void; onLink?: (link: DeviceLink) => Promise<void>; status?: (s: Partial<DeviceStatus>) => void } = {}) {
   const statuses: Array<Partial<DeviceStatus>> = []
   const ledger: LedgerFields[] = []
   const sleeps: number[] = []
@@ -114,7 +114,7 @@ async function loop(air: Air, fake: FakeSsh, o: { sleeps?: number; probe?: TcpPr
     policy: new DialPolicy({ mono: () => performance.now(), now: () => new Date(), rand: () => 0.5 }),
     configExists: o.configExists ?? (() => true),
     onLink: o.onLink ?? (async (link) => { link.close(); await link.closed }),
-    status: (s) => statuses.push(s),
+    status: (s) => { statuses.push(s); o.status?.(s) },
     ledger: (f) => { ledger.push(f); o.ledger?.(f) },
     tcpProbe: async (h, p, ms) => { probes.push([h, p, ms]); return o.probe ? o.probe(h, p, ms) : 'ok' },
     stopped: () => sleeps.length >= (o.sleeps ?? 1),
@@ -494,6 +494,52 @@ describe('runDialLoop: a dial that cannot be built, a session that throws, the l
     const auth = fakeWith(RELAY)
     auth.setFail255('macair@nuance.local: Permission denied (publickey).\r\n')
     expect((await loop(air, auth)).statuses.at(-1)).toMatchObject({ word: 'needs_yu', reason: 'auth_refused', hint: null })
+  }, 20_000)
+})
+
+describe('runDialLoop: a ledger or status write that throws', () => {
+  test('a ledger that throws on every line (a held lock, ENOSPC) neither skips the session nor the close nor the next dial (Task 63 relay-1-3)', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    let link: DeviceLink | null = null
+    let served = 0
+    const r = await loop(air, fake, {
+      ledger: () => { throw new Error('ledger lock timeout') },
+      onLink: async (l) => { served++; link = l; l.close(); await l.closed },
+    })
+    expect(r.result).toBe('stopped')
+    expect(served).toBe(1)
+    expect(await Promise.race([link!.closed.then(() => 'closed'), Bun.sleep(2_000).then(() => 'open')])).toBe('closed')
+    expect(r.statuses.map((s) => s.word)).toEqual(['connecting', 'up', 'connecting'])
+    expect(r.sleeps).toEqual([0])
+  }, 10_000)
+
+  test('a status write that throws on up cannot leave the live link unserved', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    let served = 0
+    const r = await loop(air, fake, {
+      status: (s) => { if (s.word === 'up') throw new Error('ENOSPC') },
+      onLink: async (l) => { served++; l.close(); await l.closed },
+    })
+    expect(r.result).toBe('stopped')
+    expect(served).toBe(1)
+    expect(r.sleeps).toEqual([0])
+  }, 10_000)
+
+  test('failed dials, a host-key mismatch and a stop still run when the ledger and the status throw', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    fake.setFail255(CHANGED_KEY)
+    const down = () => { throw new Error('EROFS') }
+    const r = await loop(air, fake, { sleeps: 2, ledger: down, status: down })
+    expect(r.result).toBe('stopped')
+    expect(r.sleeps).toEqual([60_000, 60_000])
+    expect(fake.calls().length).toBe(2)
+    // A stop that needs Yu still returns its word when the status that would show it cannot be written.
+    const gate = fakeWith(GATE_REFUSES)
+    expect((await loop(air, gate, { ledger: down, status: down })).result).toBe('needs_yu')
+    expect((await loop(air, fakeWith(RELAY), { configExists: () => false, ledger: down, status: down })).result).toBe('needs_yu')
   }, 20_000)
 })
 
