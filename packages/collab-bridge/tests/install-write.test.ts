@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { installCheck, installSettings, installWrite, tapCommand, uninstallSettings } from '../src/nuance/install-steps.ts'
 import { readInstalled, readShares } from '../src/nuance/installed.ts'
@@ -158,6 +158,21 @@ describe('install settings', () => {
     installSettings({ folder: h2.share, trailer: FIXTURE_TRAILER, tap: true, paths: h2.paths, git: report2.git! })
     expect(exclude(h2.share)).toBe(before2)
     expect(repoGit(h2.share, ['status', '--porcelain', '--untracked-files=all'])).toBe('')
+  }, 30_000)
+
+  test('an info/exclude the bridge creates is 0600, and one that was there keeps its own mode (Task 63 installer-2-7, conformance-7-3)', () => {
+    const { h, report } = ready()
+    const file = join(h.share, '.git', 'info', 'exclude')
+    rmSync(file)                                                  // a repo made with an empty template, or the file was deleted
+    expect(installSettings({ folder: h.share, trailer: FIXTURE_TRAILER, tap: false, paths: h.paths, git: report.git! }).ok).toBe(true)
+    expect(exclude(h.share)).toBe('.claude/settings.local.json\n.claude/settings.local.json.collab-bridge-backup\n')
+    expect(modeOf(file)).toBe(0o600)
+
+    const { h: h2, report: report2 } = ready()
+    const file2 = join(h2.share, '.git', 'info', 'exclude')
+    chmodSync(file2, 0o640)
+    installSettings({ folder: h2.share, trailer: FIXTURE_TRAILER, tap: false, paths: h2.paths, git: report2.git! })
+    expect(modeOf(file2)).toBe(0o640)
   }, 30_000)
 
   test('unsettings removes exactly the tap entry and attribution.commit', () => {

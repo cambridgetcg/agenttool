@@ -545,7 +545,7 @@ function excludeFromGit(folder: string, git: ResolvedGit, home: string): string 
   const exclude = where.stdout.trim()
   if (where.code !== 0 || !exclude.startsWith('/')) return `could not find ${folder}'s .git/info/exclude`
   let before = ''
-  let mode = 0o644
+  let mode = 0o600                                   // a file the bridge creates is 0600; one that was there keeps its own mode
   try { before = readFileSync(exclude, 'utf8'); mode = statSync(exclude).mode & 0o777 } catch (e) { if (errnoOf(e) !== 'ENOENT') return `${exclude} cannot be read` }
   mkdirSync(dirname(exclude), { recursive: true, mode: 0o700 })
   const sep = before === '' || before.endsWith('\n') ? '' : '\n'
