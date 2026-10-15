@@ -12,7 +12,7 @@ import { readToolsFile, toolsDigest } from '../src/tools-digest.ts'
 import type { NuanceBuild } from '../scripts/build-nuance.ts'
 import { parsePrepareArgs, prepareBundle, readyText, TRIAL_README, type PrepareInput } from '../scripts/prepare-pairing.ts'
 import { readToolsFixture } from './fixtures/make-collab-tools.ts'
-import { cleanupTmps, COLLAB_DIST, makeRepo, modeOf, PKG, REAL_GIT, repoGit, sha256File, temp } from './helpers.ts'
+import { cleanupTmps, COLLAB_DIST, commitFiles, makeRepo, modeOf, PKG, REAL_GIT, repoGit, sha256File, temp } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -228,6 +228,36 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
     expect(repoGit(dest, ['rev-parse', 'HEAD'])).toBe(r.trialCommit)
     expect(readFileSync(join(dest, 'README.md'), 'utf8')).toBe(TRIAL_README)
     expect(repoGit(cloneOf(o), ['merge-base', r.trialCommit, 'HEAD'])).toBe(r.trialCommit)
+  }, T)
+
+  test("the trial bundle holds the shared base branch and nothing else of the Air clone: no other branch, stash or bridge ref (Task 63 installer-1-4)", async () => {
+    const o = input()
+    const clone = cloneOf(o)
+    const base = makeRepo(clone)
+    // Air-only work that must stay on the Air: a branch, a stash with an untracked file, and a bridge ref of a remote task.
+    repoGit(clone, ['checkout', '-q', '-b', 'air-only'])
+    const secretBranch = commitFiles(clone, { 'air-only-secret.txt': 'a branch nobody shared\n' }, 'air only')
+    repoGit(clone, ['checkout', '-q', 'main'])
+    writeFileSync(join(clone, 'stashed-secret.txt'), 'edits nobody shared\n')
+    repoGit(clone, ['stash', 'push', '-q', '--include-untracked'])
+    const stashed = repoGit(clone, ['rev-parse', 'refs/stash'])
+    repoGit(clone, ['update-ref', 'refs/collab/nuance/macair/0123456789abcdef/tasks/t1', secretBranch])
+    const r = await prepareBundle(o)
+    expect(r.trialCommit).toBe(base)
+    const bundle = join(r.bundle, 'collab-trial.bundle')
+    const heads = repoGit(clone, ['bundle', 'list-heads', bundle]).split('\n').map((l) => l.split(' ')[1]).sort()
+    expect(heads).toEqual(['HEAD', 'refs/heads/main'])
+    // What the device clones: the base branch checked out, and none of the Air-only objects.
+    const into = temp('cb-pair-clone-')
+    repoGit(into, ['clone', '-q', bundle, 'collab-trial'])
+    const dest = join(into, 'collab-trial')
+    expect([repoGit(dest, ['symbolic-ref', '--short', 'HEAD']), repoGit(dest, ['rev-parse', 'HEAD'])]).toEqual(['main', base])
+    expect(repoGit(dest, ['for-each-ref', '--format=%(refname)']).split('\n').sort()).toEqual(['refs/heads/main', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'])
+    for (const oid of [secretBranch, stashed]) expect(() => repoGit(dest, ['cat-file', '-e', oid]), oid).toThrow()
+    // A detached HEAD still bundles the commit it is on, and only that.
+    repoGit(clone, ['checkout', '-q', '--detach'])
+    const d = await prepareBundle({ ...o, now: NOW + 60_000 })
+    expect(repoGit(clone, ['bundle', 'list-heads', join(d.bundle, 'collab-trial.bundle')])).toBe(`${base} HEAD`)
   }, T)
 
   test('writes the device file as prepared', async () => {

@@ -285,7 +285,14 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   const tools = writeToolsFile(join(bundle, 'tools.json'), seatTools(list, o.device, o.user))
   const trialBundle = join(bundle, 'collab-trial.bundle')
   rmSync(trialBundle, { force: true })
-  const b = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'bundle', 'create', '--quiet', trialBundle, '--all'], { env: o.gitEnv ?? {}, timeoutMs: 60_000 })
+  // Only the shared base: the branch HEAD names, and HEAD (a detached HEAD bundles just the commit it is on). Never --all: the
+  // Air clone also holds Air-only branches, stashes (with untracked files) and refs/collab/*, none of which leaves the Air.
+  const sym = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'symbolic-ref', '-q', 'HEAD'], { env: o.gitEnv ?? {} })
+  if (sym.code === null || sym.code > 1) throw new Error(`prepare: git symbolic-ref in ${airClone} failed: ${firstLine(sym.stderr)}`)
+  const baseRef = sym.code === 0 ? new TextDecoder().decode(sym.stdout).trim() : null
+  if (sym.code === 0 && !/^refs\/heads\/[^\s]+$/.test(baseRef ?? '')) throw new Error(`prepare: HEAD of ${airClone} names ${JSON.stringify(baseRef)}, not a branch`)
+  const b = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'bundle', 'create', '--quiet', trialBundle, ...(baseRef === null ? [] : [baseRef]), 'HEAD'],
+    { env: o.gitEnv ?? {}, timeoutMs: 60_000 })
   if (b.code !== 0) throw new Error(`prepare: git bundle create failed: ${firstLine(b.stderr)}`)
   chmodSync(trialBundle, 0o600)
   const files = { 'collab-bridge': built.sha256, 'tools.json': fileSha256(join(bundle, 'tools.json')), 'collab-trial.bundle': fileSha256(trialBundle) }
