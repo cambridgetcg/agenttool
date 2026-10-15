@@ -75,13 +75,36 @@ export function testEnv(home: string, extra: Record<string, string> = {}): Recor
   }
 }
 
+/** The first timeout `untilStubStarted` gives a stub, and how many times it doubles that before it gives up. */
+export const STUB_START_FIRST_MS = 500
+export const STUB_START_TRIES = 5
+
 /**
- * How long a test gives a freshly written bash stub to start and write its child's pid before the code under test times it
- * out. A first exec of a new script took 170-260 ms on the Air (probed) and now and then seconds, so 300-400 ms lost the race
- * one run in three, and the test then read a `child` file that did not exist yet. A test parameter only: no product limit is
- * raised by it (the longest user, the SIGTERM-ignoring group test, takes this plus the 5 s kill grace, inside its 20 s).
+ * Runs `attempt(timeoutMs)` until the bash stub in `dir` has written the pid of its child to `dir/child`, and returns that last
+ * attempt's result with the pid. The attempt is the code under test timing the stub out; the stub can only write its pid if it
+ * started before that timer fired, and a first exec of a new script took 170-260 ms on the Air (probed) and now and then
+ * seconds, so no one short timeout is safe and one long timeout makes every run slow. Each try gives the stub twice the time of
+ * the last (500 ms up to 8 s), so a quick stub costs one short try and a slow one is waited for. A try whose stub did not start
+ * is a call that timed out, as the test means it: with ownGroup the whole group is stopped with it, and without it at most a
+ * `sleep 60` the stub forked just before it was stopped lives out its minute. A pid file from before the first try is removed,
+ * never taken for the stub's. A stub that never starts fails with a message that says so, where a bare read of `child` would
+ * fail with ENOENT. A test using this has room for every try: give it 45 s.
  */
-export const STUB_START_MS = 4000
+export async function untilStubStarted<R>(dir: string, attempt: (timeoutMs: number) => Promise<R>): Promise<{ result: R; child: number }> {
+  const file = join(dir, 'child')
+  let timeoutMs = STUB_START_FIRST_MS
+  for (let tries = 1; ; tries += 1) {
+    rmSync(file, { force: true })
+    const result = await attempt(timeoutMs)
+    let child = 0
+    try { child = Number(readFileSync(file, 'utf8').trim()) } catch { /* the stub did not get as far as writing it */ }
+    if (Number.isInteger(child) && child > 0) return { result, child }
+    if (tries >= STUB_START_TRIES) {
+      throw new Error(`the stub in ${dir} wrote no child pid in ${STUB_START_TRIES} tries, the last with ${timeoutMs} ms to start`)
+    }
+    timeoutMs *= 2
+  }
+}
 
 /** A logging stub: every call appends `<name> <args>` to $STUB_LOG (to /dev/null when unset), then runs `body`. */
 export function writeStub(dir: string, name: string, body: string): string {
