@@ -7,15 +7,15 @@
 // another Collab would only refuse to start. "Dirty" is not what a plain `git status` shows: the user's and the system's git
 // config are not read, untracked files are listed whatever status.showUntrackedFiles says, a file hidden from git with
 // skip-worktree or assume-unchanged is dirty, and so is an ignored file among the bridge's own sources (a module the bundle
-// could take that no commit holds). The bundle carries no Collab code, and the build checks it: every module in it is the
-// bridge's own bin/ or src/, or the build refuses (P32): the hub runs the installed Collab bins.
+// could take that no commit holds). The bundle carries no Collab code, and the build checks it: every file the bundler loads is
+// the bridge's own bin/ or src/, whatever it is named or loaded as, or the build refuses (P32): the hub runs the installed Collab bins.
 // The bundler names every module by its path relative to the process cwd, so the build runs with its cwd at the package
 // root: the bytes then depend only on the commit, never on where the build was started (and a cwd bunfig.toml is not
 // read: the script runs with --config=/dev/null, P15, F5). Ai copies the result to
 // ~/.local/share/collab-bridge/air/<sha256>/hub.js (Task 66), where it never changes again.
 import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { chmodSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { distMatches, type BuildInfo } from '../src/air/hub.ts'
 import { sha256File } from '../src/nuance/git-resolve.ts'
@@ -65,11 +65,6 @@ export function treeClean(repo: string): boolean {
   return tracked.ok && tracked.out.split('\0').every((e) => e === '' || e.startsWith('H '))
 }
 
-/** The modules a bundle was made of, from the `// <path>` line the bundler writes above each one. */
-export function bundledModules(text: string): string[] {
-  return text.split('\n').filter((l) => /^\/\/ \S+\.(?:ts|tsx|js|jsx|mjs|cjs|json|node)$/.test(l)).map((l) => l.slice(3))
-}
-
 /** The commit HEAD names in `repo`, or null when git cannot say. */
 export function headCommit(repo: string): string | null {
   const r = git(repo, ['rev-parse', '--verify', 'HEAD^{commit}'])
@@ -102,21 +97,26 @@ export async function buildHub(o: { repo: string; outDir: string; installedDist:
   const before = process.cwd()
   process.chdir(pkgRoot)
   let text: string
+  // Every file the bundler loads, as the bundler names it (a symlink already followed): not read back from the `// <path>` lines
+  // of its output, which a path with a space or a loader of another extension would slip past (Task 63 new-bundle-module-list).
+  const loaded: string[] = []
+  const record: Bun.BunPlugin = { name: 'record-loaded-modules', setup(build) { build.onLoad({ filter: /.*/ }, (args) => { loaded.push(args.path); return undefined }) } }
   try {
     const r = await Bun.build({
       entrypoints: [join(pkgRoot, 'bin', 'collab-bridge.ts')],
       target: 'bun',
       define: { __COLLAB_BRIDGE_BUILD__: JSON.stringify(info) },
+      plugins: [record],
     })
     if (!r.success || r.outputs.length !== 1) throw new Error(`buildHub: the bundle failed: ${r.logs.map((l) => String(l)).join('; ').slice(0, 500)}`)
     text = await r.outputs[0]!.text()
   } finally {
     process.chdir(before)
   }
-  // The hub imports no Collab code (P32): every module is the bridge's own, named relative to the package root it was built from.
-  const modules = bundledModules(text)
-  const foreign = modules.filter((m) => !/^(bin|src)\//.test(m))
-  if (modules.length === 0) throw new Error("buildHub: the bundle lists no modules, so it cannot be checked to carry only the bridge's own code")
+  // The hub imports no Collab code (P32): every file the bundle was made of is the bridge's own bin/ or src/.
+  const roots = [...new Set([pkgRoot, realpathSync(pkgRoot)])].flatMap((root) => ['bin', 'src'].map((d) => join(root, d) + '/'))
+  const foreign = loaded.filter((m) => !roots.some((root) => m.startsWith(root)))
+  if (loaded.length === 0) throw new Error("buildHub: the bundler loaded no modules, so the bundle cannot be checked to carry only the bridge's own code")
   if (foreign.length > 0) throw new Error(`buildHub: the bundle carries code from outside the bridge's own bin/ and src/ (${foreign.slice(0, 3).join(', ')}); the hub runs the installed Collab bins and bundles none of their code`)
   mkdirSync(o.outDir, { recursive: true, mode: 0o700 })
   chmodSync(o.outDir, 0o700)

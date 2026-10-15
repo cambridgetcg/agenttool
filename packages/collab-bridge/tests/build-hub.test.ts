@@ -165,6 +165,29 @@ describe('build-hub', () => {
     expect(existsSync(out)).toBe(false)
   }, 30_000)
 
+  // Task 63 new-bundle-module-list: the check read the bundle's `// <path>` header lines for a few extensions and no space, so a
+  // foreign module named any other way was never looked at. It asks the bundler which files it loaded instead.
+  test('refuses a bundle that carries a foreign module however it is named or loaded: a space in the path, .mts, .cts, a text import', async () => {
+    const cases: Array<{ what: string; file: string; body: string; importLine: (from: string) => string }> = [
+      { what: 'a space and .mts', file: 'lea k.mts', body: 'export const leaked = "CollabStoreInside"\n', importLine: (f) => `import { leaked } from '${f}'\n;(globalThis as any).__leaked = leaked\n` },
+      { what: '.cts', file: 'leak.cts', body: 'export const leaked = "CollabStoreInside"\n', importLine: (f) => `import { leaked } from '${f}'\n;(globalThis as any).__leaked = leaked\n` },
+      { what: 'a text import', file: 'leak.txt', body: 'CollabStoreInside\n', importLine: (f) => `import leaked from '${f}' with { type: 'text' }\n;(globalThis as any).__leaked = leaked\n` },
+    ]
+    for (const c of cases) {
+      const r = hubRepo()
+      const out = join(temp('cb-hubout-'), 'hub')
+      mkdirSync(join(r.repo, 'packages', 'collab', 'src'), { recursive: true })
+      writeFileSync(join(r.repo, 'packages', 'collab', 'src', c.file), c.body)
+      writeFileSync(join(r.repo, 'packages', 'collab-bridge', 'src', 'air', 'leak.ts'), c.importLine(`../../../collab/src/${c.file}`))
+      appendFileSync(join(r.repo, 'packages', 'collab-bridge', 'bin', 'collab-bridge.ts'), "\nimport '../src/air/leak.ts'\n")
+      repoGit(r.repo, ['add', 'packages'])
+      repoGit(r.repo, ['-c', 'user.name=Ai', '-c', 'user.email=ai@collab-bridge.invalid', 'commit', '-q', '-m', 'a Collab import'])
+      expect([c.what, treeClean(r.repo)]).toEqual([c.what, true])
+      await expect(buildHub({ repo: r.repo, outDir: out, installedDist: r.dist })).rejects.toThrow('carries code from outside')
+      expect([c.what, existsSync(out)]).toEqual([c.what, false])
+    }
+  }, 90_000)
+
   test('refuses when the installed dist differs from the tracked one', async () => {
     const r = hubRepo()
     const out = join(temp('cb-hubout-'), 'hub')
