@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createPrivateKey } from 'node:crypto'
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { updateDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
 import { distMatches, embeddedBuild, recordRefusedStart, runHub, sourceBuild, type HubDeps } from '../src/air/hub.ts'
@@ -502,6 +502,30 @@ describe('a linked device', () => {
     await until(() => s.losses() === 1, 'the link to close')
     await Bun.sleep(600)
     expect(s.readies.length).toBe(1) // the pipe keeps redialing; nothing on Nuance answers for the hub any more
+    expect(await stopHub(h)).toBe(0)
+  }, T)
+
+  test('a device whose dial loop stopped for needs Yu and is then unpaired still gets the unpair steps: children stopped, unpaired status, one ledger line (Task 63 launcher-1-5, conformance-3-3)', async () => {
+    const w = linked()
+    const e = await liveLineage(w)
+    const h = startHub(w.deps())
+    const s = w.seat(e.lineage)
+    await until(() => s.readies.length === 1, 'the seat to be ready')
+    expect(s.c.send({ t: 'call', call_ref: `${e.lineage}:0000abcd:0`, name: 'collab_next', arguments: {}, timeout_ms: 60_000 })).toBe('written')
+    await until(() => s.results.length === 1, 'the collab_next result')
+    expect(lines(w.paths, 'child_start').map((l) => l.lineage)).toEqual([e.lineage])
+    // Nuance's key is refused from now on, and the relay dies: the one immediate redial meets the refusal, and the loop ends for Yu
+    w.fake.setFail255('macair@nuance.local: Permission denied (publickey).\r\n')
+    const relay = JSON.parse(readFileSync(join(dirname(w.sock), 'relay.json'), 'utf8')) as { pid: number }
+    process.kill(relay.pid, 'SIGKILL')
+    await until(() => readDeviceStatus(w.paths, 'nuance')?.word === 'needs_yu', 'needs Yu: auth_refused')
+    expect(lines(w.paths, 'unpaired')).toEqual([])
+    updateDevice(w.paths.deviceFile('nuance'), (d) => ({ ...d, state: 'unpaired', seat_public: null }))
+    await until(() => readDeviceStatus(w.paths, 'nuance')?.word === 'unpaired', 'the unpaired status')
+    await until(() => lines(w.paths, 'child_exit').some((l) => l.lineage === e.lineage), 'the child to stop')
+    await Bun.sleep(300) // several reloads: it is done once
+    expect(lines(w.paths, 'unpaired').map((l) => l.device)).toEqual(['nuance'])
+    expect(readDeviceStatus(w.paths, 'nuance')).toMatchObject({ word: 'unpaired', reason: null })
     expect(await stopHub(h)).toBe(0)
   }, T)
 

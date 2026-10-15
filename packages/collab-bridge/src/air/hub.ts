@@ -323,6 +323,7 @@ export async function runHub(deps: HubDeps): Promise<number> {
 
     const runs = new Map<string, DeviceRun>()
     const halted = new Set<string>() // stopped for Yu (auth, config, noise) or unpaired: dialled again only after a restart
+    const unpaired = new Set<string>() // the devices whose §9.10 steps 1 and 4 this run has done
 
     const prepare = (d: DeviceFile) => {
       if (!seatLists.has(d.device)) seatLists.set(d.device, seatList(d)) // a device paired after the start
@@ -404,18 +405,24 @@ export async function runHub(deps: HubDeps): Promise<number> {
       if (fresh !== null) {
         damagedSaid = false
         current = new Map(fresh.map((d) => [d.device, d]))
-        for (const r of [...runs.values()]) {
-          const d = current.get(r.device)
-          if (d && d.state === 'paired' && d.seat_public !== null) continue
-          // §9.10 steps 1 and 4: the link drops, the device is never dialled again in this run, its children stop.
-          r.stopped = true
-          r.wake()
-          r.session?.close('unpaired')
-          runs.delete(r.device)
-          halted.add(r.device)
-          await pool.stopDevice(r.device)
-          deviceStatus(r.device, { word: 'unpaired', reason: null, hint: null })
-          ledger({ event: 'unpaired', device: r.device })
+        // Every device this run has dialled: one with a loop, and one whose loop stopped for Yu (needs Yu: auth, config,
+        // noise), whose children are still detached. Unpairing the second is as much §9.10 as the first (Task 63 launcher-1-5).
+        for (const name of new Set([...runs.keys(), ...halted])) {
+          const d = current.get(name)
+          if (unpaired.has(name) || (d && d.state === 'paired' && d.seat_public !== null)) continue
+          // §9.10 steps 1 and 4: the link drops, the device is never dialled again in this run, its children stop. Once.
+          unpaired.add(name)
+          const r = runs.get(name)
+          if (r) {
+            r.stopped = true
+            r.wake()
+            r.session?.close('unpaired')
+            runs.delete(name)
+          }
+          halted.add(name)
+          await pool.stopDevice(name)
+          deviceStatus(name, { word: 'unpaired', reason: null, hint: null })
+          ledger({ event: 'unpaired', device: name })
         }
         for (const d of fresh) {
           if (d.state === 'paired' && d.seat_public !== null && !runs.has(d.device) && !halted.has(d.device) && !stopping) startLoop(d)
