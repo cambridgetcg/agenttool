@@ -127,8 +127,22 @@ export class LinkSession {
     this.mux.ping()
   }
 
+  /**
+   * Bytes off the link. Any dependency that throws while a frame is served (the store, the pool, the tool list) ends this
+   * session and nothing else: the throw would otherwise travel up into the dialer's stdout loop, which stops reading while
+   * ssh and the hub's PINGs go on, so every call sent in the next 45 s would vanish (Task 63 relay-1-1). The ledger line
+   * carries the code only, never the error's text.
+   */
   private onBytes(chunk: Uint8Array): void {
     if (this.ended) return
+    try {
+      this.serve(chunk)
+    } catch {
+      this.end('session_error')
+    }
+  }
+
+  private serve(chunk: Uint8Array): void {
     let frames: Frame[]
     try {
       frames = this.mux.feed(chunk)
@@ -246,6 +260,14 @@ export class LinkSession {
       try { this.deps.store.upsert(entry) } catch { return this.refuse(s, 'hub_away', a.lineage) }
     }
     this.disarm(s)
+    // attached() sets the pool's flags and then persists, which can fail (ENOSPC) like the upsert above: this stream alone
+    // is refused, before it holds anything, and the pool is told the lineage is detached again unless another stream holds it.
+    try {
+      this.deps.pool.attached(a.lineage)
+    } catch {
+      if (!this.deps.attachments.has(a.lineage)) { try { this.deps.pool.detached(a.lineage) } catch { /* its flags are already right */ } }
+      return this.refuse(s, 'hub_away', a.lineage)
+    }
     s.seat = { device: d.device, user: d.user, lineage: a.lineage, harness: a.harness, entrypoint: a.entrypoint, folder: a.folder, stream: s.id }
     s.phase = 'ready'
     s.holder = () => {
@@ -253,10 +275,9 @@ export class LinkSession {
       this.send(s, { t: 'notice', code: 'hub_lost' })
       this.closeStream(s)
     }
-    // The pool hears of the attach first: attachments.attach() calls the older holder, whose notice is written to the link,
-    // and a write that fails ends the session inside that call, which detaches this stream and its lineage. attached()
-    // after that would count a lineage nothing holds, so its detached window would never start (Task 63 conformance-5-1).
-    this.deps.pool.attached(a.lineage)
+    // The pool heard of the attach above, before this call: attachments.attach() calls the older holder, whose notice is
+    // written to the link, and a write that fails ends the session inside that call, which detaches this stream and its
+    // lineage. An attached() after that would count a lineage nothing holds (Task 63 conformance-5-1).
     this.deps.attachments.attach(a.lineage, s.holder)
     // §9.9: skew is warned about, never bounded; it feeds only the status.
     const skew = Math.round((this.deps.now().getTime() - Date.parse(a.clock)) / 1000) || 0

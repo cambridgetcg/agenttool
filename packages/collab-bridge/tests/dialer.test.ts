@@ -251,6 +251,35 @@ describe('dialOnce: the ssh stdin pipe breaking under a pending write', () => {
   }, 10_000)
 })
 
+describe('dialOnce: a consumer of the link that throws', () => {
+  test('closes the link instead of leaving ssh up with its stdout unread, and is called no more (Task 63 relay-1-1)', async () => {
+    const air = makeAir()
+    const out = await dial(air, fakeWith(RELAY))
+    if (!out.ok) throw new Error(JSON.stringify(out.failure))
+    let calls = 0
+    out.link.onData(() => { calls++; throw new Error('the session could not take this chunk') })
+    out.link.send(new TextEncoder().encode('first\n'))
+    const state = await Promise.race([out.link.closed.then(() => 'closed'), Bun.sleep(3_000).then(() => 'open')])
+    if (state === 'open') out.link.close()
+    expect(state).toBe('closed')
+    expect(calls).toBe(1)
+  }, 10_000)
+
+  test('a chunk that was waiting for the consumer is handled the same way', async () => {
+    const air = makeAir()
+    // The preamble and the first bytes arrive in one read; the consumer is attached afterwards and throws on what waited.
+    const out = await dial(air, fakeWith(RELAY.replace('exec /bin/cat', "printf 'early bytes\\n'\nexec /bin/cat")))
+    if (!out.ok) throw new Error(JSON.stringify(out.failure))
+    await Bun.sleep(100)
+    let calls = 0
+    out.link.onData(() => { calls++; throw new Error('boom') })
+    const state = await Promise.race([out.link.closed.then(() => 'closed'), Bun.sleep(3_000).then(() => 'open')])
+    if (state === 'open') out.link.close()
+    expect(state).toBe('closed')
+    expect(calls).toBe(1)
+  }, 10_000)
+})
+
 describe('runDialLoop', () => {
   test('links after zshenv junk, and redials at once after the drop', async () => {
     const air = makeAir()

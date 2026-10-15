@@ -745,6 +745,43 @@ describe('the link', () => {
     expect(t.pool.attached.has(second)).toBe(false)
   })
 
+  test('a dependency that throws while a frame is served ends the link session_error instead of escaping into the reader (Task 63 relay-1-1)', async () => {
+    const t = rig({ deps: { tools: () => { throw new Error('boom') } } })     // asked for the ready message of a proven stream
+    const lineage = newLineage()
+    t.relay.open(1)
+    t.relay.data(1, attachMsg(lineage))
+    expect(() => prove(t.relay, 1, lineage)).not.toThrow()
+    await t.run
+    expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'session_error' }])
+    expect(t.relay.closedByHub()).toBe(true)
+    // The stream that was marked ready on the way is not left holding its lineage, and no text of the error is recorded.
+    expect(t.attachments.has(lineage)).toBe(false)
+    expect(t.pool.attached.has(lineage)).toBe(false)
+    expect(JSON.stringify(t.ledger)).not.toContain('boom')
+  })
+
+  test('a pool that cannot persist an attach refuses that stream hub_away; the link, the other streams and the pool stay right (Task 63 relay-1-1)', async () => {
+    const t = rig()
+    const first = newLineage()
+    const second = newLineage()
+    expect(handshake(t.relay, 1, first)).toMatchObject({ t: 'ready' })
+    const pool = t.deps.pool as unknown as { attached(l: string): void }
+    const real = pool.attached
+    pool.attached = (l) => { if (l === second) { real(l); throw new Error('ENOSPC') } real(l) } // sets its flags, then fails to write
+    expect(handshake(t.relay, 3, second)).toEqual({ t: 'refused', code: 'hub_away' })
+    expect(t.relay.closes(3)).toBe(1)
+    expect(t.attachments.has(second)).toBe(false)
+    expect(t.pool.attached.has(second)).toBe(false)           // told detached again: no child counted for a stream nobody holds
+    expect(t.ledger.filter((f) => f.event === 'attach_refused').at(-1)).toMatchObject({ lineage: second, code: 'hub_away' })
+    // The link and the first stream carry on.
+    expect(t.relay.closedByHub()).toBe(false)
+    expect(t.attachments.has(first)).toBe(true)
+    t.relay.data(1, { t: 'tools_get', digest: DIGEST })
+    expect(t.relay.messages(1).at(-1)).toEqual({ t: 'tools', digest: DIGEST, list: [] })
+    t.session.close('test')
+    await t.run
+  })
+
   test('relay_replaced, a close() reason and an unpaired device each write one link_end with their own code', async () => {
     const replaced = rig()
     replaced.relay.data(0, { t: 'relay_replaced' })

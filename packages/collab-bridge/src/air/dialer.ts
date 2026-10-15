@@ -85,9 +85,20 @@ export function dialOnce(o: { ssh: string; config: string; alias: string; nonce:
     const pending: Uint8Array[] = []
     let stderrText = ''
     let ended = false
+    let broken = false
+    // A consumer that throws can no longer read the link. Left alone, the throw would end the stdout loop below (or escape
+    // into onData's caller) with ssh still up and its bytes unread: the hub keeps PINGing a link nobody serves until its
+    // PONG timer ends it 45 s later. So the link is closed, at once, and nothing more is handed to that consumer (Task 63 relay-1-1).
+    const feed = (cb: (chunk: Uint8Array) => void, chunk: Uint8Array) => {
+      if (broken) return
+      try { cb(chunk) } catch {
+        broken = true
+        link.close()
+      }
+    }
     const deliver = (chunk: Uint8Array) => {
-      if (chunk.byteLength === 0) return
-      if (consumer) consumer(chunk)
+      if (chunk.byteLength === 0 || broken) return
+      if (consumer) feed(consumer, chunk)
       else pending.push(chunk)
     }
     const kill = () => {
@@ -105,7 +116,7 @@ export function dialOnce(o: { ssh: string; config: string; alias: string; nonce:
       },
       onData(cb) {
         consumer = cb
-        for (const c of pending.splice(0)) cb(c)
+        for (const c of pending.splice(0)) feed(cb, c)
       },
       close() {
         try { quiet(proc.stdin.end()) } catch { /* already closed */ }
