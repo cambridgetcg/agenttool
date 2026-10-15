@@ -100,8 +100,8 @@ describe('ledger', () => {
     const lines = linesOf(p)
     expect(lines).toHaveLength(5)
     const torn = JSON.parse(lines[3]!)
-    expect(torn).toMatchObject({ event: 'ledger_torn_tail', detail: 'line 3 did not parse', prev: second.hash })
-    expect(Object.keys(torn).sort()).toEqual(['detail', 'event', 'hash', 'prev', 'ts'])
+    expect(torn).toMatchObject({ event: 'ledger_torn_tail', code: 'torn_line_3_unparsed', prev: second.hash })
+    expect(Object.keys(torn).sort()).toEqual(['code', 'event', 'hash', 'prev', 'ts'])
     expect(JSON.parse(lines[4]!)).toEqual(next)
     expect(next.prev).toBe(torn.hash)
     expect(verifyLedger(p)).toEqual({ ok: true, entries: 4, torn: [3] })
@@ -115,10 +115,39 @@ describe('ledger', () => {
     appendLedger(p, NUANCE_LEDGER_KEYS, { event: 'gate', form: 'relay' })
     const lines = linesOf(p)
     expect(lines).toHaveLength(4)
-    expect(JSON.parse(lines[2]!)).toMatchObject({ event: 'ledger_torn_tail', detail: 'line 2 did not parse', prev: first.hash })
+    expect(JSON.parse(lines[2]!)).toMatchObject({ event: 'ledger_torn_tail', code: 'torn_line_2_unparsed', prev: first.hash })
     expect(verifyLedger(p)).toEqual({ ok: true, entries: 3, torn: [2] })
     appendLedger(p, NUANCE_LEDGER_KEYS, { event: 'gate', form: 'hello' }) // a clean tail again: no second marker
     expect(linesOf(p)).toHaveLength(5)
+  })
+
+  test('the torn-tail marker carries only the caller\'s keys and the chain fields, on both Macs\' key lists (Task 63 conformance-6-3)', () => {
+    const chain = new Set(['ts', 'prev', 'hash'])
+    const torn = (keys: readonly string[], garbage: string) => {
+      const p = ledgerIn()
+      appendLedger(p, keys, { event: 'gate', form: 'hello' })
+      appendFileSync(p, garbage)
+      appendLedger(p, keys, { event: 'gate', form: 'relay' })
+      expect(verifyLedger(p).ok).toBe(true)
+      return readLedger(p).filter((e) => e.event === 'ledger_torn_tail')
+    }
+    for (const keys of [AIR_LEDGER_KEYS, NUANCE_LEDGER_KEYS] as const) {
+      for (const garbage of ['{"event":"gate","form":"rel', '{"x\n{"y\n', Buffer.alloc(8).toString('latin1') + '\n']) {
+        const markers = torn(keys, garbage)
+        expect(markers).toHaveLength(1)
+        for (const k of Object.keys(markers[0]!)) expect([k, keys.includes(k as never) || chain.has(k)]).toEqual([k, true])
+      }
+    }
+    // A list without `code` leaves the marker with the event and the chain only; a line count never reaches a key it is not given.
+    const bare = torn(['event'], '{"event":"gate","form":"rel')
+    expect(Object.keys(bare[0]!).sort()).toEqual(['event', 'hash', 'prev', 'ts'])
+    // The code still says which lines tore: a run of unparsable lines, and a last line that parsed but had no newline.
+    expect(torn(NUANCE_LEDGER_KEYS, '{"x\n{"y\n')[0]).toMatchObject({ code: 'torn_lines_2-3_unparsed' })
+    const p = ledgerIn()
+    appendLedger(p, NUANCE_LEDGER_KEYS, { event: 'gate', form: 'hello' })
+    appendFileSync(p, '{"hash":"x"}')
+    appendLedger(p, NUANCE_LEDGER_KEYS, { event: 'gate', form: 'relay' })
+    expect(readLedger(p).find((e) => e.event === 'ledger_torn_tail')).toMatchObject({ code: 'torn_line_2_no_newline' })
   })
 
   test('a tampered line breaks the chain at that line', () => {

@@ -62,8 +62,10 @@ function seal(fields: Record<string, LedgerValue>, prev: string, nowMs: number):
  * Where the next entry chains from, and what must be written before it. A file whose last line is not an entry, or that
  * does not end in a newline, has a torn tail (an unclean shutdown, a short write): it is terminated, and a
  * `ledger_torn_tail` entry chained to the last valid entry marks it, so the chain goes on and verifyLedger can name it.
+ * The marker is built like every other entry, through the caller's key list (C13), so which lines tore goes in `code`
+ * when the list has one (`torn_line_3_unparsed`, `torn_lines_3-4_unparsed`, `torn_line_3_no_newline`), never in a key of its own.
  */
-function tail(path: string, nowMs: number): { prev: string; before: string } {
+function tail(path: string, keys: readonly string[], nowMs: number): { prev: string; before: string } {
   if (!existsSync(path)) return { prev: 'genesis', before: '' }
   const text = readFileSync(path, 'utf8')
   const lines = text.split('\n').filter(Boolean)
@@ -74,8 +76,8 @@ function tail(path: string, nowMs: number): { prev: string; before: string } {
   while (i >= 0 && !entryOf(lines[i])) i--
   const lastValid = i >= 0 ? entryOf(lines[i])!.hash : 'genesis'
   const [from, to] = [i + 2, lines.length] // the run of non-entry lines after the last valid entry, 1-based
-  const detail = last ? `line ${to} had no newline` : from === to ? `line ${to} did not parse` : `lines ${from}-${to} did not parse`
-  const marker = seal({ event: TORN_TAIL, detail }, lastValid, nowMs)
+  const code = last ? `torn_line_${to}_no_newline` : from === to ? `torn_line_${to}_unparsed` : `torn_lines_${from}-${to}_unparsed`
+  const marker = seal(pick(keys, { event: TORN_TAIL, code }), lastValid, nowMs)
   return { prev: marker.hash, before: (text.endsWith('\n') ? '' : '\n') + JSON.stringify(marker) + '\n' }
 }
 
@@ -111,7 +113,7 @@ export function appendLedger(path: string, keys: readonly string[], fields: Ledg
   return withLock(path, () => {
     const picked = pick(keys, fields)
     const created = !existsSync(path)
-    const { prev, before } = tail(path, nowMs)
+    const { prev, before } = tail(path, keys, nowMs)
     const entry = seal(picked, prev, nowMs)
     // fsync'd before it returns, so a caller that acts after logging has its entry handed to the disk first (a new file's
     // directory entry too). macOS fsync(2) can still leave it in the drive's cache; that is as far as this goes.
