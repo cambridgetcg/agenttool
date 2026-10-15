@@ -18,7 +18,8 @@
 //   7. knock reads run one at a time per lineage, at least RATES.knocksMinMs apart (T9): each one starts a host CLI.
 //   8. a collab_session_end holds its lineage from the moment it is decided until its answer has been settled: any call
 //      of that lineage meanwhile is refused hub_away and never sent, so nothing is forwarded to a Collab that has
-//      already unbound (P53, "there is no legacy mode");
+//      already unbound (P53, "there is no legacy mode"). An edit flow, which waits behind the mirror lock or a fetch for up
+//      to a minute, reads the same hold (holdOf) under the lock and again in the turn of each write to its child;
 //   9. a fault of the hub's own after a call may have reached a child (a thrown store write, a bug) is hub_outcome_unknown,
 //      ledgered forwarder_fault and logged to stderr (hub.log, §10.4), never a rejection (R18); a write that fails after
 //      Collab has answered is logged and the answer still goes back.
@@ -239,7 +240,7 @@ export class Forwarder implements SeatHandlers {
         workspaceId: entry.workspace_id!, child: got.child, mirror: handle,
         // One MirrorDeps for the hub; the Host alias is the device's own, so a second Mac fetches from itself (§5.6).
         mirrorDeps: { ...this.deps.mirrorDeps, alias: device.host_alias }, nowMs: this.deps.now().getTime(),
-        notAfterMono: notAfter, mono: () => this.deps.mono(),
+        notAfterMono: notAfter, mono: () => this.deps.mono(), barrier: () => this.holdOf(seat.lineage, sessionId),
       })
       if (flow.kind === 'refuse') {
         return this.refused(seat, m, flow.code, flow.message, flow.extra, flow.extra?.reason === DEADLINE.reason ? DEADLINE.reason : undefined)
@@ -252,6 +253,20 @@ export class Forwarder implements SeatHandlers {
     if (!got.child.accepting()) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.stopped)
     if (m.name !== END && this.ending.has(seat.lineage)) return this.refused(seat, m, 'hub_away', FORWARD_MESSAGES.ending)
     return this.settle(seat, m, sessionId, await got.child.call(m.name, d.args))
+  }
+
+  /**
+   * What keeps a write off this lineage's child right now (item 8, P53): a collab_session_end in flight (hub_away), or a
+   * lineage that is no longer live on `sessionId` (ended, retired, or a later session: seat_session_ended). The edit flows read
+   * it in the same turn as each write, because they wait behind the mirror lock or a fetch for up to a minute, after the plain
+   * path's own check could have been made.
+   */
+  private holdOf(lineage: string, sessionId: string): { code: AgentCode; message: string } | null {
+    if (this.ending.has(lineage)) return { code: 'hub_away', message: FORWARD_MESSAGES.ending }
+    const now = this.deps.store.get(lineage)
+    if (!now) return { code: 'hub_away', message: FORWARD_MESSAGES.noLineage }
+    if (now.state !== 'live' || now.session_id !== sessionId) return { code: 'seat_session_ended', message: FORWARD_MESSAGES.ended }
+    return null
   }
 
   /**

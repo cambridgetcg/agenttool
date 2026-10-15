@@ -178,10 +178,10 @@ function createEdit(w: World, id: string, o: { base?: string | null; policy?: 'a
 }
 
 function ctxOf(w: World, flow: EditFlowCtx['flow'], name: string, args: Record<string, unknown>, declared: Declared | undefined,
-  o: { child?: CollabChild; nowMs?: number; notAfterMono?: number; mono?: () => number; deps?: MirrorDeps } = {}): EditFlowCtx {
+  o: { child?: CollabChild; nowMs?: number; notAfterMono?: number; mono?: () => number; deps?: MirrorDeps; barrier?: EditFlowCtx['barrier'] } = {}): EditFlowCtx {
   return { flow, name, args, declared, device: 'nuance', user: 'macair', sessionId: w.sessionId, workspaceId: w.ws,
     child: o.child ?? w.remote, mirror: w.handle, mirrorDeps: o.deps ?? w.deps, nowMs: o.nowMs ?? Date.now(),
-    notAfterMono: o.notAfterMono ?? null, mono: o.mono ?? (() => performance.now()) }
+    notAfterMono: o.notAfterMono ?? null, mono: o.mono ?? (() => performance.now()), barrier: o.barrier ?? (() => null) }
 }
 
 const claimArgs = (w: World, t: any, o: { key?: string; ttl?: number } = {}) => ({ workspace_id: w.ws, task_id: t.id,
@@ -191,13 +191,13 @@ const completeArgs = (w: World, t: any, o: { key?: string; limits?: string } = {
 const takeoverArgs = (w: World, t: { id: string; version: number }, note: string, k?: string) => ({ workspace_id: w.ws, task_id: t.id,
   idempotency_key: k ?? key(), expected_version: t.version, recovery_note: note })
 
-type FlowOpts = { child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number }
+type FlowOpts = { child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number; barrier?: EditFlowCtx['barrier'] }
 const claim = (w: World, t: any, declared: Declared | undefined, o: FlowOpts & { key?: string; ttl?: number } = {}) =>
   runEditFlow(ctxOf(w, 'claim', 'collab_task_claim', claimArgs(w, t, o), declared, o))
 const complete = (w: World, t: any, declared: Declared | undefined, o: FlowOpts & { key?: string; limits?: string } = {}) =>
   runEditFlow(ctxOf(w, 'complete', 'collab_task_complete', completeArgs(w, t, o), declared, o))
 const takeover = (w: World, t: { id: string; version: number }, declared: Declared | undefined, note: string,
-  o: { key?: string; child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number } = {}) =>
+  o: { key?: string; child?: CollabChild; deps?: MirrorDeps; notAfterMono?: number; mono?: () => number; barrier?: EditFlowCtx['barrier'] } = {}) =>
   runEditFlow(ctxOf(w, 'takeover', 'collab_task_recover', takeoverArgs(w, t, note, o.key), declared, o))
 
 /** The task of a flow that reached Collab and succeeded. */
@@ -905,6 +905,58 @@ describe('every way a flow is stopped before the forward', () => {
       expect([fetches(w), mirrorAt(w), syncedAt(w)]).toEqual([before, tampered, w.base])
     }, T)
   }
+
+  // Task 63 conformance-3-1, pipe-1-1: the lineage's end (collab_session_end in flight or settled) reaches a flow that waited.
+  const ENDING = { code: 'hub_away', message: 'a collab_session_end is in flight' } as const
+  const ENDED = { code: 'seat_session_ended', message: 'the session has ended' } as const
+
+  for (const flow of FLOWS) {
+    test(`a ${flow} that gets the lock after its lineage's end began is refused with the lineage's own answer, and nothing is read, fetched or sent`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const rec = recording(w.remote)
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, barrier: () => ENDING })).toEqual({ kind: 'refuse', ...ENDING })
+      expect(rec.calls).toEqual([])
+      expect([fetches(w), mirrorAt(w)]).toEqual([before, w.base])
+    }, T)
+
+    test(`a ${flow} whose lineage's end begins after the reads (and the sync, which a takeover has not) and before the forward is refused: nothing is forwarded`, async () => {
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const state = { ended: false }
+      // The end begins while the flow works: a takeover has no fetch, so it begins when the hub reads which tasks hold the mirror.
+      const deps: MirrorDeps = { ...w.deps, ledger: (f) => { w.deps.ledger(f); if (f.event === 'fetch') state.ended = true } }
+      const rec = recording(w.remote, flow === 'takeover' ? { name: 'collab_task_list', run: async () => { state.ended = true } } : undefined)
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, deps, barrier: () => (state.ended ? ENDED : null) })).toEqual({ kind: 'refuse', ...ENDED })
+      expect(rec.calls.map((c) => c.name)).not.toContain(FORWARDED[flow])
+      if (flow !== 'takeover') expect([fetches(w), mirrorAt(w)]).toEqual([before + 1, ready.n1]) // the mirror stays at the fetched commit, as for a late call
+      expect((await readTask(w.remote, w.ws, 'T'))?.effective_status).toBe(ready.effective)
+    }, T)
+
+    test(`a ${flow} whose lineage's end begins after the busy read and before the sync fetches nothing`, async () => {
+      if (flow === 'takeover') return // a takeover never syncs
+      const w = await world()
+      const ready = await readyFor(w, flow)
+      const state = { ended: false }
+      const rec = recording(w.remote, { name: 'collab_task_list', run: async () => { state.ended = true } })
+      const before = fetches(w)
+      expect(await ready.run({ child: rec.child, barrier: () => (state.ended ? ENDING : null) })).toEqual({ kind: 'refuse', ...ENDING })
+      expect(rec.calls.map((c) => c.name)).not.toContain(FORWARDED[flow])
+      expect([fetches(w), mirrorAt(w), syncedAt(w)]).toEqual([before, w.base, w.base])
+    }, T)
+  }
+
+  test('an artifact_attach that gets the lock after its lineage has ended is refused and never forwarded', async () => {
+    const w = await world()
+    const t = await claimed(w)
+    const rec = recording(w.remote)
+    const attach = runEditFlow(ctxOf(w, 'attach', 'collab_artifact_attach', { workspace_id: w.ws, task_id: t.id, lease_id: t.lease_id,
+      idempotency_key: key(), expected_version: t.version, kind: 'file', uri: 'notes/a.md' }, undefined, { child: rec.child, barrier: () => ENDED }))
+    expect(await attach).toEqual({ kind: 'refuse', ...ENDED })
+    expect(rec.calls).toEqual([])
+  }, T)
 
   for (const flow of ['claim', 'complete'] as const) {
     test(`a ${flow} whose deadline passes after the busy read and before the sync is hub_away: nothing is fetched or forwarded`, async () => {

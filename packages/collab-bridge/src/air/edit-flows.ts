@@ -28,7 +28,12 @@ import { readTask, taskFromResult } from './tasks.ts'
 export interface EditFlowCtx { flow: 'claim' | 'complete' | 'takeover' | 'attach'; name: string; args: Record<string, unknown>; declared: Declared | undefined;
   device: string; user: string; sessionId: string; workspaceId: string; child: CollabChild; mirror: MirrorHandle; mirrorDeps: MirrorDeps; nowMs: number;
   /** The forwarder's deadline on the hub's monotonic clock (§5.4): past it nothing is sent. null: no deadline. */
-  notAfterMono: number | null; mono: () => number }
+  notAfterMono: number | null; mono: () => number
+  /** A refusal that holds this lineage right now, or null (a collab_session_end in flight or settled, a session that is no
+   *  longer this flow's: the forwarder's item 8, P53). Read in the same synchronous turn as every write to the child, and
+   *  once under the lock before anything is read or fetched, so a flow that waited behind another capture is never sent to a
+   *  Collab that has already unbound. */
+  barrier(): { code: AgentCode; message: string } | null }
 export type EditFlowOutcome = { kind: 'outcome'; outcome: CallOutcome } | { kind: 'refuse'; code: AgentCode; message: string; extra?: Record<string, unknown> }
 
 export const FLOW_MESSAGES = {
@@ -48,6 +53,11 @@ export function runEditFlow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
 }
 
 const late = (ctx: EditFlowCtx) => ctx.notAfterMono !== null && ctx.mono() >= ctx.notAfterMono
+/** The lineage's own hold (EditFlowCtx.barrier) as a refusal, or null. */
+function held(ctx: EditFlowCtx): EditFlowOutcome | null {
+  const b = ctx.barrier()
+  return b === null ? null : refuse(b.code, b.message)
+}
 const lateRefusal = () => refuse('hub_away', FLOW_MESSAGES.late, { reason: 'deadline_passed' })
 // accepting() in the same synchronous turn as call() (Task 37): a child stopped while this call waited (for the lock, a
 // read, a sync) is never written to, so the agent hears "not sent", never hub_outcome_unknown (§9.3 item 3).
@@ -70,8 +80,12 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   const deps = ctx.mirrorDeps
   // The lock may have been held for minutes by another lineage's capture: a call whose deadline passed is never sent.
   if (late(ctx)) return lateRefusal()
+  const heldAtStart = held(ctx)
+  if (heldAtStart) return heldAtStart
   // artifact_attach stores a uri and reads no file (K18); it only has to wait for any capture of this mirror (§7.2).
   if (ctx.flow === 'attach') {
+    const heldAtWrite = held(ctx)
+    if (heldAtWrite) return heldAtWrite
     if (!ctx.child.accepting()) return stoppedRefusal()
     return { kind: 'outcome', outcome: await ctx.child.call(ctx.name, ctx.args) }
   }
@@ -101,6 +115,8 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
   let fetched: string | null = null
   if (plan.kind === 'sync') {
     if (late(ctx)) return lateRefusal()
+    const heldBeforeSync = held(ctx) // a fetch moves the mirror: not for a lineage whose end began while the reads ran
+    if (heldBeforeSync) return heldBeforeSync
     let r: SyncResult
     try {
       r = await syncMirror(spec, { declaredHead: ctx.declared!.head, atComplete: plan.atComplete }, deps)
@@ -133,6 +149,8 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
 
   // After a sync this leaves the mirror at the fetched commit with nothing forwarded, as Collab's own refusal would (§12.2).
   if (late(ctx)) return lateRefusal()
+  const heldAtForward = held(ctx)
+  if (heldAtForward) return heldAtForward
   if (!ctx.child.accepting()) return stoppedRefusal()
   const outcome = await ctx.child.call(ctx.name, args)
 

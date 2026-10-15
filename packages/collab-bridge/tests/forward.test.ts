@@ -13,7 +13,7 @@ import { seatTools } from '../src/air/policy-table.ts'
 import { ChildPool, liveProcAlive, makeHostCli, type HostCli } from '../src/air/pool.ts'
 import { roleNonce } from '../src/air/stamp.ts'
 import type { SeatRef } from '../src/air/streams.ts'
-import { MirrorRegistry } from '../src/air/sync-points.ts'
+import { MirrorRegistry, type MirrorHandle } from '../src/air/sync-points.ts'
 import { AIR_LEDGER_KEYS, appendLedger, readLedger, type LedgerEntry } from '../src/ledger.ts'
 import { newLineage, type CallMsg, type Declared, type HubKnockReportMsg, type ResultMsg, type ToolDef } from '../src/link/messages.ts'
 import { hasLazyFetchGuard, parseGitVersion, sha256File, type ResolvedGit } from '../src/nuance/git-resolve.ts'
@@ -180,6 +180,7 @@ async function start(w: World, s: Seat, args: Record<string, unknown> = { actor:
   return r
 }
 const lines = (w: World, event: string): LedgerEntry[] => readLedger(w.paths.ledger).filter((l) => l.event === event)
+const lines2 = (f: { paths: AirPaths }, event: string): LedgerEntry[] => readLedger(f.paths.ledger).filter((l) => l.event === event)
 
 /** An Air Claude session in the trial clone on the shared journal, run the hub's way (§10.2 step 4). */
 async function airSession(w: World): Promise<{ h: StdioHarness; sessionId: string }> {
@@ -517,6 +518,10 @@ describe('knocks', () => {
 
 interface FakeWorld {
   paths: AirPaths; dist: string; fwd: Forwarder; pool: ChildPool; store: LineageStore; seat: Seat; clock: Clock
+  /** The device file the Forwarder reads, as a mutable map (an unpair or a removed share is a change to it). */
+  devices: Map<string, DeviceFile>
+  /** The mirror's handle, when the world was made with `mirror: true`: its lock is the one the edit flows wait on. */
+  mirror: MirrorHandle | null
   release(): void; calls(): string[]
 }
 
@@ -524,7 +529,7 @@ interface FakeWorld {
  * A lineage that is already live (its credential file present), so the pool resumes it on Task 37's fake Collab dist,
  * which reads its script once at spawn: each test passes its script here. `knock` stands in for the host CLI's knock read.
  */
-function fakeWorld(script: FakeScript = {}, o: { knock?: ForwardDeps['knock'] } = {}): FakeWorld {
+function fakeWorld(script: FakeScript = {}, o: { knock?: ForwardDeps['knock']; mirror?: boolean } = {}): FakeWorld {
   const air = temp('cb-fwd-fake-')
   const paths = airPaths(air)
   const dist = writeFakeCollab(temp('cb-fwd-fakedist-'), script)
@@ -556,16 +561,24 @@ function fakeWorld(script: FakeScript = {}, o: { knock?: ForwardDeps['knock'] } 
       mirror_worktree_id: null, workspace_id: workspaceId, caps: DEFAULT_CAPS }],
     prepared_at: '2026-10-13T12:00:00.000Z', paired_at: '2026-10-13T12:30:00.000Z',
   }
+  const devices = new Map([['nuance', device]])
+  // An artifact_attach reads no file, so a handle whose paths do not exist is enough to hold a flow on the mirror lock.
+  const mirrors = new MirrorRegistry()
+  const mirror: MirrorHandle | null = o.mirror
+    ? { spec: { device: 'nuance', user: 'macair', mirrorId, mirrorPath: join(air, 'mirror'), airClone: join(air, 'Projects', 'collab-trial'),
+        remoteGitdir: `${folder}/.git`, caps: DEFAULT_CAPS }, lock: new MirrorLock(), worktreeId: null }
+    : null
+  if (mirror) mirrors.set(mirror)
   const fwd = new Forwarder({
-    pool, store, calls: new CallRegistry(), mirrors: new MirrorRegistry(),
+    pool, store, calls: new CallRegistry(), mirrors,
     mirrorDeps: { git: airGit({ git: REAL_GIT, home: air }), sshBin: '/nonexistent/ssh', sshConfig: paths.sshConfig, alias: 'collab-nuance',
       freeBytes: () => 1e15, fetchedToday: () => 0, ledger },
-    devices: () => new Map([['nuance', device]]), devicePath: (d) => paths.deviceFile(d), seatTools: () => SEAT_TOOLS,
+    devices: () => devices, devicePath: (d) => paths.deviceFile(d), seatTools: () => SEAT_TOOLS,
     knock: o.knock ?? (async () => ({ t: 'knock_report', count: 0, origins: [], seqs: [] })), journal: paths.sharedJournal, ledger,
     mono: () => clock.mono, now: () => new Date(clock.now),
   })
   return {
-    paths, dist, fwd, pool, store, clock,
+    paths, dist, fwd, pool, store, clock, devices, mirror,
     seat: { ref: { device: 'nuance', user: 'macair', lineage, harness: 'claude', entrypoint: 'cli', folder, stream: 1 }, seq: 0 },
     release: () => writeFileSync(join(dist, 'release'), ''),
     calls: () => fakeLog(dist).filter((l) => l.method === 'tools/call').map((l) => l.name!),
@@ -1046,6 +1059,47 @@ describe('lineage state across long waits', () => {
       expect((await ending).outcome).toBe('ok')
     }, T)
   }
+
+  /** An artifact_attach (an edit flow that reads no file) queued on the mirror lock, as another lineage's capture would hold it (Task 63). */
+  async function attachBehindLock(f: FakeWorld): Promise<{ attach: Promise<ResultMsg>; free(): void }> {
+    let free: (() => void) | undefined
+    void f.mirror!.lock.run(() => new Promise<void>((res) => { free = res }))
+    await until(() => free !== undefined, 'the test to hold the mirror lock')
+    const attach = fcall(f, 'collab_artifact_attach', { task_id: 't1', lease_id: 'l1', idempotency_key: 'k1', expected_version: 1, kind: 'file', uri: 'notes/a.md' })
+    await until(() => fakeLog(f.dist).some((l) => l.method === 'initialize'), 'the attach to get its child')
+    await Bun.sleep(100) // childFor answers, and the flow queues behind the held lock
+    return { attach, free: () => free!() }
+  }
+
+  test('an edit flow queued on the mirror lock while a collab_session_end is in flight is refused hub_away and never sent (Task 63 conformance-3-1, pipe-1-1)', async () => {
+    const f = fakeWorld({ tools: { collab_session_end: { kind: 'wait_file', file: 'release' } } }, { mirror: true })
+    const held = await attachBehindLock(f)
+    const ending = fcall(f, 'collab_session_end', { reason: 'done' })
+    try {
+      await until(() => f.calls().length === 1, 'the end to be inside the child')
+      held.free() // the attach gets the lock with the end unanswered: the window the hold exists for
+      const r = await held.attach
+      expect(sc(r)).toMatchObject({ error: 'hub_away', delivered: false, message: FORWARD_MESSAGES.ending })
+      expect(f.calls()).toEqual(['collab_session_end']) // nothing but the end reached the child
+    } finally {
+      held.free()
+      f.release()
+    }
+    expect((await ending).outcome).toBe('ok')
+    expect(f.calls()).toEqual(['collab_session_end'])
+  }, T)
+
+  test('an edit flow queued on the mirror lock until the end has settled is refused seat_session_ended and never sent (Task 63 conformance-3-1)', async () => {
+    const f = fakeWorld({}, { mirror: true })
+    const held = await attachBehindLock(f)
+    expect((await fcall(f, 'collab_session_end', { reason: 'done' })).outcome).toBe('ok')
+    expect(f.store.get(f.seat.ref.lineage)!.state).toBe('ended')
+    held.free()
+    const r = await held.attach
+    expect(sc(r)).toMatchObject({ error: 'seat_session_ended', delivered: false, message: FORWARD_MESSAGES.ended })
+    expect(f.calls()).toEqual(['collab_session_end'])
+    expect(lines2(f, 'forward').map((l) => l.tool)).toEqual(['collab_session_end'])
+  }, T)
 
   test('when the end answers an error the barrier is gone and the lineage is served normally', async () => {
     const f = fakeWorld({ tools: { collab_session_end: { kind: 'error' } } })
