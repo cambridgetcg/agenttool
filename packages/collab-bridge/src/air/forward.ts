@@ -165,6 +165,12 @@ export class Forwarder implements SeatHandlers {
     const received = this.deps.mono()
     const e = this.deps.store.get(seat.lineage)
     if (!e || e.state !== 'live' || e.session_id === null) return quiet()
+    // As for a call: a stream outlives an unpair or a removed share for a while, and a read would mark the session's notes as
+    // tapped for a Mac that is no longer paired for this folder, so they would never tap again.
+    const device = this.deps.devices().get(seat.device)
+    if (!device || device.state !== 'paired') return quiet()
+    const share = shareForFolder(device, seat.folder)
+    if (!share || share.mirror_id !== e.mirror_id) return quiet()
     // The in-flight check comes before allow(), so a refused overlap does not move the window.
     if (this.knocking.has(seat.lineage)) return quiet()
     if (!this.knockGap.allow(seat.lineage)) return quiet()

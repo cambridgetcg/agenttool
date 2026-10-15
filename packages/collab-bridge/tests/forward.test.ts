@@ -740,6 +740,29 @@ describe('knock reads (T9)', () => {
   }, T)
 })
 
+describe('knocks after the device is unpaired or the share is gone (Task 63 pipe-1-3)', () => {
+  const ONE: HubKnockReportMsg = { t: 'knock_report', count: 1, origins: ['air'], seqs: [7] }
+  const QUIET: HubKnockReportMsg = { t: 'knock_report', count: 0, origins: [], seqs: [] }
+  const changes: Array<[string, (d: DeviceFile) => DeviceFile]> = [
+    ['the device is unpaired', (d) => ({ ...d, state: 'unpaired' })],
+    ['the folder is no longer a share', (d) => ({ ...d, shares: [] })],
+    ['the share is another mirror', (d) => ({ ...d, shares: d.shares.map((x) => ({ ...x, mirror_id: 'f'.repeat(16) })) })],
+  ]
+  for (const [what, change] of changes) {
+    test(`when ${what} the tap hears silence: no host-CLI read runs, nothing is marked, and no slot is taken`, async () => {
+      let started = 0
+      const f = fakeWorld({}, { knock: async () => { started += 1; return ONE } })
+      const paired = f.devices.get('nuance')!
+      f.devices.set('nuance', change(paired))
+      expect(await f.fwd.knocks(f.seat.ref, { t: 'knocks', timeout_ms: 2_000 })).toEqual(QUIET)
+      expect(started).toBe(0)
+      f.devices.set('nuance', paired) // paired again at the same mono: the refused read took no slot
+      expect(await f.fwd.knocks(f.seat.ref, { t: 'knocks', timeout_ms: 2_000 })).toEqual(ONE)
+      expect(started).toBe(1)
+    }, T)
+  }
+})
+
 // ---- Task 51 fix round 1: the start path's deadline, failures after a write, ledger failures, lineage races, access refusals ----
 
 /** Everything written to process.stderr while `run` runs (kept out of the test output), and the hub's own lines. */
