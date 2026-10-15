@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statfsSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_CAPS, type TreeCaps } from '../src/air/diff-check.ts'
 import { airGit, type GitRunner } from '../src/air/git.ts'
@@ -69,6 +69,23 @@ async function created(o: Parameters<typeof world>[0] = {}): Promise<World> {
 const collabRefs = (w: World) => repoGit(w.airClone, ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/collab'])
 const packTemps = (w: World) => readdirSync(join(w.airClone, '.git', 'objects', 'pack')).filter((n) => n.startsWith('tmp_'))
 const fetchLines = (w: World) => readLedger(w.paths.ledger).filter((e) => e.event === 'fetch')
+
+/**
+ * A mirror whose tree carries `.gitattributes` naming a filter driver (allowed at a claim sync), and an Air that then
+ * configures that driver, as `git lfs install` would. The mirror file's mtime is moved so `git status` must hash its
+ * content, which runs the driver's clean command; the command leaves `marker` behind when it runs.
+ */
+async function mirrorWithLateFilter(): Promise<{ w: World; marker: string }> {
+  const w = await created()
+  const c2 = commitFiles(w.share, { '.gitattributes': 'notes/* filter=probe\n', 'notes/a.md': 'a\n' }, 'attributes name a driver')
+  expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+  const marker = join(w.air, 'filter-ran')
+  const script = join(w.air, 'probe-clean.sh')
+  writeFileSync(script, `#!/bin/sh\ncat\necho ran >> '${marker}'\n`, { mode: 0o755 })
+  writeFileSync(join(w.air, '.gitconfig'), `[filter "probe"]\n\tclean = ${script}\n`)
+  utimesSync(join(w.spec.mirrorPath, 'notes', 'a.md'), new Date(2020, 0, 1), new Date(2020, 0, 1))
+  return { w, marker }
+}
 
 describe('createMirror', () => {
   test('createMirror makes a locked linked worktree at the fetched commit, with incoming and synced refs and no refs/heads', async () => {
@@ -158,6 +175,15 @@ describe('createMirror', () => {
     expect(await syncedOid(w.spec, w.deps)).toBeNull()
     rmSync(join(w.air, '.gitconfig'))
     expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base })
+  }, T)
+
+  test('re-pinning an existing mirror checks filters before its status, so a clean filter never runs there either (Task 63 gate-1-10, conformance-4-13)', async () => {
+    const { w, marker } = await mirrorWithLateFilter()
+    const r = await createMirror(w.spec, w.deps)
+    expect(r.ok === false && r.code).toBe('mirror_filters_present')
+    expect(existsSync(marker)).toBe(false)
+    rmSync(join(w.air, '.gitconfig'))
+    expect(await createMirror(w.spec, w.deps)).toMatchObject({ ok: true }) // without the driver the healthy mirror is kept
   }, T)
 
   test('a level that is a regular file answers mirror_tampered and never throws, before anything is fetched', async () => {
@@ -282,6 +308,19 @@ describe('syncMirror', () => {
     expect(w.fake.calls().length).toBe(1)
     rmSync(join(w.air, '.gitconfig'))
     expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+  }, T)
+
+  test('the filter check comes before any git status in the mirror, so a clean filter named by the fetched tree never runs (Task 63 gate-1-10, conformance-4-13)', async () => {
+    const { w, marker } = await mirrorWithLateFilter()
+    const c3 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'a second note')
+    const r = await syncMirror(w.spec, { declaredHead: c3 }, w.deps)
+    expect(r.ok === false && r.code).toBe('mirror_filters_present')
+    expect(existsSync(marker)).toBe(false) // step 1's status would have hashed notes/a.md through the driver
+    // A tampered mirror is still tampered when a filter is configured too: the checks that run no filter come first.
+    repoGit(w.spec.mirrorPath, ['switch', '-q', '-c', 'on-a-branch'])
+    const t = await syncMirror(w.spec, { declaredHead: c3 }, w.deps)
+    expect(t.ok === false && t.code).toBe('mirror_tampered')
+    expect(existsSync(marker)).toBe(false)
   }, T)
 
   test('a filter reached only through an includeIf is mirror_filters_present', async () => {

@@ -151,8 +151,11 @@ export async function mirrorHead(spec: MirrorSpec, deps: MirrorDeps): Promise<st
   return clone !== null && commonReal === clone ? oid : null
 }
 
-/** §7.3 step 1: null when the mirror is clean, detached, and at `…/synced`; else why not. */
-async function tamperReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string | null> {
+/**
+ * §7.3 step 1 up to the work tree: null when the mirror is a mirror of this clone, detached, and at `…/synced`; else why
+ * not. Nothing here reads a work-tree file, so no filter driver can run.
+ */
+async function stateReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string | null> {
   const head = await mirrorHead(spec, deps)
   if (head === null) return 'the mirror has no readable HEAD of its own in the Air clone'
   const synced = await syncedOid(spec, deps)
@@ -160,13 +163,14 @@ async function tamperReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string 
   if (head !== synced) return "the mirror's HEAD is not its last synced commit"
   const sym = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'symbolic-ref', '-q', 'HEAD'])
   if (sym.code !== 1) return 'the mirror is not on a detached HEAD'
-  return statusReason(spec, deps)
+  return null
 }
 
 /**
  * Null when the mirror's work tree is exactly its HEAD; else why not. Ignored and untracked files count: a forced
  * checkout would clobber them without a word (T16). After a checkout it is also the proof that the file system took
- * every name as the commit wrote it (Task 63 gate-1-3).
+ * every name as the commit wrote it (Task 63 gate-1-3). `status` hashes any file whose stat data moved, through the
+ * clean filter its `.gitattributes` names, so it runs only after filterReason found no driver configured.
  */
 async function statusReason(spec: MirrorSpec, deps: MirrorDeps): Promise<string | null> {
   const st = await deps.git.run(['-C', spec.mirrorPath, ...MIRROR_GIT_FLAGS, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored'])
@@ -184,6 +188,20 @@ async function filterReason(cwd: string, deps: MirrorDeps): Promise<string | nul
   if (r.code === 1 && r.stdout.byteLength === 0 && !r.timedOut) return null
   if (r.code === 0) return 'a git filter, textconv or fsmonitor is configured where the mirror would see it'
   return 'the git config check failed'
+}
+
+/**
+ * §7.3 steps 1 and 2 on an existing mirror, in the one order that is safe: the state checks (no work-tree read), then the
+ * filter check, then `status`, which can run a clean filter that the fetched tree's `.gitattributes` names and Ai's
+ * `git lfs install` configured since (Task 63 gate-1-10). `tampered` words a state or status reason.
+ */
+async function mirrorFit(spec: MirrorSpec, deps: MirrorDeps, tampered: (why: string) => string): Promise<SyncResult | null> {
+  const state = await stateReason(spec, deps)
+  if (state !== null) return refuse('mirror_tampered', tampered(state))
+  const filters = await filterReason(spec.mirrorPath, deps) // 2
+  if (filters !== null) return refuse('mirror_filters_present', filters)
+  const dirty = await statusReason(spec, deps)
+  return dirty === null ? null : refuse('mirror_tampered', tampered(dirty))
 }
 
 /** §7.3 step 3. */
@@ -301,11 +319,9 @@ export async function syncMirror(spec: MirrorSpec, o: { declaredHead: string; at
   let refs: ReturnType<typeof mirrorRefs>
   try { refs = mirrorRefs(spec) } catch { return refuse('mirror_tampered', 'the mirror spec cannot name its refs; Ai looks at the device file') }
   if (!OID_RE.test(o.declaredHead)) return refuse('remote_head_moved', 'the declared head is not a commit id')
-  const why = await tamperReason(spec, deps) // 1
-  if (why !== null) return refuse('mirror_tampered', `${why}; Ai looks at it on the Air`)
+  const unfit = await mirrorFit(spec, deps, (why) => `${why}; Ai looks at it on the Air`) // 1, 2
+  if (unfit !== null) return unfit
   const synced = (await syncedOid(spec, deps))!
-  const filters = await filterReason(spec.mirrorPath, deps) // 2
-  if (filters !== null) return refuse('mirror_filters_present', filters)
   const room = diskAndBudget(spec, deps) // 3
   if (room !== null) return room
   const fetched = await fetchIncoming(spec, deps) // 4
@@ -376,7 +392,8 @@ async function ensureLocked(spec: MirrorSpec, deps: MirrorDeps): Promise<boolean
  * `repo_mismatch` unless the fetched commit shares history with the clone, then the linked worktree (added without a
  * checkout, its own config view checked for filters, since an includeIf can match only a worktree's gitdir, then checked
  * out), locked against prune, and `…/synced` created. A mirror that already exists is never deleted and re-added (that
- * would give `worktree_identity_changed`, K11): a healthy one is kept as it is, anything else is mirror_tampered.
+ * would give `worktree_identity_changed`, K11): a healthy one is kept as it is, anything else is mirror_tampered, or
+ * mirror_filters_present when a filter is configured (checked before the mirror's `status`, which could run it).
  */
 export async function createMirror(spec: MirrorSpec, deps: MirrorDeps): Promise<SyncResult> {
   let refs: ReturnType<typeof mirrorRefs>
@@ -386,8 +403,8 @@ export async function createMirror(spec: MirrorSpec, deps: MirrorDeps): Promise<
   let exists = true
   try { lstatSync(spec.mirrorPath) } catch { exists = false }
   if (exists) {
-    const why = await tamperReason(spec, deps)
-    if (why !== null) return refuse('mirror_tampered', `an existing mirror path is not a healthy mirror: ${why}`)
+    const unfit = await mirrorFit(spec, deps, (why) => `an existing mirror path is not a healthy mirror: ${why}`)
+    if (unfit !== null) return unfit
     if (!(await ensureLocked(spec, deps))) return refuse('mirror_tampered', 'the existing mirror could not be locked against prune')
     return { ok: true, oid: (await syncedOid(spec, deps))! }
   }
