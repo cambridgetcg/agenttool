@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { connect } from 'node:net'
 import { join } from 'node:path'
 import type { LedgerFields } from '../src/ledger.ts'
 import { encodeFrame, FRAME_HEADER_BYTES, FRAME_TYPE, FrameDecoder, PreambleScanner, preambleOf, type Frame, type FrameType } from '../src/link/frame.ts'
@@ -104,7 +105,7 @@ async function until<T>(f: () => T | null | undefined | false, ms = 3000): Promi
 
 const running: Array<{ hub: ReturnType<typeof hubEnd>; done: Promise<number> }> = []
 
-async function startRelay(o: { paths?: NuancePaths; clock?: { t: number } } = {}) {
+async function startRelay(o: { paths?: NuancePaths; clock?: { t: number }; flushMs?: number } = {}) {
   const paths = o.paths ?? nuance()
   const clock = o.clock ?? { t: 1_000_000 }
   const hub = hubEnd()
@@ -112,7 +113,7 @@ async function startRelay(o: { paths?: NuancePaths; clock?: { t: number } } = {}
   const ledger: LedgerFields[] = []
   let settled = false
   const done = runRelay({ paths, nonce: NONCE, stdin: hub.stdin, write: (b) => hub.write(b), mono: () => clock.t,
-    ledger: (f) => { ledger.push(f) }, timers, staleMs: 20_000, exitMs: 45_000, inodeCheckMs: 5_000 })
+    ledger: (f) => { ledger.push(f) }, timers, staleMs: 20_000, exitMs: 45_000, inodeCheckMs: 5_000, flushMs: o.flushMs })
   done.then(() => { settled = true })
   running.push({ hub, done })
   await until(() => hub.preambleSeen())
@@ -321,6 +322,76 @@ describe('relay', () => {
     expect(ledger).toEqual([{ event: 'relay', outcome: 'refused', code: 'socket_path_too_long' }])
     expect(errs.length).toBe(1)
     expect(existsSync(root)).toBe(false)
+  })
+
+  test('a result still queued for a pipe, and the CLOSE behind it, are written before the relay closes its sockets on exit (Task 63 relay-2-1)', async () => {
+    const r = await startRelay()
+    const c = localClient(r.paths.hubSock)
+    await c.ready
+    await until(() => r.hub.of(OPEN).length === 1)
+    // A unix socket takes about 8 KiB per write on macOS, so most of this frame waits in the relay's Outbox for drain; the
+    // hub's ssh side then ends right behind it.
+    const result = new Uint8Array(300 * 1024).map((_, i) => i % 251)
+    r.hub.send(DATA, 1, result)
+    r.hub.end()
+    expect(await r.done).toBe(0)
+    await until(() => c.isClosed())
+    const data = c.frames.filter((f) => f.type === DATA)
+    expect(data).toHaveLength(1)
+    expect(Array.from(data[0]!.payload.subarray(0, 600))).toEqual(Array.from(result.subarray(0, 600)))
+    expect(data[0]!.payload.byteLength).toBe(result.byteLength)
+    expect(Buffer.from(data[0]!.payload).equals(Buffer.from(result))).toBe(true)
+    expect(c.frames.at(-1)).toMatchObject({ type: CLOSE, stream: 0 })
+    expect(r.ledger.at(-1)).toMatchObject({ event: 'relay', outcome: 'exit', code: 'stdin_eof' })
+  })
+
+  test('the same holds for a malformed hub: what was queued is written, then the sockets end', async () => {
+    const r = await startRelay()
+    const c = localClient(r.paths.hubSock)
+    await c.ready
+    await until(() => r.hub.of(OPEN).length === 1)
+    const big = new Uint8Array(200 * 1024).fill(7)
+    r.hub.send(DATA, 1, big)
+    r.hub.raw(header(0, 9 as FrameType, 1))                           // a type no hub sends: the decoder cannot trust the stream after it
+    expect(await r.done).toBe(1)
+    await until(() => c.isClosed())
+    expect(c.frames.filter((f) => f.type === DATA).map((f) => f.payload.byteLength)).toEqual([big.byteLength])
+    expect(c.frames.at(-1)).toMatchObject({ type: CLOSE })
+  })
+
+  test('the same holds for relay_replaced: what was queued is written, then the sockets end', async () => {
+    const paths = nuance()
+    const a = await startRelay({ paths })
+    const ca = localClient(paths.hubSock)
+    await ca.ready
+    await until(() => a.hub.of(OPEN).length === 1)
+    const b = await startRelay({ paths, clock: { t: 2_000_000 } })    // a newer relay takes hub.sock
+    const big = new Uint8Array(200 * 1024).fill(7)
+    a.hub.send(DATA, 1, big)
+    for (let i = 0; i < 20; i++) await Promise.resolve()              // the relay has read the frame; no socket I/O has run yet
+    a.timers.fire()                                                   // the inode check
+    expect(await a.done).toBe(0)
+    expect(a.ledger.at(-1)).toMatchObject({ code: 'relay_replaced' })
+    await until(() => ca.isClosed())
+    expect(ca.frames.filter((f) => f.type === DATA).map((f) => f.payload.byteLength)).toEqual([big.byteLength])
+    expect(ca.frames.at(-1)).toMatchObject({ type: CLOSE })
+    expect(b.settled()).toBe(false)
+  })
+
+  test('a pipe that never reads cannot hold an exiting relay longer than the flush limit', async () => {
+    const r = await startRelay({ flushMs: 300 })
+    const stuck = connect({ path: r.paths.hubSock })
+    await new Promise<void>((resolve) => stuck.once('connect', () => resolve()))
+    stuck.pause()                                                     // its receive buffer fills and stays full
+    await until(() => r.hub.of(OPEN).length === 1)
+    r.hub.send(DATA, 1, new Uint8Array(1024 * 1024))
+    const t0 = performance.now()
+    r.hub.end()
+    expect(await r.done).toBe(0)
+    const waited = performance.now() - t0
+    expect(waited).toBeGreaterThanOrEqual(250)                        // it did wait for the pipe to drain
+    expect(waited).toBeLessThan(2_000)                                // and then let go
+    stuck.destroy()
   })
 
   test('the ledger has content-free start and exit lines only', async () => {

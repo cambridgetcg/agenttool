@@ -15,7 +15,7 @@ import { listenPrivate, Outbox } from './unix.ts'
 export interface RelayTimers { setInterval(fn: () => void, ms: number): unknown; clearInterval(h: unknown): void }
 export interface RelayDeps { paths: NuancePaths; nonce: string; stdin: ReadableStream<Uint8Array>; write(bytes: Uint8Array): void;
   mono(): number; ledger(f: LedgerFields): void; timers?: RelayTimers; staleMs?: number; exitMs?: number; inodeCheckMs?: number;
-  stderr?: { write(s: string): void } }
+  flushMs?: number; stderr?: { write(s: string): void } }
 export interface RelayStatusFile { pid: number; started_mono: number; last_ping_mono: number | null; streams: number }
 
 /** A relay that cannot listen exits like a refused gate command, before its preamble, so the dialer says needs Yu: config (§5.4). */
@@ -25,6 +25,9 @@ const realTimers: RelayTimers = {
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
 }
+
+/** How long an exiting relay waits for its pipes to take what is still queued for them before it closes their sockets. */
+const FLUSH_MS = 2_000
 
 const HUB_AWAY: RefusedMsg = { t: 'refused', code: 'hub_away' }
 const REPLACED: RelayReplacedMsg = { t: 'relay_replaced' }
@@ -53,6 +56,7 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
   const { paths } = deps
   const staleMs = deps.staleMs ?? TIMING.staleMs
   const exitMs = deps.exitMs ?? TIMING.relayExitMs
+  const flushMs = deps.flushMs ?? FLUSH_MS
   const inodeCheckMs = deps.inodeCheckMs ?? TIMING.inodeCheckMs
   const timers = deps.timers ?? realTimers
   const started = deps.mono()
@@ -71,6 +75,12 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
   if (!socketPathOk(fresh)) return refuse('socket_path_too_long', `${fresh} is longer than ${MAX_SOCKET_PATH_BYTES} bytes (K46)`)
 
   const conns = new Map<number, Conn>()
+  const live = new Set<object>()   // every local socket not yet closed, the ones that are only draining included
+  let flushed: (() => void) | null = null
+  const sockGone = (sock: object) => {
+    live.delete(sock)
+    if (live.size === 0) flushed?.()
+  }
   let lastPing: number | null = null
   let finished = false
   let resolveDone!: (code: number) => void
@@ -122,6 +132,7 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     chmodSync(paths.run, 0o700)   // a mode passed to mkdir applies only to a new dir, and the umask cuts it
     const l = listenPrivate<Conn | null>(paths.hubSock, {
       open(sock) {
+        live.add(sock)
         const c: Conn = { id: 0, out: new Outbox(sock), decoder: new FrameDecoder(MAX_PIPE_TO_HUB) }
         sock.data = c
         if (finished) { sock.end(); return }
@@ -150,8 +161,14 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
         for (const f of frames) fromPipe(c, f)
       },
       drain(sock) { sock.data?.out.drain() },
-      close(sock) { if (sock.data) closeConn(sock.data, { hub: true, local: false }) },
-      error(sock) { if (sock.data) closeConn(sock.data, { hub: true, local: false }) },
+      close(sock) {
+        if (sock.data) closeConn(sock.data, { hub: true, local: false })
+        sockGone(sock)
+      },
+      error(sock) {
+        if (sock.data) closeConn(sock.data, { hub: true, local: false })
+        sockGone(sock)
+      },
     }, { replace: true })
     server = l.server
     ours = l.ino
@@ -171,13 +188,30 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     timers.clearInterval(inodeCheck)
     for (const c of conns.values()) { c.out.push(encodeFrame(FRAME_TYPE.CLOSE, 0)); c.out.endWhenFlushed() }
     conns.clear()
-    server.stop(true)   // unlinks only the name it bound, which the rename already moved
+    // Stop accepting, but leave the open sockets alone: a result or CLOSE frame may still wait in a pipe's Outbox (a unix
+    // socket takes about 8 KiB per write), and closing the socket now would cut it off, so the pipe would answer
+    // hub_outcome_unknown for a call whose answer had reached this relay (Task 63 relay-2-1). stop() unlinks only the name
+    // it bound, which the rename already moved.
+    server.stop(false)
     if (ours !== null && inodeOf(paths.hubSock) === ours) { try { unlinkSync(paths.hubSock) } catch { /* gone */ } }
     const s = readRelayStatus(paths)
     if (s && s.pid === process.pid && s.started_mono === started) { try { unlinkSync(paths.relayStatus) } catch { /* gone */ } }
     note({ event: 'relay', outcome: 'exit', code: reason, ms: Math.max(0, Math.round(deps.mono() - started)) })
     reader.cancel().catch(() => { /* already closed */ })
-    resolveDone(code)
+    // Done once every pipe has taken what was queued and closed its end, or after flushMs: a pipe that never reads must not
+    // keep an exiting relay (and the ssh channel behind it) up. Then whatever is left is closed.
+    let settled = false
+    let cap: ReturnType<typeof setTimeout> | null = null
+    const settle = () => {
+      if (settled) return
+      settled = true
+      if (cap !== null) clearTimeout(cap)
+      server.stop(true)
+      resolveDone(code)
+    }
+    if (live.size === 0) return settle()
+    flushed = settle
+    cap = setTimeout(settle, flushMs)
   }
 
   const liveness = timers.setInterval(() => {
