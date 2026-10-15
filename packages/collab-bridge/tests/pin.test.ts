@@ -342,6 +342,39 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     expect(parseHello(JSON.stringify(oneShare('/Users/macair/Projects/❤️ \u{1f468}‍\u{1f469} café م‌ن', '/Users/macair/Projects/x/.git')))).not.toBeNull()
   }, T)
 
+  test('hello text keeps a variation selector only directly after a visible base character: no chain of selectors among joiners, and none at the start (Task 63 conformance-1-3 fix-diff)', () => {
+    const w = pinWorld()
+    writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })
+    const h = helloOf(w)
+    const oneShare = (realpath: string, gitdir: string) => ({ ...h, shares: [{ realpath, gitdir }] })
+    // A selector (one of 16, so four bits) after each joiner carries a message nothing draws; N2 would keep each one, since no two
+    // are side by side, so the run rule alone let this through. 'x', then (selector, joiner) a few hundred times, is such a chain.
+    const chain = (joiner: string) => `x${`\ufe0e${joiner}`.repeat(200)}`
+    const bad: Array<[string, unknown]> = [
+      ['a realpath with a selector chain through ZWJ', oneShare(`/Users/macair/Projects/${chain('\u200d')}`, join(w.share, '.git'))],
+      ['a gitdir with a selector chain through ZWNJ', oneShare(w.share, `/Users/macair/Projects/${chain('\u200c')}/.git`)],
+      ['git.path with a selector chain through ZWJ', { ...h, git: { ...h.git, path: `/opt/${chain('\u200d')}` } }],
+      ['a realpath with a selector chain through ZWSP', oneShare(`/Users/macair/Projects/${chain('\u200b')}`, join(w.share, '.git'))],
+      ['a realpath with a selector straight after ZWJ', oneShare('/Users/macair/Projects/x\u200d\ufe0f', join(w.share, '.git'))],
+      ['a realpath with a selector straight after ZWNJ', oneShare('/Users/macair/Projects/x\u200c\ufe0e', join(w.share, '.git'))],
+      ['a realpath with a selector after a word joiner', oneShare('/Users/macair/Projects/x\u2060\ufe0f', join(w.share, '.git'))],
+      ['a realpath with a selector after a soft hyphen', oneShare('/Users/macair/Projects/x\u00ad\ufe0f', join(w.share, '.git'))],
+      // N2 drops a selector at the start of a text (a lone one too); the pin refuses what N2 would drop.
+      ['a realpath that starts with a selector', oneShare('\ufe0f/Users/macair/Projects/x', join(w.share, '.git'))],
+      ['a gitdir that starts with a selector', oneShare(w.share, '\ufe0e/x/.git')],
+    ]
+    for (const [name, broken] of bad) expect(parseHello(JSON.stringify(broken)), name).toBeNull()
+    // A selector after a visible base character, an emoji with its selector before a joiner or after the joined emoji, still parse.
+    const ok = [
+      '/Users/macair/Projects/\u2764\ufe0f',
+      '/Users/macair/Projects/\u{1f3f3}\ufe0f\u200d\u{1f308}',
+      '/Users/macair/Projects/\u{1f441}\ufe0f\u200d\u{1f5e8}\ufe0f',
+      '/Users/macair/Projects/#\ufe0f\u20e3',
+      '/Users/macair/Projects/\u{1f468}\u200d\u{1f469}\u200d\u{1f467} \u263a\ufe0e',
+    ]
+    for (const p of ok) expect(parseHello(JSON.stringify(oneShare(p, '/Users/macair/Projects/x/.git'))), JSON.stringify(p)).not.toBeNull()
+  }, T)
+
   test('refuses a git without the guard', async () => {
     const w = pinWorld()
     writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })

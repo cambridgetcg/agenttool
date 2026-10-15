@@ -77,11 +77,16 @@ const str = (v: unknown, re?: RegExp): v is string => typeof v === 'string' && (
  * Text the device chose, of at most `max` characters, with nothing a Terminal would act on and nothing it would not show: no
  * control character (C0, DEL, C1), line or paragraph separator or bidi control, and none of the invisible-text carriers N2 drops
  * (spec §6.4, T10): tag characters U+E0000–E007F, which spell a sentence a Terminal draws as nothing and an agent reads, U+FEFF,
- * U+E0100–E01EF (VS17 and up), and a run of U+FE00–FE0F (N2 keeps at most one after a base character). A compromised device
- * answers hello, and its strings reach Ai's Terminal in the ✗ lines and the pinned text and are stored in the device file. ZWJ
- * and ZWNJ stay (an emoji folder name; N2 keeps them too).
+ * U+E0100–E01EF (VS17 and up), and a variation selector U+FE00–FE0F at the start of the text or right after another selector (N2
+ * keeps one directly after a base character). A compromised device answers hello, and its strings reach Ai's Terminal in the ✗
+ * lines and the pinned text and are stored in the device file. ZWJ and ZWNJ stay (an emoji folder name; N2 keeps them too).
+ *
+ * Stricter than N2 in one place: N2 keeps a selector after a joiner, so (selector, joiner) pairs would chain, four bits each,
+ * through a path. Here a selector follows a visible base character or the text is refused. An emoji sequence puts its selector
+ * right after the emoji it varies (before a joiner, or after the joined emoji), so it never needs one after a joiner. Any
+ * default-ignorable code point (ZWJ, ZWNJ, ZWSP, word joiner, soft hyphen…) counts as not visible.
  */
-const NOT_SHOWN = /[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]|[\ufe00-\ufe0f]{2}/u
+const NOT_SHOWN = /[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]|(?:^|\p{Default_Ignorable_Code_Point})[\ufe00-\ufe0f]/u
 const shown = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max && !NOT_SHOWN.test(v)
 const HELLO_KEYS = ['v', 'device', 'build', 'prepared', 'expiry', 'user', 'seat_public', 'shares', 'git', 'summon', 'summon_now',
   'claude_version', 'zshenv_clean', 'clock']
