@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CollabChild } from '../src/air/children.ts'
-import { ChildPool } from '../src/air/pool.ts'
+import { ChildPool, makeHostCli } from '../src/air/pool.ts'
 import type { LineageEntry } from '../src/air/lineages.ts'
 import { COLLAB_DIST, temp } from './helpers.ts'
 import { writeFakeCollab } from './fake-collab.ts'
@@ -356,6 +356,37 @@ describe('start-up failures and the build check', () => {
     expect(events(w, 'child_start').at(-1)).toMatchObject({ outcome: 'ok', code: 'fresh' })
     expect(envOf(next.pid)).not.toContain('AGENTOOL_COLLAB_SESSION_FILE')
   }, 30_000)
+
+  test('a credential file the child cannot trust ends the lineage as seat_session_ended and raises orphan_session: the session is still active in the journal (Task 63 pipe-2-3)', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    chmodSync(w.store.get(e.lineage)!.credential_path!, 0o644) // a stray chmod: the host refuses a credential others can read
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'seat_session_ended']])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', session_id: null, past_sessions: [sid] })
+    expect((await activeSessions(w)).map((x) => x.id)).toEqual([sid]) // nothing in the hub ends it any more
+    expect(w.statuses).toContainEqual([e.lineage, `orphan_session ${sid}`]) // Ai decides, with the credential file left where it is
+  }, 30_000)
+
+  test('a credential for a session Collab has ended is seat_session_ended and raises no orphan_session', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const sid = await seedLive(w, e)
+    const credential = w.store.get(e.lineage)!.credential_path!
+    const kept = `${credential}.copy`
+    copyFileSync(credential, kept)
+    const hostCli = makeHostCli({ bun: process.execPath, dist: COLLAB_DIST, journal: w.paths.sharedJournal, home: w.home })
+    expect((await hostCli(['end', '--session-file', credential, '--reason', 'test', '--db', w.paths.sharedJournal], 20_000)).code).toBe(0)
+    copyFileSync(kept, credential)
+    chmodSync(credential, 0o600) // the file is back, the session is not: the child reports "Session credentials are invalid"
+    expect(await p.childFor(e.lineage)).toMatchObject({ ok: false, code: 'seat_session_ended' })
+    expect(events(w, 'child_start').map((l) => [l.outcome, l.code])).toEqual([['failed', 'seat_session_ended']])
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'ended', past_sessions: [sid] })
+    expect(w.statuses.filter(([, note]) => note?.startsWith('orphan_session'))).toEqual([])
+  }, 60_000)
 
   test('after journal_invalid no lineage gets a new child until a new pool starts', async () => {
     const w = world()

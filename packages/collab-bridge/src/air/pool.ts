@@ -23,7 +23,7 @@ import { TIMING } from '../timing.ts'
 import { CHILD_REQUEST_TIMEOUT_MS, childEnv, CollabChild, type CallOutcome, type ChildSpec, type StartFailure } from './children.ts'
 import type { LineageEntry, LineageStore } from './lineages.ts'
 import { roleNonce } from './stamp.ts'
-import { classifyStart, startMayHaveCommitted } from './startup.ts'
+import { classifyStart, sessionMayStillBeActive, startMayHaveCommitted } from './startup.ts'
 
 /** `cause` says why there is no exit code (additive; absent when the CLI exited with one): it was killed at the timeout, died
  *  by a signal, or could not be started at all. */
@@ -245,7 +245,12 @@ export class ChildPool {
     }
     if (cls === 'seat_session_ended') {
       const e = this.deps.store.get(lineage)
-      if (e && e.state === 'live') this.markEnded(e, 'credential_invalid')
+      if (e && e.state === 'live') {
+        this.markEnded(e, 'credential_invalid')
+        // A credential file that could not be read, trusted or rewritten says nothing about the session: it may be active in the
+        // shared journal with nothing in the hub left to end it, so Ai is told, with the file left where it is (as for retire).
+        if (e.session_id !== null && sessionMayStillBeActive(f.lastErrLine)) this.deps.status(lineage, `orphan_session ${e.session_id}`)
+      }
       return refuse('seat_session_ended', MSG.ended)
     }
     rt.startFailed = true

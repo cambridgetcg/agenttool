@@ -5,13 +5,16 @@
 // child_start_failed. No class is ever respawned automatically, so a broken journal is never re-verified in a loop.
 export type StartClass = 'seat_recovery_required' | 'journal_invalid' | 'seat_session_ended' | 'child_start_failed'
 
+/** Collab's own verdict on the session (store.resumeSession), as opposed to a fault of the credential file. */
+const CREDENTIALS_INVALID = 'Session credentials are invalid'
+
 export const PINNED_START_MESSAGES: ReadonlyArray<{ message: string; class: StartClass }> = Object.freeze([
   // store.resumeSession: the persisted or host cursor needs an audited reset (cursor_reset_required).
   { message: 'The host and persisted session cursors require an explicit audited reset', class: 'seat_recovery_required' },
   // store open: validateAllJournals (database_journal_invalid).
   { message: 'A workspace event journal failed hash-chain verification', class: 'journal_invalid' },
   // store.resumeSession: unknown session, wrong token or a session that is no longer active (session_auth_failed).
-  { message: 'Session credentials are invalid', class: 'seat_session_ended' },
+  { message: CREDENTIALS_INVALID, class: 'seat_session_ended' },
   // session-file.ts, read before resuming and rewritten after it.
   { message: 'Session credential path must be a private regular file owned by this user', class: 'seat_session_ended' },
   { message: 'Session credential file must not be accessible by group or other users', class: 'seat_session_ended' },
@@ -28,6 +31,16 @@ const BY_LINE: ReadonlyMap<string, StartClass> = new Map(PINNED_START_MESSAGES.m
 export function classifyStart(lastErrLine: string | null): StartClass {
   if (lastErrLine === null) return 'child_start_failed'
   return BY_LINE.get(lastErrLine) ?? 'child_start_failed'
+}
+
+/**
+ * Whether a child that died with this line left a session that may still be active in the journal: a seat_session_ended whose
+ * line is a fault of the credential file (it could not be read, trusted or rewritten) and not Collab's verdict on the session
+ * itself. The hub ends the lineage either way (§9.6 item 4), but a file fault says nothing about the session, which nothing in
+ * the hub will end any more, so it is flagged for Ai as orphan_session (§9.2).
+ */
+export function sessionMayStillBeActive(lastErrLine: string | null): boolean {
+  return classifyStart(lastErrLine) === 'seat_session_ended' && lastErrLine !== `✖ ${CREDENTIALS_INVALID}`
 }
 
 /**

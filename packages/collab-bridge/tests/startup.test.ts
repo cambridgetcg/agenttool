@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CollabChild, type ChildSpec, type StartFailure } from '../src/air/children.ts'
-import { classifyStart, PINNED_START_MESSAGES, POST_COMMIT_OPERATIONS, startMayHaveCommitted, type StartClass } from '../src/air/startup.ts'
+import { classifyStart, PINNED_START_MESSAGES, POST_COMMIT_OPERATIONS, sessionMayStillBeActive, startMayHaveCommitted, type StartClass } from '../src/air/startup.ts'
 import { COLLAB_DIST, cleanupTmps, temp } from './helpers.ts'
 import { startCollabSession, tamperJournal } from './mcp-harness.ts'
 
@@ -53,6 +53,19 @@ describe('the pinned start-up messages', () => {
         expect(classifyStart(line)).toBe('child_start_failed')
       }
     }
+  })
+})
+
+describe('which dead starts may have left a live session (Task 63 pipe-2-3)', () => {
+  test('only the file faults of the seat_session_ended class do; Collab\'s own verdict and the other classes do not', () => {
+    const faults = PINNED_START_MESSAGES.filter((m) => m.class === 'seat_session_ended' && m.message !== 'Session credentials are invalid')
+    expect(faults).toHaveLength(7)
+    for (const { message } of faults) expect(sessionMayStillBeActive(`✖ ${message}`)).toBe(true)
+    expect(sessionMayStillBeActive('✖ Session credentials are invalid')).toBe(false)
+    expect(sessionMayStillBeActive('✖ The host and persisted session cursors require an explicit audited reset')).toBe(false)
+    expect(sessionMayStillBeActive('✖ A workspace event journal failed hash-chain verification')).toBe(false)
+    expect(sessionMayStillBeActive('✖ something else')).toBe(false)
+    expect(sessionMayStillBeActive(null)).toBe(false)
   })
 })
 
