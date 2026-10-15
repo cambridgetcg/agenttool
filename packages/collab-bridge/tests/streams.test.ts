@@ -16,7 +16,7 @@ import {
   decodeJson, encodeMessage, MAX_HUB_TO_PIPE, MAX_PIPE_TO_HUB, newLineage, type CallMsg, type HubKnockReportMsg, type KnocksMsg, type ResultMsg, type ToolsGetMsg,
 } from '../src/link/messages.ts'
 import { generateSeatKey, signSeat } from '../src/nuance/seatkey.ts'
-import { cleanupTmps, temp } from './helpers.ts'
+import { cleanupTmps, temp, watchLongTimers } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -642,25 +642,59 @@ describe('the link', () => {
     // A timer left behind cannot be seen through the ledger (its callback returns at once on an ended session), so the
     // timers themselves are watched: every setTimeout of the silence timer's size (pongDropMs here is ten minutes, no
     // other timer of the session comes near it) is held until it fires or is cleared.
-    const realSet = globalThis.setTimeout
-    const realClear = globalThis.clearTimeout
-    const pending = new Set<unknown>()
-    globalThis.setTimeout = ((fn: () => void, ms?: number, ...rest: unknown[]) => {
-      const h = realSet(() => { pending.delete(h); fn() }, ms, ...rest)
-      if (ms !== undefined && ms >= 500_000) pending.add(h)
-      return h
-    }) as unknown as typeof setTimeout
-    globalThis.clearTimeout = ((h?: Parameters<typeof realClear>[0]) => { pending.delete(h); return realClear(h) }) as typeof clearTimeout
+    const watch = watchLongTimers(500_000)
     try {
       const t = rig({ deps: { pingMs: 15_000, pongDropMs: 600_000 } })
-      expect(pending.size).toBe(1)                     // the probe sees the silence timer: armed while the link is up
+      expect(watch.pending.size).toBe(1)               // the probe sees the silence timer: armed while the link is up
       t.session.close('test')
       await t.run
-      expect(pending.size).toBe(0)                     // end() cleared it
+      expect(watch.pending.size).toBe(0)               // end() cleared it
     } finally {
-      globalThis.setTimeout = realSet
-      globalThis.clearTimeout = realClear
-      for (const h of pending) realClear(h as Parameters<typeof realClear>[0])
+      watch.restore()
+    }
+  })
+
+  // Task 63 new-streams-clear: a PONG is what a re-arm would hang on, and the test above sends none. The silence timer is one per
+  // link whatever arrives: PONGs on a link do not add timers, and each link's end clears its own and no other.
+  test('PONGs add no silence timers: one is live per link however many arrive, and each link ends with its own (Task 63 new-streams-clear)', async () => {
+    const watch = watchLongTimers(500_000)
+    try {
+      const a = rig({ deps: { pingMs: 15_000, pongDropMs: 600_000 } })
+      const b = rig({ deps: { pingMs: 15_000, pongDropMs: 600_000 } })
+      expect(watch.pending.size).toBe(2)
+      for (let i = 0; i < 25; i++) { a.relay.pong(); if (i % 5 === 0) b.relay.pong(); await Bun.sleep(1) }
+      expect(watch.pending.size).toBe(2)               // 25 + 5 PONGs later: still one per link
+      a.session.close('test')
+      await a.run
+      expect(watch.pending.size).toBe(1)               // a's own is gone, b's is not
+      b.relay.pong()
+      expect(watch.pending.size).toBe(1)
+      b.session.close('test')
+      await b.run
+      expect(watch.pending.size).toBe(0)
+    } finally {
+      watch.restore()
+    }
+  })
+
+  // Task 63 new-streams-settimeout: the probe stands in for setTimeout for the code under test, so it must not change what a timer
+  // does: the callback gets the arguments the caller gave setTimeout, whatever the timer's size.
+  test('the timer probe hands a callback the arguments its setTimeout was given, long timer or short', async () => {
+    const watch = watchLongTimers(500_000)
+    try {
+      const got: unknown[][] = []
+      const done = new Promise<void>((resolve) => {
+        setTimeout((...args: unknown[]) => { got.push(args); resolve() }, 1, 'short', 2, { three: 3 })
+      })
+      await done
+      expect(got).toEqual([['short', 2, { three: 3 }]])
+      const long = setTimeout((...args: unknown[]) => { got.push(args) }, 600_000, 'long', 4)
+      expect(watch.pending.has(long)).toBe(true)
+      expect(watch.pending.size).toBe(1)
+      clearTimeout(long)
+      expect(watch.pending.size).toBe(0)
+    } finally {
+      watch.restore()
     }
   })
 

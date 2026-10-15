@@ -290,6 +290,32 @@ export function killRecordedPid(file: string): void {
   try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
 }
 
+/**
+ * Watches the setTimeouts of at least `minMs` (a size nothing else in the code under test comes near): each one is in `pending`
+ * from its call until it fires or is cleared. Every timer still runs as written, and its callback gets the arguments setTimeout
+ * was given. `restore()` puts the real functions back and clears what is left; call it in a `finally`.
+ */
+export function watchLongTimers(minMs: number): { pending: Set<unknown>; restore(): void } {
+  const realSet = globalThis.setTimeout
+  const realClear = globalThis.clearTimeout
+  const pending = new Set<unknown>()
+  globalThis.setTimeout = ((fn: (...a: unknown[]) => void, ms?: number, ...rest: unknown[]) => {
+    const h = realSet(() => { pending.delete(h); fn(...rest) }, ms)
+    if (ms !== undefined && ms >= minMs) pending.add(h)
+    return h
+  }) as unknown as typeof setTimeout
+  globalThis.clearTimeout = ((h?: Parameters<typeof realClear>[0]) => { pending.delete(h); return realClear(h) }) as typeof clearTimeout
+  return {
+    pending,
+    restore() {
+      globalThis.setTimeout = realSet
+      globalThis.clearTimeout = realClear
+      for (const h of pending) realClear(h as Parameters<typeof realClear>[0])
+      pending.clear()
+    },
+  }
+}
+
 // ---- Task 63 fold (mirror batch): exact git paths, whatever this Mac's file system makes of their names ----
 
 /**
