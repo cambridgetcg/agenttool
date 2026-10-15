@@ -44,7 +44,11 @@ describe("the README's mirror removal (spec §10.6, Task 63 installer-1-12)", ()
 
     const log = readFileSync(calls, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t') as [string, string])
     const verbs = log.map(([, args]) => args.replace(/^-c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false -C \S+ /, '').split(' ').slice(0, 2).join(' '))
-    expect(verbs).toEqual(['worktree list', 'worktree unlock', 'worktree remove', 'bundle create', 'for-each-ref --format=delete', 'update-ref --stdin', 'worktree prune'])
+    // `for-each-ref … | update-ref --stdin` is one pipeline: both stages start together, so which one logs first is not fixed.
+    const at = verbs.indexOf('bundle create') + 1
+    expect(verbs.slice(0, at)).toEqual(['worktree list', 'worktree unlock', 'worktree remove', 'bundle create'])
+    expect(verbs.slice(at, at + 2).sort()).toEqual(['for-each-ref --format=delete', 'update-ref --stdin'])
+    expect(verbs.slice(at + 2)).toEqual(['worktree prune'])
     for (const [cwd, args] of log) {
       expect([cwd, args.startsWith(`-c core.hooksPath=/dev/null -c core.fsmonitor=false -C ${clone} `)]).toEqual(['/', true])
     }
