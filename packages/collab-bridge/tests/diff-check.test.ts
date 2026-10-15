@@ -59,6 +59,15 @@ describe('scopes and control paths', () => {
   })
 })
 
+describe('paths git hands over byte for byte (Task 63 gate-1-4)', () => {
+  test('a path that starts with U+FEFF is checked as that path: out of scope, not the scope it looks like', async () => {
+    const { repo, git, base } = setup()
+    // The directory is "\ufeffnotes", not "notes"; a decoder that drops the BOM would see notes/x.sh, which is in scope.
+    const oid = commitFiles(repo, { '\ufeffnotes/x.sh': 'echo hi\n' }, 'a BOM before the scope name')
+    expect(await checkDiff(git, repo, base, oid, ['notes'], caps())).toEqual({ ok: false, code: 'remote_out_of_scope', path: '\ufeffnotes/x.sh' })
+  })
+})
+
 describe('modes', () => {
   test('a symlink and a gitlink are non-regular', async () => {
     const { repo, git, base } = setup()

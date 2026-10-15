@@ -88,6 +88,28 @@ describe('airGit', () => {
     expect(() => process.kill(pid, 0)).toThrow()
   })
 
+  test('records keeps a leading U+FEFF in each record and refuses bytes that are not UTF-8 (Task 63 gate-1-4)', async () => {
+    // A default TextDecoder drops a BOM at the start of every non-streaming decode(), so a path whose bytes start EF BB BF
+    // would reach the scope and control-path checks as a different path from the one git checks out.
+    const dir = temp('cb-git-stub-')
+    const bom = writeStub(dir, 'git', "printf '\\xef\\xbb\\xbfnotes/x.sh\\0\\xef\\xbb\\xbf\\xef\\xbb\\xbfdouble\\0plain\\0'")
+    const got: string[] = []
+    for await (const rec of airGit({ git: bom, home: temp('cb-git-home-') }).records(['ls-tree'])) got.push(rec)
+    expect(got).toEqual(['\ufeffnotes/x.sh', '\ufeff\ufeffdouble', 'plain'])
+    // Bytes that are not UTF-8 would be replaced by U+FFFD, so two different paths could read the same: refused instead.
+    const dir2 = temp('cb-git-stub-')
+    const latin1 = writeStub(dir2, 'git', "printf 'ok\\0caf\\xe9.md\\0'")
+    const seen: string[] = []
+    let error = ''
+    try {
+      for await (const rec of airGit({ git: latin1, home: temp('cb-git-home-') }).records(['ls-tree'])) seen.push(rec)
+    } catch (e) {
+      error = String(e)
+    }
+    expect(seen).toEqual(['ok'])
+    expect(error).toMatch(/TypeError|decode|UTF-8/i)
+  })
+
   test('records keeps a record split across reads and throws when git fails after its output', async () => {
     const dir = temp('cb-git-stub-')
     const ok = writeStub(dir, 'git', "printf 'a b\\tnotes/one\\0'; sleep 0.1; printf 'second'; sleep 0.1; printf ' half\\0'")

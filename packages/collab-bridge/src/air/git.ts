@@ -166,7 +166,10 @@ export function airGit(o: { git: string; home: string; defaultTimeoutMs?: number
           const timer = setTimeout(() => { timedOut = true; stop(proc) }, timeoutMs)
           const stderr = drainText(proc.stderr as ReadableStream<Uint8Array>, GIT_STDERR_MAX)
           const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-          const decoder = new TextDecoder()
+          // ignoreBOM: true keeps a U+FEFF at the start of a record (the default drops it from every non-streaming decode(),
+          // so the scope and control-path checks would see a different path from the one git checks out), and fatal: a
+          // byte sequence that is not UTF-8 throws, where the default would turn two different paths into the same text.
+          const decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true })
           let finished = false
           let buf: Uint8Array = new Uint8Array(0)
           try {
