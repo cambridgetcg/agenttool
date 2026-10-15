@@ -387,7 +387,7 @@ describe('gate entry: a reply to a reader that has gone (Task 63 gate-1-8 round 
       const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }), stderr: { write(_s: string) {} },
         stdout: { closed: false, write(_b: Uint8Array | string) { return Bun.sleep(5) } } }
       expect(await runGate(env, io)).toBe(0)
-      expect(gateTriples(n.paths)).toEqual([['hello', 'ok', undefined]])
+      expect(gateLines(n.paths).map((e) => [e.form, e.outcome, e.code ?? '-'])).toEqual([['hello', 'ok', '-']])
     })
   })
 
