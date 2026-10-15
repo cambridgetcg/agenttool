@@ -9,7 +9,7 @@ import {
   decodeJson, encodeMessage, MAX_HANDSHAKE_BYTES, MAX_KNOCK_COUNT, ORIGIN_RE, parseTapKnockReport, type TapKnockReportMsg, type TapKnocksMsg,
 } from '../link/messages.ts'
 import { socketPathOk, type NuancePaths } from '../paths.ts'
-import { ancestry, type ProcTable } from '../proc.ts'
+import { ancestry, isClaudeComm, type ProcTable } from '../proc.ts'
 import { TIMING } from '../timing.ts'
 import { bunConnect, type Connect, type LinkSocket } from './link-client.ts'
 import { readPipeRecords, type PipeRecord } from './pipe-record.ts'
@@ -34,15 +34,17 @@ export function hookOutput(line: string): string {
 export interface TapDeps { paths: NuancePaths; selfPid: number; table(): ProcTable | null; stdin: ReadableStream<Uint8Array>; mono(): number; connect?: Connect; budgetMs?: number }
 
 /**
- * §8 item 2: walking up from the tap, the nearest ancestor that matches a live pipe record by {host_pid, host_lstart}
- * decides: exactly one record is the pipe, more than one is silence, and no match anywhere is silence. A record's host is
- * always the claude its pipe found by the basename(comm) rule (K68). Records of dead pipes are already skipped (P61).
+ * §8 item 2: walking up from the tap, the nearest claude ancestor (K68) decides: exactly one live pipe record for it by
+ * {host_pid, host_lstart} is the pipe; more than one, or none, is silence, and the walk never goes on to an outer claude. A
+ * record's host is always the claude its pipe found by that rule, so a nested `claude -p` whose pipe has not started (or is
+ * disabled) is silent rather than shown the outer seat's knocks, which its pending report would hand to the wrong agent.
+ * Records of dead pipes are already skipped (P61).
  */
 function pipeFor(selfPid: number, table: ProcTable, records: PipeRecord[]): PipeRecord | null {
   for (const a of ancestry(selfPid, table).slice(1)) {
+    if (!isClaudeComm(a.comm)) continue
     const matching = records.filter((r) => r.host_pid === a.pid && r.host_lstart === a.started_at)
-    if (matching.length === 1) return matching[0]!
-    if (matching.length > 1) return null
+    return matching.length === 1 ? matching[0]! : null
   }
   return null
 }

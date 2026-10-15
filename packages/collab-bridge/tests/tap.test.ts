@@ -91,6 +91,23 @@ describe('finding the pipe', () => {
     expect(await runTap(deps(f))).toBeNull()
   })
 
+  test("a nested claude with no pipe of its own is silence: the tap does not walk past it to the outer claude's pipe (Task 63 pipe-3-4)", async () => {
+    const f = nuanceFixture()
+    let asked = 0
+    await pipeSide(f, async () => { asked++; return { count: 1, origins: ['air'], seqs: [1] } })
+    const nested = (innerComm: string): TapDeps['table'] => () => new Map([
+      [process.pid, { pid: process.pid, ppid: 4300, started_at: 'Tue Oct 13 11:33:11 2026', comm: '/usr/bin/true' }],
+      [4300, { pid: 4300, ppid: HOST.pid, started_at: 'Wed Oct 7 17:00:00 2026', comm: innerComm }],
+      [HOST.pid, { pid: HOST.pid, ppid: 1, started_at: HOST.lstart, comm: HOST.comm }],
+    ])
+    // The inner claude (a `claude -p` started in the shared folder) has no pipe record: its hook must not take the outer one's knocks.
+    expect(await runTap(deps(f, { table: nested('/Users/macair/.local/bin/claude') }))).toBeNull()
+    expect(asked).toBe(0)
+    // The control: an inner process that is not a claude (a shell, a node helper) is walked through to the claude above it.
+    expect(await runTap(deps(f, { table: nested('/bin/zsh') }))).toBe(hookOutput(ONE) + '\n')
+    expect(asked).toBe(1)
+  })
+
   test('silence when the pipe answers CLOSE (hub away)', async () => {
     const f = nuanceFixture()
     await pipeSide(f, async () => null)
