@@ -73,6 +73,13 @@ type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v)
 const keysAre = (o: Obj, keys: string[]) => Object.keys(o).length === keys.length && keys.every((k) => Object.hasOwn(o, k))
 const str = (v: unknown, re?: RegExp): v is string => typeof v === 'string' && (re === undefined || re.test(v))
+/**
+ * Text the device chose, of at most `max` characters, with nothing a Terminal would act on: no control character (C0, DEL, C1),
+ * line or paragraph separator or bidi control. A compromised device answers hello, and its strings reach Ai's Terminal in the
+ * ✗ lines and the pinned text and are stored in the device file. ZWJ and ZWNJ stay (an emoji folder name; N2 keeps them too).
+ */
+const shown = (v: unknown, max: number): v is string =>
+  typeof v === 'string' && v.length <= max && !/[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(v)
 const HELLO_KEYS = ['v', 'device', 'build', 'prepared', 'expiry', 'user', 'seat_public', 'shares', 'git', 'summon', 'summon_now',
   'claude_version', 'zshenv_clean', 'clock']
 
@@ -84,17 +91,17 @@ export function parseHello(line: string): Hello | null {
   if (!str(o.device, DEVICE_RE) || !str(o.build, /^[0-9a-f]{8}$/) || !str(o.prepared, /^[0-9]{14}$/) || !str(o.expiry, /^[0-9]{8}$/)) return null
   if (!str(o.user, USER_RE) || !str(o.seat_public, /^[0-9a-fA-F]{0,128}$/)) return null
   if (!Array.isArray(o.shares) || o.shares.length === 0 || o.shares.length > 64) return null
-  for (const s of o.shares) if (!isObj(s) || !keysAre(s, ['realpath', 'gitdir']) || !str(s.realpath) || !str(s.gitdir)) return null
+  for (const s of o.shares) if (!isObj(s) || !keysAre(s, ['realpath', 'gitdir']) || !shown(s.realpath, 1024) || !shown(s.gitdir, 1024)) return null
   const g = o.git
-  if (!isObj(g) || !keysAre(g, ['path', 'version', 'sha256', 'guard', 'apple']) || !str(g.path) || !g.path.startsWith('/')
+  if (!isObj(g) || !keysAre(g, ['path', 'version', 'sha256', 'guard', 'apple']) || !shown(g.path, 1024) || !g.path.startsWith('/')
     || !str(g.version, VERSION_RE) || !str(g.sha256, HEX64_RE) || typeof g.guard !== 'boolean' || typeof g.apple !== 'boolean') return null
   const s = o.summon
   if (!isObj(s) || !keysAre(s, ['key_sha256', 'dropin_stat']) || !str(s.key_sha256, HEX64_RE) || !str(s.dropin_stat, DROPIN_STAT_RE)) return null
   const n = o.summon_now
   if (!isObj(n) || !keysAre(n, ['key_sha256', 'dropin_stat']) || !str(n.key_sha256, HEX64_RE)
     || !(n.dropin_stat === null || str(n.dropin_stat, DROPIN_STAT_RE))) return null
-  if (!(o.claude_version === null || str(o.claude_version)) || typeof o.zshenv_clean !== 'boolean') return null
-  if (!str(o.clock) || Number.isNaN(Date.parse(o.clock))) return null
+  if (!(o.claude_version === null || shown(o.claude_version, 200)) || typeof o.zshenv_clean !== 'boolean') return null
+  if (!str(o.clock, /^[\x20-\x7e]{1,64}$/) || Number.isNaN(Date.parse(o.clock))) return null
   return o as unknown as Hello
 }
 

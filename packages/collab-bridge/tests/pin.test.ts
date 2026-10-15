@@ -287,6 +287,34 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     expect(await mirror()).toEqual(before)
   }, T)
 
+  test('hello text the device chooses never reaches the Terminal with a control character in it (Task 63 installer-1-3)', () => {
+    const w = pinWorld()
+    writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })
+    const h = helloOf(w)
+    const oneShare = (realpath: string, gitdir: string) => ({ ...h, shares: [{ realpath, gitdir }] })
+    // A compromised device could title the window, clear the screen or hide the ✗ lines with these.
+    const esc = '\u001b]0;pwned\u0007\u001b[2J'
+    const bad: Array<[string, unknown]> = [
+      ['git.path with escape sequences', { ...h, git: { ...h.git, path: `/${esc}` } }],
+      ['git.path with a C1 control', { ...h, git: { ...h.git, path: '/opt/\u009b2Jgit' } }],
+      ['git.path with a bidi override', { ...h, git: { ...h.git, path: '/opt/\u202egit' } }],
+      ['git.path with a line separator', { ...h, git: { ...h.git, path: '/opt/\u2028git' } }],
+      ['git.path over 1024 characters', { ...h, git: { ...h.git, path: `/${'a'.repeat(1024)}` } }],
+      ['a realpath with escape sequences', oneShare(`/${esc}`, join(w.share, '.git'))],
+      ['a realpath with a C1 control', oneShare('/x/\u0085y', join(w.share, '.git'))],
+      ['a gitdir with escape sequences', oneShare(w.share, `/${esc}`)],
+      ['a gitdir with a newline', oneShare(w.share, '/x\ny')],
+      ['claude_version with escape sequences', { ...h, claude_version: `2.1.296 ${esc}` }],
+      ['claude_version over 200 characters', { ...h, claude_version: 'v'.repeat(201) }],
+      ['a clock with text after the time', { ...h, clock: `${new Date().toISOString()} ${esc}` }],
+    ]
+    for (const [name, broken] of bad) expect(parseHello(JSON.stringify(broken)), name).toBeNull()
+    // Plain text, a folder with a non-ASCII name, ZWJ (an emoji folder) and a missing Claude version still parse.
+    expect(parseHello(JSON.stringify({ ...h, claude_version: null }))).not.toBeNull()
+    expect(parseHello(JSON.stringify({ ...h, claude_version: '2.1.296 (Claude Code)' }))).not.toBeNull()
+    expect(parseHello(JSON.stringify(oneShare('/Users/macair/Projects/caf\u00e9 \u{1f468}\u200d\u{1f469}', '/Users/macair/Projects/caf\u00e9/.git')))).not.toBeNull()
+  }, T)
+
   test('refuses a git without the guard', async () => {
     const w = pinWorld()
     writeCollabSsh({ paths: w.paths, device: 'nuance', user: USER, summonKnownHosts: w.paths.summonKnownHosts })
