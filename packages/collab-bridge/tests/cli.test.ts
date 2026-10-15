@@ -83,7 +83,8 @@ function spawnBin(home: string, argv: string[], extra: Record<string, string> = 
  * (tab-separated, with launchctl's header), exits 113 for `print` (no such service) and 0 for everything else. `over`
  * makes `bootout` fail with its code (a real launchctl says why on stderr) or `print` exit with its code (0: still loaded).
  * `loadedFor: n` is a service that launchd is still tearing down: the first n `print`s find it loaded (exit 0), the later
- * ones do not, and `bootstrap` fails with launchd's own refusal (exit 5) until the n-th `print` has been answered.
+ * ones do not, and `bootstrap` fails with launchd's own refusal (exit 5) until the n-th `print` has been answered. The first
+ * `print` that finds it gone leaves <dir>/gone, which is when the old hub, in a test that plays one, lets go of hub.lock.
  */
 function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; print?: number; loadedFor?: number } = {}): { bin: string; calls(): string[]; setLabels(l: string[]): void } {
   const setLabels = (l: string[]) =>
@@ -96,7 +97,7 @@ function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; 
     'case "$1" in',
     `  list) cat '${dir}/list.txt' ;;`,
     over.loadedFor !== undefined
-      ? `  print) n=$(( $(cat '${dir}/prints' 2>/dev/null || echo 0) + 1 )); echo $n > '${dir}/prints'; if [ $n -le ${over.loadedFor} ]; then echo 'dev.agenttool.collab-bridge = {'; exit 0; fi; echo 'Could not find service' >&2; exit 113 ;;`
+      ? `  print) n=$(( $(cat '${dir}/prints' 2>/dev/null || echo 0) + 1 )); echo $n > '${dir}/prints'; if [ $n -le ${over.loadedFor} ]; then echo 'dev.agenttool.collab-bridge = {'; exit 0; fi; : > '${dir}/gone'; echo 'Could not find service' >&2; exit 113 ;;`
       : over.print === 0 ? "  print) echo 'dev.agenttool.collab-bridge = {'; exit 0 ;;" : `  print) echo 'Could not find service' >&2; exit ${over.print ?? 113} ;;`,
     over.loadedFor !== undefined
       ? `  bootstrap) if [ $(cat '${dir}/prints' 2>/dev/null || echo 0) -le ${over.loadedFor} ]; then echo 'Bootstrap failed: 5: Input/output error' >&2; exit 5; fi; exit 0 ;;` : '',
@@ -415,7 +416,7 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     const before = c.launchctl.calls().length
     expect(await runAirCli(['hub', 'off'], c.deps)).toBe(0)
     expect(c.asked).toEqual(['Turn the Collab bridge hub on? [y/N] ', 'Turn the Collab bridge hub off? [y/N] '])
-    expect(c.launchctl.calls().slice(before)).toEqual([`bootout ${SERVICE}`])
+    expect(c.launchctl.calls().slice(before)).toEqual([`bootout ${SERVICE}`, `print ${SERVICE}`]) // launchd's word that it let go, before hub.lock is asked about
     expect(existsSync(c.paths.plist)).toBe(false)
     expect(existsSync(c.paths.baselineLabels)).toBe(true)
     expect(c.out.at(-1)).toBe(`✓ Hub off: ${HUB_LABEL} is booted out of gui/502 and its plist removed.`)
@@ -429,6 +430,15 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
   }, 20_000)
 
   test('hub off after a bootout that failed: a hub still loaded, or one that cannot be checked, is a ✗ and exit 1; only a print that fails too is "not loaded"', async () => {
+    process.env.COLLAB_BRIDGE_TEST_TIME_SCALE = '0.05' // a service launchd keeps is waited for 30 s in production; a test gives it 1.5 s
+    try {
+      await failedBootout()
+    } finally {
+      delete process.env.COLLAB_BRIDGE_TEST_TIME_SCALE
+    }
+  }, 20_000)
+
+  async function failedBootout() {
     const leftPlist = (c: Cli) => {
       mkdirSync(dirname(c.paths.plist), { recursive: true })
       writeFileSync(c.paths.plist, 'plist left by hub on\n')
@@ -439,7 +449,10 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     const loaded = cli({ launchctl: { bootout: 5, print: 0 } })
     leftPlist(loaded)
     expect(await off(loaded)).toBe(1)
-    expect(loaded.launchctl.calls()).toEqual([`bootout ${SERVICE}`, `print ${SERVICE}`])
+    const loadedCalls = loaded.launchctl.calls() // launchd is asked until the wait is over, and nothing else
+    expect(loadedCalls[0]).toBe(`bootout ${SERVICE}`)
+    expect(loadedCalls.length).toBeGreaterThan(2)
+    expect(loadedCalls.slice(1).every((c) => c === `print ${SERVICE}`)).toBe(true)
     const loadedErr = loaded.err.join('\n')
     expect(loadedErr).toContain(`✗ Hub off:`)
     expect(loadedErr).toContain(SERVICE)
@@ -465,6 +478,50 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     expect(gone.out.at(-1)).toBe(`✓ Hub off: ${HUB_LABEL} was not loaded in gui/502; its plist is removed.`)
     expect(gone.err).toEqual([])
     expect(existsSync(gone.paths.plist)).toBe(false)
+  }
+
+  test('hub off waits for launchd to let go of the hub whatever bootout returned, and only then asks who holds hub.lock (Task 63 new-hub-off-wait)', async () => {
+    process.env.COLLAB_BRIDGE_TEST_TIME_SCALE = '0.05' // the wait is 30 s of launchd's teardown and the lock grace 2 s; a test gives them 1.5 s and 100 ms
+    // launchd's own hub: it holds hub.lock while it exits, and lets go when launchd's `print` first finds the service gone
+    const launchdHub = (c: Cli) => {
+      mkdirSync(c.paths.stateDir, { recursive: true, mode: 0o700 })
+      const fd = openSync(c.paths.hubLock, 'a', 0o600)
+      expect(tryFlock(fd)).toBe('locked')
+      let open = true
+      const release = () => { if (open) { open = false; closeSync(fd) } }
+      const timer = setInterval(() => { if (existsSync(join(c.home, 'stubs', 'gone'))) { clearInterval(timer); release() } }, 5)
+      return () => { clearInterval(timer); release() }
+    }
+    try {
+      for (const bootout of [undefined, 36]) {
+        // bootout returned (0, or 36 "in progress") and the old hub is still exiting: three prints find it loaded, the fourth does not
+        const c = cli({ launchctl: { loadedFor: 3, ...(bootout === undefined ? {} : { bootout }) } })
+        const stop = launchdHub(c)
+        mkdirSync(dirname(c.paths.plist), { recursive: true })
+        writeFileSync(c.paths.plist, 'plist left by hub on\n')
+        try {
+          expect([bootout, await runAirCli(['hub', 'off'], c.deps)]).toEqual([bootout, 0])
+        } finally { stop() }
+        expect(c.launchctl.calls()).toEqual([`bootout ${SERVICE}`, ...Array(4).fill(`print ${SERVICE}`)])
+        expect([bootout, c.err]).toEqual([bootout, []])
+        expect(c.out.at(-1)).toContain('✓ Hub off:')
+        expect(existsSync(c.paths.plist)).toBe(false)
+      }
+      // launchd never lets go, though bootout returned 0: the wait ends and hub off says so, instead of blaming a Terminal hub
+      const stuck = cli({ launchctl: { print: 0 } })
+      mkdirSync(dirname(stuck.paths.plist), { recursive: true })
+      writeFileSync(stuck.paths.plist, 'plist left by hub on\n')
+      expect(await runAirCli(['hub', 'off'], stuck.deps)).toBe(1)
+      const err = stuck.err.join('\n')
+      expect(err).toContain('✗ Hub off:')
+      expect(err).toContain(`launchd still has ${HUB_LABEL} loaded`)
+      expect(err).toContain('may still be serving')
+      expect(err).not.toContain('hub run in a Terminal')
+      expect(stuck.out.join('\n')).not.toContain('✓ Hub off')
+      expect(existsSync(stuck.paths.plist)).toBe(false)
+    } finally {
+      delete process.env.COLLAB_BRIDGE_TEST_TIME_SCALE
+    }
   }, 20_000)
 
   test('every launchctl call names gui/502', async () => {

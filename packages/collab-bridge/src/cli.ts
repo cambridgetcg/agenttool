@@ -343,14 +343,16 @@ async function hubOff(deps: AirCliDeps): Promise<number> {
   if (!yuConfirms(deps, 'Turn the Collab bridge hub off? [y/N] ')) return 1
   const out = launchctl(deps, 'bootout', SERVICE)
   rmSync(deps.paths.plist, { force: true })
-  if (out.code !== 0) {
-    // A failed bootout is not "not loaded" until launchd agrees: a hub still serving must not be reported as off.
-    // Only a print that runs and fails means the service is gone, which is the state Yu asked for.
-    const still = launchctl(deps, 'print', SERVICE)
-    if (still.code === null || still.code === 0) {
-      deps.err(`✗ Hub off: launchctl bootout ${SERVICE} failed (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}; ${HUB_LABEL} may still be serving in ${DOMAIN}; its plist is removed; run hub off again`)
-      return 1
-    }
+  // Whatever bootout returned, launchd's own hub may still be exiting (up to about 12 s), and it holds hub.lock until it has:
+  // asking who holds the lock before launchd lets go would blame a Terminal hub for launchd's closing one (Task 63 new-hub-off-wait).
+  // A failed bootout is not "not loaded" until launchd agrees: a hub still serving must not be reported as off. Only a print
+  // that runs and fails means the service is gone, which is the state Yu asked for.
+  const gone = await untilGone(deps)
+  if (gone !== 'gone') {
+    const said = out.code === 0 ? `launchctl bootout ${SERVICE} returned 0` : `launchctl bootout ${SERVICE} failed (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}`
+    const why = gone === 'loaded' ? `launchd still has ${HUB_LABEL} loaded after waiting for it to let go` : `launchctl print ${SERVICE} could not be run, so it is not known that launchd let go`
+    deps.err(`✗ Hub off: ${said}; ${why}; ${HUB_LABEL} may still be serving in ${DOMAIN}; its plist is removed; run hub off again`)
+    return 1
   }
   // launchd has let go, but a hub outside it (hub run in a Terminal) holds hub.lock and keeps dialling and serving seats:
   // it is not off, whatever launchctl says (Task 63 launcher-1-2).
