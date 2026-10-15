@@ -218,6 +218,33 @@ describe('install check', () => {
     expect(citizenRoot(join(h.home, 'Projects'), h.home)).toBe('clear')
   }, 30_000)
 
+  test('a share inside a folder that holds REST or EVENT-ONLY, at any depth above it, is a citizen\'s: existing or absent (Task 63 installer-2-2)', () => {
+    const { h, trial } = world({ allowlist: allowlistYaml([{ path: '~/Projects', access: 'edit' }]) })
+    const aria = join(h.home, 'Projects', 'aria')               // a citizen's folder that is not under ~/love-unlimited
+    mkdirSync(aria)
+    writeFileSync(join(aria, 'REST'), '')
+    const deep = join(h.home, 'Projects', 'cato', 'one', 'two')   // the marker sits two levels above the share
+    mkdirSync(deep, { recursive: true })
+    writeFileSync(join(h.home, 'Projects', 'cato', 'EVENT-ONLY'), '')
+    cloneAt(h, trial.repo, join(aria, 'site'))
+    cloneAt(h, trial.repo, join(deep, 'site'))
+    for (const share of [join(aria, 'site'), join(deep, 'site'), join(aria, 'collab-trial'), join(deep, 'fresh')]) {
+      const r = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [share] })))
+      expect([share, codes(r)]).toEqual([share, ['share_citizen']])
+      expect(r.shares).toEqual([])
+    }
+    expect(citizenRoot(join(aria, 'site'), h.home)).toBe('citizen')
+    expect(citizenRoot(join(aria, 'not-yet', 'deeper'), h.home)).toBe('citizen')
+    // The controls: a sibling of the citizen's folder, and an absent folder beside it, are clear.
+    const free = join(h.home, 'Projects', 'free')
+    mkdirSync(free)
+    cloneAt(h, trial.repo, join(free, 'site'))
+    expect(installCheck(checkInput(h, writeCheckBundle({ trial, shares: [join(free, 'site')] }))).failures).toEqual([])
+    expect(installCheck(checkInput(h, writeCheckBundle({ trial, shares: [join(free, 'new')] }))).failures).toEqual([])
+    expect(citizenRoot(join(free, 'new'), h.home)).toBe('clear')
+    expect(readdirSync(aria).sort()).toEqual(['REST', 'site'])   // nothing was written into the citizen's folder
+  }, 120_000)
+
   test('an absent share that would land in a symlinked ~/love-unlimited is refused, however it is spelled', () => {
     const { h, realLu, trial, spelled } = linkedLoveUnlimited()
     for (const share of spelled) {

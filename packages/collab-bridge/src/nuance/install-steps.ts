@@ -127,11 +127,32 @@ function servedProblem(realpath: string, gitdir: string): string | null {
   return sharePathProblem(realpath) ?? sharePathProblem(gitdir, MAX_GITDIR_BYTES)
 }
 
+/** Whether a marker (REST, EVENT-ONLY) is in one folder: `citizen`, `clear`, or `unknown` when a marker cannot be told apart from its absence. */
+function markerIn(dir: string): 'citizen' | 'clear' | 'unknown' {
+  for (const marker of ['REST', 'EVENT-ONLY']) {
+    try { lstatSync(join(dir, marker)); return 'citizen' } catch (e) { if (errnoOf(e) !== 'ENOENT') return 'unknown' }
+  }
+  return 'clear'
+}
+
+/** The verdict for a real folder and every folder above it up to `/`: any marker is `citizen` (worst first), then any unreadable one `unknown`. */
+function markersUpward(realDir: string): 'citizen' | 'clear' | 'unknown' {
+  let verdict: 'citizen' | 'clear' | 'unknown' = 'clear'
+  for (let d = realDir; ; d = dirname(d)) {
+    const v = markerIn(d)
+    if (v === 'citizen') return 'citizen'
+    if (v === 'unknown') verdict = 'unknown'
+    if (dirname(d) === d) return verdict
+  }
+}
+
 /**
- * §11.1: a citizen's folder is one with REST or EVENT-ONLY at its root, or anything under ~/love-unlimited, by spelling,
- * by where ~/love-unlimited really is (so a folder that is not there yet is judged by where it would be, even when
- * ~/love-unlimited is a symlink), or by what the folder resolves to. A folder that is not there holds no marker (`clear`);
- * one that cannot be read is `unknown`, which the installer refuses like a citizen. APFS ignores case, so `rest` is found as REST.
+ * §11.1: a citizen's folder is one with REST or EVENT-ONLY at its root or in any folder above it, or anything under
+ * ~/love-unlimited, by spelling, by where ~/love-unlimited really is (so a folder that is not there yet is judged by where
+ * it would be, even when ~/love-unlimited is a symlink), or by what the folder resolves to. A share inside a citizen's
+ * folder is the citizen's tree, whether or not the share has a marker of its own (P10). A folder that is not there is judged
+ * by its nearest existing parent; one that cannot be read is `unknown`, which the installer refuses like a citizen. APFS
+ * ignores case, so `rest` is found as REST.
  */
 export function citizenRoot(path: string, home: string): 'citizen' | 'clear' | 'unknown' {
   const lu = join(home, 'love-unlimited')
@@ -141,14 +162,18 @@ export function citizenRoot(path: string, home: string): 'citizen' | 'clear' | '
   const real = safeRealpath(path)
   if (luReal && real && within(real, luReal)) return 'citizen'
   if (!real) {
-    try { lstatSync(path) } catch (e) { return errnoOf(e) === 'ENOENT' ? 'clear' : 'unknown' }
+    try { lstatSync(path) } catch (e) {
+      if (errnoOf(e) !== 'ENOENT') return 'unknown'
+      for (let d = dirname(path); ; d = dirname(d)) {                // not there: its nearest parent that is, and everything above it
+        const parentReal = safeRealpath(d)
+        if (parentReal) return markersUpward(parentReal)
+        if (dirname(d) === d) return 'clear'
+      }
+    }
     return 'unknown'                                  // there, but it does not resolve (a dangling link)
   }
   try { readdirSync(real) } catch { return 'unknown' }
-  for (const marker of ['REST', 'EVENT-ONLY']) {
-    try { lstatSync(join(real, marker)); return 'citizen' } catch (e) { if (errnoOf(e) !== 'ENOENT') return 'unknown' }
-  }
-  return 'clear'
+  return markersUpward(real)
 }
 
 /**
@@ -190,7 +215,7 @@ function existingShare(path: string, c: ShareCtx): ShareResult {
   const unserved = servedProblem(real, join(real, '.git'))
   if (unserved) { fail('share_path', `${path} resolves to ${real}, which ${unserved}`); return done() }
   const citizen = citizenRoot(real, c.home)
-  if (citizen === 'citizen') fail('share_citizen', `${path} is a citizen's folder (REST or EVENT-ONLY at its root, or under ~/love-unlimited) and can never be shared`)
+  if (citizen === 'citizen') fail('share_citizen', `${path} is a citizen's folder (REST or EVENT-ONLY at its root or in a folder above it, or under ~/love-unlimited) and can never be shared`)
   if (citizen === 'unknown') fail('share_unclassified', `${path} cannot be read to check whether it is a citizen's folder`)
   if (c.allowlist && longestFolderMatch(real, c.allowlist, c.home, c.realpath)?.access !== 'edit') {
     fail('share_not_edit', `${path} is not inside an \`access: edit\` folder of Summon's allowlist (~/.config/summon/allowlist.yaml)`)
@@ -235,7 +260,7 @@ function absentShare(path: string, c: ShareCtx): ShareResult {
   // Both the spelled path and where it would really be: ~/love-unlimited may be a link, and the folder is not there to resolve. Worst verdict wins.
   const verdicts = [citizenRoot(path, c.home), citizenRoot(toBe, c.home)]
   const citizen = verdicts.includes('citizen') ? 'citizen' : verdicts.includes('unknown') ? 'unknown' : 'clear'
-  if (citizen === 'citizen') fail('share_citizen', `${path} would be under ~/love-unlimited, a citizen's folder`)
+  if (citizen === 'citizen') fail('share_citizen', `${path} would be inside a citizen's folder (under ~/love-unlimited, or below a REST or EVENT-ONLY marker)`)
   if (citizen === 'unknown') fail('share_unclassified', `${path} cannot be checked for a citizen's folder`)
   if (c.allowlist && absentFolderMatch(toBe, c.allowlist, c.home, c.realpath)?.access !== 'edit') {
     fail('share_not_edit', `${path} is not inside an \`access: edit\` folder of Summon's allowlist (~/.config/summon/allowlist.yaml)`)
