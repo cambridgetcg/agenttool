@@ -3,8 +3,9 @@
 // acknowledges a security warning (§5.5). So is `unpair <device>`, which revokes a device (§9.10, §10.6). `hub status`,
 // `hub doctor` and `version` only read. The bare `run` is launchd's verb (the plist's ProgramArguments end `…/hub.js`,
 // `run`: C7, §10.4) and `hub run` is the Terminal fallback (C14, §10.4); both are refused inside any agent harness and
-// for any uid but 502, with no question, so no agent starts a hub that serves seats without Yu. `hub unpark` is Ai's
-// repair step after a seat recovery (§9.6 item 5, P54).
+// for any uid but 502, with no question, so no agent starts a hub that serves seats without Yu. A refused `run` exits 0
+// and records the refusal, because launchd restarts a non-zero exit every 10 s (§10.4 Exits); a refused `hub run` exits 1.
+// `hub unpark` is Ai's repair step after a seat recovery (§9.6 item 5, P54).
 // Every side effect comes through AirCliDeps; bin/collab-bridge.ts is the only place that builds the live ones.
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
@@ -33,6 +34,8 @@ export interface AirCliDeps {
   launchctl: string; codesign: string; bun: string; hubSha: string | null; build: BuildInfo | null; collabDist: string
   runHub(): Promise<number>; out(line: string): void; err(line: string): void; now(): Date
   unpair(device: string): Promise<number>
+  /** launchd's `run` only, after a refusal: records it in hub.status.json while no hub holds hub.lock; never throws. */
+  refuseStart(code: string, detail: string): void
 }
 
 export const USAGE: readonly string[] = [
@@ -90,12 +93,15 @@ export function labelDiff(baseline: string, current: string): { added: string[];
  * process table that cannot be read, or that does not hold this process, cannot rule out a harness ancestor. An agent
  * may ask Yu; it never answers for him.
  */
-export function hubOnRefusal(env: Env, table: ProcTable | null, selfPid: number, uid: number): string | null {
+export function hubOnRefusal(env: Env, table: ProcTable | null, selfPid: number, uid: number, via: 'terminal' | 'launchd' = 'terminal'): string | null {
   const only = 'only Yu turns the hub on or off, from his own Terminal'
   if (env.CLAUDECODE !== undefined) return `CLAUDECODE is set (a Claude Code session); ${only}`
   for (const k of Object.keys(env).sort()) {
     if (env[k] !== undefined && (k.startsWith('CODEX_') || k.startsWith('HERMES_'))) {
-      return `${k} is set (an agent harness); ${only} (if his shell exports it, run it as env -u ${k} collab-bridge …)`
+      // env -u cannot apply to a launchd job: the variable comes from the gui domain (launchctl setenv), not from a shell
+      const fix = via === 'launchd' ? `the gui domain carries it into the job: launchctl unsetenv ${k}, then collab-bridge hub on`
+        : `if his shell exports it, run it as env -u ${k} collab-bridge …`
+      return `${k} is set (an agent harness); ${only} (${fix})`
     }
   }
   if (table === null) return `the process table could not be read, so an agent harness ancestor cannot be ruled out; ${only}`
@@ -422,13 +428,18 @@ async function unpair(deps: AirCliDeps, device: string): Promise<number> {
 /**
  * `run` (launchd's) and `hub run` (the Terminal fallback): the hub starts only where `hub on` could be answered, so an
  * agent cannot start one that dials devices and serves seats without Yu. No question, since launchd has no tty, and
- * nothing is touched before the refusal, so a refused start never writes `lock_held` over a running hub's status.
+ * `hub run` touches nothing before the refusal, so a refused start never writes `lock_held` over a running hub's status.
+ * A refusal of launchd's `run` is deliberate like every other (spec §10.4 Exits), so it exits 0, or KeepAlive
+ * {SuccessfulExit:false} would restart it every 10 s for ever with nothing counted; it is recorded for `hub status`, but
+ * only where no hub holds hub.lock (refuseStart). It comes back at the next login, `hub on`, or Ai's kickstart (Task 63 launcher-1-1).
  */
-async function startHub(deps: AirCliDeps): Promise<number> {
-  const refusal = hubOnRefusal(deps.env, deps.table(), deps.selfPid, deps.uid())
+async function startHub(deps: AirCliDeps, via: 'terminal' | 'launchd'): Promise<number> {
+  const refusal = hubOnRefusal(deps.env, deps.table(), deps.selfPid, deps.uid(), via)
   if (refusal !== null) {
     deps.err(`✗ refused: ${refusal}`)
-    return 1
+    if (via === 'terminal') return 1
+    deps.refuseStart('start_refused', refusal)
+    return 0
   }
   return deps.runHub()
 }
@@ -445,14 +456,14 @@ export async function runAirCli(argv: string[], deps: AirCliDeps): Promise<numbe
     return 0
   }
   // launchd's verb: the plist's ProgramArguments end '…/hub.js', 'run' (spec C7, §10.4)
-  if (verb === 'run' && sub === undefined) return startHub(deps)
+  if (verb === 'run' && sub === undefined) return startHub(deps, 'launchd')
   if (verb === 'unpair') return sub !== undefined && rest.length === 0 && DEVICE_RE.test(sub) ? unpair(deps, sub) : usage(deps)
   if (verb !== 'hub') return usage(deps)
   if (sub === 'on' && rest.length === 0) return hubOn(deps)
   if (sub === 'off' && rest.length === 0) return hubOff(deps)
   if (sub === 'status' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--json'))) return hubStatus(deps, rest.length === 1)
   if (sub === 'doctor' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--ack-host-key'))) return hubDoctor(deps, rest.length === 1)
-  if (sub === 'run' && rest.length === 0) return startHub(deps) // the Terminal fallback (C14, §10.4)
+  if (sub === 'run' && rest.length === 0) return startHub(deps, 'terminal') // the Terminal fallback (C14, §10.4)
   if (sub === 'unpark' && rest.length === 1 && LINEAGE_RE.test(rest[0]!)) return hubUnpark(deps, rest[0]!)
   return usage(deps)
 }

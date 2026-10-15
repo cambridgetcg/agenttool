@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
@@ -11,6 +11,7 @@ import {
 } from '../src/air/status.ts'
 import { cliLauncherText, HUB_LABEL, HUB_UID, hubOnRefusal, labelDiff, runAirCli, stableLabels, ttyAsk, type AirCliDeps } from '../src/cli.ts'
 import { readLedger } from '../src/ledger.ts'
+import { tryFlock } from '../src/native.ts'
 import { airPaths, type AirPaths } from '../src/paths.ts'
 import type { ProcRecord, ProcTable } from '../src/proc.ts'
 import { systemBin } from '../src/sysbin.ts'
@@ -121,7 +122,7 @@ function signedApp(app: string): void {
   if (r.exitCode !== 0) throw new Error(`codesign could not sign the test app: ${r.stderr.toString()}`)
 }
 
-interface Cli { deps: AirCliDeps; out: string[]; err: string[]; asked: string[]; launchctl: ReturnType<typeof fakeLaunchctl>; paths: AirPaths; home: string }
+interface Cli { deps: AirCliDeps; out: string[]; err: string[]; asked: string[]; refused: Array<{ code: string; detail: string }>; launchctl: ReturnType<typeof fakeLaunchctl>; paths: AirPaths; home: string }
 
 /** The CLI over a temp home with the pinned bundle and a signed launcher in place, as Task 66 leaves them, and every side effect recorded. */
 function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | null; answer?: string | null; ask?: AirCliDeps['ask'];
@@ -137,15 +138,16 @@ function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | nul
   const out: string[] = []
   const err: string[] = []
   const asked: string[] = []
+  const refused: Array<{ code: string; detail: string }> = []
   const deps: AirCliDeps = {
     paths, env: o.env ?? {}, selfPid: SELF, uid: () => o.uid ?? 502, table: () => (o.table === undefined ? TERMINAL : o.table),
     ask: o.ask ?? ((prompt) => { asked.push(prompt); return o.answer === undefined ? 'y' : o.answer }),
     launchctl: launchctl.bin, codesign: '/usr/bin/codesign', bun: BUN, hubSha: SHA,
     build: o.build === undefined ? sourceBuild(COLLAB_DIST) : o.build, collabDist: COLLAB_DIST,
-    runHub: o.runHub ?? (async () => 0), out: (l) => { out.push(l) }, err: (l) => { err.push(l) }, now: o.now ?? (() => NOW),
+    runHub: o.runHub ?? (async () => 0), refuseStart: (code, detail) => { refused.push({ code, detail }) }, out: (l) => { out.push(l) }, err: (l) => { err.push(l) }, now: o.now ?? (() => NOW),
     unpair: o.unpair ?? (async () => { throw new Error('unpair must not run in this test') }),
   }
-  return { deps, out, err, asked, launchctl, paths, home }
+  return { deps, out, err, asked, refused, launchctl, paths, home }
 }
 
 function pairedDevice(paths: AirPaths): DeviceFile {
@@ -581,11 +583,16 @@ describe('hub unpark, hub run, version, the launcher line', () => {
       [{ uid: 501 }, 'this is uid 501; the hub runs as uid 502 (yuai) in gui/502 only'],
     ]
     for (const argv of [['run'], ['hub', 'run']]) {
+      // launchd's `run` exits 0 on a deliberate refusal, so KeepAlive{SuccessfulExit:false} does not restart it every 10 s
+      // (spec §10.4 Exits) and the refusal is recorded; the Terminal's `hub run` exits 1 and records nothing (Task 63 launcher-1-1)
+      const launchd = argv[0] === 'run'
       for (const [o, why] of refused) {
         let ran = 0
         const c = cli({ ...o, ask: neverAsk, runHub: async () => { ran++; return 7 } })
-        expect([argv, why, await runAirCli(argv, c.deps), ran]).toEqual([argv, why, 1, 0])
+        expect([argv, why, await runAirCli(argv, c.deps), ran]).toEqual([argv, why, launchd ? 0 : 1, 0])
         expect(c.err.join('\n')).toContain(`✗ refused: ${why}`)
+        expect(launchd ? c.refused.map((r) => r.code) : c.refused).toEqual(launchd ? ['start_refused'] : [])
+        if (launchd) expect(c.refused[0]!.detail).toContain(why)
         nothingWritten(c)
       }
       for (const chain of [UNDER_LAUNCHD, TERMINAL]) {
@@ -594,6 +601,19 @@ describe('hub unpark, hub run, version, the launcher line', () => {
         expect([argv, await runAirCli(argv, c.deps), ran, c.err]).toEqual([argv, 7, 1, []])
       }
     }
+  }, 20_000)
+
+  test("under launchd a CODEX_* or HERMES_* variable is told to launchctl unsetenv, not env -u, which cannot apply to a job (Task 63 launcher-1-1)", async () => {
+    const c = cli({ env: { CODEX_THREAD_ID: 'thread-1' }, ask: neverAsk })
+    expect(await runAirCli(['run'], c.deps)).toBe(0)
+    expect(c.refused).toHaveLength(1)
+    expect(c.refused[0]!.detail).toContain('CODEX_THREAD_ID is set')
+    expect(c.refused[0]!.detail).toContain('launchctl unsetenv CODEX_THREAD_ID')
+    expect(c.refused[0]!.detail).not.toContain('env -u')
+    // Yu's Terminal keeps its own advice
+    const t = cli({ env: { CODEX_THREAD_ID: 'thread-1' }, ask: neverAsk })
+    expect(await runAirCli(['hub', 'run'], t.deps)).toBe(1)
+    expect(t.err.join('\n')).toContain('env -u CODEX_THREAD_ID collab-bridge')
   }, 20_000)
 
   test('the launcher text is the exact zsh line', () => {
@@ -630,17 +650,50 @@ describe('hub unpark, hub run, version, the launcher line', () => {
 })
 
 describe('the bin: run and hub run from source', () => {
-  test('inside an agent harness the bin refuses run and hub run before anything is written', async () => {
+  test('inside an agent harness the bin refuses hub run before anything is written, and launchd\'s run with exit 0 and a refused status', async () => {
     // the preload's ps stub chains every caller to a fake claude at pid 4100 (P43), as an agent's shell would
     const home = temp('cb-run-refused-')
-    for (const argv of [['run'], ['hub', 'run']]) {
-      const p = spawnBin(home, argv)
-      const [code, stderr] = await Promise.all([p.exited, new Response(p.stderr).text()])
-      expect([argv, code]).toEqual([argv, 1])
-      expect(stderr).toContain(`✗ refused: claude (pid ${PS_STUB_HOST.pid}) is an ancestor of this process`)
-      // no hub.lock taken and no hub.status.json written, so a running hub's status is never overwritten
-      expect(existsSync(airPaths(home).stateDir)).toBe(false)
+    const paths = airPaths(home)
+    const hubRun = spawnBin(home, ['hub', 'run'])
+    const [hubCode, hubErr] = await Promise.all([hubRun.exited, new Response(hubRun.stderr).text()])
+    expect(hubCode).toBe(1)
+    expect(hubErr).toContain(`✗ refused: claude (pid ${PS_STUB_HOST.pid}) is an ancestor of this process`)
+    // no hub.lock taken and no hub.status.json written, so a running hub's status is never overwritten
+    expect(existsSync(paths.stateDir)).toBe(false)
+    // launchd's own verb exits 0, or KeepAlive{SuccessfulExit:false} restarts it every 10 s with nothing counted (spec §10.4 Exits),
+    // and the refusal is what `hub status` then shows (Task 63 launcher-1-1)
+    const run = spawnBin(home, ['run'])
+    const [code, stderr] = await Promise.all([run.exited, new Response(run.stderr).text()])
+    expect(code).toBe(0)
+    expect(stderr).toContain(`✗ refused: claude (pid ${PS_STUB_HOST.pid}) is an ancestor of this process`)
+    const s = readHubStatus(paths)!
+    expect([s.word, s.code]).toEqual(['refused', 'start_refused'])
+    expect(s.detail).toContain('is an ancestor of this process')
+    expect(s.runs).toHaveLength(1)
+    expect(s.runs[0]).toMatchObject({ clean: true })
+    expect(s.runs[0]!.ended_at).not.toBeNull()
+    expect(modeOf(paths.stateDir)).toBe(0o700)
+  }, 20_000)
+
+  test('a refused run leaves the status of a hub that holds hub.lock exactly as it is', async () => {
+    const home = temp('cb-run-refused-live-')
+    const paths = airPaths(home)
+    mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
+    const live: HubStatus = { word: 'running', code: null, detail: null, at: '2026-10-13T11:05:00.000Z', build: '00000000', unexpected_exits: [],
+      runs: [{ started_at: '2026-10-13T11:04:00.000Z', ended_at: null, clean: false }], seats: [] }
+    writeHubStatus(paths, live)
+    const before = readFileSync(paths.hubStatus, 'utf8')
+    const fd = openSync(paths.hubLock, 'a', 0o600)
+    try {
+      expect(tryFlock(fd)).toBe('locked') // this process plays the running hub
+      const run = spawnBin(home, ['run'])
+      const [code, stderr] = await Promise.all([run.exited, new Response(run.stderr).text()])
+      expect(code).toBe(0)
+      expect(stderr).toContain('✗ refused:')
+    } finally {
+      closeSync(fd)
     }
+    expect(readFileSync(paths.hubStatus, 'utf8')).toBe(before)
   }, 20_000)
 
   test('SIGTERM, SIGINT and SIGHUP stop hub run cleanly: exit 0, stopped, the run recorded clean, one hub_stop', async () => {

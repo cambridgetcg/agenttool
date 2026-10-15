@@ -8,7 +8,9 @@
 //   (4) only then the reconcile (once, never in a loop, P64), the dial loops and the seat streams.
 // Every deliberate refusal writes hub status, logs one line and returns 0, so launchd does not restart it every 10 s;
 // only an unexpected fault returns non-zero, and five of those within 10 minutes become `needs Yu: config` at the next
-// start (P58). The hub never starts a harness, never runs Summon and never opens the private journal.
+// start (P58). A fault before step (2) (the state dir, hub.lock) is recorded and counted like any other, and a refusal
+// before runHub (the bare `run` meeting a harness variable) is recorded by recordRefusedStart. The hub never starts a
+// harness, never runs Summon and never opens the private journal.
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { AIR_LEDGER_KEYS, appendLedger, type LedgerFields } from '../ledger.ts'
@@ -92,10 +94,39 @@ export function defaultHubDeps(env: Env): HubDeps {
 }
 
 const text = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/[^\x20-\x7e]/g, '?').slice(0, 200)
+const logLine = (line: string) => { try { process.stderr.write(`collab-bridge hub: ${line}\n`) } catch { /* no stderr */ } }
 
 function privateDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   chmodSync(dir, 0o700) // the mode passed to mkdir is cut by the umask
+}
+
+const noStatus = (at: string): HubStatus => ({ word: 'running', code: null, detail: null, at, build: null, unexpected_exits: [], runs: [], seats: [] })
+
+/**
+ * A start refused before runHub ever ran: the bare `run` under launchd, which found a harness variable in the job's
+ * environment or a process table it could not read (spec §10.4 Exits). It is recorded as a refused status and a clean run,
+ * so `hub status` shows why the hub is not running, and the caller exits 0, so launchd does not restart it every 10 s.
+ * Only while no hub holds hub.lock: a running hub's status is its own, and a refused second start must not overwrite it
+ * (the same rule as the lock_held refusal, which the running hub puts back at its next reload). Never throws.
+ */
+export function recordRefusedStart(deps: Pick<HubDeps, 'paths' | 'build' | 'now'>, code: string, detail: string): void {
+  const { paths } = deps
+  try {
+    privateDir(paths.stateDir)
+    const fd = openSync(paths.hubLock, 'a', 0o600)
+    try {
+      if (tryFlock(fd) === 'busy') return
+      const at = deps.now().toISOString()
+      const base = readHubStatus(paths) ?? noStatus(at)
+      writeHubStatus(paths, { ...base, word: 'refused', code, detail: text(detail), at, build: deps.build?.hub_build ?? null,
+        runs: [...base.runs, { started_at: at, ended_at: at, clean: true }] })
+    } finally {
+      closeSync(fd)
+    }
+  } catch (e) {
+    logLine(`refused start not recorded: ${text(e)}`)
+  }
 }
 
 function waitAtMost(p: Promise<unknown>, ms: number): Promise<void> {
@@ -120,10 +151,10 @@ interface DeviceRun {
 export async function runHub(deps: HubDeps): Promise<number> {
   const { paths } = deps
   const iso = () => deps.now().toISOString()
-  const say = (line: string) => { try { process.stderr.write(`collab-bridge hub: ${line}\n`) } catch { /* no stderr */ } }
+  const say = logLine
   let hubCode: string | null = null
   const status = (patch: Partial<HubStatus>) => {
-    const base: HubStatus = readHubStatus(paths) ?? { word: 'running', code: null, detail: null, at: iso(), build: null, unexpected_exits: [], runs: [], seats: [] }
+    const base: HubStatus = readHubStatus(paths) ?? noStatus(iso())
     const next: HubStatus = { ...base, ...patch, build: deps.build?.hub_build ?? null, at: iso() }
     try { writeHubStatus(paths, next) } catch (e) { say(`hub status not written: ${text(e)}`) }
   }
@@ -135,11 +166,38 @@ export async function runHub(deps: HubDeps): Promise<number> {
     return 0
   }
 
+  // A fault before the run record exists (the state dir, hub.lock) is still an unexpected fault: launchd restarts a non-zero
+  // exit every 10 s, so it is recorded as an unclean run, and five within 10 minutes stop the restarts like any other (P58).
+  const startFault = (e: unknown): number => {
+    say(`unexpected fault before the start: ${text(e)}`)
+    const at = iso()
+    const cur = readHubStatus(paths)
+    const earlier = cur?.runs ?? []
+    if (uncleanRunsWithin(earlier, deps.now().getTime(), BACKOFF.unexpectedExitsWindowMs) >= BACKOFF.unexpectedExitsMax) {
+      status({ word: 'refused', code: 'needs Yu: config', detail: `${BACKOFF.unexpectedExitsMax} hub runs ended unexpectedly within 10 minutes`,
+        runs: [...earlier, { started_at: at, ended_at: at, clean: true }] })
+      return 0
+    }
+    status({ word: 'stopped', detail: `unexpected fault: ${text(e)}`, runs: [...earlier, { started_at: at, ended_at: at, clean: false }],
+      unexpected_exits: [...(cur?.unexpected_exits ?? []), at] })
+    return 1
+  }
+
   // (1) One hub per user. Closing the fd (any exit, a crash included) releases the flock.
-  privateDir(paths.stateDir)
-  const fd = openSync(paths.hubLock, 'a', 0o600)
+  let fd: number
+  let lock: 'locked' | 'busy'
   try {
-    if (tryFlock(fd) === 'busy') return refuse('lock_held', 'another hub is already running for this user')
+    privateDir(paths.stateDir)
+    fd = openSync(paths.hubLock, 'a', 0o600)
+    try { lock = tryFlock(fd) } catch (e) {
+      closeSync(fd)
+      throw e
+    }
+  } catch (e) {
+    return startFault(e)
+  }
+  try {
+    if (lock === 'busy') return refuse('lock_held', 'another hub is already running for this user')
     return await supervise()
   } finally {
     closeSync(fd)

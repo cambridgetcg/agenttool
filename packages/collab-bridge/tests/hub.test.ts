@@ -4,7 +4,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSyn
 import { join } from 'node:path'
 import { updateDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
-import { distMatches, embeddedBuild, runHub, sourceBuild, type HubDeps } from '../src/air/hub.ts'
+import { distMatches, embeddedBuild, recordRefusedStart, runHub, sourceBuild, type HubDeps } from '../src/air/hub.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
 import { mirrorIdOf } from '../src/air/mirror.ts'
 import { seatTools } from '../src/air/policy-table.ts'
@@ -340,6 +340,47 @@ describe('runs that never ended cleanly', () => {
     expect(readHubStatus(paths)).toMatchObject({ word: 'refused', code: 'needs Yu: config' })
     expect(readHubStatus(paths)!.runs.at(-1)).toMatchObject({ clean: true })
   }, T)
+})
+
+describe('a fault before the supervised start (Task 63 launcher-1-1)', () => {
+  test('hub.lock that cannot be opened is an unclean run each time, and five of them give needs Yu: config and exit 0', async () => {
+    const paths = airHome()
+    mkdirSync(paths.hubLock, { recursive: true, mode: 0o700 }) // a directory where the lock file belongs: openSync throws EISDIR
+    for (let i = 0; i < 5; i++) expect(await runHub(hubDeps(paths))).toBe(1)
+    const after = readHubStatus(paths)!
+    expect(after.word).toBe('stopped')
+    expect(after.detail).toContain('unexpected fault')
+    expect(after.runs.map((r) => r.clean)).toEqual([false, false, false, false, false])
+    expect(after.runs.every((r) => r.ended_at !== null)).toBe(true)
+    expect(after.unexpected_exits.length).toBe(5)
+    // the sixth start counts them, as a fault inside the supervised start would: needs Yu, exit 0, launchd stops restarting it
+    expect(await runHub(hubDeps(paths))).toBe(0)
+    expect(readHubStatus(paths)).toMatchObject({ word: 'refused', code: 'needs Yu: config' })
+    expect(readHubStatus(paths)!.runs.at(-1)).toMatchObject({ clean: true })
+  }, T)
+
+  test('a refused start is recorded as a clean run beside the earlier records, and only while no hub holds hub.lock', () => {
+    const paths = airHome()
+    const at = '2026-10-13T11:05:00.000Z'
+    const crashed = { started_at: '2026-10-13T11:04:00.000Z', ended_at: null, clean: false }
+    mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
+    writeHubStatus(paths, { word: 'stopped', code: null, detail: null, at, build: '00000000', unexpected_exits: [at], runs: [crashed], seats: [] })
+    const deps = { paths, build: sourceBuild(COLLAB_DIST), now: () => new Date('2026-10-13T11:10:00.000Z') }
+    const fd = openSync(paths.hubLock, 'a', 0o600)
+    try {
+      expect(tryFlock(fd)).toBe('locked') // a live hub
+      const before = readFileSync(paths.hubStatus, 'utf8')
+      recordRefusedStart(deps, 'start_refused', 'claude is an ancestor')
+      expect(readFileSync(paths.hubStatus, 'utf8')).toBe(before)
+    } finally {
+      closeSync(fd)
+    }
+    recordRefusedStart(deps, 'start_refused', 'claude is an ancestor')
+    expect(readHubStatus(paths)).toMatchObject({
+      word: 'refused', code: 'start_refused', detail: 'claude is an ancestor', at: '2026-10-13T11:10:00.000Z', build: '00000000', unexpected_exits: [at],
+      runs: [crashed, { started_at: '2026-10-13T11:10:00.000Z', ended_at: '2026-10-13T11:10:00.000Z', clean: true }],
+    })
+  })
 })
 
 describe('reconcile', () => {

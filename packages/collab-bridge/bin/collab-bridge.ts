@@ -3,7 +3,7 @@
 // ~/.local/share/collab-bridge/air/<sha>/hub.js, which ~/.local/bin/collab-bridge and the LaunchAgent run with
 // bun --no-env-file --config=/dev/null from cwd / (R39). Exit codes: 0 done; 1 refused or failed; 2 a usage error.
 import { basename } from 'node:path'
-import { defaultHubDeps, embeddedBuild, runHub } from '../src/air/hub.ts'
+import { defaultHubDeps, embeddedBuild, recordRefusedStart, runHub } from '../src/air/hub.ts'
 import { liveUnpairDeps, unpairDevice } from '../src/air/unpair.ts'
 import { runAirCli, ttyAsk, type AirCliDeps } from '../src/cli.ts'
 import { getuid } from '../src/native.ts'
@@ -47,6 +47,8 @@ export function defaultAirDeps(): AirCliDeps {
         for (const s of STOP_SIGNALS) process.off(s, stop)
       })
     },
+    // launchd's `run` after a refusal: the status says why the hub is not running, and the exit is 0 (spec §10.4 Exits).
+    refuseStart: (code, detail) => recordRefusedStart({ paths, build: embeddedBuild(), now: () => new Date() }, code, detail),
     out,
     err: (line) => { process.stderr.write(`${line}\n`) },
     now: () => new Date(),

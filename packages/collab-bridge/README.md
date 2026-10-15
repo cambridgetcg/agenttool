@@ -23,12 +23,12 @@ pipe and the knock tap.
 | `collab-bridge hub doctor` | Ai | Checks the pinned bundle, the installed Collab against the build the bundle embeds, the launcher's signature (`codesign --verify --deep --strict`), each paired device's `known_hosts` copy against Summon's pin, and prints `launchd labels added since hub on: …`. Exit 1 when it printed a `warn:` line or a host-key warning. |
 | `collab-bridge hub doctor --ack-host-key` | Yu | Acknowledges the sticky host-key warnings (the same refusals as `hub on`, and a y/N question); they leave the status file at once, and no later status write, the running hub's included, brings them back. |
 | `collab-bridge hub run` | Yu, in his own Terminal (the fallback) | Runs the hub in the foreground, when the Local Network check finds no grant for the launcher; that hub stops at logout. Refused inside an agent harness and for any uid but 502, like `hub on`, with no question. Ctrl-C, closing the window or logout stop it cleanly. |
-| `collab-bridge run` | launchd, through `~/Applications/CollabBridgeHub.app` | The LaunchAgent's own verb (`…/hub.js run`): the same hub and the same refusals; `hub off` stops it cleanly. |
+| `collab-bridge run` | launchd, through `~/Applications/CollabBridgeHub.app` | The LaunchAgent's own verb (`…/hub.js run`): the same hub and the same refusals; `hub off` stops it cleanly. A refusal exits 0, so launchd does not restart it every 10 s: `hub status` shows `hub: start_refused (…)` (written only while no hub holds `hub.lock`), and the hub returns at the next login, `hub on` or a kickstart. |
 | `collab-bridge hub unpark <lineage>` | Ai | Un-parks a seat after its repair (Seat recovery, below). uid 502 only; no question. |
 | `collab-bridge version` | anyone | One JSON line: the build the bundle embeds, or `{"build":null}` from source. |
 
 Exit codes: 0 done; 1 refused, not confirmed or failed; 2 a usage error. `run` and `hub run` exit with the hub's own
-code once they start it.
+code once they start it; a refused `run` exits 0 (launchd's verb, above) and a refused `hub run` exits 1.
 
 ## Status words
 
