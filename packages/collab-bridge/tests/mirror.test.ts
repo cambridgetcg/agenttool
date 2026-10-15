@@ -345,6 +345,23 @@ describe('syncMirror', () => {
     }
   }, T)
 
+  test('the fetch never starts git auto-maintenance in the Air clone: packs pile up untouched, nothing detaches from the fetch\'s group (Task 63 gate-1-2, conformance-4-11)', async () => {
+    const w = await created()
+    const packFiles = () => readdirSync(join(w.airClone, '.git', 'objects', 'pack')).filter((n) => n.endsWith('.pack'))
+    // Every bridge fetch adds a pack (transfer.unpackLimit=1); past gc.autoPackLimit a default fetch runs
+    // `maintenance run --auto` and so `gc --auto`, which detaches (setsid) from ownGroup's kill and inherits ulimit -f.
+    // Synchronous here, so a repack that did run would show as fewer packs straight away.
+    writeFileSync(join(w.air, '.gitconfig'), '[gc]\n\tautoPackLimit = 1\n\tautoDetach = false\n[maintenance]\n\tautoDetach = false\n')
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    expect(await syncMirror(w.spec, { declaredHead: c2 }, w.deps)).toEqual({ ok: true, oid: c2 })
+    const c3 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'another note')
+    expect(await syncMirror(w.spec, { declaredHead: c3 }, w.deps)).toEqual({ ok: true, oid: c3 })
+    // The Air clone already held the base, so createMirror's fetch brought no pack: these are c2's and c3's. A gc --auto
+    // with gc.autoPackLimit=1 would have folded them into one.
+    expect(packFiles().length).toBe(2)
+    expect(existsSync(join(w.airClone, '.git', 'gc.log'))).toBe(false)
+  }, T)
+
   test('a pack over the wire cap is fetch_failed and leaves no temp pack', async () => {
     const w = await created()
     const c2 = commitFiles(w.share, { 'notes/noise.txt': randomBytes(1536 * 1024).toString('base64') }, 'a 2 MiB note')
@@ -416,7 +433,7 @@ describe('syncMirror', () => {
       '/opt/homebrew/bin/git', '-C', '/Users/yuai/Projects/collab-trial', '-c', 'protocol.version=0',
       '-c', 'transfer.fsckObjects=true', '-c', 'fetch.fsckObjects=true', '-c', 'transfer.unpackLimit=1',
       '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
-      'fetch', '--no-tags', '--no-recurse-submodules', '--no-prune', '--no-write-fetch-head',
+      'fetch', '--no-auto-maintenance', '--no-tags', '--no-recurse-submodules', '--no-prune', '--no-write-fetch-head',
       'collab-nuance:/Users/macair/Projects/collab-trial/.git', '+HEAD:refs/collab/nuance/macair/0123456789abcdef/incoming',
     ])
     expect(mirrorIdOf('/Users/macair/Projects/collab-trial')).toMatch(/^[0-9a-f]{16}$/)

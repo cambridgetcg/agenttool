@@ -84,7 +84,7 @@ function fetchParts(spec: MirrorSpec, deps: Pick<MirrorDeps, 'sshBin' | 'sshConf
     prefix: ['/bin/sh', '-c', `ulimit -f ${ulimitBlocks(wireCapBytes)}; exec "$@"`, 'sh',
       'env', '-u', 'GIT_SSH', `GIT_SSH_COMMAND=${deps.sshBin} -F '${deps.sshConfig}'`],
     args: ['-C', spec.airClone, '-c', 'protocol.version=0', '-c', 'transfer.fsckObjects=true', '-c', 'fetch.fsckObjects=true',
-      '-c', 'transfer.unpackLimit=1', ...MIRROR_GIT_FLAGS, 'fetch', '--no-tags', '--no-recurse-submodules', '--no-prune',
+      '-c', 'transfer.unpackLimit=1', ...MIRROR_GIT_FLAGS, 'fetch', '--no-auto-maintenance', '--no-tags', '--no-recurse-submodules', '--no-prune',
       '--no-write-fetch-head', `${deps.alias}:${spec.remoteGitdir}`, `+HEAD:${mirrorRefs(spec).incoming}`],
   }
 }
@@ -92,7 +92,9 @@ function fetchParts(spec: MirrorSpec, deps: Pick<MirrorDeps, 'sshBin' | 'sshConf
 /**
  * The exact argv of §7.3 step 4: `-c fetch.fsckObjects=true` outranks any config that would turn fsck off, and
  * `transfer.unpackLimit=1` keeps the download as one pack file, which the file-size limit bounds. GIT_PROTOCOL is never
- * set, so the fetch is v0 end to end (K49).
+ * set, so the fetch is v0 end to end (K49). `--no-auto-maintenance`: a default fetch ends with `maintenance run --auto`
+ * (gc --auto once packs pile up, one per sync), which detaches with setsid, so neither ownGroup's kill nor the 60 s
+ * deadline reaches it, and it inherits the file-size limit; Ai's own git runs maintenance on the Air clone (Task 63).
  */
 export function fetchArgv(spec: MirrorSpec, deps: Pick<MirrorDeps, 'sshBin' | 'sshConfig' | 'alias' | 'git'>, wireCapBytes: number): string[] {
   const { prefix, args } = fetchParts(spec, deps, wireCapBytes)
