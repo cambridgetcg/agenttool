@@ -31,22 +31,42 @@ export type HostCli = (args: string[], timeoutMs: number) => Promise<{ code: num
 
 const MAX_TIMER_MS = 2_147_483_647
 const HOST_OUTPUT_MAX = 1024 * 1024
+// After the SIGTERM at the deadline: how long the CLI has to die before SIGKILL, and how long the pipes then have to reach EOF
+// before the reads are given up. Together they bound every run (R19: no unbounded wait), whatever the CLI or a grandchild does.
+const HOST_KILL_GRACE_MS = 1_000
+const HOST_REAP_GRACE_MS = 1_000
 
-async function readCapped(stream: ReadableStream<Uint8Array>, max: number): Promise<string> {
+/** The graces of makeHostCli; the tests shorten them. */
+export interface HostCliOptions { killGraceMs?: number; reapGraceMs?: number }
+
+/** Reads a stream to EOF, keeping at most `max` bytes. `text()` is what has arrived so far; `stop()` gives the rest up. */
+function capture(stream: ReadableStream<Uint8Array>, max: number): { done: Promise<void>; text(): string; stop(): void } {
+  const reader = stream.getReader()
   const parts: Uint8Array[] = []
   let size = 0
-  for await (const chunk of stream) {
-    if (size < max) parts.push(chunk.subarray(0, max - size))
-    size += chunk.byteLength
-  }
-  return Buffer.concat(parts).toString('utf8')
+  const done = (async () => {
+    try {
+      for (;;) {
+        const r = await reader.read()
+        if (r.done) return
+        if (size < max) parts.push(r.value.subarray(0, max - size))
+        size += r.value.byteLength
+      }
+    } catch { /* cancelled or broken: what arrived stands */ }
+  })()
+  return { done, text: () => Buffer.concat(parts).toString('utf8'), stop: () => { void reader.cancel().catch(() => {}) } }
 }
 
 /** The installed host CLI, run the children's way: --no-env-file --config=/dev/null, cwd '/', and the children's
  *  three-key env, so a call that leaves out --db still names the shared journal, never the private one (§10.4, §11.2,
- *  R39, P14). Never a session file: `end` takes the credential as --session-file. */
-export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>): HostCli {
+ *  R39, P14). Never a session file: `end` takes the credential as --session-file.
+ *  The timeout is a deadline the CLI cannot refuse: SIGTERM at `timeoutMs`, SIGKILL one grace later, and one more grace later
+ *  the answer is given with whatever was read, so a CLI that ignores SIGTERM, or a grandchild that holds the output pipes
+ *  open, never holds up the caller (Task 63 conformance-4-10). */
+export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>, o: HostCliOptions = {}): HostCli {
   const env = childEnv({ bun: spec.bun, dist: spec.dist, journal: spec.journal, home: spec.home })
+  const killGrace = Math.max(1, Math.floor(o.killGraceMs ?? HOST_KILL_GRACE_MS))
+  const reapGrace = Math.max(1, Math.floor(o.reapGraceMs ?? HOST_REAP_GRACE_MS))
   return async (args, timeoutMs) => {
     let proc: ReturnType<typeof Bun.spawn>
     try {
@@ -56,16 +76,29 @@ export function makeHostCli(spec: Omit<ChildSpec, 'sessionFile'>): HostCli {
     } catch {
       return { code: null, stdout: '', stderr: 'the host CLI could not be started', cause: 'spawn_failed' }
     }
+    const running = () => proc.exitCode === null && proc.signalCode === null
+    const signal = (sig: 'SIGTERM' | 'SIGKILL') => { try { proc.kill(sig) } catch { /* gone already */ } }
+    // A timer above 2^31-1 ms fires at once (K65), so every sum is clamped.
+    const at = (ms: number) => Math.min(MAX_TIMER_MS, Math.max(1, Math.floor(ms)))
+    const ms = at(timeoutMs)
     let timedOut = false
-    const timer = setTimeout(() => { timedOut = true; proc.kill('SIGTERM') }, Math.min(MAX_TIMER_MS, Math.max(1, Math.floor(timeoutMs))))
-    const [stdout, stderr] = await Promise.all([
-      readCapped(proc.stdout as ReadableStream<Uint8Array>, HOST_OUTPUT_MAX),
-      readCapped(proc.stderr as ReadableStream<Uint8Array>, HOST_OUTPUT_MAX),
-    ])
-    await proc.exited
-    clearTimeout(timer)
-    const code = timedOut ? null : proc.exitCode
-    return code === null ? { code, stdout, stderr, cause: timedOut ? 'timeout' : 'signal' } : { code, stdout, stderr }
+    const timers = [
+      setTimeout(() => { if (running()) { timedOut = true; signal('SIGTERM') } }, ms),
+      setTimeout(() => { if (running()) signal('SIGKILL') }, at(ms + killGrace)),
+    ]
+    const out = capture(proc.stdout as ReadableStream<Uint8Array>, HOST_OUTPUT_MAX)
+    const err = capture(proc.stderr as ReadableStream<Uint8Array>, HOST_OUTPUT_MAX)
+    let late: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<'late'>((resolve) => { late = setTimeout(() => resolve('late'), at(ms + killGrace + reapGrace)) })
+    const how = await Promise.race([Promise.all([out.done, err.done, proc.exited]).then(() => 'done' as const), deadline])
+    for (const t of [...timers, late]) clearTimeout(t)
+    if (how === 'late') {
+      if (running()) signal('SIGKILL')
+      out.stop()
+      err.stop()
+    }
+    const code = timedOut ? null : proc.exitCode // past the deadline there is no answer, even from a CLI that then exited 0
+    return code === null ? { code, stdout: out.text(), stderr: err.text(), cause: timedOut ? 'timeout' : 'signal' } : { code, stdout: out.text(), stderr: err.text() }
   }
 }
 

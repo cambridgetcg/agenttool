@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { TIMING } from '../src/timing.ts'
 import { CollabChild, type CallOutcome } from '../src/air/children.ts'
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
-import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool, type HostCli } from '../src/air/pool.ts'
+import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool, type HostCli, type HostCliOptions } from '../src/air/pool.ts'
 import { rolePrefix } from '../src/air/stamp.ts'
 import { newStartNonce } from '../src/link/messages.ts'
 import { COLLAB_DIST, temp, writeStub } from './helpers.ts'
@@ -671,10 +671,10 @@ describe('retirement guards its lineage while it ends the session (Task 40b revi
 })
 
 describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
-  const hostWith = (script: string, bun = process.execPath) => {
+  const hostWith = (script: string, bun = process.execPath, o?: HostCliOptions) => {
     const dist = temp('cb-hostcli-')
     writeFileSync(join(dist, 'agenttool-collab-host.js'), script)
-    return makeHostCli({ bun, dist, journal: '/j/collab.sqlite', home: temp('cb-hostcli-home-') })
+    return makeHostCli({ bun, dist, journal: '/j/collab.sqlite', home: temp('cb-hostcli-home-') }, o)
   }
 
   test('an exit code has no cause', async () => {
@@ -697,6 +697,24 @@ describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
     const r = await hostWith('', '/nonexistent/bun')(['x'], 5_000)
     expect(r).toMatchObject({ code: null, cause: 'spawn_failed' })
   })
+
+  // Task 63 conformance-4-10: the timeout is a deadline, not a request. Both stubs end by themselves after 8 s, so a build that
+  // waits for them leaves no process behind, and fails the elapsed-time check instead of hanging the suite.
+  test('a host CLI that ignores SIGTERM is killed after the grace and answered as a timeout', async () => {
+    const t0 = Date.now()
+    const r = await hostWith("process.on('SIGTERM', () => {})\nsetTimeout(() => process.exit(0), 8000)\n", process.execPath, { killGraceMs: 200, reapGraceMs: 200 })(['x'], 300)
+    expect(r).toMatchObject({ code: null, cause: 'timeout' })
+    expect(Date.now() - t0).toBeLessThan(4_000)
+  }, 30_000)
+
+  test('a grandchild that keeps the output pipes open cannot hold the answer past the deadline', async () => {
+    const t0 = Date.now()
+    // The CLI itself exits 0 at once; a sleeping grandchild inherits its stdout and stderr and holds both open for 8 s.
+    const script = "Bun.spawn(['/bin/sleep', '8'], { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })\nprocess.exit(0)\n"
+    const r = await hostWith(script, process.execPath, { killGraceMs: 200, reapGraceMs: 200 })(['x'], 300)
+    expect(r.code).toBe(0) // the exit status it really had stands; only the unread rest of its output is given up
+    expect(Date.now() - t0).toBeLessThan(4_000)
+  }, 30_000)
 })
 
 describe('a hub-start reconcile that cannot write lineages.json uses a §9.2 status word (Task 63 conformance-4-8)', () => {
