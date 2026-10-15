@@ -47,6 +47,16 @@ describe('gate entry', () => {
     expect(gateLines(n.paths).map((e) => [e.form, e.outcome])).toEqual([['bad', 'refused']])
   })
 
+  test('a free-text command puts no word of the client\'s into the hash-chained ledger (Task 63 gate-2-1)', async () => {
+    const n = nuance()
+    const r = await ssh(n, `summarize the ${MARKER} payroll repo`)
+    expect(r.code).toBe(64)
+    const line = gateLines(n.paths)[0]!
+    expect([line.form, line.outcome, line.code]).toEqual(['bad', 'refused', `len ${`summarize the ${MARKER} payroll repo`.length}, first token not shown`])
+    const raw = readFileSync(n.paths.ledger, 'utf8')
+    for (const word of ['summarize', MARKER, 'payroll']) expect(raw).not.toContain(word)
+  })
+
   test('an upload-pack-shaped refusal answers a pkt-line ERR', async () => {
     const n = nuance()
     const r = await ssh(n, "git-upload-pack 'relative/path'")

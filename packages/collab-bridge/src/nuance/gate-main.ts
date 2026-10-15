@@ -82,7 +82,7 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
     if (!cmd) {
       if (uploadPackShaped(raw)) out.write(pktLineErr('bad_command'))
       say("refused: the only forms are hello, relay 1 <nonce> and git-upload-pack '<path>'")
-      record('bad', 'refused', describeCommand(raw))   // its length and a program-like first token, never the command
+      record('bad', 'refused', describeCommand(raw))   // its length and, for a listed program only, its name; never a word the client chose
       return GATE_REFUSED_EXIT
     }
     formSeen = cmd.form

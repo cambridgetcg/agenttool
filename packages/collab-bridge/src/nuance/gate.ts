@@ -36,14 +36,26 @@ export function uploadPackShaped(raw: string | undefined): boolean {
 }
 
 /**
- * What the ledger may say about a refused command (Summon's describeCommand, verbatim). The ledger is hash-chained and
- * cannot be redacted later, and a client can put anything in SSH_ORIGINAL_COMMAND, including a prompt, so this is
- * content-free: the byte length, and the first token only when it looks like a program name.
+ * The program names a first token may be reported as: the gate's own words and what a misdirected client really runs
+ * (file transfer, a shell, git's other two services). Fixed in this file, so no client text is ever matched by shape.
+ */
+const KNOWN_PROGRAMS: ReadonlySet<string> = new Set([
+  'hello', 'relay', 'git-upload-pack', 'git-receive-pack', 'git-upload-archive',
+  'scp', 'sftp', 'sftp-server', 'internal-sftp', 'rsync',
+  'ssh', 'sh', 'bash', 'zsh', 'ls', 'cat', 'id', 'env', 'uname', 'whoami', 'echo', 'sudo', 'curl', 'claude',
+])
+
+/**
+ * What the ledger may say about a refused command. The ledger is hash-chained and cannot be redacted later, and a client
+ * can put anything in SSH_ORIGINAL_COMMAND, including a prompt, so this is content-free (spec §5.2, C13): the byte length,
+ * and the first token only when it is exactly one of KNOWN_PROGRAMS. Summon's describeCommand named any lower-case word
+ * of up to 16 characters, so the first word of any prompt got through; this one never reports a word the client chose
+ * (Task 63 gate-2-1).
  */
 export function describeCommand(raw: string | undefined): string {
   if (raw === undefined) return 'unset'
   const first = raw.split(/\s/, 1)[0]!
-  return `len ${Buffer.byteLength(raw, 'utf8')}, first token ${/^[a-z][a-z-]{0,15}$/.test(first) ? `"${first}"` : 'not shown'}`
+  return `len ${Buffer.byteLength(raw, 'utf8')}, first token ${KNOWN_PROGRAMS.has(first) ? `"${first}"` : 'not shown'}`
 }
 
 export interface Hello { v: 1; device: string; build: string; prepared: string; expiry: string; user: string; seat_public: string;
