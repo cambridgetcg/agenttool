@@ -19,6 +19,12 @@ export function nuanceStatus(paths: NuancePaths, mono: () => number, o: { staleM
   const now = mono()
   const relay = readRelayStatus(paths)
   if (!relay || !alive(relay.pid)) return { relay: 'none', stale_since_mono: null, last_ping_age_s: null, pipes, refused }
+  // CLOCK_MONOTONIC is system-wide and never runs backwards within a boot, so a reading ahead of now was written under an
+  // earlier boot (a power loss or SIGKILL leaves relay.json behind): this pid is some other process, and now - heard would
+  // be negative, which is "fresh" (Task 63 relay-2-3).
+  if (relay.started_mono > now || (relay.last_ping_mono !== null && relay.last_ping_mono > now)) {
+    return { relay: 'none', stale_since_mono: null, last_ping_age_s: null, pipes, refused }
+  }
   const lastPingAge = relay.last_ping_mono === null ? null : Math.max(0, Math.round((now - relay.last_ping_mono) / 1000))
   const heard = relay.last_ping_mono ?? relay.started_mono   // the relay's own rule: until the first PING, its start counts (§5.3)
   if (now - heard <= staleMs) return { relay: 'up', stale_since_mono: null, last_ping_age_s: lastPingAge, pipes, refused }

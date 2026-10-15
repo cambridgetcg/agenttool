@@ -56,6 +56,23 @@ describe('collab-bridge status', () => {
     expect(nuanceStatus(paths, () => 35_000).relay).toBe('none')
   })
 
+  test('a relay.json written under an earlier boot, whose clock ran ahead of this one, is not a live relay (Task 63 relay-2-3)', () => {
+    const paths = nuance()
+    // A power loss or SIGKILL leaves relay.json (only finish() removes it). CLOCK_MONOTONIC restarts near 0 at boot, so the
+    // old readings are ahead of `now`; if any process has the recorded pid, now - heard is negative and used to read as up.
+    writeRelayJson(paths, { pid: process.pid, started_mono: 260_000_000, last_ping_mono: 260_000_000, streams: 1 })
+    expect(nuanceStatus(paths, () => 5_000)).toEqual({ relay: 'none', stale_since_mono: null, last_ping_age_s: null, pipes: 0, refused: [] })
+    expect(renderNuanceStatus(nuanceStatus(paths, () => 5_000), 5_000)).toEqual(['relay: none', 'last PING: none', 'pipes attached: 0'])
+    writeRelayJson(paths, { pid: process.pid, started_mono: 260_000_000, last_ping_mono: null, streams: 0 })
+    expect(nuanceStatus(paths, () => 5_000).relay).toBe('none')
+    // Either reading ahead of now is enough, though a real relay's PING can never be ahead of its start.
+    writeRelayJson(paths, { pid: process.pid, started_mono: 1_000, last_ping_mono: 260_000_000, streams: 0 })
+    expect(nuanceStatus(paths, () => 5_000).relay).toBe('none')
+    // A reading that is exactly now is a live relay's: both clocks are the same system-wide CLOCK_MONOTONIC.
+    writeRelayJson(paths, { pid: process.pid, started_mono: 5_000, last_ping_mono: 5_000, streams: 0 })
+    expect(nuanceStatus(paths, () => 5_000)).toMatchObject({ relay: 'up', last_ping_age_s: 0 })
+  })
+
   test('counts ready pipes and lists refused codes', () => {
     const paths = nuance()
     writePipeRecord(paths, rec(4100, process.pid))
