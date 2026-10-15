@@ -68,9 +68,10 @@ the native agent from reading them. The target's broad-read opt-in is required.
 4. Nuance's native CLI/version and model availability are observed, then one
    explicit Astra hello completes through Summon. No silent model fallback.
 
-The proposed target runtime entry is below; merge it into the existing allowlist
-without replacing other runtimes or folders. It has not been applied. The first
-hello uses the already allowlisted `~/Projects/collab-trial` working folder.
+The target runtime entry is below; merge it into the existing allowlist without
+replacing other runtimes or folders. It has not been applied: the first live
+request was refused because `codex` was absent. The hello uses the already
+allowlisted `~/Projects/collab-trial` working folder.
 
 ```yaml
 - id: codex
@@ -99,12 +100,9 @@ compiled runner or prove that this account can use the model.
   cover admission, launch, replay, result parsing, cancellation with descendants,
   timeout, supervisor restart and preservation of unrelated processes. These use
   fixture CLIs; they do not establish Nuance account or model availability.
-- Nuance inventory reports an executable at `/opt/homebrew/bin/codex`, but its
-  version probe returned null. The nonzero login-status result does not by
-  itself distinguish a startup failure from a logged-out account. Yu subsequently
-  reported Nuance's native version as `0.162.1` on 2026-10-15, matching the tested
-  version. This is user-reported evidence; the updated runner's own version check
-  and an actual model reply remain to be observed after installation.
+- Before this update, Nuance inventory returned a null Codex version and false
+  login status; that did not distinguish launcher failure from logout. Yu then
+  reported version `0.162.1`, followed by the installation receipt below.
 - Nuance Sonnet consultation `nuance/smn_01a13f291c3d7ae8887394097d998896`
   completed in one turn. It recommends a separate read-only Codex adapter and
   conservative parsing. It used no tools or files; its advice is not a native
@@ -125,11 +123,31 @@ compiled runner or prove that this account can use the model.
   the HF training host test environment is missing. Its result is not a passing
   repository-wide gate; no unrelated dependency preparation was performed.
 
+## Nuance installation and first request (2026-10-15)
+
+Yu returned installer output for user `macair`, build `073508aa`, prepared
+`20261015112308` UTC, key expiry `20270113`. The build/prepared fields match the
+local bundle manifest. Its reported host fingerprint matched the independently
+read existing Air pin. The pin helper preserved that key and SSH configuration
+and updated only the expiry value. This is a user-reported installation receipt,
+not an independent hash readback of Nuance's installed programs.
+
+A fresh inventory over pinned SSH at `2026-10-15T11:35:04.890Z` returned
+`/opt/homebrew/bin/codex`, `codex-cli 0.162.1`, `logged_in: true`, user `macair`
+and the expected GUI session. That verifies the CLI startup/login probe, not
+model availability.
+
+The first review hello explicitly selected `gpt-6-astra`, no effort/provider
+override, and `~/Projects/collab-trial`. Admission returned
+`refused(outside_allowlist): runtime codex is not allowed`; no model job was
+started. The target runtime entry above still needs to be added locally on
+Nuance before a new hello can be admitted.
+
 Official references: [non-interactive JSONL](https://learn.chatgpt.com/docs/non-interactive-mode),
 [CLI flags](https://learn.chatgpt.com/docs/developer-commands?surface=cli),
 [configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 Implementation, local Summon verification, the native isolation probe and remote
-source review are complete. Nuance's version is user-confirmed. Installation,
-target allowlist and live Astra reply remain pending. Do not describe this route
-as connected yet.
+source review are complete. Nuance installation is user-reported and native
+version/login are observed through authenticated inventory. The target allowlist
+and live Astra reply remain pending. Do not describe this route as connected yet.

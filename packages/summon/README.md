@@ -4,8 +4,9 @@ Start a new agent session on another of Yu's Macs. Design: `docs/superpowers/spe
 
 The [Codex review extension](CODEX.md) adds native Codex jobs on a separately
 reviewed runner. It requires an explicit target model/folder allowlist and
-`reads_anywhere: true`. The installed Phase 0 runner remains Claude-only until
-updated; a source checkout is not a live connection receipt.
+`reads_anywhere: true`. Existing Phase 0 installations remain Claude-only until
+updated; a source checkout is not a live connection receipt. The contract records
+Nuance's installation and remaining live checks separately.
 
 Phase 0 (SSH at home): `summon nuance claude --model sonnet --cwd '~/Projects/x' --review --prompt-file task.md`,
 then `summon status|result nuance/smn_<id>`. `--job` may be given (it is Phase 0's only mode); `--live` is refused until
