@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadAllowlist, type Allowlist, type AllowlistFolder } from '../src/allowlist.ts'
-import { checkUploadPackPath, gitEnv, pktLineErr, runFetchGate, UPLOAD_PACK_CONFIG, uploadPackArgv, type FetchGateCtx } from '../src/nuance/fetch-gate.ts'
+import { checkUploadPackPath, FETCH_STOPPED_EXIT, gitEnv, pktLineErr, runFetchGate, UPLOAD_PACK_CONFIG, uploadPackArgv, type FetchGateCtx } from '../src/nuance/fetch-gate.ts'
 import { sha256File, type ResolvedGit } from '../src/nuance/git-resolve.ts'
 import type { Share } from '../src/nuance/installed.ts'
 import { cleanupTmps, temp, writeStub } from './helpers.ts'
@@ -284,5 +284,58 @@ describe('runFetchGate', () => {
       if (before === undefined) delete process.env.GIT_PROTOCOL
       else process.env.GIT_PROTOCOL = before
     }
+  }, 30_000)
+})
+
+describe('a fetch whose client has gone or run out of time (Task 63 gate-1-9)', () => {
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
+
+  /** A recorded git that writes for ever. It records its pid, and is that very process (exec), so a kill reaches it. */
+  function endlessGit(n: Nuance, body: string) {
+    const dir = temp('cb-endless-git-')
+    const stub = writeStub(dir, 'git', `echo $$ > '${dir}/pid'\n${body}`)
+    const git = { path: stub, version: '2.52.0', sha256: sha256File(stub), guard: true, apple: false }
+    return { ctx: ctxOf(n, undefined, git), pid: () => Number(readFileSync(join(dir, 'pid'), 'utf8').trim()) }
+  }
+
+  test('once the sink says the client is gone, git is killed, nothing more is written, and the outcome is client_gone, not served', async () => {
+    const n = makeNuance()
+    const g = endlessGit(n, 'exec /usr/bin/yes')
+    let writes = 0
+    const io = { stdin: new Blob(['']).stream(), stdout: { write: () => { writes++ } }, stderr: { write() {} },
+      stopped: () => (writes >= 3 ? ('client_gone' as const) : null) }
+    const r = await runFetchGate(n.gitdir, g.ctx, io)
+    expect(r).toMatchObject({ exit: FETCH_STOPPED_EXIT, outcome: 'client_gone' })
+    expect(writes).toBe(3)                                   // it stopped at the first chunk after the sink said so
+    expect(alive(g.pid())).toBe(false)                       // git was stopped, not left to run into a dead sink
+  }, 30_000)
+
+  test('a deadline stops it the same way, with the outcome deadline', async () => {
+    const n = makeNuance()
+    const g = endlessGit(n, 'exec /usr/bin/yes')
+    let writes = 0
+    const io = { stdin: new Blob(['']).stream(), stdout: { write: () => { writes++ } }, stderr: { write() {} },
+      stopped: () => (writes >= 2 ? ('deadline' as const) : null) }
+    expect(await runFetchGate(n.gitdir, g.ctx, io)).toMatchObject({ exit: FETCH_STOPPED_EXIT, outcome: 'deadline' })
+    expect(alive(g.pid())).toBe(false)
+  }, 30_000)
+
+  test('a git that ignores SIGTERM is killed with SIGKILL after the grace', async () => {
+    const n = makeNuance()
+    const g = endlessGit(n, "trap '' TERM\nwhile :; do echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done")
+    let writes = 0
+    const io = { stdin: new Blob(['']).stream(), stdout: { write: () => { writes++ } }, stderr: { write() {} },
+      stopped: () => (writes >= 1 ? ('client_gone' as const) : null), killGraceMs: 300 }
+    const t0 = Date.now()
+    expect(await runFetchGate(n.gitdir, g.ctx, io)).toMatchObject({ exit: FETCH_STOPPED_EXIT, outcome: 'client_gone' })
+    expect(Date.now() - t0).toBeLessThan(10_000)
+    expect(alive(g.pid())).toBe(false)
+  }, 30_000)
+
+  test('a fetch that is never told to stop is served as before', async () => {
+    const n = makeNuance()
+    const c = captureIo()
+    const io = { ...c.io, stopped: () => null }
+    expect(await runFetchGate(n.gitdir, ctxOf(n), io)).toMatchObject({ outcome: 'git_failed' })   // real upload-pack on an empty request
   }, 30_000)
 })

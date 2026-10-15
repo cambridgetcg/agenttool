@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { readLedger, verifyLedger } from '../src/ledger.ts'
 import { encodeFrame, FRAME_TYPE, FrameDecoder, PreambleScanner, type Frame } from '../src/link/frame.ts'
 import { MAX_PIPE_TO_HUB } from '../src/link/messages.ts'
-import { pktLineErr } from '../src/nuance/fetch-gate.ts'
+import { FETCH_STOPPED_EXIT, pktLineErr } from '../src/nuance/fetch-gate.ts'
 import { runGate } from '../src/nuance/gate-main.ts'
 import { nuancePaths, type NuancePaths } from '../src/paths.ts'
 import { gateFromSource, makeFakeSsh, type FakeSsh } from './fake-ssh.ts'
@@ -456,11 +456,64 @@ describe('a served pack outlives the old 2 s exit cap (Task 24 review)', () => {
     // The suite's time scale: 60 s of fetch deadline is 600 ms here.
     const env = { ...w.h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${w.gitdir}'`, COLLAB_BRIDGE_TEST_TIME_SCALE: '0.01' }
     const t0 = Date.now()
-    expect(await runGate(env, io)).toBe(0)
+    expect(await runGate(env, io)).toBe(FETCH_STOPPED_EXIT)
     const waited = Date.now() - t0
     expect(waited).toBeGreaterThanOrEqual(500)           // it did wait for the reader first
     expect(waited).toBeLessThan(15_000)                  // and then stopped waiting
     expect(writes).toBeGreaterThan(0)
-    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome])).toEqual([['upload-pack', 'served']])
+    // Not 'served': the Air never received this pack (Task 63 gate-1-9).
+    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome])).toEqual([['upload-pack', 'deadline']])
+  }, 30_000)
+})
+
+describe('a fetch to a client that has gone or timed out stops git and says so (Task 63 gate-1-9)', () => {
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
+
+  /** An installed home whose recorded git writes for ever (a stub that is the git process itself), and the pid it recorded. */
+  function endlessWorld() {
+    const dir = temp('cb-endless-')
+    const stub = join(dir, 'git')
+    writeFileSync(stub, `#!/bin/sh\necho $$ > '${dir}/pid'\nexec /usr/bin/yes\n`, { mode: 0o755 })
+    const h = installedNuanceHome({ share: join('Projects', 'collab-trial'),
+      git: { path: stub, version: '2.52.0', sha256: sha256File(stub), guard: true, apple: false } })
+    secretBranchRepo(h.share, h.home)
+    return { h, gitdir: join(h.share, '.git'), pid: () => Number(readFileSync(join(dir, 'pid'), 'utf8').trim()) }
+  }
+  const request = () => ({ stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }), stderr: { write() {} } })
+
+  test('a write that is rejected: git is killed, the line says client_gone, and it does not keep draining', async () => {
+    const w = endlessWorld()
+    let writes = 0
+    const io = { ...request(), stdout: { write: () => { writes++; return Promise.reject(new Error('EPIPE')) } } }
+    const env = { ...w.h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${w.gitdir}'` }
+    expect(await runGate(env, io)).toBe(FETCH_STOPPED_EXIT)
+    expect(writes).toBe(1)                               // the first failure ended it; no second chunk was offered
+    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome, e.code ?? '-'])).toEqual([['upload-pack', 'client_gone', '-']])
+    expect(alive(w.pid())).toBe(false)
+  }, 30_000)
+
+  test('a sink that reports itself closed (main.ts\'s drainSink after an EPIPE) is a client that has gone too', async () => {
+    const w = endlessWorld()
+    let writes = 0
+    const stdout = { write: () => { writes++ }, closed: true }      // drainSink settles at once and writes nothing once closed
+    const env = { ...w.h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${w.gitdir}'` }
+    expect(await runGate(env, { ...request(), stdout })).toBe(FETCH_STOPPED_EXIT)
+    expect(writes).toBe(1)
+    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome, e.code ?? '-'])).toEqual([['upload-pack', 'client_gone', '-']])
+    expect(alive(w.pid())).toBe(false)
+  }, 30_000)
+
+  test('past the deadline, a reader that keeps up still stops the fetch: git is killed and the line says deadline', async () => {
+    const w = endlessWorld()
+    let writes = 0
+    const io = { ...request(), stdout: { write: () => { writes++ } } }
+    // 60 s of fetch deadline is 300 ms at this scale; git writes for ever, so only the deadline can end it.
+    const env = { ...w.h.env, SSH_ORIGINAL_COMMAND: `git-upload-pack '${w.gitdir}'`, COLLAB_BRIDGE_TEST_TIME_SCALE: '0.005' }
+    const t0 = Date.now()
+    expect(await runGate(env, io)).toBe(FETCH_STOPPED_EXIT)
+    expect(Date.now() - t0).toBeLessThan(15_000)
+    expect(writes).toBeGreaterThan(0)
+    expect(gateLines(w.h.paths).map((e) => [e.form, e.outcome, e.code ?? '-'])).toEqual([['upload-pack', 'deadline', '-']])
+    expect(alive(w.pid())).toBe(false)
   }, 30_000)
 })

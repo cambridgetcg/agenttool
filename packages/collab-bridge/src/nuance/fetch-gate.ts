@@ -135,10 +135,19 @@ export function pktLineErr(message: string): Uint8Array {
   return Buffer.from(`${(4 + 4 + message.length + 1).toString(16).padStart(4, '0')}ERR ${message}\n`, 'utf8')
 }
 
+/** Why a fetch was stopped before git finished: the client's end went away, or the Air's own fetch deadline passed (§7.3 step 4). */
+export type FetchStop = 'client_gone' | 'deadline'
+/** The gate's exit for a fetch it stopped: nobody is reading it (the Air has gone or has given up), so it only names the case. EX_TEMPFAIL. */
+export const FETCH_STOPPED_EXIT = 75
+
 export interface FetchGateIo {
   stdin: ReadableStream<Uint8Array>
-  stdout: { write(b: Uint8Array): void }      // may return a promise, which is awaited before the next chunk
+  stdout: { write(b: Uint8Array): void | Promise<void> }      // a promise is awaited before the next chunk
   stderr: { write(s: string): void }
+  /** Asked after every chunk: a reason once the client can no longer be served, else null. On a reason git is killed, not drained. */
+  stopped?: () => FetchStop | null
+  /** How long git gets to exit after SIGTERM before SIGKILL (default 2 s). */
+  killGraceMs?: number
 }
 
 /**
@@ -186,9 +195,23 @@ export async function runFetchGate(path: string, ctx: FetchGateCtx, io: FetchGat
     for await (const chunk of proc.stderr) io.stderr.write(dec.decode(chunk, { stream: true }))
   })()
   let bytes = 0
+  let stop: FetchStop | null = null
   for await (const chunk of proc.stdout) {
     bytes += chunk.byteLength
     await io.stdout.write(chunk)
+    // A pack for a client that is gone, or past the Air's deadline, is work for nobody: stop git instead of draining it.
+    stop = io.stopped?.() ?? null
+    if (stop) break
+  }
+  if (stop) {
+    const grace = io.killGraceMs ?? 2_000
+    try { proc.kill('SIGTERM') } catch { /* already gone */ }
+    const hardKill = setTimeout(() => { try { proc.kill('SIGKILL') } catch { /* already gone */ } }, grace)
+    await exited
+    clearTimeout(hardKill)
+    // git's children may still hold its pipes for a moment (they die on SIGPIPE), so the pumps get a bounded wait only.
+    await Promise.race([Promise.all([pumpIn, pumpErr]), new Promise<void>((r) => setTimeout(r, grace))])
+    return { exit: FETCH_STOPPED_EXIT, outcome: stop, bytes }
   }
   const code = await exited
   await Promise.all([pumpIn, pumpErr])
