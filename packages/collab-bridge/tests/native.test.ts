@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { closeSync, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { fullFsync, getuid, monoNowMs, passwdOfSelf, tryFlock, unlockFlock, writeFileDurable } from '../src/native.ts'
 import { cleanupTmps, temp } from './helpers.ts'
@@ -157,6 +157,28 @@ describe('writeFileDurable', () => {
     } finally { closeSync(reader) }
     expect(readdirSync(dir)).toEqual(['lineages.json'])
     expect(statSync(p).mode & 0o777).toBe(0o600)
+  })
+
+  test('the rename is made durable with F_FULLFSYNC on the directory, after the rename, as the file is (Task 63 relay-2-4)', () => {
+    const p = join(temp('cb-native-'), 'lineages.json')
+    const synced: Array<{ dir: boolean; renamed: boolean }> = []
+    // A plain fsync of the directory leaves the rename in the drive's cache (F12), so "the rename itself lasts" would not hold.
+    writeFileDurable(p, 'x', 0o600, { fullFsync: (fd) => { synced.push({ dir: fstatSync(fd).isDirectory(), renamed: existsSync(p) }); fullFsync(fd) } })
+    expect(synced).toEqual([{ dir: false, renamed: false }, { dir: true, renamed: true }])
+    expect(readFileSync(p, 'utf8')).toBe('x')
+  })
+
+  test('a volume that cannot fully sync a directory keeps the plain fsync, and the write has succeeded', () => {
+    const dir = temp('cb-native-')
+    const p = join(dir, 'lineages.json')
+    writeFileDurable(p, 'old')
+    writeFileDurable(p, 'new', 0o600, { fullFsync: (fd) => { if (fstatSync(fd).isDirectory()) throw new Error('ENOTSUP'); fullFsync(fd) } })
+    expect(readFileSync(p, 'utf8')).toBe('new')
+    expect(readdirSync(dir)).toEqual(['lineages.json'])
+    // A failure on the file itself, before the rename, still throws and leaves the old file.
+    expect(() => writeFileDurable(p, 'newer', 0o600, { fullFsync: () => { throw new Error('EIO') } })).toThrow('EIO')
+    expect(readFileSync(p, 'utf8')).toBe('new')
+    expect(readdirSync(dir)).toEqual(['lineages.json'])
   })
 
   test('the mode is set whatever the umask, and a missing dir throws and leaves nothing', () => {

@@ -86,10 +86,13 @@ export function monoNowMs(): number {
 
 /**
  * Replaces `path` whole or not at all: a fresh temp file in the same dir (O_EXCL, `mode`, default 0600, set whatever the
- * umask), every byte written, F_FULLFSYNC, rename over `path`, then an fsync of the dir so the rename itself lasts.
- * A failure before the rename removes the temp file and leaves `path` as it was.
+ * umask), every byte written, F_FULLFSYNC, rename over `path`, then F_FULLFSYNC of the dir so the rename itself lasts
+ * (a plain fsync would leave it in the drive's cache, F12). A volume that cannot fully sync a directory keeps the plain
+ * fsync: the rename has happened by then, so that is no failure of the write. A failure before the rename removes the temp
+ * file and leaves `path` as it was. `o.fullFsync` lets a test see which descriptors are synced and when.
  */
-export function writeFileDurable(path: string, data: string | Uint8Array, mode: number = 0o600): void {
+export function writeFileDurable(path: string, data: string | Uint8Array, mode: number = 0o600, o: { fullFsync?: (fd: number) => void } = {}): void {
+  const sync = o.fullFsync ?? fullFsync
   const dir = dirname(path)
   const tmp = join(dir, `.${basename(path)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`)
   const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : data
@@ -98,7 +101,7 @@ export function writeFileDurable(path: string, data: string | Uint8Array, mode: 
   try {
     fchmodSync(fd, mode)
     for (let off = 0; off < bytes.length;) off += writeSync(fd, bytes, off, bytes.length - off)
-    fullFsync(fd)
+    sync(fd)
     closing = true // never close twice: the number may already belong to another open file
     closeSync(fd)
   } catch (e) {
@@ -111,5 +114,7 @@ export function writeFileDurable(path: string, data: string | Uint8Array, mode: 
     throw e
   }
   const d = openSync(dir, 'r')
-  try { fsyncSync(d) } finally { closeSync(d) }
+  try {
+    try { sync(d) } catch { fsyncSync(d) }
+  } finally { closeSync(d) }
 }
