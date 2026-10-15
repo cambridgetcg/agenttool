@@ -75,6 +75,27 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
     expect(readdirSync(o.home)).toEqual([])
   }, T)
 
+  test('refuses a binary built while the tree changed under the build: edited, new file or moved HEAD (Task 63 installer-1-5)', async () => {
+    const tmpl = (repo: string) => join(repo, 'packages', 'collab-bridge', 'nuance', 'install.sh.tmpl')
+    const during: Array<[string, (repo: string) => void]> = [
+      ['a tracked file edited', (repo) => appendFileSync(tmpl(repo), '# edited during the build\n')],
+      ['an untracked file added', (repo) => writeFileSync(join(repo, 'new-source.ts'), 'export {}\n')],
+      ['HEAD moved to another clean commit', (repo) => { commitFiles(repo, { 'later.txt': 'a later commit\n' }, 'later') }],
+    ]
+    for (const [name, change] of during) {
+      const o = input()
+      const stand = standInBuild()
+      o.build = () => { change(o.repo); return stand() }
+      await expect(prepareBundle(o), name).rejects.toThrow(/changed while .* was built/)
+      // Nothing of the bundle exists: no folder, no device file.
+      expect(readdirSync(o.home).filter((n) => n.startsWith('collab-bridge-')), name).toEqual([])
+      expect(existsSync(airPaths(o.home).deviceFile('nuance')), name).toBe(false)
+    }
+    // A build that leaves the tree and HEAD alone is as before.
+    const ok = await prepareBundle(input())
+    expect(existsSync(join(ok.bundle, 'collab-install.sh'))).toBe(true)
+  }, T)
+
   test('expiry is the pairing date + 90 days, YYYYMMDD', async () => {
     const a = await prepareBundle(input())
     expect([a.expiry, a.preparedAt]).toEqual(['20270111', '20261013123456'])

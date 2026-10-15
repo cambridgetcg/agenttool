@@ -38,6 +38,13 @@ export function treeClean(repo: string): boolean {
   return r.ok && r.out === ''
 }
 
+/** The commit HEAD names in `repo`, or null when git cannot say. */
+export function headCommit(repo: string): string | null {
+  const r = git(repo, ['rev-parse', '--verify', 'HEAD^{commit}'])
+  const oid = r.out.trim()
+  return r.ok && HEX40.test(oid) ? oid : null
+}
+
 export async function buildHub(o: { repo: string; outDir: string; installedDist: string }): Promise<HubBuildResult> {
   for (const p of [o.repo, o.outDir, o.installedDist]) if (!isAbsolute(p)) throw new Error(`buildHub: not an absolute path: ${p}`)
   if (!treeClean(o.repo)) {

@@ -20,7 +20,7 @@ import { sharePathProblem } from '../src/share-path.ts'
 import { systemBin } from '../src/sysbin.ts'
 import { writeToolsFile } from '../src/tools-digest.ts'
 import { buildNuance, type NuanceBuild } from './build-nuance.ts'
-import { treeClean } from './build-hub.ts'
+import { headCommit, treeClean } from './build-hub.ts'
 
 export interface InstallerValues { device: string; user: string; pubkey: string; expiry: string; preparedAt: string; build: string;
   shaBinary: string; shaManifest: string; shaTools: string; shaTrialBundle: string; trailer: string; shares: string[] }
@@ -245,6 +245,8 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   }
   // 2. The binary that ships must be a reviewed commit's (Tasks 63 and 65), so the tree it is built from is clean.
   if (!treeClean(o.repo)) throw new Error(`prepare: ${o.repo} has uncommitted changes; the shipped binary must be a reviewed commit's`)
+  const builtFrom = headCommit(o.repo)
+  if (builtFrom === null) throw new Error(`prepare: cannot read the commit HEAD names in ${o.repo}`)
 
   // 3. The trial repo, before any bundle is made: its commit becomes the shared base on both Macs.
   const git = airGit({ git: o.git, home: o.home })
@@ -262,6 +264,11 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
     return buildNuance(out)
   })
   const built = build()
+  // The check above came before the trial repo, the key and the compile; sessions share this worktree. The binary ships only
+  // if the tree is still clean and HEAD is still the commit it was clean at, or it may hold edits nobody reviewed.
+  if (!treeClean(o.repo) || headCommit(o.repo) !== builtFrom) {
+    throw new Error(`prepare: ${o.repo} changed while the binary was built (an edit, a new file or another commit); nothing was bundled. Run prepare again`)
+  }
   // Collab's tools/list from one probe child on a throwaway journal, never the shared or private one (§10.4 step 3).
   const probe = await probeCollabTools({ bun: o.bun, dist: o.collabDist, tmpRoot: tmpdir() })
   if (!probe.ok) {
