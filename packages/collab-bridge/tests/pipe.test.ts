@@ -168,6 +168,22 @@ describe('the pipe refuses before sending', () => {
     expect(calls(l)).toHaveLength(0)
   })
 
+  test('a lineage file that cannot be read before a mutating call is refused hub_away, not sent, never a rejection (Task 63 pipe-3-1)', async () => {
+    const f = nuanceFixture()
+    const l = await link(f)
+    const p = await started(pipeDeps(f))
+    await attached(l)
+    rmSync(f.paths.lineageFile(KEY))
+    mkdirSync(f.paths.lineageFile(KEY))   // a read error that is not ENOENT (EISDIR) throws instead of reading as none
+    const r = await p.handleCall(1, 'collab_report_append', report('k1'))
+    expect(codeOf(r)).toBe('hub_away')
+    expect(r.structuredContent).toMatchObject({ delivered: false, message: 'This pipe could not record the call before sending it; nothing was sent.' })
+    expect(r.structuredContent!.call_ref).toMatch(/^lin_[0-9a-f]{32}:[0-9a-f]{8}:0$/)
+    await Bun.sleep(100)
+    expect(calls(l)).toHaveLength(0)
+    expect(ledgerEvents(f.paths)).toContain('inflight_unwritable')
+  })
+
   test('a 3 MiB argument is frame_too_large, never written, and other in-flight calls are unaffected', async () => {
     const f = nuanceFixture()
     const l = await link(f)

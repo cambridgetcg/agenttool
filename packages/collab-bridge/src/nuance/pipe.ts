@@ -230,8 +230,17 @@ export class Pipe {
     const recorded = !UNRECORDED_TOOLS.has(name)
     let replay = false
     if (recorded) {
-      const records = unresolved(deps.paths, this.key)
-      const prior = priorConflict(records, name, args, this.session)
+      // A lineage file that cannot be read (corrupt, a read error, a lock timeout) is answered as not sent, like a record that
+      // cannot be written: a rejection here would reach the agent as no answer, or as an unknown outcome for a call never sent.
+      let records: ReturnType<typeof unresolved>
+      let prior: ReturnType<typeof priorConflict>
+      try {
+        records = unresolved(deps.paths, this.key)
+        prior = priorConflict(records, name, args, this.session)
+      } catch {
+        this.ledger({ event: 'inflight_unwritable', call_ref: ref, tool: name, lineage: this.lineage })
+        return refuse('hub_away', MESSAGES.unrecorded)
+      }
       if (prior) {
         const old = JSON.stringify(prior.idempotency_key)
         return refuse('prior_outcome_unknown', isStale(prior, this.session)
