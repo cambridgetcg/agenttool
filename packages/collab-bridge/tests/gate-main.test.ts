@@ -340,17 +340,55 @@ describe('gate entry: a reply to a reader that has gone (Task 63 gate-1-8 round 
     expect(lines(r.err)).toHaveLength(1)
   })
 
-  test('the ERR bad_command, the hello answer and the ERR not_installed are the same: tried, ledgered, nothing unhandled', async () => {
+  test('the ERR bad_command and the ERR not_installed are tried, ledgered, nothing unhandled', async () => {
     const n = nuance()
     const bad = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: "git-upload-pack 'relative/path'" })
     expect([bad.code, bad.unhandled, Array.from(bad.tried)]).toEqual([64, [], Array.from(pktLineErr('bad_command'))])
     const notInstalled = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: "git-upload-pack '/Users/macair/Projects/collab-trial/.git'" })
     expect([notInstalled.code, notInstalled.unhandled, Array.from(notInstalled.tried)]).toEqual([64, [], Array.from(pktLineErr('not_installed'))])
-    installForHello(n.paths)
-    const hello = await runGone({ ...n.env, SSH_ORIGINAL_COMMAND: 'hello' })
-    expect([hello.code, hello.unhandled, JSON.parse(hello.tried.toString('utf8')).v]).toEqual([0, [], 1])
-    expect(hello.err).toBe('')
-    expect(gateTriples(n.paths)).toEqual([['bad', 'refused', expect.any(String)], ['upload-pack', 'refused', 'not_installed'], ['hello', 'ok', undefined]])
+    expect(gateTriples(n.paths)).toEqual([['bad', 'refused', expect.any(String)], ['upload-pack', 'refused', 'not_installed']])
+  })
+
+  // Task 63 new-gate-hello-write: the hello answer is the one reply the Air acts on, so a write that was rejected (or a sink that
+  // says its reader is gone, which is how main.ts's drainSink reports a failed write: it never rejects) is no 'ok' and no exit 0.
+  describe('a hello whose answer did not reach the reader (Task 63 new-gate-hello-write)', () => {
+    const helloEnv = () => { const n = nuance(); installForHello(n.paths); return { n, env: { ...n.env, SSH_ORIGINAL_COMMAND: 'hello' } } }
+
+    test('a rejected write is ledgered as an error, one stderr line, exit 75, and nothing is left unhandled', async () => {
+      const { n, env } = helloEnv()
+      const hello = await runGone(env)
+      expect(JSON.parse(hello.tried.toString('utf8')).v).toBe(1) // the answer was tried
+      expect([hello.code, hello.unhandled]).toEqual([FETCH_STOPPED_EXIT, []])
+      expect(lines(hello.err)).toHaveLength(1)
+      expect(gateTriples(n.paths)).toEqual([['hello', 'error', 'client_gone']])
+    })
+
+    test('a sink that reports itself closed after the write is the same, though its promise resolved', async () => {
+      const { n, env } = helloEnv()
+      let err = ''
+      const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }), stderr: { write(s: string) { err += s } },
+        stdout: { closed: true, write(_b: Uint8Array | string) { return Promise.resolve() } } }
+      expect(await runGate(env, io)).toBe(FETCH_STOPPED_EXIT)
+      expect(lines(err)).toHaveLength(1)
+      expect(gateTriples(n.paths)).toEqual([['hello', 'error', 'client_gone']])
+    })
+
+    test('a write that never settles is given up on at the handshake step deadline: error, deadline, not a hang and not ok', async () => {
+      const { n, env } = helloEnv()
+      const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }), stderr: { write(_s: string) {} },
+        stdout: { write(_b: Uint8Array | string) { return new Promise<void>(() => {}) } } }
+      const code = await runGate({ ...env, COLLAB_BRIDGE_TEST_TIME_SCALE: '0.01' }, io)
+      expect(code).toBe(FETCH_STOPPED_EXIT)
+      expect(gateTriples(n.paths)).toEqual([['hello', 'error', 'deadline']])
+    })
+
+    test('a delivered answer is still ok and exit 0, also from a sink whose write settles late but within the deadline', async () => {
+      const { n, env } = helloEnv()
+      const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }), stderr: { write(_s: string) {} },
+        stdout: { closed: false, write(_b: Uint8Array | string) { return Bun.sleep(5) } } }
+      expect(await runGate(env, io)).toBe(0)
+      expect(gateTriples(n.paths)).toEqual([['hello', 'ok', undefined]])
+    })
   })
 
   test('the ERR exception is the same: tried, ledgered, exit 70, nothing unhandled', async () => {

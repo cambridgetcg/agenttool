@@ -11,7 +11,7 @@ import { monoNowMs, passwdOfSelf } from '../native.ts'
 import { homeOf, nuancePaths, type NuancePaths } from '../paths.ts'
 import { systemBin, type Env } from '../sysbin.ts'
 import { scaled, TIMING } from '../timing.ts'
-import { pktLineErr, runFetchGate, type FetchGateCtx, type FetchStop } from './fetch-gate.ts'
+import { FETCH_STOPPED_EXIT, pktLineErr, runFetchGate, type FetchGateCtx, type FetchStop } from './fetch-gate.ts'
 import { buildHello, describeCommand, parseGateCommand, uploadPackShaped } from './gate.ts'
 import { readInstalled, readShares } from './installed.ts'
 import { runRelay } from './relay.ts'
@@ -115,7 +115,16 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
           record('hello', 'refused', 'hello_unavailable')
           return GATE_REFUSED_EXIT
         }
-        unawaited(out.write(JSON.stringify(h) + '\n'))
+        // The Air acts on this one line, so it is not a reply the gate may forget: a write that was rejected, a sink that says its
+        // reader is gone (drainSink never rejects; it closes) or one that has not taken the line within a handshake step is an
+        // error on the ledger and a nonzero exit, never 'ok' (Task 63 new-gate-hello-write). The exit is a stopped fetch's.
+        const how = await writeEnd(out.write(JSON.stringify(h) + '\n'), scaled(TIMING.handshakeStepMs, env))
+        if (how !== 'done' || io.stdout.closed === true) {
+          const why = how === 'late' ? 'deadline' : 'client_gone'
+          say(`hello: the answer was not delivered (${why})`)
+          record('hello', 'error', why)
+          return FETCH_STOPPED_EXIT
+        }
         record('hello', 'ok')
         return 0
       }
