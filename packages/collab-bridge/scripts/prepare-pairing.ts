@@ -3,7 +3,7 @@
 // build, tools.json, the trial repo and its git bundle, MANIFEST.txt and the device file).
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { probeCollabTools } from '../src/air/children.ts'
@@ -288,30 +288,51 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   if (sym.code === 0 && !/^refs\/heads\/[^\s]+$/.test(baseRef ?? '')) throw new Error(`prepare: HEAD of ${airClone} names ${JSON.stringify(baseRef)}, not a branch`)
   for (const ref of baseRef === null ? ['HEAD'] : ['HEAD', baseRef]) {
     const at = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { env: o.gitEnv ?? {} })
+    // --verify --quiet answers a ref that does not resolve with exit 1 and no output; any other failure is git's own, and is said
+    // as such, with its stderr, not blamed on the clone having moved (Task 63 new-prepare-revparse).
+    if (at.code === null || at.code > 1) {
+      throw new Error(`prepare: git rev-parse ${ref} in ${airClone} failed: ${firstLine(at.stderr) || (at.code === null ? 'no exit code' : `exit ${at.code}`)}`)
+    }
     if (at.code !== 0 || new TextDecoder().decode(at.stdout).trim() !== trialCommit) {
       throw new Error(`prepare: ${ref} of ${airClone} moved off the trial commit ${trialCommit} while the key, the build and the probe ran; nothing was bundled. Run prepare again`)
     }
   }
 
-  // 6. The bundle folder: 0700, the binary 0700, every other file 0600, even when they already exist.
+  // 6. The trial bundle first, made in a private folder of its own and read back, then the bundle folder: 0700, the binary 0700,
+  //    every other file 0600, even when they already exist. `git bundle create` takes ref names (a bare oid is "an empty bundle"),
+  //    so a ref that moved after the check above would be packed as it now is; what the bundle names is what ships, so its own
+  //    heads must be the trial commit, or it is dropped before the bundle folder exists (Task 63 new-prepare-oid-race).
+  //    Only the shared base: the branch HEAD names, and HEAD (a detached HEAD bundles just the commit it is on). Never --all: the
+  //    Air clone also holds Air-only branches, stashes (with untracked files) and refs/collab/*, none of which leaves the Air.
   const folder = `collab-bridge-${o.device}-bundle-${expiry}-${built.build}`
   const bundle = join(o.home, folder)
-  mkdirPrivate(bundle)
-  chmodSync(bundle, 0o700)
+  const trialBundle = join(bundle, 'collab-trial.bundle')
+  const stage = mkdtempSync(join(tmpdir(), 'cb-trial-bundle-'))
+  try {
+    const staged = join(stage, 'collab-trial.bundle')
+    const b = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'bundle', 'create', '--quiet', staged, ...(baseRef === null ? [] : [baseRef]), 'HEAD'],
+      { env: o.gitEnv ?? {}, timeoutMs: 60_000 })
+    if (b.code !== 0) throw new Error(`prepare: git bundle create failed: ${firstLine(b.stderr)}`)
+    const lh = await git.run([...MIRROR_GIT_FLAGS, 'bundle', 'list-heads', staged], { env: o.gitEnv ?? {} })
+    if (lh.code !== 0) throw new Error(`prepare: git bundle list-heads failed: ${firstLine(lh.stderr)}`)
+    const got = new TextDecoder().decode(lh.stdout).split('\n').filter(Boolean).sort()
+    const want = (baseRef === null ? ['HEAD'] : [baseRef, 'HEAD']).map((name) => `${trialCommit} ${name}`).sort()
+    if (got.length !== want.length || got.some((line, i) => line !== want[i])) {
+      throw new Error(`prepare: ${airClone} moved off the trial commit ${trialCommit} while the trial bundle was made (it names ${JSON.stringify(got.join(', ').slice(0, 300))}); nothing was bundled. Run prepare again`)
+    }
+    mkdirPrivate(bundle)
+    chmodSync(bundle, 0o700)
+    rmSync(trialBundle, { force: true })
+    copyFileSync(staged, trialBundle)
+    chmodSync(trialBundle, 0o600)
+  } finally {
+    rmSync(stage, { recursive: true, force: true })
+  }
   const binary = join(bundle, 'collab-bridge')
   copyFileSync(built.binary, binary)
   chmodSync(binary, 0o700)
   if (fileSha256(binary) !== built.sha256) throw new Error('prepare: the copied binary does not match its build')
   const tools = writeToolsFile(join(bundle, 'tools.json'), seatTools(list, o.device, o.user))
-  const trialBundle = join(bundle, 'collab-trial.bundle')
-  rmSync(trialBundle, { force: true })
-  // Only the shared base: the branch HEAD names, and HEAD (a detached HEAD bundles just the commit it is on), both checked above
-  // to be trial_commit. Never --all: the Air clone also holds Air-only branches, stashes (with untracked files) and refs/collab/*,
-  // none of which leaves the Air.
-  const b = await git.run(['-C', airClone, ...MIRROR_GIT_FLAGS, 'bundle', 'create', '--quiet', trialBundle, ...(baseRef === null ? [] : [baseRef]), 'HEAD'],
-    { env: o.gitEnv ?? {}, timeoutMs: 60_000 })
-  if (b.code !== 0) throw new Error(`prepare: git bundle create failed: ${firstLine(b.stderr)}`)
-  chmodSync(trialBundle, 0o600)
   const files = { 'collab-bridge': built.sha256, 'tools.json': fileSha256(join(bundle, 'tools.json')), 'collab-trial.bundle': fileSha256(trialBundle) }
   const manifest = renderManifest({ device: o.device, build: built.build, prepared: preparedAt, expiry, binary_sha256: built.sha256,
     tools_digest: tools.digest, trial_commit: trialCommit, shares: [share.remote], files })

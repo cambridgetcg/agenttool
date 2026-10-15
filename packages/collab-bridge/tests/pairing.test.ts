@@ -127,6 +127,63 @@ describe('prepareBundle (the Air side of pairing, spec §10.2 step 1)', () => {
     expect(repoGit(cloneOf(o), ['bundle', 'list-heads', join(ok.bundle, 'collab-trial.bundle')]).split('\n').map((l) => l.split(' ')[0])).toEqual([ok.trialCommit, ok.trialCommit])
   }, T)
 
+  /** A `git` that runs `hook` (shell) before the real one: the way a test makes the Air clone change at an exact git call. */
+  function hookedGit(hook: string): string {
+    const bin = join(temp('cb-pair-hookgit-'), 'git')
+    writeFileSync(bin, `#!/bin/sh\n${hook}\nexec ${REAL_GIT} "$@"\n`, { mode: 0o755 })
+    return bin
+  }
+  const noBundleFolder = (o: PrepareInput, name: string) => {
+    expect(readdirSync(o.home).filter((n) => n.startsWith('collab-bridge-')), name).toEqual([])
+    expect(existsSync(airPaths(o.home).deviceFile('nuance')), name).toBe(false)
+  }
+
+  test('a ref that moves between the check and git bundle create is never bundled: the bundle is read back and must hold the trial commit and nothing else (Task 63 new-prepare-oid-race)', async () => {
+    // `git bundle create` takes ref names (a bare oid is "an empty bundle"), so the checked oids cannot be handed to it. What the
+    // bundle names is what ships, so the bundle's own heads are checked after it is made, and a bundle that is not the trial commit
+    // is dropped before it has a folder.
+    const o = input()
+    const clone = cloneOf(o)
+    const moveAtBundle = `for a in "$@"; do [ "$a" = create ] && ${REAL_GIT} -C '${clone}' -c user.name=T -c user.email=t@collab-bridge.invalid commit -q --allow-empty -m 'raced the bundle'; done`
+    o.git = hookedGit(moveAtBundle)
+    await expect(prepareBundle(o)).rejects.toThrow(/moved off the trial commit/)
+    noBundleFolder(o, 'a commit made while the bundle was made')
+    expect(repoGit(clone, ['rev-list', '--count', 'HEAD'])).toBe('2') // the race did happen
+    // The same race on a detached HEAD, where only HEAD names the commit.
+    const d = input()
+    const base = makeRepo(cloneOf(d))
+    repoGit(cloneOf(d), ['checkout', '-q', '--detach'])
+    d.git = hookedGit(moveAtBundle.replace(clone, cloneOf(d)))
+    await expect(prepareBundle(d)).rejects.toThrow(/moved off the trial commit/)
+    noBundleFolder(d, 'a commit made on a detached HEAD while the bundle was made')
+    expect(repoGit(cloneOf(d), ['rev-parse', 'HEAD'])).not.toBe(base)
+    // A clone that does not move still bundles exactly the trial commit.
+    const ok = await prepareBundle(input())
+    expect(existsSync(join(ok.bundle, 'collab-trial.bundle'))).toBe(true)
+  }, T)
+
+  test('a rev-parse that fails for its own reason says so, with its stderr, and is not reported as the ref having moved (Task 63 new-prepare-revparse)', async () => {
+    // --verify --quiet exits 1 for a ref that no longer resolves (that is "moved"); anything else is git failing.
+    const failing = (body: string) => hookedGit(`for a in "$@"; do case "$a" in 'refs/heads/main^{commit}') ${body};; esac; done`)
+    for (const [name, body, message] of [
+      ['exit 128 with a message', "echo 'fatal: simulated object store failure' >&2; exit 128", /rev-parse refs\/heads\/main in .* failed: fatal: simulated object store failure/],
+      ['exit 128 without one', 'exit 128', /rev-parse refs\/heads\/main in .* failed: exit 128/],
+      ['killed by a signal', 'kill -KILL $$', /rev-parse refs\/heads\/main in .* failed: no exit code/],
+    ] as const) {
+      const o = input()
+      o.git = failing(body)
+      const err = await prepareBundle(o).then(() => null, (e: Error) => e)
+      expect(err?.message, name).toMatch(message)
+      expect(err?.message, name).not.toContain('moved off')
+      noBundleFolder(o, name)
+    }
+    // A ref that really no longer resolves (exit 1, no output) is still the clone having moved.
+    const gone = input()
+    gone.git = failing('exit 1')
+    await expect(prepareBundle(gone)).rejects.toThrow(/refs\/heads\/main of .* moved off the trial commit/)
+    noBundleFolder(gone, 'exit 1')
+  }, T)
+
   test('expiry is the pairing date + 90 days, YYYYMMDD', async () => {
     const a = await prepareBundle(input())
     expect([a.expiry, a.preparedAt]).toEqual(['20270111', '20261013123456'])
