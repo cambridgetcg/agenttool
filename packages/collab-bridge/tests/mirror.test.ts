@@ -691,6 +691,36 @@ describe('syncMirror', () => {
     expect(refValue()).toBe(c3)
   }, T)
 
+  test('a replay answers mirror_moved only for a mirror that sits at its synced ref: a HEAD moved by hand, or no synced ref, is mirror_tampered (Task 63 new-mirror-replay)', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+    const c3 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'another note')
+    await syncMirror(w.spec, { declaredHead: c3 }, w.deps) // the mirror is past c2, and HEAD is synced
+    const ref = mirrorRefs(w.spec).task('t-notes-1')
+    const synced = mirrorRefs(w.spec).synced
+    const refValue = () => repoGit(w.airClone, ['for-each-ref', '--format=%(objectname)', ref])
+    const replay = () => writeTaskRef(w.spec, 't-notes-1', c2, w.deps, { replay: true })
+    expect(await replay()).toBe('mirror_moved')
+    // Somebody checked another commit out in the mirror: it is readable and not at c2, but it is not where the hub left it.
+    repoGit(w.spec.mirrorPath, ['checkout', '-q', '--detach', w.base])
+    expect(await mirrorHead(w.spec, w.deps)).toBe(w.base)
+    expect(await replay()).toBe('mirror_tampered')
+    expect(refValue()).toBe('')
+    repoGit(w.spec.mirrorPath, ['checkout', '-q', '--detach', c3])
+    expect(await replay()).toBe('mirror_moved')
+    // No synced ref at all: HEAD equals nothing the hub recorded.
+    repoGit(w.airClone, ['update-ref', '-d', synced])
+    expect(await replay()).toBe('mirror_tampered')
+    expect(refValue()).toBe('')
+    // A synced ref that names another commit than HEAD.
+    repoGit(w.airClone, ['update-ref', synced, c2])
+    expect(await replay()).toBe('mirror_tampered')
+    repoGit(w.airClone, ['update-ref', synced, c3])
+    expect(await replay()).toBe('mirror_moved')
+    expect(refValue()).toBe('')
+  }, T)
+
   test('the daily total is summed from today\'s ledger lines', () => {
     const ledger = join(temp('cb-mirror-ledger-'), 'ledger.jsonl')
     const at = (day: number, h: number, m: number) => new Date(2026, 9, day, h, m, 0).getTime()

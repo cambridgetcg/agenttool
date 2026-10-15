@@ -486,8 +486,9 @@ export async function mirrorWorkspaceId(spec: MirrorSpec, deps: Pick<MirrorDeps,
  *
  * `replay` is the same-key replay of a completion whose first forward was never heard (Task 63 conformance-2-3). Its
  * ref may be absent because the first forward never wrote it, and the mirror may legitimately have moved past the head
- * since: that is 'mirror_moved' (nothing written, nothing wrong with the mirror), where a new completion whose head is
- * not the mirror's HEAD is still mirror_tampered (§7.2). A mirror git cannot read is mirror_tampered either way.
+ * since: that is 'mirror_moved' (nothing written, nothing wrong with the mirror) when its HEAD is the synced ref, where a new
+ * completion whose head is not the mirror's HEAD is still mirror_tampered (§7.2). A mirror git cannot read, or whose HEAD is
+ * not its synced ref, is mirror_tampered either way.
  */
 export async function writeTaskRef(spec: MirrorSpec, taskId: string, head: string, deps: MirrorDeps, o: { replay?: boolean } = {}): Promise<'ok' | 'mirror_tampered' | 'mirror_moved'> {
   if (!OID_RE.test(head)) return 'mirror_tampered'
@@ -496,7 +497,13 @@ export async function writeTaskRef(spec: MirrorSpec, taskId: string, head: strin
   const existing = await commitAt(deps, spec.airClone, ref)
   if (existing === head) return 'ok'
   const at = await mirrorHead(spec, deps)
-  if (at !== head) return o.replay === true && at !== null && existing === null ? 'mirror_moved' : 'mirror_tampered'
+  if (at !== head) {
+    if (o.replay !== true || at === null || existing !== null) return 'mirror_tampered'
+    // "Moved on" is the hub's own doing: a later sync leaves HEAD at the synced ref (§7.3 step 9). A readable HEAD that is not
+    // there, or a mirror with no synced ref, was moved by someone else, and that is tampering, not a healthy mirror (Task 63
+    // new-mirror-replay).
+    return (await syncedOid(spec, deps)) === at ? 'mirror_moved' : 'mirror_tampered'
+  }
   if (existing !== null) return 'mirror_tampered'
   const r = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'update-ref', ref, head, ''])
   if (r.code === 0) return 'ok'
