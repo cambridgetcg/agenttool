@@ -439,6 +439,35 @@ describe('relay', () => {
     stuck.destroy()
   })
 
+  // Once `done` has resolved the relay holds no socket: stop(true) on a listener that finish() already stopped closes nothing,
+  // so a pipe that never reads kept its socket (and its Outbox) open for as long as the process lived (Task 63 new-settle-stop).
+  for (const how of ['the listener it started with', 'the listener it re-listened on after hub.sock vanished'] as const) {
+    test(`after done a pipe that never reads has had its socket closed, on ${how} (Task 63 new-settle-stop)`, async () => {
+      const r = await startRelay({ flushMs: 300 })
+      const stuck = connect({ path: r.paths.hubSock })
+      await new Promise<void>((resolve) => stuck.once('connect', () => resolve()))
+      stuck.pause()                                                   // its receive buffer fills and stays full
+      await until(() => r.hub.of(OPEN).length === 1)
+      if (how !== 'the listener it started with') {
+        unlinkSync(r.paths.hubSock)
+        r.timers.fire()                                               // the inode check listens again; the open socket stays with the old listener
+        await until(() => existsSync(r.paths.hubSock))
+      }
+      const frame = 1024 * 1024
+      r.hub.send(DATA, 1, new Uint8Array(frame))
+      r.hub.end()
+      expect(await r.done).toBe(0)
+      // The test process is the relay's process, so a socket left open would go on draining into the client once it reads.
+      let got = 0
+      let closed = false
+      stuck.on('data', (d: Buffer) => { got += d.byteLength })
+      stuck.on('close', () => { closed = true })
+      stuck.resume()
+      await until(() => closed, 2_000)
+      expect(got).toBeLessThan(frame / 2)                             // what the kernel already held, then EOF: the rest was dropped
+    })
+  }
+
   test('the ledger has content-free start and exit lines only', async () => {
     const r = await startRelay()
     const c = localClient(r.paths.hubSock)

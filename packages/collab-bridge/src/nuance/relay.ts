@@ -76,9 +76,9 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
   if (!socketPathOk(fresh)) return refuse('socket_path_too_long', `${fresh} is longer than ${MAX_SOCKET_PATH_BYTES} bytes (K46)`)
 
   const conns = new Map<number, Conn>()
-  const live = new Set<object>()   // every local socket not yet closed, the ones that are only draining included
+  const live = new Set<{ terminate(): void }>()   // every local socket not yet closed, the ones that are only draining included
   let flushed: (() => void) | null = null
-  const sockGone = (sock: object) => {
+  const sockGone = (sock: { terminate(): void }) => {
     live.delete(sock)
     if (live.size === 0) flushed?.()
   }
@@ -216,7 +216,11 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
       if (settled) return
       settled = true
       if (cap !== null) clearTimeout(cap)
-      server.stop(true)
+      // Close what is left socket by socket. server.stop(true) would not: finish() stopped this listener already, and a
+      // second stop returns at once, and after a re-listen the sockets of the first listener are not its own (Task 63
+      // new-settle-stop). A socket still here has not taken what was queued for it; it goes without, as a cap is meant to.
+      for (const sock of [...live]) { try { sock.terminate() } catch { /* already closed */ } }
+      live.clear()
       resolveDone(code)
     }
     if (live.size === 0) return settle()
