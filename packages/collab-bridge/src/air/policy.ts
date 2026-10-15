@@ -89,6 +89,10 @@ export function decide(ctx: SeatCtx, name: string, rawArgs: Record<string, unkno
     if (ctx.workspaceId === null) return refuse('workspace_not_shared', 'This seat has no bound workspace yet')
     if (args.workspace_id === undefined) args.workspace_id = ctx.workspaceId
     else if (args.workspace_id !== ctx.workspaceId) return refuse('workspace_not_shared', `Remote seats may use only their bound workspace, ${ctx.workspaceId}`)
+  } else if (cls === 'pinned_read') {
+    // Collab checks no binding on a pinned read (K4), so the pin is the hub's alone: a read with no workspace_id to pin would
+    // go through unpinned. All seven of Collab 0.5.0's have one; the table fails closed for the day one does not (§6.3).
+    return refuse('workspace_not_shared', `${name} cannot be pinned to this seat's workspace, so remote seats may not use it`)
   }
 
   if (depthOver(args, 0)) return refuse('field_too_long', `The arguments nest deeper than ${MAX_DEPTH} levels`)

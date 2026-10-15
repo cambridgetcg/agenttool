@@ -119,6 +119,24 @@ describe('one test per §6.3 row', () => {
     expect(argsOf(run('collab_session_end', {})).workspace_id).toBeUndefined()
   })
 
+  test('a pinned read whose schema cannot carry the workspace pin is refused workspace_not_shared, never forwarded unpinned (Task 63 conformance-4-5)', () => {
+    // Collab checks no binding on the pinned reads (K4), so the pin is the hub's alone. Every one of Collab 0.5.0's seven carries
+    // workspace_id, which is why none leaks today; this is the day one does not.
+    const pinned = Object.entries(POLICY_TABLE).filter(([, c]) => c === 'pinned_read').map(([n]) => n)
+    expect(pinned).toHaveLength(7)
+    for (const name of pinned) {
+      const tool = SEAT.find((t) => t.name === name)!
+      expect(Object.keys((tool.inputSchema as { properties: object }).properties)).toContain('workspace_id')
+      const { workspace_id: _pin, ...rest } = (tool.inputSchema as { properties: Record<string, unknown> }).properties
+      const bare = { ...tool, inputSchema: { ...tool.inputSchema, properties: rest } }
+      expect(codeOf(run(name, { task_id: 't-of-another-workspace' }, { tool: bare }))).toBe('workspace_not_shared')
+      expect(codeOf(run(name, { task_id: 't1' }, { tool: bare, workspaceId: null }))).toBe('workspace_not_shared')
+    }
+    // A tool that is not a pinned read, and has no workspace_id, is untouched.
+    expect(run('collab_session_end', {}).kind).toBe('forward')
+    expect(run('collab_next', {}).kind).toBe('forward')
+  })
+
   test('resting gets wake_on [] and ["addressed"] is refused', () => {
     expect(argsOf(run('collab_session_rest', { idempotency_key: 'k1', mode: 'resting' })).wake_on).toEqual([])
     expect(argsOf(run('collab_session_rest', { idempotency_key: 'k1', mode: 'resting', wake_on: [] })).wake_on).toEqual([])
