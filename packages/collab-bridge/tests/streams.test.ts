@@ -493,6 +493,24 @@ describe('one attach per lineage', () => {
     await fresh.run
   })
 
+  test('a hand-over whose notice to the older stream cannot be written ends the link with the lineage detached, not left counted as attached (Task 63 conformance-5-1)', async () => {
+    const r = relay()
+    const t = rig({ relay: r })
+    const lineage = newLineage()
+    expect(handshake(r, 3, lineage)).toMatchObject({ t: 'ready' })
+    expect(t.pool.attached.has(lineage)).toBe(true)
+    // The pipe reconnects as stream 5 while ssh's stdin is already gone: the notice to stream 3 cannot be written.
+    const send = r.link.send
+    r.link.send = (bytes) => { if (new TextDecoder().decode(bytes).includes('hub_lost')) throw new Error('ssh stdin is gone'); send(bytes) }
+    handshake(r, 5, lineage)
+    await t.run
+    expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'write_failed' }])
+    // The session ended inside the hand-over: whatever the pool was told last must be that nothing holds the lineage.
+    expect(t.attachments.has(lineage)).toBe(false)
+    expect(t.pool.attached.has(lineage)).toBe(false)
+    expect(t.pool.calls.filter((c) => c[1] === lineage).map((c) => c[0]).at(-1)).toBe('detached')
+  })
+
   test('a newer attach on another link wins too, and the AttachTable keeps only the newest', () => {
     const table = new AttachTable()
     const closed: string[] = []

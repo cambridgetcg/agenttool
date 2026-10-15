@@ -253,8 +253,11 @@ export class LinkSession {
       this.send(s, { t: 'notice', code: 'hub_lost' })
       this.closeStream(s)
     }
-    this.deps.attachments.attach(a.lineage, s.holder)
+    // The pool hears of the attach first: attachments.attach() calls the older holder, whose notice is written to the link,
+    // and a write that fails ends the session inside that call, which detaches this stream and its lineage. attached()
+    // after that would count a lineage nothing holds, so its detached window would never start (Task 63 conformance-5-1).
     this.deps.pool.attached(a.lineage)
+    this.deps.attachments.attach(a.lineage, s.holder)
     // §9.9: skew is warned about, never bounded; it feeds only the status.
     const skew = Math.round((this.deps.now().getTime() - Date.parse(a.clock)) / 1000) || 0
     const hint = entry.state === 'live' && entry.session_id !== null && entry.workspace_id !== null
