@@ -280,6 +280,34 @@ describe('upload-pack through the fake ssh and the real gate entry (§12.1 Git t
 /** The code a ledger line carries, for the lines the gate appends. */
 const gateTriples = (paths: NuancePaths) => gateLines(paths).map((e) => [e.form, e.outcome, e.code])
 
+describe('gate entry: no paths (Task 63 gate-1-8)', () => {
+  /** runGate in this process with a stdin that is already at its end, and what it wrote to stdout and stderr. */
+  async function runBare(env: Record<string, string>) {
+    const out: Buffer[] = []
+    let err = ''
+    const io = { stdin: new ReadableStream<Uint8Array>({ start(c) { c.close() } }),
+      stdout: { write(b: Uint8Array | string) { out.push(Buffer.from(b)) } }, stderr: { write(s: string) { err += s } } }
+    const code = await runGate(env, io)
+    return { code, bytes: Buffer.concat(out), err }
+  }
+
+  test('an upload-pack-shaped command is still answered with a pkt-line ERR when the Nuance paths cannot be built', async () => {
+    // A HOME that is not absolute: homeOf returns it and nuancePaths refuses it, before any ledger path exists.
+    const r = await runBare({ HOME: 'not/absolute', SSH_ORIGINAL_COMMAND: "git-upload-pack '/Users/macair/Projects/collab-trial/.git'" })
+    expect(r.code).toBe(64)
+    expect(Array.from(r.bytes)).toEqual(Array.from(pktLineErr('config')))
+    expect(lines(r.err)).toHaveLength(1)
+    expect(r.err).toContain('refused')
+  })
+
+  test('any other command gets the one stderr line and no stdout when the paths cannot be built', async () => {
+    for (const command of ['hello', `relay 1 ${NONCE}`, 'ls -la', undefined]) {
+      const r = await runBare({ HOME: 'not/absolute', ...(command === undefined ? {} : { SSH_ORIGINAL_COMMAND: command }) })
+      expect([command, r.code, r.bytes.byteLength, lines(r.err).length]).toEqual([command, 64, 0, 1])
+    }
+  })
+})
+
 describe('gate entry: failures stay on the record (Task 24 review)', () => {
   test('a throw in the hello dispatch still appends the ledger line, and exits 70 with one stderr line', async () => {
     const n = nuance()

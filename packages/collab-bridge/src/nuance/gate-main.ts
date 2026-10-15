@@ -1,7 +1,9 @@
 // The forced command on Nuance (C2, spec §5.2). sshd runs `collab-bridge gate` for the Air's collab key with the
 // client's request in SSH_ORIGINAL_COMMAND. Exactly three forms are served; anything else gets one stderr line and exit 64
 // (an upload-pack-shaped refusal also a pkt-line ERR, so git shows the reason). Every invocation appends one content-free
-// ledger line (form, outcome, bytes, ms). The gate runs no harness and no shell, and never echoes a refused command.
+// ledger line (form, outcome, bytes, ms), the one exception being an invocation whose home cannot be built (no ledger path
+// exists then; it still gets its stderr line, and an upload-pack its ERR). The gate runs no harness and no shell, and never
+// echoes a refused command.
 // An unexpected throw is still ledgered (outcome error, code exception), answers an upload-pack with a pkt-line ERR, and exits 70.
 import { loadAllowlist } from '../allowlist.ts'
 import { appendLedger, NUANCE_LEDGER_KEYS, type LedgerFields } from '../ledger.ts'
@@ -48,6 +50,10 @@ export async function runGate(env: Env, io: GateIo, o: { mono?: () => number; no
   try {
     paths = nuancePaths(homeOf(env), env)
   } catch (e) {
+    // The one invocation that cannot be ledgered: the ledger lives under the home, and this is the case where no home could be
+    // built. A passwd-derived fallback would put a line where the Nuance paths do not point (and, in a test, in a real home),
+    // so the stderr line is the whole record. git still gets its reason (Task 63 gate-1-8).
+    if (uploadPackShaped(raw)) { try { io.stdout.write(pktLineErr('config')) } catch { /* the client is gone */ } }
     say(`refused: ${e instanceof Error ? e.message : String(e)}`)
     return GATE_REFUSED_EXIT
   }
