@@ -101,8 +101,10 @@ compiled runner or prove that this account can use the model.
   fixture CLIs; they do not establish Nuance account or model availability.
 - Nuance inventory reports an executable at `/opt/homebrew/bin/codex`, but its
   version probe returned null. The nonzero login-status result does not by
-  itself distinguish a startup failure from a logged-out account. Direct
-  version/environment evidence is pending.
+  itself distinguish a startup failure from a logged-out account. Yu subsequently
+  reported Nuance's native version as `0.162.1` on 2026-10-15, matching the tested
+  version. This is user-reported evidence; the updated runner's own version check
+  and an actual model reply remain to be observed after installation.
 - Nuance Sonnet consultation `nuance/smn_01a13f291c3d7ae8887394097d998896`
   completed in one turn. It recommends a separate read-only Codex adapter and
   conservative parsing. It used no tools or files; its advice is not a native
@@ -128,6 +130,6 @@ Official references: [non-interactive JSONL](https://learn.chatgpt.com/docs/non-
 [configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 Implementation, local Summon verification, the native isolation probe and remote
-source review are complete. Nuance version evidence, installation, target
-allowlist and live Astra reply remain pending. Do not describe this route as
-connected yet.
+source review are complete. Nuance's version is user-confirmed. Installation,
+target allowlist and live Astra reply remain pending. Do not describe this route
+as connected yet.
