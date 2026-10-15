@@ -201,6 +201,22 @@ describe('install settings', () => {
     expect(existsSync(join(other, 'gone'))).toBe(false)
   }, 30_000)
 
+  test('a settings file (or its backup) that git already tracks is refused and left alone: an exclude entry cannot hide a tracked file (Task 63 installer-2-6, conformance-7-2)', () => {
+    for (const tracked of ['.claude/settings.local.json', '.claude/settings.local.json.collab-bridge-backup']) {
+      const { h, report } = ready()
+      const content = '{ "permissions": { "allow": ["Read"] } }\n'
+      commitFiles(h.share, { [tracked]: content }, 'track a local setting')
+      const before = exclude(h.share)
+      const r = installSettings({ folder: h.share, trailer: FIXTURE_TRAILER, tap: true, paths: h.paths, git: report.git! })
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.reason).toContain('tracked')
+      expect(readFileSync(join(h.share, tracked), 'utf8')).toBe(content)
+      expect(exclude(h.share)).toBe(before)
+      expect(repoGit(h.share, ['status', '--porcelain', '--untracked-files=all'])).toBe('')
+      if (!tracked.endsWith('.json')) expect(existsSync(settingsOf(h.share))).toBe(false)
+    }
+  }, 60_000)
+
   test('a settings file that is not a JSON object is refused and left alone', () => {
     const { h, report } = ready()
     mkdirSync(join(h.share, '.claude'))

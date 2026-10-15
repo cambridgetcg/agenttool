@@ -514,10 +514,26 @@ const tapHook = (paths: NuancePaths) => ({ type: 'command', command: tapCommand(
 const hasTap = (groups: unknown[], command: string) =>
   groups.some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((x) => isObj(x) && x.command === command))
 
+/** The recorded git with the fetch gate's scrubbed env, no repo-configured fsmonitor or hooks, run in a share. */
+function bridgeGit(folder: string, git: ResolvedGit, home: string, args: string[]) {
+  return runCmd(git.path, ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', folder, ...args], { env: gitEnv(home), timeoutMs: 10_000 })
+}
+
+/** A reason to refuse when git already tracks the settings file or its backup: `info/exclude` and check-ignore never apply to a tracked file. */
+function trackedProblem(folder: string, git: ResolvedGit, home: string): string | null {
+  const r = bridgeGit(folder, git, home, ['ls-files', '-z', '--', ...EXCLUDED])
+  if (r.code !== 0) return `git ls-files failed in ${folder}`
+  const tracked = r.stdout.split('\0').filter((x) => x !== '')
+  if (tracked.length === 0) return null
+  return `${tracked.join(' and ')} is tracked by git in ${folder}, so it cannot be kept out of commits and the hook and trailer would enter its history; ` +
+    'untrack it (git rm --cached) and run the installer again; it was left as it is'
+}
+
 /** Adds each excluded path to the repo's info/exclude unless `git check-ignore` already ignores it (recorded git, scrubbed env). */
 function excludeFromGit(folder: string, git: ResolvedGit, home: string): string | null {
-  const run = (args: string[]) => runCmd(git.path, ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', folder, ...args],
-    { env: gitEnv(home), timeoutMs: 10_000 })
+  const run = (args: string[]) => bridgeGit(folder, git, home, args)
+  const tracked = trackedProblem(folder, git, home)
+  if (tracked) return tracked
   const missing: string[] = []
   for (const rel of EXCLUDED) {
     const ci = run(['check-ignore', '-q', rel])
