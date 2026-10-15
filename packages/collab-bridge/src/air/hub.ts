@@ -93,7 +93,10 @@ export function defaultHubDeps(env: Env): HubDeps {
   }
 }
 
-const text = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/[^\x20-\x7e]/g, '?').slice(0, 200)
+const sane = (e: unknown, max: number) => String(e instanceof Error ? e.message : e).replace(/[^\x20-\x7e]/g, '?').slice(0, max)
+const text = (e: unknown) => sane(e, 200)
+/** A refused start's reason is a sentence of ours that ends in what Yu must do, so it is cut far later than an error text: 200 characters lose that advice. */
+const REFUSAL_MAX = 1000
 const logLine = (line: string) => { try { process.stderr.write(`collab-bridge hub: ${line}\n`) } catch { /* no stderr */ } }
 
 function privateDir(dir: string): void {
@@ -119,7 +122,7 @@ export function recordRefusedStart(deps: Pick<HubDeps, 'paths' | 'build' | 'now'
       if (tryFlock(fd) === 'busy') return
       const at = deps.now().toISOString()
       const base = readHubStatus(paths) ?? noStatus(at)
-      writeHubStatus(paths, { ...base, word: 'refused', code, detail: text(detail), at, build: deps.build?.hub_build ?? null,
+      writeHubStatus(paths, { ...base, word: 'refused', code, detail: sane(detail, REFUSAL_MAX), at, build: deps.build?.hub_build ?? null,
         runs: [...base.runs, { started_at: at, ended_at: at, clean: true }] })
     } finally {
       closeSync(fd)

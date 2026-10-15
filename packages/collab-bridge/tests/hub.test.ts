@@ -8,7 +8,8 @@ import { distMatches, embeddedBuild, recordRefusedStart, runHub, sourceBuild, ty
 import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
 import { mirrorIdOf } from '../src/air/mirror.ts'
 import { seatTools } from '../src/air/policy-table.ts'
-import { readDeviceStatus, readHubStatus, writeDeviceStatus, writeHostKeyAck, writeHubStatus } from '../src/air/status.ts'
+import { readDeviceStatus, readHubStatus, statusLines, writeDeviceStatus, writeHostKeyAck, writeHubStatus } from '../src/air/status.ts'
+import { hubOnRefusal } from '../src/cli.ts'
 import { readLedger, type LedgerEntry } from '../src/ledger.ts'
 import { newLineage, newStartNonce, type HubKnockReportMsg, type NoticeMsg, type ReadyMsg, type RefusedCode, type ResultMsg, type ToolDef } from '../src/link/messages.ts'
 import { monoNowMs, tryFlock } from '../src/native.ts'
@@ -380,6 +381,28 @@ describe('a fault before the supervised start (Task 63 launcher-1-1)', () => {
       word: 'refused', code: 'start_refused', detail: 'claude is an ancestor', at: '2026-10-13T11:10:00.000Z', build: '00000000', unexpected_exits: [at],
       runs: [crashed, { started_at: '2026-10-13T11:10:00.000Z', ended_at: '2026-10-13T11:10:00.000Z', clean: true }],
     })
+  })
+})
+
+describe('the refusal `hub status` shows for a refused start (Task 63 new-refusal-detail-cut)', () => {
+  const deps = (paths: AirPaths) => ({ paths, build: sourceBuild(COLLAB_DIST), now: () => new Date('2026-10-13T11:10:00.000Z') })
+
+  test('keeps the whole launchctl unsetenv advice whatever the variable is called, and stays bounded', () => {
+    for (const name of ['CODEX_THREAD_ID', 'CODEX_SANDBOX_NETWORK_DISABLED_BY_THE_HARNESS', `HERMES_${'X'.repeat(120)}`]) {
+      const paths = airHome()
+      const refusal = hubOnRefusal({ [name]: '1' }, null, 9100, 502, 'launchd')!
+      expect(refusal).toContain(`launchctl unsetenv ${name}, then collab-bridge hub on`)
+      recordRefusedStart(deps(paths), 'start_refused', refusal)
+      const status = readHubStatus(paths)!
+      expect([name, status.detail]).toEqual([name, refusal]) // not one character of the advice is cut
+      expect(statusLines(status, []).join('\n')).toContain(`hub: start_refused (${refusal})`)
+    }
+    // a detail that is not ours to size is still cut, and shows no control character
+    const paths = airHome()
+    recordRefusedStart(deps(paths), 'start_refused', `a\u0007${'b'.repeat(5000)}`)
+    const long = readHubStatus(paths)!.detail!
+    expect(long.length).toBeLessThanOrEqual(1000)
+    expect(long.startsWith('a?bbb')).toBe(true)
   })
 })
 
