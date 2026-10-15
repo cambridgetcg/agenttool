@@ -383,6 +383,28 @@ describe('a fault before the supervised start (Task 63 launcher-1-1)', () => {
   })
 })
 
+describe('a stop that arrives during the start (Task 63 launcher-1-6)', () => {
+  test('is acted on before the reconcile and the dial loops start: nothing is dialled, the run is clean, hub_stop is ledgered, exit 0', async () => {
+    // a bun that takes 0.6 s to start, so the tools/list probe of step (3) is still running when the stop arrives
+    const slow = join(temp('cb-hub-slowbun-'), 'bun')
+    writeFileSync(slow, `#!/bin/bash\n/bin/sleep 0.6\nexec ${JSON.stringify(process.execPath)} "$@"\n`, { mode: 0o755 })
+    for (const when of ['before the start', 'during the probe'] as const) {
+      const w = linked()
+      const ac = new AbortController()
+      if (when === 'before the start') ac.abort()
+      else setTimeout(() => ac.abort(), 250)
+      const code = await runHub(w.deps({ bun: slow, signal: ac.signal }))
+      expect([when, code]).toEqual([when, 0])
+      expect([when, w.fake.calls()]).toEqual([when, []]) // never dialled
+      expect([when, lines(w.paths, 'tcp_probe')]).toEqual([when, []])
+      expect([when, lines(w.paths, 'hub_start')]).toEqual([when, []])
+      expect([when, lines(w.paths, 'hub_stop').map((l) => l.outcome)]).toEqual([when, ['ok']])
+      const st = readHubStatus(w.paths)!
+      expect([when, st.word, st.code, st.runs.length, st.runs[0]!.clean, st.runs[0]!.ended_at !== null]).toEqual([when, 'stopped', null, 1, true, true])
+    }
+  }, T)
+})
+
 describe('reconcile', () => {
   test('with a pending_start and a tampered journal, start keeps running, writes journal_invalid, keeps the marker and spawns no further child', async () => {
     const paths = airHome()

@@ -443,12 +443,20 @@ export async function runHub(deps: HubDeps): Promise<number> {
       for (const r of runs.values()) r.session?.notice('collab_build_changed')
     }
 
+    // A stop that arrived during the probe (or during the reconcile, which cannot be cut short) is acted on before the next
+    // step: no reconcile, no dial loop, no TCP probe or ssh for a hub that was told to stop, so launchd's 20 s are not spent
+    // on a start and the run ends clean (Task 63 launcher-1-6).
+    const stopWanted = () => deps.signal?.aborted === true
     try {
-      await pool.reconcile() // never throws, once per start (P64)
-      applyUnparkRequests()
-      for (const d of devices) if (d.state === 'paired' && d.seat_public !== null) startLoop(d)
-      status({ word: 'running', code: hubCode, detail: null })
-      ledger({ event: 'hub_start', code: build.hub_build })
+      if (!stopWanted()) {
+        await pool.reconcile() // never throws, once per start (P64)
+        if (!stopWanted()) {
+          applyUnparkRequests()
+          for (const d of devices) if (d.state === 'paired' && d.seat_public !== null) startLoop(d)
+          status({ word: 'running', code: hubCode, detail: null })
+          ledger({ event: 'hub_start', code: build.hub_build })
+        }
+      }
     } catch (e) {
       fault(e) // stopped below like any other fault, so no loop outlives this run
     }
