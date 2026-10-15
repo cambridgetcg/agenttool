@@ -9,7 +9,7 @@ import { basename, dirname, join, normalize } from 'node:path'
 import { expandHome, loadAllowlist, longestFolderMatch, safeRealpath, tccProtected, type Allowlist, type AllowlistFolder } from '../allowlist.ts'
 import { passwdOfSelf, writeFileDurable } from '../native.ts'
 import { homeOf, nuancePaths, type NuancePaths } from '../paths.ts'
-import { sharePathProblem } from '../share-path.ts'
+import { MAX_GITDIR_BYTES, sharePathProblem } from '../share-path.ts'
 import { knobInt, systemBin, type Env } from '../sysbin.ts'
 import { readToolsFile } from '../tools-digest.ts'
 import { gitEnv } from './fetch-gate.ts'
@@ -122,6 +122,11 @@ function lexists(p: string): boolean {
   try { lstatSync(p); return true } catch { return false }
 }
 
+/** The gate's rule (§5.2) on a share as shares.json will hold it: its realpath, and its gitdir under it (the 1024-byte form). */
+function servedProblem(realpath: string, gitdir: string): string | null {
+  return sharePathProblem(realpath) ?? sharePathProblem(gitdir, MAX_GITDIR_BYTES)
+}
+
 /**
  * §11.1: a citizen's folder is one with REST or EVENT-ONLY at its root, or anything under ~/love-unlimited, by spelling,
  * by where ~/love-unlimited really is (so a folder that is not there yet is judged by where it would be, even when
@@ -181,6 +186,9 @@ function existingShare(path: string, c: ShareCtx): ShareResult {
   const real = c.realpath(path)
   if (!real) { fail('share_unresolved', `${path} is there but does not resolve`); return done() }
   try { if (!statSync(real).isDirectory()) { fail('share_not_dir', `${path} is not a folder`); return done() } } catch { fail('share_unresolved', `${path} cannot be read`); return done() }
+  // shares.json and the gate hold the REAL path: a link to a folder whose real path the gate's grammar cannot carry installs fine and is refused at every fetch.
+  const unserved = servedProblem(real, join(real, '.git'))
+  if (unserved) { fail('share_path', `${path} resolves to ${real}, which ${unserved}`); return done() }
   const citizen = citizenRoot(real, c.home)
   if (citizen === 'citizen') fail('share_citizen', `${path} is a citizen's folder (REST or EVENT-ONLY at its root, or under ~/love-unlimited) and can never be shared`)
   if (citizen === 'unknown') fail('share_unclassified', `${path} cannot be read to check whether it is a citizen's folder`)
@@ -222,6 +230,8 @@ function absentShare(path: string, c: ShareCtx): ShareResult {
   const viaParent = tccProtected(parent, c.home, c.realpath)
   if (viaParent) { fail('share_tcc', `${parent} leads into ~/${viaParent}, which macOS protects`); return done() }
   const toBe = join(parentReal, basename(path))
+  const unserved = servedProblem(toBe, join(toBe, '.git'))
+  if (unserved) { fail('share_path', `${path} would be made at ${toBe}, which ${unserved}`); return done() }
   // Both the spelled path and where it would really be: ~/love-unlimited may be a link, and the folder is not there to resolve. Worst verdict wins.
   const verdicts = [citizenRoot(path, c.home), citizenRoot(toBe, c.home)]
   const citizen = verdicts.includes('citizen') ? 'citizen' : verdicts.includes('unknown') ? 'unknown' : 'clear'
@@ -404,6 +414,11 @@ export function installWrite(o: { paths: NuancePaths; report: CheckReport; bundl
   if (!report.ok || !m || !report.git || !report.summon) return { ok: false, reason: 'the install checks did not pass; nothing was written' }
   if (report.shares.length !== m.shares.length || report.shares.some((s) => s.state !== 'exists')) {
     return { ok: false, reason: 'every shared folder must be in place before install write; nothing was written' }
+  }
+  // writeShares refuses a share the gate cannot serve, but only after INSTALLED and the seat key are down: refuse before the first write.
+  for (const sh of report.shares) {
+    const unserved = servedProblem(sh.realpath, sh.gitdir)
+    if (unserved) return { ok: false, reason: `share_path: ${sh.realpath} ${unserved}; nothing was written` }
   }
   const tools = readToolsFile(join(o.bundle, 'tools.json'))
   if (!tools || tools.digest !== m.tools_digest) return { ok: false, reason: 'tools.json is unreadable or not the tool list MANIFEST.txt names; nothing was written' }

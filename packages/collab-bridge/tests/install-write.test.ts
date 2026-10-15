@@ -81,6 +81,18 @@ describe('install write', () => {
     for (const p of [h.paths.installed, h.paths.seatKey, h.paths.shares, h.paths.tools]) expect([p, existsSync(p)]).toEqual([p, false])
   }, 30_000)
 
+  test('a share path the gate cannot serve is refused before the first write, so INSTALLED never outlives a failed shares.json (Task 63 conformance-7-1)', () => {
+    const { h, b, report } = ready()
+    for (const real of ['/Users/macair/W!rk/trial', "/Users/macair/it's/trial", '/Users/macair/' + 'x'.repeat(1100)]) {
+      const bad = { ...report, shares: [{ path: h.share, state: 'exists' as const, realpath: real, gitdir: real + '/.git' }] }
+      const r = installWrite({ paths: h.paths, report: bad, bundle: b.dir, claudeVersion: null, now: NOW })
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.reason).toContain('share_path')
+      for (const p of [h.paths.installed, h.paths.seatKey, h.paths.shares, h.paths.tools]) expect([p, existsSync(p)]).toEqual([p, false])
+    }
+    expect(installWrite({ paths: h.paths, report, bundle: b.dir, claudeVersion: null, now: NOW }).ok).toBe(true)
+  }, 30_000)
+
   test('a binary that is not this bundle\'s, or a failed check, is refused before anything is written', () => {
     const { h, b, report } = ready()
     writeFileSync(h.paths.binary, '#!/bin/bash\nexit 1\n')

@@ -303,6 +303,37 @@ describe('install check', () => {
     expect(installCheck(checkInput(h, b)).failures).toEqual([])
   }, 60_000)
 
+  test('a share whose RESOLVED path the gate cannot serve is refused share_path, existing or absent, though its typed path is fine (Task 63 installer-2-1, conformance-7-1)', () => {
+    const { h, trial } = world({ allowlist: allowlistYaml([{ path: '~/Projects', access: 'edit' }]) })
+    for (const [n, bad] of ['W!rk', "it's", 'back\\slash'].entries()) {
+      const real = join(h.home, 'Projects', bad)
+      // existing: the typed path is a link to a clone whose real path carries the character
+      mkdirSync(real)
+      cloneAt(h, trial.repo, join(real, 'trial'))
+      const typed = join(h.home, 'Projects', `via-${n}`)
+      symlinkSync(join(real, 'trial'), typed)
+      const existing = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [typed] })))
+      expect(codes(existing)).toEqual(['share_path'])
+      expect(existing.failures[0]).toContain(join(real, 'trial'))
+      expect(existing.shares).toEqual([])
+      // absent: the parent is a link to a folder whose real path carries it, and the folder-to-be would live there
+      const parentLink = join(h.home, 'Projects', `dir-${n}`)
+      symlinkSync(real, parentLink)
+      const absent = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [join(parentLink, 'fresh')] })))
+      expect(codes(absent)).toEqual(['share_path'])
+      expect(absent.shares).toEqual([])
+    }
+    // The control: a link to a clean real path is still accepted, and shares.json would get the real path.
+    const clean = join(h.home, 'Projects', 'clean')
+    mkdirSync(clean)
+    cloneAt(h, trial.repo, join(clean, 'trial'))
+    const typed = join(h.home, 'Projects', 'via-clean')
+    symlinkSync(join(clean, 'trial'), typed)
+    const ok = installCheck(checkInput(h, writeCheckBundle({ trial, shares: [typed] })))
+    expect(ok.failures).toEqual([])
+    expect(ok.shares).toEqual([{ path: typed, state: 'exists', realpath: join(clean, 'trial'), gitdir: join(clean, 'trial', '.git') }])
+  }, 90_000)
+
   test('an absent folder with an exact edit entry is accepted', () => {
     const { h, b } = world({ allowlist: allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }]) })
     const r = installCheck(checkInput(h, b))
