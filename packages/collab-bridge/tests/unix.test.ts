@@ -67,6 +67,27 @@ describe('listenPrivate', () => {
     await reaches(path)
   })
 
+  test('onlyIfAbsent creates the path when nothing is there, and leaves a socket that is there alone (Task 63 new-relisten-takeback)', async () => {
+    const root = shortSockRoot()
+    const path = join(root, 'hub.sock')
+    const first = listenPrivate(path, handlers, { replace: true, onlyIfAbsent: true })
+    servers.push(first.server)
+    expect(readdirSync(root)).toEqual(['hub.sock'])                  // no <path>.<pid> behind
+    expect(first.ino).toBe(inode(path))
+    expect(modeOf(path)).toBe(0o600)
+    await reaches(path)
+    // A socket that is there is not replaced: the call fails EEXIST, the listener it started is stopped, and hub.sock is still the first's.
+    let code: unknown
+    try { listenPrivate(path, handlers, { replace: true, onlyIfAbsent: true }) } catch (e) { code = (e as { code?: unknown }).code }
+    expect(code).toBe('EEXIST')
+    expect(readdirSync(root)).toEqual(['hub.sock'])
+    expect(inode(path)).toBe(first.ino!)
+    await reaches(path)
+    // And a stop of the first removes only the name it bound, which is gone: the path stays, as with rename (P17).
+    first.server.stop(true)
+    expect(inode(path)).toBe(first.ino!)
+  })
+
   test('without replace it binds the path itself and returns no inode', async () => {
     const root = shortSockRoot()
     const path = join(root, 'tap.sock')

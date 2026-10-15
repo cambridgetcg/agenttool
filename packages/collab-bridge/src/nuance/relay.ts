@@ -16,7 +16,9 @@ import { listenPrivate, Outbox } from './unix.ts'
 export interface RelayTimers { setInterval(fn: () => void, ms: number): unknown; clearInterval(h: unknown): void }
 export interface RelayDeps { paths: NuancePaths; nonce: string; stdin: ReadableStream<Uint8Array>; write(bytes: Uint8Array): void;
   mono(): number; ledger(f: LedgerFields): void; timers?: RelayTimers; staleMs?: number; exitMs?: number; inodeCheckMs?: number;
-  flushMs?: number; stderr?: { write(s: string): void } }
+  flushMs?: number; stderr?: { write(s: string): void }
+  /** A test seam: runs after the inode check found hub.sock missing and before the relay listens again, where another relay's rename can land. */
+  beforeRelisten?(): void }
 export interface RelayStatusFile { pid: number; started_mono: number; last_ping_mono: number | null; streams: number }
 
 /** A relay that cannot listen exits like a refused gate command, before its preamble, so the dialer says needs Yu: config (§5.4). */
@@ -121,7 +123,18 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     else if (f.type === FRAME_TYPE.CLOSE) closeConn(c, { hub: false, local: true })
   }
 
+  /**
+   * run/relay.json names a relay of this boot that started after this one. Every relay writes it at its start, so it holds the
+   * newest relay's; a reading ahead of the clock was written under an earlier boot (Task 63 relay-2-3) and names nobody.
+   * Such a relay owns hub.sock, and this one must neither take it back nor overwrite its status (Task 63 new-relisten-takeback).
+   */
+  const newerRelay = (): boolean => {
+    const s = readRelayStatus(paths)
+    return s !== null && s.started_mono > started && s.started_mono <= deps.mono()
+  }
+
   const writeStatus = () => {
+    if (newerRelay()) return
     const s: RelayStatusFile = { pid: process.pid, started_mono: started, last_ping_mono: lastPing, streams: conns.size }
     try { writeFileDurable(paths.relayStatus, JSON.stringify(s) + '\n', 0o600) } catch { /* status only */ }
   }
@@ -167,11 +180,15 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     },
   }
 
-  /** Listens on a name of this process's own and renames it over hub.sock (P17); the same call starts the relay and re-listens. */
-  const bind = () => {
+  /**
+   * Listens on a name of this process's own and renames it over hub.sock (P17): the start of a relay replaces whatever is
+   * there. A relay that listens again takes the path only while nothing is there (onlyIfAbsent), so it cannot overwrite the
+   * socket of a relay that started in the instant between its check and its listen.
+   */
+  const bind = (o: { onlyIfAbsent?: boolean } = {}) => {
     mkdirSync(paths.run, { recursive: true, mode: 0o700 })
     chmodSync(paths.run, 0o700)   // a mode passed to mkdir applies only to a new dir, and the umask cuts it
-    return listenPrivate<Conn | null>(paths.hubSock, handlers, { replace: true })
+    return listenPrivate<Conn | null>(paths.hubSock, handlers, { replace: true, ...o })
   }
 
   let server: { stop(closeActiveConnections?: boolean): void }
@@ -236,21 +253,27 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     if (finished) return
     const now = inodeOf(paths.hubSock)
     if (now === ours) return
-    if (now === null) {
+    if (now === null && !newerRelay()) {
       // hub.sock is gone, and nobody's socket stands in its place: not "replaced" (§5.3), so the hub must not count a
       // contest. An older relay's exit can delete it in the instant this one's rename lands (it checks, then unlinks), and
       // anything else may too. Listen again: the pipes already connected stay, the ones that tried meanwhile read the
       // missing socket as away (P12) and retry (Task 63 relay-2-2, conformance-8-3). If that fails, this relay is no use.
+      // Two limits (Task 63 new-relisten-takeback): when relay.json names a relay that started after this one, hub.sock is
+      // that relay's to listen on again, so this one is the replaced relay and falls through to say so; and the listen takes
+      // the path only while it is still absent, so a relay whose rename lands first keeps it, and this one is replaced too.
       try {
+        deps.beforeRelisten?.()
         const old = server
-        const l = bind()
+        const l = bind({ onlyIfAbsent: true })
         server = l.server
         ours = l.ino
         old.stop(false)   // its name moved with the first rename; its open sockets go on
+        return
       } catch {
-        finish('socket_gone', 0)
+        // The listen failed: because something is at hub.sock now (a relay's socket put there since the check, EEXIST), which
+        // makes this relay the replaced one, or because it could not listen at all, which leaves it no use.
+        if (inodeOf(paths.hubSock) === null) return finish('socket_gone', 0)
       }
-      return
     }
     // A newer relay put its own socket in place (§5.3): tell this link's hub, which counts these for relay_contested (T5).
     mux.data(0, encodeMessage(REPLACED))

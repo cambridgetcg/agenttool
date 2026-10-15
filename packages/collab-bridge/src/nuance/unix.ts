@@ -3,7 +3,7 @@
 // Bun's socket.write did not take. Bun writes what the kernel accepts right now (8 KiB at a time on this Air for a unix
 // socket), returns that count and buffers nothing, so the rest of every partial write waits here, in order, for `drain`.
 import type { SocketHandler, UnixSocketListener } from 'bun'
-import { chmodSync, lstatSync, renameSync, unlinkSync } from 'node:fs'
+import { chmodSync, linkSync, lstatSync, renameSync, unlinkSync } from 'node:fs'
 
 /** The two calls of a Bun socket the outbox makes. */
 export interface RawSock { write(b: Uint8Array): number; end(): void }
@@ -63,11 +63,15 @@ export class Outbox {
  *   stale or older socket at `path` is replaced in one step, and Bun's stop() later unlinks only the name it bound,
  *   which the rename already moved, so it never removes a newer listener's socket (P17). `ino` lets the caller check
  *   later whether `path` is still its own.
+ * - replace: true with onlyIfAbsent takes `path` with link(2) instead of rename(2), so it fails EEXIST when anything is at
+ *   `path`: for a listener that wants its path back after the file was deleted and must not overwrite a socket another
+ *   process put there in the meantime (Task 63 new-relisten-takeback). The call then stops its listener, which unlinks the
+ *   name it bound, and throws the EEXIST error.
  * - replace: false unlinks `path` and binds it directly; `ino` is null.
  * Path-length checks stay with the callers, each with its own refusal code (P16). A failure after the bind stops the
  * listener (which unlinks the name it bound) and throws.
  */
-export function listenPrivate<T>(path: string, socket: SocketHandler<T>, o: { replace: boolean }): { server: UnixSocketListener<T>; ino: bigint | null } {
+export function listenPrivate<T>(path: string, socket: SocketHandler<T>, o: { replace: boolean; onlyIfAbsent?: boolean }): { server: UnixSocketListener<T>; ino: bigint | null } {
   const bind = o.replace ? `${path}.${process.pid}` : path
   try { unlinkSync(bind) } catch { /* nothing there: the usual case */ }
   const mask = process.umask(0o177)
@@ -81,7 +85,12 @@ export function listenPrivate<T>(path: string, socket: SocketHandler<T>, o: { re
     chmodSync(bind, 0o600)
     if (!o.replace) return { server, ino: null }
     const ino = lstatSync(bind, { bigint: true }).ino
-    renameSync(bind, path)
+    if (o.onlyIfAbsent) {
+      linkSync(bind, path)   // one inode under two names; EEXIST if `path` is taken, and nothing is overwritten
+      try { unlinkSync(bind) } catch { /* stop() unlinks the name it bound */ }
+    } else {
+      renameSync(bind, path)
+    }
     return { server, ino }
   } catch (e) {
     server.stop(true)

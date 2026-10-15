@@ -105,7 +105,8 @@ async function until<T>(f: () => T | null | undefined | false, ms = 3000): Promi
 
 const running: Array<{ hub: ReturnType<typeof hubEnd>; done: Promise<number> }> = []
 
-async function startRelay(o: { paths?: NuancePaths; clock?: { t: number }; flushMs?: number } = {}) {
+/** Starts a relay and returns at once: runRelay binds and writes its preamble before its first await, so the socket is in place. */
+function launchRelay(o: { paths?: NuancePaths; clock?: { t: number }; flushMs?: number; beforeRelisten?: () => void } = {}) {
   const paths = o.paths ?? nuance()
   const clock = o.clock ?? { t: 1_000_000 }
   const hub = hubEnd()
@@ -113,11 +114,17 @@ async function startRelay(o: { paths?: NuancePaths; clock?: { t: number }; flush
   const ledger: LedgerFields[] = []
   let settled = false
   const done = runRelay({ paths, nonce: NONCE, stdin: hub.stdin, write: (b) => hub.write(b), mono: () => clock.t,
-    ledger: (f) => { ledger.push(f) }, timers, staleMs: 20_000, exitMs: 45_000, inodeCheckMs: 5_000, flushMs: o.flushMs })
+    ledger: (f) => { ledger.push(f) }, timers, staleMs: 20_000, exitMs: 45_000, inodeCheckMs: 5_000, flushMs: o.flushMs,
+    beforeRelisten: o.beforeRelisten })
   done.then(() => { settled = true })
   running.push({ hub, done })
-  await until(() => hub.preambleSeen())
   return { paths, clock, hub, timers, ledger, done, settled: () => settled }
+}
+
+async function startRelay(o: Parameters<typeof launchRelay>[0] = {}) {
+  const r = launchRelay(o)
+  await until(() => r.hub.preambleSeen())
+  return r
 }
 
 afterEach(async () => {
@@ -289,6 +296,83 @@ describe('relay', () => {
     expect(r.hub.of(DATA, 0).map((f) => decodeJson(f.payload))).toEqual([{ t: 'relay_replaced' }])
     expect(r.ledger.at(-1)).toMatchObject({ code: 'relay_replaced' })
     expect(newer.settled()).toBe(false)
+  })
+
+  // The relays below share one clock, as the real ones share CLOCK_MONOTONIC: the newer one starts later on it (10 s here, inside the 45 s a relay waits for a PING).
+  test('an older relay does not take hub.sock back when the newer relay\'s socket has gone: it is the replaced one, and the newest keeps the link (Task 63 new-relisten-takeback)', async () => {
+    const paths = nuance()
+    const clock = { t: 1_000_000 }
+    const a = await startRelay({ paths, clock })
+    clock.t = 1_010_000
+    const b = await startRelay({ paths, clock })
+    // B's socket is deleted (a third relay's exit between its check and its unlink, or anything else), and A's inode check
+    // comes first. relay.json names B, which started after A, so hub.sock is B's to listen on again.
+    unlinkSync(paths.hubSock)
+    a.timers.fire()
+    expect(await Promise.race([a.done, Bun.sleep(500).then(() => 'still running')])).toBe(0)
+    expect(a.hub.of(DATA, 0).map((f) => decodeJson(f.payload))).toEqual([{ t: 'relay_replaced' }])
+    expect(a.ledger.at(-1)).toMatchObject({ event: 'relay', outcome: 'exit', code: 'relay_replaced' })
+    expect(existsSync(paths.hubSock)).toBe(false)                   // A did not listen on it
+    b.timers.fire()
+    await until(() => existsSync(paths.hubSock))
+    expect(b.settled()).toBe(false)
+    expect(b.hub.of(DATA, 0)).toEqual([])
+    const c = localClient(paths.hubSock)
+    await c.ready
+    await until(() => b.hub.of(OPEN).length === 1)
+    expect(a.hub.of(OPEN)).toEqual([])
+  })
+
+  test('an older relay\'s PING does not overwrite the status of a newer one, and a newer relay\'s own PING still does (Task 63 new-relisten-takeback)', async () => {
+    const paths = nuance()
+    const clock = { t: 1_000_000 }
+    const a = await startRelay({ paths, clock })
+    clock.t = 1_010_000
+    const b = await startRelay({ paths, clock })
+    a.hub.send(PING, 0)
+    await until(() => a.hub.of(PONG).length === 1)                  // the PONG goes out before the status is written, in one call
+    expect(readRelayStatus(paths)).toEqual({ pid: process.pid, started_mono: 1_010_000, last_ping_mono: null, streams: 0 })
+    clock.t = 1_025_000
+    b.hub.send(PING, 0)
+    await until(() => b.hub.of(PONG).length === 1)
+    expect(readRelayStatus(paths)).toEqual({ pid: process.pid, started_mono: 1_010_000, last_ping_mono: 1_025_000, streams: 0 })
+  })
+
+  test('a relay.json from an earlier boot (its clock ran ahead of this one) is overwritten, not honoured as a newer relay', async () => {
+    const paths = nuance()
+    mkdirSync(paths.run, { recursive: true, mode: 0o700 })
+    writeFileSync(paths.relayStatus, JSON.stringify({ pid: process.pid, started_mono: 260_000_000, last_ping_mono: 260_000_000, streams: 3 }) + '\n')
+    const r = await startRelay({ paths })
+    expect(readRelayStatus(paths)).toEqual({ pid: process.pid, started_mono: 1_000_000, last_ping_mono: null, streams: 0 })
+    r.hub.send(PING, 0)
+    await until(() => r.hub.of(PONG).length === 1)
+    expect(readRelayStatus(paths)?.last_ping_mono).toBe(1_000_000)
+  })
+
+  test('the listen again takes hub.sock only while nothing is there: a newer relay\'s rename that lands first is not overwritten (Task 63 new-relisten-takeback)', async () => {
+    const paths = nuance()
+    const clock = { t: 1_000_000 }
+    let b: ReturnType<typeof launchRelay> | null = null
+    // hub.sock is gone and no newer relay is registered, so A listens again. Between its check and its listen another relay
+    // starts and renames its socket into place, which is the moment this hook stands for.
+    const a = await startRelay({ paths, clock, beforeRelisten: () => { clock.t = 1_010_000; b = launchRelay({ paths, clock }) } })
+    unlinkSync(paths.hubSock)
+    a.timers.fire()
+    expect(b).not.toBeNull()
+    expect(await Promise.race([a.done, Bun.sleep(500).then(() => 'still running')])).toBe(0)
+    expect(a.hub.of(DATA, 0).map((f) => decodeJson(f.payload))).toEqual([{ t: 'relay_replaced' }])
+    expect(a.ledger.at(-1)).toMatchObject({ event: 'relay', outcome: 'exit', code: 'relay_replaced' })
+    const newer = b!
+    await until(() => newer.hub.preambleSeen())
+    newer.timers.fire()                                             // B's inode check: hub.sock is still its own
+    await Bun.sleep(20)
+    expect(newer.settled()).toBe(false)
+    expect(newer.hub.of(DATA, 0)).toEqual([])
+    const c = localClient(paths.hubSock)
+    await c.ready
+    await until(() => newer.hub.of(OPEN).length === 1)
+    expect(a.hub.of(OPEN)).toEqual([])
+    expect(readdirSync(paths.run).filter((n) => n.startsWith('hub.sock.'))).toEqual([])
   })
 
   test('a hub.sock that is gone and cannot be listened on again ends the relay socket_gone, without relay_replaced', async () => {
