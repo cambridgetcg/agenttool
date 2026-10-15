@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import type { LedgerFields } from '../src/ledger.ts'
@@ -258,6 +258,51 @@ describe('relay', () => {
     await until(() => b.hub.of(OPEN).length === 1)
     b.timers.fire()
     expect(b.settled()).toBe(false)
+  })
+
+  test('a hub.sock that is gone is not "replaced": the relay listens again and keeps its link and its pipes (Task 63 relay-2-2, conformance-8-3)', async () => {
+    const r = await startRelay()
+    const open = localClient(r.paths.hubSock)
+    await open.ready
+    await until(() => r.hub.of(OPEN).length === 1)
+    // An older relay's exit unlinked the socket in the instant this one's rename landed (check, then unlink), or anything
+    // else removed it: no newer relay owns hub.sock, so telling the hub "replaced" would count a false relay_contested.
+    unlinkSync(r.paths.hubSock)
+    r.timers.fire()
+    await Bun.sleep(20)
+    expect(r.settled()).toBe(false)
+    expect(r.hub.of(DATA, 0)).toEqual([])
+    expect(lstatSync(r.paths.hubSock).isSocket()).toBe(true)
+    expect(modeOf(r.paths.hubSock)).toBe(0o600)
+    // The pipe that was connected is untouched, and the socket takes new ones again.
+    open.send(DATA, enc.encode('still here'))
+    expect(dec.decode((await until(() => r.hub.of(DATA, 1)[0])).payload)).toBe('still here')
+    const again = localClient(r.paths.hubSock)
+    await again.ready
+    await until(() => r.hub.of(OPEN).length === 2)
+    r.hub.send(DATA, 2, enc.encode('to the new one'))
+    expect(dec.decode((await until(() => again.frames.find((f) => f.type === DATA))).payload)).toBe('to the new one')
+    // An inode that is somebody else's is still "replaced".
+    const newer = await startRelay({ paths: r.paths, clock: { t: 3_000_000 } })
+    r.timers.fire()
+    expect(await r.done).toBe(0)
+    expect(r.hub.of(DATA, 0).map((f) => decodeJson(f.payload))).toEqual([{ t: 'relay_replaced' }])
+    expect(r.ledger.at(-1)).toMatchObject({ code: 'relay_replaced' })
+    expect(newer.settled()).toBe(false)
+  })
+
+  test('a hub.sock that is gone and cannot be listened on again ends the relay socket_gone, without relay_replaced', async () => {
+    const r = await startRelay()
+    const c = localClient(r.paths.hubSock)
+    await c.ready
+    await until(() => r.hub.of(OPEN).length === 1)
+    rmSync(r.paths.run, { recursive: true, force: true })
+    writeFileSync(r.paths.run, 'a file where the run dir was')       // mkdir and bind both fail now
+    r.timers.fire()
+    expect(await r.done).toBe(0)
+    expect(r.hub.of(DATA, 0)).toEqual([])
+    expect(r.ledger.at(-1)).toMatchObject({ event: 'relay', outcome: 'exit', code: 'socket_gone' })
+    await until(() => c.isClosed())
   })
 
   test('a stale hub.sock left by a SIGKILLed relay does not stop a new relay', async () => {

@@ -2,6 +2,7 @@
 // channel to the Air's hub. It listens on run/hub.sock for this Mac's pipes, gives each local connection its own stream
 // on the link (ids from 1, never reused), copies every hub PING to every pipe so each knows how fresh the link is, and
 // moves frames both ways. It never parses MCP: the frame size limits of §6.6 are the only thing it checks.
+import type { SocketHandler } from 'bun'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import type { LedgerFields } from '../ledger.ts'
 import { encodeFrame, FRAME_TYPE, FrameDecoder, FrameMalformed, FrameTooLarge, preambleOf, type Frame } from '../link/frame.ts'
@@ -125,51 +126,58 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     try { writeFileDurable(paths.relayStatus, JSON.stringify(s) + '\n', 0o600) } catch { /* status only */ }
   }
 
+  const handlers: SocketHandler<Conn | null> = {
+    open(sock) {
+      live.add(sock)
+      const c: Conn = { id: 0, out: new Outbox(sock), decoder: new FrameDecoder(MAX_PIPE_TO_HUB) }
+      sock.data = c
+      if (finished) { sock.end(); return }
+      if (deps.mono() - lastHeard() > staleMs) {
+        // §5.3: no new call goes into a stale link. The pipe answers its agent hub_away, a definite "not sent".
+        c.out.push(encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage(HUB_AWAY)))
+        c.out.push(encodeFrame(FRAME_TYPE.CLOSE, 0))
+        c.out.endWhenFlushed()
+        return
+      }
+      c.id = mux.open()
+      conns.set(c.id, c)
+    },
+    data(sock, chunk) {
+      const c = sock.data
+      if (!c || conns.get(c.id) !== c) return
+      let frames: Frame[]
+      try {
+        frames = c.decoder.push(chunk)
+      } catch (e) {
+        // Over 2 MiB, or not a frame at all: forward what came before it, then close this connection only (§6.6).
+        if (!(e instanceof FrameTooLarge) && !(e instanceof FrameMalformed)) throw e
+        for (const f of e.frames) fromPipe(c, f)
+        return closeConn(c, { hub: true, local: true })
+      }
+      for (const f of frames) fromPipe(c, f)
+    },
+    drain(sock) { sock.data?.out.drain() },
+    close(sock) {
+      if (sock.data) closeConn(sock.data, { hub: true, local: false })
+      sockGone(sock)
+    },
+    error(sock) {
+      if (sock.data) closeConn(sock.data, { hub: true, local: false })
+      sockGone(sock)
+    },
+  }
+
+  /** Listens on a name of this process's own and renames it over hub.sock (P17); the same call starts the relay and re-listens. */
+  const bind = () => {
+    mkdirSync(paths.run, { recursive: true, mode: 0o700 })
+    chmodSync(paths.run, 0o700)   // a mode passed to mkdir applies only to a new dir, and the umask cuts it
+    return listenPrivate<Conn | null>(paths.hubSock, handlers, { replace: true })
+  }
+
   let server: { stop(closeActiveConnections?: boolean): void }
   let ours: bigint | null
   try {
-    mkdirSync(paths.run, { recursive: true, mode: 0o700 })
-    chmodSync(paths.run, 0o700)   // a mode passed to mkdir applies only to a new dir, and the umask cuts it
-    const l = listenPrivate<Conn | null>(paths.hubSock, {
-      open(sock) {
-        live.add(sock)
-        const c: Conn = { id: 0, out: new Outbox(sock), decoder: new FrameDecoder(MAX_PIPE_TO_HUB) }
-        sock.data = c
-        if (finished) { sock.end(); return }
-        if (deps.mono() - lastHeard() > staleMs) {
-          // §5.3: no new call goes into a stale link. The pipe answers its agent hub_away, a definite "not sent".
-          c.out.push(encodeFrame(FRAME_TYPE.DATA, 0, encodeMessage(HUB_AWAY)))
-          c.out.push(encodeFrame(FRAME_TYPE.CLOSE, 0))
-          c.out.endWhenFlushed()
-          return
-        }
-        c.id = mux.open()
-        conns.set(c.id, c)
-      },
-      data(sock, chunk) {
-        const c = sock.data
-        if (!c || conns.get(c.id) !== c) return
-        let frames: Frame[]
-        try {
-          frames = c.decoder.push(chunk)
-        } catch (e) {
-          // Over 2 MiB, or not a frame at all: forward what came before it, then close this connection only (§6.6).
-          if (!(e instanceof FrameTooLarge) && !(e instanceof FrameMalformed)) throw e
-          for (const f of e.frames) fromPipe(c, f)
-          return closeConn(c, { hub: true, local: true })
-        }
-        for (const f of frames) fromPipe(c, f)
-      },
-      drain(sock) { sock.data?.out.drain() },
-      close(sock) {
-        if (sock.data) closeConn(sock.data, { hub: true, local: false })
-        sockGone(sock)
-      },
-      error(sock) {
-        if (sock.data) closeConn(sock.data, { hub: true, local: false })
-        sockGone(sock)
-      },
-    }, { replace: true })
+    const l = bind()
     server = l.server
     ours = l.ino
   } catch (e) {
@@ -193,6 +201,8 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
     // hub_outcome_unknown for a call whose answer had reached this relay (Task 63 relay-2-1). stop() unlinks only the name
     // it bound, which the rename already moved.
     server.stop(false)
+    // Check, then unlink: a newer relay's rename can land between the two and lose its socket. That relay's inode check sees
+    // hub.sock missing and listens again, so the cost is one detour of at most inodeCheckMs, not a dropped link.
     if (ours !== null && inodeOf(paths.hubSock) === ours) { try { unlinkSync(paths.hubSock) } catch { /* gone */ } }
     const s = readRelayStatus(paths)
     if (s && s.pid === process.pid && s.started_mono === started) { try { unlinkSync(paths.relayStatus) } catch { /* gone */ } }
@@ -219,7 +229,25 @@ export async function runRelay(deps: RelayDeps): Promise<number> {
   }, Math.max(1, Math.min(1000, Math.floor(exitMs / 45))))
 
   const inodeCheck = timers.setInterval(() => {
-    if (finished || inodeOf(paths.hubSock) === ours) return
+    if (finished) return
+    const now = inodeOf(paths.hubSock)
+    if (now === ours) return
+    if (now === null) {
+      // hub.sock is gone, and nobody's socket stands in its place: not "replaced" (§5.3), so the hub must not count a
+      // contest. An older relay's exit can delete it in the instant this one's rename lands (it checks, then unlinks), and
+      // anything else may too. Listen again: the pipes already connected stay, the ones that tried meanwhile read the
+      // missing socket as away (P12) and retry (Task 63 relay-2-2, conformance-8-3). If that fails, this relay is no use.
+      try {
+        const old = server
+        const l = bind()
+        server = l.server
+        ours = l.ino
+        old.stop(false)   // its name moved with the first rename; its open sockets go on
+      } catch {
+        finish('socket_gone', 0)
+      }
+      return
+    }
     // A newer relay put its own socket in place (§5.3): tell this link's hub, which counts these for relay_contested (T5).
     mux.data(0, encodeMessage(REPLACED))
     finish('relay_replaced', 0)
