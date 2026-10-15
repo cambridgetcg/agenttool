@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-10-01 (YUTABASE CI read access and audit permission hints; historical receipts retain their original dates)
+> Updated: 2026-10-15 (Summon Codex review candidate; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,14 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Summon Codex review candidate (2026-10-15)
+
+The isolated `feat/summon-codex-review-20261015` branch adds a native Codex review
+adapter to Summon's existing job transport. The [contract](../packages/summon/CODEX.md)
+tracks verification and remaining installation/live evidence. Nuance Claude's
+design consultation completed; that is not evidence of a Nuance Astra reply.
+The installed transport and held Collab Phase 1 trial remain unchanged.
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 

@@ -92,11 +92,12 @@ describe('gateStart', () => {
     expect(existsSync(lock)).toBe(false)
   })
   describe('F21/F24: runtime availability is decided before the allowlist', () => {
-    test('codex and hermes against the starter allowlist are runtime_unavailable, with no hint toward reads_anywhere', () => {
+    test('unverified codex and unsupported hermes are runtime_unavailable, with no widening hint', () => {
       const h = targetHome()
       for (const runtime of ['codex', 'hermes'] as const) {
         expect(gateStart(JSON.stringify(sampleRequest({ runtime, model: 'gpt-6-astra' })), deps(h)))
-          .toEqual({ status: 'refused', reason: 'runtime_unavailable', detail: `${runtime} is not wired in Phase 0` })
+          .toEqual({ status: 'refused', reason: 'runtime_unavailable', detail: runtime === 'codex'
+            ? 'codex CLI is missing or has not passed the supported-version check' : 'hermes is not wired in Phase 0' })
       }
     })
     test('a claude request with a provider is runtime_unavailable, even when the allowlist lists that provider', () => {

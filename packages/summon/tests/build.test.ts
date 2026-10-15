@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildNuance, cutAfterLinkedit, linkeditEnd, type NuanceBuild } from '../scripts/build-nuance.ts'
 import { prepareBundle } from '../scripts/prepare-pairing.ts'
-import { BASE_PATH, cleanupFixtureHostKey, cleanupTmps, END_TO_END, mode, PKG, run, sha, temp, world } from './helpers.ts'
+import { BASE_PATH, cleanupFixtureHostKey, cleanupTmps, END_TO_END, mode, PKG, run, sampleRequest, sha, targetHome, temp, world } from './helpers.ts'
+import { CODEX_ALLOWLIST, fakeCodex } from './codex-fixture.ts'
 
 afterEach(cleanupTmps)
 afterAll(cleanupFixtureHostKey)
@@ -120,5 +121,19 @@ describe('the real build', () => {
 
   // F40: the end-to-end checks of e2e.test.ts, through the compiled gatekeeper and the compiled runner.
   for (const [name, check] of Object.entries(END_TO_END)) test(`through the compiled pair: ${name}`, () => check(world(built)), 30_000)
+
+  test('compiled pair admits and completes an explicit Codex review without a Claude executable', () => {
+    const home = targetHome(CODEX_ALLOWLIST), fake = fakeCodex()
+    const env = { PATH: BASE_PATH, HOME: home, SUMMON_HOME_OVERRIDE: home, SUMMON_TEST_GUI: '1', SUMMON_TEST_RUNNER: '1',
+      SUMMON_CODEX_BIN: fake.bin, SUMMON_CLAUDE_BIN: '/does-not-exist' }
+    const req = sampleRequest({ runtime: 'codex', model: 'gpt-6-astra', prompt: 'compiled-codex-fixture' })
+    const start = Bun.spawnSync([built.gatekeeper], { env: { ...env, SSH_ORIGINAL_COMMAND: 'start' }, stdin: new TextEncoder().encode(JSON.stringify(req)) })
+    expect(JSON.parse(start.stdout.toString())).toMatchObject({ status: 'admitted' })
+    const runner = Bun.spawnSync([built.runner], { env, cwd: '/', timeout: 15_000 })
+    expect(runner.exitCode).toBe(0)
+    const result = Bun.spawnSync([built.gatekeeper], { env: { ...env, SSH_ORIGINAL_COMMAND: `result ${req.id}` } })
+    expect(JSON.parse(result.stdout.toString())).toMatchObject({ status: 'completed', result_text: 'echo: compiled-codex-fixture', exit_code: 0 })
+    expect(readFileSync(join(home, '.local/state/summon/ledger.jsonl'), 'utf8')).not.toContain(req.prompt)
+  }, 30_000)
 })
 

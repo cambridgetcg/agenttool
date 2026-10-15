@@ -29,9 +29,9 @@ export type CliCommand =
 
 const USAGE = `usage:
   summon <device> inventory
-  summon <device> claude --model M [--effort E] [--provider P] [--job] --cwd '<path on target>' [--review|--edit] --prompt-file F|-
+  summon <device> claude|codex --model M [--effort E] [--provider P] [--job] --cwd '<path on target>' [--review|--edit] --prompt-file F|-
          [--timeout 15m] [--expires 15m] [--label L]
-  (--effort must be one the target's allowlist lists for that model; Phase 0 refuses --provider for claude)
+  (--effort must be allowlisted for that model; codex is review-only and needs a verified target CLI; provider selection is unsupported)
   summon status|result|cancel <device>/smn_<id>`
 
 export function parseCli(argv: string[]): CliCommand | { error: string } {

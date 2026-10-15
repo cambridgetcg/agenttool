@@ -106,7 +106,7 @@ describe('collectInventory', () => {
     expect(inv).toMatchObject({
       harnesses: {
         claude: { retention: "no session persistence; large tool outputs may remain under ~/.claude/projects per Claude Code's own cleanup" },
-        codex: { retention: 'not run by Summon in Phase 0' },
+        codex: { retention: 'review jobs use --ephemeral; native authentication and auxiliary state retain their own lifecycle' },
         hermes: { retention: 'not run by Summon in Phase 0' },
       },
     })
@@ -155,6 +155,27 @@ describe('collectInventory', () => {
     }), present, executable)
     expect(inv).toMatchObject({ harnesses: { codex: { logged_in: true } } })
     expect(JSON.stringify(inv)).not.toContain('zq7')
+  })
+
+  test('a failed Codex launcher is unknown authentication, and its explicit PATH can find Node', () => {
+    const calls: { args: string[]; env?: Record<string, string> }[] = []
+    const base = fakeRun({ 'codex --version': { code: 127, stderr: 'env: node: No such file or directory' } })
+    const run: Run = (cmd, args, timeout, env) => {
+      if (cmd === codexPath) calls.push({ args, env })
+      return base(cmd, args, timeout, env)
+    }
+    const inv = inventoryWithClaude(run, present, executable)
+    expect(inv).toMatchObject({ harnesses: { codex: { version: null, logged_in: null } } })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.args).toEqual(['--version'])
+    expect(calls[0]!.env!.PATH).toContain('/opt/homebrew/bin')
+    expect(calls[0]!.env!.HOME).toBe('/h')
+    expect(calls[0]!.env).not.toHaveProperty('OPENAI_API_KEY')
+  })
+
+  test('a non-auth Codex login-status failure does not claim logout', () => {
+    expect(inventoryWithClaude(fakeRun({ 'codex login status': { code: 127 } }), present, executable))
+      .toMatchObject({ harnesses: { codex: { logged_in: null } } })
   })
 
   test('hermes is logged in only when its auth file exists', () => {

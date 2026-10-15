@@ -2,10 +2,11 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { findClaude, isExecutable } from './harness.ts'
+import { codexEnvironment } from './codex.ts'
 
-export type Run = (cmd: string, args: string[], timeoutMs?: number) => { code: number | null; stdout: string; stderr: string }
-export const runCmd: Run = (cmd, args, timeoutMs = 5000) => {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: timeoutMs })
+export type Run = (cmd: string, args: string[], timeoutMs?: number, env?: Record<string, string>) => { code: number | null; stdout: string; stderr: string }
+export const runCmd: Run = (cmd, args, timeoutMs = 5000, env) => {
+  const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: timeoutMs, ...(env ? { env } : {}) })
   return { code: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' }
 }
 
@@ -50,11 +51,15 @@ function firstLine(r: { code: number | null; stdout: string }): string | null {
 }
 
 /** `codex login status` is read for its exit code only: its output can name the account, so it never leaves this function. */
-function codexFacts(home: string, run: Run, executable: (p: string) => boolean): Record<string, unknown> | null {
+function codexFacts(home: string, user: string, run: Run, executable: (p: string) => boolean): Record<string, unknown> | null {
   const path = which('codex', home, executable)
   if (!path) return null
-  const login = run(path, ['login', 'status'], 15_000).code
-  return { path, version: firstLine(run(path, ['--version'])), logged_in: login === null ? null : login === 0, retention: RETENTION.other }
+  // A Node-backed launcher needs the same explicit PATH as a job. A failed launcher is not evidence of logout.
+  const env = codexEnvironment(home, user)
+  const version = firstLine(run(path, ['--version'], 5000, env))
+  const login = version === null ? null : run(path, ['login', 'status'], 15_000, env).code
+  return { path, version, logged_in: login === 0 ? true : login === 1 ? false : null,
+    retention: 'review jobs use --ephemeral; native authentication and auxiliary state retain their own lifecycle' }
 }
 
 /** Hermes keeps its login in auth.json; only that file's existence is read, never its contents. */
@@ -93,7 +98,7 @@ export function collectInventory(home: string, user: string, run: Run = runCmd, 
       keychain: kc.stdout + kc.stderr,
       harnesses: {
         claude: claude ? { path: claude, version: run(claude, ['--version']).stdout, logged_in: claudeLoggedIn, retention: RETENTION.claude } : null,
-        codex: codexFacts(home, run, executable),
+        codex: codexFacts(home, user, run, executable),
         hermes: hermesFacts(home, run, exists),
       },
       iterm2: exists('/Applications/iTerm.app'),

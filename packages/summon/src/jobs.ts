@@ -25,6 +25,10 @@ export interface JobState {
   pid?: number
   /** The child's start time as `ps -o lstart=` printed it at spawn: with `pid`, what identifies the process. */
   pid_lstart?: string
+  /** Codex's detached group and the runner that owns its timeout watcher. */
+  codex_group?: boolean
+  supervisor_pid?: number
+  supervisor_lstart?: string
   /** When Yu's usage limit resets, for a job that ended blocked(usage) and was told. */
   resets_at?: string
 }
@@ -83,7 +87,8 @@ export function finishJob(paths: SummonPaths, nowMs: number, s: JobState, o: Out
 /** The terminal state, then its ledger entry. finishJob's second half, and all of it for a job whose result.json is already there. */
 export function settleJob(paths: SummonPaths, nowMs: number, s: JobState, o: Outcome): void {
   writeState(paths, { ...s, status: o.status, reason: o.reason, detail: o.detail, ...(o.resets_at ? { resets_at: o.resets_at } : {}),
-    ended_at: new Date(nowMs).toISOString(), pid: undefined, pid_lstart: undefined })
+    ended_at: new Date(nowMs).toISOString(), pid: undefined, pid_lstart: undefined,
+    codex_group: undefined, supervisor_pid: undefined, supervisor_lstart: undefined })
   appendLedger(paths.ledger, { event: 'job_end', id: s.id, status: o.status, reason: o.reason, detail: o.detail?.slice(0, 200) }, nowMs)
 }
 

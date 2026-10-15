@@ -15,6 +15,8 @@ export interface GateDeps {
   guiSessionIsMine(): boolean
   runnerLoaded(): boolean
   claudeAvailable(): boolean
+  /** True only for a locally verified Codex CLI; omitted means unavailable. */
+  codexAvailable?(): boolean
   realpath?: (p: string) => string | null
 }
 
@@ -31,8 +33,14 @@ function wellFormedId(raw: string): string | undefined {
   } catch { return undefined }
 }
 
-/** Phase 0 runs Claude Code only, with no provider choice. Decided before the allowlist, so no hint asks for a widening that buys nothing. */
+/** Runtime support precedes allowlist admission. Codex is a separately verified review-only adapter (CODEX.md). */
 function runtimeUnavailable(req: SummonRequest, deps: GateDeps): string | null {
+  if (req.runtime === 'codex') {
+    if (req.access !== 'review') return 'codex supports review jobs only'
+    if (req.provider !== undefined) return 'provider selection is not wired for codex'
+    if (!deps.codexAvailable?.()) return 'codex CLI is missing or has not passed the supported-version check'
+    return null
+  }
   if (req.runtime !== 'claude') return `${req.runtime} is not wired in Phase 0`
   if (req.provider !== undefined) return 'provider selection is not wired for claude in Phase 0'
   if (!deps.claudeAvailable()) return 'claude is not installed on this Mac'

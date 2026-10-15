@@ -2,6 +2,9 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { claudeInvocation, interpretClaudeStream, usageWarning, type Invocation, type Outcome } from './harness.ts'
+import { codexInvocation, codexReady } from './codex.ts'
+import { interpretCodexStream } from './codex-output.ts'
+import { groupMembers, signalOwnedGroup, type GroupMembers } from './process-group.ts'
 import { claimFailedNote, errTag, finishJob, jobDir, notStartedOutcome, readJson, readState, settleJob, writeJsonAtomic, writeState, type JobResult, type JobState } from './jobs.ts'
 import { appendLedger, withLock } from './ledger.ts'
 import type { SummonPaths } from './paths.ts'
@@ -14,6 +17,7 @@ export interface RunnerDeps {
   user: string
   nowMs(): number
   claudeBin(): string | null
+  codexBin?(): string | null
   collectInventory(): Promise<unknown>
   heartbeatMs: number
   pollMs: number
@@ -33,9 +37,9 @@ const iso = (ms: number) => new Date(ms).toISOString()
 const finish = (deps: RunnerDeps, s: JobState, o: Outcome, exitCode: number | null = null) => finishJob(deps.paths, deps.nowMs(), s, o, exitCode)
 
 /** Spawns claude. Bun reports some failures by throwing (ENOTDIR) and some later as an 'error' event with no pid (ENOENT). */
-function startChild(inv: Invocation, cwd: string): Promise<{ child: ChildProcess } | { error: string }> {
+function startChild(inv: Invocation, cwd: string, processGroup = false): Promise<{ child: ChildProcess } | { error: string }> {
   let child: ChildProcess
-  try { child = spawn(inv.bin, inv.args, { cwd, env: inv.env, stdio: ['pipe', 'pipe', 'pipe'] }) } catch (e) { return Promise.resolve({ error: errTag(e) }) }
+  try { child = spawn(inv.bin, inv.args, { cwd, env: inv.env, detached: processGroup, stdio: ['pipe', 'pipe', 'pipe'] }) } catch (e) { return Promise.resolve({ error: errTag(e) }) }
   if (child.pid !== undefined) {
     child.on('error', () => { /* a kill that did not land; the close event still decides */ })
     return Promise.resolve({ child })
@@ -62,23 +66,53 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   if (existsSync(join(dir, 'cancel')) || deps.nowMs() > Date.parse(s.expires_at) + CLOCK_SKEW_MS) return finish(deps, s, notStartedOutcome(deps.paths, id))
   const req = readJson<SummonRequest>(join(dir, 'request.json'))
   if (!req || typeof req.prompt !== 'string') return finish(deps, s, { status: 'failed', detail: 'request file is missing or unreadable' })
-  const bin = deps.claudeBin()
-  if (!bin) return finish(deps, s, { status: 'failed', detail: 'claude is not installed on this Mac' })
-  let inv: Invocation
-  try { inv = claudeInvocation({ model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
-    return finish(deps, s, { status: 'failed', detail: 'could not start claude: the command could not be built for this folder' })
+  if (s.runtime !== 'claude' && s.runtime !== 'codex') return finish(deps, s, { status: 'failed', detail: 'runtime is not supported' })
+  const isCodex = s.runtime === 'codex'
+  const runtime = isCodex ? 'codex' : 'claude'
+  if (isCodex && (s.access !== 'review' || req.runtime !== 'codex' || req.access !== 'review' || req.provider !== undefined)) {
+    return finish(deps, s, { status: 'failed', detail: 'codex request does not match the review-only contract' })
   }
-  const started = await startChild(inv, s.cwd_real)
-  if ('error' in started) return finish(deps, s, { status: 'failed', detail: `could not start claude: ${started.error}` })
+  const bin = isCodex ? deps.codexBin?.() : deps.claudeBin()
+  if (!bin) return finish(deps, s, { status: 'failed', detail: `${runtime} is not installed on this Mac` })
+  if (isCodex && !codexReady(bin, deps.home, deps.user)) {
+    return finish(deps, s, { status: 'failed', detail: 'codex CLI failed the supported-version check' })
+  }
+  const supervisorStart = isCodex ? deps.processStartTime(process.pid) : null
+  if (isCodex && !supervisorStart) return finish(deps, s, { status: 'failed', detail: 'could not identify the Codex supervisor' })
+  let inv: Invocation
+  try { inv = (isCodex ? codexInvocation : claudeInvocation)({ model: s.model, effort: s.effort, access: s.access, cwdReal: s.cwd_real, prompt: req.prompt }, deps.home, bin, deps.user) } catch {
+    return finish(deps, s, { status: 'failed', detail: `could not start ${runtime}: the command could not be built for this folder` })
+  }
+  const started = await startChild(inv, s.cwd_real, isCodex)
+  if ('error' in started) return finish(deps, s, { status: 'failed', detail: `could not start ${runtime}: ${started.error}` })
   const { child } = started
+  const childStart = deps.processStartTime(child.pid!)
+  let knownGroup: GroupMembers = new Map(childStart ? [[child.pid!, childStart]] : [])
+  const observeGroup = () => {
+    const observed = groupMembers(child.pid!)
+    // One snapshot proves both leader identity and membership. Retain earlier observed descendants.
+    if (childStart && observed?.get(child.pid!) === childStart) {
+      for (const [pid, start] of observed) knownGroup.set(pid, start)
+    }
+  }
+  // Codex can launch sandboxed commands. Its fresh process group belongs only to this job.
+  const signalChild = (signal: NodeJS.Signals) => {
+    if (isCodex) {
+      observeGroup()
+      return signalOwnedGroup(child.pid!, knownGroup, signal)
+    }
+    try { child.kill(signal); return true } catch { return false }
+  }
   const startedMs = deps.nowMs()
   // A job whose start cannot be recorded (state or ledger) is stopped at once: nothing runs on unrecorded.
   try {
-    const lstart = deps.processStartTime(child.pid!)
-    writeState(deps.paths, { ...s, status: 'running', started_at: iso(startedMs), pid: child.pid, ...(lstart ? { pid_lstart: lstart } : {}) })
+    if (isCodex && !childStart) { child.kill('SIGKILL'); throw new Error('unidentified Codex child') }
+    writeState(deps.paths, { ...s, status: 'running', started_at: iso(startedMs), pid: child.pid,
+      ...(childStart ? { pid_lstart: childStart } : {}),
+      ...(isCodex ? { codex_group: true, supervisor_pid: process.pid, supervisor_lstart: supervisorStart! } : {}) })
     appendLedger(deps.paths.ledger, { event: 'job_start', id, status: 'running' }, startedMs)
   } catch (e) {
-    try { child.kill('SIGKILL') } catch { /* gone */ }
+    signalChild('SIGKILL')
     throw e
   }
   // Keep the Mac awake exactly as long as the job (spec §2 step 3).
@@ -98,8 +132,8 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const stop = (o: Outcome) => {
     if (stopped) return
     stopped = o
-    try { child.kill('SIGTERM') } catch { /* gone */ }
-    killTimer = setTimeout(() => { try { child.kill('SIGKILL') } catch { /* gone */ } }, deps.killGraceMs)
+    signalChild('SIGTERM')
+    killTimer = setTimeout(() => signalChild('SIGKILL'), deps.killGraceMs)
   }
   child.stdout!.setEncoding('utf8')
   child.stdout!.on('data', (chunk: string) => {
@@ -110,7 +144,7 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i); buf = buf.slice(i + 1)
       lines.push(line)
-      if (usageWarning(line)) stop({ status: 'blocked', reason: 'usage' })
+      if (!isCodex && usageWarning(line)) stop({ status: 'blocked', reason: 'usage' })
     }
   })
   const stderrHead: Buffer[] = []
@@ -130,7 +164,10 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   const timer = setInterval(() => {
     const m = mono()
     const sinceBeat = m - lastBeat
-    if (sinceBeat >= deps.heartbeatMs || sinceBeat < 0) { beat(); lastBeat = m }
+    if (sinceBeat >= deps.heartbeatMs || sinceBeat < 0) {
+      beat(); lastBeat = m
+      if (isCodex) observeGroup()
+    }
     if (existsSync(join(dir, 'cancel'))) stop({ status: 'cancelled', detail: 'cancelled by request' })
     if (m - startedMono > s.timeout_s * 1000) stop({ status: 'timed_out', detail: `ran past ${s.timeout_s}s` })
   }, deps.pollMs)
@@ -143,11 +180,26 @@ async function runJob(deps: RunnerDeps, id: string): Promise<void> {
   })
   clearInterval(timer)
   clearTimeout(killTimer)
+  let cleanupUnverified = false
+  if (isCodex) {
+    // A parent may exit before its command. Settle owned descendants before publishing a terminal result.
+    const remaining = groupMembers(child.pid!)
+    if (remaining === null) cleanupUnverified = true
+    else if (remaining.size > 0) {
+      if (!signalChild('SIGTERM')) cleanupUnverified = true
+      else {
+        await new Promise((resolve) => setTimeout(resolve, deps.killGraceMs))
+        if (!signalChild('SIGKILL')) cleanupUnverified = true
+      }
+    }
+  }
   child.stdout!.destroy(); child.stderr!.destroy()
   if (buf) lines.push(buf)
-  const interpreted = interpretClaudeStream(lines, code, Buffer.concat(stderrHead).toString('utf8'))
+  const interpreted = (isCodex ? interpretCodexStream : interpretClaudeStream)(lines, code, Buffer.concat(stderrHead).toString('utf8'))
   const stoppedBy = stopped as Outcome | null // set from the callbacks above, which control-flow analysis cannot see
-  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
+  finish(deps, { ...s, status: 'running', started_at: iso(startedMs) }, cleanupUnverified
+    ? { status: 'unknown', detail: 'Codex process group cleanup could not be verified' }
+    : stoppedBy ? stoppedOutcome(stoppedBy, interpreted) : interpreted, code)
 }
 
 /** Last resort for a throw that escaped runJob: end the job failed (runner-authored detail) rather than leave it queued or running. */
@@ -260,7 +312,14 @@ export function markOrphans(paths: SummonPaths, nowMs: number,
   for (const id of jobIds(paths)) {
     const s = readState(paths, id)
     let detail: string | undefined
-    if (s?.status === 'running' && !stillOurs(s)) detail = 'runner stopped mid-job'
+    if (s?.status === 'running' && s.runtime === 'codex' && s.codex_group && stillOurs(s)
+      && s.supervisor_pid && s.supervisor_lstart
+      && !(startTimeOf(s.supervisor_pid) === s.supervisor_lstart && isAlive(s.supervisor_pid))) {
+      // This is a stopped supervisor, never a retry. The leader's identity proves this detached group is ours.
+      const known = new Map([[s.pid!, s.pid_lstart!]])
+      if (!signalOwnedGroup(s.pid!, known, 'SIGKILL')) continue // keep its slot occupied when ownership/cleanup is uncertain
+      detail = 'Codex supervisor stopped; owned process group terminated'
+    } else if (s?.status === 'running' && !stillOurs(s)) detail = 'runner stopped mid-job'
     else if (s?.status === 'queued' && existsSync(join(jobDir(paths, id), 'claimed'))) detail = 'runner stopped before the job started'
     if (!s || !detail) continue
     // result.json is written atomically and before state.json, so one that parses is the job's whole outcome.

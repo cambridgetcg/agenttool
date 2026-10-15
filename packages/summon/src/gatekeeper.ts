@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
+import { userInfo } from 'node:os'
+import { codexReady, findCodex } from './codex.ts'
 import type { GateDeps } from './gate.ts'
 import { findClaude } from './harness.ts'
 import { errTag, heartbeatAgeS, jobDir, neverReached, notStartedOutcome, readJson, readState, type JobResult } from './jobs.ts'
@@ -137,5 +139,6 @@ export function liveGateDeps(paths: SummonPaths, serviceLoaded: ServiceLoaded = 
     guiSessionIsMine: () => (testing && process.env.SUMMON_TEST_GUI === '1') || (() => { try { return statSync('/dev/console').uid === uid } catch { return false } })(),
     runnerLoaded: () => (testing && process.env.SUMMON_TEST_RUNNER === '1') || serviceLoaded(`gui/${uid}/dev.summon.runner`),
     claudeAvailable: () => findClaude(paths.home) !== null,
+    codexAvailable: () => codexReady(findCodex(paths.home), paths.home, userInfo().username),
   }
 }

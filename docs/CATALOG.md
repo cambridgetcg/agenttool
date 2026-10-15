@@ -8,6 +8,9 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
+New private source candidate: [Summon Codex review contract](../packages/summon/CODEX.md).
+The generated inventory below predates this candidate; this link makes no installation claim.
+
 **816 document paths** (including mirrors). orientation: 184; guide: 83; reference: 328; policy: 27; reflection: 127; proposal: 45; record: 20; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An

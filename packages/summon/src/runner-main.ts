@@ -5,6 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { findClaude } from './harness.ts'
+import { findCodex } from './codex.ts'
 import { collectInventory } from './inventory.ts'
 import { settleNeverReached } from './jobs.ts'
 import { withLock } from './ledger.ts'
@@ -35,6 +36,7 @@ for (const [what, step] of [
 let exitCode = 0
 try {
   await runOnce({ paths, home: paths.home, user, nowMs: () => Date.now(), claudeBin: () => findClaude(paths.home),
+    codexBin: () => findCodex(paths.home),
     collectInventory: async () => collectInventory(paths.home, user), heartbeatMs: 10_000, pollMs: 2_000, killGraceMs: 5_000, processStartTime })
 } catch (e) {
   console.error(`summon-runner: runOnce failed: ${tag(e)}`)

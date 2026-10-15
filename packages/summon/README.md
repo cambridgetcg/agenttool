@@ -2,6 +2,11 @@
 
 Start a new agent session on another of Yu's Macs. Design: `docs/superpowers/specs/2026-10-10-summon-design.md`.
 
+The [Codex review extension](CODEX.md) adds native Codex jobs on a separately
+reviewed runner. It requires an explicit target model/folder allowlist and
+`reads_anywhere: true`. The installed Phase 0 runner remains Claude-only until
+updated; a source checkout is not a live connection receipt.
+
 Phase 0 (SSH at home): `summon nuance claude --model sonnet --cwd '~/Projects/x' --review --prompt-file task.md`,
 then `summon status|result nuance/smn_<id>`. `--job` may be given (it is Phase 0's only mode); `--live` is refused until
 Phase 1. Nuance runs `summon-gatekeeper` (SSH forced command) and
@@ -138,10 +143,12 @@ hint that says what is wrong.
 
 - **`limits.max_concurrent` must be 1.** The runner is serial, so a second admitted job could only wait, and it could
   expire before its turn.
-- **Only `claude` runs in Phase 0.** A `codex` or `hermes` request, or a `claude` request that names a provider, is
-  refused `runtime_unavailable` before the allowlist's admission check. A claude model entry may list `effort` values that
+- **Claude and verified Codex review jobs.** `hermes`, Codex edit jobs, unsupported Codex CLI versions, or requests naming a provider
+  are refused `runtime_unavailable` before the allowlist's admission check. Codex uses its native OpenAI account,
+  explicitly selected model and read-only sandbox; it can read beyond the working folder and requires `reads_anywhere: true`.
+  It does not attach to an existing session. A claude model entry may list `effort` values that
   `claude --help` accepts (`low`, `medium`, `high`, `xhigh`, `max`), and an admitted effort reaches claude as `--effort`.
-- **A review folder** gives the job Read, Glob and Grep, and Claude Code keeps those reads inside the folder.
+- **A Claude review folder** gives the job Read, Glob and Grep, and Claude Code keeps those reads inside the folder.
 - **An edit folder also needs `reads_anywhere: true` on the claude runtime entry**, because an edit grant reaches well
   past its folder:
   1. The job can **read any file Yu can**, through git's own file options (`git commit -F <file>`,
