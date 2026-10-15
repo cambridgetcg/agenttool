@@ -322,6 +322,29 @@ describe('syncMirror', () => {
     expect(await syncMirror(w.spec, { declaredHead: c2 }, { ...w.deps, fetchedToday: () => DAILY_BUDGET_BYTES - 1 })).toEqual({ ok: true, oid: c2 })
   }, T)
 
+  test('fetch.fsckObjects=true keeps the download one pack whatever fetch.unpackLimit says, so the cap and the day\'s budget still see it (Task 63 gate-1-1, conformance-4-12 declined: false premise)', async () => {
+    const w = await created()
+    const packFiles = () => readdirSync(join(w.airClone, '.git', 'objects', 'pack')).filter((n) => n.endsWith('.pack'))
+    const looseCount = () => Number(/^count: (\d+)$/m.exec(repoGit(w.airClone, ['count-objects', '-v']))![1])
+    // With fsck on, fetch-pack always runs index-pack, which stores the pack; unpack-objects (loose files) is used only
+    // when fsck is off and the object count is under the limit. The argv fixes fsck on, so fetch.unpackLimit, which does
+    // outrank transfer.unpackLimit, has nothing to override. This test is the tripwire if a future git changes that.
+    const scopes: Array<[string, () => void]> = [
+      ['global', () => writeFileSync(join(w.air, '.gitconfig'), '[fetch]\n\tunpackLimit = 100000\n')],
+      ['repo', () => { rmSync(join(w.air, '.gitconfig')); repoGit(w.airClone, ['config', 'fetch.unpackLimit', '100000']) }],
+    ]
+    for (const [scope, arm] of scopes) {
+      arm()
+      const next = commitFiles(w.share, { [`notes/${scope}.md`]: `${scope}\n` }, `a note under ${scope} config`)
+      const packsBefore = packFiles().length
+      const looseBefore = looseCount()
+      expect([scope, await syncMirror(w.spec, { declaredHead: next }, w.deps)]).toEqual([scope, { ok: true, oid: next }])
+      expect([scope, packFiles().length]).toEqual([scope, packsBefore + 1]) // kept as one pack
+      expect([scope, looseCount()]).toEqual([scope, looseBefore]) // and not unpacked into loose objects
+      expect([scope, (fetchLines(w).at(-1)!.bytes as number) > 0]).toEqual([scope, true]) // so the day's budget is charged
+    }
+  }, T)
+
   test('a pack over the wire cap is fetch_failed and leaves no temp pack', async () => {
     const w = await created()
     const c2 = commitFiles(w.share, { 'notes/noise.txt': randomBytes(1536 * 1024).toString('base64') }, 'a 2 MiB note')
