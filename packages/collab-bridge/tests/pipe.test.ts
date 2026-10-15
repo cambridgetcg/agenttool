@@ -567,6 +567,32 @@ describe('after the write', () => {
   })
 })
 
+describe('reattach while the process table cannot be read', () => {
+  test('a ps run that fails is not "the host is gone": the pipe keeps redialling and attaches when the hub returns (Task 63 pipe-3-3)', async () => {
+    const f = nuanceFixture()
+    let reads = 0
+    // The first read (the pipe start) works; every later one fails, as ps does under fork pressure or its 2 s timeout.
+    const table = () => (reads++ === 0 ? fakeTable() : null)
+    const p = await started(pipeDeps(f, { table, env: { ...f.env, CLAUDE_CODE_ENTRYPOINT: 'cli', COLLAB_BRIDGE_TEST_TIME_SCALE: '0.05' } }))
+    await Bun.sleep(400)   // detached, several redial ticks with the table unreadable
+    const l = await link(f)
+    await attached(l)
+    expect(l.connections()).toBeGreaterThanOrEqual(1)
+    expect(codeOf(await p.handleCall(1, 'collab_task_list', {}))).not.toBe('hub_away')
+  })
+
+  test('a table that is read and no longer holds the host (or holds another process under its pid) stops the redialling', async () => {
+    const f = nuanceFixture()
+    let reads = 0
+    const table = () => (reads++ === 0 ? fakeTable() : fakeTable(process.pid, { ...FAKE_HOST, lstart: 'Thu Oct 8 09:00:00 2026' }))
+    await started(pipeDeps(f, { table, env: { ...f.env, CLAUDE_CODE_ENTRYPOINT: 'cli', COLLAB_BRIDGE_TEST_TIME_SCALE: '0.05' } }))
+    await Bun.sleep(400)
+    const l = await link(f)
+    await Bun.sleep(600)
+    expect(l.connections()).toBe(0)
+  })
+})
+
 describe('the tool list', () => {
   const changed = TEST_TOOLS.map((t) => (t.name === 'collab_task_list' ? { ...t, description: 'List tasks, newer words.' } : t))
 

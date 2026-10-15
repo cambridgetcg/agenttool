@@ -313,8 +313,12 @@ export class Pipe {
       mono: deps.mono,
       rand: deps.rand,
       // The same host process, by pid and start time, from the same table the lineage came from (P40).
+      // A table that could not be read (ps failed or timed out) says nothing about the host, so redialling goes on: the link
+      // client stops for good on one false, and a pipe whose host really died gets stdin EOF and exits anyway.
       hostAlive: () => {
-        const r = deps.table()?.get(host.pid)
+        const t = deps.table()
+        if (t === null) return true
+        const r = t.get(host.pid)
         return r !== undefined && r.started_at === host.lstart
       },
       on: {
