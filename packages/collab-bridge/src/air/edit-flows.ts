@@ -160,12 +160,13 @@ async function flow(ctx: EditFlowCtx): Promise<EditFlowOutcome> {
     // same-key replay of one whose first forward answered unknown after Collab committed (plan 'forward': the task reads
     // completed, so nothing syncs and Collab returns its stored receipt). writeTaskRef is a no-op when the ref is already
     // there and writes only while the mirror still holds the head. The call has already applied, so a refusal here is
-    // ledgered and the reviewer reads the result checkpoint's head instead (§7.7).
+    // ledgered and the reviewer reads the result checkpoint's head instead (§7.7). A replay that finds the mirror moved
+    // on is ledgered as 'mirror_moved', not 'mirror_tampered': the mirror is healthy (Task 63 new-taskref-moved).
     const done = taskFromResult(outcome.result)
     const resultHead = done?.result_checkpoint?.head_sha ?? null
-    let ref: 'ok' | 'mirror_tampered' | 'missing' = 'missing'
+    let ref: 'ok' | 'mirror_tampered' | 'mirror_moved' | 'missing' = 'missing'
     try {
-      if (resultHead !== null) ref = await writeTaskRef(spec, task.id, resultHead, deps)
+      if (resultHead !== null) ref = await writeTaskRef(spec, task.id, resultHead, deps, { replay: plan.kind !== 'sync' })
     } catch (e) {
       logFault(ctx, 'tasks ref fault', e)
       ref = 'mirror_tampered'

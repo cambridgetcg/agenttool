@@ -660,6 +660,36 @@ describe('syncMirror', () => {
     expect(() => mirrorRefs(w.spec).task('a:b')).toThrow()
   }, T)
 
+  test('a task id git cannot hold answers ok whatever the mirror holds, and a replay that finds the mirror moved on says moved, not tampered (Task 63 new-taskref-moved)', async () => {
+    const w = await created()
+    const c2 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a note')
+    await syncMirror(w.spec, { declaredHead: c2 }, w.deps)
+    const c3 = commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'another note')
+    await syncMirror(w.spec, { declaredHead: c3 }, w.deps) // the mirror is past c2 now
+    const ref = mirrorRefs(w.spec).task('t-notes-1')
+    const refValue = () => repoGit(w.airClone, ['for-each-ref', '--format=%(objectname)', ref])
+    // 'a:b' can never hold a ref: there is nothing to write and nothing wrong, so a replay long after is ok, not tampered.
+    expect(taskRefOk('a:b')).toBe(false)
+    expect(await writeTaskRef(w.spec, 'a:b', c2, w.deps)).toBe('ok')
+    expect(await writeTaskRef(w.spec, 'a:b', c2, w.deps, { replay: true })).toBe('ok')
+    // A replay whose ref was never written finds a healthy mirror past the head: it says so, and writes nothing.
+    expect(await writeTaskRef(w.spec, 't-notes-1', c2, w.deps, { replay: true })).toBe('mirror_moved')
+    expect(refValue()).toBe('')
+    // A new completion's head is the mirror's HEAD (§7.2); anything else is still mirror_tampered.
+    expect(await writeTaskRef(w.spec, 't-notes-1', c2, w.deps)).toBe('mirror_tampered')
+    // A mirror git cannot read at all is tampered even on a replay.
+    expect(await writeTaskRef({ ...w.spec, mirrorPath: join(w.air, 'nowhere') }, 't-notes-1', c2, w.deps, { replay: true })).toBe('mirror_tampered')
+    // A ref that holds another value, or a head that is no commit id, is tampered on a replay too.
+    expect(await writeTaskRef(w.spec, 't-notes-1', 'not-an-oid', w.deps, { replay: true })).toBe('mirror_tampered')
+    repoGit(w.airClone, ['update-ref', ref, w.base])
+    expect(await writeTaskRef(w.spec, 't-notes-1', c2, w.deps, { replay: true })).toBe('mirror_tampered')
+    expect(refValue()).toBe(w.base)
+    // A replay while the mirror still holds the head writes the ref, as before.
+    repoGit(w.airClone, ['update-ref', '-d', ref])
+    expect(await writeTaskRef(w.spec, 't-notes-1', c3, w.deps, { replay: true })).toBe('ok')
+    expect(refValue()).toBe(c3)
+  }, T)
+
   test('the daily total is summed from today\'s ledger lines', () => {
     const ledger = join(temp('cb-mirror-ledger-'), 'ledger.jsonl')
     const at = (day: number, h: number, m: number) => new Date(2026, 9, day, h, m, 0).getTime()

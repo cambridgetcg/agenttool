@@ -476,7 +476,23 @@ describe('replays', () => {
     const replay = taskOf(await complete(w, a, declaredOf(w), { key: k }))
     expect(replay.result_checkpoint.head_sha).toBe(n1)
     expect(tasksRef(w, 'A')).toBeNull() // never written from a mirror that no longer holds the head
-    expect(w.ledger.filter((f) => f.event === 'tasks_ref' && f.code === 'mirror_tampered')).toHaveLength(1) // visible, not silent
+    // Visible, not silent, and not called tampering: the mirror is healthy, it only moved on (Task 63 new-taskref-moved).
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([{ event: 'tasks_ref', device: 'nuance', user: 'macair', code: 'mirror_moved', outcome: 'refused' }])
+  }, T)
+
+  test('a replay of a completion whose task id git cannot hold as a ref name ledgers nothing, whatever the mirror holds by then (Task 63 new-taskref-moved)', async () => {
+    const w = await world()
+    const a = await claimed(w, 'A:1') // Collab allows ':' in a task id; git refuses it in a ref name
+    const n1 = commitFiles(w.share, { 'notes/a.md': 'a\n' }, 'a')
+    const k = key()
+    const doneA = taskOf(await complete(w, a, declaredOf(w), { key: k }))
+    await airReview(w, doneA, 'accept')
+    const b = await claimed(w, 'B', { base: n1 })
+    commitFiles(w.share, { 'notes/b.md': 'b\n' }, 'b')
+    taskOf(await complete(w, b, declaredOf(w)))
+    expect(mirrorAt(w)).not.toBe(n1) // the mirror is past A's commit
+    for (let i = 0; i < 2; i++) expect(taskOf(await complete(w, a, declaredOf(w), { key: k }))).toEqual(doneA)
+    expect(w.ledger.filter((f) => f.event === 'tasks_ref')).toEqual([])
   }, T)
 
   test("a same-key replay of a complete while another task holds the mirror is forwarded and returns Collab's receipt", async () => {

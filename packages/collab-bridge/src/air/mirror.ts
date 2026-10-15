@@ -481,15 +481,22 @@ export async function mirrorWorkspaceId(spec: MirrorSpec, deps: Pick<MirrorDeps,
  * `…/tasks/<task_id>`, written once for a completion the hub first sees applied and only when `head` is the mirror's HEAD
  * (§7.2). The same value again is a no-op, whatever the mirror holds by then (a replay long after it moved on); a
  * different value is mirror_tampered and the ref stays. A task id git cannot hold as a ref name (`taskRefOk`) writes
- * nothing and answers 'ok': the mirror is fine, and the reviewer reads the task's result checkpoint head instead (§7.7).
+ * nothing and answers 'ok' at once, whatever the mirror holds: nothing is wrong, and the reviewer reads the task's result
+ * checkpoint head instead (§7.7).
+ *
+ * `replay` is the same-key replay of a completion whose first forward was never heard (Task 63 conformance-2-3). Its
+ * ref may be absent because the first forward never wrote it, and the mirror may legitimately have moved past the head
+ * since: that is 'mirror_moved' (nothing written, nothing wrong with the mirror), where a new completion whose head is
+ * not the mirror's HEAD is still mirror_tampered (§7.2). A mirror git cannot read is mirror_tampered either way.
  */
-export async function writeTaskRef(spec: MirrorSpec, taskId: string, head: string, deps: MirrorDeps): Promise<'ok' | 'mirror_tampered'> {
+export async function writeTaskRef(spec: MirrorSpec, taskId: string, head: string, deps: MirrorDeps, o: { replay?: boolean } = {}): Promise<'ok' | 'mirror_tampered' | 'mirror_moved'> {
   if (!OID_RE.test(head)) return 'mirror_tampered'
-  const ref = taskRefOk(taskId) ? mirrorRefs(spec).task(taskId) : null
-  const existing = ref === null ? null : await commitAt(deps, spec.airClone, ref)
+  if (!taskRefOk(taskId)) return 'ok'
+  const ref = mirrorRefs(spec).task(taskId)
+  const existing = await commitAt(deps, spec.airClone, ref)
   if (existing === head) return 'ok'
-  if ((await mirrorHead(spec, deps)) !== head) return 'mirror_tampered'
-  if (ref === null) return 'ok'
+  const at = await mirrorHead(spec, deps)
+  if (at !== head) return o.replay === true && at !== null && existing === null ? 'mirror_moved' : 'mirror_tampered'
   if (existing !== null) return 'mirror_tampered'
   const r = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'update-ref', ref, head, ''])
   if (r.code === 0) return 'ok'
