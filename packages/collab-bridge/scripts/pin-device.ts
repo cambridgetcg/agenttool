@@ -74,12 +74,15 @@ const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !
 const keysAre = (o: Obj, keys: string[]) => Object.keys(o).length === keys.length && keys.every((k) => Object.hasOwn(o, k))
 const str = (v: unknown, re?: RegExp): v is string => typeof v === 'string' && (re === undefined || re.test(v))
 /**
- * Text the device chose, of at most `max` characters, with nothing a Terminal would act on: no control character (C0, DEL, C1),
- * line or paragraph separator or bidi control. A compromised device answers hello, and its strings reach Ai's Terminal in the
- * ✗ lines and the pinned text and are stored in the device file. ZWJ and ZWNJ stay (an emoji folder name; N2 keeps them too).
+ * Text the device chose, of at most `max` characters, with nothing a Terminal would act on and nothing it would not show: no
+ * control character (C0, DEL, C1), line or paragraph separator or bidi control, and none of the invisible-text carriers N2 drops
+ * (spec §6.4, T10): tag characters U+E0000–E007F, which spell a sentence a Terminal draws as nothing and an agent reads, U+FEFF,
+ * U+E0100–E01EF (VS17 and up), and a run of U+FE00–FE0F (N2 keeps at most one after a base character). A compromised device
+ * answers hello, and its strings reach Ai's Terminal in the ✗ lines and the pinned text and are stored in the device file. ZWJ
+ * and ZWNJ stay (an emoji folder name; N2 keeps them too).
  */
-const shown = (v: unknown, max: number): v is string =>
-  typeof v === 'string' && v.length <= max && !/[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(v)
+const NOT_SHOWN = /[\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]|[\ufe00-\ufe0f]{2}/u
+const shown = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max && !NOT_SHOWN.test(v)
 const HELLO_KEYS = ['v', 'device', 'build', 'prepared', 'expiry', 'user', 'seat_public', 'shares', 'git', 'summon', 'summon_now',
   'claude_version', 'zshenv_clean', 'clock']
 
@@ -100,7 +103,8 @@ export function parseHello(line: string): Hello | null {
   const n = o.summon_now
   if (!isObj(n) || !keysAre(n, ['key_sha256', 'dropin_stat']) || !str(n.key_sha256, HEX64_RE)
     || !(n.dropin_stat === null || str(n.dropin_stat, DROPIN_STAT_RE))) return null
-  if (!(o.claude_version === null || shown(o.claude_version, 200)) || typeof o.zshenv_clean !== 'boolean') return null
+  // claude_version is the one INSTALLED holds (src/nuance/installed.ts: printable ASCII, 1 to 128), or null for none recorded.
+  if (!(o.claude_version === null || str(o.claude_version, /^[\x20-\x7e]{1,128}$/)) || typeof o.zshenv_clean !== 'boolean') return null
   if (!str(o.clock, /^[\x20-\x7e]{1,64}$/) || Number.isNaN(Date.parse(o.clock))) return null
   return o as unknown as Hello
 }
