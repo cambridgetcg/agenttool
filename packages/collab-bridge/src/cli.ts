@@ -17,7 +17,7 @@ import {
   activeSticky, readDeviceStatus, readHostKeyAck, readHubStatus, statusLines, writeDeviceStatus, writeHostKeyAck, type DeviceStatus,
 } from './air/status.ts'
 import { LINEAGE_RE } from './link/messages.ts'
-import { writeFileDurable } from './native.ts'
+import { tryFlock, writeFileDurable } from './native.ts'
 import { mkdirPrivate } from './private-dir.ts'
 import type { AirPaths } from './paths.ts'
 import { ancestry, HARNESS_COMMS, type ProcTable } from './proc.ts'
@@ -54,6 +54,8 @@ const REPLY_MAX_BYTES = 256
 /** How long hub on waits for launchd to let go of a booted-out hub, and how often it asks (scaled in tests, P33). */
 const LET_GO_MS = 30_000
 const LET_GO_POLL_MS = 250
+/** How long a hub.lock that is held is asked again before it is reported: a hub that launchd just stopped may still be closing it. */
+const LOCK_GRACE_MS = 2_000
 
 /** The fixed ~/.local/bin/collab-bridge (spec §4.3 with P14's env -u): zsh -f reads no rc file, and bun gets no BUN_OPTIONS. */
 export function cliLauncherText(sha: string): string {
@@ -231,6 +233,26 @@ async function untilGone(deps: AirCliDeps): Promise<'gone' | 'loaded' | 'unknown
   }
 }
 
+/**
+ * Whether another process holds hub.lock, the flock every hub takes (spec §10.4 (1)): a `collab-bridge hub run` in a
+ * Terminal, or a hub a killed launcher left behind. launchctl cannot see it. A lock file that is not there is free.
+ */
+function lockState(paths: AirPaths): 'free' | 'held' | 'unknown' {
+  let fd: number
+  try { fd = openSync(paths.hubLock, 'r') } catch (e) { return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'free' : 'unknown' }
+  try { return tryFlock(fd) === 'busy' ? 'held' : 'free' } catch { return 'unknown' } finally { closeSync(fd) }
+}
+
+/** lockState, asked again for a moment while it is held, so a hub that is only just closing it is not taken for a second one. */
+async function lockHolder(deps: AirCliDeps): Promise<'free' | 'held' | 'unknown'> {
+  const end = Date.now() + scaled(LOCK_GRACE_MS)
+  for (;;) {
+    const state = lockState(deps.paths)
+    if (state !== 'held' || Date.now() >= end) return state
+    await Bun.sleep(scaled(LET_GO_POLL_MS))
+  }
+}
+
 async function hubOn(deps: AirCliDeps): Promise<number> {
   const { paths } = deps
   const refusal = hubOnRefusal(deps.env, deps.table(), deps.selfPid, deps.uid())
@@ -280,6 +302,15 @@ async function hubOn(deps: AirCliDeps): Promise<number> {
       : `✗ launchctl print ${SERVICE} could not be run, so it is not known whether launchd let go of ${HUB_LABEL}; nothing was bootstrapped; run hub on again`)
     return 1
   }
+  // launchd's hub would start, find hub.lock held by a hub outside launchd, refuse lock_held and exit 0, and KeepAlive
+  // {SuccessfulExit:false} never restarts an exit 0: Yu would be told "Hub on" and have no hub once the other one stops (Task 63 launcher-1-2).
+  const holder = await lockHolder(deps)
+  if (holder !== 'free') {
+    deps.err(holder === 'held'
+      ? `✗ another hub holds ${paths.hubLock} (a collab-bridge hub run in a Terminal, or one a killed launcher left behind); nothing was bootstrapped, because launchd's hub would find the lock held and exit 0 and would never be restarted; stop that hub (Ctrl-C in its window), then run hub on again`
+      : `✗ ${paths.hubLock} could not be checked, so it is not known that no other hub is running; nothing was bootstrapped; run hub on again`)
+    return 1
+  }
   const boot = launchctl(deps, 'bootstrap', DOMAIN, paths.plist)
   if (boot.code !== 0) {
     deps.err(`✗ launchctl bootstrap ${DOMAIN} failed (exit ${boot.code}): ${firstLine(boot.stderr)}`)
@@ -297,18 +328,25 @@ async function hubOff(deps: AirCliDeps): Promise<number> {
   if (!yuConfirms(deps, 'Turn the Collab bridge hub off? [y/N] ')) return 1
   const out = launchctl(deps, 'bootout', SERVICE)
   rmSync(deps.paths.plist, { force: true })
-  if (out.code === 0) {
-    deps.out(`✓ Hub off: ${HUB_LABEL} is booted out of ${DOMAIN} and its plist removed.`)
-    return 0
+  if (out.code !== 0) {
+    // A failed bootout is not "not loaded" until launchd agrees: a hub still serving must not be reported as off.
+    // Only a print that runs and fails means the service is gone, which is the state Yu asked for.
+    const still = launchctl(deps, 'print', SERVICE)
+    if (still.code === null || still.code === 0) {
+      deps.err(`✗ Hub off: launchctl bootout ${SERVICE} failed (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}; ${HUB_LABEL} may still be serving in ${DOMAIN}; its plist is removed; run hub off again`)
+      return 1
+    }
   }
-  // A failed bootout is not "not loaded" until launchd agrees: a hub still serving must not be reported as off.
-  // Only a print that runs and fails means the service is gone, which is the state Yu asked for.
-  const still = launchctl(deps, 'print', SERVICE)
-  if (still.code === null || still.code === 0) {
-    deps.err(`✗ Hub off: launchctl bootout ${SERVICE} failed (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}; ${HUB_LABEL} may still be serving in ${DOMAIN}; its plist is removed; run hub off again`)
+  // launchd has let go, but a hub outside it (hub run in a Terminal) holds hub.lock and keeps dialling and serving seats:
+  // it is not off, whatever launchctl says (Task 63 launcher-1-2).
+  const holder = await lockHolder(deps)
+  if (holder !== 'free') {
+    deps.err(holder === 'held'
+      ? `✗ Hub off: launchd has no ${HUB_LABEL} in ${DOMAIN}, but another hub still holds ${deps.paths.hubLock} and is serving: a collab-bridge hub run in a Terminal (stop it with Ctrl-C), or one a killed launcher left behind; its plist is removed; run hub off again once it has stopped`
+      : `✗ Hub off: launchd has no ${HUB_LABEL} in ${DOMAIN}, but ${deps.paths.hubLock} could not be checked, so it is not known that no other hub is serving; its plist is removed; run hub off again`)
     return 1
   }
-  deps.out(`✓ Hub off: ${HUB_LABEL} was not loaded in ${DOMAIN}; its plist is removed.`)
+  deps.out(out.code === 0 ? `✓ Hub off: ${HUB_LABEL} is booted out of ${DOMAIN} and its plist removed.` : `✓ Hub off: ${HUB_LABEL} was not loaded in ${DOMAIN}; its plist is removed.`)
   return 0
 }
 

@@ -316,6 +316,60 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     }
   }, 20_000)
 
+  test('a hub outside launchd that holds hub.lock is never reported as off, and hub on does not bootstrap beside it (Task 63 launcher-1-2)', async () => {
+    process.env.COLLAB_BRIDGE_TEST_TIME_SCALE = '0.05' // the lock is re-asked for 2 s in production; a test gives it 100 ms
+    // a `collab-bridge hub run` in a Terminal tab: this process plays it, with the same flock the hub takes
+    const terminalHub = (c: Cli) => {
+      mkdirSync(c.paths.stateDir, { recursive: true, mode: 0o700 })
+      const fd = openSync(c.paths.hubLock, 'a', 0o600)
+      expect(tryFlock(fd)).toBe('locked')
+      return () => closeSync(fd)
+    }
+    try {
+      // hub off: launchd has nothing loaded (bootout and print fail), the Terminal hub still serves
+      const off = cli({ launchctl: { bootout: 113, print: 113 } })
+      const release = terminalHub(off)
+      mkdirSync(dirname(off.paths.plist), { recursive: true })
+      writeFileSync(off.paths.plist, 'plist left by hub on\n')
+      expect(await runAirCli(['hub', 'off'], off.deps)).toBe(1)
+      const offErr = off.err.join('\n')
+      expect(offErr).toContain('✗ Hub off:')
+      expect(offErr).toContain(off.paths.hubLock)
+      expect(offErr).toContain('another hub still holds')
+      expect(offErr).toContain('hub run in a Terminal')
+      expect(off.out.join('\n')).not.toContain('✓ Hub off')
+      expect(existsSync(off.paths.plist)).toBe(false) // removed either way: it must not bring a second hub back at login
+      release()
+      off.err.length = 0
+      expect(await runAirCli(['hub', 'off'], off.deps)).toBe(0) // the Terminal hub stopped: now it is off
+      expect(off.out.at(-1)).toBe(`✓ Hub off: ${HUB_LABEL} was not loaded in gui/502; its plist is removed.`)
+      expect(off.err).toEqual([])
+      // a bootout that succeeded does not make a lock held by another process the launchd hub's
+      const booted = cli()
+      const releaseBooted = terminalHub(booted)
+      expect(await runAirCli(['hub', 'off'], booted.deps)).toBe(1)
+      expect(booted.err.join('\n')).toContain('another hub still holds')
+      expect(booted.out.join('\n')).not.toContain('✓ Hub off')
+      releaseBooted()
+
+      // hub on: launchd's start would find the lock held, refuse lock_held and exit 0, and KeepAlive never restarts an exit 0
+      const on = cli()
+      const releaseOn = terminalHub(on)
+      expect(await runAirCli(['hub', 'on'], on.deps)).toBe(1)
+      expect(on.launchctl.calls().some((c) => c.startsWith('bootstrap'))).toBe(false)
+      const onErr = on.err.join('\n')
+      expect(onErr).toContain('another hub holds')
+      expect(onErr).toContain(on.paths.hubLock)
+      expect(onErr).toContain('nothing was bootstrapped')
+      expect(on.out.join('\n')).not.toContain('✓ Hub on')
+      releaseOn()
+      expect(await runAirCli(['hub', 'on'], on.deps)).toBe(0)
+      expect(on.out[0]).toBe(`✓ Hub on: ${HUB_LABEL} is bootstrapped in gui/502.`)
+    } finally {
+      delete process.env.COLLAB_BRIDGE_TEST_TIME_SCALE
+    }
+  }, 20_000)
+
   test('hub off with y boots out and removes the plist', async () => {
     const c = cli()
     expect(await runAirCli(['hub', 'on'], c.deps)).toBe(0)
