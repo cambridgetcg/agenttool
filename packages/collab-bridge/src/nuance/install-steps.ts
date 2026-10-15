@@ -359,7 +359,9 @@ export function installCheck(o: CheckInput): CheckReport {
 
   const al = loadAllowlist(paths.summonAllowlist)
   if (!al.ok) fail('allowlist', `Summon's allowlist ${paths.summonAllowlist} cannot be used (${al.detail})`)
-  const ctx = shareCtxOf(o, al.ok ? al.allowlist : null, git, manifest ? manifest.trial_commit : null)
+  // A git that failed the safety check is not run in any share: a partial clone's promisor, core.sshCommand or credential helper
+  // would run with it (lazy fetch for a missing commit), and the run fails on git_unsafe anyway.
+  const ctx = shareCtxOf(o, al.ok ? al.allowlist : null, git && gitAcceptable(git) ? git : null, manifest ? manifest.trial_commit : null)
   const shares: ShareCheck[] = []
   for (const s of o.shares) {
     const problem = sharePathProblem(s)

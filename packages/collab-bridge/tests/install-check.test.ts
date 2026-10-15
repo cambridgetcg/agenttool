@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   citizenRoot, dropinOwnerUidOf, INSTALL_USAGE, installCheck, installClone, parseManifest, renderManifest, type CheckReport,
 } from '../src/nuance/install-steps.ts'
-import { resolveGit } from '../src/nuance/git-resolve.ts'
+import { resolveGit, runCmd, type Run } from '../src/nuance/git-resolve.ts'
 import { dropinStat, renderInstalled, summonKeySha256 } from '../src/nuance/installed.ts'
 import { checkInput, claudeStub, makeTrialRepo, summonReadyHome, writeCheckBundle, type NuanceHome } from './install-fixtures.ts'
 import { allowlistYaml } from './nuance-home.ts'
@@ -158,6 +158,20 @@ describe('install check', () => {
     expect(r.git).toEqual(expect.objectContaining({ version: '2.39.5', apple: true, guard: false }))
     expect(codes(installCheck(checkInput(h, b, { xcrun: noXcrun, terminalGit: null })))).toContain('git')
     expect(codes(installCheck(checkInput(h, b, { claude: join(bin, 'no-such-claude') })))).toEqual(['claude'])
+  }, 20_000)
+
+  test('a git that failed the safety check is never run inside a share repository (Task 63 installer-2-4)', () => {
+    const { h, trial, b } = world()
+    cloneAt(h, trial.repo)
+    const bin = temp('cb-oldgit-')
+    const noXcrun = writeStub(bin, 'xcrun', 'exit 1')
+    const oldGit = writeStub(bin, 'git', 'echo "git version 2.39.5 (Apple Git-154)"')
+    const ran: string[] = []
+    const run: Run = (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')}`); return runCmd(cmd, args, o) }
+    const r = installCheck(checkInput(h, b, { xcrun: noXcrun, terminalGit: oldGit, run }))
+    expect(codes(r)).toEqual(['git_unsafe'])                    // the one failure; the share is not judged by a git that is refused
+    expect(ran.filter((c) => c.includes(' -C '))).toEqual([])
+    expect(ran.some((c) => c.startsWith(oldGit))).toBe(true)    // it was asked for its version, and only that
   }, 20_000)
 
   test('an old Command Line Tools git does not hide an acceptable Terminal git, and when both are old the refusal names both (Task 63 gate-2-2)', () => {
