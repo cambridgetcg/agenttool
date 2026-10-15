@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { loadAllowlist, type Allowlist, type AllowlistFolder } from '../src/allowlist.ts'
+import { loadAllowlist, safeRealpath, type Allowlist, type AllowlistFolder } from '../src/allowlist.ts'
 import { checkUploadPackPath, FETCH_STOPPED_EXIT, gitEnv, pktLineErr, runFetchGate, UPLOAD_PACK_CONFIG, uploadPackArgv, type FetchGateCtx } from '../src/nuance/fetch-gate.ts'
 import { sha256File, type ResolvedGit } from '../src/nuance/git-resolve.ts'
 import type { Share } from '../src/nuance/installed.ts'
@@ -167,6 +167,45 @@ describe('checkUploadPackPath', () => {
     expect(checkUploadPackPath(gitdir, ctxOf(n, shares))).toEqual({ ok: false, code: 'outside_edit_folder' })
     writeFileSync(n.paths.summonAllowlist, allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }, { path: '~/Projects/main', access: 'edit' }]))
     expect(checkUploadPackPath(gitdir, ctxOf(n, shares))).toEqual({ ok: true, gitdir, worktree: wt })
+  })
+
+  /** A linked work tree wt in ~/Projects/collab-trial whose gitdir and common dir live in ~/Projects/main; both folders are edit. */
+  function linkedWorld() {
+    const n = makeNuance({ folders: [{ path: '~/Projects/collab-trial', access: 'edit' }, { path: '~/Projects/main', access: 'edit' }] })
+    const main = join(n.home, 'Projects', 'main')
+    secretBranchRepo(main, n.home)
+    const wt = join(n.home, 'Projects', 'collab-trial', 'wt')
+    git(['-C', main, 'worktree', 'add', '-q', '--detach', wt, 'main'], n.home)
+    const gitdir = realpathSync(join(main, '.git', 'worktrees', 'wt'))
+    return { n, main, wt, gitdir, shares: [{ realpath: wt, gitdir }], commondir: join(gitdir, 'commondir') }
+  }
+
+  test('commondir is read as git reads it: only trailing CR and LF are dropped, so whitespace that git keeps is refused (Task 63 gate-1-5)', () => {
+    const w = linkedWorld()
+    expect(readFileSync(w.commondir, 'utf8')).toBe('../..\n')
+    expect(checkUploadPackPath(w.gitdir, ctxOf(w.n, w.shares))).toEqual({ ok: true, gitdir: w.gitdir, worktree: w.wt })
+    // What git also drops: any run of CR and LF at the end.
+    for (const same of ['../..', '../..\r\n', '../..\n\n', '../..\r\r\n\n']) {
+      writeFileSync(w.commondir, same)
+      expect([same, checkUploadPackPath(w.gitdir, ctxOf(w.n, w.shares)).ok]).toEqual([same, true])
+    }
+    // What git keeps: git would open "<gitdir>/ ../.." or "<gitdir>/../.. ", not the repository the trimmed text names.
+    for (const other of [' ../..\n', '\t../..\n', '../.. \n', '../..\t', ' ../..', '../..\0\n', '../..\0x\n']) {
+      writeFileSync(w.commondir, other)
+      expect([other, checkUploadPackPath(w.gitdir, ctxOf(w.n, w.shares))]).toEqual([other, { ok: false, code: 'outside_edit_folder' }])
+    }
+  })
+
+  test('a commondir whose leading space makes git read through a symlink is checked at the place git reads (Task 63 gate-1-5)', () => {
+    const w = linkedWorld()
+    // "<gitdir>/ .." is a symlink to a root-owned directory: git's "<gitdir>/ ../.." is /usr, not the repository the trimmed text names.
+    symlinkSync('/usr/share', join(w.gitdir, ' ..'))
+    writeFileSync(w.commondir, ' ../..\n')
+    const seen: string[] = []
+    const ctx = { ...ctxOf(w.n, w.shares), realpath: (p: string) => { seen.push(p); return safeRealpath(p) } }
+    expect(checkUploadPackPath(w.gitdir, ctx)).toEqual({ ok: false, code: 'outside_edit_folder' })
+    expect(seen).toContain(`${w.gitdir}/ ..`)                 // the gate followed ` ..` first, as git does, and only then took the `..` after it
+    expect(seen).not.toContain(w.main + '/.git')              // and not the trimmed spelling's repository
   })
 
   test('objects/info/alternates is refused', () => {

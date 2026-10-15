@@ -4,7 +4,7 @@
 // GIT_PROTOCOL out of that env is the control that matters: it forces protocol v0, where hideRefs=refs/ advertises only
 // HEAD and upload-pack refuses every other want (`not our ref`); a v2 want can name any object (K49).
 import { lstatSync, readFileSync, statSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { longestFolderMatch, safeRealpath, tccProtected, type Allowlist } from '../allowlist.ts'
 import { gitAcceptable, sha256File } from './git-resolve.ts'
 import type { InstalledInfo, Share } from './installed.ts'
@@ -73,15 +73,38 @@ function dotGitTarget(worktree: string, realpath: (p: string) => string | null):
   return realpath(isAbsolute(m[1]!) ? m[1]! : resolve(worktree, m[1]!))
 }
 
-/** The repository's common dir: `<gitdir>/commondir` resolved (a linked work tree), else the gitdir itself; null when unreadable. */
+/**
+ * Resolves `text` as git resolves a path (strbuf_realpath): one component at a time from `base`, each made real before the
+ * next, and a `..` taken from the real path built so far. `base` must be real already. Neither path.resolve nor Bun's
+ * realpathSync.native does this: both fold ` ..` with the `..` after it before looking at the disk, so a symlink named ` ..`
+ * would be skipped, where git (and the file system) follow it first. A component that does not exist gives null, as in git.
+ */
+function realpathLikeGit(base: string, text: string, realpath: (p: string) => string | null): string | null {
+  let cur = text.startsWith('/') ? '/' : base
+  for (const part of text.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') { cur = dirname(cur); continue }
+    const next = realpath(cur === '/' ? `/${part}` : `${cur}/${part}`)
+    if (next === null) return null
+    cur = next
+  }
+  return cur
+}
+
+/**
+ * The repository's common dir: `<gitdir>/commondir` as git reads it, else the gitdir itself; null when unreadable. Git drops
+ * only the trailing CR and LF of that file (get_common_dir_noenv) and keeps every other space or tab as part of a name, so
+ * this does too, where it used to trim them and check a different directory from the one upload-pack opens. A NUL ends git's
+ * string early, so text holding one is refused (Task 63 gate-1-5).
+ */
 function commonDirOf(gitdir: string, realpath: (p: string) => string | null): string | null {
   const file = join(gitdir, 'commondir')
   try { lstatSync(file) } catch { return gitdir }
   const text = smallRegularFile(file)
   if (text === null) return null
-  const rel = text.trim()
-  if (rel === '') return null
-  return realpath(isAbsolute(rel) ? rel : resolve(gitdir, rel))
+  const rel = text.replace(/[\r\n]+$/, '')
+  if (rel === '' || rel.includes('\0')) return null
+  return realpathLikeGit(gitdir, rel, realpath)
 }
 
 const isEditIn = (p: string, al: Allowlist, home: string, realpath: (p: string) => string | null) =>
