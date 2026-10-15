@@ -22,6 +22,7 @@ import { mkdirPrivate } from './private-dir.ts'
 import type { AirPaths } from './paths.ts'
 import { ancestry, HARNESS_COMMS, type ProcTable } from './proc.ts'
 import { overrideActive, type Env } from './sysbin.ts'
+import { scaled } from './timing.ts'
 
 export const HUB_LABEL = 'dev.agenttool.collab-bridge'
 /** yuai's uid: the hub lives in gui/502 only, never in another account's domain on this Air (P10). */
@@ -50,6 +51,9 @@ const DEVICE_RE = /^[a-z][a-z0-9-]{0,31}$/
 /** Per-run launchd entries: apps Yu opens and one-shot jobs come and go between the baseline and any later check. */
 const PER_RUN: readonly RegExp[] = [/^application\./, /^\[0x/, /^com\.apple\.xpc\.launchd\.oneshot\./]
 const REPLY_MAX_BYTES = 256
+/** How long hub on waits for launchd to let go of a booted-out hub, and how often it asks (scaled in tests, P33). */
+const LET_GO_MS = 30_000
+const LET_GO_POLL_MS = 250
 
 /** The fixed ~/.local/bin/collab-bridge (spec §4.3 with P14's env -u): zsh -f reads no rc file, and bun gets no BUN_OPTIONS. */
 export function cliLauncherText(sha: string): string {
@@ -211,11 +215,19 @@ function statusReport(deps: AirCliDeps, devices: DeviceFile[]): string[] {
   return lines
 }
 
-/** Waits until launchd has let go of the service, so the bootstrap that follows a bootout does not race it. */
-async function untilGone(deps: AirCliDeps): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    if (launchctl(deps, 'print', SERVICE).code !== 0) return
-    await Bun.sleep(250)
+/**
+ * Waits until launchd has let go of the service, so the bootstrap that follows a bootout does not race it: a stopping hub
+ * takes up to about 12 s (two 5 s waits and the bin's 2 s timer) and launchd's ExitTimeOut is 20 s, hence 30 s. A `print`
+ * that fails with a code means the service is gone; one that cannot run at all says nothing, so it is not waited on.
+ */
+async function untilGone(deps: AirCliDeps): Promise<'gone' | 'loaded' | 'unknown'> {
+  const end = Date.now() + scaled(LET_GO_MS)
+  for (;;) {
+    const code = launchctl(deps, 'print', SERVICE).code
+    if (code === null) return 'unknown'
+    if (code !== 0) return 'gone'
+    if (Date.now() >= end) return 'loaded'
+    await Bun.sleep(scaled(LET_GO_POLL_MS))
   }
 }
 
@@ -258,7 +270,16 @@ async function hubOn(deps: AirCliDeps): Promise<number> {
   chmodSync(paths.hubLog, 0o600) // launchd opens StandardErrorPath with its own mode only when the file is missing
   mkdirSync(dirname(paths.plist), { recursive: true })
   writeFileDurable(paths.plist, renderPlist({ home: paths.home, sha: deps.hubSha, bun: deps.bun }), 0o644)
-  if (launchctl(deps, 'bootout', SERVICE).code === 0) await untilGone(deps) // a running hub restarts on the new plist
+  // A running hub restarts on the new plist. Whatever bootout returned (36, "in progress", is a hub still exiting), the
+  // bootstrap waits until launchd says the service is gone: it would be refused while the old job is still loaded (Task 63 launcher-1-7).
+  const out = launchctl(deps, 'bootout', SERVICE)
+  const gone = await untilGone(deps)
+  if (gone !== 'gone') {
+    deps.err(gone === 'loaded'
+      ? `✗ launchd still has ${HUB_LABEL} loaded in ${DOMAIN} after bootout (exit ${out.code ?? 'none'}): ${firstLine(out.stderr)}; nothing was bootstrapped; the new plist is written, so run hub on again`
+      : `✗ launchctl print ${SERVICE} could not be run, so it is not known whether launchd let go of ${HUB_LABEL}; nothing was bootstrapped; run hub on again`)
+    return 1
+  }
   const boot = launchctl(deps, 'bootstrap', DOMAIN, paths.plist)
   if (boot.code !== 0) {
     deps.err(`✗ launchctl bootstrap ${DOMAIN} failed (exit ${boot.code}): ${firstLine(boot.stderr)}`)

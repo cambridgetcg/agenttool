@@ -79,8 +79,10 @@ function spawnBin(home: string, argv: string[], extra: Record<string, string> = 
  * A launchctl stand-in: it appends each call's arguments to <dir>/launchctl.calls, prints <dir>/list.txt for `list`
  * (tab-separated, with launchctl's header), exits 113 for `print` (no such service) and 0 for everything else. `over`
  * makes `bootout` fail with its code (a real launchctl says why on stderr) or `print` exit with its code (0: still loaded).
+ * `loadedFor: n` is a service that launchd is still tearing down: the first n `print`s find it loaded (exit 0), the later
+ * ones do not, and `bootstrap` fails with launchd's own refusal (exit 5) until the n-th `print` has been answered.
  */
-function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; print?: number } = {}): { bin: string; calls(): string[]; setLabels(l: string[]): void } {
+function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; print?: number; loadedFor?: number } = {}): { bin: string; calls(): string[]; setLabels(l: string[]): void } {
   const setLabels = (l: string[]) =>
     writeFileSync(join(dir, 'list.txt'), ['PID\tStatus\tLabel', ...l.map((label, i) => `${i % 2 === 0 ? '-' : String(400 + i)}\t0\t${label}`)].join('\n') + '\n')
   setLabels(labels)
@@ -90,7 +92,11 @@ function fakeLaunchctl(dir: string, labels: string[], over: { bootout?: number; 
     `printf '%s\\n' "$*" >> '${dir}/launchctl.calls'`,
     'case "$1" in',
     `  list) cat '${dir}/list.txt' ;;`,
-    over.print === 0 ? "  print) echo 'dev.agenttool.collab-bridge = {'; exit 0 ;;" : `  print) echo 'Could not find service' >&2; exit ${over.print ?? 113} ;;`,
+    over.loadedFor !== undefined
+      ? `  print) n=$(( $(cat '${dir}/prints' 2>/dev/null || echo 0) + 1 )); echo $n > '${dir}/prints'; if [ $n -le ${over.loadedFor} ]; then echo 'dev.agenttool.collab-bridge = {'; exit 0; fi; echo 'Could not find service' >&2; exit 113 ;;`
+      : over.print === 0 ? "  print) echo 'dev.agenttool.collab-bridge = {'; exit 0 ;;" : `  print) echo 'Could not find service' >&2; exit ${over.print ?? 113} ;;`,
+    over.loadedFor !== undefined
+      ? `  bootstrap) if [ $(cat '${dir}/prints' 2>/dev/null || echo 0) -le ${over.loadedFor} ]; then echo 'Bootstrap failed: 5: Input/output error' >&2; exit 5; fi; exit 0 ;;` : '',
     over.bootout ? `  bootout) echo 'Boot-out failed: 5: Input/output error' >&2; exit ${over.bootout} ;;` : '  bootout) exit 0 ;;',
     '  *) exit 0 ;;',
     'esac',
@@ -126,7 +132,7 @@ interface Cli { deps: AirCliDeps; out: string[]; err: string[]; asked: string[];
 
 /** The CLI over a temp home with the pinned bundle and a signed launcher in place, as Task 66 leaves them, and every side effect recorded. */
 function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | null; answer?: string | null; ask?: AirCliDeps['ask'];
-  build?: BuildInfo | null; runHub?: () => Promise<number>; launchctl?: { bootout?: number; print?: number }; now?: () => Date; unpair?: (device: string) => Promise<number> } = {}): Cli {
+  build?: BuildInfo | null; runHub?: () => Promise<number>; launchctl?: { bootout?: number; print?: number; loadedFor?: number }; now?: () => Date; unpair?: (device: string) => Promise<number> } = {}): Cli {
   const home = temp('cb-cli-')
   const paths = airPaths(home)
   const stubs = join(home, 'stubs')
@@ -284,6 +290,30 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     expect(await runAirCli(['hub', 'on'], c.deps)).toBe(0)
     expect(readFileSync(c.paths.baselineLabels, 'utf8')).toBe('com.apple.Finder\nlove.awaken\n')
     expect(c.launchctl.calls().slice(4)).toEqual([`bootout ${SERVICE}`, `print ${SERVICE}`, `bootstrap gui/502 ${c.paths.plist}`])
+  }, 20_000)
+
+  test('hub on waits for launchd to let go of the old hub whatever bootout returned, and bootstraps only then (Task 63 launcher-1-7)', async () => {
+    process.env.COLLAB_BRIDGE_TEST_TIME_SCALE = '0.05' // the wait is 30 s of launchd's teardown; a test gives it 1.5 s
+    try {
+      // bootout said "36: Operation now in progress" and the old hub is still exiting: three prints find it loaded, the fourth does not
+      const busy = cli({ launchctl: { bootout: 36, loadedFor: 3 } })
+      expect(await runAirCli(['hub', 'on'], busy.deps)).toBe(0)
+      expect(busy.launchctl.calls()).toEqual(['list', `bootout ${SERVICE}`, ...Array(4).fill(`print ${SERVICE}`), `bootstrap gui/502 ${busy.paths.plist}`])
+      expect(busy.err).toEqual([])
+      // a bootout that returned 0 while the old hub was still exiting is waited for as well, for longer than the old 5 s
+      const slow = cli({ launchctl: { loadedFor: 25 } })
+      expect(await runAirCli(['hub', 'on'], slow.deps)).toBe(0)
+      expect(slow.launchctl.calls().at(-1)).toBe(`bootstrap gui/502 ${slow.paths.plist}`)
+      // launchd never lets go: the wait ends, hub on says so and does not bootstrap
+      const stuck = cli({ launchctl: { bootout: 36, print: 0 } })
+      expect(await runAirCli(['hub', 'on'], stuck.deps)).toBe(1)
+      expect(stuck.launchctl.calls().some((c) => c.startsWith('bootstrap'))).toBe(false)
+      expect(stuck.err.join('\n')).toContain(`✗ launchd still has ${HUB_LABEL} loaded in gui/502 after bootout`)
+      expect(stuck.err.join('\n')).toContain('nothing was bootstrapped')
+      expect(stuck.out.join('\n')).not.toContain('✓ Hub on')
+    } finally {
+      delete process.env.COLLAB_BRIDGE_TEST_TIME_SCALE
+    }
   }, 20_000)
 
   test('hub off with y boots out and removes the plist', async () => {
