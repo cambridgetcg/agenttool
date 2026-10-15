@@ -23,7 +23,7 @@ import { TIMING } from '../timing.ts'
 import { CHILD_REQUEST_TIMEOUT_MS, childEnv, CollabChild, type CallOutcome, type ChildSpec, type StartFailure } from './children.ts'
 import type { LineageEntry, LineageStore } from './lineages.ts'
 import { roleNonce } from './stamp.ts'
-import { classifyStart } from './startup.ts'
+import { classifyStart, startMayHaveCommitted } from './startup.ts'
 
 /** `cause` says why there is no exit code (additive; absent when the CLI exited with one): it was killed at the timeout, died
  *  by a signal, or could not be started at all. */
@@ -345,13 +345,14 @@ export class ChildPool {
       this.deps.ledger({ event: 'session_start', device: after.device, user: after.user, lineage, session_id: sessionId, journal: this.deps.spec.journal, outcome: 'ok' })
       return out
     }
-    if (out.outcome === 'error') {
-      // Collab refused it, so nothing was created; the unbound child stays for the next start.
+    if (out.outcome === 'error' && !startMayHaveCommitted(out.result.structuredContent)) {
+      // Collab refused it before it committed anything; the unbound child stays for the next start.
       this.deps.store.upsert({ ...after, pending_start: null })
       return out
     }
-    // Unknown: the marker stays, and the child that may hold the new session is stopped, so the next start (or the next
-    // hub start) settles it from the journal.
+    // Unknown, or a refusal from after Collab's commit (the file-mode tightening, the credential write; K23): the session may be
+    // active, so the marker stays, and the child that may hold the new session is stopped, so the next start (or the next hub
+    // start) settles it from the journal. Collab's own answer still goes back unchanged.
     void this.stopChild(rt)
     return out
   }

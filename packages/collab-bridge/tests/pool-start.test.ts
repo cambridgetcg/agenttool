@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TIMING } from '../src/timing.ts'
 import { CollabChild, type CallOutcome } from '../src/air/children.ts'
@@ -101,6 +101,44 @@ describe('session_start at most once', () => {
     expect(out).toMatchObject({ refuse: 'hub_away' })
     expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: null })
     expect(events(w, 'session_start')).toEqual([])
+    expect(await activeSessions(w)).toEqual([])
+  }, 30_000)
+
+  test('a session_start Collab refuses after it committed (its credential directory is unsafe) keeps the marker and stops the child; the next start settles it from the journal (Task 63 pipe-2-2)', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    mkdirSync(w.paths.collabSessions, { recursive: true })
+    chmodSync(w.paths.collabSessions, 0o755) // Collab commits the session, then refuses to write its credential here
+    const c = await childOf(p, e.lineage, true)
+    const n1 = newStartNonce()
+    const first = await p.startSession(e.lineage, startArgs(w, n1), ref(e, 1), n1, w.workspaceId)
+    expect(outcome(first)).toBe('error')
+    if (!('outcome' in first) || first.outcome !== 'error') throw new Error('unreachable')
+    expect(first.result.structuredContent).toMatchObject({ error: 'session_directory_not_private', operation: 'validate_session_credential_directory' })
+    // The refusal came after the commit, so "nothing was created" is not known: the marker stays, as for an unknown outcome.
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: { nonce: n1 } })
+    await until(() => !c.alive()) // the child that may hold the session is stopped, not kept for the next start
+    chmodSync(w.paths.collabSessions, 0o700)
+    const n2 = newStartNonce()
+    expect(outcome(await p.startSession(e.lineage, startArgs(w, n2), ref(e, 2), n2, w.workspaceId))).toBe('ok')
+    expect(events(w, 'reconcile').map((l) => l.outcome)).toEqual(['cleared']) // Collab ended the first session itself
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'live', pending_start: null })
+    expect(await activeSessions(w)).toHaveLength(1)
+  }, 60_000)
+
+  test('a session_start Collab refuses before it committed anything clears the marker and keeps the unbound child', async () => {
+    const w = world()
+    const p = pool(w)
+    const e = entry(w)
+    const c = await childOf(p, e.lineage, true)
+    const n1 = newStartNonce()
+    const out = await p.startSession(e.lineage, { ...startArgs(w, n1), root_path: join(w.home, 'no-such-dir') }, ref(e, 1), n1, w.workspaceId)
+    expect(outcome(out)).toBe('error')
+    if (!('outcome' in out) || out.outcome !== 'error') throw new Error('unreachable')
+    expect(out.result.structuredContent).not.toHaveProperty('operation')
+    expect(fresh(w).get(e.lineage)).toMatchObject({ state: 'pending', pending_start: null })
+    expect(c.alive()).toBe(true)
     expect(await activeSessions(w)).toEqual([])
   }, 30_000)
 

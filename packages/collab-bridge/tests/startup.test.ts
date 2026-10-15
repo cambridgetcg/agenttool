@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CollabChild, type ChildSpec, type StartFailure } from '../src/air/children.ts'
-import { classifyStart, PINNED_START_MESSAGES, type StartClass } from '../src/air/startup.ts'
+import { classifyStart, PINNED_START_MESSAGES, POST_COMMIT_OPERATIONS, startMayHaveCommitted, type StartClass } from '../src/air/startup.ts'
 import { COLLAB_DIST, cleanupTmps, temp } from './helpers.ts'
 import { startCollabSession, tamperJournal } from './mcp-harness.ts'
 
@@ -53,6 +53,27 @@ describe('the pinned start-up messages', () => {
         expect(classifyStart(line)).toBe('child_start_failed')
       }
     }
+  })
+})
+
+describe('a session_start refusal from after the commit (Task 63 pipe-2-2)', () => {
+  test('every post-commit operation, and internal_error, occurs in the tracked dist', () => {
+    expect([...POST_COMMIT_OPERATIONS].sort()).toEqual(['tighten_database_file_mode', 'validate_session_credential_directory', 'write_session_credential_file'])
+    for (const needle of [...POST_COMMIT_OPERATIONS, 'internal_error']) {
+      const r = Bun.spawnSync(['/usr/bin/grep', '-cF', `"${needle}"`, join(COLLAB_DIST, 'agenttool-collab-mcp.js')], { env: { PATH: '/usr/bin:/bin' } })
+      expect(Number(r.stdout.toString().trim())).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  test('only a post-commit operation or an internal_error may have committed; any other answer is a refusal before the commit', () => {
+    expect(startMayHaveCommitted({ error: 'session_file_write_failed', operation: 'write_session_credential_file' })).toBe(true)
+    expect(startMayHaveCommitted({ error: 'session_directory_not_private', operation: 'validate_session_credential_directory' })).toBe(true)
+    expect(startMayHaveCommitted({ error: 'database_sidecar_unsafe', operation: 'tighten_database_file_mode' })).toBe(true)
+    expect(startMayHaveCommitted({ error: 'internal_error', message: 'EIO' })).toBe(true)
+    expect(startMayHaveCommitted({ error: 'invalid_actor' })).toBe(false)
+    expect(startMayHaveCommitted({ error: 'session_already_bound', session_id: 's' })).toBe(false)
+    expect(startMayHaveCommitted({ error: 'x', operation: 'read_session_credential_file' })).toBe(false)
+    for (const none of [undefined, null, 'internal_error', 7, ['internal_error']]) expect(startMayHaveCommitted(none)).toBe(false)
   })
 })
 

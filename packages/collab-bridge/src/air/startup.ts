@@ -29,3 +29,26 @@ export function classifyStart(lastErrLine: string | null): StartClass {
   if (lastErrLine === null) return 'child_start_failed'
   return BY_LINE.get(lastErrLine) ?? 'child_start_failed'
 }
+
+/**
+ * The `operation` detail of Collab's own errors that collab_session_start can raise AFTER store.startSession has committed the
+ * session row (K23): the file-mode tightening that follows the commit (store.ts tightenFileModes), then the credential
+ * directory check and write (session-file.ts). Collab ends the session itself when the credential write fails, but that end
+ * can fail too (a full disk fails both), and a tightening failure ends nothing. A hermetic test greps each one out of the
+ * tracked dist, so a Collab change that renames one shows up there.
+ */
+export const POST_COMMIT_OPERATIONS: ReadonlySet<string> = new Set([
+  'tighten_database_file_mode', 'validate_session_credential_directory', 'write_session_credential_file',
+])
+
+/**
+ * Whether a collab_session_start isError result may have come after the session was committed, so "nothing was created" is
+ * not known: an error carrying one of POST_COMMIT_OPERATIONS, or Collab's `internal_error` (a fault that is not one of its
+ * own codes can be thrown from anywhere, the commit's aftermath included). An SDK input-validation result has no
+ * structuredContent, and every other Collab code is raised by validation before the commit.
+ */
+export function startMayHaveCommitted(structured: unknown): boolean {
+  if (typeof structured !== 'object' || structured === null || Array.isArray(structured)) return false
+  const r = structured as Record<string, unknown>
+  return r.error === 'internal_error' || (typeof r.operation === 'string' && POST_COMMIT_OPERATIONS.has(r.operation))
+}
