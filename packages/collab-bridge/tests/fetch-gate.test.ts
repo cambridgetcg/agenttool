@@ -208,6 +208,27 @@ describe('checkUploadPackPath', () => {
     expect(seen).not.toContain(w.main + '/.git')              // and not the trimmed spelling's repository
   })
 
+  test('a gitdir outside every edit folder is refused before its commondir is read or resolved (Task 63 gate-1-7)', () => {
+    const w = linkedWorld()
+    // Only the work tree's folder is edit: the gitdir (and the common dir) in ~/Projects/main is not.
+    writeFileSync(w.n.paths.summonAllowlist, allowlistYaml([{ path: '~/Projects/collab-trial', access: 'edit' }]))
+    writeFileSync(w.commondir, '../../probe-marker\n')
+    const seen: string[] = []
+    const ctx = { ...ctxOf(w.n, w.shares), realpath: (p: string) => { seen.push(p); return safeRealpath(p) } }
+    expect(checkUploadPackPath(w.gitdir, ctx)).toEqual({ ok: false, code: 'outside_edit_folder' })
+    // §7.4: the resolved gitdir must be in an edit folder; nothing the gitdir holds is followed before it is.
+    expect(seen.filter((p) => p.includes('probe-marker'))).toEqual([])
+  })
+
+  test('the same gitdir with a commondir that names something is read, and refused only at the common dir, once its folder is edit', () => {
+    const w = linkedWorld()
+    writeFileSync(w.commondir, '../../probe-marker\n')
+    const seen: string[] = []
+    const ctx = { ...ctxOf(w.n, w.shares), realpath: (p: string) => { seen.push(p); return safeRealpath(p) } }
+    expect(checkUploadPackPath(w.gitdir, ctx)).toEqual({ ok: false, code: 'outside_edit_folder' })   // probe-marker does not exist
+    expect(seen.filter((p) => p.includes('probe-marker'))).toHaveLength(1)                           // so the read did happen here
+  })
+
   test('objects/info/alternates is refused', () => {
     const n = makeNuance()
     writeFileSync(join(n.gitdir, 'objects', 'info', 'alternates'), '/tmp/other/objects\n')

@@ -141,6 +141,8 @@ export function checkUploadPackPath(path: string, ctx: FetchGateCtx): FetchCheck
   if (tccProtected(worktree, ctx.home, realpath)) return refuse('tcc_protected')
   if (!ctx.allowlist || realpath(worktree) !== worktree || !isEditIn(worktree, ctx.allowlist, ctx.home, realpath)) return refuse('not_edit_folder')
   if (dotGitTarget(worktree, realpath) !== path) return refuse('git_link')
+  // The gitdir itself is held to an edit folder before anything inside it (its commondir) is read or followed (Task 63 gate-1-7).
+  if (!isEditIn(path, ctx.allowlist, ctx.home, realpath)) return refuse('outside_edit_folder')
   const common = commonDirOf(path, realpath)
   if (!common) return refuse('outside_edit_folder')
   for (const dir of new Set([path, common])) {
