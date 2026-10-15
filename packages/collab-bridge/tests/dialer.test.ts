@@ -497,6 +497,46 @@ describe('runDialLoop: a dial that cannot be built, a session that throws, the l
   }, 20_000)
 })
 
+describe('a spawn that fails', () => {
+  /** What Bun.spawn throws when the kernel refuses the fork or exec: an Error with the errno name in `code`. */
+  const refusing = (code: string): NonNullable<Parameters<typeof dialOnce>[0]['spawn']> => () => { throw Object.assign(new Error(`spawn failed: ${code}`), { code }) }
+
+  test('only a path that no later dial can heal is config; a resource error is unknown, which backs off (Task 63 conformance-2-4, relay-1-5)', async () => {
+    const air = makeAir()
+    const stub = fakeWith(RELAY).bin // never the real ssh, even if a spawn were not injected
+    const dialWith = (code: string) => dialOnce({ ssh: stub, config: air.paths.sshConfig, alias: 'collab-nuance', nonce: NONCE, ctx: air.ctx,
+      preambleMs: 5_000, spawn: refusing(code) })
+    for (const code of ['EMFILE', 'ENFILE', 'EAGAIN', 'ENOMEM', 'EINTR', 'EIO']) {
+      expect([code, await dialWith(code)]).toEqual([code, { ok: false, failure: { status: 'unknown', detail: `ssh could not be started (${code})` } }])
+    }
+    for (const code of ['ENOENT', 'EACCES', 'ENOEXEC', 'ENOTDIR', 'ELOOP', 'ENAMETOOLONG']) {
+      expect([code, await dialWith(code)]).toEqual([code, { ok: false, failure: { status: 'config', detail: `ssh could not be started (${code})` } }])
+    }
+    // An error with no errno at all is not known to be permanent either.
+    expect(await dialOnce({ ssh: stub, config: air.paths.sshConfig, alias: 'collab-nuance', nonce: NONCE, ctx: air.ctx, preambleMs: 5_000,
+      spawn: () => { throw new Error('boom') } })).toEqual({ ok: false, failure: { status: 'unknown', detail: 'ssh could not be started (ERROR)' } })
+  })
+
+  test('a transient spawn failure backs off and the loop keeps dialling instead of stopping as needs Yu: config', async () => {
+    const air = makeAir()
+    const fake = fakeWith(RELAY)
+    const statuses: Array<Partial<DeviceStatus>> = []
+    const ledger: LedgerFields[] = []
+    const sleeps: number[] = []
+    const result = await runDialLoop({
+      device: air.device, paths: air.paths, ssh: fake.bin, spawn: refusing('EMFILE'),
+      policy: new DialPolicy({ mono: () => performance.now(), now: () => new Date(), rand: () => 0.5 }),
+      configExists: () => true, onLink: async () => {}, status: (s) => statuses.push(s), ledger: (f) => ledger.push(f),
+      tcpProbe: async () => 'ok', stopped: () => sleeps.length >= 3, sleep: async (ms) => { sleeps.push(ms) }, preambleMs: 5_000,
+    })
+    expect(result).toBe('stopped')
+    expect(sleeps).toEqual([5_000, 10_000, 20_000])
+    expect(statuses.at(-1)).toMatchObject({ word: 'connecting', reason: 'unknown' })
+    expect(ledger.filter((l) => l.event === 'dial').map((l) => [l.outcome, l.code])).toEqual([['failed', 'unknown'], ['failed', 'unknown'], ['failed', 'unknown']])
+    expect(fake.calls()).toEqual([])
+  })
+})
+
 describe('runDialLoop: a ledger or status write that throws', () => {
   test('a ledger that throws on every line (a held lock, ENOSPC) neither skips the session nor the close nor the next dial (Task 63 relay-1-3)', async () => {
     const air = makeAir()

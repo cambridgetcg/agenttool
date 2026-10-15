@@ -29,6 +29,15 @@ const STDERR_KEEP = 256 * 1024
 const KILL_GRACE_MS = 2_000
 const ALIAS_RE = /^[a-z][a-z0-9-]{0,63}$/
 
+/** The spawn dialOnce makes; a test passes its own to see what a refused fork does. */
+export type SpawnSsh = (argv: string[], opts: { stdin: 'pipe'; stdout: 'pipe'; stderr: 'pipe'; cwd: string; env: Record<string, string> }) => Bun.Subprocess<'pipe', 'pipe', 'pipe'>
+/**
+ * The errnos of a spawn that no later dial can heal: the ssh path is missing, not executable, not a program or not a
+ * path. Anything else (EMFILE, ENFILE, EAGAIN, ENOMEM: the Mac under fd or process pressure) clears by itself, so it
+ * backs off like any unknown failure instead of stopping the device as needs Yu: config (Task 63 conformance-2-4).
+ */
+const PERMANENT_SPAWN_ERRNOS: ReadonlySet<string> = new Set(['ENOENT', 'EACCES', 'ENOEXEC', 'ENOTDIR', 'ELOOP', 'ENAMETOOLONG'])
+
 /**
  * Bun's FileSink answers a write, flush or end it cannot finish at once with a promise, and rejects it with EPIPE when
  * ssh has no reader left. Nobody awaits those (the exit is seen through `closed`), and Bun ends the whole process on an
@@ -59,15 +68,15 @@ function gateLine(stderr: string): string {
  * bytes (and any after the preamble in the same chunk) go to onData, send() writes ssh's stdin. ssh gets an env built
  * here: PATH, and HOME when given (P14).
  */
-export function dialOnce(o: { ssh: string; config: string; alias: string; nonce: string; ctx: SshContext; preambleMs: number; home?: string }): Promise<DialOutcome> {
+export function dialOnce(o: { ssh: string; config: string; alias: string; nonce: string; ctx: SshContext; preambleMs: number; home?: string; spawn?: SpawnSsh }): Promise<DialOutcome> {
   const argv = dialArgv(o.ssh, o.config, o.alias, o.nonce)
   const env: Record<string, string> = { PATH: '/usr/bin:/bin', ...(o.home ? { HOME: o.home } : {}) }
   let proc: Bun.Subprocess<'pipe', 'pipe', 'pipe'>
   try {
-    proc = Bun.spawn(argv, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', cwd: '/', env })
+    proc = (o.spawn ?? Bun.spawn)(argv, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', cwd: '/', env })
   } catch (e) {
-    const code = String((e as NodeJS.ErrnoException).code ?? 'error').replace(/[^A-Z0-9_]/g, '')
-    return Promise.resolve({ ok: false, failure: { status: 'config', detail: `ssh could not be started (${code})` } })
+    const code = String((e as NodeJS.ErrnoException).code ?? '').replace(/[^A-Z0-9_]/g, '') || 'ERROR' // lowercase never survives the filter
+    return Promise.resolve({ ok: false, failure: { status: PERMANENT_SPAWN_ERRNOS.has(code) ? 'config' : 'unknown', detail: `ssh could not be started (${code})` } })
   }
   return new Promise<DialOutcome>((resolve) => {
     const scanner = new PreambleScanner(o.nonce)
@@ -311,7 +320,7 @@ function failureCode(f: DialFailure | PreambleFailure): string {
  */
 export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh: string; policy: DialPolicy; configExists(): boolean;
   onLink(link: DeviceLink): Promise<void>; status(s: Partial<DeviceStatus>): void; ledger(f: LedgerFields): void;
-  tcpProbe: TcpProbe; stopped(): boolean; sleep(ms: number): Promise<void>; preambleMs?: number }): Promise<'stopped' | 'needs_yu'> {
+  tcpProbe: TcpProbe; stopped(): boolean; sleep(ms: number): Promise<void>; preambleMs?: number; spawn?: SpawnSsh }): Promise<'stopped' | 'needs_yu'> {
   const device = o.device.device
   const alias = o.device.host_alias
   const config = o.paths.sshConfig
@@ -368,7 +377,7 @@ export async function runDialLoop(o: { device: DeviceFile; paths: AirPaths; ssh:
       if (o.stopped()) break
     }
     const t0 = monoNowMs()
-    const out = await dialOnce({ ssh: o.ssh, config, alias, nonce: newRelayNonce(), ctx, preambleMs, home: o.paths.home })
+    const out = await dialOnce({ ssh: o.ssh, config, alias, nonce: newRelayNonce(), ctx, preambleMs, home: o.paths.home, spawn: o.spawn })
     const ms = Math.round(monoNowMs() - t0)
     let decision: DialDecision
     if (out.ok) {
