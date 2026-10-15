@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadAllowlist, safeRealpath, type Allowlist, type AllowlistFolder } from '../src/allowlist.ts'
 import { checkUploadPackPath, FETCH_STOPPED_EXIT, gitEnv, pktLineErr, runFetchGate, UPLOAD_PACK_CONFIG, uploadPackArgv, type FetchGateCtx } from '../src/nuance/fetch-gate.ts'
@@ -233,6 +233,41 @@ describe('checkUploadPackPath', () => {
     const n = makeNuance()
     writeFileSync(join(n.gitdir, 'objects', 'info', 'alternates'), '/tmp/other/objects\n')
     expect(checkUploadPackPath(n.gitdir, ctxOf(n))).toEqual({ ok: false, code: 'alternates' })
+  })
+
+  test('a symlinked objects/ or objects/pack, which puts the object store somewhere else, is refused like alternates (Task 63 gate-1-6)', () => {
+    const n = makeNuance()
+    expect(checkUploadPackPath(n.gitdir, ctxOf(n)).ok).toBe(true)
+    // Another repository's object store, outside every edit folder and not owned by this check at all.
+    const other = temp('cb-other-repo-')
+    git(['init', '-q', '-b', 'main', other], n.home)
+    const objects = join(n.gitdir, 'objects')
+    const moved = join(n.home, 'objects-moved')
+    renameSync(objects, moved)
+    symlinkSync(join(other, '.git', 'objects'), objects)
+    expect(checkUploadPackPath(n.gitdir, ctxOf(n))).toEqual({ ok: false, code: 'alternates' })
+    // Even a link to a directory inside the same edit folder: an object store is a real directory of this repository.
+    rmSync(objects)
+    symlinkSync(moved, objects)
+    expect(checkUploadPackPath(n.gitdir, ctxOf(n))).toEqual({ ok: false, code: 'alternates' })
+    // A real objects/ with a symlinked pack/ is the same thing one level down.
+    rmSync(objects)
+    renameSync(moved, objects)
+    expect(checkUploadPackPath(n.gitdir, ctxOf(n)).ok).toBe(true)
+    const pack = join(objects, 'pack')
+    const packMoved = join(n.home, 'pack-moved')
+    renameSync(pack, packMoved)
+    symlinkSync(packMoved, pack)
+    expect(checkUploadPackPath(n.gitdir, ctxOf(n))).toEqual({ ok: false, code: 'alternates' })
+  })
+
+  test('the common dir of a linked work tree is held to the same real objects/ (Task 63 gate-1-6)', () => {
+    const w = linkedWorld()
+    expect(checkUploadPackPath(w.gitdir, ctxOf(w.n, w.shares)).ok).toBe(true)
+    const objects = join(w.main, '.git', 'objects')
+    renameSync(objects, join(w.n.home, 'main-objects'))
+    symlinkSync(join(w.n.home, 'main-objects'), objects)
+    expect(checkUploadPackPath(w.gitdir, ctxOf(w.n, w.shares))).toEqual({ ok: false, code: 'alternates' })
   })
 
   test('a path in ~/Documents, by spelling or through a symlink, is refused', () => {

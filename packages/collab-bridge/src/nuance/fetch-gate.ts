@@ -119,6 +119,16 @@ function ownedDir(p: string, uid: number): boolean {
   }
 }
 
+/** Whether something that is not a real directory sits at this path: a symlink (even to a directory) or a file. False where nothing is. */
+function notRealDir(p: string): boolean {
+  try {
+    const st = lstatSync(p)
+    return st.isSymbolicLink() || !st.isDirectory()
+  } catch {
+    return false
+  }
+}
+
 /** Whether anything, even a dangling symlink, sits at this path. */
 function present(p: string): boolean {
   try { lstatSync(p); return true } catch { return false }
@@ -150,6 +160,11 @@ export function checkUploadPackPath(path: string, ctx: FetchGateCtx): FetchCheck
   }
   for (const dir of new Set([path, common])) {
     if (!ownedDir(dir, ctx.uid)) return refuse('foreign_owner')
+  }
+  // An object store that is a link leads wherever the link does, outside every folder checked above: the same thing alternates
+  // does, so it has the same refusal (Task 63 gate-1-6). Each link would be followed by upload-pack, and by present() below.
+  for (const sub of ['objects', join('objects', 'pack')]) {
+    if (notRealDir(join(common, sub))) return refuse('alternates')
   }
   if (present(join(common, 'objects', 'info', 'alternates'))) return refuse('alternates')
   return { ok: true, gitdir: path, worktree }
