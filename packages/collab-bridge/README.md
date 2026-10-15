@@ -161,16 +161,20 @@ rm -rf /Users/yuai/Applications/CollabBridgeHub.app /Users/yuai/collab-bridge-*-
 ```
 
 The mirrors go last, and only after every session that used them has ended and their pending reviews are resolved.
-Keeping the bridge refs first is optional (the `bundle create` line):
+Keeping the bridge refs first is optional (the `bundle create` line). Every git here is the one the hub runs: the pinned
+`/opt/homebrew/bin/git`, from `/`, with hooks and fsmonitor off, because `worktree remove` runs `git status` inside the
+mirror, a folder of remote-authored files, under the clone's own config (Global Constraints, Air git):
 
 ```sh
+cd /
 C=/Users/yuai/Projects/collab-trial
-for m in $(git -C "$C" worktree list --porcelain | sed -n 's#^worktree \(/Users/yuai/.local/share/agenttool/collab-shared/mirrors/.*\)#\1#p'); do
-  git -C "$C" worktree unlock "$m"; git -C "$C" worktree remove "$m"
+mgit() { /opt/homebrew/bin/git -c core.hooksPath=/dev/null -c core.fsmonitor=false -C "$C" "$@"; }
+for m in $(mgit worktree list --porcelain | sed -n 's#^worktree \(/Users/yuai/.local/share/agenttool/collab-shared/mirrors/.*\)#\1#p'); do
+  mgit worktree unlock "$m"; mgit worktree remove "$m"
 done
-git -C "$C" bundle create /Users/yuai/.cache/agenttool/collab-bridge-archive/collab-refs.bundle --glob=refs/collab
-git -C "$C" for-each-ref --format='delete %(refname)' refs/collab/ | git -C "$C" update-ref --stdin
-git -C "$C" worktree prune
+mgit bundle create /Users/yuai/.cache/agenttool/collab-bridge-archive/collab-refs.bundle --glob=refs/collab
+mgit for-each-ref --format='delete %(refname)' refs/collab/ | mgit update-ref --stdin
+mgit worktree prune
 ```
 
 The mirrors' root paths stay in the append-only shared journal; `~/.local/share/agenttool/collab-shared/` can be
