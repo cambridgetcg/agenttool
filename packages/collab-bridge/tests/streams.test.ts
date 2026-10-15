@@ -629,16 +629,39 @@ describe('the link', () => {
     expect(t.ledger).toContainEqual({ event: 'link_end', device: 'nuance', user: 'macair', code: 'no_pong' })
   })
 
-  test('a PONG that keeps arriving postpones the silence timer: the link stays up past the first deadline and no timer outlives it (Task 63 relay-1-8)', async () => {
+  test('a PONG that keeps arriving postpones the silence timer: the link stays up past the first deadline (Task 63 relay-1-8)', async () => {
     const t = rig({ deps: { pingMs: 40, pongDropMs: 120 } })
     for (let i = 0; i < 8; i++) { await Bun.sleep(40); t.relay.pong() }   // 320 ms, well past the first 120 ms deadline
     expect(t.relay.closedByHub()).toBe(false)
     t.session.close('test')
     await t.run
-    const closed = t.ledger.filter((f) => f.event === 'link_end')
-    await Bun.sleep(200)                               // a timer left running would end the session again after the deadline
-    expect(t.ledger.filter((f) => f.event === 'link_end')).toEqual(closed)
-    expect(closed).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'test' }])
+    expect(t.ledger.filter((f) => f.event === 'link_end')).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'test' }])
+  })
+
+  test('ending the session clears the silence timer: it is armed while the link is up and no such timer is left pending after it (Task 63 new-dropper-clear)', async () => {
+    // A timer left behind cannot be seen through the ledger (its callback returns at once on an ended session), so the
+    // timers themselves are watched: every setTimeout of the silence timer's size (pongDropMs here is ten minutes, no
+    // other timer of the session comes near it) is held until it fires or is cleared.
+    const realSet = globalThis.setTimeout
+    const realClear = globalThis.clearTimeout
+    const pending = new Set<unknown>()
+    globalThis.setTimeout = ((fn: () => void, ms?: number, ...rest: unknown[]) => {
+      const h = realSet(() => { pending.delete(h); fn() }, ms, ...rest)
+      if (ms !== undefined && ms >= 500_000) pending.add(h)
+      return h
+    }) as unknown as typeof setTimeout
+    globalThis.clearTimeout = ((h?: Parameters<typeof realClear>[0]) => { pending.delete(h); return realClear(h) }) as typeof clearTimeout
+    try {
+      const t = rig({ deps: { pingMs: 15_000, pongDropMs: 600_000 } })
+      expect(pending.size).toBe(1)                     // the probe sees the silence timer: armed while the link is up
+      t.session.close('test')
+      await t.run
+      expect(pending.size).toBe(0)                     // end() cleared it
+    } finally {
+      globalThis.setTimeout = realSet
+      globalThis.clearTimeout = realClear
+      for (const h of pending) realClear(h as Parameters<typeof realClear>[0])
+    }
   })
 
   test('a 30-minute jump of the monotonic clock drops the link at the next tick', async () => {
