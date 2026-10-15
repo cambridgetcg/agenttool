@@ -73,6 +73,21 @@ describe('collab-bridge status', () => {
     expect(nuanceStatus(paths, () => 5_000)).toMatchObject({ relay: 'up', last_ping_age_s: 0 })
   })
 
+  test('a PING the relay records between the CLI reading the clock and reading relay.json does not make a live relay `none` (Task 63 new-status-skew)', () => {
+    const paths = nuance()
+    writeRelayJson(paths, { pid: process.pid, started_mono: 1_000, last_ping_mono: 30_000, streams: 1 })
+    // The clock reads 35_000; the CLI is then held up (preempted), and the live relay writes the PING that arrived at 35_001
+    // before the file is read. The mono() below does that right after it answers, which is the moment the old order read the file.
+    const mono = (): number => {
+      writeRelayJson(paths, { pid: process.pid, started_mono: 1_000, last_ping_mono: 35_001, streams: 1 })
+      return 35_000
+    }
+    expect(nuanceStatus(paths, mono)).toMatchObject({ relay: 'up' })
+    // Read in that order the file can only be older than the clock, so no skew has to be allowed: a reading ahead of now is still none.
+    writeRelayJson(paths, { pid: process.pid, started_mono: 1_000, last_ping_mono: 35_001, streams: 1 })
+    expect(nuanceStatus(paths, () => 35_000).relay).toBe('none')
+  })
+
   test('counts ready pipes and lists refused codes', () => {
     const paths = nuance()
     writePipeRecord(paths, rec(4100, process.pid))

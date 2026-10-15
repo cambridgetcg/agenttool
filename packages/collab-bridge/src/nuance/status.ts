@@ -16,9 +16,12 @@ export function nuanceStatus(paths: NuancePaths, mono: () => number, o: { staleM
   const records = readPipeRecords(paths, alive)
   const pipes = records.filter((r) => r.state === 'ready').length
   const refused = [...new Set(records.flatMap((r) => (r.refused === null ? [] : [r.refused])))].sort()
-  const now = mono()
   const relay = readRelayStatus(paths)
   if (!relay || !alive(relay.pid)) return { relay: 'none', stale_since_mono: null, last_ping_age_s: null, pipes, refused }
+  // The clock is read after the file, never before: a live relay rewrites relay.json on every PING, and a clock read first
+  // could be older than a reading the relay wrote while this process waited to run (Task 63 new-status-skew). Read in this
+  // order a reading in the file was taken before the clock was, so no skew has to be allowed.
+  const now = mono()
   // CLOCK_MONOTONIC is system-wide and never runs backwards within a boot, so a reading ahead of now was written under an
   // earlier boot (a power loss or SIGKILL leaves relay.json behind): this pid is some other process, and now - heard would
   // be negative, which is "fresh" (Task 63 relay-2-3).
