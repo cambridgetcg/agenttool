@@ -364,7 +364,9 @@ export class LinkSession {
     this.streams.delete(s.id)
     if (wasReady && !s.replaced && s.seat !== null && s.holder !== null) {
       this.deps.attachments.detach(s.seat.lineage, s.holder)
-      this.deps.pool.detached(s.seat.lineage)
+      // detached() sets the pool's own flags and the child's window before it persists detached_since, which can fail
+      // (ENOSPC): the window has started, and that failure must not stop the other streams of this link or its end.
+      try { this.deps.pool.detached(s.seat.lineage) } catch { /* persisted at the lineage's next write */ }
     }
   }
 
@@ -372,11 +374,18 @@ export class LinkSession {
     if (this.ended) return
     this.ended = true
     if (this.pinger !== null) { clearInterval(this.pinger); this.pinger = null }
-    for (const s of [...this.streams.values()]) this.finish(s)
-    const d = this.currentDevice()
-    this.ledger({ event: 'link_end', device: d?.device, user: d?.user, code: reason })
-    try { this.deps.link.close() } catch { /* already gone */ }
-    this.resolveDone()
+    try {
+      for (const s of [...this.streams.values()]) {
+        try { this.finish(s) } catch { /* the other streams still detach */ }
+      }
+    } finally {
+      // Whatever a stream's end did, the link is closed and `done` resolves: runDialLoop awaits it, and a session that never
+      // ends would leave the device un-redialled for good (Task 63 relay-1-2).
+      const d = this.currentDevice()
+      this.ledger({ event: 'link_end', device: d?.device, user: d?.user, code: reason })
+      try { this.deps.link.close() } catch { /* already gone */ }
+      this.resolveDone()
+    }
   }
 
   private send(s: Stream, m: HubToPipe): void {

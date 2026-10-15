@@ -711,6 +711,40 @@ describe('the link', () => {
     expect(t.pool.attached.size).toBe(0)
   })
 
+  test('a pool that throws while a stream detaches cannot stop the link from ending: every stream is detached, link_end is written and the link closes (Task 63 relay-1-2)', async () => {
+    const t = rig()
+    const first = newLineage()
+    const second = newLineage()
+    expect(handshake(t.relay, 1, first)).toMatchObject({ t: 'ready' })
+    expect(handshake(t.relay, 3, second)).toMatchObject({ t: 'ready' })
+    // pool.detached persists detached_since (writeFileDurable), which can fail with ENOSPC; stream 1 is finished first.
+    const pool = t.deps.pool as unknown as { detached(l: string): void }
+    const real = pool.detached
+    const told: string[] = []
+    pool.detached = (l) => { told.push(l); if (l === first) throw new Error('ENOSPC'); real(l) }
+    const close = t.relay.link.close
+    let closes = 0
+    t.relay.link.close = () => { closes++; close() }
+    const unhandled: unknown[] = []
+    const note = (e: unknown) => { unhandled.push(e) }
+    process.on('unhandledRejection', note)
+    try {
+      t.relay.drop()                                     // ssh exits: `closed` resolves and the session ends link_closed
+      const ended = await Promise.race([t.run.then(() => 'ended'), Bun.sleep(1_000).then(() => 'hung')])
+      expect(ended).toBe('ended')
+      await Bun.sleep(20)
+    } finally {
+      process.off('unhandledRejection', note)
+    }
+    expect(unhandled).toEqual([])
+    expect(linkEnds(t)).toEqual([{ event: 'link_end', device: 'nuance', user: 'macair', code: 'link_closed' }])
+    expect(closes).toBe(1)
+    expect(told).toEqual([first, second])                // the second stream was still detached after the first one threw
+    expect(t.attachments.has(first)).toBe(false)
+    expect(t.attachments.has(second)).toBe(false)
+    expect(t.pool.attached.has(second)).toBe(false)
+  })
+
   test('relay_replaced, a close() reason and an unpaired device each write one link_end with their own code', async () => {
     const replaced = rig()
     replaced.relay.data(0, { t: 'relay_replaced' })
