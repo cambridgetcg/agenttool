@@ -276,6 +276,20 @@ export function killQuietly(pid: number): void {
   try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ }
 }
 
+/**
+ * SIGKILLs the process whose pid a test recorded in `file`, for a `finally`. Only a positive integer written in digits is ever
+ * signalled: an empty file reads as 0, and kill(0) would signal the test runner's own process group (kill(-n), another one).
+ * A missing, empty or garbled file, or a process that is gone, is skipped.
+ */
+export function killRecordedPid(file: string): void {
+  let text: string
+  try { text = readFileSync(file, 'utf8').trim() } catch { return }
+  if (!/^[0-9]+$/.test(text)) return
+  const pid = Number(text)
+  if (!Number.isSafeInteger(pid) || pid <= 0) return
+  try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
+}
+
 // ---- Task 63 fold (mirror batch): exact git paths, whatever this Mac's file system makes of their names ----
 
 /**

@@ -7,7 +7,7 @@ import { LineageStore, type LineageEntry } from '../src/air/lineages.ts'
 import { liveLstartOf, liveProcAlive, makeHostCli, type ChildPool, type HostCli, type HostCliOptions } from '../src/air/pool.ts'
 import { rolePrefix } from '../src/air/stamp.ts'
 import { newStartNonce } from '../src/link/messages.ts'
-import { COLLAB_DIST, temp, writeStub } from './helpers.ts'
+import { COLLAB_DIST, killRecordedPid, pidGone, temp, writeStub } from './helpers.ts'
 import { startCollabSession, tamperJournal } from './mcp-harness.ts'
 import { activeSessions, childOf, cleanupPools, deferred, entry, events, fresh, pool, world, type World } from './pool-world.ts'
 
@@ -754,20 +754,73 @@ describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
   test('a grandchild that keeps the output pipes open cannot hold the answer past the deadline', async () => {
     const pidFile = join(temp('cb-hostcli-pid-'), 'grandchild.pid')
     // The CLI exits 0 after its slow start; a sleeping grandchild inherits its stdout and stderr and holds both open for 30 s.
-    const script = [
-      "import { writeFileSync } from 'node:fs'",
-      'await Bun.sleep(700)',
-      "const g = Bun.spawn(['/bin/sleep', '30'], { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })",
-      `writeFileSync(${JSON.stringify(pidFile)}, String(g.pid))`,
-      'process.exit(0)',
-    ].join('\n') + '\n'
+    const script = grandchildScript(pidFile)
     const t0 = Date.now()
     try {
       const r = await hostWith(script, process.execPath, { killGraceMs: 200, reapGraceMs: 200 })(['x'], 3_000)
       expect(r.code).toBe(0) // the exit status it really had stands; only the unread rest of its output is given up
       expect(Date.now() - t0).toBeLessThan(10_000) // the answer came at the deadline plus the graces, long before the sleeper ended
     } finally {
-      try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL') } catch { /* no sleeper was started, or it is gone */ }
+      killRecordedPid(pidFile) // no sleeper was started, or it is gone: nothing to stop
+    }
+  }, 30_000)
+})
+
+/**
+ * The host CLI stub of the grandchild test: it starts slowly, spawns a sleeper that inherits its output pipes, and exits 0.
+ * `afterSpawn` is code run right after the spawn, for a test that kills the CLI there.
+ */
+function grandchildScript(pidFile: string, afterSpawn = ''): string {
+  return [
+    'await Bun.sleep(700)',
+    // The sleeper's own shell records its pid as its first act and then becomes the sleeper (exec keeps the pid): the pid is on disk
+    // before there is anything to leave behind, whatever happens to this CLI after the spawn.
+    `Bun.spawn(['/bin/sh', '-c', 'echo $$ > "$1" && exec /bin/sleep 30', 'sh', ${JSON.stringify(pidFile)}], { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })`,
+    afterSpawn,
+    'process.exit(0)',
+  ].join('\n') + '\n'
+}
+
+describe('the grandchild test cleans up after itself (Task 63 new-pool-start-pid0, new-pool-start-sleeper)', () => {
+  // kill(0, ...) signals the caller's own process group, so an empty pid file (Number('') is 0) must never reach process.kill.
+  test('killRecordedPid signals only a positive integer pid: an empty, zero, negative, fractional or garbled file signals nobody', () => {
+    const dir = temp('cb-killrec-')
+    const spy = spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      for (const [i, text] of ['', '\n', ' ', '0', '0\n', '-1', '-4242', '1.5', '1e3', '0x10', 'abc', '12abc', '4242 4243', '99999999999999999999'].entries()) {
+        const f = join(dir, `pid${i}`)
+        writeFileSync(f, text)
+        killRecordedPid(f)
+      }
+      killRecordedPid(join(dir, 'missing'))
+      expect(spy).not.toHaveBeenCalled()
+      const ok = join(dir, 'ok')
+      writeFileSync(ok, '4242\n')
+      killRecordedPid(ok)
+      expect(spy.mock.calls).toEqual([[4242, 'SIGKILL']])
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  // The CLI dies right after it spawned the sleeper and before the old code wrote the sleeper's pid, so the finally had no pid
+  // to stop and /bin/sleep ran on. The sleeper's own shell now records the pid, before it becomes the sleeper.
+  test('a CLI that dies right after spawning its sleeper still leaves the sleeper\'s pid, so the cleanup can stop it', async () => {
+    const pidFile = join(temp('cb-sleeper-pid-'), 'grandchild.pid')
+    const script = grandchildScript(pidFile, "process.kill(process.pid, 'SIGKILL')")
+    const runner = join(temp('cb-sleeper-run-'), 'cli.mjs')
+    writeFileSync(runner, script)
+    try {
+      const cli = Bun.spawn([process.execPath, '--no-env-file', '--config=/dev/null', runner], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })
+      await cli.exited
+      await until(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== '', 10_000)
+      const pid = Number(readFileSync(pidFile, 'utf8'))
+      expect(Number.isInteger(pid) && pid > 0).toBe(true)
+      expect(await pidGone(pid, 0)).toBe(false) // the sleeper is alive
+      killRecordedPid(pidFile)
+      expect(await pidGone(pid, 5_000)).toBe(true)
+    } finally {
+      killRecordedPid(pidFile)
     }
   }, 30_000)
 })
