@@ -51,13 +51,15 @@ const BUILT_FROM = ['packages/collab-bridge', 'packages/collab/dist']
  * hidden from status with skip-worktree or assume-unchanged (every `ls-files -v` tag is `H`).
  */
 export function treeClean(repo: string): boolean {
-  const status = git(repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=none', '--ignored'])
-  if (!status.ok) return false
-  for (const entry of status.out.split('\0')) {
+  const status = git(repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=none'])
+  if (!status.ok || status.out.split('\0').some((entry) => entry !== '')) return false // modified, staged, untracked, renamed
+  // Ignored files are looked for among the bridge's own sources only: `--ignored` over the whole repo would list every file of
+  // every ignored directory (node_modules), more than git() takes, and a clean tree would be refused as dirty (Task 63 new-ignored-scan-scope).
+  const ignored = git(repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored', '--', ...BRIDGE_SOURCES])
+  if (!ignored.ok) return false
+  for (const entry of ignored.out.split('\0')) {
     if (entry === '') continue
-    if (!entry.startsWith('!! ')) return false // modified, staged, untracked, renamed
-    const path = entry.slice(3)
-    if (BRIDGE_SOURCES.some((d) => path.startsWith(d) || d.startsWith(path)) && basename(path) !== '.DS_Store') return false
+    if (!entry.startsWith('!! ') || basename(entry.slice(3)) !== '.DS_Store') return false
   }
   const tracked = git(repo, ['ls-files', '-v', '-z', '--', ...BUILT_FROM])
   return tracked.ok && tracked.out.split('\0').every((e) => e === '' || e.startsWith('H '))

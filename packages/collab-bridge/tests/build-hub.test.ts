@@ -6,7 +6,7 @@ import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSy
 import { homeOf } from '../src/paths.ts'
 import { join, relative } from 'node:path'
 import { buildHub, treeClean } from '../scripts/build-hub.ts'
-import { cleanupTmps, COLLAB_DIST, modeOf, PKG, repoGit, sha256File, temp, testEnv } from './helpers.ts'
+import { cleanupTmps, COLLAB_DIST, modeOf, PKG, REAL_GIT, repoGit, sha256File, temp, testEnv } from './helpers.ts'
 
 afterEach(cleanupTmps)
 
@@ -113,6 +113,41 @@ describe('build-hub', () => {
       const built = await buildHub({ repo: r.repo, outDir: join(temp('cb-hubout-'), 'hub'), installedDist: r.dist })
       expect(built.info.commit).toBe(r.head)
     }, 30_000)
+  })
+
+  // Task 63 new-ignored-scan-scope: `status --ignored --untracked-files=all` over the whole repo lists every file of every ignored
+  // directory, node_modules included, and git() cuts an answer over its 16 MB or 30 s; treeClean then said "dirty" for a clean tree.
+  test('the ignored-file scan covers the bridge\'s bin and src only: a huge ignored node_modules is neither listed nor a reason to refuse', () => {
+    const r = hubRepo()
+    appendFileSync(join(r.repo, '.git', 'info', 'exclude'), 'node_modules/\n')
+    const lib = join(r.repo, 'node_modules', 'some-package', 'lib')
+    mkdirSync(lib, { recursive: true })
+    for (let i = 0; i < 300; i++) writeFileSync(join(lib, `module-number-${i}.js`), '')
+    const everything = repoGit(r.repo, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored'])
+    expect(everything.length).toBeGreaterThan(4096) // a repo-wide ignored scan is this long here
+    // a git that cuts any status answer over 4 KB, as git() cuts one over 16 MB (the same, scaled down to 300 files)
+    const dir = temp('cb-hubgit-')
+    const wrapper = join(dir, 'git')
+    writeFileSync(wrapper, [
+      '#!/bin/bash',
+      `out=$(/usr/bin/mktemp "${dir}/out.XXXXXX")`,
+      `${REAL_GIT} "$@" > "$out"; code=$?`,
+      'case " $* " in *" status "*) if [ "$(/usr/bin/wc -c < "$out")" -gt 4096 ]; then echo "answer too long" >&2; exit 1; fi ;; esac',
+      '/bin/cat "$out"; exit $code',
+      '',
+    ].join('\n'), { mode: 0o755 })
+    const was = process.env.COLLAB_BRIDGE_BIN_GIT
+    process.env.COLLAB_BRIDGE_BIN_GIT = wrapper
+    try {
+      expect(treeClean(r.repo)).toBe(true)
+      // the narrower scan still sees an ignored file where the bundle could take it
+      appendFileSync(join(r.repo, '.git', 'info', 'exclude'), 'packages/collab-bridge/src/hidden.ts\n')
+      writeFileSync(join(r.repo, 'packages', 'collab-bridge', 'src', 'hidden.ts'), 'export const hidden = 1\n')
+      expect(treeClean(r.repo)).toBe(false)
+    } finally {
+      if (was === undefined) delete process.env.COLLAB_BRIDGE_BIN_GIT
+      else process.env.COLLAB_BRIDGE_BIN_GIT = was
+    }
   })
 
   // Task 63 launcher-1-9: the dependency rule's wording allows a relative import into packages/collab/src; the build is what enforces it.
