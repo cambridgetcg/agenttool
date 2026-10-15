@@ -18,6 +18,7 @@ import {
 } from './air/status.ts'
 import { LINEAGE_RE } from './link/messages.ts'
 import { tryFlock, writeFileDurable } from './native.ts'
+import { sha256File } from './nuance/git-resolve.ts'
 import { mkdirPrivate } from './private-dir.ts'
 import type { AirPaths } from './paths.ts'
 import { ancestry, HARNESS_COMMS, type ProcTable } from './proc.ts'
@@ -201,6 +202,14 @@ function devicesOrNote(deps: AirCliDeps, notes: string[]): DeviceFile[] {
   }
 }
 
+/** Why the bundle at air/<sha>/hub.js is not the pinned one its folder name says (spec §4.3: the folder is the sha256 of hub.js), or null. */
+function bundleProblem(paths: AirPaths, sha: string): string | null {
+  let actual: string
+  try { actual = sha256File(paths.hubJs(sha)) } catch (e) { return `the pinned hub bundle ${paths.hubJs(sha)} could not be read: ${message(e)}` }
+  return actual === sha ? null
+    : `the pinned hub bundle ${paths.hubJs(sha)} does not hash to its directory name ${sha} (it hashes to ${actual}): it was changed, or put in the wrong folder`
+}
+
 /** Each device's status as `hub status` and `hub doctor` show it: sticky warnings already acknowledged are left out (P52). */
 function shownStatus(paths: AirPaths, device: string): DeviceStatus | null {
   const s = readDeviceStatus(paths, device)
@@ -267,6 +276,12 @@ async function hubOn(deps: AirCliDeps): Promise<number> {
   }
   if (!existsSync(paths.hubJs(deps.hubSha))) {
     deps.err(`✗ the pinned hub bundle is missing: ${paths.hubJs(deps.hubSha)}`)
+    return 1
+  }
+  // The plist pins this path for good, so the bytes must be the ones the folder is named for (Task 63 launcher-1-8).
+  const mismatch = bundleProblem(paths, deps.hubSha)
+  if (mismatch !== null) {
+    deps.err(`✗ ${mismatch}`)
     return 1
   }
   if (!existsSync(paths.launcherExe)) {
@@ -411,7 +426,11 @@ async function hubDoctor(deps: AirCliDeps, ack: boolean): Promise<number> {
   // The pinned bundle this command runs from.
   if (deps.hubSha === null) deps.out('hub bundle: source mode (not a pinned bundle)')
   else if (!existsSync(paths.hubJs(deps.hubSha))) warnings.push(`the pinned hub bundle is missing: ${paths.hubJs(deps.hubSha)}`)
-  else deps.out(`hub bundle: ${paths.hubJs(deps.hubSha)}`)
+  else {
+    deps.out(`hub bundle: ${paths.hubJs(deps.hubSha)}`)
+    const mismatch = bundleProblem(paths, deps.hubSha)
+    if (mismatch !== null) warnings.push(mismatch)
+  }
   // The installed Collab against the build the bundle embeds (§10.4 build check).
   if (deps.build === null) deps.out('collab dist: not checked (no embedded build)')
   else if (!distMatches(deps.collabDist, deps.build)) {

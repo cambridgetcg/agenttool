@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { readDevice, writeDevice, type DeviceFile } from '../src/air/devices.ts'
@@ -19,7 +20,9 @@ import { cleanupTmps, COLLAB_DIST, modeOf, PKG, PS_STUB_HOST, temp, testEnv } fr
 
 afterEach(cleanupTmps)
 
-const SHA = 'b'.repeat(64)
+/** The fixture's pinned bundle, and the directory name that is its sha256, as Task 66 installs it. */
+const BUNDLE = '// the pinned hub bundle\n'
+const SHA = createHash('sha256').update(BUNDLE).digest('hex')
 const BUN = '/Users/yuai/.bun/bin/bun'
 const NOW = new Date('2026-10-13T12:00:00.000Z')
 const SELF = 9100
@@ -139,7 +142,7 @@ function cli(o: { env?: AirCliDeps['env']; uid?: number; table?: ProcTable | nul
   mkdirSync(stubs)
   const launchctl = fakeLaunchctl(stubs, BASE_LABELS, o.launchctl)
   mkdirSync(paths.hubDir(SHA), { recursive: true })
-  writeFileSync(paths.hubJs(SHA), '// the pinned hub bundle\n')
+  writeFileSync(paths.hubJs(SHA), BUNDLE)
   signedApp(paths.launcherApp)
   const out: string[] = []
   const err: string[] = []
@@ -270,6 +273,28 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     expect(await runAirCli(['hub', 'on'], s.deps)).toBe(1)
     expect(s.err.join('\n')).toContain('✗ this collab-bridge is not a pinned hub bundle')
     for (const x of [c, l, s]) { expect(x.asked).toEqual([]); nothingWritten(x) }
+  }, 20_000)
+
+  test('hub on is refused before any prompt when the bundle does not hash to the directory name the plist would pin, and hub doctor warns (Task 63 launcher-1-8)', async () => {
+    // a rebuilt hub.js copied over an installed one, or a bundle put under another bundle's name
+    const c = cli()
+    writeFileSync(c.paths.hubJs(SHA), '// a rebuilt bundle copied over the pinned one\n')
+    expect(await runAirCli(['hub', 'on'], c.deps)).toBe(1)
+    const err = c.err.join('\n')
+    expect(err).toContain(`✗ the pinned hub bundle ${c.paths.hubJs(SHA)} does not hash to its directory name`)
+    expect(err).toContain(SHA)
+    expect(c.asked).toEqual([])
+    nothingWritten(c)
+    pairedDevice(c.paths)
+    writePins(c.paths, PIN, PIN)
+    expect(await runAirCli(['hub', 'doctor'], c.deps)).toBe(1)
+    const rebuilt = createHash('sha256').update('// a rebuilt bundle copied over the pinned one\n').digest('hex')
+    expect(c.out.filter((l) => l.startsWith('warn: '))).toEqual([
+      `warn: the pinned hub bundle ${c.paths.hubJs(SHA)} does not hash to its directory name ${SHA} (it hashes to ${rebuilt}): it was changed, or put in the wrong folder`,
+    ])
+    // the real bytes under their own name are fine
+    const ok = cli()
+    expect(await runAirCli(['hub', 'on'], ok.deps)).toBe(0)
   }, 20_000)
 
   test('hub on with y writes the exact plist, the baseline labels and a 0600 hub.log, and bootstraps gui/502', async () => {
