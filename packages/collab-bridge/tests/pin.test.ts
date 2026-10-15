@@ -202,6 +202,12 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     expect(checkHello({ ...h, shares: [{ realpath: w.share, gitdir: "/x/it's.git" }] }, d)).toEqual([expect.stringContaining('gitdir')])
     expect(checkHello({ ...h, seat_public: '0'.repeat(64) }, d)).toEqual([expect.stringContaining('seat')])
     expect(checkHello({ ...h, device: 'zerone' }, d)).toEqual([expect.stringContaining('device')])
+    // Same build, same expiry, but the file was prepared again since the device's install (Task 63 installer-1-1, conformance-1-1):
+    // hello's `prepared` stamp is the bundle the device runs, and only that bundle's file can be pinned from it.
+    expect(h.prepared).toBe('20261013120000')
+    expect(checkHello(h, { ...d, prepared_at: '2026-10-13T12:00:00.999Z' })).toEqual([]) // the stamp has whole seconds
+    expect(checkHello(h, { ...d, prepared_at: '2026-10-13T15:30:00.000Z' })).toEqual([expect.stringContaining('prepared')])
+    expect(checkHello({ ...h, prepared: '20261013120001' }, d)).toEqual([expect.stringContaining('prepared')])
     // parseHello takes exactly hello's fields with their forms, and nothing else.
     expect(parseHello(JSON.stringify(h))).toEqual(h)
     for (const broken of [{ ...h, extra: 1 }, { ...h, v: 2 }, { ...h, build: 'ABCDEF01' }, { ...h, shares: 'x' }, { ...h, zshenv_clean: 'yes' },
@@ -218,6 +224,17 @@ describe('pinDevice (spec §10.2 step 2)', () => {
     const u = pinWorld({ device: { user: 'someone' } })
     expect(await pin(u)).toEqual({ ok: false, problems: [expect.stringContaining('user')] })
     expect(existsSync(specOf(u).mirrorPath)).toBe(false)
+  }, T)
+
+  test('a device installed from an earlier prepare of the same build and expiry is not pinned against the newer file', async () => {
+    // Ai prepared at 12:00 and Yu installed that bundle; Ai prepared again from the same commit at 15:30 (a corrected trailer or
+    // new caps: build and expiry do not change) and pins before Yu reinstalls. The device still runs the 12:00 settings.
+    const w = pinWorld({ device: { prepared_at: '2026-10-13T15:30:00.000Z', trailer: 'Co-Authored-By: A Corrected Trailer <x@example.org>' } })
+    const r = await pin(w)
+    expect(r).toEqual({ ok: false, problems: [expect.stringMatching(/prepared 20261013120000.*20261013153000.*installer/)] })
+    expect(readFileSync(w.paths.deviceFile('nuance'), 'utf8')).toBe(w.deviceText)
+    expect(existsSync(specOf(w).mirrorPath)).toBe(false)
+    expect(w.fake.calls().map((c) => c.at(-1))).toEqual(['hello']) // no fetch followed
   }, T)
 
   test('records nothing when the device file is unpaired or prepared again while the mirror is made', async () => {

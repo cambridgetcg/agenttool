@@ -7,7 +7,7 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync,
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { probeCollabTools } from '../src/air/children.ts'
-import { writeDevice, type DeviceFile } from '../src/air/devices.ts'
+import { preparedStamp, writeDevice, type DeviceFile } from '../src/air/devices.ts'
 import { DEFAULT_CAPS } from '../src/air/diff-check.ts'
 import { airGit, MIRROR_GIT_FLAGS, OID_RE, type GitRunner } from '../src/air/git.ts'
 import { mirrorIdOf } from '../src/air/mirror.ts'
@@ -230,7 +230,7 @@ export async function prepareBundle(o: PrepareInput): Promise<PreparedBundle> {
   if (!isAbsolute(share.airClone)) throw new Error(`prepare: --share's Air clone ${JSON.stringify(share.airClone)} must be absolute`)
   const now = o.now ?? Date.now()
   const expiry = new Date(now + KEY_LIFETIME_DAYS * DAY_MS).toISOString().slice(0, 10).replaceAll('-', '')
-  const preparedAt = new Date(now).toISOString().replace(/[-:T]/g, '').slice(0, 14)
+  const preparedAt = preparedStamp(new Date(now).toISOString())
   const tmplPath = join(o.repo, 'packages', 'collab-bridge', 'nuance', 'install.sh.tmpl')
   let tmpl: string
   try { tmpl = readFileSync(tmplPath, 'utf8') } catch { throw new Error(`prepare: no installer template at ${tmplPath}`) }

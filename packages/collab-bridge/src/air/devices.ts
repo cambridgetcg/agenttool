@@ -102,6 +102,12 @@ export function parseDevice(text: string): DeviceFile | null {
   return o as unknown as DeviceFile
 }
 
+/**
+ * prepare's `PREPARED_AT` (the installer's, MANIFEST.txt's and INSTALLED's stamp, which hello reports): the device file's
+ * ISO `prepared_at` as 14 UTC digits, whole seconds.
+ */
+export const preparedStamp = (iso: string): string => iso.replace(/[-:T]/g, '').slice(0, 14)
+
 /** The device file at `path`, or null when it is missing or does not parse. */
 export function readDevice(path: string): DeviceFile | null {
   let text: string

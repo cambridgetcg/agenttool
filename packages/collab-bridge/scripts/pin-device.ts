@@ -3,7 +3,7 @@
 // sync and lock each share's mirror, and only then record the device as paired (spec §10.2 step 2, §5.6, §7.1; R25).
 //   cd / && bun --no-env-file --config=/dev/null <PKG>/scripts/pin-device.ts nuance
 import { chmodSync, readFileSync } from 'node:fs'
-import { readDevice, updateDevice, type DeviceFile, type DeviceShare } from '../src/air/devices.ts'
+import { preparedStamp, readDevice, updateDevice, type DeviceFile, type DeviceShare } from '../src/air/devices.ts'
 import { airGit } from '../src/air/git.ts'
 import { createMirror, liveMirrorDeps, mirrorIdOf, mirrorWorkspaceId, type MirrorDeps, type MirrorSpec } from '../src/air/mirror.ts'
 import { parseSeatPublicHex } from '../src/air/seats.ts'
@@ -105,6 +105,11 @@ export function checkHello(h: Hello, d: DeviceFile): string[] {
   if (h.user !== d.user) problems.push(`hello's user is ${h.user}; this pairing was prepared for ${d.user}`)
   if (h.build !== d.bundle_build) problems.push(`the device runs build ${h.build}, not the prepared bundle's ${d.bundle_build}: run that bundle's installer`)
   if (h.expiry !== d.key_expiry) problems.push(`the device's collab key expires ${h.expiry}, not the prepared ${d.key_expiry}: run that bundle's installer`)
+  // Build and expiry are the same for a second prepare of the same commit on the same day, so only the prepare stamp tells a
+  // device installed from the earlier bundle (older trailer, tool list, caps) from this file's: it is not pinned against it.
+  if (h.prepared !== preparedStamp(d.prepared_at)) {
+    problems.push(`the device runs the bundle prepared ${h.prepared}, not the prepared file's ${preparedStamp(d.prepared_at)}: run that bundle's installer`)
+  }
   const reported = new Set(h.shares.map((s) => s.realpath))
   const prepared = new Set(d.shares.map((s) => s.remote_realpath))
   for (const p of prepared) if (!reported.has(p)) problems.push(`the prepared share ${p} is not among the shares the device reports`)
