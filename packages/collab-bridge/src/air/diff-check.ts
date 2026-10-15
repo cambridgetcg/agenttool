@@ -37,14 +37,61 @@ export function isControlPath(path: string): boolean {
   return false
 }
 
+/** One folding round is not always enough (U+1E9E folds to U+00DF, which folds to "ss"); every code point settles within two. */
+const FOLD_ROUNDS = 8
+
 /**
  * The name two paths share when one Air file name would hold both: the Air's APFS compares names without regard to case
- * or Unicode form, so `src/a.ts` and `src/A.ts`, or `caf\u00e9` spelled NFC and NFD, are one file there. NFD, the
- * upper-then-lower round trip (which also folds \u017F and the Kelvin sign) and NFD again, as isControlPath folds; a few
- * more exotic spellings counting as one is the safe direction.
+ * or Unicode form, so `src/a.ts` and `src/A.ts`, or `caf\u00e9` spelled NFC and NFD, are one file there. Each round is NFD,
+ * the upper-then-lower round trip (which also folds \u017F and the Kelvin sign) and NFD again, as isControlPath folds, and
+ * rounds repeat to a fixed point, so \u1E9E and \u00DF meet at "ss". A few more exotic spellings counting as one is the
+ * safe direction. A name that has not settled after FOLD_ROUNDS throws, so checkTree answers fetch_failed (Task 63
+ * new-fold-fixed-point).
  */
 export function foldedPath(path: string): string {
-  return path.normalize('NFD').toUpperCase().toLowerCase().normalize('NFD')
+  let cur = path
+  for (let round = 0; round < FOLD_ROUNDS; round++) {
+    const next = cur.normalize('NFD').toUpperCase().toLowerCase().normalize('NFD')
+    if (next === cur) return cur
+    cur = next
+  }
+  throw new Error('foldedPath: the name did not settle')
+}
+
+interface FoldedNode { kids: Map<string, FoldedNode>; file: boolean }
+
+/**
+ * The folded names a tree holds, as a trie of folded segments: a name collides with an earlier one when it is the same
+ * path, or when one is a directory the other is a file in (`notes/A` and `notes/a/x.md` are one name on the Air, and checkout
+ * could not write both). Linear in the path, whatever its depth.
+ */
+class FoldedNames {
+  private readonly root: FoldedNode = { kids: new Map(), file: false }
+
+  /** True when `path` collides with a name added earlier; otherwise adds it. */
+  collides(path: string): boolean {
+    const segs = foldedPath(path).split('/')
+    let node = this.root
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i]!
+      const kid = node.kids.get(seg)
+      if (i === segs.length - 1) {
+        if (kid !== undefined) return true // the same name, or a directory of that name
+        node.kids.set(seg, { kids: new Map(), file: true })
+        return false
+      }
+      if (kid === undefined) {
+        const dir: FoldedNode = { kids: new Map(), file: false }
+        node.kids.set(seg, dir)
+        node = dir
+      } else if (kid.file) {
+        return true // a file of the name of a directory on this path
+      } else {
+        node = kid
+      }
+    }
+    return false
+  }
 }
 
 /** Collab's own rule (KN `src/store.ts:6799`, K67): exact, case-sensitive, a literal prefix. `notes/**` is not a glob. */
@@ -70,7 +117,7 @@ export async function checkTree(git: GitRunner, repo: string, oid: string, caps:
   if (!OID_RE.test(oid)) return { ok: false, code: 'fetch_failed' }
   let entries = 0
   let totalBytes = 0
-  const names = new Set<string>()
+  const names = new FoldedNames()
   try {
     for await (const rec of git.records(['-C', repo, ...MIRROR_GIT_FLAGS, 'ls-tree', '-r', '-z', '-l', '--full-tree', oid])) {
       const m = TREE_RECORD.exec(rec)
@@ -79,9 +126,7 @@ export async function checkTree(git: GitRunner, repo: string, oid: string, caps:
       entries += 1
       if (entries > caps.maxEntries) return { ok: false, code: 'remote_too_large', path }
       if (mode === '160000' || mode === '120000' || type === 'commit') return { ok: false, code: 'remote_non_regular_path', path }
-      const folded = foldedPath(path)
-      if (names.has(folded)) return { ok: false, code: 'remote_non_regular_path', path }
-      names.add(folded)
+      if (names.collides(path)) return { ok: false, code: 'remote_non_regular_path', path }
       const bytes = Number(size)
       if (!Number.isSafeInteger(bytes)) return { ok: false, code: 'fetch_failed' }
       if (bytes > caps.maxBlobBytes) return { ok: false, code: 'remote_too_large', path }

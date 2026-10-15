@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { randomBytes } from 'node:crypto'
 import { symlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { ancestorCheck, checkDiff, checkTree, CONTROL_SEGMENTS, DEFAULT_CAPS, inScopes, isControlPath, type TreeCaps } from '../src/air/diff-check.ts'
+import { ancestorCheck, checkDiff, checkTree, CONTROL_SEGMENTS, DEFAULT_CAPS, foldedPath, inScopes, isControlPath, type TreeCaps } from '../src/air/diff-check.ts'
 import { airGit, type GitRunner } from '../src/air/git.ts'
 import { cleanupTmps, commitFiles, commitIndexEntries, makeRepo, REAL_GIT, repoGit, temp } from './helpers.ts'
 
@@ -112,6 +112,44 @@ describe('modes', () => {
     // Names that only look alike are fine: the same file name in two directories, and distinct names.
     const fine = commitIndexEntries(repo, [{ path: 'a/x.ts', content: '1' }, { path: 'b/x.ts', content: '2' }, { path: 'a/y.ts', content: '3' }, { path: 'caf\u00e9.md', content: '4' }, { path: 'cafes.md', content: '5' }], 'distinct')
     expect(await checkTree(git, repo, fine, caps())).toMatchObject({ ok: true })
+  })
+
+  test('names that fold to one only after a second round, and a file and a directory of one name, are non-regular too (Task 63 new-fold-fixed-point)', async () => {
+    const { repo, git, base } = setup()
+    // U+1E9E folds to U+00DF in one round and U+00DF to "ss" in the next: the same Air file name, so one round is not enough.
+    const pairs: Array<[string, string, string]> = [
+      ['notes/\u1E9E.md', 'notes/\u00DF.md', 'capital sharp s and sharp s'],
+      ['notes/\u1E9E.md', 'notes/ss.md', 'capital sharp s and ss'],
+      ['notes/A', 'notes/a/x.md', 'a file, then a directory of its name'],
+      ['notes/a/x.md', 'notes/A', 'a directory, then a file of its name'],
+      ['Docs/b/c/d.md', 'docs/B/C', 'a file named for a directory two levels down'],
+      ['notes/caf\u00e9', 'notes/cafe\u0301/x.md', 'a file and a directory, NFC and NFD'],
+      ['notes/\u1E9E/x.md', 'notes/\u00DF', 'a directory and a file, capital sharp s and sharp s'],
+    ]
+    for (const [one, two, why] of pairs) {
+      const oid = commitIndexEntries(repo, [{ path: one, content: 'one\n' }, { path: two, content: 'two\n' }], `colliding: ${why}`)
+      const r = await checkTree(git, repo, oid, caps())
+      expect([why, r.ok === false && r.code]).toEqual([why, 'remote_non_regular_path'])
+      repoGit(repo, ['reset', '-q', '--soft', base])
+      repoGit(repo, ['reset', '-q'])
+    }
+    // Names that only share a directory, or a prefix, are fine: a file next to a directory of another name.
+    const fine = commitIndexEntries(repo, [{ path: 'notes/a.md', content: '1' }, { path: 'notes/a/b.md', content: '2' }, { path: 'notes/ab', content: '3' }, { path: 'notes/\u00DF.md', content: '4' }], 'distinct')
+    expect(await checkTree(git, repo, fine, caps())).toMatchObject({ ok: true })
+  })
+
+  test('foldedPath folds to a fixed point: every code point, and its upper and lower case, fold to one name within the round cap', () => {
+    let notFixed = 0
+    let apart = 0
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue
+      const c = String.fromCodePoint(cp)
+      const f = foldedPath(c)
+      if (foldedPath(f) !== f) notFixed += 1
+      if (foldedPath(c.toLowerCase()) !== f || foldedPath(c.toUpperCase()) !== f) apart += 1
+    }
+    expect([notFixed, apart]).toEqual([0, 0])
+    expect(foldedPath('a/\u1E9E.md')).toBe(foldedPath('A/\u00DF.MD'))
   })
 
   test('a deletion is regular', async () => {

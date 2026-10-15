@@ -451,6 +451,12 @@ export async function createMirror(spec: MirrorSpec, deps: MirrorDeps): Promise<
     await removeNewWorktree(spec, deps)
     return refuse('checkout_failed', 'the new mirror could not be tightened to 0700; nothing was kept')
   }
+  // As at a sync: a checkout can exit 0 and still not write the commit, and synced must never name a tree the mirror does
+  // not hold. The filter check above has already run, so this `status` starts no filter driver (Task 63 new-fold-fixed-point).
+  if ((await statusReason(spec, deps)) !== null) {
+    await removeNewWorktree(spec, deps)
+    return refuse('checkout_failed', 'the first checkout did not leave the mirror exactly at the fetched commit; nothing was kept')
+  }
   const lock = await deps.git.run(['-C', spec.airClone, ...MIRROR_GIT_FLAGS, 'worktree', 'lock', '--reason', 'collab-bridge mirror', spec.mirrorPath])
   if (lock.code !== 0) {
     await removeNewWorktree(spec, deps)

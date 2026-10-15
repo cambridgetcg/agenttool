@@ -231,6 +231,34 @@ describe('createMirror', () => {
     expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base }) // the name is free again
   }, T)
 
+  test('a first checkout that exits 0 but leaves the mirror unlike the commit removes the new worktree and answers checkout_failed, with no synced ref (Task 63 new-fold-fixed-point)', async () => {
+    const w = world()
+    const real = w.deps.git
+    const calls: string[][] = []
+    // As if the file system wrote one name over another: git says all is well, and the tree is not the commit.
+    const silent: GitRunner = {
+      path: real.path,
+      records: (a, o) => real.records(a, o),
+      run: async (a, o) => {
+        calls.push(a)
+        const r = await real.run(a, o)
+        if (a.includes('checkout')) {
+          expect(r.code).toBe(0)
+          writeFileSync(join(w.spec.mirrorPath, 'README.md'), 'overwritten by a colliding name\n')
+        }
+        return r
+      },
+    }
+    const r = await createMirror(w.spec, { ...w.deps, git: silent })
+    expect(r.ok === false && r.code).toBe('checkout_failed')
+    expect(calls.some((a) => a.includes('lock'))).toBe(false)
+    expect(calls.some((a) => a.includes('update-ref') && a.includes(mirrorRefs(w.spec).synced))).toBe(false)
+    expect(existsSync(w.spec.mirrorPath)).toBe(false)
+    expect(repoGit(w.airClone, ['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length).toBe(1)
+    expect(await syncedOid(w.spec, w.deps)).toBeNull()
+    expect(await createMirror(w.spec, w.deps)).toEqual({ ok: true, oid: w.base }) // the name is free again
+  }, T)
+
   test('an existing mirror that vanishes while it is being locked answers mirror_tampered and never throws', async () => {
     const w = await created()
     const real = w.deps.git
