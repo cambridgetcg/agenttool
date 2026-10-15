@@ -7,7 +7,7 @@
 // and records the refusal, because launchd restarts a non-zero exit every 10 s (§10.4 Exits); a refused `hub run` exits 1.
 // `hub unpark` is Ai's repair step after a seat recovery (§9.6 item 5, P54).
 // Every side effect comes through AirCliDeps; bin/collab-bridge.ts is the only place that builds the live ones.
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { listDevices, type DeviceFile } from './air/devices.ts'
 import { distMatches, type BuildInfo } from './air/hub.ts'
@@ -290,7 +290,7 @@ async function hubOn(deps: AirCliDeps): Promise<number> {
   }
   if (!existsSync(paths.hubLog)) closeSync(openSync(paths.hubLog, 'a', 0o600))
   chmodSync(paths.hubLog, 0o600) // launchd opens StandardErrorPath with its own mode only when the file is missing
-  mkdirSync(dirname(paths.plist), { recursive: true })
+  mkdirPrivate(dirname(paths.plist)) // 0700 for a folder this call makes (Global Constraints, Modes); one that exists is left as it is
   writeFileDurable(paths.plist, renderPlist({ home: paths.home, sha: deps.hubSha, bun: deps.bun }), 0o644)
   // A running hub restarts on the new plist. Whatever bootout returned (36, "in progress", is a hub still exiting), the
   // bootstrap waits until launchd says the service is gone: it would be refused while the old job is still loaded (Task 63 launcher-1-7).

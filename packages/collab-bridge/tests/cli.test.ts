@@ -370,6 +370,20 @@ describe('hub on and hub off: only Yu, only gui/502', () => {
     }
   }, 20_000)
 
+  test('hub on makes a missing LaunchAgents folder 0700, and leaves one that exists exactly as it is (Task 63 conformance-6-4)', async () => {
+    const fresh = cli()
+    expect(existsSync(dirname(fresh.paths.plist))).toBe(false)
+    expect(await runAirCli(['hub', 'on'], fresh.deps)).toBe(0)
+    expect(modeOf(dirname(fresh.paths.plist))).toBe(0o700)
+    expect(modeOf(fresh.paths.plist)).toBe(0o644)
+    // macOS's own ~/Library/LaunchAgents is 0755: hub on never tightens a folder it did not make
+    const there = cli()
+    mkdirSync(dirname(there.paths.plist), { recursive: true })
+    chmodSync(dirname(there.paths.plist), 0o755)
+    expect(await runAirCli(['hub', 'on'], there.deps)).toBe(0)
+    expect(modeOf(dirname(there.paths.plist))).toBe(0o755)
+  }, 20_000)
+
   test('hub off with y boots out and removes the plist', async () => {
     const c = cli()
     expect(await runAirCli(['hub', 'on'], c.deps)).toBe(0)
