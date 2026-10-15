@@ -38,6 +38,9 @@ case "$TERMINAL_GIT" in /*) ;; *) TERMINAL_GIT="" ;; esac
 TTY_SRC=/dev/tty
 if [ "$TEST_MODE" = 1 ] && [ -n "${COLLAB_BRIDGE_TTY:-}" ]; then TTY_SRC="$COLLAB_BRIDGE_TTY"; fi
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+# A Bun preload or "be bun" from your Terminal's environment must not reach the programs run below (collab-bridge, claude): the
+# first would run inside the program that writes the seat key, the second turns a compiled program into the bun CLI (P14).
+unset BUN_OPTIONS BUN_BE_BUN
 
 SHARE_DIR="$HOME/.local/share/collab-bridge"; AK="$HOME/.ssh/authorized_keys"
 STAGE=""; EXPLAINED=0

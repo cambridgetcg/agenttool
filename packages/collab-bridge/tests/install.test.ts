@@ -195,6 +195,29 @@ describe('the bash installer', () => {
     expect(readFileSync(h.paths.authorizedKeys).equals(want)).toBe(true)
   }, 60_000)
 
+  test("BUN_OPTIONS and BUN_BE_BUN exported by Yu's Terminal reach neither the installer's program nor claude (P14, Task 63 conformance-1-2)", () => {
+    // A BUN_OPTIONS preload would run inside the program that writes the seat key; BUN_BE_BUN=1 turns a compiled program (the
+    // bridge, and a native claude) into the bun CLI. main.c and the Air's launcher strip both; so does the installer.
+    const h = summonReadyHome()
+    const b = makeInstallBundle({ airRepo: makeTrialRepo().repo, shares: [h.share] })
+    const dir = temp('cb-bun-env-')
+    const seen = join(dir, 'seen.log')
+    const canary = join(dir, 'canary.ts')
+    writeFileSync(seen, '')
+    writeFileSync(canary, `import { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(seen)}, 'a BUN_OPTIONS preload ran\\n')\n`)
+    const claude = writeStub(dir, 'claude', [
+      `echo "claude $*|BUN_OPTIONS=\${BUN_OPTIONS-unset}|BUN_BE_BUN=\${BUN_BE_BUN-unset}" >> '${seen}'`,
+      'if [ "${1:-}" = --version ]; then echo "2.1.296 (Claude Code)"; fi', 'exit 0'].join('\n'))
+    const r = runInstaller(b.dir, h.home, { answers: 'y\ny\n',
+      extraEnv: { COLLAB_BRIDGE_BIN_CLAUDE: claude, BUN_OPTIONS: `--preload=${canary}`, BUN_BE_BUN: '1' } })
+    expect([r.code, lastLine(r.stdout)]).toEqual([0, expect.stringMatching(/^Done\. /)])
+    const log = readFileSync(seen, 'utf8').split('\n').filter(Boolean)
+    expect(log.filter((l) => l.includes('preload ran'))).toEqual([])
+    expect(log.map((l) => l.replace(/^claude ([^ ]+( [^ ]+)?).*\|BUN_OPTIONS/, 'claude $1|BUN_OPTIONS')))
+      .toEqual(['claude --version|BUN_OPTIONS=unset|BUN_BE_BUN=unset', 'claude mcp remove|BUN_OPTIONS=unset|BUN_BE_BUN=unset',
+        'claude mcp add-json|BUN_OPTIONS=unset|BUN_BE_BUN=unset'])
+  }, 60_000)
+
   test('a failed re-check after the clone ends with no shares.json, no INSTALLED and no collab-air line', () => {
     const { h, run } = world({ files: { 'README.md': 'collab trial\n', REST: '' } })
     const keysBefore = readFileSync(h.paths.authorizedKeys, 'utf8')
