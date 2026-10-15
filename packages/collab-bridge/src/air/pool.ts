@@ -131,6 +131,11 @@ const MSG = {
   closed: 'The hub is shutting down; nothing was sent.',
 } as const
 
+/** What a hub-start reconcile that threw reports for its lineage. Everything in it that can throw is a lineages.json write (the
+ *  child start and the journal call answer with outcomes, never exceptions), and the state dir that refuses it is Yu's config:
+ *  §9.2's closed word for that, not a word of the pool's own (Task 63 conformance-4-8). */
+const RECONCILE_FAILED_NOTE = 'needs Yu: config'
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const refuse = (code: AgentCode, message: string): Refused => ({ ok: false, code, message })
 
@@ -474,7 +479,7 @@ export class ChildPool {
       try {
         this.deps.store.upsert({ ...e, detached_since: at })
       } catch {
-        this.deps.status(e.lineage, 'reconcile_failed')
+        this.deps.status(e.lineage, RECONCILE_FAILED_NOTE)
       }
     }
     for (const e of this.deps.store.all()) {
@@ -484,7 +489,7 @@ export class ChildPool {
         // Through the lineage's start chain: a session_start that arrives meanwhile waits, and never settles the same marker.
         await this.chained(e.lineage, () => this.reconcileOne(e.lineage))
       } catch {
-        this.deps.status(e.lineage, 'reconcile_failed')
+        this.deps.status(e.lineage, RECONCILE_FAILED_NOTE)
       }
     }
   }

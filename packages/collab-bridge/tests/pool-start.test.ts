@@ -698,3 +698,36 @@ describe('makeHostCli says why it has no exit code (Task 40b review)', () => {
     expect(r).toMatchObject({ code: null, cause: 'spawn_failed' })
   })
 })
+
+describe('a hub-start reconcile that cannot write lineages.json uses a §9.2 status word (Task 63 conformance-4-8)', () => {
+  test('a detached_since that cannot be written is needs Yu: config, never a word §9.2 does not define', async () => {
+    const w = world()
+    const e = entry(w) // detached_since null: the first step of reconcile writes it
+    const p = pool(w)
+    const up = spyOn(w.store, 'upsert').mockImplementation(() => { throw new Error('ENOSPC: no space left on device') })
+    try {
+      await p.reconcile() // resolves: never throws
+    } finally {
+      up.mockRestore()
+    }
+    expect(w.statuses).toEqual([[e.lineage, 'needs Yu: config']])
+    expect(fresh(w).get(e.lineage)!.detached_since).toBeNull()
+  }, 30_000)
+
+  test('a pending_start that cannot be settled because the store cannot be written keeps the marker and reports needs Yu: config', async () => {
+    const w = world()
+    await startCollabSession({ journal: w.paths.sharedJournal, home: w.home, root: w.mirror, actor: 'other', role: `${rolePrefix('nuance', 'macair', newStartNonce(), 'claude')}x` })
+    const e = entry(w, { detached_since: new Date(w.clock.now).toISOString() }) // the first step has nothing to write
+    const marker = { nonce: newStartNonce(), call_ref: ref(e, 1), child_pid: await deadPid(), child_lstart: null, workspace_id: w.workspaceId, at: new Date(w.clock.now).toISOString() }
+    w.store.upsert({ ...e, pending_start: marker })
+    const p = pool(w)
+    const up = spyOn(w.store, 'upsert').mockImplementation(() => { throw new Error('ENOSPC: no space left on device') })
+    try {
+      await p.reconcile() // no session carries the nonce, so the marker is to be cleared, and that write fails
+    } finally {
+      up.mockRestore()
+    }
+    expect(w.statuses).toEqual([[e.lineage, 'needs Yu: config']])
+    expect(fresh(w).get(e.lineage)!.pending_start).toMatchObject({ nonce: marker.nonce })
+  }, 30_000)
+})

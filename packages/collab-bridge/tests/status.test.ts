@@ -46,6 +46,7 @@ describe('status lines', () => {
       { lineage: LIN, device: 'nuance', user: 'macair', session_id: 'session_2', note: 'orphan_session session_2' },
       { lineage: LIN, device: 'nuance', user: 'macair', session_id: null, note: 'journal_invalid' },
       { lineage: LIN, device: 'nuance', user: 'macair', session_id: null, note: 'child_start_failed' },
+      { lineage: LIN, device: 'nuance', user: 'macair', session_id: null, note: 'needs Yu: config' },
     ]
     expect(statusLines(hub({ seats: notes }), [])).toEqual([
       'hub: running',
@@ -53,6 +54,7 @@ describe('status lines', () => {
       `nuance/macair ${LIN}: orphan_session session_2`,
       `nuance/macair ${LIN}: journal_invalid`,
       `nuance/macair ${LIN}: child_start_failed`,
+      `nuance/macair ${LIN}: needs Yu: config`,
     ])
     const hubRows: Array<[HubStatus | null, string]> = [
       [null, 'hub: not running'],
