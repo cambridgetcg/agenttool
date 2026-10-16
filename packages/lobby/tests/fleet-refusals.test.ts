@@ -291,6 +291,10 @@ describe("decisions", () => {
   test("deny posts a door-signed denial; the device sees it and ready refuses", async () => {
     const fleet = await bootstrapFleet();
     const knockId = await knock(fleet);
+    // A reason is posted text: it passes the gate like everything else.
+    const leaky = await fleet.hub.run("hub", "deny", knockId, "--reason", "ask the desk at 192.168.4.2 instead");
+    expect(leaky.code).toBe(1);
+    expect(leaky.stderr).toContain("private_ipv4");
     const denied = await ok(fleet.hub.yes("hub", "deny", knockId, "--reason", "the season is full"));
     expect(denied.stdout).toContain(`denied knock ${knockId}`);
     await ok(fleet.device.run("fleet", "sync"));
@@ -381,6 +385,22 @@ describe("terminals, uncertainty and recovery", () => {
     expect((await fleet.hub.run("outbox", "retry", pending.event_id)).stderr).toContain("outbox_stored");
   });
 
+  test("an admit whose grant response was lost is never retried and blocks the knock until inspected", async () => {
+    const fleet = await bootstrapFleet();
+    const knockId = await knock(fleet);
+    fleet.world.hosted.loseResponse = (request) => request.method === "POST" && request.path.endsWith("/grants");
+    const first = await fleet.hub.yes("hub", "admit", knockId);
+    expect(first.code).toBe(1);
+    expect(first.stderr).toContain("hosted_uncertain");
+    // The grant did land; the hub knows only that it asked.
+    const listed = JSON.parse((await ok(fleet.hub.run("hub", "knocks", "--json"))).stdout).knocks[0];
+    expect(listed.status).toBe("invalid");
+    expect(listed.reason).toMatch(/^grant_uncertain:[0-9a-f-]{36}$/);
+    expect((await fleet.hub.run("hub", "admit", knockId)).stderr).toContain("knock_invalid");
+    const grantPosts = fleet.world.hosted.seen.filter((request) => request.method === "POST" && request.path.endsWith("/grants"));
+    expect(grantPosts.filter((request) => request.body.includes(listed.token_sha256))).toHaveLength(1);
+  });
+
   test("hub init without a Keychain bearer explains how to add it and creates nothing", async () => {
     const w = world();
     const hub = w.desk("hub");
@@ -433,6 +453,38 @@ describe("terminals, uncertainty and recovery", () => {
       "--directory-digest", hubRow.directory_digest));
     expect(adopted.stdout).toContain(`door fingerprint ${fleet.doorFingerprint}`);
     expect(adopted.stdout).toContain("(adopted)");
+  });
+});
+
+describe("hub seats and seasons after interruptions", () => {
+  test("the hub renews its own directory and season seats with hub seat", async () => {
+    const fleet = await bootstrapFleet();
+    fleet.world.advance(25 * HOUR);
+    const stale = await fleet.hub.yes("room", "publish", fleet.roomId);
+    expect(stale.code).toBe(1);
+    expect(stale.stderr).toContain("run hub seat directory");
+    await ok(fleet.hub.yes("hub", "seat", "directory"));
+    await ok(fleet.hub.yes("hub", "seat", fleet.roomId));
+    await ok(fleet.hub.yes("room", "publish", fleet.roomId));
+    // The device renews too, then knocks, and the hub can admit with its fresh season seat.
+    await enrollThroughHub(fleet.hub, fleet.device);
+    await ok(fleet.device.run("fleet", "sync"));
+    const knockId = await knock(fleet);
+    await ok(fleet.hub.yes("hub", "admit", knockId));
+  });
+
+  test("a season whose creation response was lost is finished by adopting it", async () => {
+    const fleet = await bootstrapFleet();
+    const roomId = await addFleetRoom(fleet, "--title", "Second room");
+    fleet.world.hosted.loseResponse = (request) => request.method === "POST" && request.path === "/v1/collaboration/missions";
+    const lost = await fleet.hub.yes("hub", "season", "open", roomId);
+    expect(lost.code).toBe(1);
+    expect(lost.stderr).toContain("season_uncertain");
+    const hint = /hub season adopt (room_[0-9a-f]{32}) --mission ([0-9a-f-]{36}) --digest (sha256:[0-9a-f]{64})/.exec(lost.stderr)!;
+    expect(hint[1]).toBe(roomId);
+    expect(fleet.world.hosted.missions.has(hint[2]!)).toBe(true);
+    await ok(fleet.hub.yes("hub", "season", "adopt", roomId, "--mission", hint[2]!, "--digest", hint[3]!));
+    await ok(fleet.hub.yes("room", "publish", roomId));
   });
 });
 

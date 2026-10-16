@@ -6,6 +6,7 @@ import { buildEnrollmentPacket, doorResource, namesDoor, parseEnrollmentPacket, 
 import {
   documentSha256,
   openDocument,
+  ROSTER_PART_MEMBERS,
   sealDocument,
   verifyDocument,
   type AdmissionBody,
@@ -171,8 +172,14 @@ describe("signed lobby documents", () => {
     expect(errorCode(() => sealDocument("admission", { ...admission, grant: { ...admission.grant, expires_at: LATER(86_400_001) } }, desk)))
       .toBe("invalid_signed_document");
     expect(errorCode(() => sealDocument("admission", { ...admission, term_ends_at: LATER(60_000) }, desk))).toBe("invalid_signed_document");
-    const roster: RosterBody = { room_id: ROOM, mission_id: UUID_A, members: [{ identity_id: UUID_A, tier: "player", term_ends_at: T }], issued_at: T };
+    const roster: RosterBody = { room_id: ROOM, mission_id: UUID_A, members: [{ identity_id: UUID_A, tier: "player", term_ends_at: T }], part: 1, parts: 1, issued_at: T };
     expect(errorCode(() => sealDocument("roster", { ...roster, members: [...roster.members, ...roster.members] }, desk))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("roster", { ...roster, part: 2 }, desk))).toBe("invalid_signed_document");
+    // A full roster part, signature included, fits one observation.
+    const full = Array.from({ length: ROSTER_PART_MEMBERS }, (_, index) => ({
+      identity_id: `${String(index).repeat(8)}-1111-4111-8111-111111111111`, tier: "spectator" as const, term_ends_at: T,
+    }));
+    expect([...sealDocument("roster", { ...roster, members: full, part: 3, parts: 3 }, desk).summary].length).toBeLessThanOrEqual(1000);
     expect(errorCode(() => sealDocument("card", { ...card, residency: "device" as "fleet" }, desk))).toBe("invalid_signed_document");
   });
 

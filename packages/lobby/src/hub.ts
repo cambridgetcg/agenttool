@@ -48,6 +48,7 @@ import type { RoomCard } from "./room.js";
 import { DeskSecrets } from "./secrets.js";
 import {
   documentSha256,
+  ROSTER_PART_MEMBERS,
   sealDocument,
   verifyDocument,
   type AdmissionBody,
@@ -607,7 +608,11 @@ export async function planSeason(ctx: FleetContext, input: {
     if (view.revoked_at !== null || Date.parse(view.expires_at) <= now.getTime() + HOUR_MS) {
       throw new LobbyError("season_closed", "that mission is revoked or ends within the hour");
     }
-    if (view.mission_id === hub.directory_mission_id || ctx.store.fleet.season(view.mission_id) !== null) {
+    const recorded = ctx.store.fleet.season(view.mission_id);
+    // A season of this room whose creation response was lost may be adopted to finish it.
+    const finishing = recorded !== null && recorded.state === "pending" && recorded.room_id === room.room_id
+      && recorded.mission_digest === view.mission_digest;
+    if (view.mission_id === hub.directory_mission_id || (recorded !== null && !finishing)) {
       throw new LobbyError("season_in_use", "that mission is already the directory or a recorded season");
     }
     mission = { mission_id: view.mission_id, mission_digest: view.mission_digest, expires_at: view.expires_at, descriptor: view.descriptor };
@@ -652,12 +657,28 @@ export async function executeSeason(ctx: FleetContext, plan: SeasonPlan): Promis
     state: plan.mode === "create" ? "pending" : "current",
     recorded_at: ctx.now().toISOString(),
   };
-  fleet.addSeason(row);
+  if (plan.mode === "adopt" && fleet.season(row.mission_id)?.state === "pending") fleet.makeSeasonCurrent(row.mission_id);
+  else fleet.addSeason(row);
   if (plan.mode === "create") {
-    await admin.createMission({ mission_id: row.mission_id, descriptor: plan.mission.descriptor, expires_at: row.expires_at }, gateOfRoom(plan.room));
+    try {
+      await admin.createMission({ mission_id: row.mission_id, descriptor: plan.mission.descriptor, expires_at: row.expires_at }, gateOfRoom(plan.room));
+    } catch (error) {
+      if (error instanceof LobbyError && error.code === "hosted_uncertain") {
+        throw new LobbyError("season_uncertain",
+          `season mission ${row.mission_id} may or may not exist. Nothing was retried. Inspect it; if it exists, finish with: ` +
+          `hub season adopt ${plan.room.room_id} --mission ${row.mission_id} --digest ${row.mission_digest}`);
+      }
+      throw error;
+    }
     fleet.makeSeasonCurrent(row.mission_id);
   }
-  const seatExpires = await executeSeatIssue(ctx, admin, desk, plan.seat);
+  let seatExpires: string;
+  try {
+    seatExpires = await executeSeatIssue(ctx, admin, desk, plan.seat);
+  } catch (error) {
+    if (!(error instanceof LobbyError)) throw error;
+    throw new LobbyError(error.code, `${error.message}. The season is recorded; take the hub's seat with: hub seat ${plan.room.room_id}`, error.details);
+  }
   return { mission_id: row.mission_id, mission_digest: row.mission_digest, seat_expires_at: seatExpires };
 }
 
@@ -770,7 +791,11 @@ function assessKnock(ctx: FleetContext, entry: { envelope: SignedEnvelope<KnockB
   const season = fleet.currentSeason(body.room_id);
   if (ctx.store.getRoom(body.room_id) === null || fleet.latestCard(body.room_id) === null) return invalid("room_not_published");
   if (season === null || season.mission_digest !== body.charter_digest) return invalid("charter_changed");
-  if (fleet.hubGrantByToken(body.token_sha256) !== null) return invalid("token_reused");
+  const bound = fleet.hubGrantByToken(body.token_sha256);
+  // A grant requested for this token whose outcome was never confirmed:
+  // inspect that grant id with the administrator read API before anything else.
+  if (bound !== null && bound.state === "requested") return invalid(`grant_uncertain:${bound.grant_id}`);
+  if (bound !== null) return invalid("token_reused");
   if (Date.parse(body.expires_at) <= ctx.now().getTime()) return { ...base, status: "expired", reason: null };
   return { ...base, status: "pending", reason: null };
 }
@@ -880,18 +905,28 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     .map((member) => ({ identity_id: member.identity_id, tier: member.tier, term_ends_at: member.term_ends_at }));
   members.push({ identity_id: issue.identity_id, tier, term_ends_at: termEnds });
   members.sort((left, right) => left.identity_id < right.identity_id ? -1 : 1);
-  const roster: RosterBody = { room_id: room.room_id, mission_id: season.mission_id, members, issued_at: now.toISOString() };
+  const parts = Math.max(1, Math.ceil(members.length / ROSTER_PART_MEMBERS));
+  const rosters: RosterBody[] = Array.from({ length: parts }, (_, index) => ({
+    room_id: room.room_id,
+    mission_id: season.mission_id,
+    members: members.slice(index * ROSTER_PART_MEMBERS, (index + 1) * ROSTER_PART_MEMBERS),
+    part: index + 1,
+    parts,
+    issued_at: now.toISOString(),
+  }));
   const key = await doorKey(ctx, hub);
   const signer = { privateKey: key, fingerprint: hub.door_fingerprint };
   const admissionSummary = sealDocument("admission", admission, signer).summary;
-  const rosterSummary = sealDocument("roster", roster, signer).summary;
   const directorySeat = requireSeat(ctx, hub.directory_mission_id, "mission.observe", 5 * 60_000, "; run hub seat directory").seat;
   const seasonSeat = requireSeat(ctx, season.mission_id, "mission.observe", 5 * 60_000, `; run hub seat ${room.room_id}`).seat;
   const gate = gateOfRoom(room);
   const posts = [
     { post: preparePost(ctx, "admission", hub.directory_mission_id, admissionSummary, gate), seat: directorySeat },
     { post: preparePost(ctx, "admission", season.mission_id, admissionSummary, gate), seat: seasonSeat },
-    { post: preparePost(ctx, "roster", season.mission_id, rosterSummary, gate), seat: seasonSeat },
+    ...rosters.map((roster) => ({
+      post: preparePost(ctx, "roster", season.mission_id, sealDocument("roster", roster, signer).summary, gate),
+      seat: seasonSeat,
+    })),
   ];
   const preview = actPreview("hub.admit", knock.knock_id, now.toISOString(), [
     `requester ${knock.requester.fingerprint} ${JSON.stringify(knock.requester.display_name)} did:at:${knock.requester.identity_id}`,
@@ -899,7 +934,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     `room ${room.room_id} ${JSON.stringify(room.title)} season ${season.mission_id}`,
     `tier ${tier} (${issue.actions.join("+")}); grant until ${issue.expires_at}; term ends ${termEnds}`,
     `knock note (untrusted) ${JSON.stringify(knock.note)}`,
-    `posts: the door-signed admission to the directory and the season, and a roster of ${members.length} to the season`,
+    `posts: the door-signed admission to the directory and the season, and a roster of ${members.length} (${parts} part${parts === 1 ? "" : "s"}) to the season`,
   ], {
     knock_id: knock.knock_id,
     knock_sha256: documentSha256(knock.summary),

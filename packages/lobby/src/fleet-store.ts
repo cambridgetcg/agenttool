@@ -643,11 +643,6 @@ export class FleetStore {
       .get({ room_id: roomId }) as SeasonRow | null;
   }
 
-  pendingSeason(roomId: string): SeasonRow | null {
-    return this.db.query("SELECT * FROM hub_seasons WHERE room_id = $room_id AND state = 'pending' ORDER BY recorded_at DESC LIMIT 1")
-      .get({ room_id: roomId }) as SeasonRow | null;
-  }
-
   nextCardSeq(roomId: string): number {
     const row = this.db.query("SELECT max(card_seq) AS seq FROM hub_cards WHERE room_id = $room_id").get({ room_id: roomId }) as
       | { seq: number | null }

@@ -115,10 +115,14 @@ export interface RosterMember {
   term_ends_at: string;
 }
 
+/** One part of a roster; a roster too long for one observation is split
+ * into `parts` documents with the same `issued_at`. */
 export interface RosterBody {
   room_id: string;
   mission_id: string;
   members: RosterMember[];
+  part: number;
+  parts: number;
   issued_at: string;
 }
 
@@ -246,9 +250,14 @@ export function validateDenial(value: unknown): DenialBody {
 }
 
 export function validateRoster(value: unknown): RosterBody {
-  const record = exact(value, ["room_id", "mission_id", "members", "issued_at"], "roster");
+  const record = exact(value, ["room_id", "mission_id", "members", "part", "parts", "issued_at"], "roster");
   if (!Array.isArray(record.members) || record.members.length > ROSTER_MAX_MEMBERS) {
-    throw new LobbyError("invalid_signed_document", `a roster lists at most ${ROSTER_MAX_MEMBERS} members`);
+    throw new LobbyError("invalid_signed_document", `a roster part lists at most ${ROSTER_MAX_MEMBERS} members`);
+  }
+  const { part, parts } = record;
+  if (typeof parts !== "number" || !Number.isInteger(parts) || parts < 1 || parts > 64
+    || typeof part !== "number" || !Number.isInteger(part) || part < 1 || part > parts) {
+    throw new LobbyError("invalid_signed_document", "a roster part is numbered 1..parts, at most 64 parts");
   }
   const seen = new Set<string>();
   const members = record.members.map((entry) => {
@@ -266,9 +275,14 @@ export function validateRoster(value: unknown): RosterBody {
     room_id: roomIdOf(record.room_id),
     mission_id: assertUuid(record.mission_id, "mission_id"),
     members,
+    part,
+    parts,
     issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
   };
 }
+
+/** Members per roster part: what fits one observation with the signature. */
+export const ROSTER_PART_MEMBERS = 4;
 
 const VALIDATORS: Record<SignedKind, (value: unknown) => SignedBody> = {
   card: validateFleetCard,

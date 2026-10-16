@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/lobby",
   "version": "0.1.0-dev.0",
-  "description": "Private local lobby desk: device-only room cards, a private ledger, a pin book, an append-only audit log, a read-only MCP view and an egress gate",
+  "description": "Private lobby desk: a device-only local hall, a fleet hall on agenttool missions (door-signed cards, knocks, admission and Ready), a private ledger, a pin book, an append-only audit log, an egress gate and a read-only MCP view",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
