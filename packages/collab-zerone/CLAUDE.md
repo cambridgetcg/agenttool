@@ -1,5 +1,8 @@
 # collab-zerone
 
+> **Type:** guide · **Purpose:** keep the witness-only anchoring rules intact for future sessions changing this package.
+> **Evidence:** `src/`, `bin/collab-zerone.ts` and `tests/`; release and live-chain state are recorded elsewhere.
+
 Witness-only anchoring of collab journal head hashes to zerone. Read
 README.md first; these are the non-negotiables for future sessions.
 
@@ -23,10 +26,20 @@ README.md first; these are the non-negotiables for future sessions.
   collab coordination depend on chain availability. The `collab_anchor_status`
   tool in `@agenttool/collab` must stay fail-open (missing/corrupt ledger →
   `unanchored`, never an error) and network-free.
-- **Memo format is a protocol.** `agenttool.collab-anchor/0.1` is parsed
-  strictly; any change to the format is a new protocol version string, not an
-  in-place edit. The 256-char cap is the zerone-1 genesis memo limit; memos
-  must never start with `did:zrn:` (chain ante DID-validates those).
+- **Memo format is a protocol.** `agenttool.collab-anchor/0.1` (legacy,
+  verified but never written) and `0.2` (salted aliases, what `anchor`
+  writes) are parsed strictly; any change to either format is a new protocol
+  version string, not an in-place edit. Each entry is matched only under its
+  own `memo_protocol`. The 256-char cap is the zerone-1 genesis memo limit;
+  memos must never start with `did:zrn:` (chain ante DID-validates those).
+- **No path-derived id on chain.** A `ws_` id is a path hash, so a new memo
+  carries only HMAC aliases (`src/alias.ts`). Never add a raw workspace or
+  epoch id, or any other path-derived value, to a memo.
+- **The alias salt fails closed.** It lives at `<ledger>.salt` (0600) and
+  never leaves the machine. Never create a salt over existing 0.2 aliases,
+  never accept one that does not reproduce them, and never fall back to an
+  unsalted or legacy memo when it is missing. `verify`/`resolve`/`anchor`
+  refuse with exit 2; only the fail-open `status` paths may merely warn.
 - **Dated defaults.** The RPC endpoints and keyring homes in
   `src/constants.ts` are observations (2026-08-01), not truths. If they fail,
   re-probe the live chain; don't invent hostnames (`rpc.zerone.ai` does not
@@ -39,13 +52,16 @@ README.md first; these are the non-negotiables for future sessions.
 - `src/canonical.ts` — byte-identical port of collab's `canonicalJson`;
   conformance-tested against the real store, do not "improve"
 - `src/memo.ts` · `src/ledger.ts` · `src/status.ts` — pure protocol pieces
+- `src/alias.ts` — alias derivation, the salt file, per-entry alias binding
 - `src/zeroned.ts` — CLI shell-out (broadcast/lookup) with outcome discipline
 - `bin/collab-zerone.ts` — `status` / `verify` / `anchor`
 
 The mirror of the status logic inside `@agenttool/collab`
 (`src/anchor-status.ts`) is deliberately dependency-free duplication — collab
 cannot depend on this package. If you change the state model, change both and
-their tests.
+their tests. The state model is memo-protocol agnostic: the collab reader
+never reads the salt or returns memo text or aliases, and ledger entries keep
+the raw local ids it filters on. Keep both true.
 
 ## Related
 

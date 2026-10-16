@@ -1,5 +1,19 @@
-export const ANCHOR_MEMO_PROTOCOL = "agenttool.collab-anchor/0.1" as const;
+// Legacy memo protocol. Its `ws=` field is the raw Collab workspace id, an
+// unsalted hash of a local path, so anyone can confirm a guessed path from the
+// memo. Anchors already on chain still parse and verify; `anchor` no longer
+// writes it.
+export const LEGACY_ANCHOR_MEMO_PROTOCOL = "agenttool.collab-anchor/0.1" as const;
+// Current memo protocol: salted aliases replace the workspace and epoch ids.
+export const ANCHOR_MEMO_PROTOCOL = "agenttool.collab-anchor/0.2" as const;
+export type AnchorMemoProtocol = typeof LEGACY_ANCHOR_MEMO_PROTOCOL | typeof ANCHOR_MEMO_PROTOCOL;
+
+// The ledger protocol is unchanged by memo 0.2: entries only gain optional
+// fields, which the deployed @agenttool/collab reader ignores.
 export const ANCHOR_LEDGER_PROTOCOL = "agenttool.collab-zerone-ledger/0.1" as const;
+
+// Alias salt: 32 random bytes beside the ledger; aliases are 32 hex chars.
+export const ANCHOR_SALT_BYTES = 32;
+export const ANCHOR_ALIAS_HEX_CHARS = 32;
 
 export const JOURNAL_GENESIS_HASH = "0".repeat(64);
 export const LEGACY_COLLAB_PROTOCOL = "agenttool.collab/0.1" as const;

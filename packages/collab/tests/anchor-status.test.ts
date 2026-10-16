@@ -59,6 +59,87 @@ function anchorEntry(workspace: { id: string; epoch_id: string }, fields: Record
   };
 }
 
+// @agenttool/collab-zerone now writes `agenttool.collab-anchor/0.2` entries:
+// the memo carries salted aliases, and the entry records memo_protocol and the
+// aliases beside the local ids. Collab cannot depend on that package, so the
+// shape is spelled out here; its ledger-conformance test binds the real writer
+// to this reader.
+const WORKSPACE_ALIAS = "1f".repeat(16);
+const EPOCH_ALIAS = "2e".repeat(16);
+
+function aliasedAnchorEntry(
+  workspace: { id: string; epoch_id: string },
+  fields: { sequence: number; head_hash: string } & Record<string, unknown>,
+) {
+  return anchorEntry(workspace, {
+    memo_protocol: "agenttool.collab-anchor/0.2",
+    workspace_alias: WORKSPACE_ALIAS,
+    epoch_alias: EPOCH_ALIAS,
+    memo: `agenttool.collab-anchor/0.2 alias=${WORKSPACE_ALIAS} epoch=${EPOCH_ALIAS}`
+      + ` seq=${fields.sequence} head=${fields.head_hash}`,
+    ...fields,
+  });
+}
+
+describe("collab_anchor_status across anchor memo protocols", () => {
+  test("0.2 salted-alias entries report the same states as legacy 0.1 entries", () => {
+    const { store, workspace, ledgerPath } = fixture();
+    const first = store.eventsSince(workspace.id, 0, 1).events[0]!;
+    const head = { sequence: workspace.event_head_sequence, head_hash: workspace.event_head_hash };
+
+    writeLedger(ledgerPath, [aliasedAnchorEntry(workspace, { ...head, status: "submitted" })]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_pending");
+
+    writeLedger(ledgerPath, [aliasedAnchorEntry(workspace, head)]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath)).toMatchObject({
+      status: "anchored", ledger_readable: true, lag_events: 0, anchor: { tx_hash: "AB12" },
+    });
+
+    writeLedger(ledgerPath, [aliasedAnchorEntry(workspace, { sequence: first.sequence, head_hash: first.hash })]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_stale");
+
+    writeLedger(ledgerPath, [aliasedAnchorEntry(workspace, { ...head, head_hash: "ee".repeat(32) })]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_conflict");
+  });
+
+  test("in a mixed ledger the newest confirmed anchor wins, whatever its memo protocol", () => {
+    const { store, workspace, ledgerPath } = fixture();
+    const first = store.eventsSince(workspace.id, 0, 1).events[0]!;
+    const head = { sequence: workspace.event_head_sequence, head_hash: workspace.event_head_hash };
+    writeLedger(ledgerPath, [
+      anchorEntry(workspace, { sequence: first.sequence, head_hash: first.hash, tx_hash: "LEGACY" }),
+      aliasedAnchorEntry(workspace, { ...head, tx_hash: "ALIASED" }),
+    ]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath)).toMatchObject({
+      status: "anchored", anchor: { sequence: head.sequence, tx_hash: "ALIASED" },
+    });
+    writeLedger(ledgerPath, [
+      aliasedAnchorEntry(workspace, { sequence: first.sequence, head_hash: first.hash, tx_hash: "ALIASED" }),
+      anchorEntry(workspace, { ...head, tx_hash: "LEGACY" }),
+    ]);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath)).toMatchObject({
+      status: "anchored", anchor: { sequence: head.sequence, tx_hash: "LEGACY" },
+    });
+  });
+
+  test("never depends on the bridge's alias salt and never returns memo text or aliases", () => {
+    const { store, workspace, ledgerPath } = fixture();
+    writeLedger(ledgerPath, [aliasedAnchorEntry(workspace, {
+      sequence: workspace.event_head_sequence,
+      head_hash: workspace.event_head_hash,
+    })]);
+    // Missing, then unusable: the local state is unchanged either way.
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchored");
+    writeFileSync(`${ledgerPath}.salt`, "not a salt");
+    const status = anchorStatusForWorkspace(store, workspace.id, ledgerPath);
+    expect(status.status).toBe("anchored");
+    const visible = JSON.stringify(status);
+    for (const hidden of [WORKSPACE_ALIAS, EPOCH_ALIAS, "agenttool.collab-anchor/0.2", "memo"]) {
+      expect(visible).not.toContain(hidden);
+    }
+  });
+});
+
 describe("collab_anchor_status backing logic", () => {
   test("missing ledger file → unanchored, fail-open", () => {
     const { store, workspace, ledgerPath } = fixture();
