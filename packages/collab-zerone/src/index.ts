@@ -1,3 +1,4 @@
+export * from "./alias.js";
 export * from "./canonical.js";
 export * from "./constants.js";
 export * from "./journal.js";

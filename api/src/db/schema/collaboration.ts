@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { bigint, check, foreignKey, index, jsonb, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { identities, identityKeys } from "./identity";
 import { apiKeys, projects, toolsSchema } from "./tools";
-import type { MissionAction, MissionDescriptor, MissionObservation } from "../../services/collaboration/contracts";
+import type { MissionAction, MissionDescriptor, MissionGrantProofs, MissionObservation } from "../../services/collaboration/contracts";
 
 export const collaborationMissions = toolsSchema.table("collaboration_missions", {
   id: uuid("id").primaryKey(), projectId: uuid("project_id").notNull().references(() => projects.id),
@@ -32,7 +32,8 @@ export const collaborationGrants = toolsSchema.table("collaboration_grants", {
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
-  acceptanceProof: jsonb("acceptance_proof").$type<Record<string, string>>(),
+  // TS-only widening: a participant self-leave nests its signed record here (no SQL change).
+  acceptanceProof: jsonb("acceptance_proof").$type<MissionGrantProofs>(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 }, t => [
   foreignKey({ columns: [t.missionId, t.projectId], foreignColumns: [collaborationMissions.id, collaborationMissions.projectId], name: "collaboration_grant_mission" }),
