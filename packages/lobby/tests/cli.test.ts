@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_NOT_CONFIRMED, EXIT_OK, EXIT_REFUSED, EXIT_USAGE, runCli } from "../src/cli.js";
@@ -237,6 +238,27 @@ describe("the real CLI without a controlling terminal", () => {
     expect(store.getRoom(roomId)?.residency).toBe("device");
     expect(store.listPins()).toEqual([]);
     expect(store.listAudit()).toEqual([]);
+    store.close();
+  });
+
+  // enroll-device is the one fleet command that is wholly local (no network,
+  // no Keychain), so the real bin can be run here safely.
+  test("enroll-device prints one public packet and never the token or key", async () => {
+    const { home } = tempHome();
+    const result = await runDetached(["enroll-device", "--project", "66666666-6666-4666-8666-666666666666"], { AGENTTOOL_LOBBY_HOME: home }, "");
+    expect(result.code).toBe(EXIT_OK);
+    const packet = JSON.parse(result.stdout);
+    expect(packet).toMatchObject({ format: "agenttool-lobby-enrollment-packet/v1", kind: "enroll", origin: "https://api.agenttool.dev" });
+    expect(packet.enrollment_request.request_target).toBe("/v1/identities/enroll");
+    expect(result.stderr).toContain("VALID 5 MINUTES");
+    expect(result.stderr).toContain(packet.directory_token_sha256);
+    expect(result.stdout + result.stderr).not.toMatch(/atcm_|PRIVATE KEY/);
+    const tokenFile = join(home, "secrets", "tokens", `${packet.directory_token_sha256}.json`);
+    expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
+    expect(readFileSync(tokenFile, "utf8")).toContain("atcm_");
+    const store = LobbyStore.open(home);
+    expect(store.fleet.desk()?.identity_id).toBe(packet.identity_id);
+    expect(store.listAudit().map((entry) => entry.act)).toEqual(["desk.enroll"]);
     store.close();
   });
 });

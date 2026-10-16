@@ -272,3 +272,64 @@ describe("read-only view", () => {
     store.close();
   });
 });
+
+describe("state schema version 2", () => {
+  const FLEET_TABLES = ["cursors", "desk", "desk_grants", "desk_knocks", "events", "hub", "hub_cards", "hub_decisions",
+    "hub_devices", "hub_grants", "hub_members", "hub_seasons", "outbox"];
+
+  function tables(home: string): string[] {
+    const raw = new Database(join(home, DATABASE_FILE), { readonly: true });
+    const names = (raw.query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>)
+      .map((row) => row.name);
+    raw.close();
+    return names;
+  }
+
+  test("a version-1 file is read as having no fleet state and upgraded explicitly by the CLI handle", () => {
+    const { home, store } = openStore();
+    const room = store.addRoom({ title: "kept across the upgrade" }, T0);
+    store.close();
+    // Rebuild what a version-1 desk left behind: no fleet tables, version 1.
+    const raw = new Database(join(home, DATABASE_FILE));
+    for (const table of FLEET_TABLES) raw.exec(`DROP TABLE ${table}`);
+    raw.exec("UPDATE meta SET value = '1' WHERE key = 'schema_version'");
+    raw.close();
+
+    const reader = LobbyStore.openReadOnly(home)!;
+    expect(reader.stateVersion).toBe("1");
+    expect(reader.fleet.available).toBe(false);
+    expect(reader.fleet.desk()).toBeNull();
+    expect(reader.fleet.events("11111111-1111-4111-8111-111111111111")).toEqual([]);
+    expect(reader.listRooms()).toEqual([room]);
+    reader.close();
+
+    const upgraded = LobbyStore.open(home);
+    expect(upgraded.stateVersion).toBe("2");
+    expect(upgraded.fleet.available).toBe(true);
+    expect(upgraded.listRooms()).toEqual([room]);
+    upgraded.close();
+    for (const table of FLEET_TABLES) expect(tables(home)).toContain(table);
+  });
+
+  test("an unknown version is refused by both handles", () => {
+    const { home, store } = openStore();
+    store.close();
+    const raw = new Database(join(home, DATABASE_FILE));
+    raw.exec("UPDATE meta SET value = '3' WHERE key = 'schema_version'");
+    raw.close();
+    expect(errorCode(() => LobbyStore.open(home))).toBe("unsupported_state_version");
+    expect(errorCode(() => LobbyStore.openReadOnly(home))).toBe("unsupported_state_version");
+  });
+
+  test("hub decisions are final", () => {
+    const { store } = openStore();
+    const decision = {
+      knock_id: "11111111-1111-4111-8111-111111111111", room_id: `room_${"0".repeat(32)}`,
+      identity_id: "22222222-2222-4222-8222-222222222222", knock_sha256: "a".repeat(64), summary: "{}",
+    };
+    store.fleet.addDecision({ ...decision, decision: "denied", decided_at: T0.toISOString() });
+    expect(errorCode(() => store.fleet.addDecision({ ...decision, decision: "admitted", decided_at: T1.toISOString() })))
+      .toBe("knock_decided");
+    store.close();
+  });
+});
