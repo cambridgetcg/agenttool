@@ -2,12 +2,13 @@
  * Doctrine: docs/COLLABORATION-MISSIONS.md. Never falls back to application DATABASE_URL.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as ed from "@noble/ed25519";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type { Sql } from "postgres";
 import postgres from "../fixtures/verified-postgres";
-import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../../src/services/collaboration/store";
+import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant, type ServerIssuedMissionGrant } from "../../src/services/collaboration/store";
 import { canonicalMissionRequestBytes, verifyMissionProof } from "../../src/services/collaboration/proof";
 import type { MissionAction, MissionRequest } from "../../src/services/collaboration/contracts";
 
@@ -101,6 +102,77 @@ databaseTest("invitation is private to its subject, acceptance is explicit, and 
   const rows = await admin`SELECT * FROM tools.collaboration_grants`;
   expect(rows).toHaveLength(1); expect(JSON.stringify(rows)).not.toContain(token); expect(rows[0].token_hash).toMatch(/^[0-9a-f]{64}$/);
   await expect(executeMissionRequest(req(token, "/invitation", undefined, { proof: { ...acceptance.proof, identityId: J, keyId: L } }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+});
+
+databaseTest("a participant-chosen token hash binds the grant, returns no token, and is globally unique", async () => {
+  const mission = await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  const token = `atcm_${Buffer.alloc(32, 11).toString("base64url")}`, hash = createHash("sha256").update(token, "utf8").digest("hex");
+  const issued = await issueMissionGrant({ ...grantInput(), tokenSha256: hash }, options());
+  expect(issued).toEqual({ grant: expect.objectContaining({ grant_id: G }), token_sha256: hash, token_source: "participant" });
+  expect(JSON.stringify(issued)).not.toContain("atcm_");
+  expect((await admin`SELECT token_hash FROM tools.collaboration_grants WHERE id = ${G}`)[0].token_hash).toBe(hash);
+  expect((await executeMissionRequest(req(token, "/accept", { mission_digest: mission.mission_digest }), options())).created).toBe(true);
+  expect((await executeMissionRequest(req(token, "/context"), options())).data.mission).toEqual(mission);
+  await expect(issueMissionGrant({ ...grantInput(), grantId: H, tokenSha256: hash }, options())).rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  await expect(issueMissionGrant({ ...grantInput(), tokenSha256: "d".repeat(64) }, options())).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  const elsewhere = uid(30);
+  await createMission({ projectId: O, missionId: elsewhere, issuerApiKeyId: O, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  await expect(issueMissionGrant({ projectId: O, missionId: elsewhere, issuerApiKeyId: O, grantId: uid(31), identityId: O, signingKeyId: O, origin: ORIGIN, actions: ["mission.read"], expiresAt: END.toISOString(), tokenSha256: hash }, options()))
+    .rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(1);
+});
+
+databaseTest("concurrent issuance of one participant hash has exactly one durable winner", async () => {
+  await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  const hash = "e".repeat(64);
+  const results = await Promise.allSettled([issueMissionGrant({ ...grantInput(), tokenSha256: hash }, options()), issueMissionGrant({ ...grantInput(), grantId: H, tokenSha256: hash }, options())]);
+  expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+  expect((results.find(r => r.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ status: 409, code: "token_hash_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(1);
+});
+
+databaseTest("a participant leaves only its own grant, idempotently, and its token is then refused everywhere", async () => {
+  const { token, mission } = await accepted();
+  const peer = await issueMissionGrant({ ...grantInput(["mission.read"]), grantId: H, identityId: J, signingKeyId: L }, options());
+  const peerProof = { grantId: H, identityId: J, keyId: L, timestamp: NOW.toISOString(), signature: "" };
+  await executeMissionRequest(req(peer.token, "/accept", { mission_digest: mission.mission_digest }, { proof: peerProof }, OTHER_PRIVATE), options());
+  // The peer's key and token cannot remove this grant, and this token cannot remove the peer's.
+  await expect(executeMissionRequest(req(peer.token, "/leave", undefined, { method: "POST", proof: { ...peerProof, grantId: G } }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+  await expect(executeMissionRequest(req(token, "/leave", undefined, { method: "POST", proof: peerProof }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+  await expect(executeMissionRequest(req(token, "/leave", undefined, { method: "POST" }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+  const leave = req(token, "/leave", undefined, { method: "POST" });
+  const first = await executeMissionRequest(leave, options());
+  expect(first).toEqual({ created: true, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: NOW.toISOString() } });
+  const later = new Date(NOW.getTime() + 1000);
+  const repeat = req(token, "/leave", undefined, { method: "POST", proof: { ...leave.proof, timestamp: later.toISOString() } });
+  expect(await executeMissionRequest(repeat, { database, now: later })).toEqual({ created: false, data: first.data });
+  const [stored] = await admin`SELECT revoked_at, acceptance_proof FROM tools.collaboration_grants WHERE id = ${G}`;
+  expect(stored.revoked_at.toISOString()).toBe(NOW.toISOString());
+  expect(stored.acceptance_proof.request_target).toBe(`${BASE}/accept`);
+  expect(stored.acceptance_proof.participant_leave).toMatchObject({ reason: "participant_left", request_target: `${BASE}/leave`, raw_body: "", signature: leave.proof.signature });
+  expect(verifyMissionProof({ ...leave, bodyBytes: Buffer.from(stored.acceptance_proof.participant_leave.raw_body, "utf8") }, stored.acceptance_proof.participant_leave.public_key, NOW)).toBe(true);
+  for (const [path, body] of [["/invitation", undefined], ["/context", undefined], ["/events", undefined], ["/events", { event_id: E, summary: "after leaving" }], ["/accept", { mission_digest: mission.mission_digest }]] as const) {
+    await expect(executeMissionRequest(req(token, path, body), options())).rejects.toMatchObject({ status: 401 });
+  }
+  expect((await getMissionGrant({ ...target, grantId: G }, options())).revocation_reason).toBe("participant_left");
+  expect((await revokeMissionGrant({ ...target, grantId: G }, options())).revoked_at).toBe(NOW.toISOString());
+  const peerView = await getMissionGrant({ ...target, grantId: H }, options());
+  expect(peerView.revoked_at).toBeNull(); expect(peerView).not.toHaveProperty("revocation_reason");
+  expect((await executeMissionRequest(req(peer.token, "/context", undefined, { proof: peerProof }, OTHER_PRIVATE), options())).data.mission).toEqual(mission);
+  expect((await revokeMission(target, options())).revoked_at).toBe(NOW.toISOString());
+  await expect(executeMissionRequest(req(peer.token, "/context", undefined, { proof: peerProof }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+  await expect(executeMissionRequest(repeat, { database, now: later })).rejects.toMatchObject({ status: 401 });
+});
+
+databaseTest("leave requires acceptance, and an administrator revocation cannot become a participant leave", async () => {
+  const { token, mission } = await enrolled();
+  await expect(executeMissionRequest(req(token, "/leave", undefined, { method: "POST" }), options())).rejects.toMatchObject({ status: 403 });
+  await executeMissionRequest(req(token, "/accept", { mission_digest: mission.mission_digest }), options());
+  await revokeMissionGrant({ ...target, grantId: G }, options());
+  await expect(executeMissionRequest(req(token, "/leave", undefined, { method: "POST" }), options())).rejects.toMatchObject({ status: 401 });
+  const [stored] = await admin`SELECT acceptance_proof FROM tools.collaboration_grants WHERE id = ${G}`;
+  expect(stored.acceptance_proof).not.toHaveProperty("participant_leave");
+  expect(await getMissionGrant({ ...target, grantId: G }, options())).not.toHaveProperty("revocation_reason");
 });
 
 databaseTest("separate accepted identities share bounded observations and exact raw-body retries retain receipts", async () => {
@@ -232,7 +304,7 @@ databaseTest("concurrent issuance, acceptance, distinct appends and identical re
   const { mission } = await enrolled();
   const issued = await Promise.allSettled([issueMissionGrant({ ...grantInput(), grantId: H }, options()), issueMissionGrant({ ...grantInput(), grantId: H }, options())]);
   expect(issued.filter(r => r.status === "fulfilled")).toHaveLength(1);
-  const token = (issued.find(r => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof issueMissionGrant>>>).value.token;
+  const token = (issued.find(r => r.status === "fulfilled") as PromiseFulfilledResult<ServerIssuedMissionGrant>).value.token;
   const proof = { grantId: H, identityId: I, keyId: K, timestamp: NOW.toISOString(), signature: "" };
   const acceptance = req(token, "/accept", { mission_digest: mission.mission_digest }, { proof });
   const accepts = await Promise.all([executeMissionRequest(acceptance, options()), executeMissionRequest(acceptance, options())]);

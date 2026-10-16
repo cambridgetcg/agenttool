@@ -7,12 +7,12 @@ import { verifyBearer } from "../auth/middleware";
 import { errors, fail } from "../lib/errors";
 import { configuredLocalContextOrigin } from "./identity/local-context";
 import { readStrictCorrespondenceJson, StrictJsonError } from "../services/correspondence/strict-json";
-import { createMissionSchema, issueMissionGrantSchema, MISSION_PROOF_HEADERS, MissionError } from "../services/collaboration/contracts";
+import { createMissionSchema, issueMissionGrantSchema, MISSION_PROOF_HEADERS, MissionError, missionTokenSha256Schema } from "../services/collaboration/contracts";
 import * as missions from "../services/collaboration/store";
 
 const BASE = "/v1/collaboration/missions";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|revoke|grants)(?:/(${UUID})(/revoke)?)?)?$`);
+const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|leave|revoke|grants)(?:/(${UUID})(/revoke)?)?)?$`);
 const DOCS = "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md";
 
 class TransportError extends Error {
@@ -30,7 +30,12 @@ const TRANSPORT_MESSAGES: Record<string, string> = {
   mission_json_required: "Mission mutations with a body require application/json.",
   invalid_mission_request: "Provide a canonical mission UUID, bounded descriptor and explicit expiry.",
   invalid_mission_grant_request: "Provide the grant UUID, identity, registered key, actions and expiry.",
+  invalid_token_sha256: "token_sha256 must be the 64 lowercase hex SHA-256 of the participant's atcm_ token UTF-8 bytes.",
 };
+function malformedTokenHash(json: unknown): boolean {
+  return typeof json === "object" && json !== null && !Array.isArray(json) && Object.hasOwn(json, "token_sha256")
+    && !missionTokenSha256Schema.safeParse((json as Record<string, unknown>).token_sha256).success;
+}
 function missionFailure(c: Context, code: string, status: ContentfulStatusCode, message: string) {
   return fail(c, errors.refusal({
     error: code, message, docs: DOCS,
@@ -88,9 +93,11 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       if (!match && !collection) throw new TransportError(404, "mission_route_not_found");
       const [, missionId = "", action, grantId, revocation] = match ?? [];
       if (grantId && action !== "grants") throw new TransportError(404, "mission_route_not_found");
-      const participant = ["invitation", "accept", "context", "events"].includes(action ?? "");
+      const participant = ["invitation", "accept", "context", "events", "leave"].includes(action ?? "");
+      // Participant leave, like administrator revocation, carries zero body bytes.
+      const leave = action === "leave";
       const allowed = participant
-        ? action === "events" ? ["GET", "POST"] : action === "accept" ? ["POST"] : ["GET"]
+        ? action === "events" ? ["GET", "POST"] : action === "accept" || leave ? ["POST"] : ["GET"]
         : collection || action === "revoke" || action === "grants" && (!grantId || revocation) ? ["POST"] : ["GET"];
       if (!allowed.includes(method)) { c.header("Allow", allowed.join(", ")); throw new TransportError(405, "mission_method_not_allowed"); }
       if (query && !(participant && action === "events" && method === "GET")) throw new TransportError(400, "invalid_mission_target");
@@ -98,7 +105,7 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       const token = /^Bearer ([A-Za-z0-9_-]{1,256})$/.exec(authorization)?.[1];
       if (!token || (participant ? !/^atcm_[A-Za-z0-9_-]{43}$/.test(token) : !token.startsWith("at_"))) throw new TransportError(401, "mission_credential_invalid");
       if (c.req.header("Content-Encoding")) throw new TransportError(400, "mission_content_encoding_not_supported");
-      const carriesJson = method === "POST" && (participant || collection || action === "grants" && !grantId);
+      const carriesJson = method === "POST" && (participant && !leave || collection || action === "grants" && !grantId);
       if (carriesJson && !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(c.req.header("Content-Type") ?? "")) throw new TransportError(415, "mission_json_required");
 
       if (participant) {
@@ -109,7 +116,7 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
           timestamp: c.req.header(MISSION_PROOF_HEADERS.timestamp) ?? "",
           signature: c.req.header(MISSION_PROOF_HEADERS.signature) ?? "",
         };
-        const bytes = await bodyBytes(c.req.raw, method === "GET" ? 0 : 8192);
+        const bytes = await bodyBytes(c.req.raw, method === "GET" || leave ? 0 : 8192);
         const result = await service.executeMissionRequest({ token, missionId, origin: origin(), method, requestTarget: url.pathname + query, bodyBytes: bytes, proof });
         return c.json(result.data, result.created && action === "events" ? 201 : 200);
       }
@@ -126,8 +133,9 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       }
       if (action === "grants" && !grantId) {
         const body = issueMissionGrantSchema.safeParse(json);
-        if (!body.success) throw new TransportError(400, "invalid_mission_grant_request");
-        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin() }), 201);
+        if (!body.success) throw new TransportError(400, malformedTokenHash(json) ? "invalid_token_sha256" : "invalid_mission_grant_request");
+        const participantHash = body.data.token_sha256 === undefined ? {} : { tokenSha256: body.data.token_sha256 };
+        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin(), ...participantHash }), 201);
       }
       if (action === "grants") return c.json({ grant: await (revocation ? service.revokeMissionGrant : service.getMissionGrant)({ ...target, grantId: grantId! }) });
       if (action === "revoke") return c.json({ mission: await service.revokeMission(target) });
