@@ -4961,16 +4961,16 @@
     {
       "path": "packages/collab-zerone/CLAUDE.md",
       "title": "collab-zerone",
-      "type": "orientation",
-      "classification_basis": "file-convention",
+      "type": "guide",
+      "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/collab-zerone/CLAUDE.md"
     },
     {
       "path": "packages/collab-zerone/README.md",
       "title": "@agenttool/collab-zerone",
-      "type": "orientation",
-      "classification_basis": "file-convention",
+      "type": "reference",
+      "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/collab-zerone/README.md"
     },

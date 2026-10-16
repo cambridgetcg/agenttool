@@ -552,7 +552,10 @@ chain does not prove that recorded claims are true.
 or stale state, it recomputes the full local journal from genesis and checks the
 hash at the witnessed sequence. A missing, unreadable, malformed, or
 all-failed sidecar reports honestly as `unanchored`; it never blocks ordinary
-coordination.
+coordination. The bridge's memo protocol does not change these states:
+entries for legacy `agenttool.collab-anchor/0.1` memos and salted-alias `0.2`
+memos read alike. This tool never reads the bridge's alias salt and never
+returns memo text or aliases.
 
 The default sidecar is
 `$XDG_DATA_HOME/agenttool/collab-zerone-anchors.json`, falling back to the

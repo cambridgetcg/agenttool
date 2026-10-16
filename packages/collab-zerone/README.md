@@ -1,5 +1,8 @@
 # @agenttool/collab-zerone
 
+> **Type:** reference · **Purpose:** witness Collab journal heads on zerone without making the chain an authority or publishing path-derived workspace ids.
+> **Evidence:** source in `src/` and `bin/collab-zerone.ts`, hermetic tests in `tests/` (stubbed `zeroned`); no release, deployment or new live-chain observation is claimed here.
+
 Witness-only zerone anchoring for [agenttool-collab](../collab) journals.
 
 Every collab workspace journal is already a SHA-256 hash chain: each event
@@ -29,9 +32,12 @@ block, mutate, or gate coordination. Nothing here is ZRN-only.
   (`≤256` chars, the zerone-1 genesis cap):
 
   ```
-  agenttool.collab-anchor/0.1 ws=<workspace_id> epoch=<epoch_id> seq=<n> head=<64-hex>
+  agenttool.collab-anchor/0.2 alias=<32-hex> epoch=<32-hex> seq=<n> head=<64-hex>
   ```
 
+  The two aliases stand in for the workspace and epoch ids, which never go on
+  chain in a new memo; see
+  [Memo protocols and the alias salt](#memo-protocols-and-the-alias-salt).
   This is the governance-free anchor path: any funded key can do it today.
   Fees: gas 100,000 × 1 uzrn/gas. The chain's fee floor is 1 uzrn/gas, and a
   memo-carrying send measured 82,772 gas on zerone-testnet-1 (the ante meters
@@ -41,7 +47,9 @@ block, mutate, or gate coordination. Nothing here is ZRN-only.
   (`~/.local/share/agenttool/collab-zerone-anchors.json`, mode 0600, override
   with `AGENTOOL_COLLAB_ANCHOR_LEDGER`) with sticky broadcast-ambiguity
   discipline: once a broadcast is invoked, an unparseable outcome is recorded
-  `ambiguous`, never assumed unsent.
+  `ambiguous`, never assumed unsent. Each entry records its memo protocol
+  and, for 0.2, the aliases it published. The alias salt sits beside the
+  ledger at `<ledger>.salt`.
 - **Reports five honest states** — `unanchored`, `anchor_pending`,
   `anchored`, `anchor_stale`, `anchor_conflict` — via the CLI here and via the
   `collab_anchor_status` MCP tool in `@agenttool/collab` (local file read
@@ -50,6 +58,62 @@ block, mutate, or gate coordination. Nothing here is ZRN-only.
   attempts that definitively failed report as `unanchored`. States that vouch
   for history (`anchored`, `anchor_stale`) are backed by full recomputation
   from genesis in both the CLI and the MCP tool.
+
+## Memo protocols and the alias salt
+
+A Collab `ws_` id is a truncated sha256 of a repository key derived from a
+local path (`packages/collab/src/store.ts`, `src/repository.ts`). A memo that
+carries it lets anyone confirm a guessed path, so the memo protocol was bumped:
+
+| Protocol | Memo body after the protocol string | `anchor` writes it | `verify`/`resolve` match it by |
+|---|---|---|---|
+| `agenttool.collab-anchor/0.1` (legacy) | `ws=<workspace_id> epoch=<epoch_id> seq=<n> head=<64-hex>` | no | the raw ids |
+| `agenttool.collab-anchor/0.2` | `alias=<32-hex> epoch=<32-hex> seq=<n> head=<64-hex>` | yes | aliases re-derived from the salt |
+
+- `alias` is the first 32 hex chars of HMAC-SHA256(key = salt, message =
+  workspace_id). The `epoch` field is the same over `"epoch " + epoch_id`. The
+  longest possible 0.2 memo is 196 characters, inside the 256 cap.
+- **Why the epoch is aliased too.** Epoch ids are random UUIDs
+  (`epoch_<uuid>`), so they reveal no path. They are linkable, though: legacy
+  memos print the raw epoch id beside the `ws_` id, and the same id travels in
+  Collab cursors and event anchors. A raw epoch in a 0.2 memo would tie the
+  new alias straight back to an already-published `ws_` id. The `"epoch "`
+  label keeps the two alias domains apart, since a workspace id never
+  contains a space.
+- **The salt** is 32 random bytes stored hex-encoded at `<ledger>.salt` with
+  mode 0600. The first real `anchor` creates it with an atomic no-clobber
+  link; `--dry-run` never creates it and labels its aliases illustrative when
+  no salt exists yet. The salt never goes on chain. Back it up with the ledger.
+- **Losing the salt fails closed,** because no recorded alias can be
+  re-derived without it. `anchor` refuses (exit 2) rather than create a new
+  salt once the ledger records any 0.2 entry, and refuses a salt that does not
+  reproduce the recorded aliases (a replaced salt or edited entries). `verify`
+  exits 2 for any 0.2 entry whose aliases or memo do not re-derive, and
+  `resolve` refuses before any chain query. `status` and
+  `collab_anchor_status` stay fail-open: their local states never depend on the
+  salt, so `status` only warns. Restoring the original salt restores every path.
+- **The ledger protocol is unchanged** (`agenttool.collab-zerone-ledger/0.1`).
+  Entries gain `memo_protocol` and, for 0.2, `workspace_alias` and
+  `epoch_alias`; an entry without `memo_protocol` is legacy 0.1. The local
+  ledger still records the raw ids, which is how an alias maps back to its
+  workspace. Deployed `@agenttool/collab` readers ignore the new fields.
+- Each entry's on-chain memo is matched under that entry's own protocol only:
+  a 0.1 memo never satisfies a 0.2 entry or the reverse, and an unknown
+  protocol never matches.
+
+What the alias does not do:
+
+- It does not unpublish anything. Memos already on chain under 0.1 keep
+  showing their `ws_` ids; `anchor` prints a note when the workspace has such
+  attempts in the ledger.
+- It does not make anchors unlinkable. Every anchor is a send from the same
+  account, a workspace keeps one alias across epochs, and sequence numbers
+  continue. It only stops a guessed path from being confirmed.
+- A leaked salt turns the aliases back into confirmable path guesses.
+- The private courier's witness observer
+  (`packages/collab-courier/src/witness.ts`) still accepts only 0.1
+  selections, so it reports a 0.2 anchor as `invalid_selection` (fail-closed)
+  until it learns the 0.2 memo.
 
 ## Usage
 
@@ -68,7 +132,8 @@ integrity/verification failure, `3` anchor(s) in flight but unresolved.
 `verify --check-chain` gates the exit code too — every confirmed anchor must
 have an explicitly successful integer code 0, a positive safe-integer inclusion
 height, a returned transaction hash matching the requested hash, a byte-identical
-memo matching its recorded workspace/epoch/sequence/hash,
+memo in the entry's own protocol matching its recorded sequence, hash and
+workspace/epoch (raw ids for 0.1, aliases re-derived from the salt for 0.2),
 and a valid recomputed local prefix, or verify exits 2. Missing or malformed
 transaction fields (including a missing returned hash) remain unknown, never
 code/height 0 defaults. `resolve`
@@ -155,3 +220,9 @@ it without changing the ledger or status model.
 `@agenttool/collab` `CollabStore` and proves this package's independent hash
 walk is byte-identical; the legacy suite covers the v1 no-`session_id` schema,
 tampering, truncation, and gaps; broadcast tests pin the ambiguity discipline.
+`tests/memo.test.ts` and `tests/alias.test.ts` pin both memo grammars, an
+independently computed alias, and the salt file rules; `tests/cli.test.ts`
+checks that broadcast arguments never carry the workspace or epoch id, that
+mixed ledgers verify per protocol, and that a lost or replaced salt fails
+closed; `tests/ledger-conformance.test.ts` reads 0.2 entries back through
+`@agenttool/collab`.
