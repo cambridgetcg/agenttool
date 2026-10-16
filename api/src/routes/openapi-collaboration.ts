@@ -32,7 +32,7 @@ const jsonBody = (schema: object) => ({ required: true, content: { "application/
 const common = {
   tags: ["collaboration"], externalDocs: { url: "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md" },
 };
-function operation(summary: string, participant: boolean, options: { create?: boolean; body?: object; description?: string; parameters?: object[] } = {}) {
+function operation(summary: string, participant: boolean, options: { create?: boolean; body?: object; description?: string; parameters?: object[]; responses?: Record<string, object> } = {}) {
   return {
     ...common, summary,
     description: `${options.description ?? ""} All responses are private, no-store. Exact canonical routes only. Same-project scope; principality and seat labels convey no authority.`,
@@ -41,9 +41,18 @@ function operation(summary: string, participant: boolean, options: { create?: bo
     ...(options.body ? { requestBody: jsonBody(options.body) } : {}),
     responses: { ...errors, [options.create ? "201" : "200"]: { description: options.create ? "Created; credential tokens, when issued, are returned only once" : "Bounded metadata, acceptance or receipt; no token or verifier in reads" },
       ...(participant && options.create ? { "200": { description: "Exact retry returns original receipt after current authority checks" } } : {}),
+      ...options.responses,
     },
   };
 }
+const tokenSha256 = { type: "string", pattern: "^[0-9a-f]{64}$", description: "Optional. Lowercase hex SHA-256 of the UTF-8 bytes of a participant-generated token shaped atcm_ plus 43 base64url characters (32 random bytes). The participant keeps the token; the server stores only this hash." };
+const grantObject = { type: "object", description: "Grant metadata; never the token or its hash." };
+const issuedGrant = { oneOf: [
+  { type: "object", additionalProperties: false, required: ["grant", "token"], properties: { grant: grantObject,
+    token: { type: "string", pattern: "^atcm_[A-Za-z0-9_-]{43}$", description: "Server-minted when token_sha256 is omitted; returned once." } } },
+  { type: "object", additionalProperties: false, required: ["grant", "token_sha256", "token_source"], properties: { grant: grantObject,
+    token_sha256: tokenSha256, token_source: { const: "participant" } } },
+] };
 const base = "/v1/collaboration/missions";
 export const COLLABORATION_OPENAPI_PATHS = {
   [base]: { post: operation("Create an immutable bounded mission", false, { create: true, body: {
@@ -55,8 +64,14 @@ export const COLLABORATION_OPENAPI_PATHS = {
     type: "object", additionalProperties: false, required: ["grant_id", "identity_id", "signing_key_id", "actions", "expires_at"], properties: {
       grant_id: uuid, identity_id: uuid, signing_key_id: uuid, expires_at: date,
       actions: { type: "array", minItems: 1, maxItems: 2, uniqueItems: true, items: { enum: ["mission.read", "mission.observe"] } },
+      token_sha256: tokenSha256,
     },
-  }, description: "One active project-owned identity and registered signing key. At most 24 hours, bounded by mission and issuing parent key. Hash-only atcm_ token returned once; duplicate grant_id conflicts. After an ambiguous response inspect/revoke the known ID before choosing another." }) },
+  }, description: "One active project-owned identity and registered signing key. At most 24 hours, bounded by mission and issuing parent key. Without token_sha256, a hash-only atcm_ token is returned once. With token_sha256, the response echoes it with token_source \"participant\" and contains no token. Duplicate grant_id conflicts; a token hash already bound to any grant is refused with token_hash_conflict. After an ambiguous response inspect/revoke the known ID before choosing another.",
+  responses: {
+    "201": { description: "Created. Exactly one shape: server-minted token returned once, or the participant's echoed token_sha256 with no token.", content: { "application/json": { schema: issuedGrant } } },
+    "400": { description: "Invalid grant request; a malformed token_sha256 is refused with invalid_token_sha256" },
+    "409": { description: "Known grant_id (collaboration_mission_conflict) or a token hash already bound to a grant (token_hash_conflict); tokens are never recovered or replayed" },
+  } }) },
   [`${base}/{mission_id}/grants/{grant_id}`]: { parameters: [mission, grant], get: operation("Inspect grant metadata without recovering its token", false) },
   [`${base}/{mission_id}/grants/{grant_id}/revoke`]: { parameters: [mission, grant], post: operation("Revoke this participant grant idempotently", false, { description: "No body. Serialized with admission; already admitted transactions may finish first." }) },
   [`${base}/{mission_id}/invitation`]: { parameters: [mission], get: operation("Read own invitation before accepting", true, { description: "Grant plus exact-request signature required. Exposes only own scope and immutable descriptor. No acceptance or reply obligation." }) },

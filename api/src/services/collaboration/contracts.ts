@@ -16,6 +16,8 @@ export const MISSION_PROOF_HEADERS = Object.freeze({
 });
 export const missionUuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 export const missionDigestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+/** Plain SHA-256 of a participant-generated atcm_ token's UTF-8 bytes, the stored verifier. */
+export const missionTokenSha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 const boundedText = (max: number) => z.string().min(1).refine(value => {
   try { correspondenceCanonicalJson(value); return !value.includes("\0") && [...value].length <= max; }
   catch { return false; }
@@ -42,7 +44,7 @@ export const createMissionSchema = z.object({
 }).strict();
 export const issueMissionGrantSchema = z.object({
   grant_id: missionUuidSchema, identity_id: missionUuidSchema, signing_key_id: missionUuidSchema,
-  actions: missionActionsSchema, expires_at: missionDateSchema,
+  actions: missionActionsSchema, expires_at: missionDateSchema, token_sha256: missionTokenSha256Schema.optional(),
 }).strict();
 export const missionObservationSchema = z.object({
   event_id: missionUuidSchema, summary: boundedText(1000),
@@ -58,10 +60,11 @@ export interface MissionRequest {
   bodyBytes: Uint8Array; proof: MissionProof;
 }
 export type MissionOperation = "invitation" | "accept" | "context" | "list" | "observe";
+export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict";
 export class MissionError extends HTTPException {
   readonly code: string;
-  constructor(reason: "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state") {
-    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503 } as const;
+  constructor(reason: MissionErrorReason) {
+    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503, token_hash_conflict: 409 } as const;
     const message = {
       invalid_request: "Use the exact bounded mission request contract.",
       invalid_credential: "This credential and proof do not authorize this mission request.",
@@ -69,12 +72,18 @@ export class MissionError extends HTTPException {
       conflict: "This identifier already names different or previously issued state.",
       acceptance_required: "Explicit signed acceptance of this invitation is required.",
       invalid_state: "Mission state could not be validated.",
+      token_hash_conflict: "This token hash is already bound to a grant.",
     }[reason];
-    super(status[reason], { message, cause: { error: `collaboration_mission_${reason}`, message,
+    const action = reason === "token_hash_conflict"
+      ? "Ask the participant to generate a fresh token and send its SHA-256; if a grant you issued earlier holds this hash, inspect that grant ID instead"
+      : "Inspect the mission invitation and credential scope; an issued token cannot be recovered";
+    // The shared mission-client contract names this refusal without the domain prefix.
+    const code = reason === "token_hash_conflict" ? reason : `collaboration_mission_${reason}`;
+    super(status[reason], { message, cause: { error: code, message,
       docs: "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md",
-      next_actions: [{ action: "Inspect the mission invitation and credential scope; an issued token cannot be recovered", method: null }],
+      next_actions: [{ action, method: null }],
     } });
-    this.code = `collaboration_mission_${reason}`;
+    this.code = code;
   }
 }
 export function parseMissionInput<T>(schema: z.ZodType<T>, input: unknown): T {

@@ -2,7 +2,7 @@
 
 > **Type:** reference
 > **Purpose:** Let separately credentialed agents accept a bounded shared purpose and exchange signed observations without receiving a project administration key.
-> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing.
+> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing. The participant-chosen token hash is a later source candidate (2026-10-16) with hermetic tests; it is not deployed and needs no migration.
 > **Code:** `api/src/routes/collaboration.ts`, `api/src/services/collaboration/`, `api/src/db/schema/collaboration.ts`.
 > **Tests:** `api/tests/collaboration-transport.test.ts`, `api/tests/collaboration-missions.test.ts`, `api/tests/integration/collaboration-missions-postgres.test.ts`.
 > **Compass:** [Start collaborating](COLLABORATION.md) · [Roadmap](COLLABORATION-ROADMAP.md) · [API coverage](API-COVERAGE.md) · [Identity boundaries](IDENTITY-PARTITIONS.md)
@@ -52,7 +52,9 @@ leases, completion/review authority, private memory access or automatic executio
 3. The administrator issues a grant with a fresh caller-chosen UUID, selected
    identity/key, actions and expiry. Deliver the token and its metadata through
    an explicitly selected private credential channel. Never put the token in a
-   URL, shell history, handoff, shared journal or model message.
+   URL, shell history, handoff, shared journal or model message. Alternatively,
+   the participant generates its own token and sends only its SHA-256; then no
+   token crosses between devices (see [participant-chosen token](#participant-chosen-token)).
 4. The participant pins the HTTPS service origin and signs a GET invitation
    request. Read the full descriptor and scope. Receiving an invitation creates
    no obligation to accept or reply.
@@ -79,7 +81,7 @@ duplicate object names, unknown fields and malformed values are rejected.
 |---|---|---|
 | POST base | `mission_id`, `descriptor`, `expires_at` | 201 with mission metadata |
 | GET `/{mission_id}` | No body | Mission metadata within the bearer project |
-| POST `/{mission_id}/grants` | `grant_id`, `identity_id`, `signing_key_id`, `actions`, `expires_at` | 201 with grant metadata and token, returned once |
+| POST `/{mission_id}/grants` | `grant_id`, `identity_id`, `signing_key_id`, `actions`, `expires_at`, optional `token_sha256` | 201 with grant metadata and token, returned once; with `token_sha256`, grant metadata, the echoed hash and `"token_source": "participant"`, and no token |
 | GET `/{mission_id}/grants/{grant_id}` | No body | Metadata only; never the token or hash |
 | POST `/{mission_id}/grants/{grant_id}/revoke` | No body | Idempotently revoke this grant |
 | POST `/{mission_id}/revoke` | No body | Idempotently revoke this mission and prevent further participant admissions |
@@ -114,6 +116,32 @@ returns a conflict instead of minting or replaying a credential. After an
 ambiguous response, inspect the known ID; if the token was lost, revoke that
 grant before deliberately issuing another ID. There is no token recovery,
 refresh, child delegation or generic Redis idempotency response replay.
+
+### Participant-chosen token
+
+The participant can generate the grant token itself, so that only a hash
+leaves its device. The token must have exactly the server-minted shape:
+`atcm_` followed by 43 base64url characters, the canonical unpadded encoding of
+32 random bytes. The administrator passes `token_sha256`, the lowercase hex
+SHA-256 of the token's UTF-8 bytes, when issuing the grant. The server stores
+that value as the grant's token hash; it uses the same unkeyed SHA-256 to look
+up every participant request. The 201 response then contains `grant`, the
+echoed `token_sha256` and `"token_source": "participant"`, and no `token`
+field. When `token_sha256` is omitted, the server mints the token and the
+response is unchanged: `grant` and `token`, with no `token_source`.
+
+The server cannot see the preimage. A hash of a token with any other shape is
+stored but can never be admitted, because the participant gateway checks the
+token shape first. A malformed `token_sha256` is refused with HTTP 400
+`invalid_token_sha256`. Token hashes are unique across all projects: a hash
+already bound to any grant is refused with HTTP 409 `token_hash_conflict`, and
+the participant should generate a fresh token. A known `grant_id` keeps its
+existing `collaboration_mission_conflict`, so an exact retry after an ambiguous
+response is recovered by inspecting that grant ID. The hash is not a
+credential: every participant call still needs the token and the bound key's
+exact-request signature. A hash disclosed in advance can be claimed by another
+administrator's grant. That blocks only this issuance and grants nobody access;
+the participant then generates a fresh token. Treat each hash as single use.
 
 ## Participant HTTP contract
 

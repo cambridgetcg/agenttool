@@ -135,6 +135,58 @@ describe("sealed collaboration transport", () => {
     f.service.executeMissionRequest = async () => { throw new MissionError("acceptance_required"); };
     expect((await f.app.request(`${BASE}/${M}/context`, { headers: headers() })).status).toBe(403);
   });
+  test("a participant token hash reaches the service and its 201 carries no token", async () => {
+    const f = fixture();
+    const hash = "a".repeat(64);
+    f.service.issueMissionGrant = (async (input: unknown) => { f.seen.push(input); return { grant: { grant_id: G }, token_sha256: hash, token_source: "participant" }; }) as never;
+    const grant = { grant_id: G, identity_id: M, signing_key_id: K, actions: ["mission.read"], expires_at: "2026-09-28T12:00:00.000Z" };
+    const response = await f.app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify({ ...grant, token_sha256: hash }) });
+    expect(response.status).toBe(201); privateResponse(response);
+    const body = await response.json();
+    expect(body).toEqual({ grant: { grant_id: G }, token_sha256: hash, token_source: "participant" });
+    expect(f.seen[0]).toMatchObject({ projectId: M, issuerApiKeyId: K, grantId: G, tokenSha256: hash, origin: ORIGIN });
+    // Omitted: the service input has no hash field and the server-minted response passes through.
+    const omitted = fixture();
+    const minted = await omitted.app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify(grant) });
+    expect(minted.status).toBe(201);
+    expect(await minted.json()).toEqual({ grant: { grant_id: G }, token: TOKEN });
+    expect("tokenSha256" in omitted.seen[0]).toBe(false);
+  });
+  test("malformed token hashes are 400 before the service; conflicts keep their shared code", async () => {
+    const f = fixture();
+    const grant = { grant_id: G, identity_id: M, signing_key_id: K, actions: ["mission.read"], expires_at: "2026-09-28T12:00:00.000Z" };
+    for (const token_sha256 of ["A".repeat(64), "a".repeat(63), `sha256:${"a".repeat(64)}`, null, 7, TOKEN]) {
+      const response = await f.app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify({ ...grant, token_sha256 }) });
+      expect(response.status).toBe(400); privateResponse(response);
+      expect((await response.json()).error).toBe("invalid_token_sha256");
+    }
+    const unknown = await f.app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify({ ...grant, token: TOKEN }) });
+    expect(unknown.status).toBe(400); expect((await unknown.json()).error).toBe("invalid_mission_grant_request");
+    expect(f.seen).toEqual([]);
+    f.service.issueMissionGrant = async () => { throw new MissionError("token_hash_conflict"); };
+    const conflict = await f.app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify({ ...grant, token_sha256: "b".repeat(64) }) });
+    expect(conflict.status).toBe(409); privateResponse(conflict);
+    expect(await conflict.json()).toMatchObject({ error: "token_hash_conflict", docs: "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md" });
+  });
+  test("issuing with a participant hash still requires a live administrator bearer", async () => {
+    const denied = fixture({ verify: async () => ({ ok: false }) as never });
+    const body = JSON.stringify({ grant_id: G, identity_id: M, signing_key_id: K, actions: ["mission.read"], expires_at: "2026-09-28T12:00:00.000Z", token_sha256: "c".repeat(64) });
+    for (const [app, authorization] of [[denied.app, "Bearer at_revoked"], [fixture().app, `Bearer ${TOKEN}`], [fixture().app, ""]] as const) {
+      const response = await app.request(`${BASE}/${M}/grants`, { method: "POST", headers: { Authorization: authorization, "Content-Type": "application/json" }, body });
+      expect(response.status).toBe(401); privateResponse(response);
+    }
+    expect(denied.seen).toEqual([]);
+  });
+  test("OpenAPI documents the optional token hash and both issuance shapes", () => {
+    const issue = (COLLABORATION_OPENAPI_PATHS as any)[`${BASE}/{mission_id}/grants`].post;
+    const schema = issue.requestBody.content["application/json"].schema;
+    expect(schema.properties.token_sha256.pattern).toBe("^[0-9a-f]{64}$");
+    expect(schema.required).not.toContain("token_sha256");
+    const shapes = issue.responses["201"].content["application/json"].schema.oneOf;
+    expect(shapes.map((shape: any) => shape.required)).toEqual([["grant", "token"], ["grant", "token_sha256", "token_source"]]);
+    expect(issue.responses["409"].description).toContain("token_hash_conflict");
+    expect(issue.security).toEqual([{ bearerAuth: [] }]);
+  });
   test("OpenAPI gives every participant path the narrow scheme and five required proofs", () => {
     for (const suffix of ["invitation", "accept", "context", "events"]) {
       const path = COLLABORATION_OPENAPI_PATHS[`${BASE}/{mission_id}/${suffix}`] as any;

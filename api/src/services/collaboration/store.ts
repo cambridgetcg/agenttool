@@ -127,13 +127,22 @@ export async function getMission(input: MissionTarget, options: MissionOptions =
     return missionMetadata(row);
   });
 }
-export async function issueMissionGrant(input: MissionTarget & {
+export type ServerIssuedMissionGrant = { grant: ReturnType<typeof grantMetadata>; token: string };
+export type ParticipantIssuedMissionGrant = { grant: ReturnType<typeof grantMetadata>; token_sha256: string; token_source: "participant" };
+export type IssuedMissionGrant = ServerIssuedMissionGrant | ParticipantIssuedMissionGrant;
+type IssueMissionGrantInput = MissionTarget & {
   issuerApiKeyId: string; grantId: string; identityId: string; signingKeyId: string;
-  origin: string; actions: MissionAction[]; expiresAt: string;
-}, options: MissionOptions = {}) {
+  origin: string; actions: MissionAction[]; expiresAt: string; tokenSha256?: string;
+};
+/** Without tokenSha256 the server mints a one-time token. With it, the participant
+ * keeps the preimage and the response carries no credential. */
+export function issueMissionGrant(input: IssueMissionGrantInput & { tokenSha256?: undefined }, options?: MissionOptions): Promise<ServerIssuedMissionGrant>;
+export function issueMissionGrant(input: IssueMissionGrantInput & { tokenSha256: string }, options?: MissionOptions): Promise<ParticipantIssuedMissionGrant>;
+export function issueMissionGrant(input: IssueMissionGrantInput, options?: MissionOptions): Promise<IssuedMissionGrant>;
+export async function issueMissionGrant(input: IssueMissionGrantInput, options: MissionOptions = {}): Promise<IssuedMissionGrant> {
   ids(input.projectId, input.missionId, input.issuerApiKeyId);
   const parsed = parseMissionInput(issueMissionGrantSchema, { grant_id: input.grantId, identity_id: input.identityId,
-    signing_key_id: input.signingKeyId, actions: input.actions, expires_at: input.expiresAt });
+    signing_key_id: input.signingKeyId, actions: input.actions, expires_at: input.expiresAt, token_sha256: input.tokenSha256 });
   if (!validMissionOrigin(input.origin)) throw new MissionError("invalid_request");
   return (options.database ?? db).transaction(async tx => {
     await lockSubject(tx, input.projectId, parsed.identity_id, parsed.signing_key_id);
@@ -141,14 +150,27 @@ export async function issueMissionGrant(input: MissionTarget & {
     const mission = await lockMission(tx, input, "share");
     const now = instant(options), expiresAt = expiry(parsed.expires_at, now, MISSION_BOUNDS.grantAgeMs);
     if (!activeMission(mission, now) || expiresAt > mission.expiresAt || !parentValid(parent, input.projectId, now, expiresAt)) throw new MissionError("invalid_credential");
-    const token = `atcm_${randomBytes(32).toString("base64url")}`;
-    const [row] = await tx.insert(collaborationGrants).values({ id: parsed.grant_id, projectId: input.projectId, missionId: input.missionId,
+    const participantHash = parsed.token_sha256;
+    const token = participantHash === undefined ? `atcm_${randomBytes(32).toString("base64url")}` : null;
+    const insert = tx.insert(collaborationGrants).values({ id: parsed.grant_id, projectId: input.projectId, missionId: input.missionId,
       identityId: parsed.identity_id, signingKeyId: parsed.signing_key_id, issuingApiKeyId: input.issuerApiKeyId,
-      tokenHash: missionSha256(token), origin: input.origin, actions: [...parsed.actions].sort(),
+      tokenHash: token === null ? participantHash! : missionSha256(token), origin: input.origin, actions: [...parsed.actions].sort(),
       issuedAt: now, expiresAt, acceptedAt: null, acceptanceProof: null, revokedAt: null,
-    }).onConflictDoNothing({ target: collaborationGrants.id }).returning();
-    if (!row) throw new MissionError("conflict");
-    return { grant: grantMetadata(row), token };
+    });
+    if (token !== null) {
+      const [row] = await insert.onConflictDoNothing({ target: collaborationGrants.id }).returning();
+      if (!row) throw new MissionError("conflict");
+      return { grant: grantMetadata(row), token };
+    }
+    // Any unique arbiter (grant ID or global token hash) yields no row, including a
+    // concurrent winner. A known grant ID keeps the established conflict.
+    const [row] = await insert.onConflictDoNothing().returning();
+    if (!row) {
+      const [named] = await tx.select({ id: collaborationGrants.id }).from(collaborationGrants).where(eq(collaborationGrants.id, parsed.grant_id)).limit(1);
+      throw new MissionError(named ? "conflict" : "token_hash_conflict");
+    }
+    if (row.tokenHash !== participantHash) throw new MissionError("invalid_state");
+    return { grant: grantMetadata(row), token_sha256: row.tokenHash, token_source: "participant" as const };
   });
 }
 export async function getMissionGrant(input: MissionGrantTarget, options: MissionOptions = {}) {

@@ -2,12 +2,13 @@
  * Doctrine: docs/COLLABORATION-MISSIONS.md. Never falls back to application DATABASE_URL.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as ed from "@noble/ed25519";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type { Sql } from "postgres";
 import postgres from "../fixtures/verified-postgres";
-import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../../src/services/collaboration/store";
+import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant, type ServerIssuedMissionGrant } from "../../src/services/collaboration/store";
 import { canonicalMissionRequestBytes, verifyMissionProof } from "../../src/services/collaboration/proof";
 import type { MissionAction, MissionRequest } from "../../src/services/collaboration/contracts";
 
@@ -101,6 +102,33 @@ databaseTest("invitation is private to its subject, acceptance is explicit, and 
   const rows = await admin`SELECT * FROM tools.collaboration_grants`;
   expect(rows).toHaveLength(1); expect(JSON.stringify(rows)).not.toContain(token); expect(rows[0].token_hash).toMatch(/^[0-9a-f]{64}$/);
   await expect(executeMissionRequest(req(token, "/invitation", undefined, { proof: { ...acceptance.proof, identityId: J, keyId: L } }, OTHER_PRIVATE), options())).rejects.toMatchObject({ status: 401 });
+});
+
+databaseTest("a participant-chosen token hash binds the grant, returns no token, and is globally unique", async () => {
+  const mission = await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  const token = `atcm_${Buffer.alloc(32, 11).toString("base64url")}`, hash = createHash("sha256").update(token, "utf8").digest("hex");
+  const issued = await issueMissionGrant({ ...grantInput(), tokenSha256: hash }, options());
+  expect(issued).toEqual({ grant: expect.objectContaining({ grant_id: G }), token_sha256: hash, token_source: "participant" });
+  expect(JSON.stringify(issued)).not.toContain("atcm_");
+  expect((await admin`SELECT token_hash FROM tools.collaboration_grants WHERE id = ${G}`)[0].token_hash).toBe(hash);
+  expect((await executeMissionRequest(req(token, "/accept", { mission_digest: mission.mission_digest }), options())).created).toBe(true);
+  expect((await executeMissionRequest(req(token, "/context"), options())).data.mission).toEqual(mission);
+  await expect(issueMissionGrant({ ...grantInput(), grantId: H, tokenSha256: hash }, options())).rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  await expect(issueMissionGrant({ ...grantInput(), tokenSha256: "d".repeat(64) }, options())).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  const elsewhere = uid(30);
+  await createMission({ projectId: O, missionId: elsewhere, issuerApiKeyId: O, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  await expect(issueMissionGrant({ projectId: O, missionId: elsewhere, issuerApiKeyId: O, grantId: uid(31), identityId: O, signingKeyId: O, origin: ORIGIN, actions: ["mission.read"], expiresAt: END.toISOString(), tokenSha256: hash }, options()))
+    .rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(1);
+});
+
+databaseTest("concurrent issuance of one participant hash has exactly one durable winner", async () => {
+  await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString() }, options());
+  const hash = "e".repeat(64);
+  const results = await Promise.allSettled([issueMissionGrant({ ...grantInput(), tokenSha256: hash }, options()), issueMissionGrant({ ...grantInput(), grantId: H, tokenSha256: hash }, options())]);
+  expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+  expect((results.find(r => r.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ status: 409, code: "token_hash_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(1);
 });
 
 databaseTest("separate accepted identities share bounded observations and exact raw-body retries retain receipts", async () => {
@@ -232,7 +260,7 @@ databaseTest("concurrent issuance, acceptance, distinct appends and identical re
   const { mission } = await enrolled();
   const issued = await Promise.allSettled([issueMissionGrant({ ...grantInput(), grantId: H }, options()), issueMissionGrant({ ...grantInput(), grantId: H }, options())]);
   expect(issued.filter(r => r.status === "fulfilled")).toHaveLength(1);
-  const token = (issued.find(r => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof issueMissionGrant>>>).value.token;
+  const token = (issued.find(r => r.status === "fulfilled") as PromiseFulfilledResult<ServerIssuedMissionGrant>).value.token;
   const proof = { grantId: H, identityId: I, keyId: K, timestamp: NOW.toISOString(), signature: "" };
   const acceptance = req(token, "/accept", { mission_digest: mission.mission_digest }, { proof });
   const accepts = await Promise.all([executeMissionRequest(acceptance, options()), executeMissionRequest(acceptance, options())]);

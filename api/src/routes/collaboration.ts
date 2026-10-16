@@ -7,7 +7,7 @@ import { verifyBearer } from "../auth/middleware";
 import { errors, fail } from "../lib/errors";
 import { configuredLocalContextOrigin } from "./identity/local-context";
 import { readStrictCorrespondenceJson, StrictJsonError } from "../services/correspondence/strict-json";
-import { createMissionSchema, issueMissionGrantSchema, MISSION_PROOF_HEADERS, MissionError } from "../services/collaboration/contracts";
+import { createMissionSchema, issueMissionGrantSchema, MISSION_PROOF_HEADERS, MissionError, missionTokenSha256Schema } from "../services/collaboration/contracts";
 import * as missions from "../services/collaboration/store";
 
 const BASE = "/v1/collaboration/missions";
@@ -30,7 +30,12 @@ const TRANSPORT_MESSAGES: Record<string, string> = {
   mission_json_required: "Mission mutations with a body require application/json.",
   invalid_mission_request: "Provide a canonical mission UUID, bounded descriptor and explicit expiry.",
   invalid_mission_grant_request: "Provide the grant UUID, identity, registered key, actions and expiry.",
+  invalid_token_sha256: "token_sha256 must be the 64 lowercase hex SHA-256 of the participant's atcm_ token UTF-8 bytes.",
 };
+function malformedTokenHash(json: unknown): boolean {
+  return typeof json === "object" && json !== null && !Array.isArray(json) && Object.hasOwn(json, "token_sha256")
+    && !missionTokenSha256Schema.safeParse((json as Record<string, unknown>).token_sha256).success;
+}
 function missionFailure(c: Context, code: string, status: ContentfulStatusCode, message: string) {
   return fail(c, errors.refusal({
     error: code, message, docs: DOCS,
@@ -126,8 +131,9 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       }
       if (action === "grants" && !grantId) {
         const body = issueMissionGrantSchema.safeParse(json);
-        if (!body.success) throw new TransportError(400, "invalid_mission_grant_request");
-        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin() }), 201);
+        if (!body.success) throw new TransportError(400, malformedTokenHash(json) ? "invalid_token_sha256" : "invalid_mission_grant_request");
+        const participantHash = body.data.token_sha256 === undefined ? {} : { tokenSha256: body.data.token_sha256 };
+        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin(), ...participantHash }), 201);
       }
       if (action === "grants") return c.json({ grant: await (revocation ? service.revokeMissionGrant : service.getMissionGrant)({ ...target, grantId: grantId! }) });
       if (action === "revoke") return c.json({ mission: await service.revokeMission(target) });
