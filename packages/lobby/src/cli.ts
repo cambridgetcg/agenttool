@@ -65,6 +65,11 @@ export interface CliIo {
   keychain?: SecretStore;
   /** This machine's own names for the egress gate; defaults to the hostname. */
   deviceTerms?: readonly string[];
+  /** terminalAvailable in production: true when a controlling terminal can
+   * be opened (nothing is shown or read). Without it no fleet act that needs
+   * confirmation plans, so nothing is read from the Keychain, signed or sent
+   * by a headless caller. Injected only by tests. */
+  hasTerminal?: () => boolean;
 }
 
 export const USAGE = `agenttool-lobby — lobby desk: the local hall, and the fleet hall on https://api.agenttool.dev
@@ -472,6 +477,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
         ...(io.deviceTerms === undefined ? {} : { deviceTerms: io.deviceTerms }),
       },
       keychain: io.keychain ?? null,
+      hasTerminal: io.hasTerminal ?? (() => false),
     };
     const fleetIo = { stdout: io.stdout, stderr: io.stderr, confirm: io.confirm };
     if (group === "room" && rest[0] === "publish") return await roomPublishCommand(ctx, rest.slice(1), fleetIo);

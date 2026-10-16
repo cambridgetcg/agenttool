@@ -58,6 +58,8 @@ export function world(): World {
           env: { AGENTTOOL_LOBBY_HOME: home },
           confirm: (request) => confirmOnTty(request, { openTty, now: () => clock.now.getTime() }),
           showOnTty: (text) => showOnTty(text, { openTty }),
+          // A probe that does not count as opening the scripted terminal.
+          hasTerminal: () => !options.noTerminal,
           now: () => new Date(clock.now),
           ...(options.noNetwork ? {} : { fetchImpl: hosted.fetch }),
           keychain,

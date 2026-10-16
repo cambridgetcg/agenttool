@@ -78,6 +78,10 @@ export class FakeHosted {
   failNext: ((request: SeenRequest) => boolean) | null = null;
   /** Process the next matching request, then lose its response. */
   loseResponse: ((request: SeenRequest) => boolean) | null = null;
+  /** Stand between the client and the service until cleared: call `process`
+   * to let the service handle the request (or not), and return any response,
+   * such as a gateway's HTML 504 or a body that breaks off mid-stream. */
+  intercept: ((request: SeenRequest, process: () => Response) => Response) | null = null;
 
   constructor(private readonly clock: Clock) {}
 
@@ -98,7 +102,7 @@ export class FakeHosted {
       throw new Error("fake: connection dropped");
     }
     try {
-      const response = this.route(request, headers);
+      const response = this.intercept === null ? this.route(request, headers) : this.intercept(request, () => this.route(request, headers));
       if (this.loseResponse?.(request)) {
         this.loseResponse = null;
         throw new Error("fake: response lost");
@@ -282,6 +286,17 @@ export class FakeHosted {
       return json({ event }, 201);
     }
     return refuse("mission_method_not_allowed", 405);
+  }
+
+  /** A response with the given status whose body breaks off after a few
+   * bytes, as when a connection drops while the body is being read. */
+  static brokenBody(status = 201): Response {
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("{\"event\":"));
+        controller.error(new TypeError("fake: network connection was lost"));
+      },
+    }), { status, headers: { "Content-Type": "application/json" } });
   }
 
   /** Text of every observation summary posted to a mission. */

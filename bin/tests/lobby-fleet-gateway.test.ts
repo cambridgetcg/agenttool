@@ -185,6 +185,7 @@ function desk(fetchImpl: (url: string, init: RequestInit) => Promise<Response>, 
     const code = await runCli(argv, {
       stdout: text => out.push(text), stderr: text => err.push(text), env: { AGENTTOOL_LOBBY_HOME: join(parent, "lobby") },
       confirm: request => confirmOnTty(request, { openTty }), showOnTty: () => {}, now, fetchImpl, keychain, deviceTerms: [],
+      hasTerminal: () => true,
     });
     if (code !== 0) throw new Error(`agenttool-lobby ${argv.join(" ")} exited ${code}: ${err.join("")}`);
     return out.join("");

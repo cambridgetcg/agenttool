@@ -2,9 +2,13 @@
  * seats, room publish, knocks, admit and deny.
  *
  * The hub is the one device whose Keychain holds the project bearer and the
- * door key. Both are read by this CLI only, into memory, for the act the
- * person just confirmed on /dev/tty; neither is printed, stored elsewhere,
- * passed in argv or given to the MCP server. The hub posts through its own
+ * door key. Both are read by this CLI only, into memory, and only with a
+ * person at the controlling terminal (requireKeychain checks it); neither is
+ * printed, stored elsewhere, passed in argv or given to the MCP server. The
+ * door key signs before the prompt so the prompt shows exact signed bytes, and
+ * an adopt reads the named mission with the bearer (a GET) before the prompt
+ * so it can show the charter; every request that changes state is sent only
+ * after the person types yes. The hub posts through its own
  * enrolled desk identity (a seat), like any fleet device; the door key signs
  * the documents. Contract: packages/lobby/README.md#fleet-hall.
  */
@@ -12,7 +16,7 @@ import { randomBytes, type KeyObject } from "node:crypto";
 import { LobbyError } from "./errors.js";
 import type { FleetView } from "./fleet.js";
 import { verifyEventProof } from "./fleet.js";
-import { AdminClient, assertSendable, DIRECTORY_GATE_ROOM, type GateRoom, type GrantIssue, type MissionView } from "./hosted.js";
+import { AdminClient, assertSendable, DIRECTORY_GATE_ROOM, mayHaveTakenEffect, type GrantIssue, type MissionView } from "./hosted.js";
 import { assertKeychainRef, readBearer, readDoorKey, type KeychainRef } from "./keychain.js";
 import {
   actPreview,
@@ -21,10 +25,13 @@ import {
   deviceTerms,
   earliest,
   fleetView,
+  gateOfRoom,
   HOUR_MS,
   participant,
   preparePost,
+  queuePost,
   requireDesk,
+  requireFleetRoom,
   requireHosted,
   requireKeychain,
   requireSeat,
@@ -74,6 +81,7 @@ import {
   publicKeyBase64,
   publicKeyFingerprint,
   sha256HexOf,
+  validateMissionDescriptor,
   wireCanonicalJson,
   type MissionAction,
   type MissionDescriptor,
@@ -184,29 +192,13 @@ function doorOf(hub: HubRow): DoorKey {
   return { public_key: hub.door_public_key, fingerprint: hub.door_fingerprint };
 }
 
-function gateOfRoom(room: RoomCard): GateRoom {
-  return {
-    residency: room.residency,
-    hostable: room.hostable,
-    title: room.title,
-    purpose: room.purpose,
-    house_rules: room.house_rules,
-    tags: room.tags,
-    slots: room.slots,
-  };
-}
-
-/** A room may enter the fleet hall only as residency fleet, hostable, private. */
-function requireFleetRoom(ctx: FleetContext, roomId: string): RoomCard {
-  const room = ctx.store.getRoom(roomId);
-  if (room === null) throw new LobbyError("room_not_found", "no such room in this desk's local hall");
-  if (ctx.store.isDevicePinned(roomId) || room.residency === "device") {
-    throw new LobbyError("room_residency_device", "this room is device-resident; it never leaves this device");
+/** The service names the project a mission belongs to: the bearer's own
+ * project. Anything else means the bearer and this hub disagree. */
+function requireHubProject(view: MissionView, projectId: string, what: string): void {
+  if (view.project_id !== projectId) {
+    throw new LobbyError("project_mismatch",
+      `${what} ${view.mission_id} belongs to project ${view.project_id}, not ${projectId}: the Keychain bearer is for another project`);
   }
-  if (room.residency !== "fleet" || !room.hostable || room.visibility !== "private") {
-    throw new LobbyError("room_not_fleet", "only residency fleet, hostable, private rooms enter the fleet hall; promote it first (room promote --residency fleet --hostable true)");
-  }
-  return room;
 }
 
 /** The hub's own desk, enrolled in the project like any fleet device. */
@@ -281,11 +273,14 @@ export async function planHubInit(ctx: FleetContext, input: {
     if (newDoorSeed !== null) {
       throw new LobbyError("door_key_missing", "an adopted directory must name a door key already in this Keychain; none is there");
     }
+    // A read with no effect, before the prompt, so the prompt can show the
+    // descriptor being adopted (README: Keychain custody).
     const view = await new AdminClient(await readBearer(keychain, bearer), requireHosted(ctx))
       .getMission(assertUuid(input.adopt.mission_id, "mission_id"));
     if (view.mission_digest !== assertDigest(input.adopt.mission_digest, "mission_digest")) {
       throw new LobbyError("digest_mismatch", "that mission's descriptor digest differs from the digest you gave");
     }
+    requireHubProject(view, projectId, "directory mission");
     if (view.revoked_at !== null || Date.parse(view.expires_at) <= now.getTime() + HOUR_MS) {
       throw new LobbyError("directory_closed", "that mission is revoked or ends within the hour");
     }
@@ -345,15 +340,34 @@ export async function executeHubInit(ctx: FleetContext, plan: HubInitPlan): Prom
   if (plan.mode === "adopt") return fleet.hub()!;
   const admin = await adminClient(ctx, plan.row);
   const request = { mission_id: plan.row.directory_mission_id, descriptor: plan.descriptor, expires_at: plan.row.directory_expires_at };
+  let view: MissionView;
   try {
-    await admin.createMission(request, DIRECTORY_GATE_ROOM);
+    view = await admin.createMission(request, DIRECTORY_GATE_ROOM);
   } catch (error) {
-    if (!(error instanceof LobbyError) || error.details.error !== "collaboration_mission_conflict") throw error;
+    if (!(error instanceof LobbyError) || error.details.error !== "collaboration_mission_conflict") {
+      if (mayHaveTakenEffect(error)) {
+        const detail = error instanceof LobbyError ? `${error.code}: ${error.message}` : "the request failed unexpectedly";
+        throw new LobbyError("directory_uncertain",
+          `${detail}. Directory mission ${request.mission_id} may or may not exist; nothing was retried. ` +
+          "Run hub init again (no other options) to resume with the same id and bytes");
+      }
+      throw error;
+    }
     // The same id already exists: it counts only if it is exactly this directory.
-    const view = await admin.getMission(request.mission_id);
+    view = await admin.getMission(request.mission_id);
     if (view.mission_digest !== plan.row.directory_digest || view.expires_at !== request.expires_at) {
       throw new LobbyError("directory_conflict", "a different mission already holds this directory's id");
     }
+  }
+  if (view.project_id !== plan.row.project_id) {
+    // Nothing is activated; the pending hub record is dropped so hub init can
+    // run again. The door key stays in the Keychain and is reused.
+    fleet.dropPendingHub();
+    throw new LobbyError("project_mismatch",
+      `the Keychain bearer belongs to project ${view.project_id}, not ${plan.row.project_id}. ` +
+      `Directory mission ${view.mission_id} was created in project ${view.project_id} and nothing was activated. ` +
+      `Run hub init again with the right --project; to keep that directory: hub init --project ${view.project_id} ` +
+      `--adopt-directory ${view.mission_id} --directory-digest ${view.mission_digest}`);
   }
   fleet.activateDirectory();
   return fleet.hub()!;
@@ -582,10 +596,25 @@ function requireSeason(ctx: FleetContext, roomId: string): SeasonRow {
 
 export interface SeasonPlan {
   preview: ActPreview;
-  mode: "create" | "adopt";
+  /** `resume`: a season of this room whose creation was asked for but never
+   * confirmed is asked for again with the same id and bytes. */
+  mode: "create" | "adopt" | "resume";
   room: RoomCard;
   mission: { mission_id: string; mission_digest: string; expires_at: string; descriptor: MissionDescriptor };
   seat: SeatIssue;
+}
+
+function adoptCommand(roomId: string, mission: { mission_id: string; mission_digest: string }): string {
+  return `hub season adopt ${roomId} --mission ${mission.mission_id} --digest ${mission.mission_digest}`;
+}
+
+/** The charter recorded for a pending season, checked against its digest. */
+function parsePendingDescriptor(text: string, digest: string): MissionDescriptor {
+  const descriptor = validateMissionDescriptor(JSON.parse(text));
+  if (missionDigest(descriptor) !== digest) {
+    throw new LobbyError("season_record_changed", "the pending season's recorded charter no longer matches its digest");
+  }
+  return descriptor;
 }
 
 export async function planSeason(ctx: FleetContext, input: {
@@ -598,13 +627,18 @@ export async function planSeason(ctx: FleetContext, input: {
   const room = requireFleetRoom(ctx, input.room_id);
   const now = ctx.now();
   let mission: SeasonPlan["mission"];
-  let mode: "create" | "adopt";
+  let mode: SeasonPlan["mode"];
+  // A pending season that ends within the hour is of no use; it is ignored.
+  const pending = ctx.store.fleet.pendingSeason(room.room_id, new Date(now.getTime() + HOUR_MS).toISOString());
   if (input.adopt !== undefined) {
     mode = "adopt";
+    // A read with no effect, before the prompt, so the prompt can show the
+    // charter being adopted (README: Keychain custody).
     const view: MissionView = await (await adminClient(ctx, hub)).getMission(assertUuid(input.adopt.mission_id, "mission_id"));
     if (view.mission_digest !== assertDigest(input.adopt.mission_digest, "mission_digest")) {
       throw new LobbyError("digest_mismatch", "that mission's descriptor digest differs from the digest you gave");
     }
+    requireHubProject(view, hub.project_id, "season mission");
     if (view.revoked_at !== null || Date.parse(view.expires_at) <= now.getTime() + HOUR_MS) {
       throw new LobbyError("season_closed", "that mission is revoked or ends within the hour");
     }
@@ -616,6 +650,18 @@ export async function planSeason(ctx: FleetContext, input: {
       throw new LobbyError("season_in_use", "that mission is already the directory or a recorded season");
     }
     mission = { mission_id: view.mission_id, mission_digest: view.mission_digest, expires_at: view.expires_at, descriptor: view.descriptor };
+  } else if (pending !== null) {
+    // Never a second mission while the first may exist: ask again for the
+    // same id and bytes, which the service either creates or reports as taken.
+    if (input.days !== undefined) {
+      throw new LobbyError("season_resume_only",
+        `season mission ${pending.mission_id} of this room was asked for but never confirmed; run hub season open ${room.room_id} ` +
+        `with no --days to resume it with the same id and bytes, or inspect it and finish with: ${adoptCommand(room.room_id, pending)}`);
+    }
+    mode = "resume";
+    const descriptor = parsePendingDescriptor(pending.descriptor, pending.mission_digest);
+    assertSendable(wireCanonicalJson(descriptor), gateOfRoom(room), deviceTerms(ctx));
+    mission = { mission_id: pending.mission_id, mission_digest: pending.mission_digest, expires_at: pending.expires_at, descriptor };
   } else {
     mode = "create";
     const days = input.days ?? 30;
@@ -627,9 +673,12 @@ export async function planSeason(ctx: FleetContext, input: {
     mission = { mission_id: missionId, mission_digest: missionDigest(descriptor), expires_at: expiresAt, descriptor };
   }
   const seat = planSeatIssue(ctx, desk, mission, "season", room.room_id);
-  const preview = actPreview(mode === "create" ? "hub.season.open" : "hub.season.adopt", room.room_id, now.toISOString(), [
+  const act = mode === "create" ? "hub.season.open" : mode === "resume" ? "hub.season.resume" : "hub.season.adopt";
+  const verb = mode === "create" ? "create" : mode === "resume"
+    ? "resume creating (same id and bytes; the first request was never confirmed)" : "adopt";
+  const preview = actPreview(act, room.room_id, now.toISOString(), [
     `room ${room.room_id} ${JSON.stringify(room.title)}`,
-    `${mode === "create" ? "create" : "adopt"} season mission ${mission.mission_id} until ${mission.expires_at}`,
+    `${verb} season mission ${mission.mission_id} until ${mission.expires_at}`,
     `charter digest ${mission.mission_digest}`,
     `charter purpose ${JSON.stringify(mission.descriptor.purpose)}`,
     `this hub desk takes a seat: grant ${seat.issue.grant_id} until ${seat.issue.expires_at}`,
@@ -653,22 +702,43 @@ export async function executeSeason(ctx: FleetContext, plan: SeasonPlan): Promis
     mission_digest: plan.mission.mission_digest,
     descriptor: wireCanonicalJson(plan.mission.descriptor),
     expires_at: plan.mission.expires_at,
-    mode: plan.mode === "create" ? "created" : "adopted",
-    state: plan.mode === "create" ? "pending" : "current",
+    mode: plan.mode === "adopt" ? "adopted" : "created",
+    state: plan.mode === "adopt" ? "current" : "pending",
     recorded_at: ctx.now().toISOString(),
   };
   if (plan.mode === "adopt" && fleet.season(row.mission_id)?.state === "pending") fleet.makeSeasonCurrent(row.mission_id);
-  else fleet.addSeason(row);
-  if (plan.mode === "create") {
+  else if (plan.mode === "resume") {
+    if (fleet.season(row.mission_id)?.state !== "pending") throw new LobbyError("season_not_pending", "that season is no longer pending; run hub season open again");
+  } else fleet.addSeason(row);
+  if (plan.mode !== "adopt") {
+    const request = { mission_id: row.mission_id, descriptor: plan.mission.descriptor, expires_at: row.expires_at };
+    let view: MissionView;
     try {
-      await admin.createMission({ mission_id: row.mission_id, descriptor: plan.mission.descriptor, expires_at: row.expires_at }, gateOfRoom(plan.room));
+      view = await admin.createMission(request, gateOfRoom(plan.room));
     } catch (error) {
-      if (error instanceof LobbyError && error.code === "hosted_uncertain") {
+      if (error instanceof LobbyError && error.details.error === "collaboration_mission_conflict") {
+        // The same id already exists: it counts only if it is exactly this season.
+        view = await admin.getMission(row.mission_id);
+        if (view.mission_digest !== row.mission_digest || view.expires_at !== row.expires_at) {
+          throw new LobbyError("season_conflict", "a different mission already holds this season's id");
+        }
+      } else if (mayHaveTakenEffect(error)) {
+        // Sent, but no trustworthy answer (a dropped connection, a 5xx, a body
+        // that is not the service's JSON): the mission may exist.
+        const detail = error instanceof LobbyError ? `${error.code}: ${error.message}` : "the request failed unexpectedly";
         throw new LobbyError("season_uncertain",
-          `season mission ${row.mission_id} may or may not exist. Nothing was retried. Inspect it; if it exists, finish with: ` +
-          `hub season adopt ${plan.room.room_id} --mission ${row.mission_id} --digest ${row.mission_digest}`);
+          `${detail}. Season mission ${row.mission_id} may or may not exist. Nothing was retried. Run hub season open ${plan.room.room_id} ` +
+          `again to resume with the same id and bytes, or inspect it; if it exists, finish with: ${adoptCommand(plan.room.room_id, row)}`);
+      } else {
+        // A definite refusal: the service did not create it.
+        fleet.dropPendingSeason(row.mission_id);
+        throw error;
       }
-      throw error;
+    }
+    if (view.project_id !== hub.project_id) {
+      fleet.dropPendingSeason(row.mission_id);
+      throw new LobbyError("project_mismatch",
+        `season mission ${view.mission_id} was created in project ${view.project_id}, not this hub's ${hub.project_id}: the Keychain bearer is for another project. Nothing was recorded as current`);
     }
     fleet.makeSeasonCurrent(row.mission_id);
   }
@@ -753,8 +823,29 @@ export interface HubKnock {
   summary: string;
 }
 
-function assessKnock(ctx: FleetContext, entry: { envelope: SignedEnvelope<KnockBody>; summary: string; event: MissionEvent },
-  duplicates: Map<string, Set<string>>): HubKnock {
+type KnockEntry = { envelope: SignedEnvelope<KnockBody>; summary: string; event: MissionEvent };
+
+/** Why a knock did not come from the enrolled desk that signed it, or null
+ * when it did: the signer is enrolled, the event was posted by that desk's
+ * identity and key with a valid exact-request proof, and the signature holds. */
+function knockForgery(ctx: FleetContext, entry: KnockEntry): string | null {
+  const device = ctx.store.fleet.deviceByFingerprint(entry.envelope.signer);
+  if (device === null) return "unknown_desk";
+  if (entry.event.identity_id !== device.identity_id || entry.event.signing_key_id !== device.signing_key_id) return "sender_mismatch";
+  if (!verifyEventProof(entry.event, device.public_key)) return "bad_event_proof";
+  if (!verifyDocument(entry.envelope, device.public_key)) return "bad_signature";
+  return null;
+}
+
+/** Who owns each knock id: the desk whose authentic knock used it first, in
+ * receipt order, and the distinct documents that desk posted under it. A
+ * later knock reusing the id under another desk's key never displaces it. */
+interface KnockOwnership {
+  owner: Map<string, string>;
+  documents: Map<string, Set<string>>;
+}
+
+function assessKnock(ctx: FleetContext, entry: KnockEntry, forgery: string | null, ownership: KnockOwnership): HubKnock {
   const fleet = ctx.store.fleet;
   const body = entry.envelope.body;
   const device = fleet.deviceByFingerprint(entry.envelope.signer);
@@ -777,11 +868,9 @@ function assessKnock(ctx: FleetContext, entry: { envelope: SignedEnvelope<KnockB
     summary: entry.summary,
   };
   const invalid = (reason: string): HubKnock => ({ ...base, status: "invalid", reason });
-  if (device === null) return invalid("unknown_desk");
-  if (entry.event.identity_id !== device.identity_id || entry.event.signing_key_id !== device.signing_key_id) return invalid("sender_mismatch");
-  if (!verifyEventProof(entry.event, device.public_key)) return invalid("bad_event_proof");
-  if (!verifyDocument(entry.envelope, device.public_key)) return invalid("bad_signature");
-  if ((duplicates.get(body.knock_id)?.size ?? 0) > 1) return invalid("duplicate_knock_id");
+  if (forgery !== null) return invalid(forgery);
+  if (ownership.owner.get(body.knock_id) !== entry.envelope.signer) return invalid("knock_id_taken");
+  if ((ownership.documents.get(body.knock_id)?.size ?? 0) > 1) return invalid("duplicate_knock_id");
   if (Date.parse(body.issued_at) > Date.parse(entry.event.received_at) + 5 * 60_000) return invalid("issued_after_receipt");
   const decision = fleet.decision(body.knock_id);
   if (decision !== null) {
@@ -789,7 +878,12 @@ function assessKnock(ctx: FleetContext, entry: { envelope: SignedEnvelope<KnockB
     return { ...base, status: decision.decision, reason: null };
   }
   const season = fleet.currentSeason(body.room_id);
-  if (ctx.store.getRoom(body.room_id) === null || fleet.latestCard(body.room_id) === null) return invalid("room_not_published");
+  const room = ctx.store.getRoom(body.room_id);
+  if (room === null || fleet.latestCard(body.room_id) === null) return invalid("room_not_published");
+  // The hub's own room decides, not the requesting desk's CLI: a closed or
+  // invite-only room takes no knocks, however the knock was posted.
+  if (room.status === "closed") return invalid("room_closed");
+  if (room.door !== "knock") return invalid("door_invite_only");
   if (season === null || season.mission_digest !== body.charter_digest) return invalid("charter_changed");
   const bound = fleet.hubGrantByToken(body.token_sha256);
   // A grant requested for this token whose outcome was never confirmed:
@@ -809,28 +903,37 @@ export async function hubKnocks(ctx: FleetContext, input: { sync?: boolean } = {
     await syncMission(ctx, seat);
   }
   const view: FleetView = fleetView(ctx, hub.directory_mission_id, doorOf(hub));
-  const duplicates = new Map<string, Set<string>>();
-  for (const entry of view.knocks) {
-    const set = duplicates.get(entry.envelope.body.knock_id) ?? new Set<string>();
-    set.add(entry.summary);
-    duplicates.set(entry.envelope.body.knock_id, set);
-  }
+  // An exact repeat of a document already seen is the same knock.
   const seen = new Set<string>();
-  const knocks: HubKnock[] = [];
+  const entries: KnockEntry[] = [];
   for (const entry of view.knocks) {
     const key = `${entry.envelope.body.knock_id}:${entry.summary}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    knocks.push(assessKnock(ctx, entry, duplicates));
+    entries.push(entry);
   }
-  return knocks;
+  // Events are in receipt order, so the first authentic use of an id owns it.
+  const forgeries = entries.map((entry) => knockForgery(ctx, entry));
+  const ownership: KnockOwnership = { owner: new Map(), documents: new Map() };
+  entries.forEach((entry, index) => {
+    if (forgeries[index] !== null) return;
+    const knockId = entry.envelope.body.knock_id;
+    if (!ownership.owner.has(knockId)) ownership.owner.set(knockId, entry.envelope.signer);
+    if (ownership.owner.get(knockId) !== entry.envelope.signer) return;
+    const documents = ownership.documents.get(knockId) ?? new Set<string>();
+    documents.add(entry.summary);
+    ownership.documents.set(knockId, documents);
+  });
+  return entries.map((entry, index) => assessKnock(ctx, entry, forgeries[index] ?? null, ownership));
 }
 
 function requirePendingKnock(knocks: HubKnock[], knockId: string): HubKnock {
   const matching = knocks.filter((knock) => knock.knock_id === knockId);
   if (matching.length === 0) throw new LobbyError("knock_not_found", "no knock with that id in the directory");
-  const knock = matching[0]!;
-  if (matching.length > 1 || knock.status === "invalid") {
+  // Copies of the id under another desk's key do not make the owner's knock ambiguous.
+  const owned = matching.filter((knock) => knock.reason !== "knock_id_taken");
+  const knock = owned[0] ?? matching[0]!;
+  if (owned.length !== 1 || knock.status === "invalid") {
     throw new LobbyError("knock_invalid", `this knock is invalid (${knock.reason ?? "duplicate_knock_id"}) and cannot be decided`);
   }
   if (knock.status === "expired") throw new LobbyError("knock_expired", "this knock has expired; the device may knock again");
@@ -932,6 +1035,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     `requester ${knock.requester.fingerprint} ${JSON.stringify(knock.requester.display_name)} did:at:${knock.requester.identity_id}`,
     `approver did:at:${desk.identity_id} (this hub desk; differs from the requester)`,
     `room ${room.room_id} ${JSON.stringify(room.title)} season ${season.mission_id}`,
+    `room status ${room.status}, door ${room.door}`,
     `tier ${tier} (${issue.actions.join("+")}); grant until ${issue.expires_at}; term ends ${termEnds}`,
     `knock note (untrusted) ${JSON.stringify(knock.note)}`,
     `posts: the door-signed admission to the directory and the season, and a roster of ${members.length} (${parts} part${parts === 1 ? "" : "s"}) to the season`,
@@ -940,6 +1044,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     knock_sha256: documentSha256(knock.summary),
     approver_did: `did:at:${desk.identity_id}`,
     requester_did: `did:at:${knock.requester.identity_id}`,
+    room: { room_id: room.room_id, status: room.status, door: room.door },
     grant: { mission_id: season.mission_id, ...issue },
     membership: { tier, term_ends_at: termEnds },
     posts: posts.map(({ post }) => ({ mission_id: post.mission_id, kind: post.kind, event_id: post.event_id, summary: post.summary })),
@@ -983,6 +1088,9 @@ export async function executeAdmit(ctx: FleetContext, plan: AdmitPlan): Promise<
       grant_id: grant.grant_id,
       admitted_at: now,
     });
+    // Every post is saved with the decision, before the first send, so a
+    // failure part-way through leaves the rest in the outbox, not lost.
+    for (const { post, seat } of plan.posts) queuePost(ctx, post, seat);
   });
   const posts: PostOutcome[] = [];
   for (const { post, seat } of plan.posts) posts.push(await sendPost(ctx, post, seat));

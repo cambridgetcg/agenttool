@@ -13,9 +13,12 @@ import {
   deviceTerms,
   doorPin,
   fleetView,
+  gateOfCard,
+  gateOfRoom,
   participant,
   preparePost,
   requireDesk,
+  requireFleetRoom,
   requireJoinedDesk,
   requireSeat,
   sendPost,
@@ -31,10 +34,12 @@ import {
   documentSha256,
   KNOCK_MAX_MS,
   NOTE_MAX,
+  openDocument,
   sealDocument,
   type AdmissionBody,
   type FleetCard,
   type KnockBody,
+  type SignedEnvelope,
 } from "./signed.js";
 import type { ActPreview } from "./store.js";
 import { checkText } from "./text.js";
@@ -165,19 +170,27 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
   if (!namesDoor(mission.descriptor, packet.door)) {
     throw new LobbyError("door_not_in_charter", "the directory descriptor does not name this door key; nothing was accepted or pinned");
   }
+  if (mission.project_id !== desk.project_id) {
+    throw new LobbyError("project_mismatch", "the directory mission belongs to another project than this desk's; nothing was accepted or pinned");
+  }
   if (!grant.actions.includes("mission.read") || !grant.actions.includes("mission.observe")) {
     throw new LobbyError("grant_scope", "the directory grant must allow mission.read and mission.observe");
   }
   const at = now.toISOString();
-  const pin = desk.joined_at === null ? newPinRecord({
+  // Pin whenever the door key is not in the pin book: at the first join, and
+  // again on a joined desk whose door pin was removed (the typed fingerprint
+  // must still be the door this desk joined with, checked above).
+  const pinned = ctx.store.findPin({ fingerprint: packet.door.fingerprint }) !== null;
+  const pin = pinned ? null : newPinRecord({
     did: didKeyOf(packet.door.public_key),
     kid: "door",
     public_key: packet.door.public_key,
     petname: "fleet door",
     how_obtained: "hub join packet; fingerprint typed from the hub terminal",
-  }, at) : null;
+  }, at);
+  const pinState = pinned ? "kept" : desk.joined_at === null ? "new" : "restored";
   const preview = actPreview("fleet.join", packet.directory.mission_id, at, [
-    `door fingerprint ${packet.door.fingerprint} (matches what you typed; pinned ${pin === null ? "already" : "now"})`,
+    `door fingerprint ${packet.door.fingerprint} (matches what you typed; ${pinned ? "pinned already" : desk.joined_at === null ? "pinned now" : "its pin was missing and is restored now"})`,
     `directory mission ${packet.directory.mission_id}`,
     `digest ${mission.mission_digest} (accepting exactly this descriptor)`,
     `purpose ${JSON.stringify(mission.descriptor.purpose)}`,
@@ -189,7 +202,7 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
       expires_at: mission.expires_at,
       descriptor: mission.descriptor,
     },
-    door: { fingerprint: packet.door.fingerprint, public_key: packet.door.public_key, pin: pin === null ? "kept" : "new" },
+    door: { fingerprint: packet.door.fingerprint, public_key: packet.door.public_key, pin: pinState },
     grant: { grant_id: grant.grant_id, actions: grant.actions, expires_at: grant.expires_at, token_sha256: template.token_sha256 },
   });
   return { preview, packet, seat, mission, grant, pin };
@@ -220,8 +233,10 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
         accepted_at: accepted.grant.accepted_at!,
       });
     }
-    if (plan.pin !== null) {
-      ctx.store.insertPinWithinAct(plan.pin);
+    if (plan.pin !== null) ctx.store.insertPinWithinAct(plan.pin);
+    // The first join records the directory and door; a later join (renewal,
+    // or restoring a removed door pin) keeps them as they are.
+    if (fleet.desk()?.joined_at === null) {
       fleet.setDeskJoined({
         directory_mission_id: plan.packet.directory.mission_id,
         directory_digest: plan.mission.mission_digest,
@@ -256,17 +271,6 @@ export function fleetCards(ctx: FleetContext, filter: FleetCardFilter = {}): Fle
     cards: filterFleetCards(view, filter),
     unverified: view.unverified,
     synced_at: ctx.store.fleet.lastSynced(desk.directory_mission_id),
-  };
-}
-
-function gateOfCard(card: FleetCard): GateRoom {
-  return {
-    residency: card.residency,
-    hostable: true,
-    title: card.title,
-    purpose: card.purpose,
-    tags: card.tags,
-    slots: card.slots,
   };
 }
 
@@ -445,6 +449,9 @@ export async function planReady(ctx: FleetContext, input: { knock_id: string }):
   if (mission.mission_digest !== card.season.mission_digest) {
     throw new LobbyError("digest_mismatch", "the season descriptor's digest differs from the card; nothing was accepted");
   }
+  if (mission.project_id !== desk.project_id) {
+    throw new LobbyError("project_mismatch", "the season mission belongs to another project than this desk's; nothing was accepted");
+  }
   if (mission.revoked_at !== null || grant.revoked_at !== null || grant.actions.join(",") !== actionsFor(admission.tier).join(",")
     || grant.expires_at !== admission.grant.expires_at) {
     throw new LobbyError("grant_mismatch", "the season grant does not match the door-signed admission");
@@ -508,8 +515,13 @@ export function planOutboxRetry(ctx: FleetContext, input: { event_id: string }):
   if (grant === null || grant.accepted_at === null || grant.expires_at === null || Date.parse(grant.expires_at) <= ctx.now().getTime()) {
     throw new LobbyError("no_seat", "the grant this event was saved under has expired; it cannot be resent with its original seat");
   }
-  const gate = JSON.parse(row.gate_room) as GateRoom;
   const summary = String((JSON.parse(row.raw_body) as { summary: unknown }).summary);
+  // The room as it is now decides, not the snapshot saved at first send: a
+  // room narrowed to device, unhostable or no longer fleet since then sends
+  // nothing. The saved snapshot must still pass as well.
+  const gate = currentRetryGate(ctx, row.kind, summary);
+  assertSendable(summary, JSON.parse(row.gate_room) as GateRoom, deviceTerms(ctx));
+  assertSendable(summary, gate, deviceTerms(ctx));
   const post: PreparedPost = { kind: row.kind, mission_id: row.mission_id, event_id: row.event_id, raw_body: row.raw_body, summary, gate };
   const preview = actPreview("outbox.retry", row.event_id, ctx.now().toISOString(), [
     `resend saved ${row.kind} event ${row.event_id} to mission ${row.mission_id} with its exact original bytes`,
@@ -522,6 +534,32 @@ export function planOutboxRetry(ctx: FleetContext, input: { event_id: string }):
   };
 }
 
+/** The gate for resending a saved post, from the room's current state: the
+ * hub's local room for door-signed kinds (it must still be fleet, hostable,
+ * private and not device-pinned), or this desk's door-verified card for a
+ * knock. Refuses when the room or card can no longer be found. */
+function currentRetryGate(ctx: FleetContext, kind: string, summary: string): GateRoom {
+  let envelope: SignedEnvelope | null = null;
+  try {
+    envelope = openDocument(summary);
+  } catch {
+    envelope = null;
+  }
+  if (envelope === null || envelope.kind !== kind) {
+    throw new LobbyError("outbox_unreadable", "the saved event is not the lobby document its outbox row names; it is not resent");
+  }
+  const roomId = (envelope.body as { room_id: string }).room_id;
+  if (kind === "knock") {
+    const desk = requireJoinedDesk(ctx);
+    const door = doorPin(ctx);
+    if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
+    return gateOfCard(requireCard(fleetView(ctx, desk.directory_mission_id, door), roomId).envelope.body);
+  }
+  return gateOfRoom(requireFleetRoom(ctx, roomId));
+}
+
 export function executeOutboxRetry(ctx: FleetContext, plan: RetryPlan): Promise<PostOutcome> {
-  return sendPost(ctx, plan.post, plan.seat);
+  // Checked again: the room may have changed while the prompt was open.
+  const gate = currentRetryGate(ctx, plan.post.kind, plan.post.summary);
+  return sendPost(ctx, { ...plan.post, gate }, plan.seat);
 }

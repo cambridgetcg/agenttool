@@ -45,7 +45,7 @@ import {
   requireHub,
   type DecisionResult,
 } from "./hub.js";
-import { confirmAndRecord, type Confirm, type FleetContext, type PostOutcome } from "./ops.js";
+import { confirmAndRecord, NO_TERMINAL_MESSAGE, type Confirm, type FleetContext, type PostOutcome } from "./ops.js";
 import { DOORS, ROOM_STATUSES, SLOT_TIERS, type SlotTier } from "./room.js";
 import type { ActPreview } from "./store.js";
 import { wrapFleetCard } from "./view.js";
@@ -101,6 +101,15 @@ function wholeNumber(value: string | undefined, flag: string): number | undefine
   if (value === undefined) return undefined;
   if (!/^\d{1,4}$/.test(value)) throw new FleetUsageError(`${flag} must be a whole number`);
   return Number.parseInt(value, 10);
+}
+
+/** Every consequential act checks for a person at the terminal before it
+ * plans: a headless run reads no Keychain item, uses no bearer or token,
+ * signs nothing and sends nothing. Returns the exit code when there is none. */
+function withoutTerminal(ctx: FleetContext, io: FleetIo): number | null {
+  if (ctx.hasTerminal()) return null;
+  io.stderr(`agenttool-lobby: tty_unavailable: ${NO_TERMINAL_MESSAGE}\n`);
+  return EXIT_NOT_CONFIRMED;
 }
 
 /** Show and confirm; on yes record the bytes, then run the act. */
@@ -185,6 +194,8 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
       if (values["door-fingerprint"] === undefined) {
         throw new FleetUsageError("fleet join needs --door-fingerprint: type the fingerprint the hub printed, read from the hub's terminal");
       }
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = await planJoin(ctx, { packetText: readPacketFile(values["packet-file"]), doorFingerprint: values["door-fingerprint"] });
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeJoin(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
@@ -290,6 +301,8 @@ export async function knockCommand(ctx: FleetContext, args: string[], io: FleetI
   const tier = oneOf(values.tier, SLOT_TIERS, "--tier") as SlotTier | undefined;
   if (tier === undefined) throw new FleetUsageError("knock needs --tier player or --tier spectator");
   const hours = wholeNumber(values.hours, "--hours");
+  const headless = withoutTerminal(ctx, io);
+  if (headless !== null) return headless;
   const plan = planKnock(ctx, {
     room_id: roomId!,
     tier,
@@ -305,6 +318,8 @@ export async function knockCommand(ctx: FleetContext, args: string[], io: FleetI
 export async function readyCommand(ctx: FleetContext, args: string[], io: FleetIo): Promise<number> {
   const { positionals: extra } = parseArgs({ args, allowPositionals: true, strict: true, options: {} });
   const [knockId] = positionals(extra, 1, "ready <knock_id>");
+  const headless = withoutTerminal(ctx, io);
+  if (headless !== null) return headless;
   const plan = await planReady(ctx, { knock_id: knockId! });
   const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeReady(ctx, plan));
   if (!outcome.confirmed) return outcome.code;
@@ -328,6 +343,8 @@ export async function outboxCommand(ctx: FleetContext, args: string[], io: Fleet
   }
   if (sub === "retry") {
     const [eventId] = positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 1, "outbox retry <event_id>");
+    const headless = withoutTerminal(ctx, io);
+    if (headless !== null) return headless;
     const plan = planOutboxRetry(ctx, { event_id: eventId! });
     const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeOutboxRetry(ctx, plan));
     if (!outcome.confirmed) return outcome.code;
@@ -361,6 +378,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         throw new FleetUsageError("--adopt-directory and --directory-digest go together");
       }
       const days = wholeNumber(values.days, "--days");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = await planHubInit(ctx, {
         ...(values.project === undefined ? {} : { project_id: values.project }),
         ...(days === undefined ? {} : { days }),
@@ -408,6 +427,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
     case "relay": {
       const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { "packet-file": { type: "string" } } });
       positionals(extra, 0, "hub relay --packet-file FILE");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = planRelay(ctx, { packetText: readPacketFile(values["packet-file"]) });
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeRelay(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
@@ -428,6 +449,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         const { values, positionals: extra } = parseArgs({ args: more, allowPositionals: true, strict: true, options: { days: { type: "string" } } });
         const [roomId] = positionals(extra, 1, "hub season open <room_id> [--days N]");
         const days = wholeNumber(values.days, "--days");
+        const headless = withoutTerminal(ctx, io);
+        if (headless !== null) return headless;
         const plan = await planSeason(ctx, { room_id: roomId!, ...(days === undefined ? {} : { days }) });
         const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeSeason(ctx, plan));
         if (!outcome.confirmed) return outcome.code;
@@ -441,6 +464,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         });
         const [roomId] = positionals(extra, 1, "hub season adopt <room_id> --mission UUID --digest sha256:...");
         if (values.mission === undefined || values.digest === undefined) throw new FleetUsageError("hub season adopt needs --mission and --digest");
+        const headless = withoutTerminal(ctx, io);
+        if (headless !== null) return headless;
         const plan = await planSeason(ctx, { room_id: roomId!, adopt: { mission_id: values.mission, mission_digest: values.digest } });
         const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeSeason(ctx, plan));
         if (!outcome.confirmed) return outcome.code;
@@ -452,6 +477,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
     }
     case "seat": {
       const [target] = positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 1, "hub seat directory|<room_id>");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = planHubSeat(ctx, { target: target! });
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeHubSeat(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
@@ -482,6 +509,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
       const [knockId] = positionals(extra, 1, "hub admit <knock_id> [--tier spectator] [--term-days N]");
       const tier = oneOf(values.tier, SLOT_TIERS, "--tier") as SlotTier | undefined;
       const termDays = wholeNumber(values["term-days"], "--term-days");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = await planAdmit(ctx, {
         knock_id: knockId!,
         ...(tier === undefined ? {} : { tier }),
@@ -495,6 +524,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
     case "deny": {
       const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { reason: { type: "string" } } });
       const [knockId] = positionals(extra, 1, "hub deny <knock_id> [--reason TEXT]");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
       const plan = await planDeny(ctx, { knock_id: knockId!, ...(values.reason === undefined ? {} : { reason: values.reason }) });
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeDeny(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
@@ -508,6 +539,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
 
 export async function roomPublishCommand(ctx: FleetContext, args: string[], io: FleetIo): Promise<number> {
   const [roomId] = positionals(parseArgs({ args, allowPositionals: true, strict: true, options: {} }).positionals, 1, "room publish <room_id>");
+  const headless = withoutTerminal(ctx, io);
+  if (headless !== null) return headless;
   const plan = await planPublish(ctx, { room_id: roomId! });
   const outcome = await consequentialAsync(ctx, io, plan.preview, () => executePublish(ctx, plan));
   if (!outcome.confirmed) return outcome.code;

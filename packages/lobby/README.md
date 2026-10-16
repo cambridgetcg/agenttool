@@ -198,7 +198,8 @@ fleet act listed under [Fleet hall](#fleet-hall). The desk:
 3. reads the answer from `/dev/tty` (never stdin) and continues only on `yes`
    typed within five minutes;
 4. without a controlling terminal, fails closed with `tty_unavailable` and writes
-   nothing;
+   nothing; a fleet act checks for the terminal before it plans, and exits `3`
+   having read no Keychain item, used no bearer or token and sent no request;
 5. for a local act, in one transaction, re-checks that the room or pin is
    unchanged since the preview, applies the act and appends the same bytes to
    the audit log; for a fleet act, appends the same bytes to the audit log
@@ -242,7 +243,17 @@ join, open doors and public joining are off, and `residency=device` rooms
 | `api.agenttool.dev` (server-readable plaintext) | The hub project; desk identities enrolled as guests; one directory mission; one mission per room season; grants bound to device-chosen token hashes; the events: cards, knocks, admissions, denials, rosters. |
 | A person carrying files | The enrollment packet (device → hub) and the join packet plus the door fingerprint (hub → device). Neither holds a secret. |
 
-**Keychain custody.** The CLI is the only reader. It starts `/usr/bin/security`
+**Keychain custody.** The CLI is the only reader, and only with a person at
+the terminal: every consequential fleet act first checks that a controlling
+terminal exists and exits `3` without one, before it plans anything, so a
+headless caller (an agent's shell tool, a cron job) reads no Keychain item,
+uses no bearer or token, signs nothing and sends nothing. With a person
+present, two reads happen while the prompt is being prepared rather than after
+it: the door key signs the documents so the prompt can show their exact signed
+bytes, and `hub season adopt` / `hub init --adopt-directory` read the named
+mission with the bearer (a `GET` with no effect) so the prompt can show the
+charter being adopted. Every request that changes anything is sent only after
+`yes`. It starts `/usr/bin/security`
 and nothing else: `find-generic-password -s S -a A` to check an item exists
 (no secret), `find-generic-password -s S -a A -w` to read one into memory
 through a pipe, and `security -i` with the add command written to its stdin to
@@ -286,9 +297,15 @@ agenttool-lobby fleet join --packet-file join.json --door-fingerprint <read from
    the door key as a resource (`urn:agenttool-lobby:door:<fingerprint>` with the
    SHA-256 of the raw key). Or it adopts one with `--adopt-directory <uuid>
    --directory-digest sha256:…`; an adopted descriptor must name this
-   Keychain's door key. If the create response is lost, running `hub init`
-   again resumes with the same mission id and bytes; a conflict counts only if
-   the existing mission has exactly this digest and expiry. It runs once.
+   Keychain's door key. If the create response is lost (no response, a 5xx,
+   or a body that is not the service's JSON), running `hub init` again resumes
+   with the same mission id and bytes; a conflict counts only if the existing
+   mission has exactly this digest and expiry. The service files a mission
+   under the bearer's own project and says which: if that is not `--project`,
+   nothing is activated, the pending hub record is dropped, and the error names
+   the bearer's project and the `hub init --adopt-directory` command that keeps
+   the directory just made (an adopted directory must name `--project` too).
+   It runs once.
 2. **`enroll-device`** (no prompt, nothing sent) creates the desk once: an
    Ed25519 key, random identity and key ids, a neutral display name
    (`desk <first 8 of fingerprint>` unless `--display-name`, which must pass
@@ -319,7 +336,9 @@ agenttool-lobby fleet join --packet-file join.json --door-fingerprint <read from
    digest, revocation and scope, shows the descriptor and digest, and on `yes`
    accepts exactly that digest and pins the door key in the pin book (as
    `did:key`, kid `door`, how obtained recorded). The pin never comes from room
-   content.
+   content. On a joined desk whose door pin was removed, the next `fleet join`
+   (with the same typed fingerprint, which must still be the door it joined
+   with) pins it again and says so on the prompt.
 
 ### Rooms on the fleet hall
 
@@ -376,15 +395,21 @@ agenttool-lobby ready <knock_id>               # tty
   service. Expiry is at most 72 hours.
 - **`hub knocks`** syncs the directory and checks each knock: the signer is an
   enrolled desk, the event came from that desk's identity and key with a valid
-  exact-request proof, the signature verifies, the room is published, the
-  charter digest is the current season's, the token hash is unused, and it has
-  not expired. Anything else is `invalid` with a reason. Names and notes are
-  shown as untrusted, fingerprint first.
+  exact-request proof, the signature verifies, the knock id is this desk's
+  (an id belongs to the desk whose authentic knock used it first; a later copy
+  under another desk's key is `knock_id_taken` and never makes the first one
+  undecidable), the room is published, the hub's own room is not `closed` and
+  its door is `knock` (the requesting desk's CLI checks this too, but the hub
+  does not rely on it), the charter digest is the current season's, the token
+  hash is unused, and it has not expired. Anything else is `invalid` with a
+  reason and cannot be decided. Names and notes are shown as untrusted,
+  fingerprint first.
 - **Admit** (tty, CLI only). The approver is the hub desk's DID, which must
   differ from the requester's: the hub desk cannot admit its own knock. A tier
   may be lowered, never raised. The term ends at the season's end or sooner
   (`--term-days`). The season grant is bound to the knock's own token hash and
-  expires at the earliest of 24 hours, the term end and the season end. Then
+  expires at the earliest of 24 hours, the term end and the season end. The
+  prompt shows the room's current status and door. Then
   the door signs an **admission** (single use, valid 24 hours) and posts it to
   the directory, where the device reads it, and to the season, and posts a
   door-signed **roster** of current members to the season (split into parts
@@ -441,15 +466,26 @@ oversized documents.
 
 ### Uncertain outcomes
 
-Nothing is retried automatically. Each observation is saved in the outbox,
-byte for byte, before it is sent. If no verified receipt comes back, the act
-exits `1` and names the event: `outbox list` shows it, and `outbox retry
-<event_id>` (tty) resends exactly the same bytes, for which the service returns
-the original receipt if the first send was stored. A lost `hub init` response
-is resumed by running `hub init` again. A lost `hub season open` response
-prints the exact `hub season adopt` command that finishes it once the mission
-is inspected; a hub seat that failed after a season was recorded is taken with
-`hub seat <room_id>`. A grant request whose outcome is
+Nothing is retried automatically. A request that may have reached the service
+without a trustworthy answer (no response, a connection that drops while the
+body is read, a 5xx, or a body that is not the service's JSON) is treated as
+uncertain, never as refused. Each observation is saved in the outbox, byte for
+byte, before it is sent; `hub admit` saves all of its posts with the decision
+before sending the first, so a failure part-way leaves the rest saved. If no
+verified receipt comes back, the act exits `1` and names the event: `outbox
+list` shows it, and `outbox retry <event_id>` (tty) resends exactly the same
+bytes, for which the service returns the original receipt if the first send
+was stored. A retry is gated by the room as it is now, not as it was: the hub's
+local room must still be `fleet`, hostable, private and not device-pinned (a
+device's knock is gated by its current door-verified card), so a room narrowed
+to the device since the first send sends nothing. A lost `hub init` response
+is resumed by running `hub init` again. An uncertain `hub season open` is
+resumed by running `hub season open <room_id>` again (no `--days`), which asks
+for the same mission id and bytes and never makes a second mission; it also
+prints the `hub season adopt` command that finishes it once the mission is
+inspected. A season the service definitely refused (a 4xx) is forgotten, so the
+next `hub season open` starts afresh. A hub seat that failed after a season was
+recorded is taken with `hub seat <room_id>`. A grant request whose outcome is
 unknown marks its knock `invalid` (`grant_uncertain:<grant_id>`) until that
 grant id is inspected with the administrator read API; it is never re-requested
 with the same token. A conflicting enrollment (409) stops with nothing recorded.
@@ -531,7 +567,12 @@ with no MCP SDK, zod or SQLite; the package root also exports it.
 
 `checkEgress` fails closed and returns closed reason codes in a fixed order. It
 never echoes the matched text. It checks the text as written, after NFKC folding
-with format and default-ignorable characters removed, and lower-cased.
+with format and default-ignorable characters removed, and lower-cased. When the
+text is JSON (a signed document, a mission descriptor, a request body), it also
+checks every decoded string in it, keys included, and decodes strings that are
+JSON in turn (up to four layers). JSON writes a newline or tab as the two
+characters `\n` or `\t`, so without this a note with a line break between
+"Bet" and "Angel", or between "Mac" and "mini", would pass in its encoded form.
 
 The gate does not read `hostable`: it decides only whether text may leave this
 device. The fleet transport also refuses every room whose card says
@@ -556,7 +597,8 @@ device. The fleet transport also refuses every room whose card says
 | `pem_block` | any `-----BEGIN …-----` marker |
 | `key_like_base64` | base64 or base64url runs of 40 or more characters mixing upper case, lower case and digits |
 
-Every rule has fixtures in `tests/fixtures/egress-cases.json`, beside allowed
+Every rule has fixtures in `tests/fixtures/egress-cases.json` (including
+JSON-escaped forms), beside allowed
 text such as commit SHAs, digests, room ids, public addresses and version numbers.
 
 ## Limits

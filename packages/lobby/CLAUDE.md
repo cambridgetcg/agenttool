@@ -27,16 +27,26 @@ design; README `Concepts` restates the design terms it implements.
   summaries, mission descriptors, grant bodies and enrollment display names go
   through `assertSendable` (the egress gate plus: residency must be `fleet` and
   the card `hostable: true`) in `src/hosted.ts` itself, not only in callers.
-  Device rooms, device-pinned rooms and `open` rooms send nothing. Do not add a
-  send path that skips it, and do not weaken a gate rule to let text through.
+  The gate checks every decoded string of a JSON text as well as the text, so a
+  JSON escape (`\n`, `\t`, `\uXXXX`) cannot hide a term. Device rooms,
+  device-pinned rooms and `open` rooms send nothing, and a saved send is gated
+  again by the room as it is when it is retried, never by a stored snapshot
+  alone. Do not add a send path that skips it, and do not weaken a gate rule to
+  let text through.
 - **One process, and no secret in argv.** Only `src/keychain.ts` starts a
   process, and only `/usr/bin/security` with fixed arguments. A secret travels
   on the child's stdin (`security -i`) or comes back on its stdout into
   memory; it is never an argument, never logged, never printed, and stderr is
   discarded unread. Keychain names never start with `-`.
 - **Hub custody is CLI-only.** The project bearer and the door key live in the
-  hub's login Keychain. Only the CLI reads them, for an act the person just
-  confirmed. They never reach the MCP server, stdout, stderr, the audit log,
+  hub's login Keychain. Only the CLI reads them, and only with a person at the
+  controlling terminal: every consequential fleet command checks
+  `ctx.hasTerminal()` before it plans (exit 3 otherwise), and
+  `requireKeychain` refuses without one. Two reads precede the prompt by
+  design, and nothing else may: the door key signs so the prompt shows exact
+  signed bytes, and an adopt reads the named mission with the bearer (a `GET`)
+  so the prompt shows its charter. Every request that changes state goes after
+  `yes`. They never reach the MCP server, stdout, stderr, the audit log,
   lobby.sqlite or an error message. `FileSecretStore` exists for tests;
   production code never selects it from a flag or environment variable.
 - **Desk secrets stay in `secrets/`.** The desk key and every token preimage
@@ -73,7 +83,10 @@ design; README `Concepts` restates the design terms it implements.
 - **Decisions keep their rules.** The approver's DID differs from the
   requester's; a tier may be lowered, never raised; admissions are single use
   and last 24 hours; grants last at most 24 hours and never outlive the term,
-  season or directory; knocks last at most 72 hours; decisions are final.
+  season or directory; knocks last at most 72 hours; decisions are final. The
+  hub enforces its own room's door and status (never trusting the requesting
+  desk's CLI), and a knock id belongs to the desk whose authentic knock used
+  it first.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
   hex for signatures and digests (the gate refuses key-like base64). A format

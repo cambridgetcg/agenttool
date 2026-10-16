@@ -126,9 +126,12 @@ async function boundedJson(response: Response): Promise<unknown> {
   return value;
 }
 
-/** One HTTP exchange. A thrown transport error becomes `hosted_uncertain`:
- * the request may or may not have taken effect, and nothing is retried. */
+/** One HTTP exchange. A transport error, before the response or while its
+ * body is read (a dropped connection, the timeout firing mid-body), becomes
+ * `hosted_uncertain`: the request may or may not have taken effect, and
+ * nothing is retried. */
 async function exchange(options: HostedOptions, path: string, init: RequestInit): Promise<unknown> {
+  const uncertain = () => new LobbyError("hosted_uncertain", "the request did not complete; it may or may not have taken effect. Nothing was retried");
   let response: Response;
   try {
     response = await options.fetchImpl(`${LOBBY_ORIGIN}${path}`, {
@@ -137,9 +140,24 @@ async function exchange(options: HostedOptions, path: string, init: RequestInit)
       signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
   } catch {
-    throw new LobbyError("hosted_uncertain", "the request did not complete; it may or may not have taken effect. Nothing was retried");
+    throw uncertain();
   }
-  return boundedJson(response);
+  try {
+    return await boundedJson(response);
+  } catch (error) {
+    if (error instanceof LobbyError) throw error;
+    throw uncertain();
+  }
+}
+
+/** True when a hosted call failed after its request may have reached the
+ * service: no response, an incomplete or unreadable one, or a 5xx. Only a
+ * definite refusal (a 4xx with the service's own error code) or a refusal
+ * before sending says the request did not take effect. */
+export function mayHaveTakenEffect(error: unknown): boolean {
+  if (!(error instanceof LobbyError)) return true;
+  if (error.code === "hosted_uncertain" || error.code === "hosted_invalid_response" || error.code === "hosted_server_token") return true;
+  return error.code === "hosted_refused" && typeof error.details.status === "number" && error.details.status >= 500;
 }
 
 function record(value: unknown, what: string): Record<string, unknown> {
@@ -153,6 +171,9 @@ function record(value: unknown, what: string): Record<string, unknown> {
 
 export interface MissionView {
   mission_id: string;
+  /** The project the service filed the mission under: the bearer's own
+   * project when it was created (the service ignores any client choice). */
+  project_id: string;
   descriptor: MissionDescriptor;
   mission_digest: string;
   expires_at: string;
@@ -176,12 +197,13 @@ export function parseMissionView(value: unknown): MissionView {
   const mission = record(value, "mission");
   const descriptor = validateMissionDescriptor(mission.descriptor);
   const digest = missionDigest(descriptor);
-  if (!isUuid(mission.mission_id) || mission.mission_digest !== digest || !isCanonicalTime(mission.expires_at)
-    || !(mission.revoked_at === null || isCanonicalTime(mission.revoked_at))) {
+  if (!isUuid(mission.mission_id) || !isUuid(mission.project_id) || mission.mission_digest !== digest
+    || !isCanonicalTime(mission.expires_at) || !(mission.revoked_at === null || isCanonicalTime(mission.revoked_at))) {
     throw new LobbyError("hosted_invalid_response", "the mission does not match its descriptor digest or contract");
   }
   return {
     mission_id: mission.mission_id,
+    project_id: mission.project_id,
     descriptor,
     mission_digest: digest,
     expires_at: mission.expires_at,

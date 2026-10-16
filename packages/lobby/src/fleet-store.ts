@@ -564,6 +564,12 @@ export class FleetStore {
     this.db.query("UPDATE hub SET directory_state = 'active' WHERE singleton = 1").run();
   }
 
+  /** Forget a hub whose directory was never activated (only while pending). */
+  dropPendingHub(): void {
+    this.write();
+    this.db.query("DELETE FROM hub WHERE singleton = 1 AND directory_state = 'pending'").run();
+  }
+
   device(identityId: string): HubDeviceRow | null {
     return this.db.query("SELECT * FROM hub_devices WHERE identity_id = $id").get({ id: identityId }) as HubDeviceRow | null;
   }
@@ -635,6 +641,22 @@ export class FleetStore {
 
   season(missionId: string): SeasonRow | null {
     return this.db.query("SELECT * FROM hub_seasons WHERE mission_id = $mission_id").get({ mission_id: missionId }) as SeasonRow | null;
+  }
+
+  /** The newest season of a room whose creation was asked for but never
+   * confirmed, among those ending after `endsAfter` (a canonical timestamp). */
+  pendingSeason(roomId: string, endsAfter: string): SeasonRow | null {
+    if (!this.available) return null;
+    return this.db.query(
+      `SELECT * FROM hub_seasons WHERE room_id = $room_id AND state = 'pending' AND expires_at > $after
+       ORDER BY recorded_at DESC, mission_id DESC LIMIT 1`,
+    ).get({ room_id: roomId, after: endsAfter }) as SeasonRow | null;
+  }
+
+  /** Forget a pending season the service definitely refused to create. */
+  dropPendingSeason(missionId: string): void {
+    this.write();
+    this.db.query("DELETE FROM hub_seasons WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
   }
 
   currentSeason(roomId: string): SeasonRow | null {

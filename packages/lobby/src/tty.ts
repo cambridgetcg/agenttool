@@ -106,6 +106,16 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
   };
 }
 
+/** True when a controlling terminal can be opened. Opens and closes it at
+ * once; nothing is written and no answer is read. Consequential fleet acts
+ * call this before planning so that a headless run touches nothing. */
+export function terminalAvailable(openTty: OpenTty = () => openDevTty()): boolean {
+  const port = openTty();
+  if (port === null) return false;
+  port.close();
+  return true;
+}
+
 function assertTerminalSafe(text: string, what: string): void {
   if (TERMINAL_UNSAFE.test(text)) {
     throw new LobbyError("unsafe_preview", `${what} contains characters that cannot be shown faithfully`);

@@ -1,12 +1,14 @@
 /** Shared plumbing for fleet-hall acts on the desk and the hub.
  *
- * Every consequential fleet act is plan → confirm on /dev/tty → record the
- * confirmed bytes in the audit log → network effects → local records. The
- * audit entry is written before any network effect, so the log keeps what
- * the person confirmed even when the network then fails. Observations are
- * saved in the outbox, byte for byte, before they are sent; an uncertain
- * send is never retried automatically (`outbox retry` resends the same bytes
- * after its own confirmation).
+ * Every consequential fleet act is terminal check → plan → confirm on
+ * /dev/tty → record the confirmed bytes in the audit log → network effects →
+ * local records. Without a terminal nothing is planned, so nothing is read
+ * from the Keychain, signed or sent. The audit entry is written before any
+ * network effect, so the log keeps what the person confirmed even when the
+ * network then fails. Observations are saved in the outbox, byte for byte,
+ * before they are sent; an uncertain send is never retried automatically
+ * (`outbox retry` resends the same bytes after its own confirmation, gated by
+ * the room as it is then).
  */
 import { canonicalJson, sha256Hex } from "./canonical.js";
 import { LobbyError } from "./errors.js";
@@ -14,6 +16,8 @@ import { readFleetEvents, type DoorPin, type FleetView } from "./fleet.js";
 import { localDeviceTerms, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
 import { DeskSecrets } from "./secrets.js";
+import type { RoomCard } from "./room.js";
+import type { FleetCard } from "./signed.js";
 import { ACT_SCHEMA, type ActPreview, type LobbyStore } from "./store.js";
 import type { DeskGrantRow, DeskRow } from "./fleet-store.js";
 import type { ConfirmRequest } from "./tty.js";
@@ -27,6 +31,18 @@ export interface FleetContext {
   hosted: HostedOptions | null;
   /** The hub's Keychain; null when the caller supplied none. */
   keychain: SecretStore | null;
+  /** True when a controlling terminal is present. A probe only: it shows
+   * nothing and reads no answer. Without one, no consequential act plans. */
+  hasTerminal: () => boolean;
+}
+
+export const NO_TERMINAL_MESSAGE =
+  "this act needs a person at the controlling terminal (/dev/tty); none is available, so nothing was read from the Keychain, signed, written or sent";
+
+/** Consequential acts plan only with a person at the terminal, so a headless
+ * run reads no Keychain item, uses no bearer or token and signs nothing. */
+export function requireTerminal(ctx: FleetContext): void {
+  if (!ctx.hasTerminal()) throw new LobbyError("tty_unavailable", NO_TERMINAL_MESSAGE);
 }
 
 export function requireHosted(ctx: FleetContext): HostedOptions {
@@ -34,9 +50,51 @@ export function requireHosted(ctx: FleetContext): HostedOptions {
   return ctx.hosted;
 }
 
+/** The hub's Keychain, touched only with a person at the terminal. */
 export function requireKeychain(ctx: FleetContext): SecretStore {
   if (ctx.keychain === null) throw new LobbyError("keychain_unavailable", "this desk was started without Keychain access");
+  requireTerminal(ctx);
   return ctx.keychain;
+}
+
+/** A room may enter the fleet hall only as residency fleet, hostable, private,
+ * and never while device-pinned. Checked when a room's text is first sent
+ * and again whenever a saved send is retried. */
+export function requireFleetRoom(ctx: FleetContext, roomId: string): RoomCard {
+  const room = ctx.store.getRoom(roomId);
+  if (room === null) throw new LobbyError("room_not_found", "no such room in this desk's local hall");
+  if (ctx.store.isDevicePinned(roomId) || room.residency === "device") {
+    throw new LobbyError("room_residency_device", "this room is device-resident; it never leaves this device");
+  }
+  if (room.residency !== "fleet" || !room.hostable || room.visibility !== "private") {
+    throw new LobbyError("room_not_fleet", "only residency fleet, hostable, private rooms enter the fleet hall; promote it first (room promote --residency fleet --hostable true)");
+  }
+  return room;
+}
+
+/** The gate context for a local room: its residency, hostable flag and texts. */
+export function gateOfRoom(room: RoomCard): GateRoom {
+  return {
+    residency: room.residency,
+    hostable: room.hostable,
+    title: room.title,
+    purpose: room.purpose,
+    house_rules: room.house_rules,
+    tags: room.tags,
+    slots: room.slots,
+  };
+}
+
+/** The gate context for a door-verified fleet card (a device's view of a room). */
+export function gateOfCard(card: FleetCard): GateRoom {
+  return {
+    residency: card.residency,
+    hostable: true,
+    title: card.title,
+    purpose: card.purpose,
+    tags: card.tags,
+    slots: card.slots,
+  };
 }
 
 export function deviceTerms(ctx: FleetContext): readonly string[] {
@@ -147,27 +205,33 @@ export interface PostOutcome {
   error?: string;
 }
 
-/** Save exact bytes in the outbox, then send once. Never retries. */
-export async function sendPost(ctx: FleetContext, post: PreparedPost, seat: ParticipantSeat): Promise<PostOutcome> {
+/** Save one post's exact bytes in the outbox (once); nothing is sent. */
+export function queuePost(ctx: FleetContext, post: PreparedPost, seat: ParticipantSeat): void {
   const fleet = ctx.store.fleet;
-  if (fleet.outbox(post.event_id) === null) {
-    fleet.addOutbox({
-      event_id: post.event_id,
-      mission_id: post.mission_id,
-      grant_id: seat.grant_id,
-      kind: post.kind,
-      raw_body: post.raw_body,
-      gate_room: JSON.stringify(post.gate),
-      created_at: ctx.now().toISOString(),
-    });
-  }
+  if (fleet.outbox(post.event_id) !== null) return;
+  fleet.addOutbox({
+    event_id: post.event_id,
+    mission_id: post.mission_id,
+    grant_id: seat.grant_id,
+    kind: post.kind,
+    raw_body: post.raw_body,
+    gate_room: JSON.stringify(post.gate),
+    created_at: ctx.now().toISOString(),
+  });
+}
+
+/** Save exact bytes in the outbox, then send once. Never retries, and never
+ * throws once the bytes are saved: any failure leaves the post pending, so
+ * an act with several posts still saves and tries each of them. */
+export async function sendPost(ctx: FleetContext, post: PreparedPost, seat: ParticipantSeat): Promise<PostOutcome> {
+  queuePost(ctx, post, seat);
   try {
     const event: MissionEvent = await participant(ctx).observe(seat, post.raw_body, post.gate);
-    fleet.markOutboxStored(post.event_id, event.received_seq, ctx.now().toISOString());
+    ctx.store.fleet.markOutboxStored(post.event_id, event.received_seq, ctx.now().toISOString());
     return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "stored", received_seq: event.received_seq };
   } catch (error) {
-    if (!(error instanceof LobbyError)) throw error;
-    return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "pending", error: `${error.code}: ${error.message}` };
+    const reason = error instanceof LobbyError ? `${error.code}: ${error.message}` : "internal_error: the send failed unexpectedly; it may or may not have been stored";
+    return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "pending", error: reason };
   }
 }
 
