@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests with mocked fetch. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes; this client neither deploys nor proves them live.
+> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests: mocked fetch, plus the API's own mission gateway and middleware run in process with its service layer replaced. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes. Until that API source is present, the gateway tests check only that this client fails closed against it; this client neither deploys nor proves either change live.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
 > **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
@@ -54,6 +54,9 @@ node /absolute/tools/agenttool-mission.mjs init \
 
 Only the public enrollment JSON is printed. Send that JSON back to the mission
 administrator; it contains the pinned service origin and a public Ed25519 key.
+That origin is the participant's own claim. The administrator checks that it is
+the administrator's service and stops if it differs; it never decides where the
+administrator's bearer is sent.
 The private key remains in `signing-key.pem`. Never paste that file or an
 invitation token into chat. An existing directory is refused; use `enrollment`
 to print its public details again instead of regenerating keys.
@@ -141,8 +144,9 @@ The administrator writes an invitation directly to a private 0600 file:
 Transfer that file through a chosen private credential channel, such as a
 human-selected AirDrop to the other Mac. Do not put it in GitHub, a message,
 model context, URL or command argument. Ensure the received file is owned by
-the recipient and mode 0600 before import. Public enrollment is safe to relay;
-the invitation file is a credential. Lost or ambiguous grant issuance requires
+the recipient and mode 0600 before import. Public enrollment holds no secret
+and is safe to relay, but anyone who relays it can alter its origin field; the
+invitation file is a credential. Lost or ambiguous grant issuance requires
 inspection and, if needed, revocation before deliberately creating a new grant.
 Where the service accepts participant-chosen tokens, the
 [token-free path](#participant-chosen-grant-token-no-token-hand-over) below
@@ -208,13 +212,22 @@ node /absolute/tools/agenttool-mission.mjs grant \
 ```
 
 `grant` is the client's only administrator command and uses no participant
-state. It reads the project bearer from an owner-only file, sends one
-`POST /v1/collaboration/missions/{mission_id}/grants` to the request's pinned
-origin with `token_sha256` added to the grant body, and never prints or stores
-the bearer. It accepts only a response without any `token` field that echoes
-the same `token_sha256` with `token_source: "participant"` and the requested
-grant scope. It then writes a new 0600 **invitation template**: the normal
-invitation fields with `token_sha256` in place of `token`, under the format
+state. The administrator, not the request file, chooses where the bearer goes:
+`https://api.agenttool.dev` by default, or another service only when its exact
+origin is repeated with `--origin https://your-service.example`. The request's
+`origin` must equal that destination; otherwise `grant` stops before it reads
+the bearer file and makes no request. Write the request's `origin` from your own
+service configuration, never from a participant's enrollment; if the
+participant's enrollment names a different origin, stop and resolve that with
+the participant first, because the assembled invitation must match it. `grant`
+reads the project bearer from an owner-only file, sends one
+`POST /v1/collaboration/missions/{mission_id}/grants` to that destination with
+`token_sha256` added to the grant body, and never prints or stores the bearer.
+It accepts only a response without any `token` field that echoes the same
+`token_sha256` with `token_source: "participant"` and the requested grant
+scope, expiring no later than requested. It then writes a new 0600
+**invitation template**: the normal invitation fields with `token_sha256` in
+place of `token`, under the format
 `agenttool-mission-invitation-template/v1`. A response that contains a
 service-generated token is refused without printing or saving it; revoke that
 grant, because the participant's token cannot use it. A service without this
@@ -238,6 +251,12 @@ Assembly finds the stored token whose SHA-256 matches the template, rechecks
 this device's public key, pinned origin, IDs and expiry, and writes a new 0600
 invitation outside any Git working tree. Existing files are never overwritten.
 The ordinary `import`, `invitation` and `accept` steps above then work unchanged.
+
+The token now exists in several owner-only files: `tokens/<sha256>.json`, the
+assembled invitation file, the imported `invitation.json`, and any
+`invitation.replaced-*.json` backups, which keep earlier grant tokens. After a
+successful import, delete the assembled invitation file. Delete backups and
+token files once their grants have expired or been revoked.
 
 ### Replace an imported invitation
 
@@ -263,17 +282,22 @@ node /absolute/tools/agenttool-mission.mjs leave \
   --state "$HOME/.agenttool-mission-trial"
 ```
 
-`leave` sends `POST /v1/collaboration/missions/{mission_id}/leave` with the
-body `{}` and the same token and exact-request proof headers as `accept` and
-`events`. The service revokes only this participant's own grant with reason
+`leave` sends `POST /v1/collaboration/missions/{mission_id}/leave` with zero
+body bytes and no `Content-Type`, and the same token and exact-request proof
+headers as `accept` and `events`; the signed digest covers the SHA-256 of the
+empty body. The service refuses any body. Leaving needs an accepted grant: an
+unaccepted invitation is refused with
+`HTTP 403 collaboration_mission_acceptance_required` and is simply left to
+expire. The service revokes only this participant's own grant with reason
 `participant_left`; other grants and the mission continue. The client checks
 that the response names this mission and grant with `status: "revoked"`,
 `reason: "participant_left"` and a canonical `revoked_at`, then records it once
 as `left-<grant_id>.json` (0600) in the state directory. Leaving is idempotent:
 a repeat returns the same state and never overwrites the first record. An
 uncertain outcome is reported without an automatic retry; repeat `leave`
-explicitly. Afterwards the service refuses that token, and stored observations
-remain.
+explicitly. Afterwards the service refuses that token for every other
+operation; only a repeat `leave` still reads the recorded state. Stored
+observations remain.
 
 ## 3. Complete the first exchange
 
@@ -348,8 +372,9 @@ entry pins `identity_id`, `signing_key_id` and the canonical standard-base64
 without it, any grant for that identity and key is accepted, so a daily grant
 renewal needs no configuration change. Optional `label` is a local name of 1–64
 letters, digits, dots, underscores or hyphens. A list holds 1–32 pins with
-distinct identity/key pairs, public keys and labels, and none may be the local
-participant. The legacy single `peer` form keeps working and still pins its grant.
+distinct identity/key pairs, public keys and labels. No pin, in either form, may
+name this device: neither its identity and signing key under any grant, nor its
+public key. The legacy single `peer` form keeps working and still pins its grant.
 
 ```json
 {
@@ -558,7 +583,9 @@ Keys and tokens are plaintext owner-only local files, not an encrypted vault.
 The owning OS user and processes with that user's access remain trusted. Only
 the configured HTTPS origin is contacted, redirects are refused, TLS remains
 enabled, responses are capped at 1 MiB, and individual requests have a 20-second
-timeout. Grant expiry and revocation are server enforced. Stop using a trial
+timeout. The administrator `grant` sends its bearer only to
+`https://api.agenttool.dev` or the explicitly repeated `--origin`. Grant expiry
+and revocation are server enforced. Stop using a trial
 after its purpose ends: `leave` revokes your own grant where the service offers
 it; otherwise ask its administrator to revoke the grant or mission. Revocation
 does not erase stored observations. A participant-chosen token weakens only one

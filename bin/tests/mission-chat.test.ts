@@ -651,12 +651,22 @@ describe.skipIf(process.platform === "win32")("multi-peer mission chat", () => {
       c => { c.peers[0].grant_id = "not-a-uuid"; }, c => { c.peers[0].grant_id = null; }, c => { c.peers[0].public_key = "bad"; },
       c => { delete c.peers[0].signing_key_id; },
       (c, f) => { c.peers.push({ identity_id: I, signing_key_id: K, public_key: f.profile.public_key, label: "self" }); },
+      // No pin may name this device: not its identity key under another (earlier) grant, nor its public key.
+      c => { c.peers.push({ ...pinOf(peer(), "earlier-self"), identity_id: I, signing_key_id: K }); },
+      c => { c.peers.push({ ...pinOf(peer(), "self-ids", false), identity_id: I, signing_key_id: K }); },
+      (c, f) => { c.peers.push({ ...pinOf(peer(), "same-key"), public_key: f.profile.public_key }); },
     ];
     for (const mutate of variants) {
       const f = fixture(), config = structuredClone(multi(f, peer())); mutate(config, f);
       await expect(chat.inspectChat(f.state, config, f.options)).rejects.toThrow();
       await expect(chat.sendChat(f.state, config, "Not sent", { ...f.options, to: f.sender.identity_id })).rejects.toThrow();
       expect(f.controls.calls).toEqual([]); expect(readdirSync(join(f.state, "outbox"))).toEqual([]);
+    }
+    // The legacy single-peer form refuses the same self-pins.
+    for (const patch of [(f: Fixture) => ({ identity_id: I, signing_key_id: K }), (f: Fixture) => ({ public_key: f.profile.public_key })]) {
+      const f = fixture(), config = { ...structuredClone(f.config), peer: { ...f.config.peer, ...patch(f) } };
+      await expect(chat.inspectChat(f.state, config, f.options)).rejects.toThrow("may not name this device");
+      expect(f.controls.calls).toEqual([]);
     }
     const f = fixture(), config = multi(f, peer(), peer());
     const scope = await chat.inspectChat(f.state, config, f.options);

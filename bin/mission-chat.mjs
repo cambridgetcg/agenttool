@@ -151,7 +151,9 @@ function localParticipant(state, config, op) {
     if (error?.message === 'Invitation expiry is invalid or has passed.') fail('The participant invitation is expired or invalid.', 'grant_expired');
     fail('Cannot validate private participant state.');
   }
-  if (pinFor(config, p)) fail('Select a separate peer participant grant.');
+  // No pin may name this device: not its identity key under any grant, nor its public key.
+  if (pins(config).some(pin => (pin.identity_id === p.identity_id && pin.signing_key_id === p.signing_key_id)
+    || pin.public_key === p.public_key)) fail('Select a separate peer participant; a pin may not name this device.');
   op.limit(Math.min(date(p.expires_at), date(config.expires_at)));
   return p;
 }
@@ -257,7 +259,7 @@ function unpinnedMessage(event, p, config) {
   let envelope;
   try {
     if (typeof event.raw_body !== 'string' || Buffer.byteLength(event.raw_body) > 8192) return null;
-    envelope = JSON.parse(JSON.parse(event.raw_body.replace(/^﻿/, '')).summary);
+    envelope = JSON.parse(JSON.parse(event.raw_body.replace(/^\uFEFF/, '')).summary);
   } catch { return null; }
   if (envelope?.format !== 'agenttool-mission-chat/v1' || envelope.conversation !== config.conversation || envelope.to_identity !== p.identity_id) return null;
   let selected = null;

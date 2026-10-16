@@ -8,6 +8,12 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { Client } from "../../api/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "../../api/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
+import { Hono } from "../../api/node_modules/hono/dist/index.js";
+import { createMissionGateway, type MissionGatewayDependencies } from "../../api/src/routes/collaboration";
+import { collaborationTransportBoundary, isCollaborationPath } from "../../api/src/middleware/collaboration-boundary";
+import { earlyDataReplayProtection } from "../../api/src/middleware/early-data";
+import { apiCors } from "../../api/src/middleware/api-cors";
+import { issueMissionGrantSchema, MissionError, missionOperation } from "../../api/src/services/collaboration/contracts";
 import { canonicalMissionRequestBytes, missionSha256, verifyMissionProof } from "../../api/src/services/collaboration/proof";
 import { correspondenceCanonicalJson } from "../../api/src/services/correspondence/canonical";
 import * as client from "../agenttool-mission.mjs";
@@ -432,7 +438,7 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
   test("admin grant sends only the token hash, accepts a token-free response and writes a private template", async () => {
     const f = fixture(false), a = admin(f), { token_sha256: tokenSha256 } = client.newToken(f.state);
     const calls: Array<{ url: string; init: RequestInit }> = [];
-    const result = await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile },
+    const result = await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN },
       { fetchImpl: async (url: string, init: RequestInit) => { calls.push({ url, init }); return response(grantResponse(a.request, tokenSha256), 201); } });
     expect(calls).toHaveLength(1);
     const [{ url, init }] = calls, headers = new Headers(init.headers);
@@ -493,11 +499,15 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
       a => rewrite(a, { actions: ["mission.admin"] }), a => rewrite(a, { actions: ["mission.read", "mission.read"] }),
       a => rewrite(a, { origin: "http://mission-fixture.invalid" }), a => rewrite(a, { public_key: "not-a-key" }),
       a => rewrite(a, { grant_id: "not-a-uuid" }),
+      // The bearer's destination comes from the administrator, never from the request file alone.
+      () => ({ serviceOrigin: undefined }), () => ({ serviceOrigin: "https://other.invalid" }),
+      () => ({ serviceOrigin: "http://mission-fixture.invalid" }), () => ({ serviceOrigin: `${ORIGIN}/` }),
+      a => rewrite(a, { origin: "https://attacker.invalid" }),
     ];
     for (const mutate of cases) {
       rmSync(join(f.parent, "admin"), { recursive: true, force: true });
       const a = admin(f), patch = mutate(a);
-      const input = { bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, ...patch } as any;
+      const input = { bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN, ...patch } as any;
       const existingTemplate = existsSync(a.templateFile) ? readFileSync(a.templateFile, "utf8") : null;
       let failure = "";
       try { await client.issueGrant(input, options); } catch (error) { failure = String(error); }
@@ -518,6 +528,7 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
       ["missing-echo", request => { const r: any = grantResponse(request, tokenSha256); delete r.token_sha256; return response(r, 201); }, "does not confirm"],
       ["other-grant", request => response(grantResponse({ ...request, grant_id: E }, tokenSha256), 201), "does not confirm"],
       ["other-origin", request => response(grantResponse({ ...request, origin: "https://other.invalid" }, tokenSha256), 201), "does not confirm"],
+      ["later-expiry", request => response(grantResponse({ ...request, expires_at: new Date(Date.parse(request.expires_at) + 1000).toISOString() }, tokenSha256), 201), "does not confirm"],
       ["conflict", () => response({ error: "token_hash_conflict", detail: BEARER }, 409), "HTTP 409 token_hash_conflict"],
       ["older-server", () => response({ error: "invalid_mission_grant_request" }, 400), "HTTP 400 invalid_mission_grant_request"],
       ["transport", () => { throw new Error(`socket closed ${BEARER}`); }, "issuance is uncertain"],
@@ -526,7 +537,7 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
       rmSync(join(f.parent, "admin"), { recursive: true, force: true });
       const a = admin(f); let calls = 0, failure = "";
       try {
-        await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile },
+        await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN },
           { fetchImpl: async () => { calls++; return reply(a.request); } });
       } catch (error) { failure = String(error); }
       expect(calls, name).toBe(1);
@@ -534,6 +545,36 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
       expect(failure, name).not.toContain(BEARER); expect(failure, name).not.toContain(SERVER_TOKEN);
       expect(existsSync(a.templateFile), name).toBe(false);
     }
+  });
+
+  test("admin grant sends the bearer only to the administrator's pinned origin, checked before the bearer is read", async () => {
+    const f = fixture(false), { token_sha256: tokenSha256 } = client.newToken(f.state);
+    const attempt = async (a: ReturnType<typeof admin>, serviceOrigin?: string) => {
+      const urls: string[] = []; let failure = "";
+      try {
+        await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile,
+          ...(serviceOrigin === undefined ? {} : { serviceOrigin }) }, { fetchImpl: async (url: string) => {
+          urls.push(url); return response(grantResponse(a.request, tokenSha256), 201);
+        } });
+      } catch (error) { failure = String(error); }
+      return { urls, failure };
+    };
+    // A participant-relayed origin in the request file, without the administrator's matching --origin, sends nothing.
+    // The bearer file is deliberately unusable (0644): the origin refusal comes first, so it is never read.
+    let a = admin(f); chmodSync(a.bearerFile, 0o644);
+    let outcome = await attempt(a);
+    expect(outcome.urls).toEqual([]); expect(outcome.failure).toContain(`other than ${client.DEFAULT_ORIGIN}`);
+    expect(outcome.failure).not.toContain(BEARER); expect(existsSync(a.templateFile)).toBe(false);
+    rmSync(a.dir, { recursive: true, force: true });
+    a = admin(f, { origin: "https://attacker.invalid" }); chmodSync(a.bearerFile, 0o644);
+    outcome = await attempt(a, ORIGIN);
+    expect(outcome.urls).toEqual([]); expect(outcome.failure).toContain("differs from --origin"); expect(existsSync(a.templateFile)).toBe(false);
+    rmSync(a.dir, { recursive: true, force: true });
+    // Without --origin, the default service is the only destination.
+    a = admin(f, { origin: client.DEFAULT_ORIGIN });
+    outcome = await attempt(a);
+    expect(outcome.failure).toBe(""); expect(outcome.urls).toEqual([`${client.DEFAULT_ORIGIN}/v1/collaboration/missions/${M}/grants`]);
+    expect(JSON.parse(readFileSync(a.templateFile, "utf8")).origin).toBe(client.DEFAULT_ORIGIN);
   });
 
   test("invitation-assemble needs the matching local token and binds origin, key, expiry and a new private output", () => {
@@ -617,10 +658,11 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
       calls++;
       const input = proofInput(url, init, TOKEN), headers = new Headers(init.headers);
       expect(url).toBe(`${ORIGIN}/v1/collaboration/missions/${M}/leave`);
-      expect(init.method).toBe("POST"); expect(init.body).toBe(client.LEAVE_BODY); expect(client.LEAVE_BODY).toBe("{}");
-      expect(init.redirect).toBe("error");
-      expect(headers.get("Authorization")).toBe(`Bearer ${TOKEN}`); expect(headers.get("Content-Type")).toBe("application/json");
-      expect(Buffer.from(client.requestDigest(f.profile, "POST", input.requestTarget, "{}", input.proof.timestamp)))
+      // Zero body bytes, as the service requires: no body, no Content-Type, and a proof over SHA-256("").
+      expect(client.LEAVE_BODY).toBe(""); expect(init.method).toBe("POST"); expect(init.body).toBeUndefined();
+      expect(input.bodyBytes).toHaveLength(0); expect(init.redirect).toBe("error");
+      expect(headers.get("Authorization")).toBe(`Bearer ${TOKEN}`); expect(headers.get("Content-Type")).toBeNull();
+      expect(Buffer.from(client.requestDigest(f.profile, "POST", input.requestTarget, "", input.proof.timestamp)))
         .toEqual(Buffer.from(canonicalMissionRequestBytes(input)));
       expect(verifyMissionProof(input, f.enrollment.public_key, new Date())).toBe(true);
       return response(left);
@@ -644,8 +686,13 @@ describe.skipIf(process.platform === "win32")("participant-chosen grant tokens, 
     await expect(client.leave(uncertain.state, { fetchImpl: async () => response({ error: "collaboration_mission_invalid_credential" }, 401) }))
       .rejects.toThrow("HTTP 401 collaboration_mission_invalid_credential");
     expect(existsSync(join(uncertain.state, `left-${G}.json`))).toBe(false);
+    // Leave never carries a body; accept and events never send an empty one.
     let refusedCalls = 0;
-    await expect(client.request(f.state, "GET", "/leave", "", { fetchImpl: async () => { refusedCalls++; return response({}); } })).rejects.toThrow("Unsupported");
+    const counted = { fetchImpl: async () => { refusedCalls++; return response({}); } };
+    for (const [method, suffix, body] of [["GET", "/leave", ""], ["POST", "/leave", "{}"], ["POST", "/leave", " "],
+      ["POST", "/accept", ""], ["POST", "/events", ""]]) {
+      await expect(client.request(f.state, method, suffix, body, counted)).rejects.toThrow("Unsupported");
+    }
     expect(refusedCalls).toBe(0);
   });
 
@@ -667,8 +714,13 @@ globalThis.fetch = async (url, init) => {
   return new Response(JSON.stringify({ grant, token_sha256: body.token_sha256, token_source: 'participant' }), { status: 201 });
 };
 `, { mode: 0o600 });
-    const granted = run(["grant", "--bearer-file", a.bearerFile, "--grant-file", a.requestFile, "--token-sha256", tokenSha256,
-      "--template-file", a.templateFile], a.dir, preload);
+    const grantArgs = ["grant", "--bearer-file", a.bearerFile, "--grant-file", a.requestFile, "--token-sha256", tokenSha256, "--template-file", a.templateFile];
+    for (const extra of [[], ["--origin", "https://other.invalid"], ["--origin"]]) {
+      const refused = run([...grantArgs, ...extra], a.dir, preload);
+      expect(refused.status).toBe(1); expect(refused.stdout).toBe(""); expect(refused.stderr).not.toContain(BEARER);
+      expect(existsSync(marker)).toBe(false); expect(existsSync(a.templateFile)).toBe(false);
+    }
+    const granted = run([...grantArgs, "--origin", ORIGIN], a.dir, preload);
     expect(granted.stderr).toBe(""); expect(granted.status).toBe(0);
     expect(JSON.parse(granted.stdout)).toMatchObject({ grant_id: G, token_sha256: tokenSha256, token_source: "participant", template_written: true });
     const sent = readFileSync(marker, "utf8").trim().split("\n").map(line => JSON.parse(line));
@@ -688,6 +740,97 @@ globalThis.fetch = async (url, init) => {
     }
     expect(client.participant(f.state)).toMatchObject({ grant_id: G, mission_id: M });
     const help = run(["--help"], f.parent);
-    for (const command of ["token-new", "invitation-assemble", "--replace", "leave", "grant --bearer-file"]) expect(help.stdout).toContain(command);
+    for (const command of ["token-new", "invitation-assemble", "--replace", "leave", "grant --bearer-file", "[--origin URL]"]) expect(help.stdout).toContain(command);
+  });
+});
+
+// The API's real mission gateway and middleware, in process, with only its service layer
+// replaced: the client's exact bytes, headers and proofs meet the API's own transport rules.
+// The participant token-hash and /leave routes are a separate API change; these tests detect
+// them in the checked-out API source. Before that change lands, the older-service tests show
+// the client failing closed; afterwards, the contract tests run the whole flow.
+const PROJECT = "66666666-6666-4666-8666-666666666666", API_KEY = "77777777-7777-4777-8777-777777777777";
+const API_ACCEPTS_TOKEN_HASH = issueMissionGrantSchema.safeParse({ grant_id: G, identity_id: I, signing_key_id: K,
+  actions: ["mission.read"], expires_at: new Date(Date.now() + 3_600_000).toISOString(), token_sha256: "0".repeat(64) }).success;
+const API_HAS_LEAVE = (() => {
+  try {
+    return (missionOperation({ missionId: M, method: "POST", requestTarget: `/v1/collaboration/missions/${M}/leave`, bodyBytes: new Uint8Array() }) as { operation: string }).operation === "leave";
+  } catch { return false; }
+})();
+function gatewayApp(service: Partial<MissionGatewayDependencies["service"]>) {
+  const gateway = createMissionGateway({ origin: () => ORIGIN, service: service as MissionGatewayDependencies["service"],
+    verify: (async (token: string) => token === BEARER ? { ok: true, project: { id: PROJECT }, apiKey: { id: API_KEY } } : { ok: false }) as any });
+  const app = new Hono();
+  app.use("*", collaborationTransportBoundary());
+  app.use("*", earlyDataReplayProtection());
+  app.use("*", apiCors());
+  app.use("*", (c: any, next: () => Promise<void>) => isCollaborationPath(c.req.path) ? gateway(c) : next());
+  app.all("*", (c: any) => c.json({ error: "outside_mission_gateway" }, 404));
+  return { fetchImpl: async (url: string, init: RequestInit) => app.request(url, init) };
+}
+
+describe.skipIf(process.platform === "win32")("mission client through the API mission gateway", () => {
+  test.skipIf(!API_ACCEPTS_TOKEN_HASH || !API_HAS_LEAVE)("token hash grant, assembly, acceptance and zero-byte leave pass the gateway", async () => {
+    const f = fixture(false), a = admin(f), { token_sha256: tokenSha256 } = client.newToken(f.state);
+    const issued: any[] = [], seen: Array<{ operation: string; bodyBytes: number }> = [];
+    let acceptedAt: string | null = null, leftAt: string | null = null;
+    const grant = () => ({ grant_id: G, mission_id: M, project_id: PROJECT, identity_id: I, signing_key_id: K, issuing_api_key_id: API_KEY,
+      origin: ORIGIN, actions: ["mission.observe", "mission.read"], issued_at: new Date().toISOString(), expires_at: a.request.expires_at,
+      accepted_at: acceptedAt, revoked_at: leftAt });
+    const app = gatewayApp({
+      issueMissionGrant: (async (input: any) => {
+        issued.push(input);
+        return { grant: { ...grant(), grant_id: input.grantId, actions: [...input.actions].sort(), expires_at: input.expiresAt },
+          token_sha256: input.tokenSha256, token_source: "participant" };
+      }) as any,
+      executeMissionRequest: (async (input: any) => {
+        // The API's own operation and body rules, then the stored hash and exact-request proof.
+        const { operation } = missionOperation(input) as { operation: string };
+        seen.push({ operation, bodyBytes: input.bodyBytes.length });
+        if (missionSha256(input.token) !== tokenSha256 || input.origin !== ORIGIN || input.proof.grantId !== G || input.proof.identityId !== I
+          || input.proof.keyId !== K || !verifyMissionProof(input, f.enrollment.public_key, new Date()) || (leftAt && operation !== "leave"))
+          throw new MissionError("invalid_credential");
+        const mission = { mission_id: M, descriptor, mission_digest: missionDigest };
+        if (operation === "invitation") return { created: false, data: { mission, grant: grant() } };
+        if (operation === "accept") { acceptedAt ??= new Date().toISOString(); return { created: true, data: { mission, grant: grant() } }; }
+        if (operation === "leave") {
+          if (!acceptedAt) throw new MissionError("acceptance_required");
+          const created = leftAt === null; leftAt ??= new Date().toISOString();
+          return { created, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: leftAt } };
+        }
+        throw new MissionError("invalid_request");
+      }) as any,
+    });
+    const result = await client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN }, app);
+    expect(result).toMatchObject({ grant_id: G, token_sha256: tokenSha256, token_source: "participant", template_written: true });
+    expect(issued).toHaveLength(1);
+    expect(issued[0]).toMatchObject({ projectId: PROJECT, missionId: M, issuerApiKeyId: API_KEY, grantId: G, tokenSha256, origin: ORIGIN });
+    const invitationFile = join(f.parent, "assembled-invitation.json");
+    client.assembleInvitation(f.state, a.templateFile, invitationFile); client.importInvitation(f.state, invitationFile);
+    // Membership begins at acceptance: an unaccepted grant cannot leave.
+    await expect(client.leave(f.state, app)).rejects.toThrow("HTTP 403 collaboration_mission_acceptance_required");
+    expect(existsSync(join(f.state, `left-${G}.json`))).toBe(false);
+    await client.accept(f.state, missionDigest, app);
+    const left = await client.leave(f.state, app);
+    expect(left).toEqual({ mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: leftAt!, recorded: true });
+    expect(JSON.parse(readFileSync(join(f.state, `left-${G}.json`), "utf8")).revoked_at).toBe(leftAt!);
+    expect(await client.leave(f.state, app)).toEqual(left);
+    expect(seen.filter(entry => entry.operation === "leave")).toEqual(Array.from({ length: 3 }, () => ({ operation: "leave", bodyBytes: 0 })));
+    expect(seen.map(entry => entry.operation)).toEqual(["leave", "invitation", "accept", "leave", "leave"]);
+  });
+
+  test.skipIf(API_HAS_LEAVE)("against a service without /leave, leave fails closed and records nothing", async () => {
+    const f = fixture(); let called = 0;
+    const app = gatewayApp({ executeMissionRequest: (async () => { called++; throw new Error("unreachable"); }) as any });
+    await expect(client.leave(f.state, app)).rejects.toThrow("HTTP 404 mission_route_not_found");
+    expect(called).toBe(0); expect(existsSync(join(f.state, `left-${G}.json`))).toBe(false);
+  });
+
+  test.skipIf(API_ACCEPTS_TOKEN_HASH)("against a service without token_sha256, grant is refused and writes no template", async () => {
+    const f = fixture(false), a = admin(f), { token_sha256: tokenSha256 } = client.newToken(f.state); let called = 0;
+    const app = gatewayApp({ issueMissionGrant: (async () => { called++; throw new Error("unreachable"); }) as any });
+    await expect(client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN }, app))
+      .rejects.toThrow("HTTP 400 invalid_mission_grant_request");
+    expect(called).toBe(0); expect(existsSync(a.templateFile)).toBe(false);
   });
 });
