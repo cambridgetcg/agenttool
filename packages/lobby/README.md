@@ -89,8 +89,14 @@ Schema `agenttool-lobby-room/v1`. A card has exactly these fields; anything else
 | `house_rules` | up to 2000 characters |
 | `created_at`, `updated_at` | ISO-8601 UTC with milliseconds |
 
-Text fields refuse control characters, bidirectional overrides, invisible
-separators and lone surrogates, so a card shows on a terminal exactly as stored.
+Text fields refuse control characters, every format character (Unicode `Cf`:
+bidirectional controls, zero-width characters, the BOM), every default-ignorable
+code point (joiners, the soft hyphen, variation selectors, tag characters, the
+combining grapheme joiner, Hangul fillers) and lone surrogates, so a card shows
+on a terminal exactly as stored. Pin petnames and labels follow the same rule.
+This also refuses emoji written with a variation selector or joiner (such as
+`❤️` or family emoji) and the zero-width non-joiner used in Persian and some
+Indic text; write such text without them.
 
 **Invariants** (enforced in code and again in SQLite):
 
@@ -98,8 +104,8 @@ separators and lone surrogates, so a card shows on a terminal exactly as stored.
 - `unlisted` or `public` visibility needs `residency=open`; fleet rooms stay private
   to the fleet. This desk rule follows the design's hall table.
 - A room whose title, purpose, house rules, tags or slot labels match `betfair` or
-  `betangel` (case-insensitive, after NFKC folding and removal of invisible
-  characters, with separators such as "bet angel" allowed) is pinned to
+  `betangel` (case-insensitive, after NFKC folding and removal of format and
+  default-ignorable characters, with separators such as "bet angel" allowed) is pinned to
   `residency=device` and can never be promoted. The pin is sticky in SQLite.
 - `room add` always creates `device` / `private` / not hostable. Widening is a
   separate, confirmed `promote`.
@@ -123,9 +129,12 @@ agenttool-lobby audit verify
 
 Exit codes: `0` done, `1` refused, `2` usage, `3` not confirmed.
 
-`room link <room_id>` without a target prints the current ledger entry on this
-device's terminal. `room show` says only whether the room is linked and to what
-kind of target.
+`room link <room_id>` without a target writes the current ledger entry to the
+controlling terminal (`/dev/tty`) only; stdout gets just its kind. Without a
+terminal it fails with `tty_unavailable` and shows nothing, so an agent that runs
+the CLI through a shell tool does not receive the target. A target a terminal
+could not show faithfully is refused when it is linked. `room show` says only
+whether the room is linked and to what kind of target.
 
 ### Consequential acts
 
@@ -152,6 +161,10 @@ Act records:
 |---|---|
 | `room.promote` | `act`, `at`, `room_id`, `before` and `after` (`residency`, `visibility`, `hostable`), the full new `card`, `schema` |
 | `pin.add` / `pin.remove` | `act`, `at`, the full `pin` record, `schema` |
+
+`at`, in the record and in its audit row, is when the desk built the preview.
+The person may confirm up to five minutes later; the confirmation time is not
+recorded separately.
 
 Each audit row stores `hash = sha256(canonical {act, at, bytes_sha256, prev_hash, subject})`,
 starting from 64 zeros. `audit verify` recomputes the chain.
@@ -193,15 +206,22 @@ closed code; unexpected errors are not echoed into model context.
 ## Egress gate
 
 ```ts
-import { checkEgress } from "@agenttool/lobby";
+import { checkEgress } from "@agenttool/lobby/egress";
 
 const result = checkEgress(text, { room });
 // { ok: false, reasons: ["room_residency_device"] } for any device room
 ```
 
+The `@agenttool/lobby/egress` subpath loads only the gate and its text rules,
+with no MCP SDK, zod or SQLite; the package root also exports it.
+
 `checkEgress` fails closed and returns closed reason codes in a fixed order. It
 never echoes the matched text. It checks the text as written, after NFKC folding
-with invisible characters removed, and lower-cased.
+with format and default-ignorable characters removed, and lower-cased.
+
+The gate does not read `hostable`: it decides only whether text may leave this
+device. A transport that would put a room's text on a hosted service must also
+refuse every room whose card says `hostable: false`.
 
 | Reason | Refuses |
 |---|---|
@@ -210,12 +230,12 @@ with invisible characters removed, and lower-cased.
 | `room_device_only_term` | a room whose supplied text names Betfair work, whatever its label |
 | `text_not_string`, `text_too_large` | non-strings and text over 65,536 UTF-16 units |
 | `device_only_term` | `betfair`, `betangel` and separator or full-width variants |
-| `private_ipv4` | RFC 1918, loopback, link-local, `0.0.0.0/8` and `100.64.0.0/10` addresses, plus partial forms such as `192.168.1.x` |
+| `private_ipv4` | RFC 1918, loopback, link-local, `0.0.0.0/8` and `100.64.0.0/10` addresses, plus partial forms such as `192.168.1.x`, also inside wildcard-DNS names such as `app.10.0.0.7.nip.io` |
 | `private_ipv6` | `fe80::/10` link-local and `fc00::/7` unique-local prefixes |
 | `local_hostname` | `*.local`, `*.lan` and `*.home.arpa` names |
 | `home_path` | `/Users/`, `/home/`, `C:\Users\`, `/var/folders/` |
 | `tilde_path` | `~/`, `~name/`, `$HOME`, `%USERPROFILE%` |
-| `collab_workspace_id` | `ws_` followed by 24 hex |
+| `collab_workspace_id` | `ws_` followed by 24 hex, whatever follows |
 | `agenttool_token` | `atcm_` tokens, and `at_` tokens or key prefixes whose body has capitals or digits |
 | `pem_block` | any `-----BEGIN …-----` marker |
 | `key_like_base64` | base64 or base64url runs of 40 or more characters mixing upper case, lower case and digits |
@@ -234,15 +254,20 @@ text such as commit SHAs, digests, room ids, public addresses and version number
   edits; someone who can rewrite the whole file can rewrite the whole chain.
 - **The gate matches patterns.** Hex runs are allowed so commit SHAs and digests
   can be cited, so a hex-encoded secret is not caught. Lookalike letters from
-  other scripts are not folded. Some harmless text is refused, such as a mixed-case
-  URL path of 40 or more characters, a DID with a long multibase key, or a file
-  named `settings.local.json`. Rephrase rather than weaken a rule.
+  other scripts are not folded. A dotted run of five or more numbers is read as a
+  version, so `1.192.168.0.1.nip.io` passes, and dash-encoded addresses such as
+  `192-168-0-1.sslip.io` are not recognised. Some harmless text is refused, such
+  as a mixed-case URL path of 40 or more characters, a URL path containing
+  `/users/` or `/home/` (`https://api.example.com/v1/users/42`), a DID with a long
+  multibase key, or a file named `settings.local.json`. Rephrase rather than
+  weaken a rule.
 - **The device pin keys on words.** A Betfair room that never names the work is
   not pinned automatically. It still starts as `device`, and leaving the device
   needs a person at the terminal.
 - **One dependency carries transport code.** The MCP SDK package also contains a
   web-standard HTTP handler. The desk imports only its server and stdio modules;
   `tests/boundary.test.ts` fails if `src/` or `bin/` imports a network module,
-  calls `fetch`, or spawns a process.
+  calls `fetch`, or spawns a process. Importing the package root loads the SDK;
+  `@agenttool/lobby/egress` does not.
 - **No hosted surface.** Nothing here contacts agenttool.dev or any chain. The
   fleet and public halls, signing, knocks and grants are later steps.

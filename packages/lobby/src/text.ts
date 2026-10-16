@@ -1,24 +1,32 @@
 /** Text hygiene shared by room cards, the pin book and the egress gate.
  *
- * Stored text must render on a terminal exactly as written: no controls,
- * no bidirectional overrides, no invisible separators, no lone surrogates.
- * Matching (device pin, egress) runs over an NFKC-folded copy with invisible
- * characters removed, so "Bet\u200bfair" or full-width letters do not slip by.
+ * Stored text must render on a terminal exactly as written: no controls, no
+ * bidirectional overrides, no format characters, no default-ignorable code
+ * points (zero-width characters, joiners, the soft hyphen, variation
+ * selectors, tag characters, Hangul fillers) and no lone surrogates.
+ * Matching (device pin, egress) runs over an NFKC-folded copy with the same
+ * invisible characters removed, so "Bet\u200bfair", "Bet\ufe0ffair" or
+ * full-width letters do not slip by.
  */
 import { LobbyError } from "./errors.js";
 
 // C0 controls (tab and newline handled by the caller), DEL, C1 controls,
-// line/paragraph separators, bidi controls and invisible separators/BOM.
+// line/paragraph separators, then every format character (Cf: bidi controls,
+// zero-width characters, the BOM, interlinear annotation marks) and every
+// default-ignorable code point (variation selectors, tag characters, the
+// combining grapheme joiner, Hangul fillers). The last two classes render as
+// nothing, so they would let a card or petname look like different text.
 const UNSAFE_SINGLE_LINE =
-  /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\u200b\u2060\ufeff]/u;
+  /[\u0000-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 const UNSAFE_MULTI_LINE =
-  /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\u200b\u2060\ufeff]/u;
+  /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
-const INVISIBLE_FOR_MATCH = /[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/gu;
+/** Removed before matching: everything that renders as nothing. */
+const INVISIBLE_FOR_MATCH = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
 
 /** Characters that must never reach the terminal inside "exact bytes". */
 export const TERMINAL_UNSAFE =
-  /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\u200b\u2060\ufeff]/u;
+  /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 
 export function codePointLength(text: string): number {
   let count = 0;
@@ -61,9 +69,15 @@ export function checkText(value: unknown, rule: TextRule): string {
   return value;
 }
 
+/** NFKC fold with invisible characters removed: the text as a reader sees it.
+ * Case is kept for matchers that need it. */
+export function visibleForm(text: string): string {
+  return text.normalize("NFKC").replace(INVISIBLE_FOR_MATCH, "");
+}
+
 /** NFKC fold, invisible characters removed, lower-cased: input for matchers. */
 export function foldForMatch(text: string): string {
-  return text.normalize("NFKC").replace(INVISIBLE_FOR_MATCH, "").toLowerCase();
+  return visibleForm(text).toLowerCase();
 }
 
 // "betfair", "betangel" and separator variants such as "Bet Angel" or "bet-fair".

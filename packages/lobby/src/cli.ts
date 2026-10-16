@@ -3,6 +3,8 @@
  * Ordinary acts (room add, set-status, link) write directly. Consequential
  * acts (promote, pin add, pin remove) show their exact bytes on /dev/tty,
  * proceed only on "yes" typed there, and are recorded in the audit log.
+ * A ledger target is shown only on /dev/tty, never on stdout, so an agent that
+ * runs this CLI through a shell tool does not receive it.
  * Contract: packages/lobby/README.md#cli.
  */
 import { parseArgs } from "node:util";
@@ -38,6 +40,9 @@ export interface CliIo {
   env: Record<string, string | undefined>;
   /** confirmOnTty in production; injected only by tests. */
   confirm: (request: ConfirmRequest) => Promise<boolean>;
+  /** showOnTty in production: writes to the controlling terminal only and
+   * throws `tty_unavailable` without one. Injected only by tests. */
+  showOnTty: (text: string) => void;
   now?: () => Date;
 }
 
@@ -49,6 +54,7 @@ export const USAGE = `agenttool-lobby — local lobby desk (device-only; no netw
   room show <room_id> [--json]
   room set-status <room_id> <recruiting|in_play|resting|closed>
   room link <room_id> [<ws_ id | absolute path | none>]
+           (without a target, shows the ledger entry on /dev/tty only)
   room promote <room_id> [--residency device|fleet|open]
                [--visibility private|unlisted|public] [--hostable true|false]
   pin add --did D --kid K --public-key BASE64 --petname P --how H
@@ -251,9 +257,13 @@ async function roomCommand(store: LobbyStore, args: string[], io: CliIo, now: ()
       const [roomId, target] = positionals;
       if (target === undefined) {
         const link = store.getLink(roomId!);
-        io.stdout(link === null
-          ? "not linked\n"
-          : `${link.target_kind}  ${link.target}  linked ${link.linked_at}  (private ledger; this device only)\n`);
+        if (link === null) {
+          io.stdout("not linked\n");
+          return EXIT_OK;
+        }
+        // The target goes to the controlling terminal only; stdout gets its kind.
+        io.showOnTty(`${link.target_kind}  ${link.target}  linked ${link.linked_at}  (private ledger; this device only)\n`);
+        io.stdout(`linked (${link.target_kind}); the entry was shown on the controlling terminal only\n`);
         return EXIT_OK;
       }
       const entry = store.link(roomId!, target, now());

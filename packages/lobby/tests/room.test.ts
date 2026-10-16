@@ -97,6 +97,24 @@ describe("room card schema agenttool-lobby-room/v1", () => {
     }
   });
 
+  test("refuses every default-ignorable and format character, in every text field", () => {
+    // Joiners, the soft hyphen, variation selectors, tag characters, the
+    // grapheme joiner, Hangul fillers and annotation marks all render as nothing.
+    const invisibles = ["\u00ad", "\u034f", "\u115f", "\u180e", "\u200c", "\u200d", "\u2064", "\u3164", "\ufe0f",
+      "\uffa0", "\ufff9", "\u{e0001}", "\u{e0020}", "\u{e0100}"];
+    for (const invisible of invisibles) {
+      const text = `Bet${invisible}fair`;
+      expect(errorCode(() => newRoomCard({ title: text }, NOW))).toBe("invalid_title");
+      expect(errorCode(() => newRoomCard({ title: "t", purpose: text }, NOW))).toBe("invalid_purpose");
+      expect(errorCode(() => newRoomCard({ title: "t", house_rules: text }, NOW))).toBe("invalid_house_rules");
+      expect(errorCode(() => newRoomCard({ title: "t", slots: [{ label: text, tier: "player", count: 1 }] }, NOW)))
+        .toBe("invalid_slot_label");
+      expect(errorCode(() => validateRoomCard({ ...card(), title: text }))).toBe("invalid_title");
+    }
+    // Visible scripts and plain emoji still pass.
+    expect(newRoomCard({ title: "大廳 lobby 🎲 séance" }, NOW).title).toBe("大廳 lobby 🎲 séance");
+  });
+
   test("tags: at most 8, each [a-z0-9-]{1,32}, unique", () => {
     expect(newRoomCard({ title: "t", tags: Array.from({ length: 8 }, (_, i) => `tag-${i}`) }, NOW).tags).toHaveLength(8);
     expect(errorCode(() => newRoomCard({ title: "t", tags: Array.from({ length: 9 }, (_, i) => `tag-${i}`) }, NOW)))
@@ -146,7 +164,8 @@ describe("residency invariants", () => {
   });
 
   test("rooms naming Betfair work are pinned to residency=device", () => {
-    for (const text of ["Betfair", "BETANGEL", "bet angel", "bet-fair", "Ｂｅｔｆａｉｒ", "Bet\u200bfair"]) {
+    for (const text of ["Betfair", "BETANGEL", "bet angel", "bet-fair", "Ｂｅｔｆａｉｒ", "Bet\u200bfair", "Bet\ufe0ffair",
+      "Bet\u034ffair", "Bet\u{e0020}fair", "Bet\u3164fair", "Bet\u200dangel"]) {
       expect(mentionsDeviceOnlyWork({ title: text, purpose: "", house_rules: "", tags: [], slots: [] })).toBe(true);
     }
     const pinnedByPurpose = newRoomCard({ title: "Exchange research", purpose: "uses the betfair stream" }, NOW);

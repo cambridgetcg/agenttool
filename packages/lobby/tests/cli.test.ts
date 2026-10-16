@@ -4,14 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_NOT_CONFIRMED, EXIT_OK, EXIT_REFUSED, EXIT_USAGE, runCli } from "../src/cli.js";
 import { LobbyStore } from "../src/store.js";
-import { confirmOnTty } from "../src/tty.js";
+import { confirmOnTty, showOnTty } from "../src/tty.js";
 import { cleanupTempHomes, fakePublicKey, fakeTerminal, packageRoot, tempHome, type FakeTerminal } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
 
-function desk(answers: Array<string | null> = []) {
+function desk(answers: Array<string | null> = [], options: { noTerminal?: boolean } = {}) {
   const { home } = tempHome();
   const terminal = fakeTerminal(answers);
+  const openTty = options.noTerminal ? () => null : terminal.open;
   const out: string[] = [];
   const err: string[] = [];
   const run = async (...argv: string[]) => {
@@ -21,7 +22,8 @@ function desk(answers: Array<string | null> = []) {
       stdout: (text) => out.push(text),
       stderr: (text) => err.push(text),
       env: { AGENTTOOL_LOBBY_HOME: home },
-      confirm: (request) => confirmOnTty(request, { openTty: terminal.open }),
+      confirm: (request) => confirmOnTty(request, { openTty }),
+      showOnTty: (text) => showOnTty(text, { openTty }),
     });
     return { code, stdout: out.join(""), stderr: err.join("") };
   };
@@ -69,9 +71,27 @@ describe("ordinary room commands", () => {
     expect((await run("room", "set-status", roomId, "in_play")).stdout).toContain("in_play");
     expect((await run("room", "link", roomId, "/srv/example/workspace")).stdout)
       .toBe(`linked ${roomId} to a path in the private ledger (this device only)\n`);
-    expect((await run("room", "link", roomId)).stdout).toStartWith("path  /srv/example/workspace  linked ");
     expect((await run("room", "show", roomId)).stdout).toContain("ledger:       linked (path)");
     expect(terminal.opened).toBe(0);
+
+    // The ledger target goes to the terminal only; stdout gets its kind.
+    const shownLink = await run("room", "link", roomId);
+    expect(shownLink.code).toBe(EXIT_OK);
+    expect(shownLink.stdout).toBe("linked (path); the entry was shown on the controlling terminal only\n");
+    expect(shownLink.stdout + shownLink.stderr).not.toContain("/srv/example");
+    expect(terminal.written.join("")).toStartWith("path  /srv/example/workspace  linked ");
+    expect(terminal.opened).toBe(1);
+  });
+
+  test("room link without a terminal refuses to show the ledger anywhere", async () => {
+    const { run } = desk([], { noTerminal: true });
+    const roomId = await addRoom(run);
+    expect((await run("room", "link", roomId)).stdout).toBe("not linked\n");
+    expect((await run("room", "link", roomId, "ws_0000000000000000deadbeef")).code).toBe(EXIT_OK);
+    const shown = await run("room", "link", roomId);
+    expect(shown.code).toBe(EXIT_REFUSED);
+    expect(shown.stderr).toContain("tty_unavailable");
+    expect(shown.stdout + shown.stderr).not.toContain("deadbeef");
   });
 
   test("Betfair rooms are reported as pinned to this device", async () => {
@@ -205,6 +225,13 @@ describe("the real CLI without a controlling terminal", () => {
       "--how", "read aloud in person",
     ], env, "yes\n");
     expect(pin.code).toBe(EXIT_NOT_CONFIRMED);
+
+    // The ledger target never reaches stdout or stderr, even for the desk's own CLI.
+    expect((await runDetached(["room", "link", roomId, "/srv/example/private-workspace"], env, "")).code).toBe(EXIT_OK);
+    const shown = await runDetached(["room", "link", roomId], env, "");
+    expect(shown.code).toBe(EXIT_REFUSED);
+    expect(shown.stderr).toContain("tty_unavailable");
+    expect(shown.stdout + shown.stderr).not.toContain("private-workspace");
 
     const store = LobbyStore.open(home);
     expect(store.getRoom(roomId)?.residency).toBe("device");

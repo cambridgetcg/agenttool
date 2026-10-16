@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256Hex } from "../src/canonical.js";
 import { LobbyError } from "../src/errors.js";
-import { confirmOnTty, openDevTty } from "../src/tty.js";
+import { confirmOnTty, openDevTty, readLineFrom, showOnTty } from "../src/tty.js";
 import { cleanupTempHomes, fakeTerminal, tempHome } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -58,10 +58,47 @@ describe("confirmOnTty", () => {
 
   test("refuses bytes that a terminal could not show faithfully, before opening it", async () => {
     const terminal = fakeTerminal(["yes"]);
-    for (const unsafe of ["a\u001b[2Jb", "a\u202eb", "a\u0085b", "a\u200bb"]) {
+    for (const unsafe of ["a\u001b[2Jb", "a\u202eb", "a\u0085b", "a\u200bb", "a\ufe0fb", "a\u{e0020}b", "a\u3164b"]) {
       expect(await refusal(() => confirmOnTty({ ...request, bytes: unsafe }, { openTty: terminal.open })))
         .toBe("unsafe_preview");
     }
+    expect(terminal.opened).toBe(0);
+  });
+});
+
+describe("readLineFrom", () => {
+  function bytes(text: string): () => number | null {
+    const buffer = Buffer.from(text, "utf8");
+    let index = 0;
+    return () => (index < buffer.length ? buffer[index++]! : null);
+  }
+
+  test("ends a line at newline or carriage return", () => {
+    expect(readLineFrom(bytes("yes\n"), 256)).toBe("yes");
+    expect(readLineFrom(bytes("yes\r"), 256)).toBe("yes");
+    expect(readLineFrom(bytes("yes\r\n"), 256)).toBe("yes");
+    expect(readLineFrom(bytes("\r"), 256)).toBe("");
+  });
+
+  test("returns null at end of input and caps the line length", () => {
+    expect(readLineFrom(bytes(""), 256)).toBeNull();
+    expect(readLineFrom(bytes("yes"), 256)).toBe("yes");
+    expect(readLineFrom(bytes("y".repeat(300)), 256)).toBe("y".repeat(256));
+  });
+});
+
+describe("showOnTty", () => {
+  test("writes to the terminal only and closes it", () => {
+    const terminal = fakeTerminal([]);
+    showOnTty("path  /srv/example\n", { openTty: terminal.open });
+    expect(terminal.written).toEqual(["path  /srv/example\n"]);
+    expect(terminal.closed).toBe(1);
+  });
+
+  test("fails closed without a terminal and refuses unsafe text before opening one", async () => {
+    expect(await refusal(async () => showOnTty("x\n", { openTty: () => null }))).toBe("tty_unavailable");
+    const terminal = fakeTerminal([]);
+    expect(await refusal(async () => showOnTty("a\u202eb\n", { openTty: terminal.open }))).toBe("unsafe_preview");
     expect(terminal.opened).toBe(0);
   });
 });

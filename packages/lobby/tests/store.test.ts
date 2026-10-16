@@ -99,7 +99,8 @@ describe("private ledger", () => {
     expect(parseLedgerTarget("none")).toEqual({ kind: "none", target: "none" });
     expect(parseLedgerTarget("ws_0000000000000000deadbeef")).toEqual({ kind: "workspace", target: "ws_0000000000000000deadbeef" });
     expect(parseLedgerTarget("/srv/example/./repo/../repo")).toEqual({ kind: "path", target: "/srv/example/repo" });
-    for (const bad of ["", ".", "~", "~/repo", "relative/repo", "ws_short", "None", "/bad\u0000path"]) {
+    for (const bad of ["", ".", "~", "~/repo", "relative/repo", "ws_short", "None", "/bad\u0000path", "/srv/a\u202eb",
+      "/srv/a\u200bb"]) {
       expect(errorCode(() => parseLedgerTarget(bad))).toBe("invalid_ledger_target");
     }
   });
@@ -217,6 +218,9 @@ describe("pin book", () => {
       .toBe("invalid_public_key");
     expect(errorCode(() => store.planPinAdd({ ...input, public_key: "not base64!" }, T0))).toBe("invalid_public_key");
     expect(errorCode(() => store.planPinAdd({ ...input, petname: "stu\u202edio" }, T0))).toBe("invalid_petname");
+    for (const invisible of ["\u200d", "\u200c", "\u00ad", "\ufe0f", "\u{e0020}"]) {
+      expect(errorCode(() => store.planPinAdd({ ...input, petname: `stu${invisible}dio` }, T0))).toBe("invalid_petname");
+    }
     const urlSafe = Buffer.alloc(32, 0xfb).toString("base64url");
     expect(store.planPinAdd({ ...input, public_key: urlSafe }, T0).pin.public_key)
       .toBe(Buffer.alloc(32, 0xfb).toString("base64"));

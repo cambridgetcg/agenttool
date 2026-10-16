@@ -1,8 +1,10 @@
-/** Terminal confirmation for consequential acts.
+/** Terminal confirmation for consequential acts, and terminal-only output.
  *
  * confirmOnTty() writes the exact bytes of the act to /dev/tty and reads the
  * answer from /dev/tty. It never reads stdin, so piping "yes" into the CLI
  * confirms nothing. Without a controlling terminal it fails closed.
+ * showOnTty() writes text that must not reach stdout (the private ledger) to
+ * /dev/tty only, and fails closed the same way.
  *
  * Limit: this is a speed bump against a model approving its own act through
  * a tool call, not a sandbox. A process that can allocate a pseudo-terminal
@@ -44,6 +46,20 @@ function pause(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+/** Read one line from `readByte` (the next byte, or null at end of input),
+ * without its terminator. A line ends at "\n" or "\r", so a terminal left in
+ * raw mode, where Enter sends "\r", still answers. At most `maxBytes` bytes. */
+export function readLineFrom(readByte: () => number | null, maxBytes: number): string | null {
+  const collected: number[] = [];
+  while (collected.length < maxBytes) {
+    const byte = readByte();
+    if (byte === null) return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+    if (byte === 0x0a || byte === 0x0d) break;
+    collected.push(byte);
+  }
+  return Buffer.from(collected).toString("utf8");
+}
+
 /** Open the controlling terminal, or null when there is none. Refuses any
  * path that is not a terminal (a file, a pipe, /dev/null). */
 export function openDevTty(path: string = DEV_TTY): TtyPort | null {
@@ -72,24 +88,17 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
       }
     },
     readLine(maxBytes: number) {
-      const collected: number[] = [];
       const one = Buffer.alloc(1);
-      while (collected.length < maxBytes) {
-        let count: number;
-        try {
-          count = readSync(fd, one, 0, 1, null);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "EAGAIN") {
+      return readLineFrom(() => {
+        while (true) {
+          try {
+            return readSync(fd, one, 0, 1, null) === 0 ? null : one[0]!;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error;
             pause(50);
-            continue;
           }
-          throw error;
         }
-        if (count === 0) return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
-        if (one[0] === 0x0a) break;
-        collected.push(one[0]!);
-      }
-      return Buffer.from(collected).toString("utf8");
+      }, maxBytes);
     },
     close() {
       closeSync(fd);
@@ -100,6 +109,25 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
 function assertTerminalSafe(text: string, what: string): void {
   if (TERMINAL_UNSAFE.test(text)) {
     throw new LobbyError("unsafe_preview", `${what} contains characters that cannot be shown faithfully`);
+  }
+}
+
+/** Write `text` to the controlling terminal only, never to stdout. Throws
+ * `unsafe_preview` before opening the terminal when the text could not be
+ * shown faithfully, and `tty_unavailable` when there is no terminal. */
+export function showOnTty(text: string, options: { openTty?: OpenTty } = {}): void {
+  assertTerminalSafe(text, "the text");
+  const port = (options.openTty ?? (() => openDevTty()))();
+  if (port === null) {
+    throw new LobbyError(
+      "tty_unavailable",
+      "this is shown only on the controlling terminal (/dev/tty); none is available, so nothing was shown",
+    );
+  }
+  try {
+    port.write(text);
+  } finally {
+    port.close();
   }
 }
 

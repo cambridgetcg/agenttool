@@ -265,7 +265,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   keeps device-only room cards, a private room-to-workspace ledger, a pin book
   and an append-only audit log in one owner-only local SQLite file, exposes
   three read-only stdio MCP tools, and exports the egress gate that later
-  transports must call. Promotion and pin changes need `yes` typed on the
+  transports must call (alone as `@agenttool/lobby/egress`). Promotion and pin changes need `yes` typed on the
   controlling terminal. It has no network code, release lane or host
   registration; the fleet and public halls are not connected.
 

@@ -72,11 +72,25 @@ describe("egress gate behaviour", () => {
     const started = performance.now();
     checkEgress("a.".repeat(30_000), { room: { residency: "fleet" } });
     checkEgress("1.".repeat(30_000), { room: { residency: "fleet" } });
+    checkEgress(`${"9".repeat(500)}.`.repeat(120), { room: { residency: "fleet" } });
+    checkEgress("a1.".repeat(20_000), { room: { residency: "fleet" } });
     checkEgress(`bet${" ".repeat(60_000)}`, { room: { residency: "fleet" } });
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("is exported from the package entry for later transports", () => {
+  test("is exported from the package entry and alone from the egress subpath", async () => {
     expect(lobby.checkEgress).toBe(checkEgress);
+    const subpath = await import("@agenttool/lobby/egress");
+    expect(subpath.checkEgress).toBe(checkEgress);
+  });
+
+  test("ignores every default-ignorable and format character when matching", () => {
+    // Each renders as nothing, so "Bet<x>fair" displays as the device-only term.
+    for (const invisible of ["\u00ad", "\u034f", "\u115f", "\u17b4", "\u180e", "\u200b", "\u200c", "\u200d", "\u2060",
+      "\u2064", "\u3164", "\ufe00", "\ufe0f", "\ufeff", "\uffa0", "\ufff9", "\u{1d173}", "\u{e0001}", "\u{e0020}",
+      "\u{e007f}", "\u{e0100}"]) {
+      expect(checkEgress(`Bet${invisible}fair`, { room: { residency: "fleet" } }).reasons).toEqual(["device_only_term"]);
+      expect(checkEgress(`10.${invisible}0.0.7`, { room: { residency: "fleet" } }).reasons).toEqual(["private_ipv4"]);
+    }
   });
 });

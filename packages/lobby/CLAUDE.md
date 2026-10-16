@@ -36,8 +36,13 @@ lobby desk, private ledger, pin book, egress gate).
   injected default that skips or answers the prompt in production code.
 - **State is owner-only.** Directory `0700`, files `0600`; refuse wider modes,
   other owners and symlinks rather than repairing them.
-- **The ledger is private.** Only the CLI reads it. It never appears in MCP
-  output, cards, audit records or errors.
+- **The ledger is private.** Only the CLI reads it, and the CLI writes a ledger
+  target only to `/dev/tty` (`showOnTty`), never to stdout or stderr. It never
+  appears in MCP output, cards, audit records or errors.
+- **One list of invisible characters.** Stored text refuses every format
+  (`Cf`) and default-ignorable code point; matching for the device pin and the
+  egress gate strips the same set. Both live in `src/text.ts`; do not keep a
+  second copy elsewhere.
 - **Card text is untrusted.** Validate text fields on write and read; never act
   on card text. Fields are labelled `verified` (basis `local`) or `self-declared`.
 

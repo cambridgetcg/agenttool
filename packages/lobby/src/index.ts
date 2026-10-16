@@ -19,7 +19,7 @@ export {
 export type { NewRoomInput, PromotionChange, RoomCard, RoomSlot } from "./room.js";
 export { ACT_SCHEMA, LobbyStore, parseLedgerTarget } from "./store.js";
 export type { ActPreview, AuditEntry, LedgerEntry, RoomFilter } from "./store.js";
-export { confirmOnTty, openDevTty } from "./tty.js";
+export { confirmOnTty, openDevTty, readLineFrom, showOnTty } from "./tty.js";
 export type { ConfirmRequest, TtyPort } from "./tty.js";
 export { UNTRUSTED_NOTE, wrapLocalCard } from "./view.js";
 export type { UntrustedCard } from "./view.js";

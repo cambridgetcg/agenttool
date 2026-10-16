@@ -7,6 +7,10 @@
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./egress": "./src/egress.ts"
+  },
   "bin": {
     "agenttool-lobby": "./bin/agenttool-lobby.ts",
     "agenttool-lobby-mcp": "./bin/agenttool-lobby-mcp.ts"

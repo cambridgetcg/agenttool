@@ -81,4 +81,22 @@ describe("no network code in this package", () => {
     expect(manifest.private).toBe(true);
     expect(Object.keys(manifest.dependencies).sort()).toEqual(["@modelcontextprotocol/server", "zod"]);
   });
+
+  test("the ./egress subpath loads the pure gate and no dependency", () => {
+    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+    expect(manifest.exports["./egress"]).toBe("./src/egress.ts");
+    const seen = new Set<string>();
+    const pending = ["src/egress.ts"];
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const specifier of specifiers(readFileSync(join(packageRoot, file), "utf8"))) {
+        // Only sibling modules: no SDK, zod, SQLite or Node built-ins.
+        expect({ file, specifier, local: specifier.startsWith("./") }).toEqual({ file, specifier, local: true });
+        pending.push(join("src", specifier.replace(/\.js$/, ".ts")));
+      }
+    }
+    expect([...seen].sort()).toEqual(["src/egress.ts", "src/errors.ts", "src/text.ts"]);
+  });
 });

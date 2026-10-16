@@ -1,5 +1,6 @@
 /** Egress gate: the one check any later transport runs before text leaves
- * this device (a fleet card, a knock note, table talk).
+ * this device (a fleet card, a knock note, table talk). Import it alone from
+ * "@agenttool/lobby/egress"; it pulls in no MCP or transport code.
  *
  * It fails closed. A room whose residency is `device` can send nothing at all.
  * Otherwise the text is refused when it carries a shape that identifies this
@@ -9,10 +10,12 @@
  * Known limits (see README): pattern matching is not understanding. Hex runs
  * are allowed so commit SHAs and digests can be cited, which means a
  * hex-encoded secret is not caught; lookalike letters from other scripts are
- * not folded; and some harmless text is refused (for example a mixed-case
- * URL path of 40+ characters, or a file named settings.local.json).
+ * not folded; a dotted run of five or more numbers reads as a version and
+ * dash-encoded addresses are not recognised; and some harmless text is
+ * refused (for example a mixed-case URL path of 40+ characters, a URL path
+ * containing /users/, or a file named settings.local.json).
  */
-import { foldForMatch, mentionsDeviceOnlyTerm } from "./text.js";
+import { foldForMatch, mentionsDeviceOnlyTerm, visibleForm } from "./text.js";
 
 export const MAX_EGRESS_CHARS = 65_536;
 
@@ -38,7 +41,11 @@ export const EGRESS_REASONS = [
 export type EgressReason = typeof EGRESS_REASONS[number];
 
 /** The room the text would be sent in. Only residency is required; any card
- * text supplied is also checked, so a mislabelled room cannot carry device-only work. */
+ * text supplied is also checked, so a mislabelled room cannot carry device-only work.
+ *
+ * The gate does not read `hostable`. It decides whether text may leave this
+ * device at all; a transport that would put a room's text on a hosted service
+ * must also refuse every room whose card says `hostable: false`. */
 export interface EgressRoom {
   residency: string;
   title?: string;
@@ -53,16 +60,22 @@ export interface EgressResult {
   reasons: EgressReason[];
 }
 
-const INVISIBLE = /[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/gu;
-
-const DOTTED_QUAD = /(?<![\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?!\.?\d)/g;
+// An address must not start in the middle of a longer number run such as the
+// version 1.10.0.0.1: no digit right before it, and no "N." whose number is
+// itself the start of a run. A hostname label before it ("app.", "v2.") does
+// not excuse it, so wildcard-DNS names such as app.10.0.0.7.nip.io are caught.
+const NOT_MID_NUMBER = String.raw`(?<!\d)(?<!(?:^|[^A-Za-z0-9-])\d+\.)`;
+const DOTTED_QUAD = new RegExp(
+  String.raw`${NOT_MID_NUMBER}(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?!\.?\d)`,
+  "g",
+);
 // Partial private prefixes as people write them: "192.168.1.x", "169.254.", "172.16.0.*".
 const PRIVATE_IPV4_PREFIX = [
-  /(?<![\d.])192\.168\.(?:\d|x|\*)/i,
-  /(?<![\d.])169\.254\.(?:\d|x|\*)/i,
-  /(?<![\d.])172\.(?:1[6-9]|2\d|3[01])\.(?:\d|x|\*)/i,
-  /(?<![\d.])10\.(?:\d{1,3}|x|\*)\.(?:\d{1,3}|x|\*)\.(?:x|\*)/i,
-];
+  String.raw`192\.168\.(?:\d|x|\*)`,
+  String.raw`169\.254\.(?:\d|x|\*)`,
+  String.raw`172\.(?:1[6-9]|2\d|3[01])\.(?:\d|x|\*)`,
+  String.raw`10\.(?:\d{1,3}|x|\*)\.(?:\d{1,3}|x|\*)\.(?:x|\*)`,
+].map((pattern) => new RegExp(`${NOT_MID_NUMBER}${pattern}`, "i"));
 const PRIVATE_IPV6 = [
   /(?<![0-9a-f:])fe[89ab][0-9a-f]:[0-9a-f]{0,4}:/i, // fe80::/10 link-local
   /(?<![0-9a-f:])f[cd][0-9a-f]{2}:[0-9a-f]{0,4}:/i, // fc00::/7 unique-local
@@ -80,7 +93,8 @@ const TILDE_PATH = [
   /\$\{?HOME\}?(?![A-Za-z0-9_])/,
   /%USERPROFILE%/i,
 ];
-const COLLAB_WORKSPACE_ID = /ws_[0-9a-f]{24}(?![0-9a-f])/i;
+// No trailing boundary: ws_ + 24 hex followed by more hex is still refused.
+const COLLAB_WORKSPACE_ID = /ws_[0-9a-f]{24}/i;
 const MISSION_TOKEN = /(?<![A-Za-z0-9])atcm_[A-Za-z0-9_-]{8,}/;
 const BEARER_TOKEN = /(?<![A-Za-z0-9])at_([A-Za-z0-9_-]{8,})/g;
 const PEM_BLOCK = /-----\s*BEGIN [A-Z0-9 ]{1,64}-----/i;
@@ -167,9 +181,9 @@ export function checkEgress(text: string, options: { room: EgressRoom }): Egress
     found.add("text_too_large");
   } else {
     // Check the text as written and as displayed: NFKC folds full-width
-    // digits and slashes, and invisible separators are removed.
-    const visible = text.normalize("NFKC").replace(INVISIBLE, "");
-    for (const variant of [text, visible, foldForMatch(text)]) {
+    // digits and slashes, and format and default-ignorable characters
+    // (zero-width, variation selectors, tag characters) are removed.
+    for (const variant of [text, visibleForm(text), foldForMatch(text)]) {
       for (const reason of contentReasons(variant)) found.add(reason);
     }
   }

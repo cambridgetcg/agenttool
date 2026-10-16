@@ -35,7 +35,7 @@ import {
   type RoomStatus,
   type SlotTier,
 } from "./room.js";
-import { codePointLength } from "./text.js";
+import { codePointLength, TERMINAL_UNSAFE } from "./text.js";
 
 export const STATE_SCHEMA_VERSION = "1";
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
@@ -205,6 +205,7 @@ export function parseLedgerTarget(value: unknown): { kind: LedgerTargetKind; tar
     && isAbsolute(value)
     && !value.includes("\0")
     && !/[\u0000-\u001f\u007f-\u009f]/.test(value)
+    && !TERMINAL_UNSAFE.test(value)
     && codePointLength(value) <= 4096
   ) {
     return { kind: "path", target: normalize(value) };

@@ -239,6 +239,13 @@ describe("stdio MCP server", () => {
 
       const card = await harness.request("tools/call", { name: "lobby_card", arguments: { room_id: zerone.room_id } });
       expect(card.structuredContent.card.untrusted_data).toBe(true);
+      // The input schema refuses a Collab ws_ id or a bare 24-hex id before any lookup.
+      for (const room_id of ["ws_0000000000000000deadbeef", "0000000000000000deadbeef"]) {
+        const wrongShape = await harness.request("tools/call", { name: "lobby_card", arguments: { room_id } })
+          .then((result) => result, (error: Error) => ({ isError: true, message: error.message }));
+        expect(wrongShape.isError).toBe(true);
+        expect(wrongShape.structuredContent?.card).toBeUndefined();
+      }
       const refused = await harness.request("tools/call", { name: "room_promote", arguments: {} })
         .then((result) => result, (error: Error) => ({ isError: true, message: error.message }));
       expect(refused.isError).toBe(true);
