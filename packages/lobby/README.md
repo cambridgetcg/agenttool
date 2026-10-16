@@ -435,7 +435,11 @@ agenttool-lobby ready <knock_id>               # tty
   undecidable), the room is published, the hub's own room is not `closed` and
   its door is `knock` (the requesting desk's CLI checks this too, but the hub
   does not rely on it), the charter digest is the current season's, the token
-  hash is unused, and it has not expired. Anything else is `invalid` with a
+  hash is unused and was not first posted by another desk (a knock or renew
+  note carrying a hash another identity's authentic knock or renew note
+  carried first, by the service's receipt order, is
+  `token_claimed_by_another_desk`; see [Renewal](#renewal-leave-kick-and-block)),
+  and it has not expired. Anything else is `invalid` with a
   reason and cannot be decided. Names and notes are shown as untrusted,
   fingerprint first.
 - **Admit** (tty, CLI only). The approver is the hub desk's DID, which must
@@ -449,7 +453,11 @@ agenttool-lobby ready <knock_id>               # tty
   door-signed **keyed roster** of current members, the hub desk included as
   host, to the season (see [Table talk](#table-talk)). Decisions are final. A
   knock from an identity [blocked](#renewal-leave-kick-and-block) from the room
-  is `invalid` (`blocked`) and cannot be admitted.
+  is `invalid` (`blocked`) and cannot be admitted. On `yes` the hub checks its
+  records again before it asks for the grant (see
+  [Uncertain outcomes](#uncertain-outcomes)): a stop, a decision, a block, a
+  closed or narrowed room, a new season, or a keyed roster another act
+  recorded while the prompt was open refuses the admit with nothing sent.
 - **Deny** (tty) posts a door-signed denial with an optional reason (at most
   280 characters, visible to the fleet) to the directory.
 - **Ready** (tty, device) syncs, finds the door-signed admission for its own
@@ -510,11 +518,12 @@ proof (see [Table talk](#table-talk)).
   notices and enrolled display names. Only text that passed the egress gate is
   ever sent.
 - Every fleet device with a directory grant reads every card, knock (with its
-  note) and decision in the directory, and any renew or leave note and renewal
-  notice posted there (a spectator's, or a member's whose room grant has
-  lapsed): those say who is a member of which room. Season members read that
-  season's admissions, rosters, renewal notices and every table-talk message,
-  whoever it is addressed to.
+  note) and decision in the directory, every renewal notice (the hub posts each
+  one there), and any renew or leave note posted there (a spectator's, or a
+  member's whose room grant has lapsed): those say who is a member of which
+  room. Season members read that season's admissions, rosters, renewal notices
+  for requests made in the room, and every table-talk message, whoever it is
+  addressed to.
 - Nothing hosted maps a room to a local workspace; the private ledger stays on
   the device.
 
@@ -529,10 +538,12 @@ before sending the first, so a failure part-way leaves the rest saved. If no
 verified receipt comes back, the act exits `1` and names the event: `outbox
 list` shows it, and `outbox retry <event_id>` (tty) resends exactly the same
 bytes, for which the service returns the original receipt if the first send
-was stored. A retry is gated by the room as it is now, not as it was: the hub's
+was stored. Every send, first or retried, is gated by the room as it is at that
+moment, not as it was when the act was planned or the post saved: the hub's
 local room must still be `fleet`, hostable, private and not device-pinned (a
 device's knock is gated by its current door-verified card), so a room narrowed
-to the device since the first send sends nothing. A lost `hub init` response
+to the device while a prompt was open, or since the first send, sends nothing
+(the act exits `1` and says the post was not sent). A lost `hub init` response
 is resumed by running `hub init` again. An uncertain `hub season open` is
 resumed by running `hub season open <room_id>` again (no `--days`), which asks
 for the same mission id and bytes and never makes a second mission; it also
@@ -542,7 +553,26 @@ next `hub season open` starts afresh. A hub seat that failed after a season was
 recorded is taken with `hub seat <room_id>`. A grant request whose outcome is
 unknown marks its knock `invalid` (`grant_uncertain:<grant_id>`) until that
 grant id is inspected with the administrator read API; it is never re-requested
-with the same token. A conflicting enrollment (409) stops with nothing recorded.
+with the same token. A grant the service definitely refused (a 4xx, or a gate
+refusal before sending) is forgotten, like a refused season: it was never
+created, so kick and stop do not chase it. A conflicting enrollment (409)
+stops with nothing recorded.
+
+**A prompt left open.** Another terminal on the hub can change its records
+while a prompt is open. On `yes`, each act checks them again before its first
+network effect, inside the local transaction that records it: an act that
+issues, creates, seats, publishes, admits, adds or renews refuses after a
+recorded stop; admit, member add and each renewal refuse for a block, a kick,
+a pause, an ended term, a decided knock, a closed or narrowed room or a new
+season recorded since; and every grant request re-checks the stop right
+before it is sent. A keyed roster's `roster_seq` and a card's `card_seq` are
+inside the signed bytes the person confirmed, so they are never re-signed: if
+another act recorded one for the same season or room meanwhile, the act
+refuses with nothing recorded or sent (`roster_changed`, `card_changed`; run
+it again). Kick and block still record their removal and revoke the grants,
+skip only their roster post, exit `1` and name `hub roster post`. A number
+taken by an act whose grant the service then refused stays unused; a gap is
+harmless (the highest verified roster wins).
 
 The same rules hold for the acts below. A table-talk message, renew note,
 leave notice, renewal notice or roster is saved in the outbox before it is
@@ -566,7 +596,13 @@ stop prints that step for the owner and never performs it), outside agents,
 public halls and every hosted `/v1/lobby` route. Renewal is not unattended:
 every request, sweep and pickup is confirmed at a terminal. A device renews its
 directory grant by running `enroll-device`, `hub relay` and `fleet join` again;
-the hub renews its own seats with `hub seat`.
+the hub renews its own seats with `hub seat`. No command settles an uncertain
+grant by inspecting it: a grant whose request got no trustworthy answer stays
+`requested`, and if the service never created it, kick and stop report its
+revocation as refused (404) until its requested expiry passes (at most 24
+hours). Token-hash ownership is judged from what the hub has read: a season
+whose hub seat has lapsed is not read by the sweep, so a desk's request there
+does not count until `hub seat <room_id>` and the next sweep.
 
 ## Table talk
 
@@ -617,7 +653,9 @@ agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
   file loses one trailing newline.
 - **The gate on every message.** The transport refuses device rooms, rooms
   pinned to the device, unhostable and non-fleet rooms (on the hub, the local
-  room as it is now; on a member desk, the room's door-verified card), and text
+  room as it is when the text is sent, not when the act was planned, so a room
+  narrowed to the device while a prompt is open sends nothing; on a member
+  desk, the room's door-verified card), and text
   naming device-only work, device model or machine names, LAN addresses, local
   hostnames, home or `~` paths, Collab `ws_` ids, tokens, PEM blocks or
   key-like base64. A refused message reaches neither the terminal nor the
@@ -656,14 +694,35 @@ its term.
    exact-request proof, the signature holds, and the note names that same desk.
    It renews only an active member of the room's current season whose term
    has not ended, who is not paused or blocked, in a room still `fleet`,
-   hostable, private and not closed, for a token hash never used. The newest
-   request per member wins. The prompt lists every renewal and every skipped
-   request with its reason. On `yes` it issues the next grant bound to that
-   hash (at most 24 hours, never past the term or season) and posts a
-   door-signed `renewal` notice where the request was posted. The notice
+   hostable, private and not closed, for a token hash never used.
+   - **A hash belongs to the desk that posted it first.** Every fleet device
+     reads the directory and every member reads its season, so a desk could
+     copy another desk's hash into a note signed with its own key. Across every
+     cached authentic knock and renew note, a hash belongs to the identity
+     whose document the service received first; anyone else's note carrying it
+     is skipped (`token_claimed_by_another_desk`) and never burns it (two
+     identities at the same instant in different missions: `token_contested`,
+     neither). A listed hash is checked the same way. Candidates that still
+     share one hash (one desk's requests in two rooms, or a request and a
+     listed entry) are all skipped (`token_hash_collision`).
+   - **The newest request per member and room wins**, in this sweep and later
+     ones: a request already renewed still counts as the newest, so an older
+     one is never renewed after it, and requests it superseded stay quiet.
+   The prompt lists every renewal and every skipped
+   request with its reason. On `yes` it checks each renewal again right before
+   asking for its grant (a stop, kick, block, pause, ended term, new season or
+   a hash bound meanwhile withdraws it, and nothing is requested), issues the
+   next grant bound to that hash (at most 24 hours, never past the term or
+   season) and posts a door-signed `renewal` notice to the directory, which the
+   member reads with its directory grant even after its room grant has lapsed,
+   and also in the room when the request was posted there. The notice
    carries the token-free invitation template; the hub also prints the exact
-   `agenttool-mission-invitation-template/v1` documents.
-3. `room renew accept` finds the door-signed renewal for its open request,
+   `agenttool-mission-invitation-template/v1` documents. A grant request that
+   fails does not stop the rest of the sweep, its leave rosters or its
+   `.outcome` audit entry.
+3. `room renew accept` finds the door-signed renewal for its open request
+   (reading the room and the directory, whichever this desk still may; with
+   neither it says to renew the directory grant first),
    rebuilds the template, assembles the seat with its own token (the
    participant client's `invitation-assemble`), reads the invitation, requires
    the season's digest to be exactly the one this desk accepted before, and on
@@ -698,7 +757,12 @@ Block does the same and records a block: every later knock from that DID on
 that room is `invalid` (`blocked`), and the hub neither admits, adds nor renews
 it. `hub unblock` lifts only the block. Both work after an emergency stop and
 on a room since narrowed to the device: a revocation carries no text; only the
-roster post needs the room to still be a hostable fleet room. The hub desk
+roster post needs the room to still be a hostable fleet room. A block or kick
+recorded while another act's prompt is open holds: that act's admit, member
+add or renewal is refused on `yes`. If another act took the roster's number
+while this prompt was open, the removal is still recorded and its grants
+revoked, but its roster is not posted: post a current one with
+`hub roster post`. The hub desk
 cannot kick or block itself. A per-room block leaves the device's directory
 grant alone.
 
@@ -709,12 +773,17 @@ agenttool-lobby hub stop [--include-adopted]    # tty, hub
 ```
 
 The stop records itself first, so this hub issues, publishes, seats, admits,
-adds and renews nothing more, even if the network then fails. Then it revokes
+adds and renews nothing more, even if the network then fails: every such act
+checks for a recorded stop when it is confirmed and again right before each
+grant request, so an act whose prompt was already open when the stop was
+recorded refuses too. Then it revokes
 every season and directory mission the hub created (`POST .../revoke`, zero
 body bytes), then every grant the hub issued, on any mission, that has not
 expired (`POST .../grants/<id>/revoke`). Missions adopted from hand-made ones,
 and grants registered by hand, are revoked only with `--include-adopted`. Run
-it again to settle anything uncertain.
+it again to settle anything uncertain. A grant another terminal requested
+while the stop's own prompt was open is not in the confirmed list: the stop
+names it, exits `1`, and the next `hub stop` revokes it.
 
 It never rotates a key. It prints, on stdout and stderr, the manual step for
 the owner: revoke or rotate the API key whose bearer is in the hub's Keychain

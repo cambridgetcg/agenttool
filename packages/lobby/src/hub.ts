@@ -16,7 +16,7 @@ import { randomBytes, type KeyObject } from "node:crypto";
 import { LobbyError } from "./errors.js";
 import type { FleetView } from "./fleet.js";
 import { verifyEventProof } from "./fleet.js";
-import { AdminClient, assertSendable, DIRECTORY_GATE_ROOM, mayHaveTakenEffect, type GrantIssue, type MissionView } from "./hosted.js";
+import { AdminClient, assertSendable, DIRECTORY_GATE_ROOM, mayHaveTakenEffect, type GrantIssue, type GrantView, type MissionView } from "./hosted.js";
 import { assertKeychainRef, readBearer, readDoorKey, type KeychainRef } from "./keychain.js";
 import {
   actPreview,
@@ -65,6 +65,8 @@ import {
   type KeyedMember,
   type KnockBody,
   type MemberRosterBody,
+  type RenewBody,
+  type LeaveBody,
   type SignedEnvelope,
 } from "./signed.js";
 import type { ActPreview } from "./store.js";
@@ -188,6 +190,46 @@ export function requireLiveHub(ctx: FleetContext): HubRow {
       `an emergency stop was recorded at ${hub.stopped_at}; this hub issues no more access. Rotate the lobby-issuer API key by hand, then start a new hub`);
   }
   return hub;
+}
+
+/** Ask the service for one grant this hub records. `check` runs inside the
+ * local transaction that records the grant as requested, after the stop is
+ * checked again, so a stop, block or other change recorded from another
+ * terminal while this act's prompt was open stops the request before it is
+ * sent. A token hash this hub already bound is refused there too. A definite
+ * refusal (a 4xx, or a gate refusal before sending: the service created
+ * nothing) forgets the record, as a refused season is forgotten, so kick and
+ * stop never chase a grant that does not exist; an uncertain outcome keeps it
+ * as requested and is never retried. */
+export async function issueRecordedGrant(ctx: FleetContext, admin: AdminClient,
+  record: { mission_id: string; purpose: "directory" | "season"; room_id: string | null; issue: GrantIssue },
+  check: () => void = () => {}): Promise<GrantView> {
+  const fleet = ctx.store.fleet;
+  fleet.transaction(() => {
+    requireLiveHub(ctx);
+    check();
+    const bound = fleet.hubGrantByToken(record.issue.token_sha256);
+    if (bound !== null) {
+      throw new LobbyError("token_reused", `grant ${bound.grant_id} was already requested for this token hash; nothing was sent`);
+    }
+    fleet.addHubGrant({
+      ...record.issue,
+      mission_id: record.mission_id,
+      purpose: record.purpose,
+      room_id: record.room_id,
+      state: "requested",
+      requested_at: ctx.now().toISOString(),
+    });
+  });
+  let grant: GrantView;
+  try {
+    grant = await admin.issueGrant(record.mission_id, record.issue);
+  } catch (error) {
+    if (!mayHaveTakenEffect(error)) fleet.dropRequestedHubGrant(record.issue.grant_id);
+    throw error;
+  }
+  fleet.markHubGrantIssued(grant.grant_id, grant.expires_at);
+  return grant;
 }
 
 export async function adminClient(ctx: FleetContext, hub: HubRow): Promise<AdminClient> {
@@ -461,7 +503,8 @@ export interface RelayResult {
 }
 
 export async function executeRelay(ctx: FleetContext, plan: RelayPlan): Promise<RelayResult> {
-  const hub = requireHub(ctx);
+  // Checked again: a stop may have been recorded while the prompt was open.
+  const hub = requireLiveHub(ctx);
   const fleet = ctx.store.fleet;
   const admin = await adminClient(ctx, hub);
   const now = ctx.now();
@@ -478,9 +521,7 @@ export async function executeRelay(ctx: FleetContext, plan: RelayPlan): Promise<
       enrolled_at: now.toISOString(),
     });
   }
-  fleet.addHubGrant({ ...plan.issue, mission_id: hub.directory_mission_id, purpose: "directory", room_id: null, state: "requested", requested_at: now.toISOString() });
-  const grant = await admin.issueGrant(hub.directory_mission_id, plan.issue);
-  fleet.markHubGrantIssued(grant.grant_id, grant.expires_at);
+  const grant = await issueRecordedGrant(ctx, admin, { mission_id: hub.directory_mission_id, purpose: "directory", room_id: null, issue: plan.issue });
   return {
     join: {
       format: JOIN_PACKET_FORMAT,
@@ -546,9 +587,7 @@ async function executeSeatIssue(ctx: FleetContext, admin: AdminClient, desk: Des
   const fleet = ctx.store.fleet;
   const now = ctx.now().toISOString();
   seat.writeToken();
-  fleet.addHubGrant({ ...seat.issue, mission_id: seat.mission_id, purpose: seat.purpose, room_id: seat.room_id, state: "requested", requested_at: now });
-  const grant = await admin.issueGrant(seat.mission_id, seat.issue);
-  fleet.markHubGrantIssued(grant.grant_id, grant.expires_at);
+  const grant = await issueRecordedGrant(ctx, admin, { mission_id: seat.mission_id, purpose: seat.purpose, room_id: seat.room_id, issue: seat.issue });
   fleet.addDeskGrant({
     grant_id: grant.grant_id,
     mission_id: seat.mission_id,
@@ -595,7 +634,7 @@ export function planHubSeat(ctx: FleetContext, input: { target: string }): SeatP
 }
 
 export async function executeHubSeat(ctx: FleetContext, plan: SeatPlan): Promise<string> {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   return executeSeatIssue(ctx, await adminClient(ctx, hub), requireHubDesk(ctx), plan.seat);
 }
 
@@ -706,8 +745,11 @@ export async function planSeason(ctx: FleetContext, input: {
 }
 
 export async function executeSeason(ctx: FleetContext, plan: SeasonPlan): Promise<{ mission_id: string; mission_digest: string; seat_expires_at: string }> {
-  const hub = requireHub(ctx);
+  // Checked again: a stop may have been recorded, or the room narrowed to the
+  // device, while the prompt was open. The charter is gated by the room as it is now.
+  const hub = requireLiveHub(ctx);
   const desk = requireHubDesk(ctx);
+  const room = requireFleetRoom(ctx, plan.room.room_id);
   const fleet = ctx.store.fleet;
   const admin = await adminClient(ctx, hub);
   const row: SeasonRow = {
@@ -728,7 +770,7 @@ export async function executeSeason(ctx: FleetContext, plan: SeasonPlan): Promis
     const request = { mission_id: row.mission_id, descriptor: plan.mission.descriptor, expires_at: row.expires_at };
     let view: MissionView;
     try {
-      view = await admin.createMission(request, gateOfRoom(plan.room));
+      view = await admin.createMission(request, gateOfRoom(room));
     } catch (error) {
       if (error instanceof LobbyError && error.details.error === "collaboration_mission_conflict") {
         // The same id already exists: it counts only if it is exactly this season.
@@ -807,12 +849,27 @@ export async function planPublish(ctx: FleetContext, input: { room_id: string })
 }
 
 export async function executePublish(ctx: FleetContext, plan: PublishPlan): Promise<PostOutcome> {
-  ctx.store.fleet.addCard({
-    room_id: plan.card.room_id,
-    card_seq: plan.card.card_seq,
-    event_id: plan.post.event_id,
-    summary: plan.post.summary,
-    issued_at: plan.card.issued_at,
+  const fleet = ctx.store.fleet;
+  fleet.transaction(() => {
+    // Checked again: the hub, the room and its season may have changed while
+    // the prompt was open. The card's bytes were confirmed as shown, so a
+    // changed sequence number or season refuses rather than re-signing.
+    requireLiveHub(ctx);
+    requireFleetRoom(ctx, plan.card.room_id);
+    const season = fleet.currentSeason(plan.card.room_id);
+    if (season === null || season.mission_id !== plan.card.season.mission_id) {
+      throw new LobbyError("season_changed", "the room's current season changed while the prompt was open; nothing was recorded or sent. Run room publish again");
+    }
+    if (fleet.nextCardSeq(plan.card.room_id) !== plan.card.card_seq) {
+      throw new LobbyError("card_changed", "another card for this room was recorded while the prompt was open; nothing was recorded or sent. Run room publish again");
+    }
+    fleet.addCard({
+      room_id: plan.card.room_id,
+      card_seq: plan.card.card_seq,
+      event_id: plan.post.event_id,
+      summary: plan.post.summary,
+      issued_at: plan.card.issued_at,
+    });
   });
   return sendPost(ctx, plan.post, plan.seat);
 }
@@ -851,6 +908,76 @@ function knockForgery(ctx: FleetContext, entry: KnockEntry): string | null {
   return null;
 }
 
+export type NoteEntry = { envelope: SignedEnvelope<RenewBody | LeaveBody>; summary: string; event: MissionEvent };
+
+/** Why a desk note (renew, leave) did not come from the enrolled desk that
+ * signed it, or null when it did: the knock checks, plus the note names that
+ * same desk. */
+export function noteForgery(ctx: FleetContext, entry: NoteEntry): string | null {
+  const device = ctx.store.fleet.deviceByFingerprint(entry.envelope.signer);
+  if (device === null) return "unknown_desk";
+  if (entry.event.identity_id !== device.identity_id || entry.event.signing_key_id !== device.signing_key_id) return "sender_mismatch";
+  if (!verifyEventProof(entry.event, device.public_key)) return "bad_event_proof";
+  if (!verifyDocument(entry.envelope, device.public_key)) return "bad_signature";
+  const body = entry.envelope.body;
+  if (body.identity_id !== device.identity_id || body.signing_key_id !== device.signing_key_id) return "names_another_desk";
+  if (Date.parse(body.issued_at) > Date.parse(entry.event.received_at) + 5 * 60_000) return "issued_after_receipt";
+  return null;
+}
+
+// ── Token-hash claims ──────────────────────────────────────────────────
+
+/** Who may have a grant bound to each token hash the hub can see: the
+ * identity whose authentic knock or renew note carrying it the service
+ * received first, across the directory and every season this hub records
+ * (read from the local cache). Every fleet device reads the directory, and
+ * every season member reads that season, so a desk can copy another desk's
+ * hash into a document signed with its own key; the copy is received later
+ * and never takes the hash. Two identities claiming one hash at the same
+ * instant in different missions (whose order is unknown) leave it to
+ * neither: null. Forged documents claim nothing. A hash posted nowhere (a
+ * hand-supplied list) has no entry. */
+export function tokenClaimants(ctx: FleetContext, hub: HubRow): Map<string, string | null> {
+  type Claim = { token: string; identity: string; at: number; mission: string; seq: bigint };
+  const claims: Claim[] = [];
+  const missions = new Set([hub.directory_mission_id, ...ctx.store.fleet.listSeasons().map((season) => season.mission_id)]);
+  for (const missionId of missions) {
+    const view = fleetView(ctx, missionId, doorOf(hub));
+    const claim = (token: string, identity: string, event: MissionEvent) =>
+      claims.push({ token, identity, at: Date.parse(event.received_at), mission: missionId, seq: BigInt(event.received_seq) });
+    for (const entry of view.knocks) {
+      if (knockForgery(ctx, entry) === null) claim(entry.envelope.body.token_sha256, entry.event.identity_id, entry.event);
+    }
+    for (const entry of view.deskNotes) {
+      if (entry.envelope.kind === "renew" && noteForgery(ctx, entry) === null) {
+        claim((entry.envelope.body as RenewBody).token_sha256, entry.envelope.body.identity_id, entry.event);
+      }
+    }
+  }
+  claims.sort((left, right) => left.at - right.at || (left.mission < right.mission ? -1 : left.mission > right.mission ? 1 : 0)
+    || (left.seq < right.seq ? -1 : left.seq > right.seq ? 1 : 0));
+  const first = new Map<string, Claim>();
+  const owners = new Map<string, string | null>();
+  for (const claim of claims) {
+    const head = first.get(claim.token);
+    if (head === undefined) {
+      first.set(claim.token, claim);
+      owners.set(claim.token, claim.identity);
+    } else if (claim.identity !== head.identity && claim.at === head.at && claim.mission !== head.mission) {
+      owners.set(claim.token, null);
+    }
+  }
+  return owners;
+}
+
+/** Why `identity` may not have a grant bound to `token`, judged by who claimed
+ * it first (tokenClaimants), or null. */
+export function claimBlocker(claimants: ReadonlyMap<string, string | null>, token: string, identity: string): string | null {
+  const owner = claimants.get(token);
+  if (owner === undefined || owner === identity) return null;
+  return owner === null ? "token_contested" : "token_claimed_by_another_desk";
+}
+
 /** Who owns each knock id: the desk whose authentic knock used it first, in
  * receipt order, and the distinct documents that desk posted under it. A
  * later knock reusing the id under another desk's key never displaces it. */
@@ -859,7 +986,8 @@ interface KnockOwnership {
   documents: Map<string, Set<string>>;
 }
 
-function assessKnock(ctx: FleetContext, entry: KnockEntry, forgery: string | null, ownership: KnockOwnership): HubKnock {
+function assessKnock(ctx: FleetContext, entry: KnockEntry, forgery: string | null, ownership: KnockOwnership,
+  claimants: ReadonlyMap<string, string | null>): HubKnock {
   const fleet = ctx.store.fleet;
   const body = entry.envelope.body;
   const device = fleet.deviceByFingerprint(entry.envelope.signer);
@@ -901,6 +1029,9 @@ function assessKnock(ctx: FleetContext, entry: KnockEntry, forgery: string | nul
   if (room.status === "closed") return invalid("room_closed");
   if (room.door !== "knock") return invalid("door_invite_only");
   if (season === null || season.mission_digest !== body.charter_digest) return invalid("charter_changed");
+  // A copy of another desk's token hash (from its knock or renew note) is never admitted.
+  const claimed = claimBlocker(claimants, body.token_sha256, entry.event.identity_id);
+  if (claimed !== null) return invalid(claimed);
   const bound = fleet.hubGrantByToken(body.token_sha256);
   // A grant requested for this token whose outcome was never confirmed:
   // inspect that grant id with the administrator read API before anything else.
@@ -940,7 +1071,8 @@ export async function hubKnocks(ctx: FleetContext, input: { sync?: boolean } = {
     documents.add(entry.summary);
     ownership.documents.set(knockId, documents);
   });
-  return entries.map((entry, index) => assessKnock(ctx, entry, forgeries[index] ?? null, ownership));
+  const claimants = tokenClaimants(ctx, hub);
+  return entries.map((entry, index) => assessKnock(ctx, entry, forgeries[index] ?? null, ownership, claimants));
 }
 
 function requirePendingKnock(knocks: HubKnock[], knockId: string): HubKnock {
@@ -1032,16 +1164,29 @@ export function keyedRosterPosts(ctx: FleetContext, roster: KeyedRosterPlan, sig
   return roster.bodies.map((body) => preparePost(ctx, "member_roster", roster.mission_id, sealDocument("member_roster", body, signer).summary, gate));
 }
 
-/** Record a keyed roster as issued (its sequence is then taken). */
-export function recordKeyedRoster(ctx: FleetContext, roster: KeyedRosterPlan): void {
-  ctx.store.fleet.addRoster({
+/** Record a keyed roster as issued, taking its sequence number; call inside
+ * the act's transaction, before any network effect. The number was read when
+ * the act was planned and is inside the signed bytes the person confirmed, so
+ * it is never re-signed: if another act recorded a roster for the season
+ * since (from another terminal while this prompt was open), this records
+ * nothing and returns false. A number taken by an act whose network step
+ * then fails is left unused; a gap in the sequence is harmless (the highest
+ * verified roster wins). */
+export function claimKeyedRoster(ctx: FleetContext, roster: KeyedRosterPlan): boolean {
+  const fleet = ctx.store.fleet;
+  if (fleet.nextRosterSeq(roster.mission_id) !== roster.roster_seq) return false;
+  fleet.addRoster({
     mission_id: roster.mission_id,
     roster_seq: roster.roster_seq,
     room_id: roster.room_id,
     members: JSON.stringify(roster.members),
     issued_at: roster.issued_at,
   });
+  return true;
 }
+
+export const ROSTER_CHANGED_MESSAGE =
+  "another keyed roster for this season was recorded while this prompt was open, so this act's roster number is taken; nothing was recorded or sent. Run the command again";
 
 // ── admit ──────────────────────────────────────────────────────────────
 
@@ -1144,14 +1289,41 @@ export interface DecisionResult {
   posts: PostOutcome[];
 }
 
+/** What `hub admit` checked when it planned, checked again against the hub's
+ * records as they are now (inside the transaction that records the grant
+ * request): another terminal may have decided the knock, blocked the
+ * identity, narrowed or closed the room, changed its season or recorded
+ * another roster while the prompt was open. Any change refuses the act
+ * before anything is sent; the roster's number is taken here. */
+function recheckAdmit(ctx: FleetContext, plan: AdmitPlan): void {
+  const fleet = ctx.store.fleet;
+  const roomId = plan.season.room_id;
+  if (fleet.decision(plan.knock.knock_id) !== null) {
+    throw new LobbyError("knock_decided", "this knock was decided while the prompt was open; nothing was sent");
+  }
+  if (fleet.isBlocked(roomId, plan.issue.identity_id)) {
+    throw new LobbyError("blocked", "this identity was blocked from this room while the prompt was open; nothing was sent");
+  }
+  const room = requireFleetRoom(ctx, roomId);
+  if (room.status === "closed" || room.door !== "knock") {
+    throw new LobbyError("room_changed", "the room was closed or made invite-only while the prompt was open; nothing was sent");
+  }
+  const season = fleet.currentSeason(roomId);
+  if (season === null || season.mission_id !== plan.season.mission_id || season.revoked_at != null
+    || Date.parse(season.expires_at) <= ctx.now().getTime()) {
+    throw new LobbyError("season_changed", "the room's current season changed or ended while the prompt was open; nothing was sent");
+  }
+  if (!claimKeyedRoster(ctx, plan.roster)) throw new LobbyError("roster_changed", ROSTER_CHANGED_MESSAGE);
+}
+
 export async function executeAdmit(ctx: FleetContext, plan: AdmitPlan): Promise<DecisionResult> {
-  const hub = requireHub(ctx);
+  // Checked again: a stop may have been recorded while the prompt was open.
+  const hub = requireLiveHub(ctx);
   const fleet = ctx.store.fleet;
   const admin = await adminClient(ctx, hub);
   const now = ctx.now().toISOString();
-  fleet.addHubGrant({ ...plan.issue, mission_id: plan.season.mission_id, purpose: "season", room_id: plan.season.room_id, state: "requested", requested_at: now });
-  const grant = await admin.issueGrant(plan.season.mission_id, plan.issue);
-  fleet.markHubGrantIssued(grant.grant_id, grant.expires_at);
+  const grant = await issueRecordedGrant(ctx, admin, { mission_id: plan.season.mission_id, purpose: "season", room_id: plan.season.room_id, issue: plan.issue },
+    () => recheckAdmit(ctx, plan));
   fleet.transaction(() => {
     fleet.addDecision({
       knock_id: plan.knock.knock_id,
@@ -1172,7 +1344,6 @@ export async function executeAdmit(ctx: FleetContext, plan: AdmitPlan): Promise<
       grant_id: grant.grant_id,
       admitted_at: now,
     });
-    recordKeyedRoster(ctx, plan.roster);
     // Every post is saved with the decision, before the first send, so a
     // failure part-way through leaves the rest in the outbox, not lost.
     for (const { post, seat } of plan.posts) queuePost(ctx, post, seat);

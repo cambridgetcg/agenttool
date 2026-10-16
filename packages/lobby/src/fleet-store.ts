@@ -758,6 +758,14 @@ export class FleetStore {
       .run({ grant_id: grantId, expires_at: expiresAt });
   }
 
+  /** Forget a grant the service definitely refused (a 4xx: it created
+   * nothing), as a refused season is forgotten. Only a row still `requested`
+   * is removed; an issued grant is never forgotten. */
+  dropRequestedHubGrant(grantId: string): void {
+    this.write();
+    this.db.query("DELETE FROM hub_grants WHERE grant_id = $grant_id AND state = 'requested'").run({ grant_id: grantId });
+  }
+
   hubGrantByToken(tokenSha256: string): HubGrantRow | null {
     return withActions<HubGrantRow>(this.db.query("SELECT * FROM hub_grants WHERE token_sha256 = $token")
       .get({ token: tokenSha256 }) as Row | null);

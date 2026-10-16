@@ -9,7 +9,8 @@
  * - `room renew request` (tty) posts a desk-signed renew note bound to the
  *   SHA-256 of a fresh local token, in the room when this desk may post there
  *   and otherwise in the directory. `room renew accept` (tty) finds the
- *   door-signed renewal for that hash, rebuilds the token-free invitation
+ *   door-signed renewal for that hash (the hub posts it to the directory, and
+ *   to the room too for a request made there), rebuilds the token-free invitation
  *   template, reads the invitation with the new seat and accepts exactly the
  *   digest this desk accepted before.
  * - `room leave` (tty) posts a desk-signed leave notice when it can, then
@@ -343,10 +344,14 @@ export async function planRenewAccept(ctx: FleetContext, input: { room_id: strin
   const fleet = ctx.store.fleet;
   const pending = fleet.deskRenewals(scope.room_id).filter((row) => row.accepted_at === null && row.mission_id === scope.mission_id);
   if (pending.length === 0) throw new LobbyError("no_pending_renewal", "this desk has no open renew request for that room; run room renew request first");
-  // Read wherever this desk still may: the renewal notice is posted where the request was.
+  // Read wherever this desk still may: the hub posts the renewal notice to the
+  // directory, and in the room too when the request was made there.
+  let readable = 0;
   for (const missionId of [scope.mission_id, scope.desk.directory_mission_id]) {
     const seat = liveSeat(ctx, missionId, "mission.read");
-    if (seat !== null) await syncMission(ctx, seat);
+    if (seat === null) continue;
+    readable += 1;
+    await syncMission(ctx, seat);
   }
   const hashes = new Set(pending.map((row) => row.token_sha256));
   const notices: VerifiedDocument<RenewalBody>[] = [scope.mission_id, scope.desk.directory_mission_id]
@@ -357,6 +362,10 @@ export async function planRenewAccept(ctx: FleetContext, input: { room_id: strin
         && body.invitation.identity_id === scope.desk.identity_id && body.invitation.signing_key_id === scope.desk.signing_key_id;
     });
   const row = pending.find((candidate) => notices.some((document) => document.envelope.body.invitation.token_sha256 === candidate.token_sha256));
+  if (row === undefined && readable === 0) {
+    throw new LobbyError("no_seat", "this desk can read neither the room nor the directory now, so it cannot see a renewal notice; " +
+      "renew the directory grant (enroll-device here, hub relay on the hub, fleet join here), then run room renew accept again");
+  }
   if (row === undefined) throw new LobbyError("not_renewed_yet", "no door-signed renewal for this desk's open request yet; the hub renews when it runs hub renew-sweep");
   const matching = notices.filter((document) => document.envelope.body.invitation.token_sha256 === row.token_sha256);
   if (new Set(matching.map((document) => document.summary)).size > 1) {

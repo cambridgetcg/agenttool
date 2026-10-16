@@ -33,10 +33,11 @@ restates the design terms it implements.
   Leave and both revocations carry zero body bytes; keep them that way.
   The gate checks every decoded string of a JSON text as well as the text, so a
   JSON escape (`\n`, `\t`, `\uXXXX`) cannot hide a term. Device rooms,
-  device-pinned rooms and `open` rooms send nothing, and a saved send is gated
-  again by the room as it is when it is retried, never by a stored snapshot
-  alone. Do not add a send path that skips it, and do not weaken a gate rule to
-  let text through.
+  device-pinned rooms and `open` rooms send nothing, and every send, first or
+  retried, is gated by the room as it is when it is sent (`currentGate` in
+  `sendPost`), never by the snapshot taken at plan time or stored with a saved
+  post alone. Do not add a send path that skips it, and do not weaken a gate
+  rule to let text through.
 - **One process, and no secret in argv.** Only `src/keychain.ts` starts a
   process, and only `/usr/bin/security` with fixed arguments. A secret travels
   on the child's stdin (`security -i`) or comes back on its stdout into
@@ -96,9 +97,19 @@ restates the design terms it implements.
   typed at the hub's terminal, never taken from room content.
 - **Removal and the stop never wait on the network.** Kick, block and stop
   record their local effect (member state, block, stop) before the first
-  request; after a stop the hub issues nothing (`requireLiveHub`). The stop
-  prints the manual API-key rotation step and must never call `/v1/keys` or
-  rotate anything itself.
+  request; after a stop the hub issues nothing (`requireLiveHub`, at plan and
+  at execute, and again right before every grant request inside
+  `issueRecordedGrant`). The stop prints the manual API-key rotation step and
+  must never call `/v1/keys` or rotate anything itself.
+- **A prompt can stay open; re-check, never re-sign.** Another terminal can
+  change the hub's records while a prompt is open. Every `execute*` checks
+  again before its first network effect, inside the transaction that records
+  it (stop, block, member state, decision, room, season). Hub grants go only
+  through `issueRecordedGrant`, which forgets a grant the service definitely
+  refused. `roster_seq` and `card_seq` are inside the confirmed signed bytes:
+  take them with `claimKeyedRoster` (or the card check) and refuse when taken,
+  never re-number and re-sign; a removal still records itself and skips only
+  its roster.
 - **Table talk is the participant client's format.** The chat envelope is
   `agenttool-mission-chat/v1` byte for byte (`bin/mission-chat.mjs`
   `message()`); `bin/tests/lobby-table-gateway.test.ts` checks it with that
@@ -109,7 +120,10 @@ restates the design terms it implements.
   season or directory; knocks last at most 72 hours; decisions are final. The
   hub enforces its own room's door and status (never trusting the requesting
   desk's CLI), and a knock id belongs to the desk whose authentic knock used
-  it first.
+  it first. A token hash likewise belongs to the identity whose authentic
+  knock or renew note carried it first (`tokenClaimants`); a copy under
+  another key is never granted, one hash binds one grant per sweep, and the
+  newest renew request per member and room wins across sweeps.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
   hex for signatures, digests and public keys (the gate refuses key-like

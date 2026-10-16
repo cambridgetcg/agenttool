@@ -138,6 +138,10 @@ export function reportPosts(io: FleetIo, posts: PostOutcome[]): number {
   for (const post of posts) {
     if (post.status === "stored") {
       io.stdout(`posted ${post.kind} ${post.event_id} to mission ${post.mission_id} (receipt seq ${post.received_seq})\n`);
+    } else if (post.status === "refused") {
+      pending += 1;
+      io.stderr(`agenttool-lobby: ${post.kind} ${post.event_id} was not sent: the room as it is now refuses it (${post.error}). ` +
+        "Nothing was sent to the service\n");
     } else {
       pending += 1;
       io.stderr(`agenttool-lobby: ${post.kind} ${post.event_id} is saved in the outbox but has no verified receipt (${post.error}). ` +

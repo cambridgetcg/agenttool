@@ -4,27 +4,35 @@
  *
  * Every act here is consequential: a terminal check before planning, the
  * exact bytes on /dev/tty, the audit entry before any network effect, and the
- * project bearer and door key read from the Keychain by this CLI only. Grant
+ * project bearer and door key read from the Keychain by this CLI only. On
+ * `yes` each act checks the hub's records again before its first network
+ * effect (another terminal may have changed them while the prompt was open),
+ * and confirmed roster numbers are never re-signed. Grant
  * and mission revocations go through the administrator revoke routes with
  * zero body bytes; nothing here rotates an API key (the stop prints that
  * manual step for the owner). Contract: packages/lobby/README.md#renewal-leave-kick-and-block.
  */
 import { LobbyError } from "./errors.js";
-import { verifyEventProof } from "./fleet.js";
-import { mayHaveTakenEffect, type GrantIssue } from "./hosted.js";
+import { mayHaveTakenEffect, type GrantIssue, type GrantView } from "./hosted.js";
 import {
   actionsFor,
   adminClient,
+  claimBlocker,
+  claimKeyedRoster,
   doorKey,
   doorOf,
+  issueRecordedGrant,
   keyedRosterFor,
   keyedRosterPosts,
-  recordKeyedRoster,
+  noteForgery,
   requireHub,
   requireHubDesk,
   requireLiveHub,
   requireSeason,
+  ROSTER_CHANGED_MESSAGE,
+  tokenClaimants,
   type KeyedRosterPlan,
+  type NoteEntry,
 } from "./hub.js";
 import {
   actPreview,
@@ -52,15 +60,11 @@ import {
   invitationTemplateOf,
   publicKeyHexOf,
   sealDocument,
-  verifyDocument,
-  type LeaveBody,
   type RenewalBody,
   type RenewBody,
-  type SignedEnvelope,
 } from "./signed.js";
 import type { ActPreview } from "./store.js";
 import type { ParticipantSeat } from "./hosted.js";
-import type { MissionEvent } from "./wire.js";
 import { assertUuid, isSha256Hex, LOBBY_ORIGIN, MISSIONS_PATH, newUuid, publicKeyFingerprint, rawPublicKey } from "./wire.js";
 
 type Seat = ParticipantSeat;
@@ -106,23 +110,7 @@ function recordOutcome(ctx: FleetContext, act: string, subject: string, record: 
   ctx.store.recordAct(actPreview(`${act}.outcome`, subject, ctx.now().toISOString(), [], record));
 }
 
-// ── Desk notes (renew, leave): who really sent them ────────────────────
-
-type NoteEntry = { envelope: SignedEnvelope<RenewBody | LeaveBody>; summary: string; event: MissionEvent };
-
-/** Why a desk note did not come from the enrolled desk that signed it, or
- * null when it did (the same checks as a knock). */
-function noteForgery(ctx: FleetContext, entry: NoteEntry): string | null {
-  const device = ctx.store.fleet.deviceByFingerprint(entry.envelope.signer);
-  if (device === null) return "unknown_desk";
-  if (entry.event.identity_id !== device.identity_id || entry.event.signing_key_id !== device.signing_key_id) return "sender_mismatch";
-  if (!verifyEventProof(entry.event, device.public_key)) return "bad_event_proof";
-  if (!verifyDocument(entry.envelope, device.public_key)) return "bad_signature";
-  const body = entry.envelope.body;
-  if (body.identity_id !== device.identity_id || body.signing_key_id !== device.signing_key_id) return "names_another_desk";
-  if (Date.parse(body.issued_at) > Date.parse(entry.event.received_at) + 5 * 60_000) return "issued_after_receipt";
-  return null;
-}
+// ── Renewal checks ─────────────────────────────────────────────────────
 
 /** Why a member may not be renewed now, or null. */
 function renewBlocker(ctx: FleetContext, room: RoomCard | null, season: SeasonRow, member: MemberRow | null, now: Date): string | null {
@@ -142,8 +130,13 @@ function renewBlocker(ctx: FleetContext, room: RoomCard | null, season: SeasonRo
   return null;
 }
 
-function tokenBlocker(ctx: FleetContext, tokenSha256: string): string | null {
-  if (ctx.store.fleet.renewal(tokenSha256) !== null) return "renewed";
+/** Why a grant for `identityId` may not be bound to this token hash by the
+ * hub's own records, or null: it renewed that identity already (`renewed`),
+ * or it bound the hash to some grant before (`token_reused`, or
+ * `grant_uncertain:<id>` while that grant's outcome is unknown). */
+function tokenBlocker(ctx: FleetContext, tokenSha256: string, identityId: string): string | null {
+  const renewal = ctx.store.fleet.renewal(tokenSha256);
+  if (renewal !== null) return renewal.identity_id === identityId ? "renewed" : "token_reused";
   const bound = ctx.store.fleet.hubGrantByToken(tokenSha256);
   if (bound !== null && bound.state === "requested") return `grant_uncertain:${bound.grant_id}`;
   if (bound !== null) return "token_reused";
@@ -200,8 +193,10 @@ export interface SweepRenewal {
   identity_id: string;
   issue: GrantIssue;
   notice: RenewalBody;
-  post: PreparedPost;
-  seat: Seat;
+  /** The same door-signed notice, posted to the directory (which the member
+   * reads with its directory grant even after its room grant lapses) and,
+   * when the request was posted in the room, to the room as well. */
+  posts: Array<{ post: PreparedPost; seat: Seat }>;
 }
 
 export interface SweepLeave {
@@ -268,59 +263,91 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   const notes: NoteEntry[] = [hub.directory_mission_id, ...readable.map((season) => season.mission_id)]
     .flatMap((missionId) => fleetView(ctx, missionId, doorOf(hub)).deskNotes);
 
+  // Who claimed each token hash first, across every cached knock and renew
+  // note: a desk's copy of another desk's hash never gets a grant bound to it.
+  const claimants = tokenClaimants(ctx, hub);
+
   const candidates = new Map<string, Candidate>();
   const leaves = new Map<string, SweepLeave>();
   let expired = 0;
   const skip = (source: string, roomId: string | null, identityId: string | null, reason: string) => {
     skipped.push({ source, room_id: roomId, identity_id: identityId, reason });
   };
+  const sourceOf = (candidate: Candidate) => candidate.entry === null ? `list:${candidate.member.identity_id}` : `event:${candidate.entry.event.event_id}`;
+  // The newest authentic request per member and room wins. A request this hub
+  // already renewed for that member still counts, so an older one is never
+  // renewed after it, in this sweep or a later one.
+  type Request = { entry: NoteEntry; season: SeasonRow; renewed: boolean };
+  const newest = new Map<string, Request>();
+  const older: Array<{ key: string; request: Request }> = [];
+  const isNewer = (left: NoteEntry, right: NoteEntry) => {
+    const issued = Date.parse(left.envelope.body.issued_at) - Date.parse(right.envelope.body.issued_at);
+    return issued !== 0 ? issued > 0 : Date.parse(left.event.received_at) > Date.parse(right.event.received_at);
+  };
   for (const entry of notes) {
     const body = entry.envelope.body;
     const season = seasonOfRoom.get(body.room_id);
     if (season === undefined) continue; // another room, or one this sweep does not cover
     if (entry.envelope.kind === "leave" && fleet.processedNote(entry.event.event_id) !== null) continue;
-    if (entry.envelope.kind === "renew" && tokenBlocker(ctx, (body as RenewBody).token_sha256) === "renewed") continue;
+    // A request this hub renewed for the member it names is processed; any copy of it stays quiet.
+    const renewedFor = entry.envelope.kind === "renew" ? fleet.renewal((body as RenewBody).token_sha256) : null;
+    const renewed = renewedFor !== null && renewedFor.identity_id === body.identity_id && renewedFor.mission_id === body.mission_id;
     const source = `event:${entry.event.event_id}`;
     const forgery = noteForgery(ctx, entry);
     if (forgery !== null) {
-      skip(source, body.room_id, null, forgery);
+      if (!renewed) skip(source, body.room_id, null, forgery);
       continue;
     }
     if (entry.event.mission_id !== season.mission_id && entry.event.mission_id !== hub.directory_mission_id) {
-      skip(source, body.room_id, body.identity_id, "posted_elsewhere");
+      if (!renewed) skip(source, body.room_id, body.identity_id, "posted_elsewhere");
       continue;
     }
     if (body.mission_id !== season.mission_id) {
-      skip(source, body.room_id, body.identity_id, "season_changed");
+      if (!renewed) skip(source, body.room_id, body.identity_id, "season_changed");
       continue;
     }
-    const memberRow = fleet.member(season.mission_id, body.identity_id);
     if (entry.envelope.kind === "leave") {
+      const memberRow = fleet.member(season.mission_id, body.identity_id);
       if (memberRow === null || (memberRow.state ?? "active") !== "active") continue;
       // A leave signed before this membership began belongs to an earlier one.
       if (Date.parse(body.issued_at) < Date.parse(memberRow.admitted_at) - 5 * 60_000) continue;
       leaves.set(`${body.room_id}:${body.identity_id}`, { event_id: entry.event.event_id, room_id: body.room_id, season, identity_id: body.identity_id });
       continue;
     }
-    const renew = body as RenewBody;
+    const key = `${body.room_id}:${body.identity_id}`;
+    const request: Request = { entry, season, renewed };
+    const current = newest.get(key);
+    if (current === undefined) newest.set(key, request);
+    else if (isNewer(entry, current.entry)) {
+      older.push({ key, request: current });
+      newest.set(key, request);
+    } else older.push({ key, request });
+  }
+  for (const { key, request } of older) {
+    // Superseded by a request already renewed, or renewed itself: processed, and quiet.
+    if (request.renewed || newest.get(key)!.renewed) continue;
+    const body = request.entry.envelope.body;
+    skip(`event:${request.entry.event.event_id}`, body.room_id, body.identity_id, "superseded");
+  }
+  for (const [key, request] of newest) {
+    if (request.renewed) continue;
+    const renew = request.entry.envelope.body as RenewBody;
+    const source = `event:${request.entry.event.event_id}`;
     if (Date.parse(renew.expires_at) <= now.getTime()) {
       expired += 1;
       continue;
     }
-    const blocker = tokenBlocker(ctx, renew.token_sha256) ?? renewBlocker(ctx, ctx.store.getRoom(renew.room_id), season, memberRow, now);
+    const memberRow = fleet.member(request.season.mission_id, renew.identity_id);
+    const blocker = claimBlocker(claimants, renew.token_sha256, renew.identity_id) ?? tokenBlocker(ctx, renew.token_sha256, renew.identity_id)
+      ?? renewBlocker(ctx, ctx.store.getRoom(renew.room_id), request.season, memberRow, now);
     if (blocker !== null) {
       skip(source, renew.room_id, renew.identity_id, blocker);
       continue;
     }
-    const key = `${renew.room_id}:${renew.identity_id}`;
-    const previous = candidates.get(key);
-    if (previous !== undefined && previous.entry !== null
-      && Date.parse((previous.entry.envelope.body as RenewBody).issued_at) >= Date.parse(renew.issued_at)) {
-      skip(source, renew.room_id, renew.identity_id, "superseded");
-      continue;
-    }
-    if (previous?.entry != null) skip(`event:${previous.entry.event.event_id}`, renew.room_id, renew.identity_id, "superseded");
-    candidates.set(key, { basis: "request", entry, room_id: renew.room_id, season, member: memberRow!, token_sha256: renew.token_sha256, posted_to: entry.event.mission_id });
+    candidates.set(key, {
+      basis: "request", entry: request.entry, room_id: renew.room_id, season: request.season, member: memberRow!,
+      token_sha256: renew.token_sha256, posted_to: request.entry.event.mission_id,
+    });
   }
   if (input.hashes !== undefined) {
     const season = seasonOfRoom.get(input.hashes.room_id);
@@ -328,7 +355,8 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     for (const listed of input.hashes.entries) {
       const memberRow = fleet.member(season.mission_id, listed.identity_id);
       const source = `list:${listed.identity_id}`;
-      const blocker = tokenBlocker(ctx, listed.token_sha256) ?? renewBlocker(ctx, ctx.store.getRoom(season.room_id), season, memberRow, now);
+      const blocker = claimBlocker(claimants, listed.token_sha256, listed.identity_id) ?? tokenBlocker(ctx, listed.token_sha256, listed.identity_id)
+        ?? renewBlocker(ctx, ctx.store.getRoom(season.room_id), season, memberRow, now);
       if (blocker !== null) {
         skip(source, season.room_id, listed.identity_id, blocker);
         continue;
@@ -344,8 +372,20 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     const candidate = candidates.get(key);
     if (candidate === undefined) continue;
     candidates.delete(key);
-    skip(candidate.entry === null ? `list:${candidate.member.identity_id}` : `event:${candidate.entry.event.event_id}`, candidate.room_id,
-      candidate.member.identity_id, "member_left");
+    skip(sourceOf(candidate), candidate.room_id, candidate.member.identity_id, "member_left");
+  }
+  // One token hash binds one grant: candidates sharing a hash (one desk's
+  // requests in two rooms, or a request and a listed entry) all wait for a
+  // fresh request.
+  const byToken = new Map<string, string[]>();
+  for (const [key, candidate] of candidates) byToken.set(candidate.token_sha256, [...(byToken.get(candidate.token_sha256) ?? []), key]);
+  for (const keys of byToken.values()) {
+    if (keys.length < 2) continue;
+    for (const key of keys) {
+      const candidate = candidates.get(key)!;
+      candidates.delete(key);
+      skip(sourceOf(candidate), candidate.room_id, candidate.member.identity_id, "token_hash_collision");
+    }
   }
 
   const needsDoor = candidates.size > 0 || leaves.size > 0;
@@ -354,17 +394,22 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   for (const candidate of candidates.values()) {
     const device: HubDeviceRow | null = fleet.device(candidate.member.identity_id);
     const room = ctx.store.getRoom(candidate.room_id)!;
-    const source = candidate.entry === null ? `list:${candidate.member.identity_id}` : `event:${candidate.entry.event.event_id}`;
+    const source = sourceOf(candidate);
     if (device === null) {
       skip(source, candidate.room_id, candidate.member.identity_id, "member_key_unknown");
       continue;
     }
-    const seat = liveSeat(ctx, candidate.posted_to, "mission.observe", 5 * 60_000);
-    if (seat === null) {
-      skip(source, candidate.room_id, candidate.member.identity_id,
-        candidate.posted_to === hub.directory_mission_id ? "hub_directory_seat_lapsed" : "hub_seat_lapsed");
+    // The notice always goes to the directory, which the member can read with
+    // its directory grant even after its room grant has lapsed (renewal is
+    // manual, so the sweep often runs after that). A request made in the room
+    // is answered in the room too, while the hub may post there.
+    const directorySeat = liveSeat(ctx, hub.directory_mission_id, "mission.observe", 5 * 60_000);
+    if (directorySeat === null) {
+      skip(source, candidate.room_id, candidate.member.identity_id, "hub_directory_seat_lapsed");
       continue;
     }
+    const seasonSeat = candidate.posted_to === candidate.season.mission_id
+      ? liveSeat(ctx, candidate.season.mission_id, "mission.observe", 5 * 60_000) : null;
     const issue: GrantIssue = {
       grant_id: newUuid(),
       identity_id: device.identity_id,
@@ -389,6 +434,8 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
       issued_at: now.toISOString(),
     };
     const summary = sealDocument("renewal", notice, signer!).summary;
+    // renewBlocker checked that the room is still fleet, hostable, private and not device-pinned.
+    const gate = gateOfRoom(room);
     renewals.push({
       basis: candidate.basis,
       request_event_id: candidate.entry?.event.event_id ?? null,
@@ -398,9 +445,10 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
       identity_id: issue.identity_id,
       issue,
       notice,
-      // renewBlocker checked that the room is still fleet, hostable, private and not device-pinned.
-      post: preparePost(ctx, "renewal", candidate.posted_to, summary, gateOfRoom(room)),
-      seat,
+      posts: [
+        { post: preparePost(ctx, "renewal", hub.directory_mission_id, summary, gate), seat: directorySeat },
+        ...(seasonSeat === null ? [] : [{ post: preparePost(ctx, "renewal", candidate.season.mission_id, summary, gate), seat: seasonSeat }]),
+      ],
     });
   }
   const rosters: RosterPosts[] = [];
@@ -422,7 +470,8 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   const preview = actPreview("hub.renew.sweep", roomFilter ?? "all-rooms", at, [
     ...renewals.map((renewal) => `renew did:at:${renewal.identity_id} in ${renewal.room_id}: grant ${renewal.issue.grant_id} ` +
       `${renewal.issue.actions.join("+")} until ${renewal.issue.expires_at} (term ends ${renewal.notice.term_ends_at}); ` +
-      `${renewal.basis === "list" ? "token hash from the supplied list" : `request ${renewal.request_event_id}`}; notice to ${renewal.post.mission_id}`),
+      `${renewal.basis === "list" ? "token hash from the supplied list" : `request ${renewal.request_event_id}`}; ` +
+      `notice to ${renewal.posts.map(({ post }) => post.mission_id === hub.directory_mission_id ? `the directory ${post.mission_id}` : `the room ${post.mission_id}`).join(" and ")}`),
     ...leaveList.map((leave) => `did:at:${leave.identity_id} left ${leave.room_id} (notice ${leave.event_id}): dropped from the roster`),
     ...rosters.map((item) => `post keyed roster #${item.roster.roster_seq} (${item.roster.members.length} members) to ${item.roster.mission_id}`),
     ...skipped.map((item) => `skip ${item.source}${item.identity_id === null ? "" : ` did:at:${item.identity_id}`}: ${item.reason}`),
@@ -435,7 +484,7 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
       request_event_id: renewal.request_event_id,
       request_sha256: renewal.request_sha256,
       grant: { mission_id: renewal.season.mission_id, ...renewal.issue },
-      notice: { mission_id: renewal.post.mission_id, event_id: renewal.post.event_id, summary: renewal.post.summary },
+      notices: renewal.posts.map(({ post }) => ({ mission_id: post.mission_id, event_id: post.event_id, summary: post.summary })),
     })),
     leaves: leaveList.map((leave) => ({ room_id: leave.room_id, mission_id: leave.season.mission_id, identity_id: leave.identity_id, event_id: leave.event_id })),
     rosters: rosters.map(rosterRecord),
@@ -448,11 +497,24 @@ export interface SweepRenewalOutcome {
   identity_id: string;
   room_id: string;
   grant_id: string;
-  status: "renewed" | "uncertain" | "refused";
+  /** `withdrawn`: the hub's records changed while the prompt was open (a
+   * stop, kick, block, pause, term or season change, or the token hash bound
+   * since), so no grant was requested. */
+  status: "renewed" | "uncertain" | "refused" | "withdrawn";
   grant_expires_at?: string;
-  notice?: PostOutcome;
+  notices?: PostOutcome[];
   invitation_template?: Record<string, string>;
   error?: string;
+}
+
+/** Why a planned renewal may no longer be issued, judged by the hub's
+ * records as they are now, or null. */
+function renewalWithdrawn(ctx: FleetContext, renewal: SweepRenewal): string | null {
+  const fleet = ctx.store.fleet;
+  const season = fleet.currentSeason(renewal.room_id);
+  if (season === null || season.mission_id !== renewal.season.mission_id) return "season_changed";
+  return tokenBlocker(ctx, renewal.issue.token_sha256, renewal.identity_id)
+    ?? renewBlocker(ctx, ctx.store.getRoom(renewal.room_id), season, fleet.member(season.mission_id, renewal.identity_id), ctx.now());
 }
 
 export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Promise<{ renewals: SweepRenewalOutcome[]; leaves: number; rosters: PostOutcome[] }> {
@@ -460,13 +522,21 @@ export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Pro
   const fleet = ctx.store.fleet;
   const at = ctx.now().toISOString();
   // Leaves are recorded first: they need no network and stop renewals at once.
+  // Each roster's number must still be free (it is inside the confirmed
+  // bytes); if another act took one while the prompt was open, nothing is
+  // recorded or sent.
   fleet.transaction(() => {
+    for (const item of plan.rosters) {
+      if (!claimKeyedRoster(ctx, item.roster)) throw new LobbyError("roster_changed", ROSTER_CHANGED_MESSAGE);
+    }
     for (const leave of plan.leaves) {
-      fleet.setMemberState(leave.season.mission_id, leave.identity_id, "left", at);
-      fleet.addProcessedNote({ event_id: leave.event_id, kind: "leave", identity_id: leave.identity_id, outcome: "left", processed_at: at });
+      const row = fleet.member(leave.season.mission_id, leave.identity_id);
+      const state = row === null ? "absent" : row.state ?? "active";
+      // A member kicked or blocked while the prompt was open stays so.
+      if (state === "active") fleet.setMemberState(leave.season.mission_id, leave.identity_id, "left", at);
+      fleet.addProcessedNote({ event_id: leave.event_id, kind: "leave", identity_id: leave.identity_id, outcome: state === "active" ? "left" : `already_${state}`, processed_at: at });
     }
     for (const item of plan.rosters) {
-      recordKeyedRoster(ctx, item.roster);
       for (const { post, seat } of item.posts) queuePost(ctx, post, seat);
     }
   });
@@ -474,12 +544,24 @@ export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Pro
   if (plan.renewals.length > 0) {
     const admin = await adminClient(ctx, hub);
     for (const renewal of plan.renewals) {
-      fleet.addHubGrant({ ...renewal.issue, mission_id: renewal.season.mission_id, purpose: "season", room_id: renewal.room_id, state: "requested", requested_at: at });
       const base = { identity_id: renewal.identity_id, room_id: renewal.room_id, grant_id: renewal.issue.grant_id };
+      let grant: GrantView;
       try {
-        const grant = await admin.issueGrant(renewal.season.mission_id, renewal.issue);
+        // Checked again, with the request's record, right before it is sent:
+        // the stop, the member, the room, the season and the token hash as they are now.
+        grant = await issueRecordedGrant(ctx, admin,
+          { mission_id: renewal.season.mission_id, purpose: "season", room_id: renewal.room_id, issue: renewal.issue }, () => {
+            const reason = renewalWithdrawn(ctx, renewal);
+            if (reason !== null) throw new LobbyError("renewal_withdrawn", `${reason} (changed while the prompt was open); no grant was requested`);
+          });
+      } catch (error) {
+        if (error instanceof LobbyError && (error.code === "renewal_withdrawn" || error.code === "hub_stopped" || error.code === "token_reused")) {
+          outcomes.push({ ...base, status: "withdrawn", error: `${error.code}: ${error.message}` });
+        } else outcomes.push({ ...base, ...failureOf(error) });
+        continue;
+      }
+      try {
         fleet.transaction(() => {
-          fleet.markHubGrantIssued(grant.grant_id, grant.expires_at);
           fleet.addRenewal({
             token_sha256: renewal.issue.token_sha256,
             room_id: renewal.room_id,
@@ -488,26 +570,25 @@ export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Pro
             grant_id: grant.grant_id,
             basis: renewal.basis,
             request_event_id: renewal.request_event_id,
-            note_event_id: renewal.post.event_id,
+            note_event_id: renewal.posts[0]!.post.event_id,
             renewed_at: at,
           });
-          queuePost(ctx, renewal.post, renewal.seat);
+          for (const { post, seat } of renewal.posts) queuePost(ctx, post, seat);
         });
-        outcomes.push({
-          ...base,
-          status: "renewed",
-          grant_expires_at: grant.expires_at,
-          notice: await sendPost(ctx, renewal.post, renewal.seat),
-          invitation_template: invitationTemplateOf(renewal.notice),
-        });
-      } catch (error) {
-        outcomes.push({ ...base, ...failureOf(error) });
+      } catch {
+        // The grant exists; only the local record failed. Say so rather than abort the sweep.
+        outcomes.push({ ...base, status: "uncertain", grant_expires_at: grant.expires_at,
+          error: "internal_error: the grant was issued but this hub could not record the renewal; inspect it before any new attempt" });
+        continue;
       }
+      const notices: PostOutcome[] = [];
+      for (const { post, seat } of renewal.posts) notices.push(await sendPost(ctx, post, seat));
+      outcomes.push({ ...base, status: "renewed", grant_expires_at: grant.expires_at, notices, invitation_template: invitationTemplateOf(renewal.notice) });
     }
   }
   const rosters = await sendAll(ctx, plan.rosters.flatMap((item) => item.posts));
   recordOutcome(ctx, "hub.renew.sweep", plan.preview.subject, {
-    renewals: outcomes.map(({ invitation_template: _template, notice, ...rest }) => ({ ...rest, notice: notice?.status ?? null })),
+    renewals: outcomes.map(({ invitation_template: _template, notices, ...rest }) => ({ ...rest, notices: (notices ?? []).map((post) => post.status) })),
     leaves: plan.leaves.map((leave) => ({ room_id: leave.room_id, identity_id: leave.identity_id })),
     rosters: rosters.map((post) => ({ event_id: post.event_id, status: post.status })),
   });
@@ -669,12 +750,28 @@ export async function executeMemberAdd(ctx: FleetContext, plan: MemberAddPlan): 
   const fleet = ctx.store.fleet;
   const at = ctx.now().toISOString();
   fleet.transaction(() => {
+    // Checked again: a stop, a block, another add or a season change may have
+    // been recorded while the prompt was open. Any change refuses the act
+    // before anything is recorded or sent.
+    requireLiveHub(ctx);
+    const roomId = plan.season.room_id;
+    requireFleetRoom(ctx, roomId);
+    const season = fleet.currentSeason(roomId);
+    if (season === null || season.mission_id !== plan.season.mission_id || season.revoked_at != null) {
+      throw new LobbyError("season_changed", "the room's current season changed while the prompt was open; nothing was recorded or sent");
+    }
+    if (fleet.isBlocked(roomId, plan.member.identity_id)) {
+      throw new LobbyError("blocked", "this identity was blocked from this room while the prompt was open; nothing was recorded or sent");
+    }
+    if (plan.newDevice && (fleet.device(plan.device.identity_id) !== null || fleet.deviceByFingerprint(plan.device.fingerprint) !== null)) {
+      throw new LobbyError("identity_conflict", "this identity or key was recorded while the prompt was open; nothing was recorded or sent. Run the command again");
+    }
+    if (!claimKeyedRoster(ctx, plan.rosters.roster)) throw new LobbyError("roster_changed", ROSTER_CHANGED_MESSAGE);
     if (plan.newDevice) fleet.addDevice(plan.device);
     fleet.addMember(plan.member);
     for (const grantId of plan.extraGrants) {
       fleet.addExtraGrant({ grant_id: grantId, mission_id: plan.season.mission_id, room_id: plan.season.room_id, identity_id: plan.member.identity_id, recorded_at: at });
     }
-    recordKeyedRoster(ctx, plan.rosters.roster);
     for (const { post, seat } of plan.rosters.posts) queuePost(ctx, post, seat);
   });
   return sendAll(ctx, plan.rosters.posts);
@@ -739,7 +836,8 @@ export async function planRosterPost(ctx: FleetContext, input: { room_id: string
 
 export async function executeRosterPost(ctx: FleetContext, plan: RosterPostPlan): Promise<PostOutcome[]> {
   ctx.store.fleet.transaction(() => {
-    recordKeyedRoster(ctx, plan.rosters.roster);
+    requireLiveHub(ctx);
+    if (!claimKeyedRoster(ctx, plan.rosters.roster)) throw new LobbyError("roster_changed", ROSTER_CHANGED_MESSAGE);
     for (const { post, seat } of plan.rosters.posts) queuePost(ctx, post, seat);
   });
   return sendAll(ctx, plan.rosters.posts);
@@ -885,30 +983,37 @@ async function revokeGrants(ctx: FleetContext, hub: HubRow, revocations: readonl
   return outcomes;
 }
 
-export async function executeRemoval(ctx: FleetContext, plan: RemovalPlan): Promise<{ revocations: RevocationOutcome[]; rosters: PostOutcome[] }> {
+export async function executeRemoval(ctx: FleetContext, plan: RemovalPlan)
+  : Promise<{ revocations: RevocationOutcome[]; rosters: PostOutcome[]; roster_changed: boolean }> {
   const hub = requireHub(ctx);
   const fleet = ctx.store.fleet;
   const at = ctx.now().toISOString();
   // Local records first: the block refuses knocks and the state stops
-  // renewals even if every network call then fails.
+  // renewals even if every network call then fails. A roster whose number
+  // another act took while the prompt was open is not posted (its bytes were
+  // confirmed as shown and are never re-signed); the removal still holds.
+  let rosterChanged = false;
   fleet.transaction(() => {
-    if (plan.block) fleet.block(plan.room_id, plan.identity_id, at);
-    if (plan.season !== null && plan.member !== null && (plan.member.state ?? "active") === "active") {
+    if (plan.block && !fleet.isBlocked(plan.room_id, plan.identity_id)) fleet.block(plan.room_id, plan.identity_id, at);
+    const current = plan.season === null ? null : fleet.member(plan.season.mission_id, plan.identity_id);
+    if (plan.season !== null && current !== null && (current.state ?? "active") === "active") {
       fleet.setMemberState(plan.season.mission_id, plan.identity_id, plan.block ? "blocked" : "kicked", at);
     }
     if (plan.rosters !== null) {
-      recordKeyedRoster(ctx, plan.rosters.roster);
-      for (const { post, seat } of plan.rosters.posts) queuePost(ctx, post, seat);
+      if (claimKeyedRoster(ctx, plan.rosters.roster)) {
+        for (const { post, seat } of plan.rosters.posts) queuePost(ctx, post, seat);
+      } else rosterChanged = true;
     }
   });
   const revocations = await revokeGrants(ctx, hub, plan.revocations);
-  const rosters = plan.rosters === null ? [] : await sendAll(ctx, plan.rosters.posts);
+  const rosters = plan.rosters === null || rosterChanged ? [] : await sendAll(ctx, plan.rosters.posts);
   recordOutcome(ctx, plan.block ? "hub.block" : "hub.kick", plan.room_id, {
     identity_id: plan.identity_id,
     revocations,
     rosters: rosters.map((post) => ({ event_id: post.event_id, status: post.status })),
+    roster_changed: rosterChanged,
   });
-  return { revocations, rosters };
+  return { revocations, rosters, roster_changed: rosterChanged };
 }
 
 export interface UnblockPlan {
@@ -996,12 +1101,17 @@ export function planStop(ctx: FleetContext, input: { include_adopted: boolean })
 export interface StopOutcome {
   missions: Array<{ mission_id: string; kind: string; status: "revoked" | "uncertain" | "refused"; error?: string }>;
   grants: RevocationOutcome[];
+  /** Grants requested after this stop was planned (while its prompt was
+   * open), so not in its confirmed list: the next `hub stop` revokes them. */
+  late_grants: Array<{ mission_id: string; grant_id: string }>;
   manual_step: string;
 }
 
 export async function executeStop(ctx: FleetContext, plan: StopPlan): Promise<StopOutcome> {
   const hub = requireHub(ctx);
   const fleet = ctx.store.fleet;
+  // Recorded first: from here every act that issues anything refuses
+  // (requireLiveHub, checked again right before each grant request).
   fleet.setHubStopped(ctx.now().toISOString());
   const admin = await adminClient(ctx, hub);
   const missions: StopOutcome["missions"] = [];
@@ -1017,6 +1127,11 @@ export async function executeStop(ctx: FleetContext, plan: StopPlan): Promise<St
     }
   }
   const grants = await revokeGrants(ctx, hub, plan.grants);
-  recordOutcome(ctx, "hub.stop", hub.project_id, { missions, grants });
-  return { missions, grants, manual_step: plan.manual_step };
+  const listed = new Set(plan.grants.map((grant) => grant.grant_id));
+  const now = ctx.now().getTime();
+  const late = fleet.listHubGrants()
+    .filter((grant) => !listed.has(grant.grant_id) && grant.revoke_state !== "revoked" && Date.parse(grant.expires_at) > now)
+    .map((grant) => ({ mission_id: grant.mission_id, grant_id: grant.grant_id }));
+  recordOutcome(ctx, "hub.stop", hub.project_id, { missions, grants, late_grants: late });
+  return { missions, grants, late_grants: late, manual_step: plan.manual_step };
 }

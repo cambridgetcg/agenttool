@@ -296,8 +296,15 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
       for (const renewal of outcome.value.renewals) {
         if (renewal.status === "renewed") {
           io.stdout(`renewed did:at:${renewal.identity_id} in ${renewal.room_id}: grant ${renewal.grant_id} until ${renewal.grant_expires_at}\n`);
-          if (renewal.notice !== undefined && reportPosts(io, [renewal.notice]) !== EXIT_OK) code = EXIT_REFUSED;
+          if (reportPosts(io, renewal.notices ?? []) !== EXIT_OK) code = EXIT_REFUSED;
           templates.push(renewal.invitation_template!);
+        } else if (renewal.status === "withdrawn") {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: no renewal for did:at:${renewal.identity_id} in ${renewal.room_id}: ${renewal.error}\n`);
+        } else if (renewal.status === "refused") {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: grant ${renewal.grant_id} for did:at:${renewal.identity_id}: refused (${renewal.error}). ` +
+            "The service created nothing and nothing was retried; the request stays open for a later sweep once the cause is fixed\n");
         } else {
           code = EXIT_REFUSED;
           io.stderr(`agenttool-lobby: grant ${renewal.grant_id} for did:at:${renewal.identity_id}: ${renewal.status} (${renewal.error}). ` +
@@ -393,7 +400,11 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
       if (!outcome.confirmed) return outcome.code;
       io.stdout(`${sub === "block" ? "blocked" : "kicked"} did:at:${identity} from ${roomId}\naudit: recorded ${plan.preview.act} sha256 ${plan.preview.sha256}\n`);
       const open = reportRevocations(io, outcome.value.revocations);
-      return reportPosts(io, outcome.value.rosters) === EXIT_OK && open === 0 ? EXIT_OK : EXIT_REFUSED;
+      if (outcome.value.roster_changed) {
+        io.stderr(`agenttool-lobby: roster_changed: another keyed roster for this season was recorded while the prompt was open, so the roster ` +
+          `without did:at:${identity} was not posted; the ${sub} itself is recorded. Post a current roster with: hub roster post ${roomId}\n`);
+      }
+      return reportPosts(io, outcome.value.rosters) === EXIT_OK && open === 0 && !outcome.value.roster_changed ? EXIT_OK : EXIT_REFUSED;
     }
     case "unblock": {
       const [roomId, identity] = positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 2,
@@ -424,6 +435,11 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
         }
       }
       open += reportRevocations(io, outcome.value.grants);
+      if (outcome.value.late_grants.length > 0) {
+        open += outcome.value.late_grants.length;
+        io.stderr(`agenttool-lobby: ${outcome.value.late_grants.length} grant(s) were requested after this stop was planned (while its prompt was open) ` +
+          `and are not in it: ${outcome.value.late_grants.map((grant) => grant.grant_id).join(", ")}. Run hub stop again to revoke them\n`);
+      }
       // The manual step goes to stdout and stderr alike: it must not be missed.
       io.stdout(`${outcome.value.manual_step}\n`);
       io.stderr(`${outcome.value.manual_step}\n`);

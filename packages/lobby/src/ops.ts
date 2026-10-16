@@ -7,17 +7,18 @@
  * network effect, so the log keeps what the person confirmed even when the
  * network then fails. Observations are saved in the outbox, byte for byte,
  * before they are sent; an uncertain send is never retried automatically
- * (`outbox retry` resends the same bytes after its own confirmation, gated by
- * the room as it is then).
+ * (`outbox retry` resends the same bytes after its own confirmation). Every
+ * send, first or retried, is gated by the room as it is at that moment, not
+ * by the snapshot taken when the act was planned (`currentGate`).
  */
 import { canonicalJson, sha256Hex } from "./canonical.js";
 import { LobbyError } from "./errors.js";
 import { readFleetEvents, type DoorPin, type FleetView } from "./fleet.js";
-import { localDeviceTerms, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
+import { assertSendable, localDeviceTerms, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
 import { DeskSecrets } from "./secrets.js";
 import type { RoomCard } from "./room.js";
-import type { FleetCard } from "./signed.js";
+import { openDocument, type FleetCard, type SignedEnvelope } from "./signed.js";
 import { ACT_SCHEMA, type ActPreview, type LobbyStore } from "./store.js";
 import type { DeskGrantRow, DeskRow } from "./fleet-store.js";
 import type { ConfirmRequest } from "./tty.js";
@@ -236,9 +237,46 @@ export interface PostOutcome {
   event_id: string;
   mission_id: string;
   kind: string;
-  status: "stored" | "pending";
+  /** `refused`: the room as it is now refuses the text, so nothing was sent. */
+  status: "stored" | "pending" | "refused";
   received_seq?: string;
   error?: string;
+}
+
+/** The gate for sending a post now, from the room's current state: the hub's
+ * local room for door-signed kinds (it must still be fleet, hostable, private
+ * and not device-pinned), this desk's door-verified card for a knock, and for
+ * table talk and member notes whichever of the two this desk has
+ * (roomGate). Refuses when the room or card can no longer be found. Used for
+ * every send, first or retried, so a room narrowed to the device while a
+ * prompt was open, or since a post was saved, sends nothing. */
+export function currentGate(ctx: FleetContext, kind: string, missionId: string, summary: string): GateRoom {
+  if (kind === "chat") {
+    // Table talk names no room; this desk's own grants say which room the mission is.
+    const roomId = ctx.store.fleet.roomOfMission(missionId);
+    if (roomId === null) throw new LobbyError("outbox_unreadable", "this desk holds no grant naming the room of that mission; it is not sent");
+    return roomGate(ctx, roomId);
+  }
+  let envelope: SignedEnvelope | null = null;
+  try {
+    envelope = openDocument(summary);
+  } catch {
+    envelope = null;
+  }
+  if (envelope === null || envelope.kind !== kind) {
+    throw new LobbyError("outbox_unreadable", "the event is not the lobby document its outbox row names; it is not sent");
+  }
+  const roomId = (envelope.body as { room_id: string }).room_id;
+  if (kind === "knock") {
+    const desk = requireJoinedDesk(ctx);
+    const door = doorPin(ctx);
+    if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
+    const card = fleetView(ctx, desk.directory_mission_id, door).cards.get(roomId);
+    if (card === undefined) throw new LobbyError("card_not_found", "no door-verified card for that room in the local cache; run fleet sync");
+    return gateOfCard(card.envelope.body);
+  }
+  if (kind === "renew" || kind === "leave") return roomGate(ctx, roomId);
+  return gateOfRoom(requireFleetRoom(ctx, roomId));
 }
 
 /** Save one post's exact bytes in the outbox (once); nothing is sent. */
@@ -256,13 +294,24 @@ export function queuePost(ctx: FleetContext, post: PreparedPost, seat: Participa
   });
 }
 
-/** Save exact bytes in the outbox, then send once. Never retries, and never
- * throws once the bytes are saved: any failure leaves the post pending, so
- * an act with several posts still saves and tries each of them. */
+/** Gate the post by the room as it is now, save exact bytes in the outbox,
+ * then send once. Never retries, and never throws: a room that now refuses
+ * the text sends nothing (`refused`; a post saved earlier stays in the
+ * outbox, where a retry is gated again), and any other failure leaves the
+ * post pending, so an act with several posts still saves and tries each. */
 export async function sendPost(ctx: FleetContext, post: PreparedPost, seat: ParticipantSeat): Promise<PostOutcome> {
+  let gate: GateRoom;
+  try {
+    // Checked again at send time: the room may have changed while the prompt was open.
+    gate = currentGate(ctx, post.kind, post.mission_id, post.summary);
+    assertSendable(post.summary, gate, deviceTerms(ctx));
+  } catch (error) {
+    const reason = error instanceof LobbyError ? `${error.code}: ${error.message}` : "internal_error: the room could not be checked";
+    return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "refused", error: reason };
+  }
   queuePost(ctx, post, seat);
   try {
-    const event: MissionEvent = await participant(ctx).observe(seat, post.raw_body, post.gate);
+    const event: MissionEvent = await participant(ctx).observe(seat, post.raw_body, gate);
     ctx.store.fleet.markOutboxStored(post.event_id, event.received_seq, ctx.now().toISOString());
     return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "stored", received_seq: event.received_seq };
   } catch (error) {

@@ -48,7 +48,8 @@ async function fleetThroughGateway() {
     await who.yes("ready", knockId);
   }
   const status = async (who: typeof hub) => JSON.parse(await who.run("fleet", "status", "--json"));
-  return { memory, seen, hub, device, second, roomId, seasonId: seasonId!, seasonDigest: seasonDigest!, status, advance, directory: (await status(hub)).desk.directory_mission_id as string };
+  return { memory, seen, hub, device, second, roomId, seasonId: seasonId!, seasonDigest: seasonDigest!, status, advance, now, fetchImpl,
+    directory: (await status(hub)).desk.directory_mission_id as string };
 }
 
 describe("lobby table talk and access through the API's mission gateway", () => {
@@ -121,5 +122,29 @@ describe("lobby table talk and access through the API's mission gateway", () => 
     expect(fleet.seen.filter((request) => request.path.endsWith("/revoke")).every((request) => request.body === "")).toBe(true);
     expect(fleet.seen.some((request) => request.path.startsWith("/v1/keys"))).toBe(false);
     expect(fleet.seen.filter((request) => request.path === `${MISSIONS}/${fleet.seasonId}/revoke`)).toHaveLength(1);
+  });
+
+  test("a renewal grant the gateway refuses (409: the hash is bound elsewhere) is forgotten, so kick and stop settle", async () => {
+    const fleet = await fleetThroughGateway();
+    const { memory, hub, device } = fleet;
+    const requested = await device.yes("room", "renew", "request", fleet.roomId);
+    const token = /token sha256 ([0-9a-f]{64})/.exec(requested)![1]!;
+    const desk = (await fleet.status(device)).desk;
+    // The same hash is bound on the service first, by hand, outside this hub's records.
+    const bound = await fleet.fetchImpl(`${ORIGIN}${MISSIONS}/${fleet.seasonId}/grants`, {
+      method: "POST", redirect: "error", headers: { Authorization: `Bearer ${BEARER}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ grant_id: crypto.randomUUID(), identity_id: desk.identity_id, signing_key_id: desk.signing_key_id, actions: ["mission.read"],
+        expires_at: new Date(fleet.now().getTime() + 3_600_000).toISOString(), token_sha256: token }),
+    });
+    expect(bound.ok).toBe(true);
+    const swept = await hub.yes("hub", "renew-sweep").then(() => "exit 0", (error: Error) => error.message);
+    expect(swept).toContain("exited 1");
+    expect(swept).toContain("HTTP 409");
+    // Nothing of that request stays recorded, so each removal settles in one run (no phantom grant answering 404).
+    await hub.yes("hub", "kick", fleet.roomId, desk.identity_id);
+    await hub.yes("hub", "stop");
+    expect([...memory.grants.values()].filter((grant) => grant.identityId === desk.identity_id && grant.missionId === fleet.seasonId && grant.tokenHash !== token)
+      .every((grant) => grant.revokedAt !== null || grant.left)).toBe(true);
+    expect(swept).toContain("created nothing");
   });
 });
