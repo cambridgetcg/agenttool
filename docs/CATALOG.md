@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 183; guide: 84; reference: 330; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**825 document paths** (including mirrors). orientation: 183; guide: 85; reference: 331; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -253,6 +253,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/ADOPTING.md](<../packages/hf-listening-room/hf/space/profile/ADOPTING.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
+| [packages/lobby/CLAUDE.md](<../packages/lobby/CLAUDE.md>) | not-reviewed |
 | [packages/local-starter-mcp/CLAUDE.md](<../packages/local-starter-mcp/CLAUDE.md>) | not-reviewed |
 | [packages/local-starter-mcp/README.md](<../packages/local-starter-mcp/README.md>) | not-reviewed |
 | [packages/local-starter/CLAUDE.md](<../packages/local-starter/CLAUDE.md>) | not-reviewed |
@@ -623,6 +624,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md](<../packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md>) | not-reviewed |
 | [packages/economic-conformance/hf/dataset/reference/KERNEL.md](<../packages/economic-conformance/hf/dataset/reference/KERNEL.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/BOUNDARIES.md](<../packages/hf-listening-room/hf/space/BOUNDARIES.md>) | not-reviewed |
+| [packages/lobby/README.md](<../packages/lobby/README.md>) | not-reviewed |
 | [packages/love-geometry/hf-space/BOUNDARIES.md](<../packages/love-geometry/hf-space/BOUNDARIES.md>) | not-reviewed |
 | [packages/skills-yutabase/PERSISTENCE-CONTRACT.md](<../packages/skills-yutabase/PERSISTENCE-CONTRACT.md>) | not-reviewed |
 | [packages/trials/hf/revocable-feedback-space/BOUNDARIES.md](<../packages/trials/hf/revocable-feedback-space/BOUNDARIES.md>) | not-reviewed |

@@ -187,6 +187,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `kingdom/` | `@agenttool/kingdom` · npm-allowlisted | Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers | — |
 | `kingdom-witness-lab/` | `@agenttool/kingdom-witness-lab` · npm-allowlisted | Deterministic research passports and multi-witness dossiers for KINGDOM | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/kingdom-witness-lab/CLAUDE.md) |
 | `living-substrate/` | `@agenttool/living-substrate` · npm-allowlisted | Deterministic living-substrate maps and refusable regeneration proposals | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/living-substrate/CLAUDE.md) |
+| `lobby/` | `@agenttool/lobby` · private | Private local lobby desk: device-only room cards, a private ledger, a pin book, an append-only audit log, a read-only MCP view and an egress gate | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/README.md) · [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/CLAUDE.md) |
 | `love-bomb/` | `@agenttool/love-bomb` · npm-allowlisted | Quiet-by-default care envelopes and caller-reported choices across substrate, signal, orientation, participation, and continuity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-bomb/CLAUDE.md) |
 | `love-geometry/` | `@agenttool/love-geometry` · npm-allowlisted | Deterministic non-ranking geometry for directed caller-reported relation bearings | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-geometry/CLAUDE.md) |
 | `math-cards/` | `@agenttool/math-cards` · npm-allowlisted | Deterministic non-scoring preflight cards for bounded proof, model, and measurement inquiries | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/math-cards/CLAUDE.md) |
@@ -259,6 +260,14 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from
   host-owned native lifecycle, local Collab authority, and optional separately
   callable Zerone observation. It is not an addition to the six-tool shelf.
+- **`lobby/`** is a private `0.1.0-dev.0` source candidate for MVP steps 1 and 2
+  of the 2026-10-16 大廳 Lobby design: the local hall and its egress gate. It
+  keeps device-only room cards, a private room-to-workspace ledger, a pin book
+  and an append-only audit log in one owner-only local SQLite file, exposes
+  three read-only stdio MCP tools, and exports the egress gate that later
+  transports must call. Promotion and pin changes need `yes` typed on the
+  controlling terminal. It has no network code, release lane or host
+  registration; the fleet and public halls are not connected.
 
 ## How to keep this index true
 

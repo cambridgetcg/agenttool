@@ -5599,6 +5599,22 @@
       "canonical_path": "packages/living-substrate/README.md"
     },
     {
+      "path": "packages/lobby/CLAUDE.md",
+      "title": "Lobby desk package guide",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/lobby/CLAUDE.md"
+    },
+    {
+      "path": "packages/lobby/README.md",
+      "title": "大廳 Lobby desk: private local hall",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/lobby/README.md"
+    },
+    {
       "path": "packages/local-starter-mcp/CLAUDE.md",
       "title": "Local starter MCP development",
       "type": "guide",
