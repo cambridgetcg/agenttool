@@ -1,6 +1,7 @@
 /** Explicit, finite mission chat. Contract: docs/COLLABORATION-MISSION-CLIENT.md#verified-chat-with-a-selected-peer.
  * Selected messages are visible to every mission reader. No wake, execution,
  * automatic acknowledgement, retry, persistent cursor, or provider is added.
+ * Peers are pinned out of band; unpinned senders are reported as unverified data.
  */
 import { createHash, createPublicKey, randomUUID, verify } from 'node:crypto';
 import { lstatSync, mkdirSync, opendirSync, realpathSync, rmdirSync, unlinkSync } from 'node:fs';
@@ -12,7 +13,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA = /^sha256:[0-9a-f]{64}$/;
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const IDS = ['identity_id', 'signing_key_id', 'grant_id'];
-const MAX_PAGES = 100, MAX_OUTBOX_FILES = 2000;
+const MAX_PAGES = 100, MAX_OUTBOX_FILES = 2000, MAX_PEERS = 32;
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 export class ChatError extends Error {
@@ -35,17 +36,50 @@ function text(value, max = 1000) {
   if (typeof value !== 'string' || !value.length || !value.isWellFormed() || value.includes('\0') || [...value].length > max) fail(`Expected nonempty well-formed text of at most ${max} Unicode scalars.`);
   return value;
 }
+function pinnedKey(value) {
+  if (typeof value !== 'string') fail('Expected a pinned Ed25519 public key.');
+  const key = Buffer.from(value, 'base64');
+  if (key.length !== 32 || key.toString('base64') !== value) fail('Expected a pinned Ed25519 public key.');
+}
+/** One legacy `peer` (identity, key, grant and public key) or a `peers` list of
+ * 1–32 pins (identity, key and public key; optional grant and label). Never both.
+ */
 export function validateConfig(value) {
-  exact(value, ['format', 'mission_digest', 'conversation', 'peer', 'expires_at']);
+  const multiple = !!value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'peers');
+  exact(value, ['format', 'mission_digest', 'conversation', multiple ? 'peers' : 'peer', 'expires_at']);
   if (value.format !== 'agenttool-mission-chat-config/v1' || !SHA.test(value.mission_digest ?? '') ||
       typeof value.conversation !== 'string' || !SLUG.test(value.conversation)) fail('Invalid chat format, mission digest or conversation slug.');
-  exact(value.peer, [...IDS, 'public_key']);
-  for (const name of IDS) id(value.peer[name]);
-  if (typeof value.peer.public_key !== 'string') fail('Expected a pinned Ed25519 public key.');
-  const key = Buffer.from(value.peer.public_key, 'base64');
-  if (key.length !== 32 || key.toString('base64') !== value.peer.public_key) fail('Expected a pinned Ed25519 public key.');
+  if (multiple) {
+    if (!Array.isArray(value.peers) || value.peers.length < 1 || value.peers.length > MAX_PEERS) fail(`Pin from 1 to ${MAX_PEERS} peers.`);
+    const seen = new Set();
+    for (const pin of value.peers) {
+      exact(pin, ['identity_id', 'signing_key_id', 'public_key',
+        ...(pin?.grant_id === undefined ? [] : ['grant_id']), ...(pin?.label === undefined ? [] : ['label'])]);
+      id(pin.identity_id); id(pin.signing_key_id);
+      if (pin.grant_id !== undefined) id(pin.grant_id);
+      pinnedKey(pin.public_key);
+      if (pin.label !== undefined && (typeof pin.label !== 'string' || !SLUG.test(pin.label))) fail('A peer label uses 1-64 letters, digits, dots, underscores or hyphens.');
+      for (const key of [`pair:${pin.identity_id}:${pin.signing_key_id}`, `key:${pin.public_key}`, ...(pin.label === undefined ? [] : [`label:${pin.label}`])]) {
+        if (seen.has(key)) fail('Each pinned peer needs a distinct identity key, public key and label.');
+        seen.add(key);
+      }
+    }
+  } else {
+    exact(value.peer, [...IDS, 'public_key']);
+    for (const name of IDS) id(value.peer[name]);
+    pinnedKey(value.peer.public_key);
+  }
   date(value.expires_at);
   return structuredClone(value);
+}
+const pins = config => config.peers ?? [config.peer];
+/** The pin naming these sender IDs, or null. A pin without grant_id accepts any grant of its key. */
+function pinFor(config, sender) {
+  return pins(config).find(pin => pin.identity_id === sender?.identity_id && pin.signing_key_id === sender?.signing_key_id
+    && (pin.grant_id === undefined || pin.grant_id === sender?.grant_id)) ?? null;
+}
+function attribution(pin, event) {
+  return { ...Object.fromEntries(IDS.map(k => [k, event[k]])), ...(pin.label === undefined ? {} : { label: pin.label }), pinned: true };
 }
 export function message(config, to, kind, selectedText, inReplyTo) {
   if (typeof config?.conversation !== 'string' || !SLUG.test(config.conversation)) fail('Invalid conversation slug.');
@@ -117,13 +151,16 @@ function localParticipant(state, config, op) {
     if (error?.message === 'Invitation expiry is invalid or has passed.') fail('The participant invitation is expired or invalid.', 'grant_expired');
     fail('Cannot validate private participant state.');
   }
-  if (IDS.every(k => config.peer[k] === p[k])) fail('Select a separate peer participant grant.');
+  // No pin may name this device: not its identity key under any grant, nor its public key.
+  if (pins(config).some(pin => (pin.identity_id === p.identity_id && pin.signing_key_id === p.signing_key_id)
+    || pin.public_key === p.public_key)) fail('Select a separate peer participant; a pin may not name this device.');
   op.limit(Math.min(date(p.expires_at), date(config.expires_at)));
   return p;
 }
 function scopeFor(p, config, expiresAt) {
   return { origin: p.origin, mission_id: p.mission_id, mission_digest: config.mission_digest,
-    conversation: config.conversation, local: Object.fromEntries(IDS.map(k => [k, p[k]])), peer: structuredClone(config.peer),
+    conversation: config.conversation, local: Object.fromEntries(IDS.map(k => [k, p[k]])),
+    ...(config.peers ? { peers: structuredClone(config.peers) } : { peer: structuredClone(config.peer) }),
     expires_at: new Date(expiresAt).toISOString(), visibility: 'all_mission_readers', authority: 'descriptive_context_only' };
 }
 function checkParticipant(state, p, config, op) {
@@ -175,25 +212,27 @@ function observation(raw) {
   }
   return body;
 }
-// Shared with the explicit work client for historical receipt re-verification.
-// This validates the signed event, not current grant authority or task consent.
-export function verifyChatEvent(event, p, config) {
+// Verify one event against the pin book. Returns null for an unpinned sender or
+// another conversation/destination; a pinned sender's bad proof fails the page.
+function verifyPinned(event, p, config) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) fail('Invalid mission event.');
   id(event.event_id); client.cursor(event.received_seq);
   if (event.mission_id !== p.mission_id) fail('Event mission does not match.');
   for (const name of IDS) id(event[name]);
-  if (!IDS.every(name => event[name] === config.peer[name])) return null;
+  const pin = pinFor(config, event);
+  if (!pin) return null;
+  const sender = Object.fromEntries(IDS.map(k => [k, event[k]]));
   const raw = event.raw_body, proof = event.proof;
   if (typeof raw !== 'string' || !raw.isWellFormed() || Buffer.byteLength(raw) > 8192 || !proof ||
       proof.domain !== 'agenttool-collaboration-request/v1' || proof.origin !== p.origin || proof.method !== 'POST' ||
       proof.request_target !== `/v1/collaboration/missions/${p.mission_id}/events` || proof.raw_body !== raw ||
-      proof.body_sha256 !== hash(raw) || event.body_sha256 !== hash(raw) || proof.public_key !== config.peer.public_key) fail('Selected peer event failed its proof binding.');
+      proof.body_sha256 !== hash(raw) || event.body_sha256 !== hash(raw) || proof.public_key !== pin.public_key) fail('Selected peer event failed its proof binding.');
   date(proof.timestamp); date(event.received_at);
   if (typeof proof.signature !== 'string') fail('Invalid selected peer signature.');
   const signature = Buffer.from(proof.signature, 'base64url');
   if (signature.length !== 64 || signature.toString('base64url') !== proof.signature) fail('Invalid selected peer signature.');
-  const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(config.peer.public_key, 'base64').toString('base64url') }, format: 'jwk' });
-  if (!verify(null, client.requestDigest({ origin: p.origin, mission_id: p.mission_id, ...config.peer }, 'POST', proof.request_target, raw, proof.timestamp), key, signature)) fail('Invalid selected peer signature.');
+  const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(pin.public_key, 'base64').toString('base64url') }, format: 'jwk' });
+  if (!verify(null, client.requestDigest({ origin: p.origin, mission_id: p.mission_id, ...sender }, 'POST', proof.request_target, raw, proof.timestamp), key, signature)) fail('Invalid selected peer signature.');
   // Historical admitted proofs do not acquire a five-minute inbox expiry.
   const body = observation(raw);
   if (body.event_id !== event.event_id || !isDeepStrictEqual(body, event.observation)) fail('Signed observation and service projection disagree.');
@@ -206,9 +245,33 @@ export function verifyChatEvent(event, p, config) {
   const receipt = Object.fromEntries(['event_id', 'mission_id', ...IDS, 'received_seq', 'received_at', 'raw_body', 'body_sha256'].map(k => [k, event[k]]));
   receipt.observation = body;
   receipt.proof = Object.fromEntries(['domain', 'origin', 'method', 'request_target', 'raw_body', 'body_sha256', 'timestamp', 'public_key', 'signature'].map(k => [k, proof[k]]));
-  return { event_id: event.event_id, cursor: event.received_seq, body_sha256: event.body_sha256, message: validated, receipt };
+  return { item: { event_id: event.event_id, cursor: event.received_seq, body_sha256: event.body_sha256, message: validated, receipt }, pin };
 }
-const selectedEvent = verifyChatEvent;
+// Shared with the explicit work client for historical receipt re-verification.
+// This validates the signed event, not current grant authority or task consent.
+export function verifyChatEvent(event, p, config) { return verifyPinned(event, p, config)?.item ?? null; }
+/** Report, without verifying, a message addressed to this participant in this
+ * conversation by a sender outside the pin book. Never throws on its bytes; the
+ * result carries no authority and cannot be the reference of a reply.
+ */
+function unpinnedMessage(event, p, config) {
+  if (IDS.every(k => event[k] === p[k])) return null;
+  let envelope;
+  try {
+    if (typeof event.raw_body !== 'string' || Buffer.byteLength(event.raw_body) > 8192) return null;
+    envelope = JSON.parse(JSON.parse(event.raw_body.replace(/^\uFEFF/, '')).summary);
+  } catch { return null; }
+  if (envelope?.format !== 'agenttool-mission-chat/v1' || envelope.conversation !== config.conversation || envelope.to_identity !== p.identity_id) return null;
+  let selected = null;
+  try {
+    exact(envelope, ['format', 'conversation', 'to_identity', 'kind', 'text', ...(envelope.in_reply_to === undefined ? [] : ['in_reply_to'])]);
+    selected = message(config, p.identity_id, envelope.kind, envelope.text, envelope.in_reply_to);
+  } catch { /* Report the sender; withhold an envelope that fails validation. */ }
+  return { event_id: event.event_id, cursor: event.received_seq,
+    body_sha256: typeof event.body_sha256 === 'string' && /^[0-9a-f]{64}$/.test(event.body_sha256) ? event.body_sha256 : null,
+    from: { ...Object.fromEntries(IDS.map(k => [k, event[k]])), pinned: false },
+    status: 'unverified', reason: 'sender_not_pinned', authority: 'none', message: selected };
+}
 function failureReason(error) {
   if (error instanceof ChatError) return error.stop_reason;
   if (error instanceof Error && /^(Mission transport failed\.|Mission request refused:)/.test(error.message)) return 'transport_error';
@@ -222,7 +285,10 @@ export async function readChat(state, input, options = {}) {
   if (!Number.isInteger(maxMessages) || maxMessages < 1 || maxMessages > 20) fail('Message limit must be from 1 to 20.');
   const op = operation(options, seconds), seen = new Map();
   let scope = null, next = after;
-  const result = (stop_reason, messages = []) => ({ messages, next_cursor: next, scope, stop_reason });
+  // Verified pinned messages and unverified unpinned ones share one ordered batch,
+  // so the returned cursor never passes an item that was not shown.
+  const result = (stop_reason, items = []) => ({ messages: items.filter(item => item.verified).map(item => item.value),
+    unverified: items.filter(item => !item.verified).map(item => item.value), next_cursor: next, scope, stop_reason });
   try {
     const { p } = await prepare(state, config, op, false, value => { scope = value; });
     for (let pages = 0; pages < MAX_PAGES; pages++) {
@@ -233,24 +299,29 @@ export async function readChat(state, input, options = {}) {
       const selected = [], pendingSeen = new Map(seen);
       // Verify the complete page before returning any text or consuming a cursor.
       for (const event of page.events) {
-        const item = selectedEvent(event, p, config);
+        const pinned = verifyPinned(event, p, config);
         const fingerprint = hash(JSON.stringify([event.mission_id, ...IDS.map(k => event[k]), event.raw_body, event.body_sha256]));
         const previous = pendingSeen.get(event.event_id);
         if (previous !== undefined && previous !== fingerprint) fail('A repeated event UUID has changed identity or signed bytes.');
         pendingSeen.set(event.event_id, fingerprint);
-        if (item && previous === undefined) selected.push(item);
+        if (previous !== undefined) continue;
+        if (pinned) selected.push({ verified: true, value: { ...pinned.item, from: attribution(pinned.pin, event) } });
+        else {
+          const other = unpinnedMessage(event, p, config);
+          if (other) selected.push({ verified: false, value: other });
+        }
       }
       op.check();
       if (selected.length) {
-        const messages = selected.slice(0, maxMessages);
+        const shown = selected.slice(0, maxMessages);
         if (selected.length > maxMessages) {
-          const firstUnreturned = selected[maxMessages].cursor;
+          const firstUnreturned = selected[maxMessages].value.cursor;
           const index = page.events.findIndex(e => e.received_seq === firstUnreturned);
           next = index > 0 ? page.events[index - 1].received_seq : next;
-          return result('message_limit', messages);
+          return result('message_limit', shown);
         }
         next = page.page.next_cursor;
-        return result(messages.length === maxMessages ? 'message_limit' : 'messages', messages);
+        return result(shown.length === maxMessages ? 'message_limit' : 'messages', shown);
       }
       for (const [key, value] of pendingSeen) seen.set(key, value);
       next = page.page.next_cursor;
@@ -284,7 +355,8 @@ function outboxPending(state, config, op) {
     catch { fail('Cannot validate an outbox event; inspect it before sending.'); }
     if (body.event_id !== eventId) fail('An outbox filename does not match its event UUID.');
     try { envelope = JSON.parse(body.summary); } catch { continue; }
-    if (envelope?.format !== 'agenttool-mission-chat/v1' || envelope.conversation !== config.conversation || envelope.to_identity !== config.peer.identity_id) continue;
+    if (envelope?.format !== 'agenttool-mission-chat/v1' || envelope.conversation !== config.conversation
+      || !pins(config).some(pin => pin.identity_id === envelope.to_identity)) continue;
     const receiptName = `${eventId}.receipt.json`;
     const uncertain = () => { throw new ChatError('send_uncertain', `Event ${eventId} has no matching outbox receipt. Inspect it and use an explicit exact-body retry if appropriate; do not send a replacement.`, eventId); };
     if (!files.has(receiptName)) uncertain();
@@ -309,9 +381,28 @@ function sendLock(state) {
     unlinkSync(join(path, 'owner.json')); rmdirSync(path);
   };
 }
+/** A reply goes to the pinned sender of its reference; a new message to the one
+ * pinned identity, or to the explicitly selected `to` among the pins.
+ */
+function destination(config, options, reply) {
+  if (reply) {
+    const pin = pinFor(config, options.reference);
+    if (!pin) fail('Reply requires the matching verified peer event in this conversation and destination.');
+    if (options.to !== undefined && options.to !== pin.identity_id) fail('A reply goes to the verified sender of the selected event.');
+    return pin;
+  }
+  const all = pins(config);
+  if (options.to === undefined) {
+    if (new Set(all.map(pin => pin.identity_id)).size !== 1) fail('Choose a pinned peer identity as the destination.');
+    return all[0];
+  }
+  id(options.to);
+  return all.find(pin => pin.identity_id === options.to) ?? fail('The selected destination is not a pinned peer.');
+}
 async function publish(state, input, selectedText, options, reply) {
   const config = validateConfig(input), op = operation(options);
-  const envelope = message(config, config.peer.identity_id, reply ? options.kind ?? 'message' : 'message', selectedText, reply ? id(options.inReplyTo) : undefined);
+  const to = destination(config, options, reply);
+  const envelope = message(config, to.identity_id, reply ? options.kind ?? 'message' : 'message', selectedText, reply ? id(options.inReplyTo) : undefined);
   // Establish the private state boundary before touching the lock. It serializes
   // chat sends only; the base participant client remains an explicit lower layer.
   localParticipant(state, config, op); op.check();
@@ -321,8 +412,9 @@ async function publish(state, input, selectedText, options, reply) {
     outboxPending(state, config, op);
     const { p, scope } = await prepare(state, config, op, true);
     if (reply) {
-      const reference = selectedEvent(options.reference, p, config);
-      if (!reference || reference.event_id !== options.inReplyTo) fail('Reply requires the matching verified peer event in this conversation and destination.');
+      const reference = verifyPinned(options.reference, p, config);
+      if (!reference || reference.item.event_id !== options.inReplyTo || reference.pin.identity_id !== to.identity_id)
+        fail('Reply requires the matching verified peer event in this conversation and destination.');
     }
     checkParticipant(state, p, config, op);
     let receipt;
