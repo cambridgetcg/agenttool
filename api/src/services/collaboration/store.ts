@@ -3,19 +3,20 @@
  * Admin revocation uses a nonconflicting suffix. Writers take the mission UPDATE
  * lock immediately; never upgrade SHARE locks. An admitted transaction may finish
  * before revocation commits; subsequent admission rechecks all live authority.
+ * Participant leave revokes only its own grant, under the same admission checks.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../../db/client";
 import { collaborationEvents, collaborationGrants, collaborationMissions } from "../../db/schema/collaboration";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys } from "../../db/schema/tools";
 import { correspondenceCanonicalJson } from "../correspondence/canonical";
 import {
-  createMissionSchema, issueMissionGrantSchema, MISSION_BOUNDS, MissionError,
+  createMissionSchema, issueMissionGrantSchema, MISSION_BOUNDS, MISSION_LEAVE_FIELD, MISSION_LEAVE_REASON, MissionError,
   missionAcceptSchema, missionDescriptorSchema, missionObservationSchema, missionOperation,
   missionActionsSchema, missionUuidSchema, packMissionEventPage, parseMissionBody, parseMissionInput, validMissionOrigin,
-  type MissionAction, type MissionRequest,
+  type MissionAction, type MissionProofRecord, type MissionRequest,
 } from "./contracts";
 import { MISSION_REQUEST_DOMAIN, missionSha256, verifyMissionProof } from "./proof";
 
@@ -72,11 +73,22 @@ function missionMetadata(row: MissionRow) {
     created_at: row.createdAt.toISOString(), expires_at: row.expiresAt.toISOString(), revoked_at: row.revokedAt?.toISOString() ?? null,
     scope: "mission_selected_context" as const, authority: "descriptive_context_only" as const };
 }
+/** A self-left grant is revoked and carries the nested signed leave record. */
+function participantLeft(row: GrantRow): boolean {
+  const record = row.acceptanceProof?.[MISSION_LEAVE_FIELD];
+  return row.revokedAt !== null && typeof record === "object" && record !== null && record.reason === MISSION_LEAVE_REASON;
+}
 function grantMetadata(row: GrantRow) {
   return { grant_id: row.id, mission_id: row.missionId, project_id: row.projectId,
     identity_id: row.identityId, signing_key_id: row.signingKeyId, issuing_api_key_id: row.issuingApiKeyId,
     origin: row.origin, actions: row.actions, issued_at: row.issuedAt.toISOString(), expires_at: row.expiresAt.toISOString(),
-    accepted_at: row.acceptedAt?.toISOString() ?? null, revoked_at: row.revokedAt?.toISOString() ?? null };
+    accepted_at: row.acceptedAt?.toISOString() ?? null, revoked_at: row.revokedAt?.toISOString() ?? null,
+    // Additive and present only for a self-left grant; every other shape is unchanged.
+    ...(participantLeft(row) ? { revocation_reason: MISSION_LEAVE_REASON } : {}) };
+}
+function leaveView(row: GrantRow) {
+  if (!row.revokedAt) throw new MissionError("invalid_state");
+  return { mission_id: row.missionId, grant_id: row.id, status: "revoked" as const, reason: MISSION_LEAVE_REASON, revoked_at: row.revokedAt.toISOString() };
 }
 function eventMetadata(row: EventRow) {
   return { event_id: row.eventId, mission_id: row.missionId, grant_id: row.grantId,
@@ -95,7 +107,7 @@ function validGrantState(row: GrantRow, now: Date): boolean {
       || (row.acceptedAt !== null && row.acceptanceProof !== null && Number.isFinite(row.acceptedAt.getTime())
         && row.acceptedAt >= row.issuedAt && row.acceptedAt < row.expiresAt && row.acceptedAt <= now));
 }
-function proofRecord(input: MissionRequest, publicKey: string): Record<string, string> {
+function proofRecord(input: MissionRequest, publicKey: string): MissionProofRecord {
   // The BOM is signed data: ignore its decoder semantics, retaining U+FEFF.
   return { domain: MISSION_REQUEST_DOMAIN, origin: input.origin, method: input.method, request_target: input.requestTarget,
     timestamp: input.proof.timestamp, signature: input.proof.signature, public_key: publicKey,
@@ -218,7 +230,8 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     || !validMissionOrigin(input.origin) || !input.proof
     || ![input.proof.grantId, input.proof.identityId, input.proof.keyId].every(value => missionUuidSchema.safeParse(value).success)) throw deny();
   const tokenHash = missionSha256(input.token);
-  const body = input.method === "POST" ? await parseMissionBody(input.bodyBytes) : null;
+  const leaving = selected.operation === "leave";
+  const body = input.method === "POST" && !leaving ? await parseMissionBody(input.bodyBytes) : null;
   const acceptance = selected.operation === "accept" ? parseMissionInput(missionAcceptSchema, body) : null;
   const observation = selected.operation === "observe" ? parseMissionInput(missionObservationSchema, body) : null;
   return (options.database ?? db).transaction(async tx => {
@@ -230,18 +243,29 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     const parent = await lockParent(tx, hint.projectId, hint.issuingApiKeyId);
     const mission = await lockMission(tx, { projectId: hint.projectId, missionId: hint.missionId }, selected.operation === "observe" ? "update" : "share");
     const [grant] = await tx.select().from(collaborationGrants).where(eq(collaborationGrants.id, hint.id))
-      .for(selected.operation === "accept" ? "update" : "share").limit(1);
+      .for(selected.operation === "accept" || leaving ? "update" : "share").limit(1);
     // Sample time after every potentially blocking authority lock.
     const now = instant(options);
+    // Only an exact repeat of this participant's own leave may see a revoked grant.
     if (!grant || !validGrantState(grant, now) || !/^[0-9a-f]{64}$/.test(grant.tokenHash)
       || !timingSafeEqual(Buffer.from(tokenHash, "hex"), Buffer.from(grant.tokenHash, "hex"))
       || grant.projectId !== hint.projectId || grant.missionId !== hint.missionId || grant.issuingApiKeyId !== hint.issuingApiKeyId
       || grant.identityId !== hint.identityId || grant.signingKeyId !== hint.signingKeyId || grant.origin !== input.origin
-      || grant.revokedAt !== null || grant.issuedAt > now || grant.expiresAt <= now
+      || (grant.revokedAt !== null && !(leaving && participantLeft(grant))) || grant.issuedAt > now || grant.expiresAt <= now
       || !activeMission(mission, now) || grant.expiresAt > mission.expiresAt
       || !parentValid(parent, grant.projectId, now, grant.expiresAt) || !verifyMissionProof(input, key.publicKey, now)) throw deny();
     const missionView = missionMetadata(mission);
     if (selected.operation === "invitation") return { created: false, data: { mission: missionView, grant: grantMetadata(grant) } };
+    if (leaving) {
+      // Membership begins at acceptance; an unaccepted invitation is simply left to expire.
+      if (!grant.acceptedAt || !grant.acceptanceProof) throw new MissionError("acceptance_required");
+      if (grant.revokedAt) return { created: false, data: leaveView(grant) };
+      const record = { ...grant.acceptanceProof, [MISSION_LEAVE_FIELD]: { reason: MISSION_LEAVE_REASON, ...proofRecord(input, key.publicKey) } };
+      const [left] = await tx.update(collaborationGrants).set({ revokedAt: now, acceptanceProof: record })
+        .where(and(eq(collaborationGrants.id, grant.id), isNull(collaborationGrants.revokedAt))).returning();
+      if (!left || !participantLeft(left)) throw new MissionError("invalid_state");
+      return { created: true, data: leaveView(left) };
+    }
     if (acceptance) {
       if (acceptance.mission_digest !== mission.digest) throw new MissionError("conflict");
       if (grant.acceptedAt) return { created: false, data: { mission: missionView, grant: grantMetadata(grant) } };

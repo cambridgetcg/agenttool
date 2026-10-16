@@ -59,7 +59,14 @@ export interface MissionRequest {
   token: string; missionId: string; origin: string; method: string; requestTarget: string;
   bodyBytes: Uint8Array; proof: MissionProof;
 }
-export type MissionOperation = "invitation" | "accept" | "context" | "list" | "observe";
+export type MissionOperation = "invitation" | "accept" | "context" | "list" | "observe" | "leave";
+/** Signed request fields retained as independently verifiable evidence. */
+export type MissionProofRecord = Record<string, string>;
+/** The grant's stored acceptance proof. A participant self-leave adds one nested
+ * signed record under MISSION_LEAVE_FIELD; revoked_at holds its time (no migration). */
+export type MissionGrantProofs = { [field: string]: string | MissionProofRecord };
+export const MISSION_LEAVE_FIELD = "participant_leave";
+export const MISSION_LEAVE_REASON = "participant_left";
 export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict";
 export class MissionError extends HTTPException {
   readonly code: string;
@@ -109,8 +116,10 @@ export function missionOperation(input: Pick<MissionRequest, "missionId" | "meth
   const { method, requestTarget: target, bodyBytes } = input;
   if (method === "GET" && bodyBytes.length !== 0) throw new MissionError("invalid_request");
   const simple = method === "GET" ? { [`${base}/invitation`]: "invitation", [`${base}/context`]: "context" }
-    : method === "POST" ? { [`${base}/accept`]: "accept", [`${base}/events`]: "observe" } : {};
+    : method === "POST" ? { [`${base}/accept`]: "accept", [`${base}/events`]: "observe", [`${base}/leave`]: "leave" } : {};
   const operation = simple[target] as MissionOperation | undefined;
+  // Leave, like a read, signs zero body bytes.
+  if (operation === "leave" && bodyBytes.length !== 0) throw new MissionError("invalid_request");
   if (operation) return { operation, after: 0n, limit: MISSION_BOUNDS.pageDefault };
   if (method === "GET" && target.startsWith(`${base}/events`)) {
     const suffix = target.slice(`${base}/events`.length);

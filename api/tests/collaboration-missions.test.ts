@@ -6,7 +6,7 @@ import * as ed from "@noble/ed25519";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { createMissionSchema, issueMissionGrantSchema, MISSION_BOUNDS, MissionError, missionDescriptorSchema, missionObservationSchema, missionOperation, packMissionEventPage, parseMissionBody, type MissionAction, type MissionRequest } from "../src/services/collaboration/contracts";
 import { canonicalMissionRequestBytes, verifyMissionProof } from "../src/services/collaboration/proof";
-import { executeMissionRequest, issueMissionGrant } from "../src/services/collaboration/store";
+import { executeMissionRequest, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../src/services/collaboration/store";
 import { correspondenceCanonicalJson } from "../src/services/correspondence/canonical";
 
 const M = "11111111-1111-4111-8111-111111111111", G = "22222222-2222-4222-8222-222222222222";
@@ -74,12 +74,20 @@ async function refusal(promise: Promise<unknown>, status: number, code: string) 
   expect((error as MissionError).status as number).toBe(status);
   expect((error as MissionError).code).toBe(code);
 }
-function signed(token: string, method: "GET" | "POST", suffix: string, body = "", key = privateKey): MissionRequest {
+function signed(token: string, method: "GET" | "POST", suffix: string, body = "", key = privateKey, proof: Partial<MissionRequest["proof"]> = {}): MissionRequest {
   const input: MissionRequest = { token, missionId: M, origin: ORIGIN, method, requestTarget: base + suffix, bodyBytes: Buffer.from(body),
-    proof: { grantId: G, identityId: I, keyId: K, timestamp: NOW.toISOString(), signature: "" } };
+    proof: { grantId: G, identityId: I, keyId: K, timestamp: NOW.toISOString(), signature: "", ...proof } };
   input.proof.signature = Buffer.from(ed.sign(canonicalMissionRequestBytes(input), key)).toString("base64url");
   return input;
 }
+const ACCEPTANCE = { domain: "agenttool-collaboration-request/v1", origin: ORIGIN, method: "POST", request_target: `${base}/accept`,
+  timestamp: new Date(NOW.getTime() - 30_000).toISOString(), signature: "synthetic-acceptance-signature", public_key: publicKey,
+  raw_body: `{"mission_digest":"${DIGEST}"}`, body_sha256: sha256(`{"mission_digest":"${DIGEST}"}`) };
+const acceptedRow = (overrides: Record<string, unknown> = {}) => grantRow({ acceptedAt: new Date(NOW.getTime() - 30_000), acceptanceProof: ACCEPTANCE, ...overrides });
+const leftRow = () => acceptedRow({ revokedAt: new Date(NOW.getTime() - 1_000), acceptanceProof: { ...ACCEPTANCE,
+  participant_leave: { reason: "participant_left", ...ACCEPTANCE, request_target: `${base}/leave`, raw_body: "", body_sha256: sha256("") } } });
+/** One full participant admission: hint, identity, key, parent, mission, locked grant, then optional writes. */
+const admissionSteps = (row: Record<string, unknown>, ...tail: Step[]): Step[] => [[row], [identityRow()], [keyRow()], [parentRow()], [missionRow()], [row], ...tail];
 function request(): MissionRequest {
   const input: MissionRequest = { token: `atcm_${Buffer.alloc(32, 2).toString("base64url")}`, missionId: M,
     origin: "https://api.agenttool.dev", method: "POST", requestTarget: `${base}/events`,
@@ -225,5 +233,115 @@ describe("participant-chosen grant token hash", () => {
     const known = staged(issueSteps([]));
     await refusal(issueMissionGrant(issueInput(), known.options), 409, "collaboration_mission_conflict");
     expect(known.events).toHaveLength(5);
+  });
+});
+
+describe("participant self-leave", () => {
+  const H = "77777777-7777-4777-8777-777777777777", J = "88888888-8888-4888-8888-888888888888", L = "99999999-9999-4999-8999-999999999999";
+  const otherKey = new Uint8Array(32).fill(8), TOKEN_H = `atcm_${Buffer.alloc(32, 12).toString("base64url")}`;
+  const leaveRequest = () => signed(PARTICIPANT_TOKEN, "POST", "/leave");
+  const merged: Step = values => [{ ...acceptedRow(), ...values }];
+
+  test("leave revokes only the caller's own grant and records participant_left with its signed request", async () => {
+    const request = leaveRequest();
+    const s = staged(admissionSteps(acceptedRow(), merged));
+    const result = await executeMissionRequest(request, s.options);
+    expect(result).toEqual({ created: true, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: NOW.toISOString() } });
+    expect(s.events.map(e => [e.operation, e.lock])).toEqual([["select", undefined], ["select", "share"], ["select", "share"], ["select", "share"], ["select", "share"], ["select", "update"], ["update", undefined]]);
+    const write = s.events[6];
+    expect(write.condition?.params).toEqual([G]);
+    expect(write.condition?.sql).toContain('"revoked_at" is null');
+    expect(write.values?.revokedAt).toEqual(NOW);
+    const proofs = write.values?.acceptanceProof as Record<string, unknown>;
+    const leave = proofs.participant_leave as Record<string, string>;
+    expect({ ...proofs, participant_leave: undefined }).toEqual({ ...ACCEPTANCE, participant_leave: undefined });
+    expect(leave).toMatchObject({ reason: "participant_left", method: "POST", request_target: `${base}/leave`, raw_body: "", body_sha256: sha256(""), public_key: publicKey, signature: request.proof.signature });
+    expect(verifyMissionProof({ ...request, bodyBytes: Buffer.from(leave.raw_body, "utf8"), proof: { ...request.proof, signature: leave.signature, timestamp: leave.timestamp } }, leave.public_key, NOW)).toBe(true);
+    expect(s.commits()).toBe(1);
+  });
+
+  test("an exact repeat with a fresh proof returns the same state and writes nothing", async () => {
+    const first = await executeMissionRequest(leaveRequest(), staged(admissionSteps(acceptedRow(), merged)).options);
+    const repeated = { ...leftRow(), revokedAt: NOW };
+    const later = new Date(NOW.getTime() + 2_000);
+    const s = staged(admissionSteps(repeated), later);
+    const again = await executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/leave", "", privateKey, { timestamp: later.toISOString() }), s.options);
+    expect(again).toEqual({ created: false, data: first.data });
+    expect(s.events.some(e => e.operation === "update")).toBe(false);
+  });
+
+  test("afterwards the token is refused by every other participant operation", async () => {
+    const event = JSON.stringify({ event_id: H, summary: "after leaving" });
+    for (const request of [
+      signed(PARTICIPANT_TOKEN, "GET", "/invitation"), signed(PARTICIPANT_TOKEN, "GET", "/context"),
+      signed(PARTICIPANT_TOKEN, "GET", "/events"), signed(PARTICIPANT_TOKEN, "POST", "/events", event),
+      signed(PARTICIPANT_TOKEN, "POST", "/accept", JSON.stringify({ mission_digest: DIGEST })),
+    ]) {
+      const s = staged(admissionSteps(leftRow()));
+      await refusal(executeMissionRequest(request, s.options), 401, "collaboration_mission_invalid_credential");
+      expect(s.events.some(e => e.operation !== "select")).toBe(false);
+    }
+  });
+
+  test("an administrator-revoked grant cannot be relabelled as a participant leave", async () => {
+    const s = staged(admissionSteps(acceptedRow({ revokedAt: new Date(NOW.getTime() - 1_000) })));
+    await refusal(executeMissionRequest(leaveRequest(), s.options), 401, "collaboration_mission_invalid_credential");
+    expect(s.events.some(e => e.operation === "update")).toBe(false);
+  });
+
+  test("wrong, stale, retargeted or borrowed proofs are refused without a write", async () => {
+    const retargeted = signed(PARTICIPANT_TOKEN, "POST", "/accept");
+    for (const request of [
+      signed(PARTICIPANT_TOKEN, "POST", "/leave", "", otherKey),
+      signed(PARTICIPANT_TOKEN, "POST", "/leave", "", privateKey, { timestamp: new Date(NOW.getTime() - 300_001).toISOString() }),
+      { ...retargeted, requestTarget: `${base}/leave` },
+      { ...leaveRequest(), origin: "https://other.example" },
+    ]) {
+      const s = staged(admissionSteps(acceptedRow()));
+      await refusal(executeMissionRequest(request, s.options), 401, "collaboration_mission_invalid_credential");
+      expect(s.events.some(e => e.operation === "update")).toBe(false);
+    }
+    // Another participant's grant cannot be named with this token, so it cannot be revoked.
+    const borrowed = staged([[acceptedRow()]]);
+    await refusal(executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/leave", "", otherKey, { grantId: H, identityId: J, keyId: L }), borrowed.options), 401, "collaboration_mission_invalid_credential");
+    expect(borrowed.events).toHaveLength(1);
+  });
+
+  test("leave needs prior acceptance and signs zero body bytes", async () => {
+    const unaccepted = staged(admissionSteps(grantRow()));
+    await refusal(executeMissionRequest(leaveRequest(), unaccepted.options), 403, "collaboration_mission_acceptance_required");
+    expect(unaccepted.events.some(e => e.operation === "update")).toBe(false);
+    for (const body of ["{}", " "]) {
+      const s = staged([]);
+      await refusal(executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/leave", body), s.options), 400, "collaboration_mission_invalid_request");
+      expect(s.events).toHaveLength(0);
+    }
+    expect(missionOperation({ missionId: M, method: "POST", requestTarget: `${base}/leave`, bodyBytes: new Uint8Array() }).operation).toBe("leave");
+    for (const [method, suffix] of [["GET", "/leave"], ["POST", "/leave/"], ["POST", "/leave?x=1"], ["POST", "/%6ceave"]] as const) {
+      expect(() => missionOperation({ missionId: M, method, requestTarget: base + suffix, bodyBytes: new Uint8Array() })).toThrow();
+    }
+  });
+
+  test("other grants and the mission stay under administrator control", async () => {
+    // The administrator sees the reason, and a later administrator revoke stays idempotent.
+    const view = await getMissionGrant({ projectId: P, missionId: M, grantId: G }, staged([[leftRow()]]).options);
+    expect(view.revocation_reason).toBe("participant_left");
+    const revoke = staged([[missionRow()], [leftRow()]]);
+    expect((await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, revoke.options)).revocation_reason).toBe("participant_left");
+    expect(revoke.events.some(e => e.operation === "update")).toBe(false);
+    // Grants that were not left keep the established metadata shape.
+    for (const row of [acceptedRow(), acceptedRow({ revokedAt: NOW })]) {
+      expect("revocation_reason" in await getMissionGrant({ projectId: P, missionId: M, grantId: G }, staged([[row]]).options)).toBe(false);
+    }
+    // Another participant still reads context after this grant has left.
+    const peer = acceptedRow({ id: H, identityId: J, signingKeyId: L, tokenHash: sha256(TOKEN_H) });
+    const read = staged([[peer], [{ ...identityRow(), id: J }], [{ ...keyRow(), id: L, identityId: J, publicKey: Buffer.from(ed.getPublicKey(otherKey)).toString("base64") }], [parentRow()], [missionRow()], [peer]]);
+    const context = await executeMissionRequest(signed(TOKEN_H, "GET", "/context", "", otherKey, { grantId: H, identityId: J, keyId: L }), read.options);
+    expect(context.data.grant).toMatchObject({ grant_id: H, revoked_at: null });
+    // Mission revocation still works, after which even a repeat leave is refused.
+    const mission = staged([[missionRow()], values => [{ ...missionRow(), ...values }]]);
+    expect((await revokeMission({ projectId: P, missionId: M }, mission.options)).revoked_at).toBe(NOW.toISOString());
+    const closed = staged([[leftRow()], [identityRow()], [keyRow()], [parentRow()], [missionRow({ revokedAt: NOW })], [leftRow()]]);
+    await refusal(executeMissionRequest(leaveRequest(), closed.options), 401, "collaboration_mission_invalid_credential");
   });
 });

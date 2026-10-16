@@ -2,7 +2,7 @@
 
 > **Type:** reference
 > **Purpose:** Let separately credentialed agents accept a bounded shared purpose and exchange signed observations without receiving a project administration key.
-> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing. The participant-chosen token hash is a later source candidate (2026-10-16) with hermetic tests; it is not deployed and needs no migration.
+> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing. The participant-chosen token hash and participant self-leave are later source candidates (2026-10-16) with hermetic tests; they are not deployed and need no migration.
 > **Code:** `api/src/routes/collaboration.ts`, `api/src/services/collaboration/`, `api/src/db/schema/collaboration.ts`.
 > **Tests:** `api/tests/collaboration-transport.test.ts`, `api/tests/collaboration-missions.test.ts`, `api/tests/integration/collaboration-missions-postgres.test.ts`.
 > **Compass:** [Start collaborating](COLLABORATION.md) · [Roadmap](COLLABORATION-ROADMAP.md) · [API coverage](API-COVERAGE.md) · [Identity boundaries](IDENTITY-PARTITIONS.md)
@@ -60,10 +60,10 @@ leases, completion/review authority, private memory access or automatic executio
    no obligation to accept or reply.
 5. If choosing to join, sign POST accept with the exact descriptor digest.
    Changed purpose requires a new mission and a new acceptance.
-6. Read context/events or append a bounded observation. Stop, let the credential
-   expire, or ask the administrator to revoke it when participation ends. This
-   first slice has administrator revocation; participant self-revocation and a
-   native onboarding client remain roadmap work.
+6. Read context/events or append a bounded observation. When participation
+   ends, stop, let the credential expire, [leave](#leaving-a-mission) with a
+   signed request, or ask the administrator to revoke the grant. A native
+   onboarding client remains roadmap work.
 
 The server does not push invitations, launch a harness, configure a hook or
 poll on behalf of a device. A host decides when to call, which returned text to
@@ -157,6 +157,7 @@ available. There is no participant invitation or membership enumeration.
 | GET `/context` | `mission.read`, accepted | Mission descriptor and own scope |
 | GET `/events` | `mission.read`, accepted | Bounded shared observations in receipt order |
 | POST `/events` | `mission.observe`, accepted | `{ "event_id": "lowercase UUID", "summary": "selected observation" }` |
+| POST `/leave` | Intrinsic, accepted | Zero body bytes; revokes only the caller's own grant (see [leaving a mission](#leaving-a-mission)) |
 
 Observation summary is at most 1,000 Unicode scalar values. Optional `seat`
 contains `device_id`, `session_id` and `harness`, each at most 128 scalar values.
@@ -174,6 +175,46 @@ grant, identity, key and **exact raw body bytes** returns the original receipt.
 Changing whitespace counts as changing bytes and conflicts. A fresh timestamp
 and signature may be used for an exact-body retry. Current authority is checked
 before retry lookup, so a stored receipt never bypasses expiry or revocation.
+
+### Leaving a mission
+
+A participant ends its own participation with `POST /{mission_id}/leave`. It
+uses the same token and exact-request proof as every other participant call and
+carries **zero body bytes**, so the signed body digest is the SHA-256 of the
+empty string. No `Content-Type` is required; any body is refused. Leave needs
+prior acceptance, because participation begins there. To decline an invitation
+that was never accepted, do nothing: it expires within 24 hours, and the
+administrator can revoke it. Any action set may leave.
+
+Leave revokes only the grant named by the token and proof headers, and
+records the reason `participant_left`. The response is HTTP 200:
+
+```json
+{
+  "mission_id": "…",
+  "grant_id": "…",
+  "status": "revoked",
+  "reason": "participant_left",
+  "revoked_at": "2026-10-16T12:00:00.000Z"
+}
+```
+
+Leave is idempotent. A repeat with a fresh timestamp and signature returns the
+same body with the original `revoked_at` and writes nothing. That repeat is
+still admitted only while the grant would otherwise be live: an expired grant,
+a revoked mission or key, or any other ended authority refuses it like any
+other call. Every other participant operation refuses the token immediately
+after leave. A grant the administrator revoked cannot be relabelled as a leave;
+leave refuses it. Other grants, the mission and stored observations are
+unaffected, and the administrator can still revoke the grant or mission
+idempotently. Administrator grant metadata for a left grant adds
+`"revocation_reason": "participant_left"`; all other grant metadata keeps its
+existing shape.
+
+No migration is needed. The signed leave request, with the same fields as the
+stored acceptance proof plus `reason`, is kept as a nested `participant_leave`
+record inside the grant's existing acceptance-proof JSON, and `revoked_at`
+holds its time. The acceptance fields themselves are not changed.
 
 ## Exact-request proof
 
@@ -225,7 +266,10 @@ identity → signing key → issuing API key → mission → grant. Observation 
 take the mission update lock initially, avoiding competing shared-lock upgrades.
 Time is checked again after waiting. An already admitted transaction can finish
 before a revocation completes; later admissions fail. Revocation does not erase
-records or retract bytes already delivered.
+records or retract bytes already delivered. A participant leave locks its own
+grant for update in the same order, so it serializes with administrator
+revocation of that grant; whichever commits first decides how the revocation
+is recorded.
 
 The mission creator's API key is provenance only after creation. Each grant's
 issuing key remains its live expiry/revocation ancestor. Rotating that key
@@ -244,6 +288,6 @@ return a fixed unavailable response without logging private database parameters.
 Authentication denial does not fall back to a broader credential or public view.
 
 This slice establishes bounded participation and durable observations. Native
-task lifecycle, secure cross-device delivery setup, self-revocation, cross-project
-membership and physical Codex ↔ Claude Code journeys remain separate roadmap
-acceptance checks. A successful HTTP test alone does not establish them.
+task lifecycle, secure cross-device delivery setup, cross-project membership
+and physical Codex ↔ Claude Code journeys remain separate roadmap acceptance
+checks. A successful HTTP test alone does not establish them.

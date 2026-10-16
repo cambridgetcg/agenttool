@@ -12,7 +12,7 @@ import * as missions from "../services/collaboration/store";
 
 const BASE = "/v1/collaboration/missions";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|revoke|grants)(?:/(${UUID})(/revoke)?)?)?$`);
+const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|leave|revoke|grants)(?:/(${UUID})(/revoke)?)?)?$`);
 const DOCS = "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md";
 
 class TransportError extends Error {
@@ -93,9 +93,11 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       if (!match && !collection) throw new TransportError(404, "mission_route_not_found");
       const [, missionId = "", action, grantId, revocation] = match ?? [];
       if (grantId && action !== "grants") throw new TransportError(404, "mission_route_not_found");
-      const participant = ["invitation", "accept", "context", "events"].includes(action ?? "");
+      const participant = ["invitation", "accept", "context", "events", "leave"].includes(action ?? "");
+      // Participant leave, like administrator revocation, carries zero body bytes.
+      const leave = action === "leave";
       const allowed = participant
-        ? action === "events" ? ["GET", "POST"] : action === "accept" ? ["POST"] : ["GET"]
+        ? action === "events" ? ["GET", "POST"] : action === "accept" || leave ? ["POST"] : ["GET"]
         : collection || action === "revoke" || action === "grants" && (!grantId || revocation) ? ["POST"] : ["GET"];
       if (!allowed.includes(method)) { c.header("Allow", allowed.join(", ")); throw new TransportError(405, "mission_method_not_allowed"); }
       if (query && !(participant && action === "events" && method === "GET")) throw new TransportError(400, "invalid_mission_target");
@@ -103,7 +105,7 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       const token = /^Bearer ([A-Za-z0-9_-]{1,256})$/.exec(authorization)?.[1];
       if (!token || (participant ? !/^atcm_[A-Za-z0-9_-]{43}$/.test(token) : !token.startsWith("at_"))) throw new TransportError(401, "mission_credential_invalid");
       if (c.req.header("Content-Encoding")) throw new TransportError(400, "mission_content_encoding_not_supported");
-      const carriesJson = method === "POST" && (participant || collection || action === "grants" && !grantId);
+      const carriesJson = method === "POST" && (participant && !leave || collection || action === "grants" && !grantId);
       if (carriesJson && !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(c.req.header("Content-Type") ?? "")) throw new TransportError(415, "mission_json_required");
 
       if (participant) {
@@ -114,7 +116,7 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
           timestamp: c.req.header(MISSION_PROOF_HEADERS.timestamp) ?? "",
           signature: c.req.header(MISSION_PROOF_HEADERS.signature) ?? "",
         };
-        const bytes = await bodyBytes(c.req.raw, method === "GET" ? 0 : 8192);
+        const bytes = await bodyBytes(c.req.raw, method === "GET" || leave ? 0 : 8192);
         const result = await service.executeMissionRequest({ token, missionId, origin: origin(), method, requestTarget: url.pathname + query, bodyBytes: bytes, proof });
         return c.json(result.data, result.created && action === "events" ? 201 : 200);
       }

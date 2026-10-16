@@ -187,8 +187,58 @@ describe("sealed collaboration transport", () => {
     expect(issue.responses["409"].description).toContain("token_hash_conflict");
     expect(issue.security).toEqual([{ bearerAuth: [] }]);
   });
+  test("participant leave is a terminal zero-byte POST with proofs, HTTP200 and no project context", async () => {
+    const f = fixture();
+    const response = await f.app.request(`http://internal.invalid${BASE}/${M}/leave`, { method: "POST", headers: { ...headers(), Host: "spoof.invalid", "Idempotency-Key": "do-not-replay" } });
+    expect(response.status).toBe(200); privateResponse(response);
+    expect(f.counts()).toEqual({ project: 0, downstream: 0 });
+    expect(f.seen[0]).toMatchObject({ method: "POST", requestTarget: `${BASE}/${M}/leave`, origin: ORIGIN, missionId: M, token: TOKEN });
+    expect(f.seen[0].bodyBytes).toHaveLength(0);
+    expect(f.seen[0].proof).toEqual({ grantId: "proof-value", identityId: "proof-value", keyId: "proof-value", timestamp: "proof-value", signature: "proof-value" });
+    // A JSON content type with zero bytes is equally acceptable; the signed body is empty either way.
+    expect((await f.app.request(`${BASE}/${M}/leave`, { method: "POST", headers: { ...headers(), "Content-Type": "application/json", "Content-Length": "0" } })).status).toBe(200);
+  });
+  test("leave refuses bodies, other methods, aliases, queries and non-participant credentials before the service", async () => {
+    const f = fixture();
+    for (const [path, init, status] of [
+      [`${BASE}/${M}/leave`, { method: "POST", body: "{}", headers: { ...headers(), "Content-Type": "application/json" } }, 413],
+      [`${BASE}/${M}/leave`, { method: "POST", headers: { ...headers(), "Content-Length": "1" } }, 413],
+      [`${BASE}/${M}/leave`, { method: "GET", headers: headers() }, 405],
+      [`${BASE}/${M}/leave`, { method: "HEAD", headers: headers() }, 405],
+      [`${BASE}/${M}/leave/`, { method: "POST", headers: headers() }, 404],
+      [`${BASE}/${M}/leave/${G}`, { method: "POST", headers: headers() }, 404],
+      [`${BASE}/${M}/%6ceave`, { method: "POST", headers: headers() }, 404],
+      [`${BASE}/${M}/leave?grant_id=${G}`, { method: "POST", headers: headers() }, 400],
+      [`${BASE}/${M}/leave`, { method: "POST", headers: { ...headers(), Authorization: "Bearer at_project" } }, 401],
+      [`${BASE}/${M}/leave`, { method: "POST", headers: { Authorization: "Bearer atlc_other" } }, 401],
+      [`${BASE}/${M}/leave`, { method: "POST", headers: { ...headers(), "Content-Encoding": "gzip" } }, 400],
+    ] as const) {
+      const response = await f.app.request(path, init as RequestInit);
+      expect(response.status).toBe(status); privateResponse(response);
+      if (status === 405) expect(response.headers.get("Allow")).toBe("POST");
+    }
+    expect(f.seen).toEqual([]); expect(f.counts()).toEqual({ project: 0, downstream: 0 });
+  });
+  test("leave refusals from the service keep the participant error contract", async () => {
+    const f = fixture();
+    for (const [reason, status] of [["invalid_credential", 401], ["acceptance_required", 403], ["invalid_request", 400]] as const) {
+      f.service.executeMissionRequest = async () => { throw new MissionError(reason); };
+      const response = await f.app.request(`${BASE}/${M}/leave`, { method: "POST", headers: headers() });
+      expect(response.status).toBe(status); privateResponse(response);
+      expect((await response.json()).error).toBe(`collaboration_mission_${reason}`);
+    }
+  });
+  test("OpenAPI documents leave as a bodiless participant operation with a fixed result", () => {
+    const leave = (COLLABORATION_OPENAPI_PATHS as any)[`${BASE}/{mission_id}/leave`];
+    expect(Object.keys(leave)).toEqual(["parameters", "post"]);
+    expect(leave.post.requestBody).toBeUndefined();
+    const result = leave.post.responses["200"].content["application/json"].schema;
+    expect(result.required).toEqual(["mission_id", "grant_id", "status", "reason", "revoked_at"]);
+    expect(result.properties.reason).toEqual({ const: "participant_left" });
+    expect(result.properties.status).toEqual({ const: "revoked" });
+  });
   test("OpenAPI gives every participant path the narrow scheme and five required proofs", () => {
-    for (const suffix of ["invitation", "accept", "context", "events"]) {
+    for (const suffix of ["invitation", "accept", "context", "events", "leave"]) {
       const path = COLLABORATION_OPENAPI_PATHS[`${BASE}/{mission_id}/${suffix}`] as any;
       for (const method of ["get", "post"]) if (path[method]) {
         expect(path[method].security).toEqual([{ missionGrant: [] }]);

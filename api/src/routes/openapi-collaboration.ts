@@ -78,6 +78,12 @@ export const COLLABORATION_OPENAPI_PATHS = {
   [`${base}/{mission_id}/accept`]: { parameters: [mission], post: operation("Accept the immutable descriptor digest", true, { body: {
     type: "object", additionalProperties: false, required: ["mission_digest"], properties: { mission_digest: digest },
   }, description: "Explicit registered-key proof, intrinsic invitation action. Repeat valid acceptance is harmless. Does not claim independent agency or subjective consent." }) },
+  [`${base}/{mission_id}/leave`]: { parameters: [mission], post: operation("Leave the mission by revoking only the caller's own grant", true, { description: "No body: sign the SHA-256 of zero bytes. Requires prior acceptance; any action set may leave. Revokes only the grant named by the token and proof, recording reason participant_left. An exact repeat with a fresh proof returns the same state while the grant would otherwise be admissible; every other use of the token is then refused. Other grants and the mission are unaffected; observations already stored remain.",
+    responses: { "200": { description: "The caller's grant is revoked by the participant; identical for the first leave and any repeat", content: { "application/json": { schema: {
+      type: "object", additionalProperties: false, required: ["mission_id", "grant_id", "status", "reason", "revoked_at"], properties: {
+        mission_id: uuid, grant_id: uuid, status: { const: "revoked" }, reason: { const: "participant_left" }, revoked_at: date,
+      },
+    } } } } } }) },
   [`${base}/{mission_id}/context`]: { parameters: [mission], get: operation("Read accepted mission context", true, { description: "Requires mission.read and prior acceptance. No private memory or task authority." }) },
   [`${base}/{mission_id}/events`]: {
     parameters: [mission],
