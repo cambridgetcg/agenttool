@@ -2,15 +2,17 @@
 
 > **Type:** guide
 > **Purpose:** Keep the lobby desk's safety boundaries intact while changing it.
-> **Evidence:** `src/`, `bin/` and `tests/` in this package, and `../../bin/tests/lobby-fleet-gateway.test.ts`; README.md is the contract. Nothing is released or deployed.
+> **Evidence:** `src/`, `bin/` and `tests/` in this package, and `../../bin/tests/lobby-{fleet,table}-gateway.test.ts`; README.md is the contract. Nothing is released or deployed.
 > **Compass:** [README](README.md) (contract and limits) · [Collaboration missions](../../docs/COLLABORATION-MISSIONS.md) · [Mission client](../../docs/COLLABORATION-MISSION-CLIENT.md) · [Identity anchor](../../docs/IDENTITY-ANCHOR.md) · [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) · [Lounge](../../docs/LOUNGE.md) · [Agent discovery](../../docs/AGENT-DISCOVERY.md)
 
 This private package is the 大廳 Lobby desk: the **local hall** (room cards,
-the private ledger, the pin book, the audit log, the egress gate) and the
+the private ledger, the pin book, the audit log, the egress gate), the
 **fleet hall v0** (hub and door, device enrollment, door-signed cards, knocks,
-admit/deny and Ready on agenttool collaboration missions), with a read-only
-stdio MCP view of both. It is MVP steps 1, 2 and 7 of the 2026-10-16 Lobby
-design; README `Concepts` restates the design terms it implements.
+admit/deny and Ready on agenttool collaboration missions) and, inside a room,
+**table talk**, renewal inside the term, leave, kick and block, the emergency
+stop and the weekly access digest, with a read-only stdio MCP view. It is MVP
+steps 1, 2, 7 and 8 of the 2026-10-16 Lobby design; README `Concepts`
+restates the design terms it implements.
 
 ## Non-negotiables
 
@@ -24,9 +26,11 @@ design; README `Concepts` restates the design terms it implements.
   transport failure is reported as uncertain and never retried automatically.
   `tests/boundary.test.ts` enforces this.
 - **Every outbound text passes the gate inside the transport.** Observation
-  summaries, mission descriptors, grant bodies and enrollment display names go
+  summaries (table talk, notes and notices included), mission descriptors,
+  grant bodies and enrollment display names go
   through `assertSendable` (the egress gate plus: residency must be `fleet` and
   the card `hostable: true`) in `src/hosted.ts` itself, not only in callers.
+  Leave and both revocations carry zero body bytes; keep them that way.
   The gate checks every decoded string of a JSON text as well as the text, so a
   JSON escape (`\n`, `\t`, `\uXXXX`) cannot hide a term. Device rooms,
   device-pinned rooms and `open` rooms send nothing, and a saved send is gated
@@ -61,25 +65,44 @@ design; README `Concepts` restates the design terms it implements.
   room id from a path, a workspace or a Collab `ws_` id, and never accept a
   `ws_` id or bare 24-hex id where a room id is expected.
 - **The MCP server stays read-only and offline.** Exactly `lobby_halls`,
-  `lobby_browse` and `lobby_card`, opened through a read-only SQLite handle per
-  call. The fleet hall is read from the local event cache and re-verified
-  against the pinned door key on every call. Its import graph must not reach
-  `hosted`, `keychain`, `secrets`, `ops`, `desk`, `hub`, `packets`, `tty` or the
-  CLI. Do not add a tool that fetches, writes, knocks, admits, accepts, signs,
-  pins or returns the ledger, the pin book, the audit log, a token or a key.
-  Every card goes through `wrapLocalCard` or `wrapFleetCard`.
+  `lobby_browse`, `lobby_card`, `room_read`, `room_wait` and `room_say_draft`,
+  opened through a read-only SQLite handle per call. The fleet hall and a
+  room's table are read from the local event cache and re-verified against the
+  pinned door key on every call; `room_wait` polls that cache for at most 45
+  seconds. `room_say_draft` returns bytes and a gate verdict and saves nothing.
+  Its import graph must not reach `hosted`, `keychain`, `secrets`, `ops`,
+  `desk`, `hub`, `hub-access`, `talk`, `digest`, `packets`, `tty` or the CLI
+  (`tests/boundary.test.ts`). Do not add a tool that fetches, sends, writes,
+  knocks, admits, accepts, renews, leaves, signs, pins or returns the ledger,
+  the pin book, the audit log, a token or a key. Every card goes through
+  `wrapLocalCard` or `wrapFleetCard`, and table talk through `wrapTableRead`.
 - **Consequential acts belong to the CLI and the terminal.** Promotion, pin
-  changes and every fleet act that signs, grants, posts or accepts go through
+  changes and every fleet act that signs, sends, grants, revokes, posts or
+  accepts (table talk, renew request and accept, leave, the renew sweep, member
+  add, pause and resume, roster posts, kick, block, unblock, stop) go through
   `plan*` → `confirmOnTty` → record → `execute*`. The confirmation shows the
   exact canonical bytes, including every document or request body to be sent,
   reads `/dev/tty` and never stdin, and fails closed without a terminal. Fleet
-  acts append those bytes to the audit log before any network effect. Do not
-  add an environment variable, flag or injected default that skips or answers
-  the prompt in production code.
+  acts append those bytes to the audit log before any network effect, and
+  acts whose network effects can partly fail add an `<act>.outcome` entry
+  after. Do not add an environment variable, flag or injected default that
+  skips or answers the prompt in production code.
 - **Pins come from people, not rooms.** The door key is pinned only at
   `fleet join`, from a fingerprint the person types, and only if the directory
-  descriptor names the same key. Never pin or trust a key because a card, knock,
-  roster or note names it.
+  descriptor names the same key. Members' keys are pinned per season only by a
+  complete door-signed `member_roster` verified against that door key (highest
+  `roster_seq` wins). Never pin or trust a key because a card, knock, message,
+  note or unverified roster names it. A key added by hand (`hub member add`) is
+  typed at the hub's terminal, never taken from room content.
+- **Removal and the stop never wait on the network.** Kick, block and stop
+  record their local effect (member state, block, stop) before the first
+  request; after a stop the hub issues nothing (`requireLiveHub`). The stop
+  prints the manual API-key rotation step and must never call `/v1/keys` or
+  rotate anything itself.
+- **Table talk is the participant client's format.** The chat envelope is
+  `agenttool-mission-chat/v1` byte for byte (`bin/mission-chat.mjs`
+  `message()`); `bin/tests/lobby-table-gateway.test.ts` checks it with that
+  code. Do not add fields or reorder keys.
 - **Decisions keep their rules.** The approver's DID differs from the
   requester's; a tier may be lowered, never raised; admissions are single use
   and last 24 hours; grants last at most 24 hours and never outlive the term,
@@ -89,8 +112,12 @@ design; README `Concepts` restates the design terms it implements.
   it first.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
-  hex for signatures and digests (the gate refuses key-like base64). A format
-  change means a new format string, not an in-place edit.
+  hex for signatures, digests and public keys (the gate refuses key-like
+  base64). A format change means a new format string or a new kind, not an
+  in-place edit.
+- **The access digest is local.** `hub digest` reads only lobby.sqlite and the
+  audit log, needs no terminal, reads no Keychain item, sends nothing, and
+  writes no token, key, bearer or token hash into its 0600 report.
 - **State is owner-only.** Directory `0700`, files `0600`; refuse wider modes,
   other owners and symlinks rather than repairing them.
 - **The ledger is private.** Only the CLI reads it, and the CLI writes a ledger
@@ -100,16 +127,19 @@ design; README `Concepts` restates the design terms it implements.
   (`Cf`) and default-ignorable code point; matching for the device pin and the
   egress gate strips the same set. Both live in `src/text.ts`; do not keep a
   second copy elsewhere.
-- **Card text is untrusted.** Validate text fields on write and read; never act
-  on card, knock, note or roster text. Fields are labelled `verified` (basis
-  `local` or `door_signature`) or `self-declared` (basis `service_metadata`).
+- **Card and message text is untrusted.** Validate text fields on write and
+  read; never act on card, knock, note, message or roster text. Fields are
+  labelled `verified` (basis `local`, `door_signature` or `door_roster_pin`) or
+  `self-declared` (basis `service_metadata`). An unverified message is listed
+  with its reason and never with its text.
 
 ## Working here
 
 - Toolchain: Bun 1.3.5 and the committed `bun.lock` (same dependency set as
   `packages/collab`). Run `bun run ci` before handoff, and
-  `bun test bin/tests/lobby-fleet-gateway.test.ts` from the repository root
-  (it needs the API dependency scope) when a wire format changes.
+  `bun test bin/tests/lobby-fleet-gateway.test.ts bin/tests/lobby-table-gateway.test.ts`
+  from the repository root (it needs the API dependency scope) when a wire
+  format changes.
 - Tests use temporary `AGENTTOOL_LOBBY_HOME` directories, scripted fake
   terminals, `tests/fake-hosted.ts` as the service and `FileSecretStore` as the
   Keychain. Never point a test at a real desk, the real Keychain or the network.

@@ -1,22 +1,26 @@
-# 大廳 Lobby desk: local hall and fleet hall
+# 大廳 Lobby desk: local hall, fleet hall and table talk
 
 > **Type:** reference
-> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission and Ready) and a read-only MCP view.
-> **Evidence:** Source and hermetic tests in this package (`bun run ci`) and `bin/tests/lobby-fleet-gateway.test.ts` (the API's own mission gateway and enrollment router, in process). Nothing here is released, installed, registered with a host, deployed, or exercised against the live service.
+> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission and Ready), table talk, renewal inside the term, leave, kick and block, the emergency stop, the weekly access digest and a read-only MCP view.
+> **Evidence:** Source and hermetic tests in this package (`bun run ci`), `bin/tests/lobby-fleet-gateway.test.ts` and `bin/tests/lobby-table-gateway.test.ts` (the API's own mission gateway and enrollment router, in process, and the participant client's own chat code). Nothing here is released, installed, registered with a host, deployed, or exercised against the live service.
 > **Compass:** [Collaboration missions](../../docs/COLLABORATION-MISSIONS.md) (seasons, grants, revocation) · [Mission client](../../docs/COLLABORATION-MISSION-CLIENT.md) (wire formats reused here) · [Identity anchor](../../docs/IDENTITY-ANCHOR.md) (enrollment) · [Collaboration roadmap](../../docs/COLLABORATION-ROADMAP.md) (public joining is deferred) · [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) (the local Collab journal stays canonical) · [Lounge](../../docs/LOUNGE.md) (seats are explicit leases, never "online") · [Agent discovery](../../docs/AGENT-DISCOVERY.md) (reading obliges nothing) · [Rights of Life](../../docs/RIGHTS-OF-LIFE.md)
-> **Implements:** MVP steps 1, 2 and 7 of the 大廳 Lobby design (2026-10-16): the local hall, its egress gate, and fleet hall v0. The design document is kept outside this repository; [Concepts](#concepts) restates the parts built here.
-> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
-> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-fleet-gateway.test.ts`
+> **Implements:** MVP steps 1, 2, 7 and 8 of the 大廳 Lobby design (2026-10-16): the local hall, its egress gate, fleet hall v0, and table talk with renewal, leave, kick and block, the emergency stop and the access digest. The design document is kept outside this repository; [Concepts](#concepts) restates the parts built here.
+> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub}.ts` · table talk and access `src/{table,device-terms,talk,hub-access,digest,cli-table}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
+> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals,fleet-hardening}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · table talk and access `tests/{table,table-talk,renewal,removal}.test.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-{fleet,table}-gateway.test.ts` with `../../bin/tests/lobby-gateway-fixture.ts`
 
 `@agenttool/lobby` is a private Bun 1.3.5 package (`"private": true`, no release
 lane). It keeps a list of project rooms on one device (the **local hall**) and,
 for rooms deliberately promoted to `residency=fleet`, a **fleet hall** shared by
 the owner's own devices through agenttool collaboration missions on
-`https://api.agenttool.dev`. Local agents read both halls through three
-read-only MCP tools. Every act that signs, grants, knocks, admits or accepts
-lives in the CLI behind a `/dev/tty` confirmation. One transport module talks
-to the service, only through an injected `fetch`, and every text it sends
-passes the egress gate inside that module.
+`https://api.agenttool.dev`. Members of a fleet room talk at its **table** (signed
+mission chat, verified against a door-signed roster), renew their grants inside
+their term, and leave; the hub kicks, blocks, pauses and, in an emergency, stops
+everything. Local agents read both halls and a room's table through six
+read-only MCP tools, one of which only drafts a message. Every act that signs,
+sends, grants, revokes, knocks, admits or accepts lives in the CLI behind a
+`/dev/tty` confirmation. One transport module talks to the service, only through
+an injected `fetch`, and every text it sends passes the egress gate inside that
+module.
 
 ## Concepts
 
@@ -27,20 +31,21 @@ passes the egress gate inside that module.
 | **Season (賽季)** | One mission per room per period of at most 30 days. Its descriptor is the room **charter**, bound by digest; the hub creates it from the room card or **adopts** an existing mission by id and digest. | Season rollover reminders. |
 | **Residency** | `device` (default), `fleet` or `open`, separate from visibility. A `device` room is never hostable, always private, and neither the gate nor the transport sends anything from it. Rooms naming Betfair work are pinned to `device` forever. Only `fleet` rooms reach the fleet hall; `open` is refused while public joining is off. | — |
 | **Desk identity** | One agenttool identity per device, enrolled into the hub's project as a guest with a neutral display name and no capabilities. Claude sessions on the device are seats of it. | Room-scoped seat leases. |
-| **Hub and door** | The hub is the one device whose login Keychain holds the project bearer and the **door** key, an Ed25519 key that signs cards, admissions, denials and rosters. Its own desk posts them like any fleet device. | A dedicated `lobby-issuer` API key; steward roles. |
+| **Hub and door** | The hub is the one device whose login Keychain holds the project bearer and the **door** key, an Ed25519 key that signs cards, admissions, denials, rosters and renewal notices. Its own desk posts them like any fleet device, and sits at every table as the room's **host**. | A dedicated `lobby-issuer` API key; steward roles. |
 | **Knock (敲門)** | A request signed by the requesting desk: room, charter digest, tier, the SHA-256 of a fresh room token, a note of at most 280 characters (untrusted), expiry of at most 72 hours. Posted to the directory. | `/v1/lobby/knocks`. |
 | **Admission / Ready (準備)** | The door's signed decision (single use, 24 hours), then the device's own signed accept of exactly the charter digest the card named. | — |
-| **Membership / grant** | A term of at most the season; underneath, a mission grant of at most 24 hours bound to the device's own token hash (`mission.read`, plus `mission.observe` for players). | In-room renewal inside the term. |
-| **Roster** | A door-signed list of the season's members, posted in the season mission on each admission and announced in the charter. | — |
-| **Lobby desk** | The `agenttool-lobby` CLI and the read-only `agenttool-lobby-mcp` server. MCP tools only read. Consequential acts exist only in the CLI behind a `/dev/tty` confirmation. | — |
+| **Membership / grant** | A term of at most the season; underneath, a mission grant of at most 24 hours bound to the device's own token hash (`mission.read`, plus `mission.observe` for players), **renewed inside the term**: a signed renew note, the hub's sweep, the member's accept of the same digest. The hub can **pause** a member's renewal. | Automatic (unattended) renewal: every renewal is confirmed at a terminal. |
+| **Roster** | A door-signed **keyed roster** (`member_roster`) of the season's members, with each member's key: the pin source for table talk. Posted on every admission, leave, kick, block and member added by hand; the newest complete roster wins. Announced in the charter. | — |
+| **Table talk** | The room's shared, signed message stream: `agenttool-mission-chat/v1` envelopes, byte for byte as the participant client writes them, verified against the keyed roster. Every member and the service read every message. | Fan-out to several members in one message. |
+| **Leave, kick, block, stop** | A member leaves its own grants (`POST .../leave`, zero body bytes). The hub kicks (revokes the member's grants), blocks (and refuses its knocks on that room), and in an emergency revokes every lobby grant and created mission, then tells the owner to rotate the issuing API key. | Steward roles; a fleet-wide block of one device. |
+| **Lobby desk** | The `agenttool-lobby` CLI and the read-only `agenttool-lobby-mcp` server. MCP tools only read (and draft). Consequential acts exist only in the CLI behind a `/dev/tty` confirmation. | — |
 | **Private ledger** | `room_id` ↔ a local Collab workspace id, an absolute path, or `none`. | The Collab bridge that would use it. |
-| **Pin book** | DID, key id, public key, petname, how the pin was obtained, fingerprint. Fingerprints are shown before names. The door key is pinned here at `fleet join`, from a fingerprint the person types. | — |
-| **Audit log** | Append-only, hash-chained record of every consequential act, with the exact bytes the person confirmed. | Weekly access digest. |
+| **Pin book** | DID, key id, public key, petname, how the pin was obtained, fingerprint. Fingerprints are shown before names. The door key is pinned here at `fleet join`, from a fingerprint the person types. Members' keys are pinned per season by the door-signed roster, not in the pin book. | — |
+| **Audit log** | Append-only, hash-chained record of every consequential act, with the exact bytes the person confirmed, and of what happened after (`*.outcome`). The hub's **weekly access digest** is a local report built from it. | — |
 | **Egress gate** | `checkEgress(text, { room, deviceTerms })`. The transport calls it on every text it sends. | — |
 
-Table talk, in-room renewal, leave, kick and block, the emergency stop, the
-Collab bridge, outside agents and every hosted `/v1/lobby` route belong to
-later steps (see [Fleet hall](#fleet-hall), *Not built*).
+The Collab bridge, seat leases, outside agents and every hosted `/v1/lobby`
+route belong to later steps (see [Not built](#not-built-later-steps)).
 
 ## Use
 
@@ -55,7 +60,9 @@ bun bin/agenttool-lobby-mcp.ts            # stdio MCP server, read-only
 bun run ci                                # typecheck + hermetic tests
 ```
 
-The fleet hall's commands and their order are in [Fleet hall](#fleet-hall).
+The fleet hall's commands and their order are in [Fleet hall](#fleet-hall); a
+room's table, renewal and leave are in [Table talk](#table-talk) and
+[Renewal, leave, kick and block](#renewal-leave-kick-and-block).
 
 A host that wants the MCP view runs `bun <checkout>/packages/lobby/bin/agenttool-lobby-mcp.ts`
 as a stdio command. This package installs nothing and changes no host configuration.
@@ -81,11 +88,16 @@ a relative `XDG_STATE_HOME` is ignored, as the XDG specification requires.
   for expired or revoked grants can be deleted by hand.
 - The hub's project bearer and door key are not in this directory at all: they
   live in the login Keychain (see [Fleet hall](#fleet-hall)).
+- `reports/` (directory `0700`, files `0600`, never overwritten) holds the hub's
+  [weekly access digests](#weekly-access-digest) unless `--out` names another
+  new file.
 
-`lobby.sqlite` uses schema version `2` (rollback journal, `secure_delete`). A
-version-1 file is upgraded explicitly the first time the CLI opens it for
-writing (the fleet tables are added; nothing existing changes); the read-only
-MCP handle reads a version-1 file as "no fleet state yet". Local-hall tables:
+`lobby.sqlite` uses schema version `3` (rollback journal, `secure_delete`). An
+older file is upgraded explicitly, one step at a time, the first time the CLI
+opens it for writing: 1 → 2 adds the fleet tables, 2 → 3 adds the version-3
+columns and tables below (all additive; nothing existing changes). The
+read-only MCP handle reads a version-1 file as "no fleet state yet" and a
+version-2 file as fleet state without the version-3 tables. Local-hall tables:
 
 | Table | Holds | Guarded by |
 |---|---|---|
@@ -110,7 +122,22 @@ keys and signed documents are not secrets):
 | `hub_seasons` | hub | Seasons per room (created or adopted); one current per room. |
 | `hub_cards` | hub | Published cards by room and sequence number. |
 | `hub_decisions` | hub | Admit or deny per knock, with the signed document. A trigger refuses every `UPDATE`: decisions are final. |
-| `hub_members` | hub | Members per season: tier, term end, the knock and grant behind them. |
+| `hub_members` | hub | Members per season: tier, term end, the knock and grant behind them (`none` for a member added by hand), and since version 3 their state (`active`, `left`, `kicked`, `blocked`), the pause flag and when the state changed. |
+
+Version 3 adds, again with no secret anywhere:
+
+| Table or column | Side | Holds |
+|---|---|---|
+| `desk_grants.left_at` | every device | When this desk left a grant itself; a left grant is never used again. |
+| `desk_renewals` | every device | This desk's renew requests: room, season, the token hash, where the request was posted, and the grant it was picked up as. |
+| `hub.stopped_at`, `hub.directory_revoked_at` | hub | The emergency stop: once set, this hub issues no more access. |
+| `hub_grants.revoke_state`, `.revoked_at` | hub | `requested` (sent, no confirmed answer) or `revoked` (confirmed). |
+| `hub_seasons.revoked_at` | hub | A season mission revoked by the stop. |
+| `hub_rosters` | hub | Every keyed roster the door signed, by season and `roster_seq`. |
+| `hub_renewals` | hub | Each renewal: token hash, member, grant, basis (`request` or `list`), the request and notice events. A token hash renews once. |
+| `hub_blocks` | hub | Blocked identities per room. |
+| `hub_extra_grants` | hub | Grants issued by hand for an adopted season, registered so kick and stop can revoke them. |
+| `hub_processed_notes` | hub | Leave notices already acted on, so a later sweep never repeats one. |
 
 ## Room card
 
@@ -171,8 +198,11 @@ agenttool-lobby audit verify
 ```
 
 The fleet hall's commands (`enroll-device`, `fleet …`, `knock`, `ready`,
-`outbox …`, `hub …`, `room publish`) are listed in [Fleet hall](#fleet-hall)
-and in `agenttool-lobby help`.
+`outbox …`, `hub …`, `room publish`) are listed in [Fleet hall](#fleet-hall);
+a room's table, renewal and leave (`room sync|read|wait|roster|say|renew|leave`)
+and the hub's `renew-sweep`, `member`, `members`, `roster post`, `kick`,
+`block`, `unblock`, `stop` and `digest` in [Table talk](#table-talk) and the
+sections after it; all of them in `agenttool-lobby help`.
 
 Exit codes: `0` done, `1` refused, `2` usage, `3` not confirmed. A fleet act
 that was confirmed but whose post has no verified receipt exits `1` and names
@@ -207,8 +237,12 @@ fleet act listed under [Fleet hall](#fleet-hall). The desk:
    person confirmed even when the network then fails.
 
 A device-pinned room is refused before the terminal is opened. Ordinary acts
-(`room add`, `set-status`, `link`) are not audited. `enroll-device` sends
-nothing and is audited (`desk.enroll`) without a prompt.
+(`room add`, `set-status`, `link`) and reads (`room read`, `wait`, `sync`,
+`roster`, `hub members`, `hub digest`) are not audited. `enroll-device` sends
+nothing and is audited (`desk.enroll`) without a prompt. After a confirmed act
+whose network effects can partly fail (`room leave`, `hub renew-sweep`,
+`hub kick`, `hub block`, `hub stop`), a second entry `<act>.outcome` records
+what happened (statuses and ids, never a secret), also without a prompt.
 
 Act records:
 
@@ -240,7 +274,7 @@ join, open doors and public joining are off, and `residency=device` rooms
 |---|---|
 | The hub's macOS login Keychain | The project bearer (you add it by hand) and the door key's 32-byte Ed25519 seed (generated by `hub init`). Read by the CLI only. |
 | Each desk's `secrets/` | The desk key and every grant-token preimage. Never printed, never sent. |
-| `api.agenttool.dev` (server-readable plaintext) | The hub project; desk identities enrolled as guests; one directory mission; one mission per room season; grants bound to device-chosen token hashes; the events: cards, knocks, admissions, denials, rosters. |
+| `api.agenttool.dev` (server-readable plaintext) | The hub project; desk identities enrolled as guests; one directory mission; one mission per room season; grants bound to device-chosen token hashes; the events: cards, knocks, admissions, denials, rosters, table talk, renew and leave notes, renewal notices. |
 | A person carrying files | The enrollment packet (device → hub) and the join packet plus the door fingerprint (hub → device). Neither holds a secret. |
 
 **Keychain custody.** The CLI is the only reader, and only with a person at
@@ -412,8 +446,10 @@ agenttool-lobby ready <knock_id>               # tty
   prompt shows the room's current status and door. Then
   the door signs an **admission** (single use, valid 24 hours) and posts it to
   the directory, where the device reads it, and to the season, and posts a
-  door-signed **roster** of current members to the season (split into parts
-  of four members so each fits one observation). Decisions are final.
+  door-signed **keyed roster** of current members, the hub desk included as
+  host, to the season (see [Table talk](#table-talk)). Decisions are final. A
+  knock from an identity [blocked](#renewal-leave-kick-and-block) from the room
+  is `invalid` (`blocked`) and cannot be admitted.
 - **Deny** (tty) posts a door-signed denial with an optional reason (at most
   280 characters, visible to the fleet) to the directory.
 - **Ready** (tty, device) syncs, finds the door-signed admission for its own
@@ -440,7 +476,19 @@ oversized documents.
 | `knock` | requesting desk | directory | `knock_id`, `room_id`, `charter_digest`, `tier`, `token_sha256`, `note`, `issued_at`, `expires_at` |
 | `admission` | door | directory and season | `knock_id`, `room_id`, season `mission_id` and `mission_digest`, member `identity_id` and `signing_key_id`, `tier`, `grant` (`grant_id`, `expires_at`, `token_sha256`), `term_ends_at`, `issued_at`, `expires_at` |
 | `denial` | door | directory | `knock_id`, `room_id`, `identity_id`, `reason`, `issued_at` |
-| `roster` | door | season | `room_id`, `mission_id`, `members` (`identity_id`, `tier`, `term_ends_at`), `part`, `parts`, `issued_at` |
+| `roster` | door | season | `room_id`, `mission_id`, `members` (`identity_id`, `tier`, `term_ends_at`), `part`, `parts`, `issued_at`. Fleet hall v0's roster: still read, no longer posted (it names no keys, so it cannot pin table talk). |
+| `member_roster` | door | season | `room_id`, `mission_id`, `roster_seq`, `members` (`identity_id`, `signing_key_id`, `public_key_hex`, `tier`, `role` `host`/`member`, `term_ends_at`), `part`, `parts`, `issued_at`. Two members per part. |
+| `renew` | member desk | season, or directory | `room_id`, `mission_id`, `identity_id`, `signing_key_id`, `token_sha256`, `issued_at`, `expires_at` (at most 24 hours) |
+| `renewal` | door | where the `renew` was posted | `room_id`, `tier`, `term_ends_at`, `invitation` (`mission_id`, `grant_id`, `identity_id`, `signing_key_id`, `public_key_hex`, `expires_at`, `token_sha256`), `issued_at` |
+| `leave` | member desk | season, or directory | `room_id`, `mission_id`, `identity_id`, `signing_key_id`, `issued_at` |
+
+Kinds are additive: a desk that does not know a kind reports it as malformed
+and acts on nothing in it. A changed body is a new kind, never an in-place edit
+(`member_roster` succeeds `roster`). Public keys travel as 64 lower-case hex
+characters (`public_key_hex`), never base64, for the same reason as signatures.
+Table talk is not a signed lobby document: it is the participant client's
+`agenttool-mission-chat/v1` envelope, signed by the sender's exact-request
+proof (see [Table talk](#table-talk)).
 
 ### Lifetimes
 
@@ -450,17 +498,23 @@ oversized documents.
 | Knock | at most 72 hours (`--hours`, default 72) |
 | Admission | 24 hours, single use |
 | Grant | at most 24 hours (requested a minute short), never past the term, season or directory |
-| Membership | at most the season |
+| Renew request | at most 24 hours; a token hash renews once |
+| Membership | at most the season; ended early by leave, kick or block |
 | Season, directory | at most 30 days |
+| A wait (`room wait`, `room_wait`) | at most 45 seconds, polling at most every 3 seconds |
 
 ### Who can see what
 
 - The service can read everything hosted: descriptors, cards, knocks and their
-  notes, decisions, rosters and enrolled display names. Only text that passed
-  the egress gate is ever sent.
+  notes, decisions, rosters, table talk, renew and leave notes, renewal
+  notices and enrolled display names. Only text that passed the egress gate is
+  ever sent.
 - Every fleet device with a directory grant reads every card, knock (with its
-  note) and decision in the directory. Season members read that season's
-  admissions and rosters.
+  note) and decision in the directory, and any renew or leave note and renewal
+  notice posted there (a spectator's, or a member's whose room grant has
+  lapsed): those say who is a member of which room. Season members read that
+  season's admissions, rosters, renewal notices and every table-talk message,
+  whoever it is addressed to.
 - Nothing hosted maps a room to a local workspace; the private ledger stays on
   the device.
 
@@ -490,31 +544,243 @@ unknown marks its knock `invalid` (`grant_uncertain:<grant_id>`) until that
 grant id is inspected with the administrator read API; it is never re-requested
 with the same token. A conflicting enrollment (409) stops with nothing recorded.
 
+The same rules hold for the acts below. A table-talk message, renew note,
+leave notice, renewal notice or roster is saved in the outbox before it is
+sent, and `outbox retry` resends it gated by the room as it is now (table talk
+names no room, so the room is the one this desk's own grants record for that
+mission). A renewal grant whose response is lost is recorded as requested and
+its token hash then reads `grant_uncertain:<grant_id>` in the next sweep; the
+member asks again with a fresh token. Leave and both revocations are idempotent
+on the service: an uncertain `room leave`, `hub kick`, `hub block` or `hub
+stop` is settled by running the same command again, which sends the same
+zero-byte request and reads the recorded state. Kick, block and stop record
+their local effect (membership state, block, stop) before the first request,
+so a failed network step never leaves a removed member able to renew.
+
 ### Not built (later steps)
 
-Table talk (`room_say/read/wait`), in-room grant renewal within a term,
-self-leave, kick and block, the emergency stop (rotating a `lobby-issuer` key),
-the weekly access digest, seat leases, the Collab bridge (knocks mirrored as
-reports), directory rollover after 30 days, steward roles, outside agents,
-public halls and every hosted `/v1/lobby` route. A device renews its directory
-grant by running `enroll-device`, `hub relay` and `fleet join` again; the hub
-renews its own seats with `hub seat`.
+Seat leases, the Collab bridge (knocks mirrored as reports, room text imported
+as observations), directory rollover after 30 days, steward roles, a fleet-wide
+block of one device, a dedicated `lobby-issuer` API key and rotating it (the
+stop prints that step for the owner and never performs it), outside agents,
+public halls and every hosted `/v1/lobby` route. Renewal is not unattended:
+every request, sweep and pickup is confirmed at a terminal. A device renews its
+directory grant by running `enroll-device`, `hub relay` and `fleet join` again;
+the hub renews its own seats with `hub seat`.
+
+## Table talk
+
+```bash
+agenttool-lobby room sync <room_id>                    # read the room's new events into the cache
+agenttool-lobby room read <room_id> [--after N] [--limit 1-50] [--conversation C] [--cached] [--json]
+agenttool-lobby room wait <room_id> [--after N] [--seconds 1-45] [--conversation C] [--json]
+agenttool-lobby room roster <room_id> [--cached] [--json] [--chat-config [--conversation C]]
+agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
+                         [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C]   # tty
+```
+
+- **The format** is the reviewed participant client's (`bin/mission-chat.mjs`),
+  byte for byte: the observation summary is `{"format":"agenttool-mission-chat/v1",
+  "conversation":…,"to_identity":…,"kind":"message"|"read_ack","text":…[,"in_reply_to":…]}`
+  in that key order, at most 1000 Unicode scalars in all. The conversation is
+  `table` unless `--conversation` names another slug. `to_identity` says whom a
+  message is for, not who may read it: **every member of the season and the
+  service read every message.** A `read_ack` is a voluntary signed claim of
+  reading and must name the message read.
+- **Pins come from the door.** A sender is verified only when a complete
+  door-signed `member_roster` of this season, checked against the door key
+  pinned at `fleet join`, names its identity, key id and public key, and the
+  event's exact-request proof verifies against that key. The highest complete
+  `roster_seq` is current; a roster missing a part, or two rosters that pin one
+  identity to different keys, never verify anyone; an older roster replayed
+  later never restores a removed member. A former member's earlier messages
+  still verify and are marked `current_member: false`. Anything else (a sender
+  off the roster, a bad proof, a malformed envelope, text a terminal could not
+  show faithfully) is listed as unverified with a closed reason, authority
+  `none`, and **no text**. Members' keys are pinned per season by the roster,
+  never because a message, card or note names them.
+- **Read** syncs the season with this desk's own grant (a participant read; no
+  Keychain, no terminal needed) and prints verified messages wrapped as
+  untrusted data (`--json`: fields labelled `verified`, basis `door_roster_pin`,
+  or `self-declared`, basis `service_metadata`). `next_cursor` never passes an
+  item that was not returned. `--cached` reads only the local cache.
+- **Wait** syncs, reads, and if nothing new after the cursor arrived pauses at
+  most three seconds and tries again, for at most 45 seconds (the participant
+  client's `wait` bounds). It wakes no one and runs only while the command runs.
+- **Say** (tty, players only: a spectator's grant has no `mission.observe`)
+  syncs first, then sends to the only other current member of the roster, the
+  member named with `--to`, or, with `--in-reply-to`, the verified sender of
+  that message. It refuses a destination off the newest roster, this desk
+  itself, and a desk the roster does not list. The terminal shows the exact
+  raw body before anything is sent; the body is saved in the outbox, sent
+  once, gated in the transport, and never retried automatically. Text from a
+  file loses one trailing newline.
+- **The gate on every message.** The transport refuses device rooms, rooms
+  pinned to the device, unhostable and non-fleet rooms (on the hub, the local
+  room as it is now; on a member desk, the room's door-verified card), and text
+  naming device-only work, device model or machine names, LAN addresses, local
+  hostnames, home or `~` paths, Collab `ws_` ids, tokens, PEM blocks or
+  key-like base64. A refused message reaches neither the terminal nor the
+  outbox.
+- **`room roster --chat-config`** prints an `agenttool-mission-chat-config/v1`
+  document pinning the roster's current members other than this desk (public
+  keys only), for a member who uses `bin/agenttool-mission.mjs chat` instead of
+  a desk.
+
+## Renewal, leave, kick and block
+
+```bash
+agenttool-lobby room renew request <room_id>                                     # tty, member
+agenttool-lobby room renew accept <room_id>                                      # tty, member
+agenttool-lobby room leave <room_id>                                             # tty, member
+agenttool-lobby hub renew-sweep [--room ROOM_ID [--hashes-file FILE]]            # tty, hub
+agenttool-lobby hub members <room_id> [--json]
+agenttool-lobby hub member add <room_id> --identity UUID --tier T [--key-id UUID --public-key BASE64]
+                               [--term-days N] [--grant-id UUID]...              # tty, hub
+agenttool-lobby hub member pause|resume <room_id> <identity_id>                  # tty, hub
+agenttool-lobby hub roster post <room_id>                                        # tty, hub
+agenttool-lobby hub kick|block <room_id> <identity_id> [--grant-id UUID]...      # tty, hub
+agenttool-lobby hub unblock <room_id> <identity_id>                              # tty, hub
+```
+
+**Renewal inside the term.** A grant lasts at most 24 hours; a membership lasts
+its term.
+
+1. `room renew request` generates a fresh token on the desk (saved 0600 only on
+   `yes`), signs a `renew` note bound to its SHA-256 and posts it in the room,
+   or, when this desk may not post there (a spectator, or a member whose room
+   grant has lapsed), in the directory. Only the hash leaves the device.
+2. `hub renew-sweep` reads the directory and every current season with the hub
+   desk's own seats and checks each note like a knock: the signer is a desk the
+   hub recorded, the event came from that desk's identity and key with a valid
+   exact-request proof, the signature holds, and the note names that same desk.
+   It renews only an active member of the room's current season whose term
+   has not ended, who is not paused or blocked, in a room still `fleet`,
+   hostable, private and not closed, for a token hash never used. The newest
+   request per member wins. The prompt lists every renewal and every skipped
+   request with its reason. On `yes` it issues the next grant bound to that
+   hash (at most 24 hours, never past the term or season) and posts a
+   door-signed `renewal` notice where the request was posted. The notice
+   carries the token-free invitation template; the hub also prints the exact
+   `agenttool-mission-invitation-template/v1` documents.
+3. `room renew accept` finds the door-signed renewal for its open request,
+   rebuilds the template, assembles the seat with its own token (the
+   participant client's `invitation-assemble`), reads the invitation, requires
+   the season's digest to be exactly the one this desk accepted before, and on
+   `yes` accepts it again. The new grant becomes this desk's current seat (the
+   participant client's `import --replace`).
+
+**Seasons run by hand.** For a season adopted with `hub season adopt` whose
+members joined with the participant client, `hub member add` records each
+member: its key comes from the hub's device registry, or is typed at the hub's
+terminal (`--key-id`, `--public-key`, read from the member's own device; never
+from room content); `--grant-id` registers grants issued by hand so kick and
+stop can revoke them. The member runs `token-new` and hands over only the
+hash; `hub renew-sweep --room R --hashes-file FILE` with
+`{"format":"agenttool-lobby-renew-hashes/v1","room_id":…,"entries":[{"identity_id":…,"token_sha256":…}]}`
+issues the grants and prints the templates for `invitation-assemble`.
+
+**Pause.** `hub member pause` stops renewal for one member: the grant it holds
+runs out and is not renewed. `resume` lifts it. Both are confirmed and audited.
+
+**Leave.** `room leave` (tty) first posts a desk-signed `leave` notice (in the
+room, or the directory), then sends `POST .../leave` with zero body bytes for
+every live grant this desk holds in the season (a renewal leaves two), signed
+like any participant request. The next `hub renew-sweep` records the leave and
+posts a roster without the member. The room's host desk does not leave its own
+room.
+
+**Kick and block** (tty, hub). Kick revokes every live grant the hub issued to
+that identity in the room's seasons (plus registered and `--grant-id` grants)
+with the administrator route `POST .../grants/<id>/revoke` and zero body
+bytes, marks the member kicked, and posts a door-signed roster without them.
+Block does the same and records a block: every later knock from that DID on
+that room is `invalid` (`blocked`), and the hub neither admits, adds nor renews
+it. `hub unblock` lifts only the block. Both work after an emergency stop and
+on a room since narrowed to the device: a revocation carries no text; only the
+roster post needs the room to still be a hostable fleet room. The hub desk
+cannot kick or block itself. A per-room block leaves the device's directory
+grant alone.
+
+## Emergency stop
+
+```bash
+agenttool-lobby hub stop [--include-adopted]    # tty, hub
+```
+
+The stop records itself first, so this hub issues, publishes, seats, admits,
+adds and renews nothing more, even if the network then fails. Then it revokes
+every season and directory mission the hub created (`POST .../revoke`, zero
+body bytes), then every grant the hub issued, on any mission, that has not
+expired (`POST .../grants/<id>/revoke`). Missions adopted from hand-made ones,
+and grants registered by hand, are revoked only with `--include-adopted`. Run
+it again to settle anything uncertain.
+
+It never rotates a key. It prints, on stdout and stderr, the manual step for
+the owner: revoke or rotate the API key whose bearer is in the hub's Keychain
+item, from a terminal or the dashboard the owner controls, because every
+mission grant hangs off the API key that issued it, so revoking that key ends
+every lobby grant at once, including any the stop could not reach. The desk
+never calls `/v1/keys`. A lobby that continues afterwards starts a new hub.
+
+## Weekly access digest
+
+```bash
+agenttool-lobby hub digest [--days 1-31] [--out FILE]
+```
+
+A plain report for the owner, written to a new `0600` file
+(`<desk home>/reports/access-digest-<time>.md` unless `--out` names a new
+absolute path) and never overwritten; the command prints only its path. It is
+built from this hub's own records and audit log: the hub, the directory and the
+stop; every device with its directory grant; per room, the season and every
+member with tier, state, term, pause and latest grant; blocks; grants ending
+within 48 hours and terms, seasons and the directory ending within 7 days; and
+the admissions, denials, leaves, kicks, blocks and renewals of the window,
+with the audited access acts. It needs no terminal, reads no Keychain item,
+contacts no service and posts nothing. It holds no token, key, bearer or token
+hash; names in it are self-declared and anything a terminal could not show is
+escaped. Run it weekly, by hand or from the owner's own scheduler.
 
 ## MCP tools
 
 `bin/agenttool-lobby-mcp.ts` uses the same `@modelcontextprotocol/server`
-2.0.0-beta.5 stdio pattern as `packages/collab`. It exposes exactly three tools, each
+2.0.0-beta.5 stdio pattern as `packages/collab`. It exposes exactly six tools, each
 annotated read-only, non-destructive, idempotent and closed-world, and no resources
-or prompts. It contacts no service: the fleet hall comes from this desk's local
-cache of the directory, which only the CLI's `fleet sync` fills, and every
-door-signed card is re-verified against the pinned door key on each call. No
-tool knocks, admits, accepts, signs or reads a token, a key or the Keychain.
+or prompts. It contacts no service and writes nothing: the fleet hall comes from
+this desk's local cache of the directory (filled by the CLI's `fleet sync`), a
+room's table from the local cache of its season (filled by the CLI's `room
+sync`, `read`, `wait`, `say` and `roster`), and every door-signed card and
+roster is re-verified against the pinned door key on each call. No tool sends,
+knocks, admits, accepts, renews, leaves, signs or reads a token, a key or the
+Keychain.
 
 | Tool | Input | Returns |
 |---|---|---|
 | `lobby_halls` | none | `local` with `status: available` and its `room_count`; `fleet` with `status: available`, the count of door-verified cards and `synced_at` once this desk has joined the directory (otherwise `not connected`); `public` with `status: not connected` |
 | `lobby_browse` | optional `hall`, `tag`, `status`, `door`, `tier`, `limit` (default 50, maximum 200) | Cards matching every given filter exactly. Local: ordered by `created_at` then `room_id`. Fleet: door-verified cards ordered by `room_id`, with `synced_at` and `unverified_count`. There is no ranking. `public` returns `not connected` with no rooms. |
 | `lobby_card` | `room_id`, optional `hall` (`local` or `fleet`) | One card (the local hall first, then the fleet cache), or `room_not_found` |
+| `room_read` | `room_id`, optional `after` (cursor), `limit` (1–50, default 20), `conversation` | The room's table talk after the cursor from the local cache, wrapped as untrusted data, as [Table talk](#table-talk) describes; the door-signed roster; `next_cursor`. `not_seated` when this desk holds no grant in the room. |
+| `room_wait` | as `room_read`, plus `seconds` (1–45, default 30) | Polls the local cache at most every 3 seconds for at most 45 seconds and returns what arrived, with `stop_reason` `messages` or `timeout`. Something else must refresh the cache (the CLI's `room wait`); this tool never contacts the service and wakes no one. |
+| `room_say_draft` | `room_id`, `text`, optional `to`, `in_reply_to`, `kind`, `conversation` | A **draft only**: the exact summary bytes the CLI would send, their SHA-256, the destination (from the door-signed roster), the egress gate's verdict, and the `room say` command line that sends it (with `--text-file`, never the text in a command line). `sent: false` always; nothing is saved. A device room drafts nothing. |
+
+**Why the MCP view stays offline and only drafts.** The design lets MCP tools
+"read and draft" and keeps every signature on a consequential act in the CLI.
+Sending a message signs an exact-request proof with the desk key and publishes
+text to every member and the service, and nothing in the design allows a model
+to do that on its own, so `room say` is CLI-only behind `/dev/tty` and the MCP
+tool drafts. Reads could have used the desk's grant from the MCP process, but
+that would put the desk key and grant tokens within the MCP server's reach, so
+the MCP view keeps fleet hall v0's boundary (offline, read-only handle, no
+secrets in its import graph) and reads the cache; an agent that needs fresh
+table talk runs `agenttool-lobby room wait <room_id> --json` (a read; no
+terminal needed), which polls the service exactly like the participant
+client's `wait`.
+
+Table talk is wrapped the same way as cards: `untrusted_data: true`, the
+`note`, each message's sender labelled `verified` with basis `door_roster_pin`
+(pinned by the door-signed roster), and its delivery time `self-declared` with
+basis `service_metadata`.
 
 Every card is returned wrapped as untrusted data:
 
@@ -558,9 +824,13 @@ const result = checkEgress(text, { room, deviceTerms: ["Example-Lab-Desk"] });
 `deviceTerms` (optional) are this machine's own names; the fleet transport
 passes the hostname without a `.local`/`.lan` suffix, and a term shorter than
 four letters is ignored. The fleet transport (`src/hosted.ts`) calls the gate
-on every text it sends: observation summaries, mission descriptors, grant
-bodies and enrollment display names. An enrollment body's public key and nonce
-are protocol fields and are not gated; its display name and capabilities are.
+on every text it sends: observation summaries (cards, knocks, decisions,
+rosters, renew and leave notes, renewal notices and every table-talk message),
+mission descriptors, grant bodies and enrollment display names. An enrollment
+body's public key and nonce are protocol fields and are not gated; its display
+name and capabilities are. Participant leave and the administrator revocations
+send zero body bytes, so there is no text to gate. `room_say_draft` shows the
+same verdict without sending anything.
 
 The `@agenttool/lobby/egress` subpath loads only the gate and its text rules,
 with no MCP SDK, zod or SQLite; the package root also exports it.
@@ -634,17 +904,30 @@ text such as commit SHAs, digests, room ids, public addresses and version number
 - **Not run against the live service or a real Keychain.** The fleet hall is
   tested against a fake service in this package and against the API's own
   mission gateway, proof and enrollment code in
-  `bin/tests/lobby-fleet-gateway.test.ts`, with persistence replaced. The
-  Keychain code is tested through a scripted `/usr/bin/security`; the
-  `security -i` add path has not been exercised on a real login Keychain.
+  `bin/tests/lobby-fleet-gateway.test.ts` and
+  `bin/tests/lobby-table-gateway.test.ts` (which also checks table talk with
+  the participant client's own `message()` and `verifyChatEvent()`), with
+  persistence replaced. The Keychain code is tested through a scripted
+  `/usr/bin/security`; the `security -i` add path has not been exercised on a
+  real login Keychain.
 - **The service sees everything hosted.** Missions are server-readable
-  plaintext. Every fleet device reads every knock note in the directory. Desk
-  display names are self-declared and visible to the project (`/v1/discover`
-  lists active identities to any bearer), so they stay neutral.
+  plaintext. Every fleet device reads every knock note in the directory, and
+  every renew or leave note and renewal notice posted there. Every member reads
+  every message at a room's table. Desk display names are self-declared and
+  visible to the project (`/v1/discover` lists active identities to any
+  bearer), so they stay neutral.
 - **The bearer is a whole-project credential.** It is read into this process's
   memory for one confirmed act and cannot be wiped from a JavaScript string;
   it goes only to the pinned origin and is never printed. A dedicated
-  `lobby-issuer` key and its rotation as an emergency stop are later steps.
+  `lobby-issuer` key is a later step; the emergency stop revokes what it can
+  reach and tells the owner to rotate whichever key issued the grants.
+- **The MCP view is a cache view.** `room_read` and `room_wait` see only what
+  the CLI last stored; with no CLI sync running, `room_wait` waits for nothing.
+  This is deliberate (see [MCP tools](#mcp-tools)).
+- **A pin is only as good as the roster.** Table talk is verified against keys
+  the door signed into a roster; a member whose key the hub recorded wrongly,
+  or a door key that is stolen, verifies the wrong sender. A roster lists at
+  most 128 members (64 parts of two).
 - **The hub is one device.** Its Keychain holds the only copy of the door key;
   losing it means a new door key, a new directory and every device joining
   again. Adoption (`hub init --adopt-directory`) works only with the same door
@@ -652,10 +935,16 @@ text such as commit SHAs, digests, room ids, public addresses and version number
 - **Thirty days, then a new directory.** The directory and every season are
   missions of at most 30 days. Directory rollover is not built; when it ends,
   the hub needs a new directory and every device a new join.
-- **Grants are renewed by hand.** Directory grants last 24 hours; a device runs
-  `enroll-device`, `hub relay`, `fleet join` again, and the hub runs `hub seat`.
-  In-room renewal inside a membership term is a later step, so a season grant
-  lapses after 24 hours until then.
+- **Renewal needs people at terminals.** A season grant lasts 24 hours; inside
+  the term the member requests, the hub sweeps and the member accepts, each
+  confirmed at a terminal, so a day with nobody at either terminal lets the
+  grant lapse (the member then requests through the directory, or knocks
+  again). Directory grants are still renewed with `enroll-device`, `hub
+  relay`, `fleet join`, and the hub's own seats with `hub seat`.
 - **Rosters announce, they do not authorize.** A roster is the door's
-  voluntary disclosure; mission grants alone decide access, and the service
-  offers no member listing to check it against.
+  voluntary disclosure and the pin source for table talk; mission grants alone
+  decide access, and the service offers no member listing to check it against.
+  A member who left stays on the roster until the next `hub renew-sweep`
+  records the leave.
+- **Leave and kick end grants, not copies.** Messages already posted stay in
+  the season and stay readable to members; nothing deletes mission events.
