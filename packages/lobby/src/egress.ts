@@ -5,7 +5,10 @@
  * It fails closed. A room whose residency is `device` can send nothing at all.
  * Otherwise the text is refused when it carries a shape that identifies this
  * machine, its owner's files, local coordination ids or credentials. Reasons
- * are closed codes; matched text is never echoed back.
+ * are closed codes; matched text is never echoed back. When the text is
+ * JSON (a signed document, a mission descriptor, a request body), every
+ * decoded string in it is checked too, so an escaped newline or tab between
+ * two words cannot hide them from a rule.
  *
  * Known limits (see README): pattern matching is not understanding. Hex runs
  * are allowed so commit SHAs and digests can be cited, which means a
@@ -30,6 +33,8 @@ export const EGRESS_REASONS = [
   "private_ipv4",
   "private_ipv6",
   "local_hostname",
+  "device_name",
+  "local_device_name",
   "home_path",
   "tilde_path",
   "collab_workspace_id",
@@ -53,6 +58,14 @@ export interface EgressRoom {
   house_rules?: string;
   tags?: readonly string[];
   slots?: readonly { label: string }[];
+}
+
+/** Optional context a transport adds: this machine's own names (for example
+ * its hostname without `.local`). Each term is matched case-insensitively
+ * after the same folding, with the separators between its words allowed to vary. */
+export interface EgressOptions {
+  room: EgressRoom;
+  deviceTerms?: readonly string[];
 }
 
 export interface EgressResult {
@@ -83,6 +96,11 @@ const PRIVATE_IPV6 = [
 // A label character, a dot, then a LAN-only suffix. Linear on purpose: a
 // full hostname grammar backtracks quadratically on long dotted input.
 const LOCAL_HOSTNAME = /[a-z0-9]\.(?:local|lan|home\.arpa)(?![a-z0-9-])/i;
+// Device model words that default machine names carry ("Someones-MacBook-Pro").
+// Matched on folded, lower-cased text.
+const DEVICE_NAME = /macbook|(?<![a-z])imac(?![a-z])|mac[\s._-]?(?:mini|studio|pro)(?![a-z])|iphone|ipad(?![a-z])/;
+const TERM_SEPARATOR = /[\s._-]+/;
+const REGEX_SPECIAL = /[\\^$.*+?()[\]{}|]/g;
 const HOME_PATH = [
   /\/(?:users|home)\//i,
   /(?<![a-z])[a-z]:[\\/]+users[\\/]/i,
@@ -153,6 +171,19 @@ function contentReasons(text: string): Set<EgressReason> {
   return reasons;
 }
 
+function deviceTermPatterns(terms: unknown): RegExp[] {
+  if (!Array.isArray(terms)) return [];
+  const patterns: RegExp[] = [];
+  for (const term of terms) {
+    if (typeof term !== "string") continue;
+    const words = foldForMatch(term).split(TERM_SEPARATOR).filter((word) => word.length > 0);
+    if (words.join("").length < 4) continue;
+    const escaped = words.map((word) => word.replace(REGEX_SPECIAL, "\\$&"));
+    patterns.push(new RegExp(escaped.join("[\\s._-]{0,3}")));
+  }
+  return patterns;
+}
+
 function roomReasons(room: unknown): EgressReason[] {
   if (room === null || typeof room !== "object" || Array.isArray(room)) return ["room_context_missing"];
   const value = room as EgressRoom;
@@ -172,19 +203,59 @@ function roomReasons(room: unknown): EgressReason[] {
   return reasons;
 }
 
-/** Decide whether `text` may leave this device in `room`. Fails closed. */
-export function checkEgress(text: string, options: { room: EgressRoom }): EgressResult {
+/** How many layers of JSON-inside-a-JSON-string are decoded (an observation
+ * body holds a summary that is itself a signed JSON document). */
+const MAX_JSON_LAYERS = 4;
+
+/** Every string inside `text` when it is JSON, decoded: object keys, values,
+ * array items, and the strings inside any of those that are JSON in turn.
+ * JSON writes a newline or tab as the two characters `\n` or `\t`, and may
+ * write any character as `\uXXXX`, so a rule that allows whitespace between
+ * words would not see "Bet\nfair" or "Mac\tmini" in the encoded form. Text
+ * that is not JSON yields nothing here and is checked as written. */
+function decodedJsonStrings(text: string, layers: number = MAX_JSON_LAYERS): string[] {
+  if (layers <= 0 || !/^\s*[[{"]/.test(text)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  const pending: unknown[] = [parsed];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "string") {
+      found.push(value, ...decodedJsonStrings(value, layers - 1));
+    } else if (Array.isArray(value)) {
+      for (const item of value) pending.push(item);
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) pending.push(key, child);
+    }
+  }
+  return found;
+}
+
+/** Decide whether `text` may leave this device in `room`. Fails closed.
+ * When the text is JSON, every decoded string in it is checked as well. */
+export function checkEgress(text: string, options: EgressOptions): EgressResult {
   const found = new Set<EgressReason>(roomReasons(options?.room));
+  const devicePatterns = deviceTermPatterns(options?.deviceTerms);
   if (typeof text !== "string") {
     found.add("text_not_string");
   } else if (text.length > MAX_EGRESS_CHARS) {
     found.add("text_too_large");
   } else {
-    // Check the text as written and as displayed: NFKC folds full-width
-    // digits and slashes, and format and default-ignorable characters
-    // (zero-width, variation selectors, tag characters) are removed.
-    for (const variant of [text, visibleForm(text), foldForMatch(text)]) {
-      for (const reason of contentReasons(variant)) found.add(reason);
+    for (const piece of [text, ...decodedJsonStrings(text)]) {
+      // Check each piece as written and as displayed: NFKC folds full-width
+      // digits and slashes, and format and default-ignorable characters
+      // (zero-width, variation selectors, tag characters) are removed.
+      for (const variant of [piece, visibleForm(piece), foldForMatch(piece)]) {
+        for (const reason of contentReasons(variant)) found.add(reason);
+      }
+      const folded = foldForMatch(piece);
+      if (DEVICE_NAME.test(folded)) found.add("device_name");
+      if (devicePatterns.some((pattern) => pattern.test(folded))) found.add("local_device_name");
     }
   }
   const reasons = EGRESS_REASONS.filter((reason) => found.has(reason));

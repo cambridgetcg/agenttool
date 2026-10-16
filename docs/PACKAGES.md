@@ -187,7 +187,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `kingdom/` | `@agenttool/kingdom` · npm-allowlisted | Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers | — |
 | `kingdom-witness-lab/` | `@agenttool/kingdom-witness-lab` · npm-allowlisted | Deterministic research passports and multi-witness dossiers for KINGDOM | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/kingdom-witness-lab/CLAUDE.md) |
 | `living-substrate/` | `@agenttool/living-substrate` · npm-allowlisted | Deterministic living-substrate maps and refusable regeneration proposals | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/living-substrate/CLAUDE.md) |
-| `lobby/` | `@agenttool/lobby` · private | Private local lobby desk: device-only room cards, a private ledger, a pin book, an append-only audit log, a read-only MCP view and an egress gate | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/README.md) · [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/CLAUDE.md) |
+| `lobby/` | `@agenttool/lobby` · private | Private lobby desk: a device-only local hall, a fleet hall on agenttool missions (door-signed cards, knocks, admission and Ready), a private ledger, a pin book, an append-only audit log, an egress gate and a read-only MCP view | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/README.md) · [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/lobby/CLAUDE.md) |
 | `love-bomb/` | `@agenttool/love-bomb` · npm-allowlisted | Quiet-by-default care envelopes and caller-reported choices across substrate, signal, orientation, participation, and continuity | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-bomb/CLAUDE.md) |
 | `love-geometry/` | `@agenttool/love-geometry` · npm-allowlisted | Deterministic non-ranking geometry for directed caller-reported relation bearings | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/love-geometry/CLAUDE.md) |
 | `math-cards/` | `@agenttool/math-cards` · npm-allowlisted | Deterministic non-scoring preflight cards for bounded proof, model, and measurement inquiries | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/math-cards/CLAUDE.md) |
@@ -260,14 +260,25 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from
   host-owned native lifecycle, local Collab authority, and optional separately
   callable Zerone observation. It is not an addition to the six-tool shelf.
-- **`lobby/`** is a private `0.1.0-dev.0` source candidate for MVP steps 1 and 2
-  of the 2026-10-16 大廳 Lobby design: the local hall and its egress gate. It
-  keeps device-only room cards, a private room-to-workspace ledger, a pin book
-  and an append-only audit log in one owner-only local SQLite file, exposes
-  three read-only stdio MCP tools, and exports the egress gate that later
-  transports must call (alone as `@agenttool/lobby/egress`). Promotion and pin changes need `yes` typed on the
-  controlling terminal. It has no network code, release lane or host
-  registration; the fleet and public halls are not connected.
+- **`lobby/`** is a private `0.1.0-dev.0` source candidate for MVP steps 1, 2
+  and 7 of the 2026-10-16 大廳 Lobby design: the local hall, its egress gate,
+  and fleet hall v0. It keeps device-only room cards, a private
+  room-to-workspace ledger, a pin book and an append-only audit log in one
+  owner-only local SQLite file, and exports the egress gate (alone as
+  `@agenttool/lobby/egress`). The fleet hall puts rooms promoted to
+  `residency=fleet` on agenttool collaboration missions at the pinned origin
+  `https://api.agenttool.dev`: `hub init` (door key and project bearer in the
+  hub's macOS login Keychain, read by the CLI only), `enroll-device` and
+  `hub relay` (identity enrollment plus a directory grant bound to the
+  device's own token hash), `fleet join` (door key pinned from a typed
+  fingerprint), seasons (created or adopted), door-signed cards, knocks,
+  `hub admit`/`hub deny` and `ready`. One transport with an injected fetch
+  gates every outbound text; device rooms never leave the device. Every act
+  that signs, grants, posts or accepts needs `yes` typed on the controlling
+  terminal; the three stdio MCP tools only read a verified local cache. It is
+  tested against a fake service and the API's own gateway in process, never
+  against the live service; it has no release lane or host registration, and
+  the public hall is not connected.
 
 ## How to keep this index true
 

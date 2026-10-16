@@ -5608,7 +5608,7 @@
     },
     {
       "path": "packages/lobby/README.md",
-      "title": "大廳 Lobby desk: private local hall",
+      "title": "大廳 Lobby desk: local hall and fleet hall",
       "type": "reference",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",

@@ -53,7 +53,18 @@
     { "name": "missing room context", "text": "hello", "room": null, "reasons": ["room_context_missing"] },
     { "name": "unknown residency", "text": "hello", "room": { "residency": "cloud" }, "reasons": ["room_residency_unknown"] },
     { "name": "mislabelled room naming device-only work", "text": "hello", "room": { "residency": "fleet", "title": "Betfair research" }, "reasons": ["room_device_only_term"] },
-    { "name": "device-only work in a slot label", "text": "hello", "room": { "residency": "open", "title": "Research", "slots": [{ "label": "betangel desk" }] }, "reasons": ["room_device_only_term"] }
+    { "name": "device-only work in a slot label", "text": "hello", "room": { "residency": "open", "title": "Research", "slots": [{ "label": "betangel desk" }] }, "reasons": ["room_device_only_term"] },
+    { "name": "default machine name", "text": "posted from Someones-MacBook-Pro tonight", "room": { "residency": "fleet" }, "reasons": ["device_name"] },
+    { "name": "mac mini model word", "text": "the Mac mini in the hall", "room": { "residency": "fleet" }, "reasons": ["device_name"] },
+    { "name": "full-width device model word", "text": "Ｉｐａｄ desk", "room": { "residency": "fleet" }, "reasons": ["device_name"] },
+    { "name": "this machine's own hostname", "text": "from the example-lab-desk machine", "room": { "residency": "fleet" }, "device_terms": ["Example-Lab-Desk"], "reasons": ["local_device_name"] },
+    { "name": "this machine's hostname with other separators", "text": "Example Lab_Desk.local is busy", "room": { "residency": "fleet" }, "device_terms": ["example-lab-desk.local"], "reasons": ["local_hostname", "local_device_name"] },
+    { "name": "JSON-escaped newline inside a device-only term", "text": "{\"note\": \"Bet\\nAngel ladder tonight\"}", "room": { "residency": "fleet" }, "reasons": ["device_only_term"] },
+    { "name": "JSON-escaped tab inside a device-only term", "text": "{\"reason\": \"see the Bet\\tfair notes\"}", "room": { "residency": "fleet" }, "reasons": ["device_only_term"] },
+    { "name": "JSON-escaped newline inside a device model word", "text": "{\"purpose\": \"on the Mac\\nmini\"}", "room": { "residency": "fleet" }, "reasons": ["device_name"] },
+    { "name": "JSON-escaped newline inside this machine's hostname", "text": "{\"note\": \"from example\\nlab desk\"}", "room": { "residency": "fleet" }, "device_terms": ["example-lab-desk"], "reasons": ["local_device_name"] },
+    { "name": "JSON unicode escape spelling a device-only term", "text": "{\"title\":\"Bet\\u0066air\"}", "room": { "residency": "fleet" }, "reasons": ["device_only_term"] },
+    { "name": "JSON document inside a JSON string", "text": "{\"event_id\": \"00000000-0000-4000-8000-000000000000\", \"summary\": \"{\\\"body\\\": {\\\"note\\\": \\\"Bet\\\\nAngel\\\"}}\"}", "room": { "residency": "fleet" }, "reasons": ["device_only_term"] }
   ],
   "allowed": [
     { "name": "greeting", "text": "Season 1 kickoff: hello from the studio desk", "room": { "residency": "fleet" } },
@@ -72,6 +83,9 @@
     { "name": "emoji with a variation selector and joiners", "text": "thanks \u2764\ufe0f from the \ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67 table", "room": { "residency": "open" } },
     { "name": "long lowercase repository path", "text": "packages/collab-courier/src/correspondence-handlers", "room": { "residency": "fleet" } },
     { "name": "example DID", "text": "did:example:123456789abcdefghi", "room": { "residency": "fleet" } },
-    { "name": "localhost without a LAN suffix", "text": "dev server on localhost:3000", "room": { "residency": "fleet" } }
+    { "name": "localhost without a LAN suffix", "text": "dev server on localhost:3000", "room": { "residency": "fleet" } },
+    { "name": "words near device model names", "text": "the imaginary machine protocol is immaculate", "room": { "residency": "fleet" } },
+    { "name": "short device terms are ignored", "text": "a lab note", "room": { "residency": "fleet" }, "device_terms": ["lab"] },
+    { "name": "JSON with harmless escaped newlines and tabs", "text": "{\"note\": \"see you\\ntonight\\tafter the review\"}", "room": { "residency": "fleet" } }
   ]
 }

@@ -36,8 +36,13 @@ import {
   type SlotTier,
 } from "./room.js";
 import { codePointLength, TERMINAL_UNSAFE } from "./text.js";
+import { FLEET_SCHEMA_SQL, FleetStore } from "./fleet-store.js";
 
-export const STATE_SCHEMA_VERSION = "1";
+/** Version 2 adds the fleet-hall tables (src/fleet-store.ts). A version-1
+ * file is upgraded explicitly when the CLI opens it for writing; the
+ * read-only MCP handle reads version 1 as "no fleet state yet". */
+export const STATE_SCHEMA_VERSION = "2";
+const READABLE_VERSIONS = ["1", "2"] as const;
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
 const GENESIS_HASH = "0".repeat(64);
 
@@ -150,7 +155,7 @@ export interface AuditEntry {
 
 /** What the terminal shows and the audit log keeps, byte for byte. */
 export interface ActPreview {
-  act: "room.promote" | "pin.add" | "pin.remove";
+  act: string;
   subject: string;
   at: string;
   summary: string[];
@@ -231,10 +236,16 @@ function residencyTriple(card: RoomCard) {
 }
 
 export class LobbyStore {
+  /** Fleet-hall tables on the same handle (src/fleet-store.ts). */
+  readonly fleet: FleetStore;
+
   private constructor(
     private readonly db: Database,
     readonly readonly: boolean,
-  ) {}
+    readonly stateVersion: string,
+  ) {
+    this.fleet = new FleetStore(db, !readonly, stateVersion === STATE_SCHEMA_VERSION);
+  }
 
   /** Open (creating if needed) the desk state for read and write. */
   static open(home: string): LobbyStore {
@@ -253,15 +264,19 @@ export class LobbyStore {
         if (row === null) {
           db.query("INSERT INTO meta (key, value) VALUES ('schema_version', $value)")
             .run({ value: STATE_SCHEMA_VERSION });
+        } else if (row.value === "1") {
+          // Explicit upgrade 1 -> 2: add the fleet tables; nothing existing changes.
+          db.query("UPDATE meta SET value = $value WHERE key = 'schema_version'").run({ value: STATE_SCHEMA_VERSION });
         } else if (row.value !== STATE_SCHEMA_VERSION) {
           throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
         }
+        db.exec(FLEET_SCHEMA_SQL);
       }).immediate();
     } catch (error) {
       db.close();
       throw error;
     }
-    return new LobbyStore(db, false);
+    return new LobbyStore(db, false, STATE_SCHEMA_VERSION);
   }
 
   /** Read-only view for the MCP server. Creates nothing; null when absent. */
@@ -282,14 +297,14 @@ export class LobbyStore {
       const row = db.query("SELECT value FROM meta WHERE key = 'schema_version'").get() as
         | { value: string }
         | null;
-      if (row?.value !== STATE_SCHEMA_VERSION) {
+      if (row === null || !(READABLE_VERSIONS as readonly string[]).includes(row.value)) {
         throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
       }
+      return new LobbyStore(db, true, row.value);
     } catch (error) {
       db.close();
       throw error;
     }
-    return new LobbyStore(db, true);
   }
 
   close(): void {
@@ -577,6 +592,19 @@ export class LobbyStore {
     }).immediate();
   }
 
+  /** Pin a key as one step of a larger act the person already confirmed
+   * (fleet join pins the door key); that act's bytes are its audit entry. */
+  insertPinWithinAct(pin: PinRecord): void {
+    this.requireWritable();
+    if (this.findPin({ did: pin.did, kid: pin.kid }) !== null || this.findPin({ fingerprint: pin.fingerprint }) !== null) {
+      throw new LobbyError("pin_exists", "this key or did and kid is already pinned");
+    }
+    this.db.query(
+      `INSERT INTO pins (did, kid, public_key, fingerprint, petname, how_obtained, pinned_at)
+       VALUES ($did, $kid, $public_key, $fingerprint, $petname, $how_obtained, $pinned_at)`,
+    ).run({ ...pin });
+  }
+
   planPinRemove(selector: PinSelector, now = new Date()): PinRemovePlan {
     const pin = this.findPin(selector);
     if (pin === null) throw new LobbyError("pin_not_found", "no such pin in the pin book");
@@ -632,6 +660,15 @@ export class LobbyStore {
       previous = entry.hash;
     }
     return { ok: true, entries: entries.length, first_bad_seq: null };
+  }
+
+  /** Append one act's exact bytes to the audit chain on its own. Fleet acts
+   * call this right after the terminal confirmation and before any network
+   * effect, so the log keeps what the person confirmed even if the network
+   * step then fails or is uncertain. */
+  recordAct(plan: ActPreview): void {
+    this.requireWritable();
+    this.db.transaction(() => this.appendAudit(plan)).immediate();
   }
 
   private appendAudit(plan: ActPreview): void {

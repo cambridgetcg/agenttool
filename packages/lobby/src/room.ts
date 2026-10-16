@@ -111,14 +111,14 @@ export function generateRoomId(random: RandomBytes = systemRandom): string {
   return assertRoomId(id);
 }
 
-function member<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
+export function member<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
   if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) {
     throw new LobbyError(`invalid_${field}`, `${field} must be one of: ${allowed.join(", ")}`);
   }
   return value as T;
 }
 
-function checkTags(value: unknown): string[] {
+export function checkTags(value: unknown): string[] {
   if (!Array.isArray(value)) throw new LobbyError("invalid_tags", "tags must be an array");
   if (value.length > ROOM_LIMITS.tags) {
     throw new LobbyError("invalid_tags", `at most ${ROOM_LIMITS.tags} tags`);
@@ -134,7 +134,7 @@ function checkTags(value: unknown): string[] {
   return [...value] as string[];
 }
 
-function checkSlots(value: unknown): RoomSlot[] {
+export function checkSlots(value: unknown): RoomSlot[] {
   if (!Array.isArray(value)) throw new LobbyError("invalid_slots", "slots must be an array");
   if (value.length > ROOM_LIMITS.slots) {
     throw new LobbyError("invalid_slots", `at most ${ROOM_LIMITS.slots} slots`);

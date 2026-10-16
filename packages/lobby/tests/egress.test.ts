@@ -8,6 +8,7 @@ interface EgressCase {
   name: string;
   text: string;
   room: EgressRoom | null;
+  device_terms?: string[];
   reasons?: string[];
 }
 
@@ -19,7 +20,7 @@ const fixtures = JSON.parse(readFileSync(join(import.meta.dir, "fixtures", "egre
 describe("egress gate fixtures", () => {
   for (const fixture of fixtures.refused) {
     test(`refuses: ${fixture.name}`, () => {
-      const result = checkEgress(fixture.text, { room: fixture.room as EgressRoom });
+      const result = checkEgress(fixture.text, { room: fixture.room as EgressRoom, deviceTerms: fixture.device_terms });
       expect(result.ok).toBe(false);
       expect(result.reasons).toEqual(fixture.reasons as never);
     });
@@ -27,7 +28,8 @@ describe("egress gate fixtures", () => {
 
   for (const fixture of fixtures.allowed) {
     test(`allows: ${fixture.name}`, () => {
-      expect(checkEgress(fixture.text, { room: fixture.room as EgressRoom })).toEqual({ ok: true, reasons: [] });
+      expect(checkEgress(fixture.text, { room: fixture.room as EgressRoom, deviceTerms: fixture.device_terms }))
+        .toEqual({ ok: true, reasons: [] });
     });
   }
 

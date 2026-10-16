@@ -28,6 +28,19 @@ import {
 } from "./room.js";
 import { LobbyStore, type ActPreview, type PinSelector, type RoomFilter } from "./store.js";
 import type { ConfirmRequest } from "./tty.js";
+import {
+  enrollDeviceCommand,
+  fleetCommand,
+  FleetUsageError,
+  hubCommand,
+  knockCommand,
+  outboxCommand,
+  readyCommand,
+  roomPublishCommand,
+} from "./cli-fleet.js";
+import type { FetchLike } from "./hosted.js";
+import type { SecretStore } from "./keychain.js";
+import type { FleetContext } from "./ops.js";
 
 export const EXIT_OK = 0;
 export const EXIT_REFUSED = 1;
@@ -44,10 +57,24 @@ export interface CliIo {
    * throws `tty_unavailable` without one. Injected only by tests. */
   showOnTty: (text: string) => void;
   now?: () => Date;
+  /** Network for fleet acts. bin/agenttool-lobby.ts passes the runtime's
+   * fetch; tests pass fakes. Without it every network act refuses. */
+  fetchImpl?: FetchLike;
+  /** Hub custody. bin/agenttool-lobby.ts passes the macOS login Keychain;
+   * tests pass an owner-only file-backed store. Without it hub acts refuse. */
+  keychain?: SecretStore;
+  /** This machine's own names for the egress gate; defaults to the hostname. */
+  deviceTerms?: readonly string[];
+  /** terminalAvailable in production: true when a controlling terminal can
+   * be opened (nothing is shown or read). Without it no fleet act that needs
+   * confirmation plans, so nothing is read from the Keychain, signed or sent
+   * by a headless caller. Injected only by tests. */
+  hasTerminal?: () => boolean;
 }
 
-export const USAGE = `agenttool-lobby — local lobby desk (device-only; no network)
+export const USAGE = `agenttool-lobby — lobby desk: the local hall, and the fleet hall on https://api.agenttool.dev
 
+Local hall (this device only; no network)
   room add --title T [--purpose P] [--tag t]... [--status S] [--door D]
            [--slot label:tier:count]... [--house-rules R] [--json]
   room list [--tag t] [--status S] [--door D] [--tier T] [--json]
@@ -63,14 +90,45 @@ export const USAGE = `agenttool-lobby — local lobby desk (device-only; no netw
   audit list [--json]
   audit verify
 
-New rooms are residency=device, visibility=private, hostable=false.
-promote, pin add and pin remove are consequential: they show the exact bytes
-on the controlling terminal (/dev/tty), need "yes" typed there (never stdin),
-fail closed without a terminal, and are recorded in the audit log.
+Fleet hall, every device (one desk identity per device)
+  enroll-device [--project UUID] [--display-name NAME]
+           (prints one public packet, valid 5 minutes; renews the directory grant once joined)
+  fleet join --packet-file FILE --door-fingerprint FP
+  fleet sync
+  fleet browse [--tag t] [--status S] [--door D] [--tier T] [--json]
+  fleet card <room_id> [--json]
+  fleet knocks [--json]
+  fleet status [--json]
+  knock <room_id> --tier player|spectator [--note TEXT] [--hours 1-72]
+  ready <knock_id>
+  outbox list [--json]
+  outbox retry <event_id>
+
+Fleet hall, hub only (bearer and door key in the login Keychain)
+  hub init --project UUID [--days 1-30] [--adopt-directory UUID --directory-digest sha256:...]
+           [--keychain-account A] [--bearer-service S] [--door-service S]
+  hub show [--json]
+  hub relay --packet-file FILE
+  hub season open <room_id> [--days 1-30]
+  hub season adopt <room_id> --mission UUID --digest sha256:...
+  hub seat directory|<room_id>
+  room publish <room_id>
+  hub knocks [--json]
+  hub admit <knock_id> [--tier spectator] [--term-days 1-30]
+  hub deny <knock_id> [--reason TEXT]
+
+New rooms are residency=device, visibility=private, hostable=false. Only
+residency=fleet, hostable rooms reach the fleet hall; device rooms never leave.
+Consequential acts (promote, pin add/remove, hub init/relay/season/seat, room
+publish, hub admit/deny, fleet join, knock, ready, outbox retry) show the exact
+bytes on the controlling terminal (/dev/tty), need "yes" typed there (never
+stdin), fail closed without a terminal, and are recorded in the audit log.
 State: $AGENTTOOL_LOBBY_HOME, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby
 (directory 0700, files 0600; wider modes are refused).
 Exit codes: 0 ok, 1 refused, 2 usage, 3 not confirmed.
 `;
+
+const GROUPS = ["room", "pin", "audit", "hub", "fleet", "enroll-device", "knock", "ready", "outbox"];
 
 class UsageError extends Error {}
 
@@ -406,13 +464,35 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   const now = io.now ?? (() => new Date());
   let store: LobbyStore | null = null;
   try {
-    if (!["room", "pin", "audit"].includes(group)) throw new UsageError(`unknown command: ${group}`);
-    store = LobbyStore.open(resolveLobbyHome(io.env));
+    if (!GROUPS.includes(group)) throw new UsageError(`unknown command: ${group}`);
+    const home = resolveLobbyHome(io.env);
+    store = LobbyStore.open(home);
+    const ctx: FleetContext = {
+      store,
+      home,
+      now,
+      hosted: io.fetchImpl === undefined ? null : {
+        fetchImpl: io.fetchImpl,
+        now,
+        ...(io.deviceTerms === undefined ? {} : { deviceTerms: io.deviceTerms }),
+      },
+      keychain: io.keychain ?? null,
+      hasTerminal: io.hasTerminal ?? (() => false),
+    };
+    const fleetIo = { stdout: io.stdout, stderr: io.stderr, confirm: io.confirm };
+    if (group === "room" && rest[0] === "publish") return await roomPublishCommand(ctx, rest.slice(1), fleetIo);
     if (group === "room") return await roomCommand(store, rest, io, now);
     if (group === "pin") return await pinCommand(store, rest, io, now);
-    return auditCommand(store, rest, io);
+    if (group === "audit") return auditCommand(store, rest, io);
+    if (group === "enroll-device") return enrollDeviceCommand(ctx, rest, fleetIo);
+    if (group === "fleet") return await fleetCommand(ctx, rest, fleetIo);
+    if (group === "knock") return await knockCommand(ctx, rest, fleetIo);
+    if (group === "ready") return await readyCommand(ctx, rest, fleetIo);
+    if (group === "outbox") return await outboxCommand(ctx, rest, fleetIo);
+    return await hubCommand(ctx, rest, fleetIo);
   } catch (error) {
-    if (error instanceof UsageError || (error as { code?: string })?.code?.startsWith?.("ERR_PARSE_ARGS")) {
+    if (error instanceof UsageError || error instanceof FleetUsageError
+      || (error as { code?: string })?.code?.startsWith?.("ERR_PARSE_ARGS")) {
       io.stderr(`agenttool-lobby: ${(error as Error).message}\n\n${USAGE}`);
       return EXIT_USAGE;
     }
