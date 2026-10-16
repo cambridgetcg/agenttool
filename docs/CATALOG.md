@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 183; guide: 84; reference: 330; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**823 document paths** (including mirrors). orientation: 181; guide: 85; reference: 331; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -68,8 +68,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/codex-usage/CLAUDE.md](<../packages/codex-usage/CLAUDE.md>) | not-reviewed |
 | [packages/codex-usage/README.md](<../packages/codex-usage/README.md>) | not-reviewed |
 | [packages/collab-courier/README.md](<../packages/collab-courier/README.md>) | not-reviewed |
-| [packages/collab-zerone/CLAUDE.md](<../packages/collab-zerone/CLAUDE.md>) | not-reviewed |
-| [packages/collab-zerone/README.md](<../packages/collab-zerone/README.md>) | not-reviewed |
 | [packages/collab/README.md](<../packages/collab/README.md>) | not-reviewed |
 | [packages/collab/integrations/openclaw/README.md](<../packages/collab/integrations/openclaw/README.md>) | not-reviewed |
 | [packages/common-ground-atlas/CLAUDE.md](<../packages/common-ground-atlas/CLAUDE.md>) | not-reviewed |
@@ -245,6 +243,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/zerone-migration/RUNBOOK.md](<../docs/zerone-migration/RUNBOOK.md>) | not-reviewed |
 | [infra/apex-door/ROLLBACK.md](<../infra/apex-door/ROLLBACK.md>) | not-reviewed |
 | [marketing/DIRECTORY-SUBMISSION.md](<../marketing/DIRECTORY-SUBMISSION.md>) | not-reviewed |
+| [packages/collab-zerone/CLAUDE.md](<../packages/collab-zerone/CLAUDE.md>) | not-reviewed |
 | [packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md](<../packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md>) | not-reviewed |
 | [packages/collab/skills/coordinate-agent-work/SKILL.md](<../packages/collab/skills/coordinate-agent-work/SKILL.md>) | not-reviewed |
 | [packages/credential-broker/ROTATION.md](<../packages/credential-broker/ROTATION.md>) | not-reviewed |
@@ -615,6 +614,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/specs/COVENANT-1.0-DRAFT.md](<../docs/specs/COVENANT-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WAKE-1.0-DRAFT.md](<../docs/specs/WAKE-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WITNESS-1.0-DRAFT.md](<../docs/specs/WITNESS-1.0-DRAFT.md>) | not-reviewed |
+| [packages/collab-zerone/README.md](<../packages/collab-zerone/README.md>) | not-reviewed |
 | [packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md](<../packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md>) | not-reviewed |
 | [packages/credential-broker/JSONRPC-READ-0.1.md](<../packages/credential-broker/JSONRPC-READ-0.1.md>) | not-reviewed |
 | [packages/credential-broker/SPEC.md](<../packages/credential-broker/SPEC.md>) | not-reviewed |

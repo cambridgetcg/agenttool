@@ -1,9 +1,24 @@
 #!/usr/bin/env bun
+import { randomBytes } from "node:crypto";
 import { parseArgs } from "node:util";
 import {
+  aliasBindingProblem,
+  anchorSaltPath,
+  assertSaltReproducesLedger,
+  ensureAnchorSalt,
+  epochAlias,
+  peekAnchorSalt,
+  requireAnchorSalt,
+  workspaceAlias,
+} from "../src/alias.js";
+import {
+  ANCHOR_MEMO_PROTOCOL,
+  ANCHOR_SALT_BYTES,
   DEFAULT_FEE_UZRN,
   DEFAULT_GAS,
   DEFAULT_NETWORK,
+  LEGACY_ANCHOR_MEMO_PROTOCOL,
+  MAX_MEMO_CHARS,
   NETWORKS,
   defaultCollabDbPath,
   defaultLedgerPath,
@@ -14,13 +29,14 @@ import {
   anchorsForWorkspace,
   appendAnchor,
   emptyLedger,
+  entryMemoProtocol,
   loadLedger,
   newAnchorEntry,
   recordAnchorOutcome,
   type AnchorEntry,
   type AnchorLedger,
 } from "../src/ledger.js";
-import { buildAnchorMemo, parseAnchorMemo } from "../src/memo.js";
+import { buildAliasedAnchorMemo, parseAnchorMemo } from "../src/memo.js";
 import { computeAnchorStatus, type AnchorStatusReport } from "../src/status.js";
 import {
   bankSendAnchorArgs,
@@ -49,6 +65,13 @@ Usage:
 Common flags: --db <path> --ledger <path> --json
 Networks: ${Object.keys(NETWORKS).join(", ")} (default ${DEFAULT_NETWORK})
 Each anchor is a 1uzrn bank send-to-self costing ~${DEFAULT_FEE_UZRN} uzrn in fees.
+
+New anchors carry ${ANCHOR_MEMO_PROTOCOL} memos: salted aliases instead of
+the workspace and epoch ids. The salt sits beside the ledger (<ledger>.salt,
+mode 0600) and is created by the first anchor; back it up with the ledger.
+Without it no alias can be re-derived, so verify, resolve and anchor refuse
+(exit 2) rather than guess. Legacy ${LEGACY_ANCHOR_MEMO_PROTOCOL} anchors still
+verify and resolve.
 
 verify --check-chain also gates the exit code: every confirmed anchor must be
 found on chain with code 0 and a byte-identical memo, or verify exits 2.
@@ -119,14 +142,57 @@ function statusIcon(status: AnchorStatusReport["status"]): string {
   }
 }
 
-function memoMatchesEntry(memo: string | undefined, entry: AnchorEntry): boolean {
-  const parsed = memo ? parseAnchorMemo(memo) : null;
-  return parsed !== null
-    && memo === entry.memo && memo.length <= 256
-    && parsed.workspace_id === entry.workspace_id
-    && parsed.epoch_id === entry.epoch_id
-    && parsed.sequence === entry.sequence
-    && parsed.head_hash === entry.head_hash;
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isAliased(entry: AnchorEntry): boolean {
+  return entryMemoProtocol(entry) === ANCHOR_MEMO_PROTOCOL;
+}
+
+/**
+ * An observed memo matches an entry only under the entry's own protocol: a
+ * legacy entry by its raw ids, a 0.2 entry by aliases that re-derive from the
+ * salt. Any other protocol never matches.
+ */
+function memoMatchesEntry(memo: string | undefined, entry: AnchorEntry, salt: Uint8Array | null): boolean {
+  if (memo === undefined || memo !== entry.memo || memo.length > MAX_MEMO_CHARS) return false;
+  const parsed = parseAnchorMemo(memo);
+  if (parsed === null || parsed.protocol !== entryMemoProtocol(entry)
+    || parsed.sequence !== entry.sequence || parsed.head_hash !== entry.head_hash) {
+    return false;
+  }
+  if (parsed.protocol === LEGACY_ANCHOR_MEMO_PROTOCOL) {
+    return parsed.workspace_id === entry.workspace_id && parsed.epoch_id === entry.epoch_id;
+  }
+  return aliasBindingProblem(entry, salt) === null
+    && parsed.workspace_alias === entry.workspace_alias
+    && parsed.epoch_alias === entry.epoch_alias;
+}
+
+/**
+ * Why an entry's recorded memo is not bound to its workspace, or null when it
+ * is. Legacy entries carry raw ids and need no salt; 0.2 entries must
+ * re-derive from the salt; any protocol this CLI does not know fails closed.
+ */
+function memoBindingProblem(entry: AnchorEntry, salt: Uint8Array | null): string | null {
+  const protocol = entryMemoProtocol(entry);
+  if (protocol === LEGACY_ANCHOR_MEMO_PROTOCOL) return null;
+  if (protocol === ANCHOR_MEMO_PROTOCOL) return aliasBindingProblem(entry, salt);
+  return `unknown memo protocol ${JSON.stringify(protocol).slice(0, 80)}; this CLI cannot check it`;
+}
+
+/**
+ * Read (never create) the salt when any of `entries` is a 0.2 anchor. The
+ * note explains a missing or unusable salt; callers decide how to fail.
+ */
+function saltForEntries(ledgerPath: string, entries: readonly AnchorEntry[]): { salt: Buffer | null; note: string | null } {
+  if (!entries.some(isAliased)) return { salt: null, note: null };
+  try {
+    return { salt: requireAnchorSalt(anchorSaltPath(ledgerPath), entries), note: null };
+  } catch (error) {
+    return { salt: null, note: errorText(error) };
+  }
 }
 
 function commandStatus(options: CliOptions): void {
@@ -137,6 +203,7 @@ function commandStatus(options: CliOptions): void {
       : reader.listWorkspaces();
     const { ledger, note } = loadLedgerSafe(options.ledger);
     const reports: Array<AnchorStatusReport & { workspace_name: string; network: string | null }> = [];
+    const reportedEntries: AnchorEntry[] = [];
     for (const workspace of workspaces) {
       const head = {
         workspace_id: workspace.id,
@@ -145,6 +212,7 @@ function commandStatus(options: CliOptions): void {
         event_head_hash: workspace.event_head_hash,
       };
       const entries = anchorsForWorkspace(ledger, workspace.id, workspace.epoch_id, options.network);
+      reportedEntries.push(...entries);
       const networks = options.network
         ? [options.network]
         : [...new Set(entries.map(entry => entry.network))];
@@ -168,11 +236,22 @@ function commandStatus(options: CliOptions): void {
         });
       }
     }
+    // Status stays a fail-open report (like collab_anchor_status): the local
+    // states never depend on the salt, so an unusable salt is a warning here.
+    // verify, resolve and anchor are where it fails closed.
+    const { salt, note: saltLoadNote } = saltForEntries(options.ledger, reportedEntries);
+    const unbound = salt
+      ? reportedEntries.filter(entry => isAliased(entry) && aliasBindingProblem(entry, salt) !== null).length
+      : 0;
+    const saltNote = saltLoadNote ?? (unbound > 0
+      ? `${unbound} ${ANCHOR_MEMO_PROTOCOL} anchor(s) do not re-derive from the anchor alias salt; run verify`
+      : null);
     if (options.json) {
-      console.log(JSON.stringify({ ledger_path: options.ledger, ledger_note: note, reports }, null, 2));
+      console.log(JSON.stringify({ ledger_path: options.ledger, ledger_note: note, salt_note: saltNote, reports }, null, 2));
       return;
     }
     if (note) console.log(`⚠ ${note}`);
+    if (saltNote) console.log(`⚠ ${saltNote}`);
     for (const report of reports) {
       const where = report.network ? ` [${report.network}]` : "";
       const anchorInfo = report.anchor
@@ -196,12 +275,17 @@ async function commandVerify(options: CliOptions): Promise<void> {
     const journal = reader.verify(workspace.id);
     const { ledger, note } = loadLedgerSafe(options.ledger);
     const entries = anchorsForWorkspace(ledger, workspace.id, workspace.epoch_id, options.network);
+    const { salt, note: saltNote } = saltForEntries(options.ledger, entries);
     const lookup = options.checkChain ? createReadOnlyTxLookup(defaultZeronedBin(), {
       max_output_bytes: Number(process.env.COLLAB_ZERONE_QUERY_MAX_OUTPUT_BYTES ?? 262_144),
       timeout_ms: Number(process.env.COLLAB_ZERONE_QUERY_TIMEOUT_MS ?? 10_000),
     }) : null;
     const anchorChecks = [];
     for (const entry of entries) {
+      const memoProtocol = entryMemoProtocol(entry);
+      const aliasDetail = memoBindingProblem(entry, salt);
+      // null for a legacy entry: its memo carries raw ids, with no alias to check.
+      const aliasMatch = memoProtocol === LEGACY_ANCHOR_MEMO_PROTOCOL ? null : aliasDetail === null;
       let localMatch = false;
       let localDetail: string;
       if (!journal.valid) {
@@ -221,14 +305,24 @@ async function commandVerify(options: CliOptions): Promise<void> {
           found: found.found,
           height: found.height ?? null,
           tx_code: found.code ?? null,
-          memo_matches: memoMatchesEntry(found.memo, entry),
+          memo_matches: memoMatchesEntry(found.memo, entry, salt),
           detail: found.detail ?? null,
         };
       }
-      anchorChecks.push({ anchor: entry, local_match: localMatch, local_detail: localDetail, chain });
+      anchorChecks.push({
+        anchor: entry,
+        memo_protocol: memoProtocol,
+        local_match: localMatch,
+        local_detail: localDetail,
+        alias_match: aliasMatch,
+        alias_detail: aliasDetail,
+        chain,
+      });
     }
+    // Every 0.2 entry, whatever its status, must re-derive from the salt: a
+    // lost or replaced salt fails closed here rather than at the next anchor.
     const localOk = journal.valid && anchorChecks.every(check =>
-      check.anchor.status !== "confirmed" || check.local_match);
+      (check.anchor.status !== "confirmed" || check.local_match) && check.alias_match !== false);
     // --check-chain gates the exit code too: a confirmed anchor must be found
     // on chain with code 0 and a byte-identical memo, or verification fails.
     const chainOk = !options.checkChain || anchorChecks.every(check =>
@@ -245,6 +339,7 @@ async function commandVerify(options: CliOptions): Promise<void> {
         : `${journal.failure}${"failed_sequence" in journal && journal.failed_sequence ? ` at sequence ${journal.failed_sequence}` : ""}`,
       chain_checked: options.checkChain,
       ledger_note: note,
+      salt_note: saltNote,
       anchors: anchorChecks,
     };
     if (options.json) {
@@ -252,13 +347,17 @@ async function commandVerify(options: CliOptions): Promise<void> {
     } else {
       console.log(`${journal.valid ? "🟢" : "🔴"} journal: ${result.journal_detail}`);
       if (note) console.log(`⚠ ${note}`);
+      if (saltNote) console.log(`🔴 ${saltNote}`);
       for (const check of anchorChecks) {
+        const aliasPart = check.alias_match === null
+          ? ""
+          : ` | alias: ${check.alias_match ? "re-derived" : `NOT VERIFIED (${check.alias_detail})`}`;
         const chainPart = check.chain
           ? ` | chain: ${check.chain.found ? `found @${check.chain.height}, code ${check.chain.tx_code}, memo ${check.chain.memo_matches ? "matches" : "MISMATCH"}` : `not found (${check.chain.detail ?? "no detail"})`}`
           : "";
         console.log(
-          `${check.local_match ? "🟢" : "🔴"} anchor seq ${check.anchor.sequence} [${check.anchor.network}]`
-          + ` ${check.anchor.status}: ${check.local_detail}${chainPart}`,
+          `${check.local_match && check.alias_match !== false ? "🟢" : "🔴"} anchor seq ${check.anchor.sequence}`
+          + ` [${check.anchor.network}] ${check.anchor.status}: ${check.local_detail}${aliasPart}${chainPart}`,
         );
       }
       if (anchorChecks.length === 0) console.log("⚪ no anchors recorded for this workspace/epoch");
@@ -277,7 +376,6 @@ async function commandAnchor(options: CliOptions): Promise<void> {
 
   const reader = new JournalReader(options.db);
   let workspace: JournalWorkspace;
-  let memo: string;
   let report: AnchorStatusReport;
   let sameSeqOpen: AnchorEntry | undefined;
   try {
@@ -302,12 +400,6 @@ async function commandAnchor(options: CliOptions): Promise<void> {
     );
     sameSeqOpen = entries.find(entry => entry.sequence === workspace.event_head_sequence
       && (entry.status === "submitted" || entry.status === "ambiguous"));
-    memo = buildAnchorMemo({
-      workspace_id: workspace.id,
-      epoch_id: workspace.epoch_id,
-      sequence: workspace.event_head_sequence,
-      head_hash: workspace.event_head_hash,
-    });
   } finally {
     reader.close();
   }
@@ -328,17 +420,61 @@ async function commandAnchor(options: CliOptions): Promise<void> {
   const runner = systemZeronedRunner(defaultZeronedBin());
   const keyName = options.key ?? network.default_key;
   const address = resolveKeyAddress(runner, network, keyName);
+
+  // New anchors publish salted aliases, never the ws_ path hash. A dry run
+  // never creates the salt: when none exists yet it shows aliases from a
+  // throwaway salt and says so.
+  const saltPath = anchorSaltPath(options.ledger);
+  let salt: Buffer;
+  let saltState: "existing" | "created" | "illustrative";
+  try {
+    if (options.dryRun) {
+      const existing = peekAnchorSalt(saltPath, ledger);
+      salt = existing ?? randomBytes(ANCHOR_SALT_BYTES);
+      saltState = existing ? "existing" : "illustrative";
+    } else {
+      const ensured = ensureAnchorSalt(saltPath, ledger);
+      salt = ensured.salt;
+      saltState = ensured.created ? "created" : "existing";
+    }
+    if (saltState !== "illustrative") assertSaltReproducesLedger(saltPath, salt, ledger);
+  } catch (error) {
+    fail(`refusing to anchor: ${errorText(error)}`, 2);
+  }
+  const aliases = {
+    workspace_alias: workspaceAlias(salt, workspace.id),
+    epoch_alias: epochAlias(salt, workspace.epoch_id),
+  };
+  const memo = buildAliasedAnchorMemo({
+    ...aliases,
+    sequence: workspace.event_head_sequence,
+    head_hash: workspace.event_head_hash,
+  });
   const txOptions = { gas: options.gas, fee_uzrn: options.feeUzrn };
   const args = bankSendAnchorArgs(network, address, memo, txOptions);
+  const legacyAttempts = anchorsForWorkspace(ledger, workspace.id)
+    .filter(entry => entryMemoProtocol(entry) === LEGACY_ANCHOR_MEMO_PROTOCOL && entry.tx_hash).length;
+  const legacyNote = legacyAttempts > 0
+    ? `note: ${legacyAttempts} earlier ${LEGACY_ANCHOR_MEMO_PROTOCOL} anchor(s) of this workspace may already show its ws_ id on chain;`
+      + " new memos carry the alias, but the shared sending account still links them"
+    : null;
 
   if (options.dryRun) {
     console.log(`dry run — would anchor ${workspace.name} (${workspace.id}) on ${network.name}:`);
+    if (saltState === "illustrative") {
+      console.log(`  salt: ${saltPath} does not exist yet; the first real anchor creates it, so the aliases below are illustrative only`);
+    }
     console.log(`  memo: ${memo}`);
     console.log(`  cost: ~${options.feeUzrn} uzrn fees from ${address} (${keyName})`);
     console.log(`  zeroned ${args.join(" ")}`);
+    if (legacyNote) console.log(`  ${legacyNote}`);
     return;
   }
 
+  if (saltState === "created") {
+    console.log(`created anchor alias salt ${saltPath} (mode 0600); back it up with the ledger, because without it these aliases cannot be re-derived`);
+  }
+  if (legacyNote) console.log(legacyNote);
   console.log(`anchoring ${workspace.name} head seq ${workspace.event_head_sequence} on ${network.name} (~${options.feeUzrn} uzrn fee, key ${keyName})`);
   // The entry lands in the ledger BEFORE broadcast so a crash mid-flight
   // leaves an honest "submitted" trace instead of silence.
@@ -351,6 +487,8 @@ async function commandAnchor(options: CliOptions): Promise<void> {
     caip2: network.caip2,
     account: address,
     memo,
+    memo_protocol: ANCHOR_MEMO_PROTOCOL,
+    ...aliases,
   });
   appendAnchor(options.ledger, entry);
   const broadcast = broadcastAnchor(runner, args);
@@ -426,6 +564,10 @@ function commandResolve(options: CliOptions): void {
     console.log("nothing to resolve: no submitted or ambiguous anchors for this workspace/epoch");
     return;
   }
+  // A 0.2 memo can only be matched through aliases re-derived from the salt;
+  // without it, refuse before any lookup rather than confirm on bytes alone.
+  const { salt, note: saltNote } = saltForEntries(options.ledger, open);
+  if (saltNote) fail(`refusing to resolve ${ANCHOR_MEMO_PROTOCOL} anchors: ${saltNote}`, 2);
   const runner = systemZeronedRunner(defaultZeronedBin());
   let unresolved = 0;
   for (const entry of open) {
@@ -439,18 +581,24 @@ function commandResolve(options: CliOptions): void {
       console.log(`${entry.id} (seq ${entry.sequence}) local prefix is not verified; left ${entry.status}`);
       continue;
     }
+    const bindingProblem = memoBindingProblem(entry, salt);
+    if (bindingProblem) {
+      unresolved += 1;
+      console.log(`🔴 ${entry.id} (seq ${entry.sequence}) ${bindingProblem}; left ${entry.status}`);
+      continue;
+    }
     const network = resolveNetwork(options, entry.network);
     const lookup = lookupTx(runner, network, entry.tx_hash);
     // Upgrade on positive proof only; absence of evidence never downgrades
     // and never authorises a re-broadcast.
-    if (lookup.found && lookup.code === 0 && memoMatchesEntry(lookup.memo, entry)) {
+    if (lookup.found && lookup.code === 0 && memoMatchesEntry(lookup.memo, entry, salt)) {
       recordAnchorOutcome(options.ledger, entry, {
         status: "confirmed",
         confirmed_at: new Date().toISOString(),
         confirmed_height: lookup.height,
       });
       console.log(`🟢 ${entry.id} (seq ${entry.sequence}) confirmed at height ${lookup.height} on ${entry.network}`);
-    } else if (lookup.found && lookup.code !== 0 && memoMatchesEntry(lookup.memo, entry)) {
+    } else if (lookup.found && lookup.code !== 0 && memoMatchesEntry(lookup.memo, entry, salt)) {
       recordAnchorOutcome(options.ledger, entry, {
         status: "failed",
         note: `included at height ${lookup.height} but execution failed with code ${lookup.code}`,

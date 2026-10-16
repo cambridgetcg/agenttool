@@ -13,7 +13,7 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { ANCHOR_LEDGER_PROTOCOL } from "./constants.js";
+import { ANCHOR_LEDGER_PROTOCOL, LEGACY_ANCHOR_MEMO_PROTOCOL, type AnchorMemoProtocol } from "./constants.js";
 
 export type AnchorEntryStatus = "submitted" | "confirmed" | "failed" | "ambiguous";
 
@@ -27,6 +27,11 @@ export interface AnchorEntry {
   caip2: string;
   account: string;
   memo: string;
+  /** Protocol of `memo`. Absent on entries written before 0.2, which are legacy 0.1. */
+  memo_protocol?: AnchorMemoProtocol;
+  /** 0.2 only: the salted aliases the memo publishes instead of the two ids. */
+  workspace_alias?: string;
+  epoch_alias?: string;
   tx_hash: string | null;
   status: AnchorEntryStatus;
   submitted_at: string;
@@ -87,6 +92,11 @@ export function withLedgerLock<T>(path: string, fn: () => T): T {
       // already removed (stale takeover); nothing to release
     }
   }
+}
+
+/** The memo protocol an entry was written with; unlabelled entries are legacy 0.1. */
+export function entryMemoProtocol(entry: Pick<AnchorEntry, "memo_protocol">): string {
+  return entry.memo_protocol ?? LEGACY_ANCHOR_MEMO_PROTOCOL;
 }
 
 export function emptyLedger(now: string = new Date().toISOString()): AnchorLedger {

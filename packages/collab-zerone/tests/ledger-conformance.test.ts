@@ -12,8 +12,14 @@ import {
   defaultAnchorLedgerPath,
 } from "../../collab/src/anchor-status.js";
 import { CollabStore } from "../../collab/src/store.js";
-import { ANCHOR_LEDGER_PROTOCOL as WRITER_PROTOCOL, defaultLedgerPath } from "../src/constants.js";
-import { appendAnchor, newAnchorEntry, recordAnchorOutcome, type AnchorEntry } from "../src/ledger.js";
+import { anchorSaltPath, ensureAnchorSalt, epochAlias, workspaceAlias } from "../src/alias.js";
+import {
+  ANCHOR_MEMO_PROTOCOL,
+  ANCHOR_LEDGER_PROTOCOL as WRITER_PROTOCOL,
+  defaultLedgerPath,
+} from "../src/constants.js";
+import { appendAnchor, emptyLedger, newAnchorEntry, recordAnchorOutcome, type AnchorEntry } from "../src/ledger.js";
+import { buildAliasedAnchorMemo } from "../src/memo.js";
 
 function fixture() {
   const repo = mkdtempSync(join(tmpdir(), "collab-zerone-lconf-repo-"));
@@ -103,6 +109,40 @@ describe("ledger conformance across packages", () => {
     });
     appendAnchor(ledgerPath, conflicting);
     recordAnchorOutcome(ledgerPath, conflicting, { status: "confirmed", tx_hash: "T3", confirmed_height: 12 });
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_conflict");
+  });
+
+  test("bridge-written 0.2 entries (aliases, memo_protocol) read back in collab exactly like legacy ones", () => {
+    const { store, workspace, ledgerPath } = fixture();
+    const { salt } = ensureAnchorSalt(anchorSaltPath(ledgerPath), emptyLedger());
+    const aliases = {
+      workspace_alias: workspaceAlias(salt, workspace.id),
+      epoch_alias: epochAlias(salt, workspace.epoch_id),
+    };
+    const aliased = (sequence: number, head_hash: string) => bridgeEntry(workspace, {
+      sequence,
+      head_hash,
+      memo: buildAliasedAnchorMemo({ ...aliases, sequence, head_hash }),
+      memo_protocol: ANCHOR_MEMO_PROTOCOL,
+      ...aliases,
+    });
+
+    const pending = aliased(workspace.event_head_sequence, workspace.event_head_hash);
+    appendAnchor(ledgerPath, pending);
+    expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_pending");
+
+    recordAnchorOutcome(ledgerPath, pending, { status: "confirmed", tx_hash: "T4", confirmed_height: 13 });
+    const anchored = anchorStatusForWorkspace(store, workspace.id, ledgerPath);
+    expect(anchored).toMatchObject({ ledger_readable: true, status: "anchored", anchor: { tx_hash: "T4" } });
+    // The MCP-facing status names neither the memo nor the aliases.
+    const visible = JSON.stringify(anchored);
+    expect(visible).not.toContain(aliases.workspace_alias);
+    expect(visible).not.toContain(aliases.epoch_alias);
+    expect(visible).not.toContain(ANCHOR_MEMO_PROTOCOL);
+
+    const conflicting = aliased(workspace.event_head_sequence, "ff".repeat(32));
+    appendAnchor(ledgerPath, conflicting);
+    recordAnchorOutcome(ledgerPath, conflicting, { status: "confirmed", tx_hash: "T5", confirmed_height: 14 });
     expect(anchorStatusForWorkspace(store, workspace.id, ledgerPath).status).toBe("anchor_conflict");
   });
 });

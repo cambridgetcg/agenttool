@@ -10,7 +10,7 @@
 >
 > **Code:** `packages/collab/src/mcp.ts` · `packages/collab/src/store.ts` · `packages/collab/src/repository.ts` · `packages/collab/src/anchor-status.ts` · `packages/collab-courier/src/` · `packages/collab-courier/bin/agenttool-collab-courier.ts` · `packages/sdk-ts/src/correspondence.ts` · `api/src/services/correspondence/` · `api/src/services/wake/push.ts` · `packages/collab-zerone/src/`.
 >
-> **Tests:** `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · `packages/collab/tests/v2.test.ts` · `packages/collab/tests/anchor-status.test.ts` · `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` · `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/sdk-ts/tests/correspondence.test.ts` · `api/tests/agent-correspondence-spec.test.ts` · `packages/collab-zerone/tests/cli.test.ts` (source tests, not a final gate or live verification receipt).
+> **Tests:** `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · `packages/collab/tests/v2.test.ts` · `packages/collab/tests/anchor-status.test.ts` · `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` · `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/sdk-ts/tests/correspondence.test.ts` · `api/tests/agent-correspondence-spec.test.ts` · `packages/collab-zerone/tests/cli.test.ts` · `packages/collab-zerone/tests/alias.test.ts` (source tests, not a final gate or live verification receipt).
 
 ## Status and scope
 
@@ -369,8 +369,11 @@ automatic repair or new anchor.
 
 The private `collab-zerone` sibling owns anchoring separately. Select a journal
 head deliberately: its hash commits to the preceding journal prefix, not just
-one isolated chat message. The memo carries workspace/epoch/sequence/hash
-metadata, not private task text, credentials, paths, transcripts, or Telegram
+one isolated chat message. New `agenttool.collab-anchor/0.2` memos carry
+salted workspace and epoch aliases plus sequence/hash metadata. Legacy 0.1
+memos carried the raw `ws_` id, which is a confirmable hash of a local path;
+see the [witness guide](../packages/collab-zerone/README.md#memo-protocols-and-the-alias-salt).
+Neither carries private task text, credentials, transcripts, or Telegram
 identifiers. Even digest commitments and metadata require disclosure review.
 No normal courier loop or human reply automatically signs, anchors, spends a
 fee, pays a participant, settles a task, or rebroadcasts an uncertain attempt.
@@ -382,7 +385,9 @@ to local-sidecar evidence; only explicit `check_chain: true` requests the
 separately authorized read-only RPC observation. The host selects the exact
 anchor, CLI/runtime, database/ledger, node, observer name, and finite process
 bounds. The wire is the existing `collab-zerone` `verify` CLI, adding
-`--check-chain` only for that separate observer call.
+`--check-chain` only for that separate observer call. The observer still
+accepts only legacy 0.1 selections, so a 0.2 anchor returns
+`invalid_selection`; that is a fail-closed gap, not evidence about the anchor.
 
 **The courier's `status`, `select`, `run-once`, and `watch` do not import this
 observer and expose no witness/chain-check flag.** A host must compose it
