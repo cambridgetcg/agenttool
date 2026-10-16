@@ -5,7 +5,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect } from "bun:test";
 import { runCli } from "../src/cli.js";
+import { DIRECTORY_GATE_ROOM, ParticipantClient, prepareObservation } from "../src/hosted.js";
 import { FileSecretStore } from "../src/keychain.js";
+import { DeskSecrets } from "../src/secrets.js";
+import { LobbyStore } from "../src/store.js";
 import { confirmOnTty, showOnTty } from "../src/tty.js";
 import { FAKE_BEARER, FAKE_PROJECT, FakeHosted, type Clock } from "./fake-hosted.js";
 import { fakeTerminal, tempHome, type FakeTerminal } from "./helpers.js";
@@ -61,6 +64,10 @@ export function world(): World {
           // A probe that does not count as opening the scripted terminal.
           hasTerminal: () => !options.noTerminal,
           now: () => new Date(clock.now),
+          // A bounded wait's pause moves the shared test clock instead of sleeping.
+          sleep: async (ms) => {
+            clock.now = new Date(clock.now.getTime() + ms);
+          },
           ...(options.noNetwork ? {} : { fetchImpl: hosted.fetch }),
           keychain,
           deviceTerms: DEVICE_TERMS,
@@ -152,10 +159,84 @@ export async function bootstrapFleet(options: { roomArgs?: string[] } = {}): Pro
   return { world: w, hub, device, doorFingerprint, directoryId, roomId, seasonId: seasonId!, seasonDigest: seasonDigest! };
 }
 
+/** bootstrapFleet, then the device knocks, the hub admits and the device gets
+ * ready: the device holds an accepted season grant at the given tier. */
+export async function seatedFleet(options: { tier?: "player" | "spectator"; termDays?: number } = {}): Promise<Fleet & { knockId: string }> {
+  const fleet = await bootstrapFleet();
+  const tier = options.tier ?? "player";
+  const knocked = await ok(fleet.device.yes("knock", fleet.roomId, "--tier", tier));
+  const knockId = /knock ([0-9a-f-]{36})/.exec(knocked.stdout)![1]!;
+  await ok(fleet.hub.yes("hub", "admit", knockId, ...(options.termDays === undefined ? [] : ["--term-days", String(options.termDays)])));
+  await ok(fleet.device.yes("ready", knockId));
+  return { ...fleet, knockId };
+}
+
+/** A desk's own identity row, read through a short-lived writable handle. */
+export function deskOf(desk: Desk): { identity_id: string; signing_key_id: string; public_key: string; fingerprint: string } {
+  const store = LobbyStore.open(desk.home);
+  try {
+    const row = store.fleet.desk()!;
+    return { identity_id: row.identity_id, signing_key_id: row.signing_key_id, public_key: row.public_key, fingerprint: row.fingerprint };
+  } finally {
+    store.close();
+  }
+}
+
+/** Run a command and parse its JSON stdout (exit 0 required). */
+export async function json(result: Promise<{ code: number; stdout: string; stderr: string }>): Promise<any> {
+  return JSON.parse((await ok(result)).stdout);
+}
+
 async function enrollHub(hub: Desk, doorFingerprint: string): Promise<void> {
   const enrolled = await ok(hub.run("enroll-device", "--project", FAKE_PROJECT));
   const relayed = await ok(hub.yes("hub", "relay", "--packet-file", hub.file("hub-packet.json", enrolled.stdout)));
   await ok(hub.yes("fleet", "join", "--packet-file", hub.file("hub-join.json", relayed.stdout), "--door-fingerprint", doorFingerprint));
+}
+
+/** Run a consequential command on `desk` whose /dev/tty prompt, while open,
+ * lets `during` run first (another terminal on the same device), then
+ * answers yes on its own scripted terminal. */
+export async function runWhilePromptOpen(w: World, desk: Desk, argv: string[], during: () => Promise<void>)
+  : Promise<{ code: number; stdout: string; stderr: string }> {
+  const out: string[] = [];
+  const err: string[] = [];
+  const terminal = fakeTerminal(["yes"]);
+  const code = await runCli(argv, {
+    stdout: (text) => out.push(text),
+    stderr: (text) => err.push(text),
+    env: { AGENTTOOL_LOBBY_HOME: desk.home },
+    confirm: async (request) => {
+      await during();
+      return confirmOnTty(request, { openTty: terminal.open, now: () => w.clock.now.getTime() });
+    },
+    showOnTty: (text) => showOnTty(text, { openTty: terminal.open }),
+    hasTerminal: () => true,
+    now: () => new Date(w.clock.now),
+    sleep: async (ms) => {
+      w.clock.now = new Date(w.clock.now.getTime() + ms);
+    },
+    fetchImpl: w.hosted.fetch,
+    keychain: desk.keychain,
+    deviceTerms: DEVICE_TERMS,
+  });
+  return { code, stdout: out.join(""), stderr: err.join("") };
+}
+
+/** Post an observation summary (for example a hand-signed document) with a
+ * desk's own live seat in a mission, as that desk: a valid exact-request
+ * proof under its own identity and key. */
+export async function postAs(w: World, desk: Desk, missionId: string, summary: string): Promise<void> {
+  const store = LobbyStore.open(desk.home);
+  let seat;
+  try {
+    const row = store.fleet.desk()!;
+    const grant = store.fleet.currentDeskGrant(missionId, w.clock.now)!;
+    seat = { mission_id: missionId, grant_id: grant.grant_id, identity_id: row.identity_id, signing_key_id: row.signing_key_id, token_sha256: grant.token_sha256 };
+  } finally {
+    store.close();
+  }
+  const client = new ParticipantClient(DeskSecrets.open(desk.home), { fetchImpl: w.hosted.fetch, now: () => w.clock.now, deviceTerms: DEVICE_TERMS });
+  await client.observe(seat, prepareObservation(summary, DIRECTORY_GATE_ROOM, DEVICE_TERMS).raw_body, DIRECTORY_GATE_ROOM);
 }
 
 export function expectNoSecretIn(text: string): void {

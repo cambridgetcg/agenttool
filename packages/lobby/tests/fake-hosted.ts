@@ -51,6 +51,8 @@ interface Grant {
   accepted_at: string | null;
   revoked_at: string | null;
   token_sha256: string;
+  /** Revoked by the participant's own leave (a repeat of the leave sees the recorded state). */
+  left?: boolean;
 }
 
 export interface SeenRequest {
@@ -117,10 +119,10 @@ export class FakeHosted {
   private route(request: SeenRequest, headers: Headers): Response {
     const path = request.path;
     if (path === ENROLLMENT_PATH && request.method === "POST") return this.enroll(request, headers);
-    const match = /^\/v1\/collaboration\/missions(?:\/([0-9a-f-]{36})(?:\/(invitation|accept|events|grants)(?:\/([0-9a-f-]{36}))?)?)?(\?.*)?$/.exec(path);
+    const match = /^\/v1\/collaboration\/missions(?:\/([0-9a-f-]{36})(?:\/(invitation|accept|events|leave|grants|revoke)(?:\/([0-9a-f-]{36})(\/revoke)?)?)?)?(\?.*)?$/.exec(path);
     if (!match) return refuse("mission_route_not_found", 404);
-    const [, missionId, action, grantId, query] = match;
-    const participantAction = action === "invitation" || action === "accept" || action === "events";
+    const [, missionId, action, grantId, revocation, query] = match;
+    const participantAction = action === "invitation" || action === "accept" || action === "events" || action === "leave";
     if (participantAction) return this.participant(request, headers, missionId!, action!, query ?? "");
     if (request.authorization !== `Bearer ${FAKE_BEARER}`) return refuse("mission_credential_invalid", 401);
     if (missionId === undefined && request.method === "POST") return this.createMission(request);
@@ -128,8 +130,24 @@ export class FakeHosted {
       const mission = this.missions.get(missionId);
       return mission === undefined ? refuse("collaboration_mission_not_found", 404) : json({ mission: this.missionView(mission) });
     }
+    if (action === "revoke" && grantId === undefined && request.method === "POST") {
+      // Administrator mission revocation: zero body bytes, idempotent.
+      if (request.body !== "") return refuse("mission_body_too_large", 413);
+      const mission = this.missions.get(missionId!);
+      if (mission === undefined) return refuse("collaboration_mission_not_found", 404);
+      mission.revoked_at ??= this.nowIso();
+      return json({ mission: this.missionView(mission) });
+    }
     if (action === "grants" && grantId === undefined && request.method === "POST") return this.issueGrant(request, missionId!);
-    if (action === "grants" && grantId !== undefined && request.method === "GET") {
+    if (action === "grants" && grantId !== undefined && revocation !== undefined && request.method === "POST") {
+      // Administrator grant revocation: zero body bytes, works on expired grants, idempotent.
+      if (request.body !== "") return refuse("mission_body_too_large", 413);
+      const grant = this.grants.get(grantId);
+      if (grant === undefined || grant.mission_id !== missionId) return refuse("collaboration_mission_not_found", 404);
+      grant.revoked_at ??= this.nowIso();
+      return json({ grant: this.grantView(grant) });
+    }
+    if (action === "grants" && grantId !== undefined && revocation === undefined && request.method === "GET") {
       const grant = this.grants.get(grantId);
       return grant === undefined || grant.mission_id !== missionId ? refuse("collaboration_mission_not_found", 404) : json({ grant: this.grantView(grant) });
     }
@@ -230,7 +248,9 @@ export class FakeHosted {
     const identity = this.identities.get(grant.identity_id)!;
     const mission = this.missions.get(missionId)!;
     const now = this.clock.now.getTime();
-    if (grant.revoked_at !== null || Date.parse(grant.expires_at) <= now || mission.revoked_at !== null
+    // Only an exact repeat of this participant's own leave may see its revoked grant.
+    const leaving = action === "leave" && request.method === "POST";
+    if ((grant.revoked_at !== null && !(leaving && grant.left === true)) || Date.parse(grant.expires_at) <= now || mission.revoked_at !== null
       || Date.parse(mission.expires_at) <= now || Math.abs(now - Date.parse(proof.timestamp)) > 300_000) return deny();
     const target = `/v1/collaboration/missions/${missionId}/${action}${query}`;
     let digest: Buffer;
@@ -244,6 +264,14 @@ export class FakeHosted {
     }
     if (!verifyBytes(identity.public_key, digest, Buffer.from(proof.signature, "base64url"))) return deny();
     if (action === "invitation" && request.method === "GET") return json({ mission: this.missionView(mission), grant: this.grantView(grant) });
+    if (leaving) {
+      // Participant self-leave: zero body bytes, an accepted grant, idempotent.
+      if (request.body !== "") return refuse("mission_body_too_large", 413);
+      if (grant.accepted_at === null) return refuse("collaboration_mission_acceptance_required", 403);
+      grant.revoked_at ??= this.nowIso();
+      grant.left = true;
+      return json({ mission_id: missionId, grant_id: grant.grant_id, status: "revoked", reason: "participant_left", revoked_at: grant.revoked_at });
+    }
     if (action === "accept" && request.method === "POST") {
       const body = JSON.parse(request.body) as { mission_digest: string };
       if (body.mission_digest !== mission.digest) return refuse("collaboration_mission_conflict", 409);

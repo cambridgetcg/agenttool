@@ -7,11 +7,17 @@
  * gate refuses key-like base64 runs.
  *
  * Kinds and signers:
- * - `card`, `admission`, `denial`, `roster` are signed by the hub's **door**
- *   key and verified against the door key pinned on each device out of band.
- * - `knock` is signed by the requesting device's **desk** key and verified
- *   against the public key the hub recorded when it relayed that device's
- *   enrollment.
+ * - `card`, `admission`, `denial`, `roster`, `member_roster` and `renewal`
+ *   are signed by the hub's **door** key and verified against the door key
+ *   pinned on each device out of band.
+ * - `knock`, `renew` and `leave` are signed by a member device's **desk** key
+ *   and verified by the hub against the public key it recorded when it
+ *   relayed (or, for an adopted season, added) that device.
+ *
+ * Kinds are additive: a reader that does not know a kind reports it as
+ * malformed and never acts on it. A change to an existing kind's body is a
+ * new kind, never an in-place edit (`member_roster` is the keyed successor of
+ * `roster`, which stays readable but is no longer posted).
  *
  * The signed digest is sha256("agenttool-lobby-signed/v1" 0x00 kind 0x00
  * canonical(body)); the summary is the canonical JSON of the envelope.
@@ -26,9 +32,12 @@ import {
   assertCanonicalTime,
   assertDigest,
   assertUuid,
+  INVITATION_TEMPLATE_FORMAT,
   isSha256Hex,
+  LOBBY_ORIGIN,
   MISSION_LIMITS,
   parseCanonicalJson,
+  rawPublicKey,
   scalarLength,
   sha256Bytes,
   signBytes,
@@ -37,18 +46,25 @@ import {
 } from "./wire.js";
 
 export const SIGNED_FORMAT = "agenttool-lobby-signed/v1" as const;
-export const SIGNED_KINDS = ["card", "knock", "admission", "denial", "roster"] as const;
+export const SIGNED_KINDS = ["card", "knock", "admission", "denial", "roster", "member_roster", "renewal", "renew", "leave"] as const;
 export type SignedKind = typeof SIGNED_KINDS[number];
 /** Kinds only the door may sign. */
-export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster"];
+export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster", "member_roster", "renewal"];
+/** Kinds a member desk signs about itself; the hub verifies them against its device registry. */
+export const DESK_NOTE_KINDS: readonly SignedKind[] = ["renew", "leave"];
 
 export const KNOCK_MAX_MS = 72 * 3_600_000;
 export const ADMISSION_MAX_MS = 24 * 3_600_000;
+/** A renew request is good for at most 24 hours. */
+export const RENEW_MAX_MS = 24 * 3_600_000;
 export const NOTE_MAX = 280;
 export const ROSTER_MAX_MEMBERS = 16;
 
 const FINGERPRINT = /^[0-9a-f]{16}$/;
 const SIGNATURE_HEX = /^[0-9a-f]{128}$/;
+/** A raw 32-byte Ed25519 public key in lower-case hex: signed documents never
+ * carry base64 keys, because the egress gate refuses key-like base64 runs. */
+const PUBLIC_KEY_HEX = /^[0-9a-f]{64}$/;
 
 export interface SeasonRef {
   mission_id: string;
@@ -126,7 +142,79 @@ export interface RosterBody {
   issued_at: string;
 }
 
-export type SignedBody = FleetCard | KnockBody | AdmissionBody | DenialBody | RosterBody;
+export const MEMBER_ROLES = ["host", "member"] as const;
+export type MemberRole = typeof MEMBER_ROLES[number];
+
+/** One member of a keyed roster: the pin a fellow member uses to verify
+ * table talk. `public_key_hex` is the raw key in hex (see PUBLIC_KEY_HEX). */
+export interface KeyedMember {
+  identity_id: string;
+  signing_key_id: string;
+  public_key_hex: string;
+  tier: SlotTier;
+  role: MemberRole;
+  term_ends_at: string;
+}
+
+/** One part of a door-signed keyed roster. `roster_seq` rises with every new
+ * roster of a season; a reader uses the highest complete sequence, so an
+ * older roster replayed later never restores a removed member. */
+export interface MemberRosterBody {
+  room_id: string;
+  mission_id: string;
+  roster_seq: number;
+  members: KeyedMember[];
+  part: number;
+  parts: number;
+  issued_at: string;
+}
+
+/** A member desk's signed request for its next grant inside its term,
+ * bound to the SHA-256 of a token it generated locally. */
+export interface RenewBody {
+  room_id: string;
+  mission_id: string;
+  identity_id: string;
+  signing_key_id: string;
+  token_sha256: string;
+  issued_at: string;
+  expires_at: string;
+}
+
+/** A member desk's signed notice that it is leaving the season. */
+export interface LeaveBody {
+  room_id: string;
+  mission_id: string;
+  identity_id: string;
+  signing_key_id: string;
+  issued_at: string;
+}
+
+/** The token-free invitation template of a renewed grant, minus its two
+ * constant fields (format and origin), with the member's public key in hex.
+ * `invitationTemplateOf` rebuilds the exact
+ * `agenttool-mission-invitation-template/v1` document. */
+export interface RenewalInvitation {
+  mission_id: string;
+  grant_id: string;
+  identity_id: string;
+  signing_key_id: string;
+  public_key_hex: string;
+  expires_at: string;
+  token_sha256: string;
+}
+
+/** The door's signed notice of a renewed grant. */
+export interface RenewalBody {
+  room_id: string;
+  tier: SlotTier;
+  term_ends_at: string;
+  invitation: RenewalInvitation;
+  issued_at: string;
+}
+
+export type SignedBody = FleetCard | KnockBody | AdmissionBody | DenialBody | RosterBody | MemberRosterBody | RenewBody
+  | LeaveBody | RenewalBody;
 
 export interface SignedEnvelope<B = SignedBody> {
   format: typeof SIGNED_FORMAT;
@@ -281,8 +369,111 @@ export function validateRoster(value: unknown): RosterBody {
   };
 }
 
+function publicKeyHex(value: unknown): string {
+  if (typeof value !== "string" || !PUBLIC_KEY_HEX.test(value)) {
+    throw new LobbyError("invalid_signed_document", "public_key_hex must be 64 lowercase hex");
+  }
+  return value;
+}
+
+export function validateMemberRoster(value: unknown): MemberRosterBody {
+  const record = exact(value, ["room_id", "mission_id", "roster_seq", "members", "part", "parts", "issued_at"], "member roster");
+  if (typeof record.roster_seq !== "number" || !Number.isSafeInteger(record.roster_seq) || record.roster_seq < 1) {
+    throw new LobbyError("invalid_signed_document", "roster_seq must be a positive integer");
+  }
+  if (!Array.isArray(record.members) || record.members.length > ROSTER_MAX_MEMBERS) {
+    throw new LobbyError("invalid_signed_document", `a roster part lists at most ${ROSTER_MAX_MEMBERS} members`);
+  }
+  const { part, parts } = record;
+  if (typeof parts !== "number" || !Number.isInteger(parts) || parts < 1 || parts > 64
+    || typeof part !== "number" || !Number.isInteger(part) || part < 1 || part > parts) {
+    throw new LobbyError("invalid_signed_document", "a roster part is numbered 1..parts, at most 64 parts");
+  }
+  const seen = new Set<string>();
+  const members = record.members.map((entry) => {
+    const item = exact(entry, ["identity_id", "signing_key_id", "public_key_hex", "tier", "role", "term_ends_at"], "roster member");
+    const identity = assertUuid(item.identity_id, "identity_id");
+    if (seen.has(identity)) throw new LobbyError("invalid_signed_document", "a roster lists each member once");
+    seen.add(identity);
+    return {
+      identity_id: identity,
+      signing_key_id: assertUuid(item.signing_key_id, "signing_key_id"),
+      public_key_hex: publicKeyHex(item.public_key_hex),
+      tier: member(item.tier, SLOT_TIERS, "tier"),
+      role: member(item.role, MEMBER_ROLES, "role"),
+      term_ends_at: assertCanonicalTime(item.term_ends_at, "term_ends_at"),
+    };
+  });
+  return {
+    room_id: roomIdOf(record.room_id),
+    mission_id: assertUuid(record.mission_id, "mission_id"),
+    roster_seq: record.roster_seq,
+    members,
+    part,
+    parts,
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+  };
+}
+
+export function validateRenew(value: unknown): RenewBody {
+  const record = exact(value, ["room_id", "mission_id", "identity_id", "signing_key_id", "token_sha256", "issued_at", "expires_at"], "renew");
+  const body: RenewBody = {
+    room_id: roomIdOf(record.room_id),
+    mission_id: assertUuid(record.mission_id, "mission_id"),
+    identity_id: assertUuid(record.identity_id, "identity_id"),
+    signing_key_id: assertUuid(record.signing_key_id, "signing_key_id"),
+    token_sha256: tokenHash(record.token_sha256),
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+    expires_at: assertCanonicalTime(record.expires_at, "expires_at"),
+  };
+  const lifetime = Date.parse(body.expires_at) - Date.parse(body.issued_at);
+  if (lifetime <= 0 || lifetime > RENEW_MAX_MS) {
+    throw new LobbyError("invalid_signed_document", "a renew request expires within 24 hours of being issued");
+  }
+  return body;
+}
+
+export function validateLeave(value: unknown): LeaveBody {
+  const record = exact(value, ["room_id", "mission_id", "identity_id", "signing_key_id", "issued_at"], "leave");
+  return {
+    room_id: roomIdOf(record.room_id),
+    mission_id: assertUuid(record.mission_id, "mission_id"),
+    identity_id: assertUuid(record.identity_id, "identity_id"),
+    signing_key_id: assertUuid(record.signing_key_id, "signing_key_id"),
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+  };
+}
+
+export function validateRenewal(value: unknown): RenewalBody {
+  const record = exact(value, ["room_id", "tier", "term_ends_at", "invitation", "issued_at"], "renewal");
+  const invitation = exact(record.invitation, ["mission_id", "grant_id", "identity_id", "signing_key_id", "public_key_hex",
+    "expires_at", "token_sha256"], "renewal invitation");
+  const body: RenewalBody = {
+    room_id: roomIdOf(record.room_id),
+    tier: member(record.tier, SLOT_TIERS, "tier"),
+    term_ends_at: assertCanonicalTime(record.term_ends_at, "term_ends_at"),
+    invitation: {
+      mission_id: assertUuid(invitation.mission_id, "mission_id"),
+      grant_id: assertUuid(invitation.grant_id, "grant_id"),
+      identity_id: assertUuid(invitation.identity_id, "identity_id"),
+      signing_key_id: assertUuid(invitation.signing_key_id, "signing_key_id"),
+      public_key_hex: publicKeyHex(invitation.public_key_hex),
+      expires_at: assertCanonicalTime(invitation.expires_at, "expires_at"),
+      token_sha256: tokenHash(invitation.token_sha256),
+    },
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+  };
+  const grantLife = Date.parse(body.invitation.expires_at) - Date.parse(body.issued_at);
+  if (grantLife <= 0 || grantLife > MISSION_LIMITS.grantMs || Date.parse(body.invitation.expires_at) > Date.parse(body.term_ends_at)) {
+    throw new LobbyError("invalid_signed_document", "a renewed grant lasts at most 24 hours and ends within the term");
+  }
+  return body;
+}
+
 /** Members per roster part: what fits one observation with the signature. */
 export const ROSTER_PART_MEMBERS = 4;
+/** Keyed members per member_roster part: each carries two ids and a 64-hex key. */
+export const KEYED_ROSTER_PART_MEMBERS = 2;
 
 const VALIDATORS: Record<SignedKind, (value: unknown) => SignedBody> = {
   card: validateFleetCard,
@@ -290,6 +481,10 @@ const VALIDATORS: Record<SignedKind, (value: unknown) => SignedBody> = {
   admission: validateAdmission,
   denial: validateDenial,
   roster: validateRoster,
+  member_roster: validateMemberRoster,
+  renewal: validateRenewal,
+  renew: validateRenew,
+  leave: validateLeave,
 };
 
 export function signingDigest(kind: SignedKind, body: SignedBody): Buffer {
@@ -352,4 +547,33 @@ export function verifyDocument(envelope: SignedEnvelope, publicKey: string): boo
 /** SHA-256 hex of a document's summary bytes: how decisions cite a knock. */
 export function documentSha256(summary: string): string {
   return sha256Bytes(summary).toString("hex");
+}
+
+// ── Public keys in hex, and the renewal template ───────────────────────
+
+/** Raw public key hex from the standard base64 the service and pin book use. */
+export function publicKeyHexOf(publicKeyBase64: string): string {
+  return rawPublicKey(publicKeyBase64).toString("hex");
+}
+
+/** Standard base64 of a raw public key given in hex. */
+export function publicKeyFromHex(hex: string): string {
+  return Buffer.from(publicKeyHex(hex), "hex").toString("base64");
+}
+
+/** The exact `agenttool-mission-invitation-template/v1` document a renewal
+ * notice carries, in the participant client's field order. Holds no secret. */
+export function invitationTemplateOf(renewal: RenewalBody): Record<string, string> {
+  const invitation = renewal.invitation;
+  return {
+    format: INVITATION_TEMPLATE_FORMAT,
+    origin: LOBBY_ORIGIN,
+    mission_id: invitation.mission_id,
+    grant_id: invitation.grant_id,
+    identity_id: invitation.identity_id,
+    signing_key_id: invitation.signing_key_id,
+    public_key: publicKeyFromHex(invitation.public_key_hex),
+    expires_at: invitation.expires_at,
+    token_sha256: invitation.token_sha256,
+  };
 }

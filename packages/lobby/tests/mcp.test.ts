@@ -217,7 +217,7 @@ class StdioHarness {
 }
 
 describe("stdio MCP server", () => {
-  test("lists exactly three tools and no mutating tool", async () => {
+  test("lists exactly six tools and no mutating tool", async () => {
     const { home, zerone } = seededHall();
     const harness = new StdioHarness(home);
     try {
@@ -229,12 +229,14 @@ describe("stdio MCP server", () => {
 
       const listed = await harness.request("tools/list", {});
       const names = listed.tools.map((tool: any) => tool.name).sort();
-      expect(names).toEqual(["lobby_browse", "lobby_card", "lobby_halls"]);
+      expect(names).toEqual(["lobby_browse", "lobby_card", "lobby_halls", "room_read", "room_say_draft", "room_wait"]);
       for (const tool of listed.tools) {
         expect(tool.annotations.readOnlyHint).toBe(true);
         expect(tool.annotations.destructiveHint).toBe(false);
         expect(tool.annotations.openWorldHint).toBe(false);
-        expect(tool.name).not.toMatch(/add|set|link|promote|pin|remove|delete|write|sign|knock|admit|say/);
+        expect(tool.name).not.toMatch(/add|set|link|promote|pin|remove|delete|write|sign|knock|admit|send|renew|leave|kick|block|stop|accept/);
+        // The only tool about saying anything drafts; it never sends.
+        if (/say/.test(tool.name)) expect(tool.name).toBe("room_say_draft");
       }
 
       const card = await harness.request("tools/call", { name: "lobby_card", arguments: { room_id: zerone.room_id } });

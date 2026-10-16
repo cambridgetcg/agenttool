@@ -11,6 +11,7 @@
 import { LobbyError } from "./errors.js";
 import { mentionsDeviceOnlyWork } from "./room.js";
 import {
+  DESK_NOTE_KINDS,
   DOOR_KINDS,
   openDocument,
   verifyDocument,
@@ -18,6 +19,10 @@ import {
   type DenialBody,
   type FleetCard,
   type KnockBody,
+  type LeaveBody,
+  type MemberRosterBody,
+  type RenewalBody,
+  type RenewBody,
   type RosterBody,
   type SignedEnvelope,
 } from "./signed.js";
@@ -66,8 +71,15 @@ export interface FleetView {
   admissions: VerifiedDocument<AdmissionBody>[];
   denials: VerifiedDocument<DenialBody>[];
   rosters: VerifiedDocument<RosterBody>[];
+  /** Door-signed keyed rosters (the table-talk pin source), in receipt order. */
+  memberRosters: VerifiedDocument<MemberRosterBody>[];
+  /** Door-signed renewal notices, in receipt order. */
+  renewals: VerifiedDocument<RenewalBody>[];
   /** Desk-signed knocks, shape-checked only; the hub verifies them against its device registry. */
   knocks: Array<{ envelope: SignedEnvelope<KnockBody>; summary: string; event: MissionEvent }>;
+  /** Desk-signed renew requests and leave notices, shape-checked only; the
+   * hub verifies them against its device registry exactly like knocks. */
+  deskNotes: Array<{ envelope: SignedEnvelope<RenewBody | LeaveBody>; summary: string; event: MissionEvent }>;
   unverified: UnverifiedEvent[];
 }
 
@@ -117,7 +129,9 @@ export function verifyEventProof(event: MissionEvent, publicKey: string): boolea
 }
 
 export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin | null): FleetView {
-  const view: FleetView = { cards: new Map(), admissions: [], denials: [], rosters: [], knocks: [], unverified: [] };
+  const view: FleetView = {
+    cards: new Map(), admissions: [], denials: [], rosters: [], memberRosters: [], renewals: [], knocks: [], deskNotes: [], unverified: [],
+  };
   const reject = (event: MissionEvent, kind: string | null, reason: UnverifiedReason) => {
     view.unverified.push({ event_id: event.event_id, received_seq: event.received_seq, kind, reason, authority: "none" });
   };
@@ -138,6 +152,10 @@ export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin |
     if (envelope === null) continue; // ordinary text, not a lobby document
     if (envelope.kind === "knock") {
       view.knocks.push({ envelope: envelope as SignedEnvelope<KnockBody>, summary, event });
+      continue;
+    }
+    if (DESK_NOTE_KINDS.includes(envelope.kind)) {
+      view.deskNotes.push({ envelope: envelope as SignedEnvelope<RenewBody | LeaveBody>, summary, event });
       continue;
     }
     if (!DOOR_KINDS.includes(envelope.kind)) {
@@ -181,6 +199,12 @@ export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin |
         break;
       case "roster":
         view.rosters.push(verified as VerifiedDocument<RosterBody>);
+        break;
+      case "member_roster":
+        view.memberRosters.push(verified as VerifiedDocument<MemberRosterBody>);
+        break;
+      case "renewal":
+        view.renewals.push(verified as VerifiedDocument<RenewalBody>);
         break;
     }
   }

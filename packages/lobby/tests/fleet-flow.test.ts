@@ -65,11 +65,12 @@ describe("fleet hall end to end", () => {
     expect(admitBytes.grant.token_sha256).toBe(pending.token_sha256);
     expect(admitBytes.grant.actions).toEqual(["mission.observe", "mission.read"]);
     expect(Date.parse(admitBytes.grant.expires_at) - Date.parse(fleet.world.clock.now.toISOString())).toBeLessThanOrEqual(24 * 3_600_000);
+    // The keyed roster names the hub desk (host) and the new member: two keyed members fit one part.
     expect(admitBytes.posts.map((post: any) => [post.mission_id, post.kind])).toEqual([
-      [fleet.directoryId, "admission"], [fleet.seasonId, "admission"], [fleet.seasonId, "roster"],
+      [fleet.directoryId, "admission"], [fleet.seasonId, "admission"], [fleet.seasonId, "member_roster"],
     ]);
     const seasonSummaries = hosted.summaries(fleet.seasonId);
-    expect(seasonSummaries.some((summary) => summary.includes('"kind":"roster"'))).toBe(true);
+    expect(seasonSummaries.some((summary) => summary.includes('"kind":"member_roster"'))).toBe(true);
     expect(JSON.parse((await ok(hub.run("hub", "knocks", "--json"))).stdout).knocks[0].status).toBe("admitted");
 
     // Ready: re-read card and charter, digests agree, accept exactly that digest.

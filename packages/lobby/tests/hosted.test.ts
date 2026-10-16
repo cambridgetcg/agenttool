@@ -154,6 +154,46 @@ describe("responses and failures", () => {
     expect(calls).toBe(1);
   });
 
+  test("revocations and leave send zero body bytes; an unconfirmed revocation is not taken as done", async () => {
+    const grantView = (revoked: string | null) => ({
+      grant_id: MISSION, mission_id: MISSION, identity_id: MISSION, signing_key_id: MISSION, origin: "https://api.agenttool.dev",
+      actions: ["mission.read"], expires_at: "2026-10-17T11:00:00.000Z", accepted_at: null, revoked_at: revoked,
+    });
+    const revoked = recordingFetch(() => new Response(JSON.stringify({ grant: grantView("2026-10-16T12:00:00.000Z") })));
+    await new AdminClient(FAKE_BEARER, options(revoked.fetchImpl)).revokeGrant(MISSION, MISSION);
+    expect(revoked.calls[0]!.url).toBe(`https://api.agenttool.dev/v1/collaboration/missions/${MISSION}/grants/${MISSION}/revoke`);
+    expect(revoked.calls[0]!.init.method).toBe("POST");
+    expect(revoked.calls[0]!.init.body).toBeUndefined();
+    expect(new Headers(revoked.calls[0]!.init.headers).get("Content-Type")).toBeNull();
+    const notRevoked = recordingFetch(() => new Response(JSON.stringify({ grant: grantView(null) })));
+    expect((await asyncCodeOf(() => new AdminClient(FAKE_BEARER, options(notRevoked.fetchImpl)).revokeGrant(MISSION, MISSION))).code)
+      .toBe("hosted_invalid_response");
+    const missionGone = recordingFetch(() => new Response(JSON.stringify({ error: "collaboration_mission_not_found" }), { status: 404 }));
+    expect((await asyncCodeOf(() => new AdminClient(FAKE_BEARER, options(missionGone.fetchImpl)).revokeMission(MISSION))).code).toBe("hosted_refused");
+    expect(missionGone.calls[0]!.url).toBe(`https://api.agenttool.dev/v1/collaboration/missions/${MISSION}/revoke`);
+    expect(missionGone.calls[0]!.init.body).toBeUndefined();
+
+    // Leave: a participant request whose signed digest covers the empty body.
+    const { home } = tempHome();
+    LobbyStore.open(home).close();
+    const secrets = DeskSecrets.open(home);
+    secrets.createDeskKey();
+    const { token_sha256 } = secrets.newToken(new Date());
+    const left = recordingFetch(() => new Response(JSON.stringify({
+      mission_id: MISSION, grant_id: MISSION, status: "revoked", reason: "participant_left", revoked_at: "2026-10-16T12:00:00.000Z",
+    })));
+    const seat = { mission_id: MISSION, grant_id: MISSION, identity_id: MISSION, signing_key_id: MISSION, token_sha256 };
+    expect(await new ParticipantClient(secrets, options(left.fetchImpl)).leave(seat)).toEqual({ mission_id: MISSION, grant_id: MISSION, revoked_at: "2026-10-16T12:00:00.000Z" });
+    expect(left.calls[0]!.url).toBe(`https://api.agenttool.dev/v1/collaboration/missions/${MISSION}/leave`);
+    expect(left.calls[0]!.init.body).toBeUndefined();
+    const headers = new Headers(left.calls[0]!.init.headers);
+    expect(headers.get("Content-Type")).toBeNull();
+    expect(headers.get("Authorization")).toMatch(/^Bearer atcm_/);
+    expect(headers.get("X-Agenttool-Mission-Signature")).toMatch(/^[A-Za-z0-9_-]{86}$/);
+    const wrong = recordingFetch(() => new Response(JSON.stringify({ mission_id: MISSION, grant_id: MISSION, status: "revoked", reason: "admin", revoked_at: "2026-10-16T12:00:00.000Z" })));
+    expect((await asyncCodeOf(() => new ParticipantClient(secrets, options(wrong.fetchImpl)).leave(seat))).code).toBe("hosted_invalid_response");
+  });
+
   test("a grant response carrying a service-generated token is refused without reading it", async () => {
     const { fetchImpl } = recordingFetch(() => new Response(JSON.stringify({ grant: {}, token: "atcm_server" }), { status: 201 }));
     const result = await asyncCodeOf(() => new AdminClient(FAKE_BEARER, options(fetchImpl)).issueGrant(MISSION, {

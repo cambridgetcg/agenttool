@@ -36,13 +36,15 @@ import {
   type SlotTier,
 } from "./room.js";
 import { codePointLength, TERMINAL_UNSAFE } from "./text.js";
-import { FLEET_SCHEMA_SQL, FleetStore } from "./fleet-store.js";
+import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FleetStore } from "./fleet-store.js";
 
-/** Version 2 adds the fleet-hall tables (src/fleet-store.ts). A version-1
- * file is upgraded explicitly when the CLI opens it for writing; the
- * read-only MCP handle reads version 1 as "no fleet state yet". */
-export const STATE_SCHEMA_VERSION = "2";
-const READABLE_VERSIONS = ["1", "2"] as const;
+/** Version 2 adds the fleet-hall tables; version 3 adds table talk, renewal,
+ * leave, kick and block and the emergency stop (src/fleet-store.ts). An older
+ * file is upgraded explicitly, one step at a time, when the CLI opens it for
+ * writing; the read-only MCP handle reads version 1 as "no fleet state yet"
+ * and version 2 as fleet state without the version-3 tables. */
+export const STATE_SCHEMA_VERSION = "3";
+const READABLE_VERSIONS = ["1", "2", "3"] as const;
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
 const GENESIS_HASH = "0".repeat(64);
 
@@ -244,7 +246,7 @@ export class LobbyStore {
     readonly readonly: boolean,
     readonly stateVersion: string,
   ) {
-    this.fleet = new FleetStore(db, !readonly, stateVersion === STATE_SCHEMA_VERSION);
+    this.fleet = new FleetStore(db, !readonly, stateVersion);
   }
 
   /** Open (creating if needed) the desk state for read and write. */
@@ -261,16 +263,21 @@ export class LobbyStore {
         const row = db.query("SELECT value FROM meta WHERE key = 'schema_version'").get() as
           | { value: string }
           | null;
-        if (row === null) {
-          db.query("INSERT INTO meta (key, value) VALUES ('schema_version', $value)")
-            .run({ value: STATE_SCHEMA_VERSION });
-        } else if (row.value === "1") {
-          // Explicit upgrade 1 -> 2: add the fleet tables; nothing existing changes.
-          db.query("UPDATE meta SET value = $value WHERE key = 'schema_version'").run({ value: STATE_SCHEMA_VERSION });
-        } else if (row.value !== STATE_SCHEMA_VERSION) {
+        const from = row?.value ?? null;
+        if (from !== null && !(READABLE_VERSIONS as readonly string[]).includes(from)) {
           throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
         }
+        // Explicit upgrades: 1 -> 2 adds the fleet tables, 2 -> 3 adds the
+        // version-3 columns and tables. Nothing existing is rewritten. A new
+        // file takes the same steps, so every desk reaches one schema.
         db.exec(FLEET_SCHEMA_SQL);
+        if (from !== STATE_SCHEMA_VERSION) db.exec(FLEET_V3_UPGRADE_SQL);
+        if (from === null) {
+          db.query("INSERT INTO meta (key, value) VALUES ('schema_version', $value)")
+            .run({ value: STATE_SCHEMA_VERSION });
+        } else if (from !== STATE_SCHEMA_VERSION) {
+          db.query("UPDATE meta SET value = $value WHERE key = 'schema_version'").run({ value: STATE_SCHEMA_VERSION });
+        }
       }).immediate();
     } catch (error) {
       db.close();
