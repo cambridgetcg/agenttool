@@ -242,6 +242,7 @@ describe("boring test spine", () => {
       "CODEX_HOME",
       "CODEX_SQLITE_HOME",
       "CODEX_THREAD_ID",
+      "AGENTTOOL_LOBBY_HOME",
       "PIP_CONFIG_FILE",
       "BASH_ENV",
       "ENV",
@@ -969,6 +970,7 @@ describe("boring test spine", () => {
       "packages/codex-usage",
       "packages/collab-zerone",
       "packages/collab-courier",
+      "packages/lobby",
       "packages/browser",
       "packages/hf-scout",
       "packages/hf-training-garden",
@@ -1037,6 +1039,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/codex-usage && bun run ci");
     expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
+    expect(preflight).toContain("cd packages/lobby && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
     expect(preflight).toContain(
       "local read-only Hugging Face metadata and provenance scout",
@@ -1513,9 +1516,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(66);
+      expect(calls).toHaveLength(67);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        56,
+        57,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,

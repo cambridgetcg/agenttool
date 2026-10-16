@@ -1,0 +1,46 @@
+{
+  "name": "@agenttool/lobby",
+  "version": "0.1.0-dev.0",
+  "description": "Private local lobby desk: device-only room cards, a private ledger, a pin book, an append-only audit log, a read-only MCP view and an egress gate",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./egress": "./src/egress.ts"
+  },
+  "bin": {
+    "agenttool-lobby": "./bin/agenttool-lobby.ts",
+    "agenttool-lobby-mcp": "./bin/agenttool-lobby-mcp.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "ci": "bun run typecheck && bun run test"
+  },
+  "engines": {
+    "bun": ">=1.3.5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/lobby"
+  },
+  "keywords": [
+    "agents",
+    "lobby",
+    "local-first",
+    "mcp",
+    "sqlite"
+  ]
+}
