@@ -104,7 +104,11 @@ const RENEW_HINT = "; renew it (room renew request, then room renew accept) or k
 export async function roomSync(ctx: FleetContext, roomId: string): Promise<{ added: number; cursor: string; mission_id: string }> {
   const scope = roomScope(ctx, roomId);
   const seat = liveSeat(ctx, scope.mission_id, "mission.read");
-  if (seat === null) throw new LobbyError("no_seat", `this desk holds no live grant to read that room${RENEW_HINT}`);
+  if (seat === null) {
+    // The host's seats are renewed by the hub itself, never by a renew request.
+    const host = ctx.store.fleet.hub() !== null && ctx.store.getRoom(scope.room_id) !== null;
+    throw new LobbyError("no_seat", `this desk holds no live grant to read that room${host ? `; run hub seat ${scope.room_id}` : RENEW_HINT}`);
+  }
   return { ...(await syncMission(ctx, seat)), mission_id: scope.mission_id };
 }
 
