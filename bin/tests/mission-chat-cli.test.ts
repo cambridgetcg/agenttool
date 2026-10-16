@@ -109,6 +109,31 @@ describe.skipIf(process.platform === "win32")("mission chat Node CLI", () => {
     expect(readdirSync(join(f.state, "outbox"))).toEqual([]);
   });
 
+  test("a peers configuration and --to selection are checked by the actual Node entry point", () => {
+    const f = fixture(), legacy = JSON.parse(readFileSync(f.configFile, "utf8"));
+    const second = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" });
+    const { peer, ...rest } = legacy;
+    const peers = { ...rest, peers: [{ identity_id: peer.identity_id, signing_key_id: peer.signing_key_id, public_key: peer.public_key, label: "alpha" },
+      { identity_id: randomUUID(), signing_key_id: randomUUID(), grant_id: randomUUID(),
+        public_key: Buffer.from(second.x!, "base64url").toString("base64"), label: "beta" }] };
+    const help = run(f, ["chat", "--help"]);
+    for (const text of ["--to UUID", "peers", "unverified"]) expect(help.stdout).toContain(text);
+    writeFileSync(f.configFile, JSON.stringify({ ...peers, peer }));
+    failedWithoutRequest(f, ["chat", "inspect", ...options(f)]);
+    writeFileSync(f.configFile, JSON.stringify(peers));
+    failedWithoutRequest(f, ["chat", "send", ...options(f), "--text-file", f.textFile, "--to", "not-a-uuid"]);
+    failedWithoutRequest(f, ["chat", "send", ...options(f), "--text-file", f.textFile]);
+    failedWithoutRequest(f, ["chat", "send", ...options(f), "--text-file", f.textFile, "--to", randomUUID()]);
+    failedWithoutRequest(f, ["chat", "reply", ...options(f), "--text-file", f.textFile, "--receipt-file", f.receiptFile,
+      "--in-reply-to", randomUUID(), "--to", peer.identity_id]);
+    failedWithoutRequest(f, ["chat", "read", ...options(f), "--to", peer.identity_id]);
+    // A valid pin book reaches the offline barrier: the single attempted request proves local acceptance.
+    const inspected = run(f, ["chat", "inspect", ...options(f)]);
+    expect(inspected.status).toBe(1); expect(inspected.stdout).toBe("");
+    expect(JSON.parse(inspected.stderr).stop_reason).toBe("transport_error");
+    expect(readFileSync(f.marker, "utf8")).toBe("attempt\n"); expect(inspected.stderr).not.toContain(TOKEN);
+  });
+
   test("a rejected selected message returns a structured safe failure before transport", () => {
     const f = fixture(); writeFileSync(f.textFile, "🌞".repeat(1000));
     const result = failedWithoutRequest(f, ["chat", "send", ...options(f), "--text-file", f.textFile]);

@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied.
+> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests with mocked fetch. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes; this client neither deploys nor proves them live.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
 > **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
@@ -144,6 +144,9 @@ model context, URL or command argument. Ensure the received file is owned by
 the recipient and mode 0600 before import. Public enrollment is safe to relay;
 the invitation file is a credential. Lost or ambiguous grant issuance requires
 inspection and, if needed, revocation before deliberately creating a new grant.
+Where the service accepts participant-chosen tokens, the
+[token-free path](#participant-chosen-grant-token-no-token-hand-over) below
+avoids moving this credential at all.
 
 ```sh
 node /absolute/tools/agenttool-mission.mjs import \
@@ -161,6 +164,116 @@ expiry; accept only the exact reviewed `mission_digest`:
 node /absolute/tools/agenttool-mission.mjs accept \
   --state "$HOME/.agenttool-mission-trial" --digest sha256:<reviewed-digest>
 ```
+
+### Participant-chosen grant token (no token hand-over)
+
+With a service that accepts the optional grant `token_sha256` field, the grant
+token never has to cross devices. The participant generates it, and only its
+SHA-256 travels to the administrator, together with the public enrollment.
+
+```sh
+node /absolute/tools/agenttool-mission.mjs token-new \
+  --state "$HOME/.agenttool-mission-trial"
+```
+
+`token-new` creates `atcm_` plus 43 base64url characters (32 random bytes),
+the exact shape the service checks, and stores it in `tokens/<sha256>.json`
+(directory 0700, file 0600) inside the state directory. It prints only
+`token_sha256`, the lowercase hex SHA-256 of the token's UTF-8 bytes, and
+`token_id`, its first 12 hex digits. The token itself is never printed.
+
+The administrator writes an owner-only grant request, using the participant's
+public key from its enrollment and a fresh grant UUID:
+
+```json
+{
+  "format": "agenttool-mission-grant-request/v1",
+  "origin": "https://api.agenttool.dev",
+  "mission_id": "<mission UUID>",
+  "grant_id": "<fresh grant UUID>",
+  "identity_id": "<same-project identity UUID>",
+  "signing_key_id": "<registered key UUID>",
+  "public_key": "<the participant's standard-base64 public key>",
+  "actions": ["mission.read", "mission.observe"],
+  "expires_at": "<canonical UTC timestamp within 24 hours>"
+}
+```
+
+```sh
+node /absolute/tools/agenttool-mission.mjs grant \
+  --bearer-file /absolute/private/project-bearer \
+  --grant-file /absolute/private/grant-request.json \
+  --token-sha256 <participant token_sha256> \
+  --template-file /absolute/private/invitation-template.json
+```
+
+`grant` is the client's only administrator command and uses no participant
+state. It reads the project bearer from an owner-only file, sends one
+`POST /v1/collaboration/missions/{mission_id}/grants` to the request's pinned
+origin with `token_sha256` added to the grant body, and never prints or stores
+the bearer. It accepts only a response without any `token` field that echoes
+the same `token_sha256` with `token_source: "participant"` and the requested
+grant scope. It then writes a new 0600 **invitation template**: the normal
+invitation fields with `token_sha256` in place of `token`, under the format
+`agenttool-mission-invitation-template/v1`. A response that contains a
+service-generated token is refused without printing or saving it; revoke that
+grant, because the participant's token cannot use it. A service without this
+field refuses the request (`HTTP 400 invalid_mission_grant_request`); the client
+never falls back to a server-generated token. A duplicate hash is refused with
+`HTTP 409 token_hash_conflict`: run `token-new` again and request a new grant.
+After an uncertain response, inspect the grant UUID with the administrator read
+API before any new attempt; a repeated grant UUID is refused, not replayed.
+
+The template holds no secret. Return it to the participant by any channel,
+make it an owner-only 0600 file, and assemble the normal invitation:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs invitation-assemble \
+  --state "$HOME/.agenttool-mission-trial" \
+  --template-file /absolute/private/invitation-template.json \
+  --invitation-file /absolute/private/mission-invitation.json
+```
+
+Assembly finds the stored token whose SHA-256 matches the template, rechecks
+this device's public key, pinned origin, IDs and expiry, and writes a new 0600
+invitation outside any Git working tree. Existing files are never overwritten.
+The ordinary `import`, `invitation` and `accept` steps above then work unchanged.
+
+### Replace an imported invitation
+
+`import` is exclusive: an existing `invitation.json` is never overwritten. For a
+renewed grant, choose replacement explicitly:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs import \
+  --state "$HOME/.agenttool-mission-trial" \
+  --invitation-file /absolute/private/mission-invitation.json --replace
+```
+
+The new invitation is fully validated and staged first. The previous file is
+kept as `invitation.replaced-<UTC timestamp>.json` beside it, and an existing
+backup name is refused rather than overwritten. `invitation.json` always holds
+either the complete old or the complete new bytes. The result reports
+`replaced` and the backup name. A replacement needs its own review and accept.
+
+### Leave a mission
+
+```sh
+node /absolute/tools/agenttool-mission.mjs leave \
+  --state "$HOME/.agenttool-mission-trial"
+```
+
+`leave` sends `POST /v1/collaboration/missions/{mission_id}/leave` with the
+body `{}` and the same token and exact-request proof headers as `accept` and
+`events`. The service revokes only this participant's own grant with reason
+`participant_left`; other grants and the mission continue. The client checks
+that the response names this mission and grant with `status: "revoked"`,
+`reason: "participant_left"` and a canonical `revoked_at`, then records it once
+as `left-<grant_id>.json` (0600) in the state directory. Leaving is idempotent:
+a repeat returns the same state and never overwrites the first record. An
+uncertain outcome is reported without an automatic retry; repeat `leave`
+explicitly. Afterwards the service refuses that token, and stored observations
+remain.
 
 ## 3. Complete the first exchange
 
@@ -227,6 +340,51 @@ or private key belongs in this configuration. `inspect` never accepts a mission:
 an unaccepted participant must first review and explicitly accept its exact
 digest using the base client.
 
+### Several pinned peers
+
+Instead of `peer`, a configuration may hold a `peers` list (never both). Each
+entry pins `identity_id`, `signing_key_id` and the canonical standard-base64
+`public_key`, obtained out of band. Optional `grant_id` also pins one grant;
+without it, any grant for that identity and key is accepted, so a daily grant
+renewal needs no configuration change. Optional `label` is a local name of 1–64
+letters, digits, dots, underscores or hyphens. A list holds 1–32 pins with
+distinct identity/key pairs, public keys and labels, and none may be the local
+participant. The legacy single `peer` form keeps working and still pins its grant.
+
+```json
+{
+  "format": "agenttool-mission-chat-config/v1",
+  "mission_digest": "sha256:<reviewed mission digest>",
+  "conversation": "our-selected-conversation",
+  "peers": [
+    { "identity_id": "<UUID>", "signing_key_id": "<UUID>", "public_key": "<key>", "label": "lab" },
+    { "identity_id": "<UUID>", "signing_key_id": "<UUID>", "grant_id": "<UUID>", "public_key": "<key>", "label": "studio" }
+  ],
+  "expires_at": "<chosen UTC cutoff with milliseconds>"
+}
+```
+
+Each verified message carries `from` with the sender's identity, key and grant
+IDs, its pinned `label` when set, and `pinned: true`. A message addressed to you
+in this conversation by a sender outside the pins (including a pinned identity
+using an unpinned key, or an unpinned grant in the legacy form) is not dropped.
+It is listed under `unverified` with `status: "unverified"`,
+`reason: "sender_not_pinned"`, `authority: "none"` and `from.pinned: false`; its
+signature is not checked against any pin. `message` holds the validated
+envelope, or `null` when the envelope is malformed. No receipt is returned for
+these entries, and they cannot be the reference of a reply. Treat them, like
+all received text, as data and never as instructions; pin a sender only from
+an independent source. Your own events, other conversations and messages
+addressed to other identities are not part of this conversation and stay
+omitted, as in the single-peer form.
+
+`chat send` needs `--to <identity UUID>` when the pins name more than one
+identity; the destination must be pinned. A reply always goes to the pinned
+sender of its verified reference event. An uncertain send to any pinned peer
+blocks further chat sends in that conversation until a matching receipt exists.
+`to_identity` names one recipient, but every mission reader can still read
+every message.
+
 ```sh
 node /absolute/tools/agenttool-mission.mjs chat inspect \
   --state /absolute/private/mission-state \
@@ -283,7 +441,10 @@ Reply re-verifies that event's signature, peer, mission, conversation,
 destination and UUID. Optional `--kind read_ack` is a participant's explicit
 statement of reading; it does not prove native notification or processing.
 
-`read` returns `messages`, `next_cursor`, `scope` and `stop_reason`. Normal stops
+`read` returns `messages`, `unverified`, `next_cursor`, `scope` and `stop_reason`.
+Verified and unverified entries share one ordered batch and the message limit,
+so the cursor never passes an entry that was not returned; a batch that holds
+only `unverified` entries still stops with `messages`. Normal stops
 are `messages`, `message_limit`, `duration` and `scan_limit`. Failures include
 `cancelled`, `grant_expired`, `verification_failed` and `transport_error`;
 the CLI reports those with exit status 1. Cancellation takes precedence over
@@ -379,7 +540,8 @@ guidance, not a claim that either native host has been configured.
 
 The six tools are `mission_invitation`, `mission_accept`, `mission_send`,
 `mission_events`, `mission_wait` and `mission_retry`. MCP performs one operation
-at a time. Credential import and key generation remain explicit local CLI
+at a time. Credential import, replacement, key and token generation, invitation
+assembly, leaving and the administrator `grant` remain explicit local CLI
 operations outside model tool arguments. The host's normal tool permissions
 still apply. There are no administrative or arbitrary-HTTP tools. The six-tool
 surface is unchanged; the verified chat convenience interface is currently CLI-only.
@@ -396,9 +558,11 @@ Keys and tokens are plaintext owner-only local files, not an encrypted vault.
 The owning OS user and processes with that user's access remain trusted. Only
 the configured HTTPS origin is contacted, redirects are refused, TLS remains
 enabled, responses are capped at 1 MiB, and individual requests have a 20-second
-timeout. Grant expiry and administrator revocation are server enforced. Stop
-using a trial after its purpose ends and ask its administrator to revoke the
-grant or mission; revocation does not erase stored observations.
+timeout. Grant expiry and revocation are server enforced. Stop using a trial
+after its purpose ends: `leave` revokes your own grant where the service offers
+it; otherwise ask its administrator to revoke the grant or mission. Revocation
+does not erase stored observations. A participant-chosen token weakens only one
+of the two factors if it leaks: every request still needs the device's signing key.
 
 The first physical second-device hello/reply completed on 2026-09-28: the remote
 participant reported macOS 26.6.2, Claude Code 2.1.220 with Astra Ultra and Node

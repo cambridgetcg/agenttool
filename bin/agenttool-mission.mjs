@@ -1,22 +1,40 @@
 #!/usr/bin/env node
 /** Portable mission participant. Contract: docs/COLLABORATION-MISSION-CLIENT.md.
- * No dependencies, project bearer, automatic execution, background daemon or wake.
+ * No dependencies, automatic execution, background daemon or wake. Participant
+ * operations never use a project bearer; only the separate administrator `grant`
+ * command reads one, from an owner-only file, and it never prints or stores it.
  */
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
-import { constants, existsSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, fstatSync, fsyncSync, realpathSync } from 'node:fs';
+import { constants, existsSync, linkSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, unlinkSync, writeFileSync, fstatSync, fsyncSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_ORIGIN = 'https://api.agenttool.dev';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 const CURSOR = /^(0|[1-9][0-9]{0,18})$/;
+// The service's exact grant-token shape: atcm_ plus canonical base64url of 32 bytes.
+const GRANT_TOKEN = /^atcm_[A-Za-z0-9_-]{43}$/;
+const ADMIN_BEARER = /^at_[A-Za-z0-9_-]{1,253}$/;
 const MAX_RESPONSE = 1_048_576;
+// The leave request carries an empty JSON object: mission POST bodies are JSON and nonempty.
+export const LEAVE_BODY = '{}';
 const fail = message => { throw new Error(message); };
 const hash = bytes => createHash('sha256').update(bytes).digest();
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const uuid = value => UUID.test(value ?? '') ? value : fail('Expected a lowercase UUID.');
 const digest = value => DIGEST.test(value ?? '') ? value : fail('Expected sha256:<64 lowercase hex digits>.');
+const sha256Hex = value => typeof value === 'string' && SHA256_HEX.test(value) ? value : fail('Expected a token SHA-256 of 64 lowercase hex digits.');
+const canonicalTime = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+function validToken(value) {
+  return typeof value === 'string' && GRANT_TOKEN.test(value)
+    && Buffer.from(value.slice(5), 'base64url').toString('base64url') === value.slice(5);
+}
+function publicKeyText(value) {
+  if (typeof value !== 'string' || Buffer.from(value, 'base64').length !== 32 || Buffer.from(value, 'base64').toString('base64') !== value) fail('Expected a standard-base64 Ed25519 public key.');
+  return value;
+}
 function text(value, max) {
   if (typeof value !== 'string' || !value.length || value.includes('\0') || !value.isWellFormed() || [...value].length > max) fail(`Expected nonempty well-formed text, at most ${max} Unicode scalars.`);
   return value;
@@ -34,14 +52,23 @@ function privateStat(stat, directory = false) {
   if (process.platform === 'win32') fail('This trial requires POSIX owner-only file permissions (macOS or Linux).');
   if (stat.uid !== process.getuid() || (stat.mode & 0o077) || !(directory ? stat.isDirectory() : stat.isFile())) fail('Use an owner-only directory (0700) and regular credential files (0600).');
 }
+function outsideGit(path, message = 'Keep mission state outside a Git working tree.') {
+  for (let at = path; ; at = dirname(at)) {
+    if (existsSync(join(at, '.git'))) fail(message);
+    if (dirname(at) === at) break;
+  }
+}
 function stateRoot(path) {
   if (!isAbsolute(path ?? '')) fail('State directory must be an absolute path outside Git.');
   privateStat(lstatSync(path), true);
   if (realpathSync(path) !== path) fail('State directory must use its real path, without symlinks.');
-  for (let at = path; ; at = dirname(at)) {
-    if (existsSync(join(at, '.git'))) fail('Keep mission state outside a Git working tree.');
-    if (dirname(at) === at) break;
-  }
+  outsideGit(path);
+  return path;
+}
+/** A selected output file is new, absolute and outside any Git working tree. */
+function newFilePath(path) {
+  if (!isAbsolute(path ?? '') || existsSync(path)) fail('Choose a new absolute output file; existing files are never overwritten.');
+  outsideGit(dirname(path), 'Keep mission invitations and templates outside a Git working tree.');
   return path;
 }
 function privateRead(path, max = 32768) {
@@ -54,11 +81,14 @@ function privateRead(path, max = 32768) {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   } finally { closeSync(fd); }
 }
+function syncDirectory(path) {
+  const directory = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  try { fsyncSync(directory); } finally { closeSync(directory); }
+}
 function writeNew(path, value) {
   const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try { writeFileSync(fd, value); fsyncSync(fd); } finally { closeSync(fd); }
-  const directory = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-  try { fsyncSync(directory); } finally { closeSync(directory); }
+  syncDirectory(dirname(path));
 }
 function publicKey(key) { return Buffer.from(createPublicKey(key).export({ format: 'jwk' }).x, 'base64url').toString('base64'); }
 function readKey(root) {
@@ -73,10 +103,7 @@ export function init(path, service = DEFAULT_ORIGIN) {
   origin(service);
   if (!isAbsolute(path ?? '') || existsSync(path)) fail('Choose a new absolute state directory outside Git; existing state is never overwritten.');
   // Check the existing parent before creating anything in a checkout.
-  for (let at = dirname(path); ; at = dirname(at)) {
-    if (existsSync(join(at, '.git'))) fail('Keep mission state outside a Git working tree.');
-    if (dirname(at) === at) break;
-  }
+  outsideGit(dirname(path));
   mkdirSync(path, { mode: 0o700 }); stateRoot(path);
   const { privateKey } = generateKeyPairSync('ed25519');
   writeNew(join(path, 'signing-key.pem'), privateKey.export({ format: 'pem', type: 'pkcs8' }));
@@ -139,10 +166,83 @@ export function participant(path) {
   return metadata;
 }
 export { stateRoot, privateRead, writeNew, safeError, cursor };
-export function importInvitation(path, file) {
+/** Import is exclusive unless `replace` is explicit; a replaced invitation keeps a timestamped backup. */
+export function importInvitation(path, file, { replace = false } = {}) {
   const value = validateProfile(JSON.parse(privateRead(file)), enrollment(path));
-  writeNew(join(path, 'invitation.json'), json(value));
-  return { mission_id: value.mission_id, grant_id: value.grant_id, expires_at: value.expires_at, imported: true };
+  const summary = { mission_id: value.mission_id, grant_id: value.grant_id, expires_at: value.expires_at, imported: true };
+  if (!replace) { writeNew(join(path, 'invitation.json'), json(value)); return summary; }
+  return { ...summary, ...replaceInvitation(path, json(value)) };
+}
+function replaceInvitation(root, bytes) {
+  // Stage the complete new file first, so invitation.json always names whole old or new bytes.
+  const target = join(root, 'invitation.json'), staged = join(root, `.invitation-${randomUUID()}.new`);
+  writeNew(staged, bytes);
+  let backup = null;
+  try {
+    let current = null;
+    try { current = lstatSync(target); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    if (current) {
+      privateStat(current);
+      backup = `invitation.replaced-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      // A hard link keeps the previous bytes; an existing backup name is refused, never overwritten.
+      linkSync(target, join(root, backup));
+    }
+    renameSync(staged, target);
+  } catch (error) {
+    try { unlinkSync(staged); } catch { /* The live invitation was not replaced. */ }
+    throw error;
+  }
+  syncDirectory(root);
+  return { replaced: backup !== null, backup };
+}
+function tokenDirectory(root, create = false) {
+  const directory = join(root, 'tokens');
+  if (create && !existsSync(directory)) mkdirSync(directory, { mode: 0o700 });
+  privateStat(lstatSync(directory), true);
+  return directory;
+}
+/** Generate a grant token preimage on this device. Only its SHA-256 is printed or shared;
+ * the token stays in an owner-only file. Contract: docs/COLLABORATION-MISSION-CLIENT.md.
+ */
+export function newToken(path) {
+  const root = stateRoot(path); enrollment(root);
+  const directory = tokenDirectory(root, true);
+  const token = `atcm_${randomBytes(32).toString('base64url')}`;
+  if (!validToken(token)) fail('Generated token does not match the service token shape.');
+  const tokenSha256 = hash(token).toString('hex');
+  writeNew(join(directory, `${tokenSha256}.json`), json({ format: 'agenttool-mission-participant-token/v1',
+    token_sha256: tokenSha256, token, created_at: new Date().toISOString() }));
+  return { token_sha256: tokenSha256, token_id: tokenSha256.slice(0, 12) };
+}
+function storedToken(root, tokenSha256) {
+  sha256Hex(tokenSha256);
+  const missing = 'No token generated on this device matches that hash. Run token-new here and request a grant for its hash.';
+  if (!existsSync(join(root, 'tokens'))) fail(missing);
+  const file = join(tokenDirectory(root), `${tokenSha256}.json`);
+  if (!existsSync(file)) fail(missing);
+  const value = JSON.parse(privateRead(file));
+  sameFields(value, ['format', 'token_sha256', 'token', 'created_at']);
+  if (value.format !== 'agenttool-mission-participant-token/v1' || value.token_sha256 !== tokenSha256
+    || !validToken(value.token) || hash(value.token).toString('hex') !== tokenSha256) fail('The stored token does not match its recorded hash.');
+  return value.token;
+}
+const TEMPLATE_FIELDS = ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'expires_at', 'token_sha256'];
+/** Combine an administrator's token-free template with the matching local token into a normal 0600 invitation. */
+export function assembleInvitation(path, templateFile, invitationFile) {
+  const root = stateRoot(path), local = enrollment(root);
+  if (!isAbsolute(templateFile ?? '')) fail('Provide an absolute template-file path.');
+  newFilePath(invitationFile);
+  const template = JSON.parse(privateRead(templateFile));
+  sameFields(template, TEMPLATE_FIELDS);
+  if (template.format !== 'agenttool-mission-invitation-template/v1') fail('Expected an agenttool-mission-invitation-template/v1 document.');
+  if (template.origin !== local.origin || template.public_key !== local.public_key) fail('Template does not match this device key and pinned origin.');
+  const value = validateProfile({ format: 'agenttool-mission-invitation/v1', origin: template.origin,
+    mission_id: template.mission_id, grant_id: template.grant_id, identity_id: template.identity_id,
+    signing_key_id: template.signing_key_id, public_key: template.public_key, expires_at: template.expires_at,
+    token: storedToken(root, template.token_sha256) }, local);
+  writeNew(invitationFile, json(value));
+  return { mission_id: value.mission_id, grant_id: value.grant_id, expires_at: value.expires_at,
+    token_sha256: template.token_sha256, assembled: true };
 }
 export function requestDigest(p, method, target, body, timestamp) {
   origin(p.origin);
@@ -173,7 +273,7 @@ export async function request(path, method, suffix, body = '', { fetchImpl = fet
   const p = profile(path), key = readKey(path);
   const target = `/v1/collaboration/missions/${p.mission_id}${suffix}`;
   if (!(method === 'GET' && /^\/(?:invitation|context|events(?:\?after=(?:0|[1-9][0-9]{0,18})&limit=20)?)$/.test(suffix) && !body)
-    && !(method === 'POST' && ['/accept', '/events'].includes(suffix) && Buffer.byteLength(body) <= 8192)) fail('Unsupported participant operation.');
+    && !(method === 'POST' && ['/accept', '/events', '/leave'].includes(suffix) && Buffer.byteLength(body) <= 8192)) fail('Unsupported participant operation.');
   const timestamp = new Date().toISOString();
   const headers = { Authorization: `Bearer ${p.token}`, 'X-Agenttool-Mission-Grant-Id': p.grant_id,
     'X-Agenttool-Mission-Identity-Id': p.identity_id, 'X-Agenttool-Mission-Key-Id': p.signing_key_id,
@@ -207,6 +307,80 @@ export async function accept(path, selectedDigest, options) {
   const view = await invitation(path, options);
   if (view.mission.mission_digest !== selectedDigest) fail('The selected mission digest does not match the invitation.');
   return request(path, 'POST', '/accept', JSON.stringify({ mission_digest: selectedDigest }), options);
+}
+/** Revoke only this participant's own grant with the same signed proof as accept/events.
+ * Idempotent on the service; the first local record is never overwritten.
+ */
+export async function leave(path, options) {
+  const p = profile(path);
+  let result;
+  try { result = await request(path, 'POST', '/leave', LEAVE_BODY, options); }
+  catch (error) {
+    if (error instanceof Error && error.message.startsWith('Mission transport failed.')) fail('Leave outcome is uncertain. No automatic retry; leaving is idempotent, so repeat leave explicitly to read the recorded state.');
+    throw error;
+  }
+  if (!result || result.mission_id !== p.mission_id || result.grant_id !== p.grant_id || result.status !== 'revoked'
+    || result.reason !== 'participant_left' || !canonicalTime(result.revoked_at)) fail('Leave response does not match this participant grant.');
+  const record = { mission_id: p.mission_id, grant_id: p.grant_id, status: 'revoked', reason: 'participant_left', revoked_at: result.revoked_at };
+  const target = join(stateRoot(path), `left-${p.grant_id}.json`);
+  if (!existsSync(target)) writeNew(target, json(record));
+  return { ...record, recorded: true };
+}
+const GRANT_REQUEST_FIELDS = ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'actions', 'expires_at'];
+function grantRequest(value) {
+  sameFields(value, GRANT_REQUEST_FIELDS);
+  if (value.format !== 'agenttool-mission-grant-request/v1') fail('Expected an agenttool-mission-grant-request/v1 document.');
+  origin(value.origin);
+  for (const field of ['mission_id', 'grant_id', 'identity_id', 'signing_key_id']) uuid(value[field]);
+  publicKeyText(value.public_key);
+  if (!Array.isArray(value.actions) || !value.actions.length || value.actions.length > 2 || new Set(value.actions).size !== value.actions.length
+    || !value.actions.every(action => ['mission.read', 'mission.observe'].includes(action))) fail('Choose mission.read and optionally mission.observe.');
+  const expiry = Date.parse(value.expires_at);
+  if (!canonicalTime(value.expires_at) || expiry <= Date.now() || expiry - Date.now() > 86_400_000) fail('Grant expiry must be a canonical UTC time within the next 24 hours.');
+  return value;
+}
+/** Administrator operation: issue one grant bound to a participant-chosen token hash.
+ * The bearer is read from an owner-only file and sent only to the request's pinned
+ * origin. No grant token is ever received, printed or written; the result is a
+ * token-free invitation template. Contract: docs/COLLABORATION-MISSION-CLIENT.md.
+ */
+export async function issueGrant({ bearerFile, requestFile, tokenSha256, templateFile }, { fetchImpl = fetch, timeout = 20000, signal } = {}) {
+  sha256Hex(tokenSha256);
+  if (!isAbsolute(bearerFile ?? '') || !isAbsolute(requestFile ?? '')) fail('Provide absolute bearer and grant-request file paths.');
+  newFilePath(templateFile);
+  const selected = grantRequest(JSON.parse(privateRead(requestFile)));
+  const bearer = privateRead(bearerFile, 1024).replace(/\r?\n$/, '');
+  if (!ADMIN_BEARER.test(bearer)) fail('Expected a project bearer (at_…) in the owner-only bearer file.');
+  const id = selected.grant_id, target = `/v1/collaboration/missions/${selected.mission_id}/grants`;
+  const body = JSON.stringify({ grant_id: id, identity_id: selected.identity_id, signing_key_id: selected.signing_key_id,
+    actions: selected.actions, expires_at: selected.expires_at, token_sha256: tokenSha256 });
+  let result;
+  try {
+    result = await boundedJson(await fetchImpl(selected.origin + target, { method: 'POST', body, redirect: 'error',
+      headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) }));
+  } catch (error) {
+    // Transport details must never echo the bearer; refusals keep only their fixed code.
+    if (error instanceof Error && /^(Mission request refused:|Service response exceeds|Service returned invalid|Empty service response)/.test(error.message)) throw error;
+    fail(`Grant ${id} issuance is uncertain. No automatic retry: inspect that grant ID with the administrator read API before any new attempt.`);
+  }
+  const grant = result?.grant;
+  if (!result || typeof result !== 'object' || Object.hasOwn(result, 'token') || (grant && typeof grant === 'object' && Object.hasOwn(grant, 'token')))
+    fail(`Grant ${id} came back with a service-generated token, which was neither printed nor saved. The participant token cannot use it; revoke grant ${id}.`);
+  const echoed = result.token_sha256 ?? grant?.token_sha256, source = result.token_source ?? grant?.token_source;
+  if (!grant || typeof grant !== 'object' || grant.grant_id !== id || grant.mission_id !== selected.mission_id
+    || grant.identity_id !== selected.identity_id || grant.signing_key_id !== selected.signing_key_id || grant.origin !== selected.origin
+    || !Array.isArray(grant.actions) || [...grant.actions].sort().join(',') !== [...selected.actions].sort().join(',')
+    || grant.revoked_at !== null || grant.accepted_at !== null || echoed !== tokenSha256 || source !== 'participant'
+    || !canonicalTime(grant.expires_at) || Date.parse(grant.expires_at) <= Date.now())
+    fail(`Grant ${id} response does not confirm the selected participant token hash and scope. Inspect it before any new attempt.`);
+  const template = { format: 'agenttool-mission-invitation-template/v1', origin: selected.origin, mission_id: selected.mission_id,
+    grant_id: id, identity_id: selected.identity_id, signing_key_id: selected.signing_key_id, public_key: selected.public_key,
+    expires_at: grant.expires_at, token_sha256: tokenSha256 };
+  try { writeNew(templateFile, json(template)); }
+  catch { fail(`Grant ${id} was issued, but its template file could not be written. The template holds no secret: rebuild it from the grant request, the grant's expires_at and the token hash.`); }
+  return { mission_id: selected.mission_id, grant_id: id, expires_at: grant.expires_at, token_sha256: tokenSha256,
+    token_source: 'participant', template_written: true };
 }
 function outbox(path) {
   const root = stateRoot(path), directory = join(root, 'outbox'); privateStat(lstatSync(directory), true);
@@ -330,27 +504,37 @@ const HELP = `AgentTool mission trial — Node 22+ on macOS/Linux, no npm instal
 init --state /absolute/new/private-directory [--origin https://api.agenttool.dev]
 enrollment --state DIR                         Print public enrollment only
 enroll-proof --state DIR --details-file FILE    Sign a selected BYO birth intent; no HTTP
-import --state DIR --invitation-file FILE       Read a private 0600 invitation
+token-new --state DIR                           Generate a grant token here; prints only its SHA-256
+invitation-assemble --state DIR --template-file FILE --invitation-file NEW
+                                                Join an admin template with the local token (0600)
+import --state DIR --invitation-file FILE [--replace]
+                                                Read a private 0600 invitation; --replace keeps a backup
 invitation --state DIR                          Inspect; does not accept
 accept --state DIR --digest sha256:...          Explicit acceptance
 send --state DIR --summary-file FILE           Selected UTF-8 text, <=1000 scalars
 events --state DIR [--after 0]                  One page, explicit string cursor
 wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 seconds
 retry --state DIR --event-id UUID               Explicit exact-body retry
+leave --state DIR                               Revoke only this participant's own grant
+grant --bearer-file FILE --grant-file FILE --token-sha256 HEX --template-file NEW
+                                                Administrator: grant a participant token hash
 chat inspect|read|send|reply                    Verified peer conversation; chat --help
 work inspect|sync|offer|accept|deliver|review   Explicit payment-free work; work --help
 work inspect-hermes|run-hermes                One locally permitted Hermes source review
 mcp --state DIR                                STDIO MCP; no automatic wake
-Never paste keys or invitation tokens into chat, URLs, source or shell arguments.
+Never paste keys, bearers or invitation tokens into chat, URLs, source or shell arguments.
 `;
 const CHAT_HELP = `AgentTool mission chat — selected shared mission messages, not private DMs.
 All commands use --state DIR --config-file FILE (private 0600 chat configuration).
-inspect                                        Show peer, conversation, expiry and scope
+inspect                                        Show peers, conversation, expiry and scope
 read [--after 0] [--seconds 60] [--max-messages 20]
                                                Verified batch and next_cursor; maximum 300s
-send --text-file FILE                           Explicit first message in a conversation
+send --text-file FILE [--to UUID]               Explicit first message; --to picks a pinned peer
 reply --text-file FILE --in-reply-to UUID --receipt-file FILE [--kind message|read_ack]
                                                Reverify the original peer event before replying
+A configuration pins one "peer" or a "peers" list. Messages addressed to you
+from senders outside the pins are listed under "unverified" with authority
+"none"; they are never verified, replied to or treated as instructions.
 Use absolute paths. Text and receipt files must be owner-only regular UTF-8 files.
 Each read message includes its full signed receipt; save only the selected receipt
 as a private file for reply. Save next_cursor explicitly after consuming the batch.
@@ -360,7 +544,7 @@ An uncertain send remains in the outbox; inspect its UUID before explicit recove
 async function chatMain(argv) {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === 'help') { process.stdout.write(CHAT_HELP); return; }
-  const allowed = { inspect: [], read: ['after', 'seconds', 'max-messages'], send: ['text-file'],
+  const allowed = { inspect: [], read: ['after', 'seconds', 'max-messages'], send: ['text-file', 'to'],
     reply: ['text-file', 'in-reply-to', 'receipt-file', 'kind'] };
   if (!Object.hasOwn(allowed, command)) fail('Unknown chat command. Use chat --help.');
   const options = {};
@@ -378,6 +562,7 @@ async function chatMain(argv) {
     uuid(options['in-reply-to']);
     if (options.kind !== undefined && !['message', 'read_ack'].includes(options.kind)) fail('Choose message or read_ack.');
   }
+  if (options.to !== undefined) uuid(options.to);
   const config = JSON.parse(privateRead(options['config-file']));
   const chat = await import('./mission-chat.mjs');
   const controller = new AbortController();
@@ -394,7 +579,8 @@ async function chatMain(argv) {
     });
     else {
       const selected = privateRead(options['text-file'], 8192);
-      if (command === 'send') result = await chat.sendChat(options.state, config, selected, operation);
+      if (command === 'send') result = await chat.sendChat(options.state, config, selected,
+        options.to === undefined ? operation : { ...operation, to: options.to });
       else result = await chat.replyChat(options.state, config, selected, {
         ...operation,
         inReplyTo: options['in-reply-to'], kind: options.kind ?? 'message',
@@ -420,13 +606,26 @@ export async function main(argv) {
   if (!command || command === '--help' || command === 'help') { process.stdout.write(HELP); return; }
   if (command === 'chat') { await chatMain(rest); return; }
   if (command === 'work') { await (await import('./mission-work.mjs')).workMain(rest); return; }
-  const allowed = { init: ['origin'], enrollment: [], 'enroll-proof': ['details-file'], import: ['invitation-file'], invitation: [], accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], mcp: [] };
-  if (!(command in allowed)) fail('Unknown command. Use --help.');
+  const allowed = { init: ['origin'], enrollment: [], 'enroll-proof': ['details-file'], 'token-new': [],
+    'invitation-assemble': ['template-file', 'invitation-file'], import: ['invitation-file', 'replace'], invitation: [],
+    accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], leave: [],
+    grant: ['bearer-file', 'grant-file', 'token-sha256', 'template-file'], mcp: [] };
+  const flags = { import: ['replace'] };
+  // The administrator grant uses no participant state; every other command requires --state.
+  const stateless = command === 'grant';
+  if (!Object.hasOwn(allowed, command)) fail('Unknown command. Use --help.');
   const options = {};
-  for (let i = 0; i < rest.length; i += 2) {
-    const key = rest[i]?.slice(2);
-    if (!rest[i]?.startsWith('--') || !['state', ...allowed[command]].includes(key) || options[key] !== undefined || !rest[i + 1]) fail('Unknown, repeated or incomplete option. Use --help.');
-    options[key] = rest[i + 1];
+  for (let i = 0; i < rest.length;) {
+    const key = rest[i]?.startsWith('--') ? rest[i].slice(2) : undefined;
+    if (!key || ![...(stateless ? [] : ['state']), ...allowed[command]].includes(key) || Object.hasOwn(options, key)) fail('Unknown, repeated or incomplete option. Use --help.');
+    if (flags[command]?.includes(key)) { options[key] = true; i += 1; continue; }
+    if (!rest[i + 1]) fail('Unknown, repeated or incomplete option. Use --help.');
+    options[key] = rest[i + 1]; i += 2;
+  }
+  if (stateless) {
+    process.stdout.write(json(await issueGrant({ bearerFile: options['bearer-file'], requestFile: options['grant-file'],
+      tokenSha256: options['token-sha256'], templateFile: options['template-file'] })));
+    return;
   }
   const path = options.state; if (!isAbsolute(path ?? '')) fail('Provide --state with an absolute directory.');
   let result;
@@ -437,7 +636,9 @@ export async function main(argv) {
       if (!isAbsolute(options['details-file'] ?? '')) fail('Provide a private absolute details-file path.');
       result = enrollmentProof(path, JSON.parse(privateRead(options['details-file']))); break;
     }
-    case 'import': result = importInvitation(path, options['invitation-file']); break;
+    case 'token-new': result = newToken(path); break;
+    case 'invitation-assemble': result = assembleInvitation(path, options['template-file'], options['invitation-file']); break;
+    case 'import': result = importInvitation(path, options['invitation-file'], { replace: options.replace === true }); break;
     case 'invitation': result = await invitation(path); break;
     case 'accept': result = await accept(path, options.digest); break;
     case 'send': {
@@ -455,6 +656,7 @@ export async function main(argv) {
     case 'events': result = await events(path, options.after); break;
     case 'wait': result = await wait(path, options.after, options.seconds === undefined ? 30 : Number(options.seconds)); break;
     case 'retry': result = await retry(path, options['event-id']); break;
+    case 'leave': result = await leave(path); break;
     case 'mcp': mcp(path); return;
   }
   process.stdout.write(json(result));
