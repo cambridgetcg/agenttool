@@ -365,7 +365,7 @@ describe("a response that breaks off is uncertain, and later posts are still sav
     expect(admit.stderr).not.toContain("internal_error");
     const rows = JSON.parse((await ok(fleet.hub.run("outbox", "list", "--json"))).stdout).outbox
       .filter((row: any) => !before.has(row.event_id));
-    expect(rows.map((row: any) => `${row.kind} ${row.state}`).sort()).toEqual(["admission pending", "admission stored", "roster stored"]);
+    expect(rows.map((row: any) => `${row.kind} ${row.state}`).sort()).toEqual(["admission pending", "admission stored", "member_roster stored"]);
     expect(hosted.summaries(fleet.seasonId).length).toBeGreaterThanOrEqual(2);
     const pending = rows.find((row: any) => row.state === "pending");
     const directory = hosted.summaries(fleet.directoryId).length;

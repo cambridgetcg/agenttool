@@ -1,11 +1,18 @@
-/** Fleet-hall state in lobby.sqlite (schema version 2).
+/** Fleet-hall state in lobby.sqlite (schema version 3).
  *
  * Desk side (every enrolled device): its desk identity and directory join,
- * the grants it holds, the knocks it sent, a cache of mission events it read,
- * and an outbox of exact observation bytes saved before sending.
+ * the grants it holds (and which it left), the knocks it sent, its pending
+ * renew requests, a cache of mission events it read, and an outbox of exact
+ * observation bytes saved before sending.
  * Hub side (the one device holding the door): hub configuration, enrolled
- * fleet devices, grants it issued, room seasons, published cards, knock
- * decisions and memberships.
+ * fleet devices, grants it issued (and their revocation), room seasons,
+ * published cards, knock decisions, memberships (state, pause), keyed
+ * rosters, renewals, blocks, grants registered by hand for adopted seasons,
+ * desk notes already processed, and an emergency stop.
+ *
+ * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, run once in
+ * the same transaction that records the new version; nothing existing is
+ * rewritten.
  *
  * No secret is stored here: the desk key and token preimages live in
  * `<home>/secrets` (src/secrets.ts); the project bearer and door key live in
@@ -185,6 +192,77 @@ BEGIN
 END;
 `;
 
+/** Version 2 → 3: table talk, renewal, leave, kick and block, the emergency
+ * stop. Additive only: new nullable or defaulted columns and new tables. */
+export const FLEET_V3_UPGRADE_SQL = `
+ALTER TABLE desk_grants ADD COLUMN left_at TEXT;
+ALTER TABLE hub ADD COLUMN stopped_at TEXT;
+ALTER TABLE hub ADD COLUMN directory_revoked_at TEXT;
+ALTER TABLE hub_grants ADD COLUMN revoke_state TEXT CHECK (revoke_state IS NULL OR revoke_state IN ('requested', 'revoked'));
+ALTER TABLE hub_grants ADD COLUMN revoked_at TEXT;
+ALTER TABLE hub_seasons ADD COLUMN revoked_at TEXT;
+ALTER TABLE hub_members ADD COLUMN state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'left', 'kicked', 'blocked'));
+ALTER TABLE hub_members ADD COLUMN paused_at TEXT;
+ALTER TABLE hub_members ADD COLUMN changed_at TEXT;
+
+CREATE TABLE IF NOT EXISTS desk_renewals (
+  token_sha256 TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  mission_id TEXT NOT NULL,
+  posted_mission_id TEXT NOT NULL,
+  request_event_id TEXT NOT NULL,
+  requested_at TEXT NOT NULL,
+  accepted_grant_id TEXT,
+  accepted_at TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_rosters (
+  mission_id TEXT NOT NULL,
+  roster_seq INTEGER NOT NULL CHECK (roster_seq >= 1),
+  room_id TEXT NOT NULL,
+  members TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  PRIMARY KEY (mission_id, roster_seq)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_renewals (
+  token_sha256 TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  mission_id TEXT NOT NULL,
+  identity_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL,
+  basis TEXT NOT NULL CHECK (basis IN ('request', 'list')),
+  request_event_id TEXT,
+  note_event_id TEXT NOT NULL,
+  renewed_at TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_blocks (
+  room_id TEXT NOT NULL,
+  identity_id TEXT NOT NULL,
+  blocked_at TEXT NOT NULL,
+  PRIMARY KEY (room_id, identity_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_extra_grants (
+  grant_id TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  room_id TEXT NOT NULL,
+  identity_id TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  revoke_state TEXT CHECK (revoke_state IS NULL OR revoke_state IN ('requested', 'revoked')),
+  revoked_at TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_processed_notes (
+  event_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  identity_id TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  processed_at TEXT NOT NULL
+) STRICT;
+`;
+
 export interface DeskRow {
   project_id: string;
   origin: string;
@@ -211,6 +289,19 @@ export interface DeskGrantRow {
   expires_at: string | null;
   accepted_at: string | null;
   recorded_at: string;
+  /** When this desk left the grant itself (version 3; absent on a version-2 read). */
+  left_at?: string | null;
+}
+
+export interface DeskRenewalRow {
+  token_sha256: string;
+  room_id: string;
+  mission_id: string;
+  posted_mission_id: string;
+  request_event_id: string;
+  requested_at: string;
+  accepted_grant_id: string | null;
+  accepted_at: string | null;
 }
 
 export interface DeskKnockRow {
@@ -255,6 +346,9 @@ export interface HubRow {
   directory_mode: "created" | "adopted";
   directory_state: "pending" | "active";
   created_at: string;
+  /** Set by the emergency stop (version 3). */
+  stopped_at?: string | null;
+  directory_revoked_at?: string | null;
 }
 
 export interface HubDeviceRow {
@@ -278,6 +372,9 @@ export interface HubGrantRow {
   room_id: string | null;
   state: "requested" | "issued";
   requested_at: string;
+  /** `requested`: a revocation was sent without a confirmed answer; `revoked`: confirmed (version 3). */
+  revoke_state?: "requested" | "revoked" | null;
+  revoked_at?: string | null;
 }
 
 export interface SeasonRow {
@@ -289,6 +386,45 @@ export interface SeasonRow {
   mode: "created" | "adopted";
   state: "pending" | "current" | "replaced";
   recorded_at: string;
+  revoked_at?: string | null;
+}
+
+export type MemberState = "active" | "left" | "kicked" | "blocked";
+
+export interface RosterRow {
+  mission_id: string;
+  roster_seq: number;
+  room_id: string;
+  members: string;
+  issued_at: string;
+}
+
+export interface RenewalRow {
+  token_sha256: string;
+  room_id: string;
+  mission_id: string;
+  identity_id: string;
+  grant_id: string;
+  basis: "request" | "list";
+  request_event_id: string | null;
+  note_event_id: string;
+  renewed_at: string;
+}
+
+export interface BlockRow {
+  room_id: string;
+  identity_id: string;
+  blocked_at: string;
+}
+
+export interface ExtraGrantRow {
+  grant_id: string;
+  mission_id: string;
+  room_id: string;
+  identity_id: string;
+  recorded_at: string;
+  revoke_state: "requested" | "revoked" | null;
+  revoked_at: string | null;
 }
 
 export interface HubCardRow {
@@ -318,6 +454,10 @@ export interface MemberRow {
   knock_id: string;
   grant_id: string;
   admitted_at: string;
+  /** Version 3: membership state, pause flag (renewal stops while set) and when the state last changed. */
+  state?: MemberState;
+  paused_at?: string | null;
+  changed_at?: string | null;
 }
 
 type Row = Record<string, unknown>;
@@ -330,15 +470,23 @@ function withActions<T extends { actions: MissionAction[] }>(row: Row | null): T
 /** Fleet tables over the same handle as LobbyStore. Writes require a
  * writable store; the MCP's read-only handle can only call readers. */
 export class FleetStore {
+  /** The fleet tables exist (state version 2 or 3). */
+  readonly available: boolean;
+  /** The table-talk, renewal and removal tables and columns exist (state version 3). */
+  readonly v3: boolean;
+
   constructor(
     private readonly db: Database,
     private readonly writable: boolean,
-    readonly available: boolean,
-  ) {}
+    stateVersion: string,
+  ) {
+    this.available = stateVersion === "2" || stateVersion === "3";
+    this.v3 = stateVersion === "3";
+  }
 
   private write(): void {
     if (!this.writable) throw new LobbyError("read_only", "this desk view is read-only");
-    if (!this.available) throw new LobbyError("state_not_upgraded", "this desk state has no fleet tables yet");
+    if (!this.v3) throw new LobbyError("state_not_upgraded", "this desk state has no version-3 fleet tables yet");
   }
 
   transaction<T>(run: () => T): T {
@@ -394,11 +542,12 @@ export class FleetStore {
     ).run({ grant_id: grantId, ...input });
   }
 
-  /** The accepted grant for a mission that lasts longest past `now`. */
+  /** The accepted grant for a mission that lasts longest past `now`, never
+   * one this desk has left. */
   currentDeskGrant(missionId: string, now: Date): DeskGrantRow | null {
     return withActions<DeskGrantRow>(this.db.query(
       `SELECT * FROM desk_grants WHERE mission_id = $mission_id AND accepted_at IS NOT NULL
-         AND expires_at > $now ORDER BY expires_at DESC LIMIT 1`,
+         AND expires_at > $now ${this.v3 ? "AND left_at IS NULL" : ""} ORDER BY expires_at DESC LIMIT 1`,
     ).get({ mission_id: missionId, now: now.toISOString() }) as Row | null);
   }
 
@@ -710,13 +859,242 @@ export class FleetStore {
       `INSERT INTO hub_members (mission_id, room_id, identity_id, tier, term_ends_at, knock_id, grant_id, admitted_at)
        VALUES ($mission_id, $room_id, $identity_id, $tier, $term_ends_at, $knock_id, $grant_id, $admitted_at)
        ON CONFLICT (mission_id, identity_id) DO UPDATE SET tier = excluded.tier, term_ends_at = excluded.term_ends_at,
-         knock_id = excluded.knock_id, grant_id = excluded.grant_id, admitted_at = excluded.admitted_at`,
-    ).run({ ...row });
+         knock_id = excluded.knock_id, grant_id = excluded.grant_id, admitted_at = excluded.admitted_at,
+         state = 'active', paused_at = NULL, changed_at = excluded.admitted_at`,
+    ).run({
+      mission_id: row.mission_id, room_id: row.room_id, identity_id: row.identity_id, tier: row.tier,
+      term_ends_at: row.term_ends_at, knock_id: row.knock_id, grant_id: row.grant_id, admitted_at: row.admitted_at,
+    });
   }
 
   members(missionId: string): MemberRow[] {
     if (!this.available) return [];
     return this.db.query("SELECT * FROM hub_members WHERE mission_id = $mission_id ORDER BY admitted_at ASC, identity_id ASC")
       .all({ mission_id: missionId }) as MemberRow[];
+  }
+
+  // ── Version 3: desk side ───────────────────────────────────────────
+
+  /** This desk's season grants for a room, newest first (read-only views too). */
+  deskSeasonGrants(roomId: string): DeskGrantRow[] {
+    if (!this.available) return [];
+    return (this.db.query(
+      `SELECT * FROM desk_grants WHERE purpose = 'season' AND room_id = $room_id
+       ORDER BY recorded_at DESC, grant_id DESC`,
+    ).all({ room_id: roomId }) as Row[]).map((row) => withActions<DeskGrantRow>(row)!);
+  }
+
+  /** The room a mission belongs to, as this desk's own grants record it. */
+  roomOfMission(missionId: string): string | null {
+    if (!this.available) return null;
+    const row = this.db.query(
+      "SELECT room_id FROM desk_grants WHERE mission_id = $mission_id AND room_id IS NOT NULL LIMIT 1",
+    ).get({ mission_id: missionId }) as { room_id: string } | null;
+    return row?.room_id ?? null;
+  }
+
+  markDeskGrantLeft(grantId: string, at: string): void {
+    this.write();
+    this.db.query("UPDATE desk_grants SET left_at = $at WHERE grant_id = $grant_id AND left_at IS NULL").run({ grant_id: grantId, at });
+  }
+
+  addDeskRenewal(row: Omit<DeskRenewalRow, "accepted_grant_id" | "accepted_at">): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO desk_renewals (token_sha256, room_id, mission_id, posted_mission_id, request_event_id, requested_at,
+         accepted_grant_id, accepted_at)
+       VALUES ($token_sha256, $room_id, $mission_id, $posted_mission_id, $request_event_id, $requested_at, NULL, NULL)`,
+    ).run({ ...row });
+  }
+
+  /** Renew requests this desk sent for a room, newest first. */
+  deskRenewals(roomId: string): DeskRenewalRow[] {
+    if (!this.v3) return [];
+    return this.db.query("SELECT * FROM desk_renewals WHERE room_id = $room_id ORDER BY requested_at DESC, token_sha256 ASC")
+      .all({ room_id: roomId }) as DeskRenewalRow[];
+  }
+
+  markDeskRenewalAccepted(tokenSha256: string, grantId: string, at: string): void {
+    this.write();
+    const result = this.db.query(
+      `UPDATE desk_renewals SET accepted_grant_id = $grant_id, accepted_at = $at
+       WHERE token_sha256 = $token AND accepted_at IS NULL`,
+    ).run({ token: tokenSha256, grant_id: grantId, at });
+    if (result.changes !== 1) throw new LobbyError("renewal_used", "this renewal was already accepted");
+  }
+
+  // ── Version 3: hub side ────────────────────────────────────────────
+
+  setHubStopped(at: string): void {
+    this.write();
+    this.db.query("UPDATE hub SET stopped_at = coalesce(stopped_at, $at) WHERE singleton = 1").run({ at });
+  }
+
+  setDirectoryRevoked(at: string): void {
+    this.write();
+    this.db.query("UPDATE hub SET directory_revoked_at = coalesce(directory_revoked_at, $at) WHERE singleton = 1").run({ at });
+  }
+
+  listHubGrants(): HubGrantRow[] {
+    if (!this.available) return [];
+    return (this.db.query("SELECT * FROM hub_grants ORDER BY requested_at ASC, grant_id ASC").all() as Row[])
+      .map((row) => withActions<HubGrantRow>(row)!);
+  }
+
+  /** Grants this hub requested for one identity in the given missions. */
+  hubGrantsOf(identityId: string, missionIds: readonly string[]): HubGrantRow[] {
+    const wanted = new Set(missionIds);
+    return this.listHubGrants().filter((grant) => grant.identity_id === identityId && wanted.has(grant.mission_id));
+  }
+
+  markHubGrantRevoke(grantId: string, state: "requested" | "revoked", at: string | null): void {
+    this.write();
+    this.db.query(
+      `UPDATE hub_grants SET revoke_state = CASE WHEN revoke_state = 'revoked' THEN 'revoked' ELSE $state END,
+         revoked_at = coalesce(revoked_at, $at) WHERE grant_id = $grant_id`,
+    ).run({ grant_id: grantId, state, at });
+  }
+
+  listSeasons(): SeasonRow[] {
+    if (!this.available) return [];
+    return this.db.query("SELECT * FROM hub_seasons ORDER BY recorded_at ASC, mission_id ASC").all() as SeasonRow[];
+  }
+
+  seasonsOfRoom(roomId: string): SeasonRow[] {
+    return this.listSeasons().filter((season) => season.room_id === roomId);
+  }
+
+  markSeasonRevoked(missionId: string, at: string): void {
+    this.write();
+    this.db.query("UPDATE hub_seasons SET revoked_at = coalesce(revoked_at, $at) WHERE mission_id = $mission_id").run({ mission_id: missionId, at });
+  }
+
+  member(missionId: string, identityId: string): MemberRow | null {
+    if (!this.available) return null;
+    return this.db.query("SELECT * FROM hub_members WHERE mission_id = $mission_id AND identity_id = $identity_id")
+      .get({ mission_id: missionId, identity_id: identityId }) as MemberRow | null;
+  }
+
+  /** Members whose state is active and whose term runs past `now`. */
+  activeMembers(missionId: string, now: Date): MemberRow[] {
+    return this.members(missionId).filter((row) => (row.state ?? "active") === "active" && Date.parse(row.term_ends_at) > now.getTime());
+  }
+
+  allMembers(): MemberRow[] {
+    if (!this.available) return [];
+    return this.db.query("SELECT * FROM hub_members ORDER BY room_id ASC, admitted_at ASC, identity_id ASC").all() as MemberRow[];
+  }
+
+  setMemberState(missionId: string, identityId: string, state: MemberState, at: string): void {
+    this.write();
+    this.db.query(
+      "UPDATE hub_members SET state = $state, changed_at = $at WHERE mission_id = $mission_id AND identity_id = $identity_id",
+    ).run({ mission_id: missionId, identity_id: identityId, state, at });
+  }
+
+  setMemberPaused(missionId: string, identityId: string, pausedAt: string | null): void {
+    this.write();
+    this.db.query("UPDATE hub_members SET paused_at = $paused_at WHERE mission_id = $mission_id AND identity_id = $identity_id")
+      .run({ mission_id: missionId, identity_id: identityId, paused_at: pausedAt });
+  }
+
+  nextRosterSeq(missionId: string): number {
+    if (!this.v3) return 1;
+    const row = this.db.query("SELECT max(roster_seq) AS seq FROM hub_rosters WHERE mission_id = $mission_id")
+      .get({ mission_id: missionId }) as { seq: number | null } | null;
+    return (row?.seq ?? 0) + 1;
+  }
+
+  addRoster(row: RosterRow): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO hub_rosters (mission_id, roster_seq, room_id, members, issued_at)
+       VALUES ($mission_id, $roster_seq, $room_id, $members, $issued_at)`,
+    ).run({ ...row });
+  }
+
+  addRenewal(row: RenewalRow): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO hub_renewals (token_sha256, room_id, mission_id, identity_id, grant_id, basis, request_event_id,
+         note_event_id, renewed_at)
+       VALUES ($token_sha256, $room_id, $mission_id, $identity_id, $grant_id, $basis, $request_event_id,
+         $note_event_id, $renewed_at)`,
+    ).run({ ...row });
+  }
+
+  renewal(tokenSha256: string): RenewalRow | null {
+    if (!this.v3) return null;
+    return this.db.query("SELECT * FROM hub_renewals WHERE token_sha256 = $token").get({ token: tokenSha256 }) as RenewalRow | null;
+  }
+
+  listRenewals(): RenewalRow[] {
+    if (!this.v3) return [];
+    return this.db.query("SELECT * FROM hub_renewals ORDER BY renewed_at ASC, token_sha256 ASC").all() as RenewalRow[];
+  }
+
+  block(roomId: string, identityId: string, at: string): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO hub_blocks (room_id, identity_id, blocked_at) VALUES ($room_id, $identity_id, $at)
+       ON CONFLICT (room_id, identity_id) DO NOTHING`,
+    ).run({ room_id: roomId, identity_id: identityId, at });
+  }
+
+  unblock(roomId: string, identityId: string): boolean {
+    this.write();
+    return this.db.query("DELETE FROM hub_blocks WHERE room_id = $room_id AND identity_id = $identity_id")
+      .run({ room_id: roomId, identity_id: identityId }).changes === 1;
+  }
+
+  isBlocked(roomId: string, identityId: string): boolean {
+    if (!this.v3) return false;
+    return this.db.query("SELECT 1 AS blocked FROM hub_blocks WHERE room_id = $room_id AND identity_id = $identity_id")
+      .get({ room_id: roomId, identity_id: identityId }) !== null;
+  }
+
+  listBlocks(): BlockRow[] {
+    if (!this.v3) return [];
+    return this.db.query("SELECT * FROM hub_blocks ORDER BY blocked_at ASC, room_id ASC, identity_id ASC").all() as BlockRow[];
+  }
+
+  addExtraGrant(row: Omit<ExtraGrantRow, "revoke_state" | "revoked_at">): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO hub_extra_grants (grant_id, mission_id, room_id, identity_id, recorded_at, revoke_state, revoked_at)
+       VALUES ($grant_id, $mission_id, $room_id, $identity_id, $recorded_at, NULL, NULL)
+       ON CONFLICT (grant_id) DO NOTHING`,
+    ).run({ ...row });
+  }
+
+  listExtraGrants(): ExtraGrantRow[] {
+    if (!this.v3) return [];
+    return this.db.query("SELECT * FROM hub_extra_grants ORDER BY recorded_at ASC, grant_id ASC").all() as ExtraGrantRow[];
+  }
+
+  markExtraGrantRevoke(grantId: string, state: "requested" | "revoked", at: string | null): void {
+    this.write();
+    this.db.query(
+      `UPDATE hub_extra_grants SET revoke_state = CASE WHEN revoke_state = 'revoked' THEN 'revoked' ELSE $state END,
+         revoked_at = coalesce(revoked_at, $at) WHERE grant_id = $grant_id`,
+    ).run({ grant_id: grantId, state, at });
+  }
+
+  processedNote(eventId: string): { outcome: string } | null {
+    if (!this.v3) return null;
+    return this.db.query("SELECT outcome FROM hub_processed_notes WHERE event_id = $event_id").get({ event_id: eventId }) as { outcome: string } | null;
+  }
+
+  addProcessedNote(row: { event_id: string; kind: string; identity_id: string; outcome: string; processed_at: string }): void {
+    this.write();
+    this.db.query(
+      `INSERT INTO hub_processed_notes (event_id, kind, identity_id, outcome, processed_at)
+       VALUES ($event_id, $kind, $identity_id, $outcome, $processed_at) ON CONFLICT (event_id) DO NOTHING`,
+    ).run({ ...row });
+  }
+
+  listDecisions(): DecisionRow[] {
+    if (!this.available) return [];
+    return this.db.query("SELECT * FROM hub_decisions ORDER BY decided_at ASC, knock_id ASC").all() as DecisionRow[];
   }
 }

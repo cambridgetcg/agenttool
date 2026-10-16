@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { expect } from "bun:test";
 import { runCli } from "../src/cli.js";
 import { FileSecretStore } from "../src/keychain.js";
+import { LobbyStore } from "../src/store.js";
 import { confirmOnTty, showOnTty } from "../src/tty.js";
 import { FAKE_BEARER, FAKE_PROJECT, FakeHosted, type Clock } from "./fake-hosted.js";
 import { fakeTerminal, tempHome, type FakeTerminal } from "./helpers.js";
@@ -61,6 +62,10 @@ export function world(): World {
           // A probe that does not count as opening the scripted terminal.
           hasTerminal: () => !options.noTerminal,
           now: () => new Date(clock.now),
+          // A bounded wait's pause moves the shared test clock instead of sleeping.
+          sleep: async (ms) => {
+            clock.now = new Date(clock.now.getTime() + ms);
+          },
           ...(options.noNetwork ? {} : { fetchImpl: hosted.fetch }),
           keychain,
           deviceTerms: DEVICE_TERMS,
@@ -150,6 +155,34 @@ export async function bootstrapFleet(options: { roomArgs?: string[] } = {}): Pro
   await enrollThroughHub(hub, device, doorFingerprint);
   await ok(device.run("fleet", "sync"));
   return { world: w, hub, device, doorFingerprint, directoryId, roomId, seasonId: seasonId!, seasonDigest: seasonDigest! };
+}
+
+/** bootstrapFleet, then the device knocks, the hub admits and the device gets
+ * ready: the device holds an accepted season grant at the given tier. */
+export async function seatedFleet(options: { tier?: "player" | "spectator"; termDays?: number } = {}): Promise<Fleet & { knockId: string }> {
+  const fleet = await bootstrapFleet();
+  const tier = options.tier ?? "player";
+  const knocked = await ok(fleet.device.yes("knock", fleet.roomId, "--tier", tier));
+  const knockId = /knock ([0-9a-f-]{36})/.exec(knocked.stdout)![1]!;
+  await ok(fleet.hub.yes("hub", "admit", knockId, ...(options.termDays === undefined ? [] : ["--term-days", String(options.termDays)])));
+  await ok(fleet.device.yes("ready", knockId));
+  return { ...fleet, knockId };
+}
+
+/** A desk's own identity row, read through a short-lived writable handle. */
+export function deskOf(desk: Desk): { identity_id: string; signing_key_id: string; public_key: string; fingerprint: string } {
+  const store = LobbyStore.open(desk.home);
+  try {
+    const row = store.fleet.desk()!;
+    return { identity_id: row.identity_id, signing_key_id: row.signing_key_id, public_key: row.public_key, fingerprint: row.fingerprint };
+  } finally {
+    store.close();
+  }
+}
+
+/** Run a command and parse its JSON stdout (exit 0 required). */
+export async function json(result: Promise<{ code: number; stdout: string; stderr: string }>): Promise<any> {
+  return JSON.parse((await ok(result)).stdout);
 }
 
 async function enrollHub(hub: Desk, doorFingerprint: string): Promise<void> {

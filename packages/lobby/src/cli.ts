@@ -38,6 +38,7 @@ import {
   readyCommand,
   roomPublishCommand,
 } from "./cli-fleet.js";
+import { HUB_ACCESS_COMMANDS, hubAccessCommand, ROOM_TABLE_COMMANDS, roomTableCommand } from "./cli-table.js";
 import type { FetchLike } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
 import type { FleetContext } from "./ops.js";
@@ -70,6 +71,8 @@ export interface CliIo {
    * confirmation plans, so nothing is read from the Keychain, signed or sent
    * by a headless caller. Injected only by tests. */
   hasTerminal?: () => boolean;
+  /** Pause between polls of `room wait`; a timer unless a test injects one. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export const USAGE = `agenttool-lobby — lobby desk: the local hall, and the fleet hall on https://api.agenttool.dev
@@ -104,6 +107,17 @@ Fleet hall, every device (one desk identity per device)
   outbox list [--json]
   outbox retry <event_id>
 
+Inside a room (table talk, renewal, leave)
+  room sync <room_id>
+  room read <room_id> [--after N] [--limit 1-50] [--conversation C] [--cached] [--json]
+  room wait <room_id> [--after N] [--seconds 1-45] [--limit 1-50] [--conversation C] [--json]
+  room roster <room_id> [--cached] [--json] [--chat-config [--conversation C]]
+  room say <room_id> (--text T | --text-file FILE) [--to UUID]
+           [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C]
+  room renew request <room_id>
+  room renew accept <room_id>
+  room leave <room_id>
+
 Fleet hall, hub only (bearer and door key in the login Keychain)
   hub init --project UUID [--days 1-30] [--adopt-directory UUID --directory-digest sha256:...]
            [--keychain-account A] [--bearer-service S] [--door-service S]
@@ -116,13 +130,28 @@ Fleet hall, hub only (bearer and door key in the login Keychain)
   hub knocks [--json]
   hub admit <knock_id> [--tier spectator] [--term-days 1-30]
   hub deny <knock_id> [--reason TEXT]
+  hub renew-sweep [--room ROOM_ID [--hashes-file FILE]]
+  hub members <room_id> [--json]
+  hub member add <room_id> --identity UUID --tier T [--key-id UUID --public-key BASE64]
+                 [--term-days N] [--grant-id UUID]...
+  hub member pause|resume <room_id> <identity_id>
+  hub roster post <room_id>
+  hub kick <room_id> <identity_id> [--grant-id UUID]...
+  hub block <room_id> <identity_id> [--grant-id UUID]...
+  hub unblock <room_id> <identity_id>
+  hub stop [--include-adopted]
+           (emergency stop; prints the manual API-key rotation step, never rotates)
+  hub digest [--days 1-31] [--out FILE]
+           (weekly access digest: a local report; posts nothing)
 
 New rooms are residency=device, visibility=private, hostable=false. Only
 residency=fleet, hostable rooms reach the fleet hall; device rooms never leave.
 Consequential acts (promote, pin add/remove, hub init/relay/season/seat, room
-publish, hub admit/deny, fleet join, knock, ready, outbox retry) show the exact
-bytes on the controlling terminal (/dev/tty), need "yes" typed there (never
-stdin), fail closed without a terminal, and are recorded in the audit log.
+publish, hub admit/deny, fleet join, knock, ready, outbox retry, room say,
+room renew, room leave, hub renew-sweep/member/roster post/kick/block/unblock/stop)
+show the exact bytes on the controlling terminal (/dev/tty), need "yes" typed
+there (never stdin), fail closed without a terminal, and are recorded in the
+audit log.
 State: $AGENTTOOL_LOBBY_HOME, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby
 (directory 0700, files 0600; wider modes are refused).
 Exit codes: 0 ok, 1 refused, 2 usage, 3 not confirmed.
@@ -478,9 +507,12 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       },
       keychain: io.keychain ?? null,
       hasTerminal: io.hasTerminal ?? (() => false),
+      sleep: io.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
     };
     const fleetIo = { stdout: io.stdout, stderr: io.stderr, confirm: io.confirm };
     if (group === "room" && rest[0] === "publish") return await roomPublishCommand(ctx, rest.slice(1), fleetIo);
+    if (group === "room" && (ROOM_TABLE_COMMANDS as readonly string[]).includes(rest[0] ?? "")) return await roomTableCommand(ctx, rest, fleetIo);
+    if (group === "hub" && (HUB_ACCESS_COMMANDS as readonly string[]).includes(rest[0] ?? "")) return await hubAccessCommand(ctx, rest, fleetIo);
     if (group === "room") return await roomCommand(store, rest, io, now);
     if (group === "pin") return await pinCommand(store, rest, io, now);
     if (group === "audit") return auditCommand(store, rest, io);

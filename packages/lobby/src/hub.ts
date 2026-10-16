@@ -55,18 +55,20 @@ import type { RoomCard } from "./room.js";
 import { DeskSecrets } from "./secrets.js";
 import {
   documentSha256,
-  ROSTER_PART_MEMBERS,
+  KEYED_ROSTER_PART_MEMBERS,
+  publicKeyHexOf,
   sealDocument,
   verifyDocument,
   type AdmissionBody,
   type DenialBody,
   type FleetCard,
+  type KeyedMember,
   type KnockBody,
-  type RosterBody,
+  type MemberRosterBody,
   type SignedEnvelope,
 } from "./signed.js";
 import type { ActPreview } from "./store.js";
-import type { DeskRow, HubRow, SeasonRow } from "./fleet-store.js";
+import type { DeskRow, HubRow, MemberRow, SeasonRow } from "./fleet-store.js";
 import { checkText } from "./text.js";
 import {
   assertDigest,
@@ -176,11 +178,23 @@ export function requireHub(ctx: FleetContext): HubRow {
   return hub;
 }
 
-async function adminClient(ctx: FleetContext, hub: HubRow): Promise<AdminClient> {
+/** A hub that may still issue access: after an emergency stop it issues,
+ * publishes, seats and admits nothing more. Removal (kick, block, pause),
+ * deny, reads and the stop itself still work. */
+export function requireLiveHub(ctx: FleetContext): HubRow {
+  const hub = requireHub(ctx);
+  if (hub.stopped_at != null) {
+    throw new LobbyError("hub_stopped",
+      `an emergency stop was recorded at ${hub.stopped_at}; this hub issues no more access. Rotate the lobby-issuer API key by hand, then start a new hub`);
+  }
+  return hub;
+}
+
+export async function adminClient(ctx: FleetContext, hub: HubRow): Promise<AdminClient> {
   return new AdminClient(await readBearer(requireKeychain(ctx), bearerRef(hub)), requireHosted(ctx));
 }
 
-async function doorKey(ctx: FleetContext, hub: HubRow): Promise<KeyObject> {
+export async function doorKey(ctx: FleetContext, hub: HubRow): Promise<KeyObject> {
   const key = await readDoorKey(requireKeychain(ctx), doorRef(hub));
   if (publicKeyBase64(key) !== hub.door_public_key) {
     throw new LobbyError("door_key_changed", "the Keychain door key no longer matches this hub's recorded door key");
@@ -188,7 +202,7 @@ async function doorKey(ctx: FleetContext, hub: HubRow): Promise<KeyObject> {
   return key;
 }
 
-function doorOf(hub: HubRow): DoorKey {
+export function doorOf(hub: HubRow): DoorKey {
   return { public_key: hub.door_public_key, fingerprint: hub.door_fingerprint };
 }
 
@@ -202,7 +216,7 @@ function requireHubProject(view: MissionView, projectId: string, what: string): 
 }
 
 /** The hub's own desk, enrolled in the project like any fleet device. */
-function requireHubDesk(ctx: FleetContext): DeskRow {
+export function requireHubDesk(ctx: FleetContext): DeskRow {
   const desk = requireDesk(ctx);
   if (ctx.store.fleet.device(desk.identity_id) === null) {
     throw new LobbyError("hub_desk_not_enrolled", "this hub's own desk is not enrolled yet: run enroll-device, hub relay and fleet join here first");
@@ -383,7 +397,7 @@ export interface RelayPlan {
 }
 
 export function planRelay(ctx: FleetContext, input: { packetText: string }): RelayPlan {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   requireKeychain(ctx);
   requireHosted(ctx);
   const now = ctx.now();
@@ -564,7 +578,7 @@ export interface SeatPlan {
 
 /** `hub seat directory|<room_id>`: issue this hub desk a fresh grant. */
 export function planHubSeat(ctx: FleetContext, input: { target: string }): SeatPlan {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   const desk = requireHubDesk(ctx);
   let seat: SeatIssue;
   if (input.target === "directory") {
@@ -587,7 +601,7 @@ export async function executeHubSeat(ctx: FleetContext, plan: SeatPlan): Promise
 
 // ── Seasons ────────────────────────────────────────────────────────────
 
-function requireSeason(ctx: FleetContext, roomId: string): SeasonRow {
+export function requireSeason(ctx: FleetContext, roomId: string): SeasonRow {
   const season = ctx.store.fleet.currentSeason(roomId);
   if (season === null) throw new LobbyError("no_season", "this room has no current season; run hub season open or hub season adopt");
   if (Date.parse(season.expires_at) <= ctx.now().getTime()) throw new LobbyError("season_ended", "this room's current season has ended");
@@ -622,7 +636,7 @@ export async function planSeason(ctx: FleetContext, input: {
   days?: number;
   adopt?: { mission_id: string; mission_digest: string };
 }): Promise<SeasonPlan> {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   const desk = requireHubDesk(ctx);
   const room = requireFleetRoom(ctx, input.room_id);
   const now = ctx.now();
@@ -762,7 +776,7 @@ export interface PublishPlan {
 }
 
 export async function planPublish(ctx: FleetContext, input: { room_id: string }): Promise<PublishPlan> {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   requireHubDesk(ctx);
   const room = requireFleetRoom(ctx, input.room_id);
   const season = requireSeason(ctx, room.room_id);
@@ -877,6 +891,8 @@ function assessKnock(ctx: FleetContext, entry: KnockEntry, forgery: string | nul
     if (decision.knock_sha256 !== documentSha256(entry.summary)) return invalid("decided_knock_changed");
     return { ...base, status: decision.decision, reason: null };
   }
+  // A DID blocked from this room knocks on it no more.
+  if (fleet.isBlocked(body.room_id, entry.event.identity_id)) return invalid("blocked");
   const season = fleet.currentSeason(body.room_id);
   const room = ctx.store.getRoom(body.room_id);
   if (room === null || fleet.latestCard(body.room_id) === null) return invalid("room_not_published");
@@ -947,8 +963,84 @@ function requireDistinctApprover(desk: DeskRow, knock: HubKnock): void {
   }
 }
 
-function actionsFor(tier: "player" | "spectator"): MissionAction[] {
+export function actionsFor(tier: "player" | "spectator"): MissionAction[] {
   return tier === "player" ? ["mission.observe", "mission.read"] : ["mission.read"];
+}
+
+// ── Keyed rosters (the table-talk pin source) ──────────────────────────
+
+export interface KeyedRosterPlan {
+  mission_id: string;
+  room_id: string;
+  roster_seq: number;
+  issued_at: string;
+  members: KeyedMember[];
+  bodies: MemberRosterBody[];
+}
+
+/** The season's members as the door signs them: every active member whose
+ * term runs past now, with the key the hub recorded for that desk, and this
+ * hub's own desk as host. `change` previews an admission or a removal. Each
+ * part holds two members, so every signed part fits one observation. */
+export function keyedRosterFor(ctx: FleetContext, season: SeasonRow, now: Date,
+  change: {
+    add?: Pick<MemberRow, "identity_id" | "tier" | "term_ends_at"> & { key?: { signing_key_id: string; public_key: string } };
+    remove?: readonly string[];
+  } = {}): KeyedRosterPlan {
+  const fleet = ctx.store.fleet;
+  const host = requireHubDesk(ctx);
+  const removed = new Set(change.remove ?? []);
+  const keyed = (identityId: string, tier: "player" | "spectator", role: "host" | "member", termEndsAt: string,
+    key?: { signing_key_id: string; public_key: string }): KeyedMember => {
+    const device = key ?? fleet.device(identityId);
+    if (device === null) throw new LobbyError("member_key_unknown", `the hub has no recorded key for member did:at:${identityId}`);
+    return {
+      identity_id: identityId,
+      signing_key_id: device.signing_key_id,
+      public_key_hex: publicKeyHexOf(device.public_key),
+      tier,
+      role,
+      term_ends_at: termEndsAt,
+    };
+  };
+  const members = fleet.activeMembers(season.mission_id, now)
+    .filter((row) => row.identity_id !== host.identity_id && !removed.has(row.identity_id) && row.identity_id !== change.add?.identity_id)
+    .map((row) => keyed(row.identity_id, row.tier, "member", row.term_ends_at));
+  if (change.add !== undefined && !removed.has(change.add.identity_id)) {
+    members.push(keyed(change.add.identity_id, change.add.tier, "member", change.add.term_ends_at, change.add.key));
+  }
+  members.push(keyed(host.identity_id, "player", "host", season.expires_at));
+  members.sort((left, right) => left.identity_id < right.identity_id ? -1 : 1);
+  const rosterSeq = fleet.nextRosterSeq(season.mission_id);
+  const issuedAt = now.toISOString();
+  const parts = Math.max(1, Math.ceil(members.length / KEYED_ROSTER_PART_MEMBERS));
+  const bodies: MemberRosterBody[] = Array.from({ length: parts }, (_, index) => ({
+    room_id: season.room_id,
+    mission_id: season.mission_id,
+    roster_seq: rosterSeq,
+    members: members.slice(index * KEYED_ROSTER_PART_MEMBERS, (index + 1) * KEYED_ROSTER_PART_MEMBERS),
+    part: index + 1,
+    parts,
+    issued_at: issuedAt,
+  }));
+  return { mission_id: season.mission_id, room_id: season.room_id, roster_seq: rosterSeq, issued_at: issuedAt, members, bodies };
+}
+
+/** Sign and frame every part of a keyed roster for the season; nothing is sent. */
+export function keyedRosterPosts(ctx: FleetContext, roster: KeyedRosterPlan, signer: { privateKey: KeyObject; fingerprint: string },
+  gate: ReturnType<typeof gateOfRoom>): PreparedPost[] {
+  return roster.bodies.map((body) => preparePost(ctx, "member_roster", roster.mission_id, sealDocument("member_roster", body, signer).summary, gate));
+}
+
+/** Record a keyed roster as issued (its sequence is then taken). */
+export function recordKeyedRoster(ctx: FleetContext, roster: KeyedRosterPlan): void {
+  ctx.store.fleet.addRoster({
+    mission_id: roster.mission_id,
+    roster_seq: roster.roster_seq,
+    room_id: roster.room_id,
+    members: JSON.stringify(roster.members),
+    issued_at: roster.issued_at,
+  });
 }
 
 // ── admit ──────────────────────────────────────────────────────────────
@@ -959,11 +1051,12 @@ export interface AdmitPlan {
   season: SeasonRow;
   issue: GrantIssue;
   admission: AdmissionBody;
+  roster: KeyedRosterPlan;
   posts: Array<{ post: PreparedPost; seat: ReturnType<typeof seatOf> }>;
 }
 
 export async function planAdmit(ctx: FleetContext, input: { knock_id: string; tier?: "player" | "spectator"; term_days?: number }): Promise<AdmitPlan> {
-  const hub = requireHub(ctx);
+  const hub = requireLiveHub(ctx);
   const desk = requireHubDesk(ctx);
   requireKeychain(ctx);
   const knock = requirePendingKnock(await hubKnocks(ctx), assertUuid(input.knock_id, "knock_id"));
@@ -1003,20 +1096,14 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     issued_at: now.toISOString(),
     expires_at: new Date(now.getTime() + DAY_MS).toISOString(),
   };
-  const members = ctx.store.fleet.members(season.mission_id)
-    .filter((member) => member.identity_id !== issue.identity_id && Date.parse(member.term_ends_at) > now.getTime())
-    .map((member) => ({ identity_id: member.identity_id, tier: member.tier, term_ends_at: member.term_ends_at }));
-  members.push({ identity_id: issue.identity_id, tier, term_ends_at: termEnds });
-  members.sort((left, right) => left.identity_id < right.identity_id ? -1 : 1);
-  const parts = Math.max(1, Math.ceil(members.length / ROSTER_PART_MEMBERS));
-  const rosters: RosterBody[] = Array.from({ length: parts }, (_, index) => ({
-    room_id: room.room_id,
-    mission_id: season.mission_id,
-    members: members.slice(index * ROSTER_PART_MEMBERS, (index + 1) * ROSTER_PART_MEMBERS),
-    part: index + 1,
-    parts,
-    issued_at: now.toISOString(),
-  }));
+  if (ctx.store.fleet.isBlocked(room.room_id, issue.identity_id)) {
+    throw new LobbyError("blocked", "this identity is blocked from this room; run hub unblock first");
+  }
+  // The keyed roster names every current member with the key the hub
+  // recorded, so members can verify each other's table talk.
+  const roster = keyedRosterFor(ctx, season, now, { add: { identity_id: issue.identity_id, tier, term_ends_at: termEnds } });
+  const members = roster.members;
+  const parts = roster.bodies.length;
   const key = await doorKey(ctx, hub);
   const signer = { privateKey: key, fingerprint: hub.door_fingerprint };
   const admissionSummary = sealDocument("admission", admission, signer).summary;
@@ -1026,10 +1113,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
   const posts = [
     { post: preparePost(ctx, "admission", hub.directory_mission_id, admissionSummary, gate), seat: directorySeat },
     { post: preparePost(ctx, "admission", season.mission_id, admissionSummary, gate), seat: seasonSeat },
-    ...rosters.map((roster) => ({
-      post: preparePost(ctx, "roster", season.mission_id, sealDocument("roster", roster, signer).summary, gate),
-      seat: seasonSeat,
-    })),
+    ...keyedRosterPosts(ctx, roster, signer, gate).map((post) => ({ post, seat: seasonSeat })),
   ];
   const preview = actPreview("hub.admit", knock.knock_id, now.toISOString(), [
     `requester ${knock.requester.fingerprint} ${JSON.stringify(knock.requester.display_name)} did:at:${knock.requester.identity_id}`,
@@ -1038,7 +1122,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     `room status ${room.status}, door ${room.door}`,
     `tier ${tier} (${issue.actions.join("+")}); grant until ${issue.expires_at}; term ends ${termEnds}`,
     `knock note (untrusted) ${JSON.stringify(knock.note)}`,
-    `posts: the door-signed admission to the directory and the season, and a roster of ${members.length} (${parts} part${parts === 1 ? "" : "s"}) to the season`,
+    `posts: the door-signed admission to the directory and the season, and keyed roster #${roster.roster_seq} of ${members.length} (host included; ${parts} part${parts === 1 ? "" : "s"}) to the season`,
   ], {
     knock_id: knock.knock_id,
     knock_sha256: documentSha256(knock.summary),
@@ -1049,7 +1133,7 @@ export async function planAdmit(ctx: FleetContext, input: { knock_id: string; ti
     membership: { tier, term_ends_at: termEnds },
     posts: posts.map(({ post }) => ({ mission_id: post.mission_id, kind: post.kind, event_id: post.event_id, summary: post.summary })),
   });
-  return { preview, knock, season, issue, admission, posts };
+  return { preview, knock, season, issue, admission, roster, posts };
 }
 
 export interface DecisionResult {
@@ -1088,6 +1172,7 @@ export async function executeAdmit(ctx: FleetContext, plan: AdmitPlan): Promise<
       grant_id: grant.grant_id,
       admitted_at: now,
     });
+    recordKeyedRoster(ctx, plan.roster);
     // Every post is saved with the decision, before the first send, so a
     // failure part-way through leaves the rest in the outbox, not lost.
     for (const { post, seat } of plan.posts) queuePost(ctx, post, seat);

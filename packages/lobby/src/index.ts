@@ -25,6 +25,17 @@ export { UNTRUSTED_NOTE, wrapFleetCard, wrapLocalCard } from "./view.js";
 export type { UntrustedCard, UntrustedFleetCard } from "./view.js";
 export { filterFleetCards, readFleetEvents } from "./fleet.js";
 export type { DoorPin, FleetView, VerifiedDocument } from "./fleet.js";
-export { openDocument, SIGNED_FORMAT, verifyDocument } from "./signed.js";
-export type { FleetCard, SignedEnvelope, SignedKind } from "./signed.js";
+export { invitationTemplateOf, openDocument, SIGNED_FORMAT, verifyDocument } from "./signed.js";
+export type { FleetCard, MemberRosterBody, RenewalBody, SignedEnvelope, SignedKind } from "./signed.js";
+export {
+  buildChatEnvelope,
+  CHAT_FORMAT,
+  DEFAULT_CONVERSATION,
+  parseChatEnvelope,
+  readTable,
+  tableRoster,
+  WAIT_MAX_SECONDS,
+  wrapTableRead,
+} from "./table.js";
+export type { ChatEnvelope, TableMessage, TableRead, TableRoster } from "./table.js";
 export { LOBBY_ORIGIN } from "./wire.js";

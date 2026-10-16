@@ -154,18 +154,28 @@ describe("read-only MCP boundary", () => {
   test("the MCP server's import graph reaches no transport, Keychain, desk secret or act code", () => {
     const closure = localClosure("bin/agenttool-lobby-mcp.ts");
     for (const forbidden of ["src/hosted.ts", "src/keychain.ts", "src/secrets.ts", "src/ops.ts", "src/desk.ts",
-      "src/hub.ts", "src/cli.ts", "src/cli-fleet.ts", "src/packets.ts", "src/tty.ts"]) {
+      "src/hub.ts", "src/hub-access.ts", "src/talk.ts", "src/digest.ts", "src/cli.ts", "src/cli-fleet.ts",
+      "src/cli-table.ts", "src/packets.ts", "src/tty.ts"]) {
       expect({ forbidden, reached: closure.has(forbidden) }).toEqual({ forbidden, reached: false });
     }
     expect(closure.has("src/fleet.ts")).toBe(true);
     expect(closure.has("src/signed.ts")).toBe(true);
+    expect(closure.has("src/table.ts")).toBe(true);
   });
 
   test("signing helpers reachable from MCP only verify; sealDocument is never called there", () => {
-    const mcp = readFileSync(join(packageRoot, "src", "mcp.ts"), "utf8");
-    const fleet = readFileSync(join(packageRoot, "src", "fleet.ts"), "utf8");
-    for (const source of [mcp, fleet]) {
-      expect(source).not.toMatch(/\bsealDocument\b|\bsignBytes\b|\brecordAct\b|\binsertPinWithinAct\b/);
+    for (const file of ["mcp.ts", "fleet.ts", "table.ts", "device-terms.ts"]) {
+      const source = readFileSync(join(packageRoot, "src", file), "utf8");
+      expect({ file, signs: /\bsealDocument\b|\bsignBytes\b|\brecordAct\b|\binsertPinWithinAct\b|\bsendPost\b|\bprepareObservation\b/.test(source) })
+        .toEqual({ file, signs: false });
+    }
+  });
+
+  test("the MCP view writes nothing: no SQLite write, file write or mkdir in its own modules", () => {
+    for (const file of ["mcp.ts", "table.ts", "device-terms.ts"]) {
+      const source = readFileSync(join(packageRoot, "src", file), "utf8");
+      expect({ file, writes: /\bLobbyStore\.open\(|writeFileSync|writeNewPrivateFile|mkdirSync|\.run\(|INSERT |UPDATE |DELETE /.test(source) })
+        .toEqual({ file, writes: false });
     }
   });
 });

@@ -65,39 +65,40 @@ export interface FleetIo {
 
 const MAX_PACKET_BYTES = 65_536;
 
-/** Read a carried public packet: an absolute path to a regular file (not a
- * link) of at most 64 KiB. Packets hold no secret; they are still bounded. */
-export function readPacketFile(path: string | undefined): string {
-  if (path === undefined || !isAbsolute(path)) throw new FleetUsageError("give the packet as an absolute --packet-file path");
+/** Read a carried public packet (or a chosen text file): an absolute path to
+ * a regular file (not a link) of at most 64 KiB, UTF-8. Packets hold no
+ * secret; they are still bounded. */
+export function readPacketFile(path: string | undefined, flag = "--packet-file", what = "packet"): string {
+  if (path === undefined || !isAbsolute(path)) throw new FleetUsageError(`give the ${what} as an absolute ${flag} path`);
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
-    throw new LobbyError("packet_unreadable", "the packet file is missing, unreadable or a link");
+    throw new LobbyError(`${what.replace(/\W+/g, "_")}_unreadable`, `the ${what} file is missing, unreadable or a link`);
   }
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.size > MAX_PACKET_BYTES) throw new LobbyError("packet_unreadable", "the packet must be a regular file of at most 64 KiB");
+    if (!stat.isFile() || stat.size > MAX_PACKET_BYTES) throw new LobbyError(`${what.replace(/\W+/g, "_")}_unreadable`, `the ${what} must be a regular file of at most 64 KiB`);
     const bytes = readFileSync(fd);
-    if (bytes.length > MAX_PACKET_BYTES) throw new LobbyError("packet_unreadable", "the packet must be a regular file of at most 64 KiB");
+    if (bytes.length > MAX_PACKET_BYTES) throw new LobbyError(`${what.replace(/\W+/g, "_")}_unreadable`, `the ${what} must be a regular file of at most 64 KiB`);
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } finally {
     closeSync(fd);
   }
 }
 
-function positionals(values: string[], count: number, usage: string): string[] {
+export function positionals(values: string[], count: number, usage: string): string[] {
   if (values.length !== count) throw new FleetUsageError(usage);
   return values;
 }
 
-function oneOf<T extends string>(value: string | undefined, allowed: readonly T[], flag: string): T | undefined {
+export function oneOf<T extends string>(value: string | undefined, allowed: readonly T[], flag: string): T | undefined {
   if (value === undefined) return undefined;
   if (!(allowed as readonly string[]).includes(value)) throw new FleetUsageError(`${flag} must be one of: ${allowed.join(", ")}`);
   return value as T;
 }
 
-function wholeNumber(value: string | undefined, flag: string): number | undefined {
+export function wholeNumber(value: string | undefined, flag: string): number | undefined {
   if (value === undefined) return undefined;
   if (!/^\d{1,4}$/.test(value)) throw new FleetUsageError(`${flag} must be a whole number`);
   return Number.parseInt(value, 10);
@@ -106,14 +107,14 @@ function wholeNumber(value: string | undefined, flag: string): number | undefine
 /** Every consequential act checks for a person at the terminal before it
  * plans: a headless run reads no Keychain item, uses no bearer or token,
  * signs nothing and sends nothing. Returns the exit code when there is none. */
-function withoutTerminal(ctx: FleetContext, io: FleetIo): number | null {
+export function withoutTerminal(ctx: FleetContext, io: FleetIo): number | null {
   if (ctx.hasTerminal()) return null;
   io.stderr(`agenttool-lobby: tty_unavailable: ${NO_TERMINAL_MESSAGE}\n`);
   return EXIT_NOT_CONFIRMED;
 }
 
 /** Show and confirm; on yes record the bytes, then run the act. */
-async function consequentialAsync<T>(ctx: FleetContext, io: FleetIo, preview: ActPreview, run: () => Promise<T>)
+export async function consequentialAsync<T>(ctx: FleetContext, io: FleetIo, preview: ActPreview, run: () => Promise<T>)
   : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
   let confirmed: boolean;
   try {
@@ -132,7 +133,7 @@ async function consequentialAsync<T>(ctx: FleetContext, io: FleetIo, preview: Ac
   return { confirmed: true, value: await run() };
 }
 
-function reportPosts(io: FleetIo, posts: PostOutcome[]): number {
+export function reportPosts(io: FleetIo, posts: PostOutcome[]): number {
   let pending = 0;
   for (const post of posts) {
     if (post.status === "stored") {

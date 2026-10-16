@@ -21,6 +21,7 @@ import {
   requireFleetRoom,
   requireJoinedDesk,
   requireSeat,
+  roomGate,
   sendPost,
   syncMission,
   type FleetContext,
@@ -519,7 +520,7 @@ export function planOutboxRetry(ctx: FleetContext, input: { event_id: string }):
   // The room as it is now decides, not the snapshot saved at first send: a
   // room narrowed to device, unhostable or no longer fleet since then sends
   // nothing. The saved snapshot must still pass as well.
-  const gate = currentRetryGate(ctx, row.kind, summary);
+  const gate = currentRetryGate(ctx, row.kind, row.mission_id, summary);
   assertSendable(summary, JSON.parse(row.gate_room) as GateRoom, deviceTerms(ctx));
   assertSendable(summary, gate, deviceTerms(ctx));
   const post: PreparedPost = { kind: row.kind, mission_id: row.mission_id, event_id: row.event_id, raw_body: row.raw_body, summary, gate };
@@ -536,9 +537,16 @@ export function planOutboxRetry(ctx: FleetContext, input: { event_id: string }):
 
 /** The gate for resending a saved post, from the room's current state: the
  * hub's local room for door-signed kinds (it must still be fleet, hostable,
- * private and not device-pinned), or this desk's door-verified card for a
- * knock. Refuses when the room or card can no longer be found. */
-function currentRetryGate(ctx: FleetContext, kind: string, summary: string): GateRoom {
+ * private and not device-pinned), this desk's door-verified card for a
+ * knock, and for table talk and member notes whichever of the two this desk
+ * has (roomGate). Refuses when the room or card can no longer be found. */
+function currentRetryGate(ctx: FleetContext, kind: string, missionId: string, summary: string): GateRoom {
+  if (kind === "chat") {
+    // Table talk names no room; this desk's own grants say which room the mission is.
+    const roomId = ctx.store.fleet.roomOfMission(missionId);
+    if (roomId === null) throw new LobbyError("outbox_unreadable", "this desk holds no grant naming the room of that mission; it is not resent");
+    return roomGate(ctx, roomId);
+  }
   let envelope: SignedEnvelope | null = null;
   try {
     envelope = openDocument(summary);
@@ -555,11 +563,12 @@ function currentRetryGate(ctx: FleetContext, kind: string, summary: string): Gat
     if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
     return gateOfCard(requireCard(fleetView(ctx, desk.directory_mission_id, door), roomId).envelope.body);
   }
+  if (kind === "renew" || kind === "leave") return roomGate(ctx, roomId);
   return gateOfRoom(requireFleetRoom(ctx, roomId));
 }
 
 export function executeOutboxRetry(ctx: FleetContext, plan: RetryPlan): Promise<PostOutcome> {
   // Checked again: the room may have changed while the prompt was open.
-  const gate = currentRetryGate(ctx, plan.post.kind, plan.post.summary);
+  const gate = currentRetryGate(ctx, plan.post.kind, plan.post.mission_id, plan.post.summary);
   return sendPost(ctx, { ...plan.post, gate }, plan.seat);
 }

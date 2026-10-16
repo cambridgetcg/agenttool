@@ -34,6 +34,8 @@ export interface FleetContext {
   /** True when a controlling terminal is present. A probe only: it shows
    * nothing and reads no answer. Without one, no consequential act plans. */
   hasTerminal: () => boolean;
+  /** Pause between polls of a bounded wait (a timer in production; tests advance their clock). */
+  sleep: (ms: number) => Promise<void>;
 }
 
 export const NO_TERMINAL_MESSAGE =
@@ -99,6 +101,40 @@ export function gateOfCard(card: FleetCard): GateRoom {
 
 export function deviceTerms(ctx: FleetContext): readonly string[] {
   return ctx.hosted?.deviceTerms ?? localDeviceTerms();
+}
+
+/** The gate for anything this desk posts about a room: the hub's own local
+ * room when it has one (it must still be fleet, hostable, private and not
+ * device-pinned), otherwise the room's door-verified card on this desk. A
+ * room this desk can see neither way sends nothing. */
+export function roomGate(ctx: FleetContext, roomId: string): GateRoom {
+  if (ctx.store.getRoom(roomId) !== null) return gateOfRoom(requireFleetRoom(ctx, roomId));
+  const desk = requireJoinedDesk(ctx);
+  const door = doorPin(ctx);
+  if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
+  const card = fleetView(ctx, desk.directory_mission_id, door).cards.get(roomId);
+  if (card === undefined) throw new LobbyError("card_not_found", "no door-verified card for that room in the local cache; run fleet sync");
+  return gateOfCard(card.envelope.body);
+}
+
+/** The season this desk holds (or held) grants in for a room: the mission of
+ * its most recently recorded season grant, and the digest it accepted there. */
+export function seasonOfRoom(ctx: FleetContext, roomId: string): { mission_id: string; mission_digest: string } {
+  const grants = ctx.store.fleet.deskSeasonGrants(roomId);
+  const latest = grants[0];
+  if (latest === undefined) throw new LobbyError("not_seated", "this desk holds no grant in that room; knock and get ready first");
+  const accepted = grants.find((grant) => grant.mission_id === latest.mission_id && grant.mission_digest !== null && grant.accepted_at !== null);
+  if (accepted === undefined) throw new LobbyError("not_seated", "this desk never accepted that room's season");
+  return { mission_id: latest.mission_id, mission_digest: accepted.mission_digest! };
+}
+
+/** This desk's live seat in a mission with an action, or null. */
+export function liveSeat(ctx: FleetContext, missionId: string, needs: MissionAction, marginMs = 0): ParticipantSeat | null {
+  const desk = ctx.store.fleet.desk();
+  if (desk === null) return null;
+  const grant = ctx.store.fleet.currentDeskGrant(missionId, new Date(ctx.now().getTime() + marginMs));
+  if (grant === null || !grant.actions.includes(needs)) return null;
+  return seatOf(desk, grant);
 }
 
 export function participant(ctx: FleetContext): ParticipantClient {

@@ -13,10 +13,13 @@
  * - Bearers, tokens and keys are never echoed into errors; a refusal keeps
  *   only the HTTP status and the service's closed error code.
  *
+ * - Participant leave and administrator revocations carry zero body bytes,
+ *   exactly as the service requires; they send no text at all.
+ *
  * Wire formats: src/wire.ts. Compatibility with the real gateway is proven in
- * bin/tests/lobby-fleet-gateway.test.ts.
+ * bin/tests/lobby-fleet-gateway.test.ts and bin/tests/lobby-table-gateway.test.ts.
  */
-import { hostname } from "node:os";
+import { localDeviceTerms } from "./device-terms.js";
 import { checkEgress, type EgressRoom } from "./egress.js";
 import { LobbyError } from "./errors.js";
 import type { DeskSecrets } from "./secrets.js";
@@ -70,11 +73,7 @@ export const DIRECTORY_GATE_ROOM: GateRoom = Object.freeze({ residency: "fleet",
 const DEFAULT_TIMEOUT_MS = 20_000;
 const CURSOR = /^(0|[1-9][0-9]{0,18})$/;
 
-/** This machine's hostname without a LAN suffix, as a device term for the gate. */
-export function localDeviceTerms(): string[] {
-  const name = hostname().replace(/\.(?:local|lan|home\.arpa)$/i, "");
-  return name.length >= 4 && name.toLowerCase() !== "localhost" ? [name] : [];
-}
+export { localDeviceTerms };
 
 /** Refuse anything the gate or the hosted rule refuses. Reasons are closed codes. */
 export function assertSendable(text: string, room: GateRoom, deviceTerms: readonly string[]): void {
@@ -342,6 +341,38 @@ export class AdminClient {
     return parseGrantView(result.grant);
   }
 
+  /** Revoke one grant (`POST .../grants/<id>/revoke`, zero body bytes). The
+   * service revokes expired grants too and answers a repeat with the same
+   * revoked grant, so an uncertain revocation is settled by sending it again. */
+  async revokeGrant(missionId: string, grantId: string): Promise<GrantView> {
+    assertUuid(missionId, "mission_id");
+    assertUuid(grantId, "grant_id");
+    const result = record(await exchange(this.options, `${MISSIONS_PATH}/${missionId}/grants/${grantId}/revoke`, {
+      method: "POST",
+      headers: this.headers(false),
+    }), "grant");
+    const grant = parseGrantView(result.grant);
+    if (grant.grant_id !== grantId || grant.mission_id !== missionId || grant.revoked_at === null) {
+      throw new LobbyError("hosted_invalid_response", `the service did not confirm that grant ${grantId} is revoked`);
+    }
+    return grant;
+  }
+
+  /** Revoke a whole mission (`POST .../revoke`, zero body bytes); every grant
+   * on it stops working. Idempotent on the service. */
+  async revokeMission(missionId: string): Promise<MissionView> {
+    assertUuid(missionId, "mission_id");
+    const result = record(await exchange(this.options, `${MISSIONS_PATH}/${missionId}/revoke`, {
+      method: "POST",
+      headers: this.headers(false),
+    }), "mission");
+    const mission = parseMissionView(result.mission);
+    if (mission.mission_id !== missionId || mission.revoked_at === null) {
+      throw new LobbyError("hosted_invalid_response", `the service did not confirm that mission ${missionId} is revoked`);
+    }
+    return mission;
+  }
+
   /** Relay a participant's signed enrollment: its exact body bytes, unchanged,
    * with its signature header. Only the chosen display text is gated; the
    * body's public key and nonce are protocol fields. */
@@ -473,6 +504,19 @@ export class ParticipantClient {
       throw new LobbyError("hosted_invalid_response", "the acceptance does not confirm the reviewed digest");
     }
     return { mission, grant };
+  }
+
+  /** Revoke only this desk's own grant: `POST .../leave` with zero body bytes,
+   * signed like every participant request (the digest covers the SHA-256 of
+   * the empty body). The service needs an accepted grant and answers a repeat
+   * of the same leave with the recorded state. */
+  async leave(seat: ParticipantSeat): Promise<{ mission_id: string; grant_id: string; revoked_at: string }> {
+    const result = record(await this.request(seat, "POST", "/leave", ""), "leave");
+    if (result.mission_id !== seat.mission_id || result.grant_id !== seat.grant_id || result.status !== "revoked"
+      || result.reason !== "participant_left" || !isCanonicalTime(result.revoked_at)) {
+      throw new LobbyError("hosted_invalid_response", "the leave response does not match this desk's grant");
+    }
+    return { mission_id: seat.mission_id, grant_id: seat.grant_id, revoked_at: result.revoked_at };
   }
 
   /** One page of events after a cursor, checked for complete receipt order. */

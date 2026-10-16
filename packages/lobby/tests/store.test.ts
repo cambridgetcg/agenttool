@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { canonicalJson, sha256Hex } from "../src/canonical.js";
 import { LobbyError } from "../src/errors.js";
+import { FLEET_SCHEMA_SQL } from "../src/fleet-store.js";
 import { DATABASE_FILE } from "../src/home.js";
 import { fingerprintOf } from "../src/pins.js";
 import { LobbyStore, parseLedgerTarget } from "../src/store.js";
@@ -273,9 +274,10 @@ describe("read-only view", () => {
   });
 });
 
-describe("state schema version 2", () => {
+describe("state schema versions 2 and 3", () => {
   const FLEET_TABLES = ["cursors", "desk", "desk_grants", "desk_knocks", "events", "hub", "hub_cards", "hub_decisions",
     "hub_devices", "hub_grants", "hub_members", "hub_seasons", "outbox"];
+  const V3_TABLES = ["desk_renewals", "hub_blocks", "hub_extra_grants", "hub_processed_notes", "hub_renewals", "hub_rosters"];
 
   function tables(home: string): string[] {
     const raw = new Database(join(home, DATABASE_FILE), { readonly: true });
@@ -291,7 +293,7 @@ describe("state schema version 2", () => {
     store.close();
     // Rebuild what a version-1 desk left behind: no fleet tables, version 1.
     const raw = new Database(join(home, DATABASE_FILE));
-    for (const table of FLEET_TABLES) raw.exec(`DROP TABLE ${table}`);
+    for (const table of [...FLEET_TABLES, ...V3_TABLES]) raw.exec(`DROP TABLE ${table}`);
     raw.exec("UPDATE meta SET value = '1' WHERE key = 'schema_version'");
     raw.close();
 
@@ -304,18 +306,52 @@ describe("state schema version 2", () => {
     reader.close();
 
     const upgraded = LobbyStore.open(home);
-    expect(upgraded.stateVersion).toBe("2");
+    expect(upgraded.stateVersion).toBe("3");
     expect(upgraded.fleet.available).toBe(true);
+    expect(upgraded.fleet.v3).toBe(true);
     expect(upgraded.listRooms()).toEqual([room]);
     upgraded.close();
-    for (const table of FLEET_TABLES) expect(tables(home)).toContain(table);
+    for (const table of [...FLEET_TABLES, ...V3_TABLES]) expect(tables(home)).toContain(table);
+  });
+
+  test("a version-2 file is read without the version-3 tables and upgraded once, keeping every row", () => {
+    const { home, store } = openStore();
+    const room = store.addRoom({ title: "kept across the upgrade" }, T0);
+    store.close();
+    // Rebuild what a version-2 desk left behind: the version-2 fleet tables only.
+    const raw = new Database(join(home, DATABASE_FILE));
+    for (const table of [...FLEET_TABLES, ...V3_TABLES]) raw.exec(`DROP TABLE ${table}`);
+    raw.exec(FLEET_SCHEMA_SQL);
+    raw.exec("UPDATE meta SET value = '2' WHERE key = 'schema_version'");
+    raw.query(`INSERT INTO hub_members (mission_id, room_id, identity_id, tier, term_ends_at, knock_id, grant_id, admitted_at)
+      VALUES ('11111111-1111-4111-8111-111111111111', $room, '22222222-2222-4222-8222-222222222222', 'player',
+        '2026-11-01T00:00:00.000Z', '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444', $at)`)
+      .run({ $room: room.room_id, $at: T0.toISOString() });
+    raw.close();
+
+    const reader = LobbyStore.openReadOnly(home)!;
+    expect(reader.stateVersion).toBe("2");
+    expect(reader.fleet.available).toBe(true);
+    expect(reader.fleet.v3).toBe(false);
+    expect(reader.fleet.deskRenewals(room.room_id)).toEqual([]);
+    expect(reader.fleet.isBlocked(room.room_id, "22222222-2222-4222-8222-222222222222")).toBe(false);
+    reader.close();
+
+    const upgraded = LobbyStore.open(home);
+    expect(upgraded.stateVersion).toBe("3");
+    const [member] = upgraded.fleet.members("11111111-1111-4111-8111-111111111111");
+    expect(member).toMatchObject({ identity_id: "22222222-2222-4222-8222-222222222222", state: "active", paused_at: null });
+    upgraded.close();
+    // A second open does not run the upgrade again.
+    LobbyStore.open(home).close();
+    for (const table of V3_TABLES) expect(tables(home)).toContain(table);
   });
 
   test("an unknown version is refused by both handles", () => {
     const { home, store } = openStore();
     store.close();
     const raw = new Database(join(home, DATABASE_FILE));
-    raw.exec("UPDATE meta SET value = '3' WHERE key = 'schema_version'");
+    raw.exec("UPDATE meta SET value = '9' WHERE key = 'schema_version'");
     raw.close();
     expect(errorCode(() => LobbyStore.open(home))).toBe("unsupported_state_version");
     expect(errorCode(() => LobbyStore.openReadOnly(home))).toBe("unsupported_state_version");
