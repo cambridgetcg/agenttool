@@ -29,6 +29,20 @@ class CollabError extends Error {
   }
 }
 
+// src/protocol.ts
+var COLLAB_PROTOCOL = "agenttool.collab/0.1";
+var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
+var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
+var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
+var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
+var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
+var DEFAULT_WAIT_EVENT_LIMIT = 10;
+var MAX_WAIT_EVENT_LIMIT = 50;
+var MAX_WAIT_PAGE_BYTES = 256 * 1024;
+var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
+var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
+
 // src/session-file.ts
 import {
   chmodSync,
@@ -125,19 +139,6 @@ function sortValue(value) {
   }
   return value;
 }
-
-// src/protocol.ts
-var COLLAB_PROTOCOL = "agenttool.collab/0.1";
-var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
-var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
-var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
-var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
-var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
-var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
-var DEFAULT_WAIT_EVENT_LIMIT = 10;
-var MAX_WAIT_PAGE_BYTES = 256 * 1024;
-var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
-var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
 
 // src/repository.ts
 import { createHash } from "crypto";
@@ -5186,8 +5187,17 @@ function addSeconds(iso, seconds) {
 
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--db <path>]";
 var MAX_HOST_REASON = 2000;
+var DEFAULT_HOST_WAIT_MS = 600000;
+var MAX_HOST_WAIT_MS = 3600000;
+var HOST_WAIT_POLL_MS = 250;
+var systemClock = {
+  now: () => performance.now(),
+  sleep: (ms) => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  }
+};
 function endSessionFromCredential(store, credential, options) {
   let resumed;
   try {
@@ -5226,6 +5236,62 @@ function endSessionFromCredential(store, credential, options) {
     ended_at: ended.session.ended_at
   });
 }
+function waitForSessionEvents(store, credential, options, clock = systemClock) {
+  const session = store.getCoordinationSession(credential.session_id);
+  if (!session)
+    throw new CollabError("session_auth_failed", "Session credentials are invalid");
+  const workspaceId = session.workspace_id;
+  const afterAnchor = { ...options.after_anchor ?? session.cursor };
+  const started = clock.now();
+  const deadline = started + options.wait_ms;
+  let observed = afterAnchor;
+  let skipped = 0;
+  const receipt = (status, headSequence2) => ({
+    protocol: COLLAB_HOST_PROTOCOL,
+    status,
+    session_id: session.id,
+    workspace_id: workspaceId,
+    after_anchor: afterAnchor,
+    next_anchor: { ...observed },
+    head_sequence: headSequence2,
+    skipped_own_events: skipped,
+    waited_ms: Math.max(0, Math.round(clock.now() - started))
+  });
+  let headSequence = observed.sequence;
+  while (true) {
+    let drained = true;
+    try {
+      const page = store.eventsAfterAnchorForSession({
+        ...credential,
+        workspace_id: workspaceId,
+        after_anchor: observed,
+        event_limit: MAX_WAIT_EVENT_LIMIT
+      });
+      headSequence = page.head_sequence;
+      for (const event of page.events) {
+        if (options.include_own || event.session_id !== credential.session_id) {
+          return receipt("ready", headSequence);
+        }
+        observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
+        skipped += 1;
+      }
+      drained = !page.has_more;
+    } catch (error) {
+      if (error instanceof CollabError && error.code === "event_too_large") {
+        return { ...receipt("ready", headSequence), first_event_oversized: true };
+      }
+      if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
+        throw error;
+      }
+    }
+    if (!drained)
+      continue;
+    const remaining = deadline - clock.now();
+    if (remaining <= 0)
+      return receipt("idle", headSequence);
+    clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
+  }
+}
 function removeRevokedFile(sessionFile, receipt) {
   try {
     removeSessionCredentialFile(sessionFile);
@@ -5234,7 +5300,7 @@ function removeRevokedFile(sessionFile, receipt) {
     return { ...receipt, warning: "session_file_remove_failed" };
   }
 }
-function runCollabHostCli(argv, env = process.env) {
+function runCollabHostCli(argv, env = process.env, clock = systemClock) {
   let secret = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
@@ -5261,15 +5327,33 @@ function runCollabHostCli(argv, env = process.env) {
     if (!existsSync4(databasePath)) {
       throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
     }
-    const credential = readSessionCredentialFile(args.session_file);
-    secret = credential.session_token;
+    if (args.command === "end") {
+      const credential = readSessionCredentialFile(args.session_file);
+      secret = credential.session_token;
+      const store2 = new CollabStore(databasePath);
+      try {
+        return emit(endSessionFromCredential(store2, credential, {
+          session_file: args.session_file,
+          reason: args.reason,
+          release_leases: args.release_leases
+        }), 0);
+      } finally {
+        store2.close();
+      }
+    }
     const store = new CollabStore(databasePath);
     try {
-      return emit(endSessionFromCredential(store, credential, {
-        session_file: args.session_file,
-        reason: args.reason,
-        release_leases: args.release_leases
-      }), 0);
+      const sessionFile = args.session_file ?? store.defaultSessionCredentialPath(args.session);
+      const credential = readSessionCredentialFile(sessionFile);
+      secret = credential.session_token;
+      if (args.session !== undefined && credential.session_id !== args.session) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
+      return emit(waitForSessionEvents(store, credential, {
+        after_anchor: args.after_anchor,
+        wait_ms: args.wait_ms,
+        include_own: args.include_own
+      }, clock), 0);
     } finally {
       store.close();
     }
@@ -5277,6 +5361,8 @@ function runCollabHostCli(argv, env = process.env) {
     return emit(errorReceipt(error), 1);
   }
 }
+var END_ONLY_OPTIONS = ["reason", "release-leases"];
+var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own"];
 function parseHostArgs(argv) {
   let parsed;
   try {
@@ -5285,11 +5371,21 @@ function parseHostArgs(argv) {
     throw new CollabError("usage_error", `${error instanceof Error ? error.message : String(error)}; ${COLLAB_HOST_USAGE}`);
   }
   const [command, ...extra] = parsed.positionals;
-  if (command !== "end" || extra.length > 0) {
+  if (command !== "end" && command !== "wait" || extra.length > 0) {
     throw new CollabError("usage_error", COLLAB_HOST_USAGE);
   }
-  const sessionFile = parsed.values["session-file"];
-  const reason = parsed.values.reason;
+  const foreign = (command === "end" ? WAIT_ONLY_OPTIONS : END_ONLY_OPTIONS).find((name) => parsed.values[name] !== undefined);
+  if (foreign) {
+    throw new CollabError("usage_error", `--${foreign} does not apply to ${command}; ${COLLAB_HOST_USAGE}`);
+  }
+  if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
+    throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  return command === "end" ? parseEndArgs(parsed.values) : parseWaitArgs(parsed.values);
+}
+function parseEndArgs(values) {
+  const sessionFile = values["session-file"];
+  const reason = values.reason;
   if (!sessionFile || sessionFile.trim() === "") {
     throw new CollabError("usage_error", `--session-file is required; ${COLLAB_HOST_USAGE}`);
   }
@@ -5302,15 +5398,57 @@ function parseHostArgs(argv) {
   if (reason.includes("\x00")) {
     throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
-  if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
-    throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);
-  }
   return {
+    command: "end",
     session_file: sessionFile,
     reason,
-    release_leases: parsed.values["release-leases"] === true,
-    db: parsed.values.db
+    release_leases: values["release-leases"] === true,
+    db: values.db
   };
+}
+function parseWaitArgs(values) {
+  const sessionFile = values["session-file"];
+  const session = values.session;
+  if (sessionFile === undefined === (session === undefined)) {
+    throw new CollabError("usage_error", `Pass exactly one of --session or --session-file; ${COLLAB_HOST_USAGE}`);
+  }
+  if ((sessionFile ?? session).trim() === "") {
+    throw new CollabError("usage_error", `--session and --session-file must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  let waitMs = DEFAULT_HOST_WAIT_MS;
+  if (values["wait-ms"] !== undefined) {
+    const raw = values["wait-ms"].trim();
+    waitMs = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+    if (!Number.isSafeInteger(waitMs) || waitMs > MAX_HOST_WAIT_MS) {
+      throw new CollabError("usage_error", `--wait-ms must be an integer from 0 to ${MAX_HOST_WAIT_MS}; ${COLLAB_HOST_USAGE}`);
+    }
+  }
+  let afterAnchor;
+  if (values["after-anchor"] !== undefined) {
+    afterAnchor = parseAnchor(values["after-anchor"]);
+  }
+  return {
+    command: "wait",
+    session_file: sessionFile,
+    session,
+    after_anchor: afterAnchor,
+    wait_ms: waitMs,
+    include_own: values["include-own"] === true,
+    db: values.db
+  };
+}
+function parseAnchor(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = null;
+  }
+  const anchor = value;
+  if (anchor === null || typeof anchor !== "object" || Array.isArray(anchor) || Object.keys(anchor).sort().join(",") !== "epoch_id,hash,sequence" || typeof anchor.epoch_id !== "string" || typeof anchor.hash !== "string" || !Number.isSafeInteger(anchor.sequence) || anchor.sequence < 0) {
+    throw new CollabError("usage_error", `--after-anchor must be JSON {"epoch_id","sequence","hash"}; ${COLLAB_HOST_USAGE}`);
+  }
+  return { epoch_id: anchor.epoch_id, sequence: anchor.sequence, hash: anchor.hash };
 }
 function parseHostOptions(argv) {
   return parseArgs({
@@ -5321,7 +5459,11 @@ function parseHostOptions(argv) {
       "session-file": { type: "string" },
       reason: { type: "string" },
       "release-leases": { type: "boolean" },
-      db: { type: "string" }
+      db: { type: "string" },
+      session: { type: "string" },
+      "after-anchor": { type: "string" },
+      "wait-ms": { type: "string" },
+      "include-own": { type: "boolean" }
     }
   });
 }

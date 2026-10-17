@@ -2,7 +2,13 @@ import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { resolveDatabasePath } from "./database-path.js";
 import { CollabError } from "./errors.js";
-import type { SessionCredential, SessionEndRelease, SessionHandle } from "./protocol.js";
+import {
+  MAX_WAIT_EVENT_LIMIT,
+  type EventCursor,
+  type SessionCredential,
+  type SessionEndRelease,
+  type SessionHandle,
+} from "./protocol.js";
 import {
   readSessionCredentialFile,
   removeSessionCredentialFile,
@@ -12,10 +18,21 @@ import { CollabStore } from "./store.js";
 export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 
 export const COLLAB_HOST_USAGE =
-  "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]";
+  "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
+  + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
+  + " [--wait-ms <ms>] [--include-own] [--db <path>]";
 
 /** The trimmed-length limit endSession applies to its reason. */
 const MAX_HOST_REASON = 2_000;
+
+/**
+ * The host, not a model turn, sits in a doorbell wait, so its bound is longer
+ * than collab_events_wait's 30 seconds. One hour keeps a re-arming listener
+ * well inside the 6-hour liveness view.
+ */
+export const DEFAULT_HOST_WAIT_MS = 600_000;
+export const MAX_HOST_WAIT_MS = 3_600_000;
+const HOST_WAIT_POLL_MS = 250;
 
 export interface HostEndReceipt {
   protocol: typeof COLLAB_HOST_PROTOCOL;
@@ -46,6 +63,47 @@ export interface HostEndOptions {
   reason: string;
   release_leases: boolean;
 }
+
+/**
+ * A doorbell, not a delivery: it names where to continue and carries no
+ * event type, actor, entity, or payload. Read the events through the
+ * session's own verified MCP path (collab_next or collab_events_wait).
+ */
+export interface HostWaitReceipt {
+  protocol: typeof COLLAB_HOST_PROTOCOL;
+  status: "ready" | "idle";
+  session_id: string;
+  workspace_id: string;
+  after_anchor: EventCursor;
+  /** ready: the anchor just before the first unread event; idle: where to re-arm. */
+  next_anchor: EventCursor;
+  head_sequence: number;
+  /** Events this session wrote itself, passed over unless --include-own. */
+  skipped_own_events: number;
+  waited_ms: number;
+  /** Present when the first unread event exceeds the bounded page and could not be inspected. */
+  first_event_oversized?: true;
+}
+
+export interface HostWaitOptions {
+  /** Ring once this anchor is passed; defaults to the session's acknowledged cursor. */
+  after_anchor?: EventCursor;
+  wait_ms: number;
+  include_own: boolean;
+}
+
+export interface HostWaitClock {
+  now(): number;
+  sleep(ms: number): void;
+}
+
+const systemClock: HostWaitClock = {
+  now: () => performance.now(),
+  sleep: (ms) => {
+    // A synchronous sleep keeps the CLI's single-receipt shape; SIGTERM still ends it.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  },
+};
 
 /**
  * Host-side end for a session whose MCP process is gone. Without
@@ -98,6 +156,73 @@ export function endSessionFromCredential(
   });
 }
 
+/**
+ * Host-side doorbell for a live session. It reads with the session's current
+ * generation and never resumes, acknowledges, or writes, so it cannot fence
+ * the MCP process that owns the credential. Each poll is the same
+ * authenticated, chain-verified snapshot collab_events_wait uses; fencing,
+ * session end, cursor recovery, rollback, or fork fails explicitly.
+ */
+export function waitForSessionEvents(
+  store: CollabStore,
+  credential: SessionCredential,
+  options: HostWaitOptions,
+  clock: HostWaitClock = systemClock,
+): HostWaitReceipt {
+  const session = store.getCoordinationSession(credential.session_id);
+  if (!session) throw new CollabError("session_auth_failed", "Session credentials are invalid");
+  const workspaceId = session.workspace_id;
+  const afterAnchor = { ...(options.after_anchor ?? session.cursor) };
+  const started = clock.now();
+  const deadline = started + options.wait_ms;
+  let observed = afterAnchor;
+  let skipped = 0;
+  const receipt = (status: HostWaitReceipt["status"], headSequence: number): HostWaitReceipt => ({
+    protocol: COLLAB_HOST_PROTOCOL,
+    status,
+    session_id: session.id,
+    workspace_id: workspaceId,
+    after_anchor: afterAnchor,
+    next_anchor: { ...observed },
+    head_sequence: headSequence,
+    skipped_own_events: skipped,
+    waited_ms: Math.max(0, Math.round(clock.now() - started)),
+  });
+  let headSequence = observed.sequence;
+  while (true) {
+    let drained = true;
+    try {
+      const page = store.eventsAfterAnchorForSession({
+        ...credential,
+        workspace_id: workspaceId,
+        after_anchor: observed,
+        event_limit: MAX_WAIT_EVENT_LIMIT,
+      });
+      headSequence = page.head_sequence;
+      for (const event of page.events) {
+        if (options.include_own || event.session_id !== credential.session_id) {
+          return receipt("ready", headSequence);
+        }
+        observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
+        skipped += 1;
+      }
+      drained = !page.has_more;
+    } catch (error) {
+      if (error instanceof CollabError && error.code === "event_too_large") {
+        // Its author is unknown without a larger read, so ring rather than skip it.
+        return { ...receipt("ready", headSequence), first_event_oversized: true };
+      }
+      if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
+        throw error;
+      }
+    }
+    if (!drained) continue;
+    const remaining = deadline - clock.now();
+    if (remaining <= 0) return receipt("idle", headSequence);
+    clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
+  }
+}
+
 /** The session is ended either way; a leftover revoked file is a warning, not a failure. */
 function removeRevokedFile(sessionFile: string, receipt: HostEndReceipt): HostEndReceipt {
   try {
@@ -112,13 +237,14 @@ function removeRevokedFile(sessionFile: string, receipt: HostEndReceipt): HostEn
 export function runCollabHostCli(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
+  clock: HostWaitClock = systemClock,
 ): { exit_code: 0 | 1; line: string } {
   let secret: string | null = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
-  const emit = (payload: HostEndReceipt | HostErrorReceipt, exitCode: 0 | 1) => {
+  const emit = (payload: HostEndReceipt | HostWaitReceipt | HostErrorReceipt, exitCode: 0 | 1) => {
     const line = JSON.stringify(payload);
     if (secret !== null && line.includes(secret)) {
       return {
@@ -142,16 +268,37 @@ export function runCollabHostCli(
         "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB",
       );
     }
-    const credential = readSessionCredentialFile(args.session_file);
-    secret = credential.session_token;
+    if (args.command === "end") {
+      const credential = readSessionCredentialFile(args.session_file);
+      secret = credential.session_token;
+      const store = new CollabStore(databasePath);
+      try {
+        return emit(
+          endSessionFromCredential(store, credential, {
+            session_file: args.session_file,
+            reason: args.reason,
+            release_leases: args.release_leases,
+          }),
+          0,
+        );
+      } finally {
+        store.close();
+      }
+    }
     const store = new CollabStore(databasePath);
     try {
+      const sessionFile = args.session_file ?? store.defaultSessionCredentialPath(args.session!);
+      const credential = readSessionCredentialFile(sessionFile);
+      secret = credential.session_token;
+      if (args.session !== undefined && credential.session_id !== args.session) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
       return emit(
-        endSessionFromCredential(store, credential, {
-          session_file: args.session_file,
-          reason: args.reason,
-          release_leases: args.release_leases,
-        }),
+        waitForSessionEvents(store, credential, {
+          after_anchor: args.after_anchor,
+          wait_ms: args.wait_ms,
+          include_own: args.include_own,
+        }, clock),
         0,
       );
     } finally {
@@ -162,7 +309,14 @@ export function runCollabHostCli(
   }
 }
 
-function parseHostArgs(argv: string[]): HostEndOptions & { db?: string } {
+type HostArgs =
+  | ({ command: "end"; db?: string } & HostEndOptions)
+  | ({ command: "wait"; db?: string; session_file?: string; session?: string } & HostWaitOptions);
+
+const END_ONLY_OPTIONS = ["reason", "release-leases"] as const;
+const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own"] as const;
+
+function parseHostArgs(argv: string[]): HostArgs {
   let parsed: ReturnType<typeof parseHostOptions>;
   try {
     parsed = parseHostOptions(argv);
@@ -173,11 +327,23 @@ function parseHostArgs(argv: string[]): HostEndOptions & { db?: string } {
     );
   }
   const [command, ...extra] = parsed.positionals;
-  if (command !== "end" || extra.length > 0) {
+  if ((command !== "end" && command !== "wait") || extra.length > 0) {
     throw new CollabError("usage_error", COLLAB_HOST_USAGE);
   }
-  const sessionFile = parsed.values["session-file"];
-  const reason = parsed.values.reason;
+  const foreign = (command === "end" ? WAIT_ONLY_OPTIONS : END_ONLY_OPTIONS)
+    .find((name) => parsed.values[name] !== undefined);
+  if (foreign) {
+    throw new CollabError("usage_error", `--${foreign} does not apply to ${command}; ${COLLAB_HOST_USAGE}`);
+  }
+  if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
+    throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  return command === "end" ? parseEndArgs(parsed.values) : parseWaitArgs(parsed.values);
+}
+
+function parseEndArgs(values: ReturnType<typeof parseHostOptions>["values"]): HostArgs {
+  const sessionFile = values["session-file"];
+  const reason = values.reason;
   if (!sessionFile || sessionFile.trim() === "") {
     throw new CollabError("usage_error", `--session-file is required; ${COLLAB_HOST_USAGE}`);
   }
@@ -195,15 +361,75 @@ function parseHostArgs(argv: string[]): HostEndOptions & { db?: string } {
   if (reason.includes("\0")) {
     throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
-  if (parsed.values.db !== undefined && parsed.values.db.trim() === "") {
-    throw new CollabError("usage_error", `--db must not be empty; ${COLLAB_HOST_USAGE}`);
-  }
   return {
+    command: "end",
     session_file: sessionFile,
     reason,
-    release_leases: parsed.values["release-leases"] === true,
-    db: parsed.values.db,
+    release_leases: values["release-leases"] === true,
+    db: values.db,
   };
+}
+
+function parseWaitArgs(values: ReturnType<typeof parseHostOptions>["values"]): HostArgs {
+  const sessionFile = values["session-file"];
+  const session = values.session;
+  if ((sessionFile === undefined) === (session === undefined)) {
+    throw new CollabError("usage_error", `Pass exactly one of --session or --session-file; ${COLLAB_HOST_USAGE}`);
+  }
+  if ((sessionFile ?? session)!.trim() === "") {
+    throw new CollabError("usage_error", `--session and --session-file must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  let waitMs = DEFAULT_HOST_WAIT_MS;
+  if (values["wait-ms"] !== undefined) {
+    const raw = values["wait-ms"].trim();
+    waitMs = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+    if (!Number.isSafeInteger(waitMs) || waitMs > MAX_HOST_WAIT_MS) {
+      throw new CollabError(
+        "usage_error",
+        `--wait-ms must be an integer from 0 to ${MAX_HOST_WAIT_MS}; ${COLLAB_HOST_USAGE}`,
+      );
+    }
+  }
+  let afterAnchor: EventCursor | undefined;
+  if (values["after-anchor"] !== undefined) {
+    afterAnchor = parseAnchor(values["after-anchor"]);
+  }
+  return {
+    command: "wait",
+    session_file: sessionFile,
+    session,
+    after_anchor: afterAnchor,
+    wait_ms: waitMs,
+    include_own: values["include-own"] === true,
+    db: values.db,
+  };
+}
+
+/** The anchor JSON a page returns as next_anchor; the store checks it against the journal. */
+function parseAnchor(raw: string): EventCursor {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = null;
+  }
+  const anchor = value as Partial<EventCursor> | null;
+  if (
+    anchor === null
+    || typeof anchor !== "object"
+    || Array.isArray(anchor)
+    || Object.keys(anchor).sort().join(",") !== "epoch_id,hash,sequence"
+    || typeof anchor.epoch_id !== "string"
+    || typeof anchor.hash !== "string"
+    || !Number.isSafeInteger(anchor.sequence)
+    || anchor.sequence! < 0
+  ) {
+    throw new CollabError(
+      "usage_error",
+      `--after-anchor must be JSON {"epoch_id","sequence","hash"}; ${COLLAB_HOST_USAGE}`,
+    );
+  }
+  return { epoch_id: anchor.epoch_id, sequence: anchor.sequence!, hash: anchor.hash };
 }
 
 function parseHostOptions(argv: string[]) {
@@ -216,6 +442,10 @@ function parseHostOptions(argv: string[]) {
       reason: { type: "string" },
       "release-leases": { type: "boolean" },
       db: { type: "string" },
+      session: { type: "string" },
+      "after-anchor": { type: "string" },
+      "wait-ms": { type: "string" },
+      "include-own": { type: "boolean" },
     },
   });
 }

@@ -3,8 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { defaultDatabasePath, resolveDatabasePath } from "../src/database-path.js";
-import { runCollabHostCli } from "../src/host.js";
-import type { SessionHandle } from "../src/protocol.js";
+import { MAX_HOST_WAIT_MS, runCollabHostCli, waitForSessionEvents } from "../src/host.js";
+import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
 
@@ -216,7 +216,9 @@ describe("agenttool-collab-host end", () => {
       expect(JSON.parse(run.line)).toEqual({
         protocol: "agenttool.collab-host/1",
         status: "help",
-        usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]",
+        usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
+          + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
+          + " [--wait-ms <ms>] [--include-own] [--db <path>]",
       });
     }
   });
@@ -387,6 +389,194 @@ describe("agenttool-collab-host end", () => {
 
     expect(existsSync(file)).toBe(true);
     expect(store.getCoordinationSession(handle.session.id)?.status).toBe("active");
+  });
+});
+
+function headAnchor(workspaceId: string): EventCursor {
+  const workspace = store.getWorkspace(workspaceId)!;
+  return { epoch_id: workspace.epoch_id, sequence: workspace.event_head_sequence, hash: workspace.event_head_hash };
+}
+
+function runHostAsync(args: string[]) {
+  const child = Bun.spawn([process.execPath, hostEntry, ...args], {
+    cwd: packageRoot,
+    env: { PATH: process.env.PATH ?? "", TMPDIR: tmpdir(), HOME: join(directory, "home") },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return {
+    child,
+    receipt: (async () => {
+      const exitCode = await child.exited;
+      const stdout = await new Response(child.stdout).text();
+      return { exitCode, stdout, receipt: JSON.parse(stdout.split("\n")[0] ?? "null") as Record<string, any> };
+    })(),
+  };
+}
+
+describe("agenttool-collab-host wait", () => {
+  test("rings for another session's event, carries no event content, and writes nothing", () => {
+    const { handle } = startWithCredentialFile("doorbell-listener");
+    const anchor = headAnchor(handle.workspace.id);
+    const peer = store.startSession({ root_path: root, actor: "doorbell-peer-actor" });
+    store.appendReportForSession({
+      ...peer.credential,
+      idempotency_key: "doorbell-peer-report",
+      kind: "observation",
+      body: "doorbell-private-body-marker",
+    });
+    const before = sessionRow(handle.session.id);
+    const head = headAnchor(handle.workspace.id);
+
+    const run = runHost([
+      "wait", "--session", handle.session.id, "--after-anchor", JSON.stringify(anchor),
+      "--wait-ms", "0", "--db", databasePath,
+    ]);
+
+    expect(run.exitCode).toBe(0);
+    expect(run.lines).toHaveLength(1);
+    expect(run.receipt).toEqual({
+      protocol: "agenttool.collab-host/1",
+      status: "ready",
+      session_id: handle.session.id,
+      workspace_id: handle.workspace.id,
+      after_anchor: anchor,
+      next_anchor: anchor,
+      head_sequence: head.sequence,
+      skipped_own_events: 0,
+      waited_ms: expect.any(Number),
+    });
+    for (const hidden of [
+      handle.credential.session_token,
+      "doorbell-private-body-marker",
+      "doorbell-peer-actor",
+      peer.session.id,
+    ]) {
+      expect(run.stdout).not.toContain(hidden);
+    }
+    expect(sessionRow(handle.session.id)).toEqual(before);
+    expect(headAnchor(handle.workspace.id)).toEqual(head);
+  });
+
+  test("passes over its own events from the acknowledged cursor and re-arms from next_anchor", () => {
+    const { handle, file } = startWithCredentialFile("doorbell-self");
+    // workspace.opened carries no session, so acknowledge past it first.
+    store.acknowledgeSessionCursor({
+      ...handle.credential,
+      anchor: headAnchor(handle.workspace.id),
+      expected_cursor_version: handle.session.cursor_version,
+    });
+    store.appendReportForSession({
+      ...handle.credential,
+      idempotency_key: "doorbell-own-report",
+      kind: "observation",
+      body: "own note",
+    });
+    const head = headAnchor(handle.workspace.id);
+
+    const idle = runHost(["wait", "--session-file", file, "--wait-ms", "0", "--db", databasePath]);
+    expect(idle.exitCode).toBe(0);
+    expect(idle.receipt).toMatchObject({
+      status: "idle",
+      after_anchor: store.getCoordinationSession(handle.session.id)!.cursor,
+      next_anchor: head,
+      head_sequence: head.sequence,
+    });
+    expect(idle.receipt.skipped_own_events).toBeGreaterThanOrEqual(1);
+
+    const own = runHost([
+      "wait", "--session-file", file, "--wait-ms", "0", "--include-own", "--db", databasePath,
+    ]);
+    expect(own.receipt).toMatchObject({ status: "ready", skipped_own_events: 0 });
+
+    const rearmed = runHost([
+      "wait", "--session-file", file, "--after-anchor", JSON.stringify(idle.receipt.next_anchor),
+      "--wait-ms", "0", "--db", databasePath,
+    ]);
+    expect(rearmed.receipt).toMatchObject({ status: "idle", skipped_own_events: 0, next_anchor: head });
+  });
+
+  test("returns as soon as an event lands during the wait", async () => {
+    const { handle } = startWithCredentialFile("doorbell-patient");
+    const anchor = headAnchor(handle.workspace.id);
+    const pending = runHostAsync([
+      "wait", "--session", handle.session.id, "--after-anchor", JSON.stringify(anchor),
+      "--wait-ms", "20000", "--db", databasePath,
+    ]);
+    await Bun.sleep(400);
+    store.startSession({ root_path: root, actor: "doorbell-late-peer" });
+    const done = await pending.receipt;
+    expect(done.exitCode).toBe(0);
+    expect(done.receipt).toMatchObject({ status: "ready", next_anchor: anchor });
+    expect(done.receipt.waited_ms).toBeLessThan(20000);
+  });
+
+  test("polls on the host clock and reports idle at its deadline", () => {
+    const { handle } = startWithCredentialFile("doorbell-clock");
+    let now = 0;
+    const sleeps: number[] = [];
+    const receipt = waitForSessionEvents(store, handle.credential, {
+      after_anchor: headAnchor(handle.workspace.id),
+      wait_ms: 1_000,
+      include_own: false,
+    }, { now: () => now, sleep: (ms) => { sleeps.push(ms); now += ms; } });
+    expect(receipt).toMatchObject({ status: "idle", waited_ms: 1_000 });
+    expect(sleeps).toEqual([250, 250, 250, 250]);
+  });
+
+  test("fails closed on a forked anchor, a superseded generation, and an ended session without fencing", () => {
+    const { handle, file } = startWithCredentialFile("doorbell-fenced");
+    const anchor = headAnchor(handle.workspace.id);
+    const forked = runHost([
+      "wait", "--session-file", file, "--after-anchor",
+      JSON.stringify({ ...anchor, hash: "0".repeat(64) }), "--wait-ms", "0", "--db", databasePath,
+    ]);
+    expect(forked.exitCode).toBe(1);
+    expect(forked.receipt).toMatchObject({ status: "error", error: "cursor_fork_detected" });
+    expect(sessionRow(handle.session.id).generation).toBe(handle.credential.generation);
+
+    const resumed = store.resumeSession(handle.credential);
+    const superseded = runHost(["wait", "--session-file", file, "--wait-ms", "0", "--db", databasePath]);
+    expect(superseded.receipt).toMatchObject({ status: "error", error: "session_auth_failed" });
+    expect(sessionRow(handle.session.id).generation).toBe(resumed.credential.generation);
+
+    const other = startWithCredentialFile("doorbell-ended");
+    store.endSessionWithReleases({ ...other.handle.credential, reason: "done", release_leases: false });
+    const ended = runHost(["wait", "--session-file", other.file, "--wait-ms", "0", "--db", databasePath]);
+    expect(ended.receipt).toMatchObject({ status: "error", error: "session_auth_failed" });
+    for (const run of [forked, superseded, ended]) {
+      expect(run.stdout).not.toContain(handle.credential.session_token);
+      expect(run.stdout).not.toContain(other.handle.credential.session_token);
+    }
+  });
+
+  test("refuses malformed or foreign arguments before reading any credential", () => {
+    const { handle, file } = startWithCredentialFile("doorbell-usage");
+    const id = handle.session.id;
+    for (const args of [
+      ["wait"],
+      ["wait", "--session", id, "--session-file", file],
+      ["wait", "--session", ""],
+      ["wait", "--session", id, "--wait-ms", String(MAX_HOST_WAIT_MS + 1)],
+      ["wait", "--session", id, "--wait-ms", "-1"],
+      ["wait", "--session", id, "--wait-ms", "1.5"],
+      ["wait", "--session", id, "--wait-ms", "soon"],
+      ["wait", "--session", id, "--after-anchor", "{"],
+      ["wait", "--session", id, "--after-anchor", JSON.stringify({ epoch_id: "e", sequence: 1 })],
+      ["wait", "--session", id, "--after-anchor", JSON.stringify({ epoch_id: "e", sequence: -1, hash: "h" })],
+      ["wait", "--session", id, "--after-anchor", JSON.stringify({ epoch_id: "e", sequence: 1, hash: "h", x: 1 })],
+      ["wait", "--session", id, "--reason", "not for wait"],
+      ["wait", "--session", id, "--release-leases"],
+      ["end", "--session-file", file, "--reason", "x", "--wait-ms", "0"],
+      ["end", "--session-file", file, "--reason", "x", "--include-own"],
+    ]) {
+      const refused = runHost(args, { AGENTOOL_COLLAB_DB: databasePath });
+      expect(refused.exitCode).toBe(1);
+      expect(refused.lines).toHaveLength(1);
+      expect(refused.receipt).toMatchObject({ status: "error", error: "usage_error" });
+    }
+    expect(store.getCoordinationSession(id)?.status).toBe("active");
+    expect(existsSync(file)).toBe(true);
   });
 });
 

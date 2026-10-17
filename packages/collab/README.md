@@ -351,6 +351,40 @@ credential file stayed; remove it by hand. `--db` defaults to the database the
 MCP server would use, and the CLI never creates one (`journal_not_found`). It
 is not an MCP tool.
 
+### Host doorbell wait (unreleased)
+
+`agenttool-collab-host wait` lets a host wait between model turns, for
+example as a background command whose exit wakes the agent, instead of
+spending a turn on each 30-second `collab_events_wait`:
+
+```bash
+agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--db <path>]
+```
+
+`--session` resolves the default credential file beside the journal
+(`collab-sessions/<id>.json`). Each poll is the same authenticated,
+chain-verified read `collab_events_wait` uses, with the generation already in
+the file: the command never resumes, acknowledges, refreshes `last_seen` or
+writes, so it cannot fence the MCP process that owns the session. It waits
+after `--after-anchor` (exact `{ epoch_id, sequence, hash }` JSON) or, by
+default, after the session's acknowledged cursor, polling every 250 ms for up
+to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
+waiting session are passed over unless `--include-own`; unattributed events
+such as `workspace.opened` count as unread.
+
+It prints one JSON line without the credential and without any event type,
+actor, entity or payload. Exit 0 with `status: "ready"` means at least one
+such event follows `next_anchor`; `status: "idle"` means the deadline passed,
+and `next_anchor` is where to re-arm (past any own events it skipped). Both
+carry `after_anchor`, `head_sequence`, `skipped_own_events` and `waited_ms`.
+`first_event_oversized: true` marks a ready receipt whose first unread event
+exceeded the bounded page and could not be inspected. Read the events through
+the session's MCP tools; the receipt is a doorbell, not a delivery. Errors
+exit 1 with `status: "error"`: `session_auth_failed` after a resume or end,
+`cursor_fork_detected`, `cursor_ahead`, `cursor_reset_required`, or
+`event_read_busy` past the deadline. A listener that re-arms at least hourly
+through `collab_next` or an acknowledgement stays `live` in the 6-hour view.
+
 ### Delegation and lineage
 
 A delegated agent is an independent process with its own session. The
@@ -399,8 +433,8 @@ session has ended or when `last_seen_at` is more than 6 hours old, otherwise
 and `collab_next` adds `recovery_required` (the caller's own expired leases
 first). Every cursor acknowledgement refreshes `last_seen_at`, including one
 that does not advance the cursor; so do `collab_next`, session mutations, a
-cursor reset, resume, and end. A host that only uses `collab_events_wait` for
-over 6 hours reads as stale. This is a view: no status changes and nothing
+cursor reset, resume, and end. A host that only uses `collab_events_wait` or
+the host doorbell `wait` for over 6 hours reads as stale. This is a view: no status changes and nothing
 expires automatically.
 `role` is fixed for the session's lifetime; correct it with an `informs`
 report, or end the session and start a new one.
