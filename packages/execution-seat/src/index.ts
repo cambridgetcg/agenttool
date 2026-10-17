@@ -4,4 +4,5 @@ export { SEAT_HOME_ENV, DATABASE_FILE, resolveSeatHome } from "./home.js";
 export { SeatLedger, nativeKey, normalizeRow, type OpenGroupInput, type OpenSeatInput, type Page } from "./ledger.js";
 export { CLAUDE_CODE, readClaudeSession, readClaudeTranscript, type ClaudeChild, type ClaudeSession, type ClaudeTranscript, type ClaudeWorkflowRun } from "./claude-code.js";
 export { CODEX, readCodexRollout, type CodexRollout } from "./codex.js";
+export { handleClaudeHook, readClaudeHookInput, type ClaudeHookInput, type ClaudeHookOptions, type ClaudeHookResult, type CollabRun } from "./claude-hook.js";
 export { ingestClaudeSession, ingestCodexRollout, type IngestResult } from "./ingest.js";

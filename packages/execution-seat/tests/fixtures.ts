@@ -14,6 +14,9 @@ export const MARKERS = [
   "seat-marker-instructions",
   "seat-marker-cwd",
   "seat-marker-account",
+  "seat-marker-hook-prompt",
+  "seat-marker-tool-output",
+  "seat-marker-last-message",
 ] as const;
 
 export const CLAUDE_SESSION = "11111111-2222-4333-8444-555555555555";
@@ -208,6 +211,23 @@ export function writeCodexSessions(root: string): CodexPaths {
     solo: path(CODEX_SOLO),
     grandchild: path(CODEX_GRANDCHILD),
     fork: path(CODEX_FORK),
+  };
+}
+
+/** A Claude Code hook input whose free-text fields all carry markers, as a real hook's would carry content. */
+export function hookInput(event: string, sessionId: string, fields: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    hook_event_name: event,
+    session_id: sessionId,
+    transcript_path: `/Users/someone/${MARKERS[9]}/${sessionId}.jsonl`,
+    cwd: MARKERS[9],
+    prompt: MARKERS[11],
+    prompt_id: "9b6d84d4-49e9-4ff2-a37f-e0c65b379e93",
+    tool_input: { command: MARKERS[11] },
+    tool_response: { stdout: MARKERS[12] },
+    last_assistant_message: MARKERS[13],
+    session_title: MARKERS[6],
+    ...fields,
   };
 }
 
