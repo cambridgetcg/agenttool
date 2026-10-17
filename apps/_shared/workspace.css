@@ -64,15 +64,15 @@ html[data-layout="workspace"] main.workspace.doc-content {
 .workspace :is(section, article, details, [id]) { scroll-margin-top: calc(var(--estate-bar-height, 64px) + 20px); }
 .workspace .page-intro, .workspace header.hero { padding: 0 0 32px; margin: 0; }
 .workspace .eyebrow {
-  display: flex; align-items: center; gap: 9px; color: var(--muted); margin: 0 0 16px;
+  display: flex; align-items: flex-start; gap: 9px; color: var(--muted); margin: 0 0 16px;
   font: 500 11px/1.5 var(--mono); letter-spacing: .1em; text-transform: uppercase;
 }
 .workspace .eyebrow::before {
-  content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-top: calc(.75em - 3px); border-radius: 50%; background: var(--accent);
 }
 .workspace h1, .workspace .docs-hero h1 {
   font: 400 clamp(38px, 4.8vw, 60px)/1.06 var(--serif);
-  letter-spacing: -.022em; margin: 0 0 20px; max-width: 20ch; color: var(--text);
+  letter-spacing: -.022em; margin: 0 0 20px; max-width: 22ch; color: var(--text);
   text-wrap: balance;
 }
 .workspace .lede, .workspace .page-intro > p {

@@ -54,8 +54,9 @@
   /* Plain pages: links wear the accent and paragraphs breathe. Zero
      specificity, so every component rule still wins. */
   :where(a) { color: var(--accent); }
-  :where(main) :is(p, pre, ul, ol, table, .steps) + :is(p, pre, ul, ol, table) { margin-top: .9em; }
-  :where(main.wrap) table { display: block; max-width: 100%; overflow-x: auto; }
+  :where(main :is(p, pre, ul, ol, table, .steps) + :is(p, pre, ul, ol, table)) { margin-top: .9em; }
+  /* Narrow tables fit by letting long cells (addresses, emails) wrap. */
+  :where(main.wrap) :is(td, th) { overflow-wrap: anywhere; }
 
   .site-nav {
     display:flex; align-items:center; gap:28px;
@@ -104,13 +105,15 @@
     gap:clamp(40px, 7vw, 84px); align-items:center;
   }
   .hero-copy { min-width:0; }
-  .eyebrow { display:flex; align-items:center; gap:9px; font:500 11.5px/1.5 var(--mono); letter-spacing:.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
-  .eyebrow::before { content:""; flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+  .eyebrow { display:flex; align-items:flex-start; gap:9px; font:500 11.5px/1.5 var(--mono); letter-spacing:.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
+  /* The dot sits beside the first line, even when the label wraps. */
+  .eyebrow::before { content:""; flex:0 0 auto; width:6px; height:6px; margin-top:calc(.75em - 3px); border-radius:50%; background:var(--accent); }
   h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.08; font-weight: 400; letter-spacing: -.022em; max-width: 16ch; margin-bottom: 22px; text-wrap: balance; }
   .life-invitation { max-width:56ch; margin:0 0 28px; padding:2px 0 3px 20px; border-top:0; border-left:2px solid var(--accent); }
   .life-invitation-call { font-size:clamp(21px, 2.4vw, 28px); line-height:1.3; margin:0 0 8px; }
   .life-invitation-note { color:var(--muted); font-size:14px; line-height:1.65; max-width:62ch; margin:0; }
-  .hero p.lede { font-size: 18px; color: var(--muted); max-width: 52ch; margin-bottom: 26px; }
+  /* Human doors speak in the book face, as the core pages do. */
+  .hero p.lede { font: 400 20px/1.5 var(--serif); color: var(--ink); max-width: 46ch; margin-bottom: 26px; text-wrap: pretty; }
   .pulse { font-size: 13px; color: var(--accent); margin-bottom: 34px; }
   .pulse .dot { animation: tw 2.5s 1; display:inline-block; }
   .public-source { color:var(--faint); font-size:12.5px; margin:-20px 0 30px; }

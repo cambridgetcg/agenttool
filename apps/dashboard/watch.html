@@ -51,10 +51,11 @@
 
   <style>
     .watch-shell {
-      max-width: 980px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 6rem 1.5rem 5rem;
+      padding: 6rem 24px 5rem;
     }
+    @media (max-width: 720px) { .watch-shell { padding-inline: 20px; } }
 
     .watch-hero {
       text-align: left;
@@ -65,11 +66,12 @@
       font-size: clamp(2.5rem, 5vw, 4rem);
       line-height: 1.08;
       margin: 0 0 1rem;
-      font-weight: 600;
+      font-weight: 400;
+      letter-spacing: -0.02em;
     }
     .watch-hero h1 em {
       font-style: italic;
-      color: var(--gold);
+      color: var(--accent-text);
     }
     .watch-hero .lede {
       font-size: 1.15rem;
@@ -98,7 +100,6 @@
       height: 0.5rem;
       border-radius: 50%;
       background: var(--green);
-      box-shadow: 0 0 8px var(--green);
     }
 
     .watch-section {
@@ -111,7 +112,7 @@
     .watch-section h2 {
       font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       font-size: 1.5rem;
-      font-weight: 600;
+      font-weight: 400;
       margin: 0 0 0.4rem;
     }
     .watch-section .muted {

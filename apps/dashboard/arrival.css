@@ -21,7 +21,7 @@
 }
 .qs-code-pane { display: block; margin-bottom: .75rem; }
 .qs-code-pane[hidden] { display: none; }
-.qs-restore label { display: grid; gap: 8px; min-width: 0; }
+.qs-restore label { display: grid; gap: 8px; min-width: 0; margin: 0; }
 .qs-restore label input { width: 100%; min-width: 0; }
 .qs-restore button { align-self: end; }
 .qs-restore input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -63,7 +63,7 @@ main.onboarding.workspace::before { display: none; }
   min-height: 44px;
   border-color: var(--control-line);
   background: var(--bg);
-  border-radius: 4px;
+  border-radius: 6px;
   font-family: var(--mono);
   font-size: 13px;
 }

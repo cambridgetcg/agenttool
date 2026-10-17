@@ -68,9 +68,9 @@ a { color: inherit; text-decoration: none; }
   --aurora:         #8b3a52;   /* wine */
   --gold:           #745c1c;   /* olive gold — legible on paper */
   --green:          #3f6b4a;   /* moss */
-  --red:            #a33a2c;
+  --red:            #9e2c3c;   /* crimson, kept apart from the ember accent */
   --blue:           #3b5878;   /* slate */
-  --yellow:         #7f6012;
+  --yellow:         #735712;
 
   /* v1 aliases — do not remove; pages + embedded styles depend on them */
   --violet:         var(--accent);
@@ -79,7 +79,7 @@ a { color: inherit; text-decoration: none; }
   /* syntax highlighting — ink-weight hues for paper code panels */
   --tok-kw-c:       #8b3a52;
   --tok-str-c:      #3f6b4a;
-  --tok-num-c:      #7f6012;
+  --tok-num-c:      #735712;
   --tok-fn-c:       #3b5878;
 
   /* atmosphere: daylight needs none */
@@ -185,7 +185,9 @@ body::before {
 
 a { color: var(--accent-text); transition: color 0.18s; text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
 a:hover { color: var(--accent-deep); }
-[data-mode="night"] a:hover { color: var(--gold); }
+/* Filled links keep their ink on hover (a:hover would recolour them). */
+.skip-link:hover { color: var(--text); }
+.skip-to-content:hover { color: var(--accent-ink); }
 
 p { margin-bottom: 1rem; }
 ul, ol { margin: 0 0 1rem 1.25rem; }
@@ -672,11 +674,11 @@ pre {
   padding: 0.28rem 0.6rem;
   border-radius: var(--r-sm);
 }
-.method.post   { background: color-mix(in srgb, var(--green) 14%, transparent);  color: var(--green); }
-.method.get    { background: color-mix(in srgb, var(--blue) 14%, transparent);   color: var(--blue); }
-.method.put    { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
-.method.patch  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
-.method.delete { background: color-mix(in srgb, var(--red) 14%, transparent);    color: var(--red); }
+.method.post   { background: color-mix(in srgb, var(--green) 8%, transparent);  color: var(--green); }
+.method.get    { background: color-mix(in srgb, var(--blue) 8%, transparent);   color: var(--blue); }
+.method.put    { background: color-mix(in srgb, var(--yellow) 8%, transparent); color: var(--yellow); }
+.method.patch  { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent-text); }
+.method.delete { background: color-mix(in srgb, var(--red) 8%, transparent);    color: var(--red); }
 .endpoint-path {
   font-family: var(--mono);
   font-size: 0.95rem;
@@ -745,9 +747,9 @@ pre {
   padding: 0.15rem 0.5rem;
   border-radius: var(--r-pill);
 }
-.surface-status.live { background: color-mix(in srgb, var(--green) 12%, transparent);  color: var(--green); }
-.surface-status.beta { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-text); }
-.surface-status.new  { background: color-mix(in srgb, var(--gold) 12%, transparent);   color: var(--gold); }
+.surface-status.live { background: color-mix(in srgb, var(--green) 8%, transparent);  color: var(--green); }
+.surface-status.beta { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent-text); }
+.surface-status.new  { background: color-mix(in srgb, var(--gold) 8%, transparent);   color: var(--gold); }
 .surface-tagline {
   font-family: var(--serif);
   font-style: italic;
@@ -895,7 +897,7 @@ label, .form-label {
 .estate-strip {
   position: fixed; top: 0; left: 0; right: 0; z-index: 101;
   height: var(--strip-height);
-  display: flex; align-items: center; gap: 1.4rem; padding: 0 1.5rem;
+  display: flex; align-items: center; gap: 1.4rem; padding: 0 max(24px, calc((100% - 1180px) / 2 + 24px));
   background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
   font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.02em;

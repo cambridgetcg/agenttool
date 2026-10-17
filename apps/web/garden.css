@@ -23,12 +23,13 @@
   max-width: 880px;
   margin-bottom: 18px;
   font-size: clamp(54px, 9vw, 102px);
-  letter-spacing: -.06em;
-  line-height: .94;
+  letter-spacing: -.045em;
+  line-height: .98;
 }
 
 .garden-thesis {
-  max-width: 28ch;
+  max-width: 31ch;
+  text-wrap: pretty;
   margin: 0 0 22px;
   color: var(--ink);
   font-size: clamp(27px, 4.1vw, 43px);
@@ -108,7 +109,7 @@
   min-height: 112px;
   padding: 17px 18px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 8px;
   background: var(--panel);
   color: var(--muted);
   font-size: 13.5px;
@@ -136,7 +137,7 @@
   min-width: 0;
   min-height: 48px;
   border: 1px solid var(--control-line);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--muted);
   cursor: pointer;
@@ -166,7 +167,7 @@
   margin-bottom: 13px;
   padding: clamp(24px, 5vw, 46px);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 8px;
   background:
     radial-gradient(circle at 14% 20%, color-mix(in srgb, #799565 15%, transparent), transparent 34%),
     var(--panel);
@@ -212,7 +213,7 @@
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 8px;
 }
 
 .substrate-layer {
@@ -296,7 +297,7 @@
   min-height: 96px;
   padding: 18px 20px;
   border: 1px solid var(--control-line);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--muted);
   font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -306,7 +307,7 @@
   display: block;
   margin-bottom: 7px;
   color: var(--ink);
-  font: 600 20px/1.2 Georgia, "Times New Roman", serif;
+  font: 600 20px/1.2 var(--serif);
 }
 
 .care-choices button {
@@ -321,7 +322,7 @@
 
 .care-choices button span {
   color: var(--ink);
-  font: 600 20px/1.2 Georgia, "Times New Roman", serif;
+  font: 600 20px/1.2 var(--serif);
   letter-spacing: 0;
 }
 
@@ -361,7 +362,7 @@
   min-height: 360px;
   padding: 24px 22px;
   border: 1px solid var(--line);
-  border-radius: 15px;
+  border-radius: 8px;
   background: var(--panel);
 }
 

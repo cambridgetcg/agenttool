@@ -370,7 +370,7 @@
 .geometry-shell {
   max-width: 1180px;
   margin: 0 auto;
-  padding: calc(var(--nav-height) + 2rem) 1.75rem 3rem;
+  padding: calc(var(--nav-height) + 2rem) 24px 3rem;
 }
 
 .geometry-hero {

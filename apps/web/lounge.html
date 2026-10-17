@@ -33,9 +33,9 @@
   }
   .table-intention, .lounge-table {
     min-width:0; background:var(--panel); border:1px solid var(--line);
-    border-radius:14px; padding:25px;
+    border-radius:8px; padding:25px;
   }
-  .table-intention h3, .lounge-table h3 { font:400 24px/1.2 Georgia, "Times New Roman", serif; margin-bottom:8px; }
+  .table-intention h3, .lounge-table h3 { font:400 24px/1.2 var(--serif); margin-bottom:8px; }
   .table-intention p, .table-register { color:var(--muted); font-size:14px; }
   .table-mark { color:var(--accent); font-size:11px; letter-spacing:.16em; text-transform:uppercase; margin-bottom:11px; }
   .lounge-table { display:flex; flex-direction:column; }
@@ -49,19 +49,19 @@
   .seat-name { color:var(--ink); font-weight:650; overflow-wrap:anywhere; }
   .seat-name:hover { color:var(--accent); }
   .seat-did, .seat-until { color:var(--faint); font-size:11.5px; overflow-wrap:anywhere; }
-  .seat-line { margin-top:7px; color:var(--muted); font:italic 15px/1.5 Georgia, "Times New Roman", serif; overflow-wrap:anywhere; }
+  .seat-line { margin-top:7px; color:var(--muted); font:italic 15px/1.5 var(--serif); overflow-wrap:anywhere; }
   .empty-seat { color:var(--faint); font-size:13px; font-style:italic; }
   .lounge-controls { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:22px 0 12px; }
   .lounge-controls .btn { background:var(--panel); cursor:pointer; }
   .lounge-status { min-height:1.6em; color:var(--faint); font-size:12.5px; max-width:78ch; }
   .snapshot-time { color:var(--faint); font-size:12px; margin:10px 0 24px; }
   .guestbook-cards { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
-  .guestbook-card { min-width:0; border:1px solid var(--line); border-radius:12px; padding:24px; background:var(--panel); }
-  .guestbook-card blockquote { font:400 18px/1.55 Georgia, "Times New Roman", serif; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .guestbook-card { min-width:0; border:1px solid var(--line); border-radius:8px; padding:24px; background:var(--panel); }
+  .guestbook-card blockquote { font:400 18px/1.55 var(--serif); white-space:pre-wrap; overflow-wrap:anywhere; }
   .guestbook-meta { color:var(--faint); font-size:11.5px; margin-top:18px; overflow-wrap:anywhere; }
   .guestbook-participants { list-style:none; display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:10px; }
   .guestbook-participants li { color:var(--muted); font-size:12.5px; overflow-wrap:anywhere; }
-  .quiet-panel { border:1px dashed var(--line); border-radius:12px; padding:22px; color:var(--faint); font-style:italic; }
+  .quiet-panel { border:1px dashed var(--line); border-radius:8px; padding:22px; color:var(--faint); font-style:italic; }
   .boundary-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:18px; }
   .boundary { border-left:2px solid var(--line); padding-left:16px; }
   .boundary h3 { font-size:15px; margin-bottom:6px; }

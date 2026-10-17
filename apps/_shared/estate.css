@@ -8,7 +8,7 @@
   --estate-dim: var(--text-dim, var(--faint, #9c9385));
   --estate-line: var(--border, var(--line, #2e2a24));
   --estate-line-strong: var(--border-bright, var(--control-line, #6f675b));
-  --estate-accent: var(--accent, #a8401c);
+  --estate-accent: var(--accent, #eba352);
   --estate-serif: var(--serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif);
   --estate-sans: var(--sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   --estate-mono: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
