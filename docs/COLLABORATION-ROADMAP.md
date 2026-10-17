@@ -21,7 +21,8 @@ translation geometry and incidence atlases are distinct formats: references
 need an explicit format and digest rather than treating them as interchangeable.
 A **participant** is an admitted
 registered identity. A **grant** names permitted mission actions and its expiry.
-An **execution seat** is a device/harness/session acting for that identity.
+An **execution seat** is a device/harness/session acting for that identity;
+its proposed record is [execution-seat/v1](EXECUTION-SEAT.md).
 One identity may use several seats; a device change neither creates a new
 identity nor merges existing identities. Principality references never mint
 membership, permission, consent or execution authority.
