@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Define one record for "a runtime acting for an identity", so that collab, missions, the courier, wake receivers and Correspondence can stop inventing their own seat fields.
-> **Evidence:** Design decisions recorded 2026-10-17. Vendor behaviour comes from the cited documentation and the openai/codex source at `ce0323f`. Local counts come from one Mac's transcripts, reading structural fields only. **Proposed:** nothing here is built.
+> **Evidence:** Design decisions recorded 2026-10-17. Vendor behaviour comes from the cited documentation and the openai/codex source at `ce0323f`. Local counts come from one Mac's transcripts, reading structural fields only. **Source:** slice S1 is an unreleased source candidate in [`packages/execution-seat`](../packages/execution-seat/README.md). **Proposed:** everything else.
 > **Compass:** [Collaboration roadmap](COLLABORATION-ROADMAP.md#keep-the-records-distinct) · [Mission contract](COLLABORATION-MISSIONS.md) · [Identity anchor](IDENTITY-ANCHOR.md) · [Canonical bytes](CANONICAL-BYTES.md)
 
 The roadmap already defines an execution seat as "a device/harness/session acting for that identity", but there is no record for it. Each module writes its own version instead:
@@ -67,6 +67,7 @@ Yu answered the open questions in the identity review:
   ],
   "children": [],
   "started_at": "2026-10-17T09:12:01Z",
+  "last_seen_at": "2026-10-17T09:40:12Z",
   "ended_at": null,
   "end_reason": null
 }
@@ -83,6 +84,7 @@ Yu answered the open questions in the identity review:
 | `persistence` | `ephemeral`, `recorded` or `durable`. |
 | `settings` | An append-only timeline. A new entry is added only when `model`, `effort` or `provider` differs from the previous entry. The timeline has no cap. |
 | `children` | Summary rows for `ephemeral` child seats. |
+| `last_seen_at` | The latest activity observed. Liveness is derived from it and changes nothing. |
 | `ended_at`, `end_reason` | Set only when an end is observed. |
 
 Timeline rules:
@@ -265,7 +267,7 @@ That scale shapes the design:
 
 | Slice | Change | Replaces |
 |---|---|---|
-| S1 | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals) and Codex readers (rollouts), all reading structural fields only, and tests | — |
+| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals) and Codex readers (rollouts), all reading structural fields only, and tests | — |
 | S2 | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`. The Claude Code SessionEnd hook resolves Claude session → seat → collab session | native IDs in `actor`; the missing hook mapping |
 | S3 | The mission `seat` object, courier bindings and wake receiver bindings carry `seat_id` | three unverified strings; the unverified Claude `session_label` |
 | S4 | Selected seats are published to the hosted API | — |
