@@ -9,6 +9,7 @@ import {
   type SessionEndRelease,
   type SessionHandle,
 } from "./protocol.js";
+import { validateSeatRef } from "./seat-ref.js";
 import {
   readSessionCredentialFile,
   removeSessionCredentialFile,
@@ -18,7 +19,8 @@ import { CollabStore } from "./store.js";
 export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 
 export const COLLAB_HOST_USAGE =
-  "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
+  "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...]) --reason <text>"
+  + " [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
   + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
 
@@ -42,6 +44,32 @@ export interface HostEndReceipt {
   ended_at: string | null;
   /** Present only when the session is ended but its revoked credential file is still on disk. */
   warning?: "session_file_remove_failed";
+}
+
+/** One session's outcome in an end by seat ref. Never carries the credential. */
+export interface HostSeatRefSession {
+  session_id: string;
+  /** credential_missing: no credential file at the default path, so the session stays open. */
+  status: "ended" | "already_ended" | "credential_missing" | "error";
+  released?: SessionEndRelease[];
+  ended_at?: string | null;
+  warning?: "session_file_remove_failed";
+  error?: string;
+  message?: string;
+}
+
+export interface HostSeatRefEndReceipt {
+  protocol: typeof COLLAB_HOST_PROTOCOL;
+  status: "ended_by_seat_ref";
+  seat_refs: string[];
+  /** Every active session that declared one of the refs, oldest first; empty when none did. */
+  sessions: HostSeatRefSession[];
+}
+
+export interface HostSeatRefEndOptions {
+  seat_refs: string[];
+  reason: string;
+  release_leases: boolean;
 }
 
 export interface HostErrorReceipt {
@@ -161,6 +189,45 @@ export function endSessionFromCredential(
 }
 
 /**
+ * Host-side end for every active session that declared one of these seat refs
+ * when it joined, for a host whose agent process is exiting or gone (a seat
+ * ref is an unverified hint; ending a live process's session fences it).
+ * Each session is ended from its credential file at the default path, exactly
+ * as `end --session-file` would; a session without that file is reported as
+ * credential_missing and left open. One session's refusal does not stop the
+ * others. Every credential token read is added to `secrets` so the caller can
+ * withhold a receipt that would contain one.
+ */
+export function endSessionsForSeatRefs(
+  store: CollabStore,
+  options: HostSeatRefEndOptions,
+  secrets: string[] = [],
+): HostSeatRefEndReceipt {
+  const seatRefs = [...new Set(options.seat_refs.map(validateSeatRef))];
+  const sessions = store.activeSessionIdsForSeatRefs(seatRefs).map((sessionId): HostSeatRefSession => {
+    const sessionFile = store.defaultSessionCredentialPath(sessionId);
+    if (!existsSync(sessionFile)) return { session_id: sessionId, status: "credential_missing" };
+    try {
+      const credential = readSessionCredentialFile(sessionFile);
+      secrets.push(credential.session_token);
+      if (credential.session_id !== sessionId) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
+      const { status, released, ended_at, warning } = endSessionFromCredential(store, credential, {
+        session_file: sessionFile,
+        reason: options.reason,
+        release_leases: options.release_leases,
+      });
+      return { session_id: sessionId, status, released, ended_at, ...(warning ? { warning } : {}) };
+    } catch (error) {
+      const { error: code, message } = errorReceipt(error);
+      return { session_id: sessionId, status: "error", error: code, message };
+    }
+  });
+  return { protocol: COLLAB_HOST_PROTOCOL, status: "ended_by_seat_ref", seat_refs: seatRefs, sessions };
+}
+
+/**
  * Host-side doorbell for a live session. It reads with the session's current
  * generation and never resumes, acknowledges, or writes, so it cannot fence
  * the MCP process that owns the credential. Each poll is the same
@@ -248,14 +315,17 @@ export function runCollabHostCli(
   env: Record<string, string | undefined> = process.env,
   clock: HostWaitClock = systemClock,
 ): { exit_code: 0 | 1; line: string } {
-  let secret: string | null = null;
+  const secrets: string[] = [];
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
-  const emit = (payload: HostEndReceipt | HostWaitReceipt | HostErrorReceipt, exitCode: 0 | 1) => {
+  const emit = (
+    payload: HostEndReceipt | HostSeatRefEndReceipt | HostWaitReceipt | HostErrorReceipt,
+    exitCode: 0 | 1,
+  ) => {
     const line = JSON.stringify(payload);
-    if (secret !== null && line.includes(secret)) {
+    if (secrets.some((secret) => line.includes(secret))) {
       return {
         exit_code: 1 as const,
         line: JSON.stringify({
@@ -277,9 +347,18 @@ export function runCollabHostCli(
         "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB",
       );
     }
+    if (args.command === "end_by_seat_ref") {
+      const store = new CollabStore(databasePath);
+      try {
+        const receipt = endSessionsForSeatRefs(store, args, secrets);
+        return emit(receipt, receipt.sessions.some((session) => session.status === "error") ? 1 : 0);
+      } finally {
+        store.close();
+      }
+    }
     if (args.command === "end") {
       const credential = readSessionCredentialFile(args.session_file);
-      secret = credential.session_token;
+      secrets.push(credential.session_token);
       const store = new CollabStore(databasePath);
       try {
         return emit(
@@ -298,7 +377,7 @@ export function runCollabHostCli(
     try {
       const sessionFile = args.session_file ?? store.defaultSessionCredentialPath(args.session!);
       const credential = readSessionCredentialFile(sessionFile);
-      secret = credential.session_token;
+      secrets.push(credential.session_token);
       if (args.session !== undefined && credential.session_id !== args.session) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
@@ -321,9 +400,10 @@ export function runCollabHostCli(
 
 type HostArgs =
   | ({ command: "end"; db?: string } & HostEndOptions)
+  | ({ command: "end_by_seat_ref"; db?: string } & HostSeatRefEndOptions)
   | ({ command: "wait"; db?: string; session_file?: string; session?: string } & HostWaitOptions);
 
-const END_ONLY_OPTIONS = ["reason", "release-leases"] as const;
+const END_ONLY_OPTIONS = ["reason", "release-leases", "seat-ref"] as const;
 const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"] as const;
 
 function parseHostArgs(argv: string[]): HostArgs {
@@ -353,9 +433,20 @@ function parseHostArgs(argv: string[]): HostArgs {
 
 function parseEndArgs(values: ReturnType<typeof parseHostOptions>["values"]): HostArgs {
   const sessionFile = values["session-file"];
+  const seatRefs = values["seat-ref"];
   const reason = values.reason;
-  if (!sessionFile || sessionFile.trim() === "") {
-    throw new CollabError("usage_error", `--session-file is required; ${COLLAB_HOST_USAGE}`);
+  if ((sessionFile === undefined) === (seatRefs === undefined)) {
+    throw new CollabError("usage_error", `Pass exactly one of --session-file or --seat-ref; ${COLLAB_HOST_USAGE}`);
+  }
+  if (sessionFile !== undefined && sessionFile.trim() === "") {
+    throw new CollabError("usage_error", `--session-file must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  for (const seatRef of seatRefs ?? []) {
+    try {
+      validateSeatRef(seatRef);
+    } catch (error) {
+      throw new CollabError("usage_error", `${(error as Error).message}; ${COLLAB_HOST_USAGE}`);
+    }
   }
   if (!reason || reason.trim() === "") {
     throw new CollabError("usage_error", `--reason is required; ${COLLAB_HOST_USAGE}`);
@@ -371,11 +462,15 @@ function parseEndArgs(values: ReturnType<typeof parseHostOptions>["values"]): Ho
   if (reason.includes("\0")) {
     throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
+  const releaseLeases = values["release-leases"] === true;
+  if (seatRefs !== undefined) {
+    return { command: "end_by_seat_ref", seat_refs: seatRefs, reason, release_leases: releaseLeases, db: values.db };
+  }
   return {
     command: "end",
-    session_file: sessionFile,
+    session_file: sessionFile!,
     reason,
-    release_leases: values["release-leases"] === true,
+    release_leases: releaseLeases,
     db: values.db,
   };
 }
@@ -450,6 +545,7 @@ function parseHostOptions(argv: string[]) {
     strict: true,
     options: {
       "session-file": { type: "string" },
+      "seat-ref": { type: "string", multiple: true },
       reason: { type: "string" },
       "release-leases": { type: "boolean" },
       db: { type: "string" },

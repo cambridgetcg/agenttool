@@ -216,7 +216,8 @@ describe("agenttool-collab-host end", () => {
       expect(JSON.parse(run.line)).toEqual({
         protocol: "agenttool.collab-host/1",
         status: "help",
-        usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
+        usage: "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...])"
+          + " --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
           + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
       });

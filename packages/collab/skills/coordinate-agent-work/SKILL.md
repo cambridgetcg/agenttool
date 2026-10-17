@@ -26,7 +26,9 @@ and inspect existing work first.
    or conversation, with the repository `root_path`, an `actor` label, an
    optional free-text `role`, and, for a delegated child, `parent_session_id`.
    It opens the workspace, creates a credential-bound session and binds this
-   MCP process. Never open or read the credential file.
+   MCP process. Never open or read the credential file. Leave `seat_ref` out
+   unless your host told you one: the MCP process declares the host's seat
+   ref itself. It is a routing hint, not proof of who you are.
 2. **Poll and acknowledge.** Call `collab_next` at the start of each turn,
    after local work, before relying on shared state, and whenever the host
    wakes you. Process one page, then call `collab_cursor_ack` with its exact
