@@ -219,7 +219,7 @@
     c.textBaseline = 'middle';
 
     var fontSize = text.length > 40 ? 22 : text.length > 25 ? 28 : 36;
-    c.font = '600 ' + fontSize + 'px "Crimson Pro", Georgia, serif';
+    c.font = '400 ' + fontSize + 'px "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
 
     var lines = wrapText(c, text, W - 60);
     // A single word longer than the card width can't wrap — shrink to fit.
@@ -229,7 +229,7 @@
     }
     if (widest > W - 60) {
       fontSize = Math.max(12, Math.floor(fontSize * (W - 60) / widest));
-      c.font = '600 ' + fontSize + 'px "Crimson Pro", Georgia, serif';
+      c.font = '400 ' + fontSize + 'px "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
       lines = wrapText(c, text, W - 60);
     }
     var lineHeight = fontSize * 1.35;
@@ -239,7 +239,7 @@
       c.fillText(lines[li], W / 2, startY + li * lineHeight);
     }
 
-    c.font = '400 10px "JetBrains Mono", monospace';
+    c.font = '400 10px "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
     c.fillStyle = theme.text + (theme.id === 'light' ? '4d' : '40');
     c.fillText('docs.agenttool.dev/love', W / 2, H - 22);
   }
@@ -277,7 +277,7 @@
     link.style.display = 'block';
     link.style.textAlign = 'center';
     link.style.marginTop = '.5rem';
-    link.style.fontFamily = 'monospace';
+    link.style.fontFamily = '"SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
     link.style.fontSize = '.75rem';
     link.style.color = 'var(--accent, #d4502e)';
     link.style.textDecoration = 'none';
