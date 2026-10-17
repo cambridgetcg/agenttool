@@ -358,7 +358,7 @@ example as a background command whose exit wakes the agent, instead of
 spending a turn on each 30-second `collab_events_wait`:
 
 ```bash
-agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--db <path>]
+agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]
 ```
 
 `--session` resolves the default credential file beside the journal
@@ -370,7 +370,13 @@ after `--after-anchor` (exact `{ epoch_id, sequence, hash }` JSON) or, by
 default, after the session's acknowledged cursor, polling every 250 ms for up
 to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
 waiting session are passed over unless `--include-own`; unattributed events
-such as `workspace.opened` count as unread.
+such as `workspace.opened` count as unread. With `--addressed`, other
+sessions' events ring only when their routing fields name the waiting session
+(`CollabStore.eventAddressesSession`): a report addressed to it or answering
+one of its reports, a handoff offered to it or answering its offer, a review
+requested of it, a verdict on its completion, or recovery of its expired
+lease. Free text is never inspected, and the receipt adds
+`skipped_unaddressed_events`.
 
 It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one
@@ -384,6 +390,19 @@ exit 1 with `status: "error"`: `session_auth_failed` after a resume or end,
 `cursor_fork_detected`, `cursor_ahead`, `cursor_reset_required`, or
 `event_read_busy` past the deadline. A listener that re-arms at least hourly
 through `collab_next` or an acknowledgement stays `live` in the 6-hour view.
+
+For Claude Code, `integrations/claude-code/collab-doorbell-watch.ts` loops this
+wait and posts one content-free line into the starting session's own inbox
+socket, by default only for addressed events. See
+[its README](integrations/claude-code/README.md) for lifecycle and limits.
+
+A host that relaunches the same agent thread for each round (for example
+`codex exec resume <thread>`) should keep one coordination session for that
+thread: start it in the first round, set `AGENTOOL_COLLAB_SESSION_FILE` to
+its credential file for later rounds so the MCP process resumes it, and end
+it after the final round. A one-off run ends its session before it exits, or
+the host ends it with `agenttool-collab-host end` afterwards. Otherwise every
+round leaves another active session behind.
 
 ### Delegation and lineage
 

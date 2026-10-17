@@ -20,7 +20,7 @@ export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-  + " [--wait-ms <ms>] [--include-own] [--db <path>]";
+  + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
 
 /** The trimmed-length limit endSession applies to its reason. */
 const MAX_HOST_REASON = 2_000;
@@ -80,6 +80,8 @@ export interface HostWaitReceipt {
   head_sequence: number;
   /** Events this session wrote itself, passed over unless --include-own. */
   skipped_own_events: number;
+  /** With --addressed only: other sessions' events whose routing does not name this session. */
+  skipped_unaddressed_events?: number;
   waited_ms: number;
   /** Present when the first unread event exceeds the bounded page and could not be inspected. */
   first_event_oversized?: true;
@@ -90,6 +92,8 @@ export interface HostWaitOptions {
   after_anchor?: EventCursor;
   wait_ms: number;
   include_own: boolean;
+  /** Ring only for events whose routing fields name this session (CollabStore.eventAddressesSession). */
+  addressed?: boolean;
 }
 
 export interface HostWaitClock {
@@ -177,6 +181,7 @@ export function waitForSessionEvents(
   const deadline = started + options.wait_ms;
   let observed = afterAnchor;
   let skipped = 0;
+  let unaddressed = 0;
   const receipt = (status: HostWaitReceipt["status"], headSequence: number): HostWaitReceipt => ({
     protocol: COLLAB_HOST_PROTOCOL,
     status,
@@ -186,6 +191,7 @@ export function waitForSessionEvents(
     next_anchor: { ...observed },
     head_sequence: headSequence,
     skipped_own_events: skipped,
+    ...(options.addressed ? { skipped_unaddressed_events: unaddressed } : {}),
     waited_ms: Math.max(0, Math.round(clock.now() - started)),
   });
   let headSequence = observed.sequence;
@@ -200,16 +206,19 @@ export function waitForSessionEvents(
       });
       headSequence = page.head_sequence;
       for (const event of page.events) {
-        if (options.include_own || event.session_id !== credential.session_id) {
+        const own = event.session_id === credential.session_id;
+        const routed = !options.addressed || store.eventAddressesSession(event, session.id);
+        if ((options.include_own || !own) && routed) {
           return receipt("ready", headSequence);
         }
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        skipped += 1;
+        if (own && !options.include_own) skipped += 1;
+        else unaddressed += 1;
       }
       drained = !page.has_more;
     } catch (error) {
       if (error instanceof CollabError && error.code === "event_too_large") {
-        // Its author is unknown without a larger read, so ring rather than skip it.
+        // Its author and routing are unknown without a larger read, so ring rather than skip it.
         return { ...receipt("ready", headSequence), first_event_oversized: true };
       }
       if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
@@ -298,6 +307,7 @@ export function runCollabHostCli(
           after_anchor: args.after_anchor,
           wait_ms: args.wait_ms,
           include_own: args.include_own,
+          addressed: args.addressed,
         }, clock),
         0,
       );
@@ -314,7 +324,7 @@ type HostArgs =
   | ({ command: "wait"; db?: string; session_file?: string; session?: string } & HostWaitOptions);
 
 const END_ONLY_OPTIONS = ["reason", "release-leases"] as const;
-const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own"] as const;
+const WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"] as const;
 
 function parseHostArgs(argv: string[]): HostArgs {
   let parsed: ReturnType<typeof parseHostOptions>;
@@ -401,6 +411,7 @@ function parseWaitArgs(values: ReturnType<typeof parseHostOptions>["values"]): H
     after_anchor: afterAnchor,
     wait_ms: waitMs,
     include_own: values["include-own"] === true,
+    addressed: values.addressed === true,
     db: values.db,
   };
 }
@@ -446,6 +457,7 @@ function parseHostOptions(argv: string[]) {
       "after-anchor": { type: "string" },
       "wait-ms": { type: "string" },
       "include-own": { type: "boolean" },
+      addressed: { type: "boolean" },
     },
   });
 }

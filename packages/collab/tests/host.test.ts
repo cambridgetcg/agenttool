@@ -218,7 +218,7 @@ describe("agenttool-collab-host end", () => {
         status: "help",
         usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-          + " [--wait-ms <ms>] [--include-own] [--db <path>]",
+          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
       });
     }
   });
@@ -569,6 +569,7 @@ describe("agenttool-collab-host wait", () => {
       ["wait", "--session", id, "--release-leases"],
       ["end", "--session-file", file, "--reason", "x", "--wait-ms", "0"],
       ["end", "--session-file", file, "--reason", "x", "--include-own"],
+      ["end", "--session-file", file, "--reason", "x", "--addressed"],
     ]) {
       const refused = runHost(args, { AGENTOOL_COLLAB_DB: databasePath });
       expect(refused.exitCode).toBe(1);
@@ -577,6 +578,106 @@ describe("agenttool-collab-host wait", () => {
     }
     expect(store.getCoordinationSession(id)?.status).toBe("active");
     expect(existsSync(file)).toBe(true);
+  });
+});
+
+describe("addressed doorbell", () => {
+  test("names the sessions an event is routed to, from routing fields only", () => {
+    const a = startWithCredentialFile("addressed-a").handle;
+    const b = store.startSession({ root_path: root, actor: "addressed-b" });
+    const events = () => store.eventsSince(a.workspace.id, 0, 500).events;
+    const lastOf = (type: string) => events().filter((event) => event.type === type).at(-1)!;
+    const routes = (type: string) => ({
+      a: store.eventAddressesSession(lastOf(type), a.session.id),
+      b: store.eventAddressesSession(lastOf(type), b.session.id),
+    });
+
+    store.appendReportForSession({
+      ...b.credential, idempotency_key: "plain", kind: "observation", body: "for everyone",
+    });
+    expect(routes("report.posted")).toEqual({ a: false, b: false });
+    store.appendReportForSession({
+      ...b.credential, idempotency_key: "to-a", kind: "observation", body: "for a",
+      to_session_id: a.session.id,
+    });
+    expect(routes("report.posted")).toEqual({ a: true, b: false });
+    const proposal = store.appendReportForSession({
+      ...a.credential, idempotency_key: "a-proposes", kind: "proposal", body: "a proposes",
+    });
+    store.appendReportForSession({
+      ...b.credential, idempotency_key: "b-supports", kind: "observation", body: "agreed",
+      relation: "supports", target_report_id: proposal.id,
+    });
+    expect(routes("report.posted")).toEqual({ a: true, b: false });
+
+    const handoffTask = store.createTaskForSession({
+      ...b.credential, idempotency_key: "handoff-create", title: "handoff", work_mode: "coordination",
+    });
+    const held = store.claimTaskForSession({
+      ...b.credential, idempotency_key: "handoff-claim", task_id: handoffTask.id,
+      expected_version: handoffTask.version, ttl_seconds: 3600,
+    });
+    const offer = store.offerHandoffForSession({
+      ...b.credential, idempotency_key: "handoff-offer", task_id: held.id, lease_id: held.lease_id!,
+      expected_version: held.version, to_session_id: a.session.id, summary: "take it",
+    });
+    expect(routes("handoff.offered")).toEqual({ a: true, b: false });
+    store.respondHandoffForSession({
+      ...a.credential, idempotency_key: "handoff-decline", handoff_id: offer.handoff.id,
+      expected_version: offer.task.version, response: "decline",
+    });
+    expect(routes("handoff.declined")).toEqual({ a: false, b: true });
+
+    const reviewTask = store.createTaskForSession({
+      ...b.credential, idempotency_key: "review-create", title: "review", work_mode: "coordination",
+      completion_policy: "accepted",
+    });
+    const claimed = store.claimTaskForSession({
+      ...b.credential, idempotency_key: "review-claim", task_id: reviewTask.id,
+      expected_version: reviewTask.version, ttl_seconds: 3600,
+    });
+    const reported = store.completeTaskForSession({
+      ...b.credential, idempotency_key: "review-complete", task_id: claimed.id, lease_id: claimed.lease_id!,
+      expected_version: claimed.version, summary: "done", review_requested_session_id: a.session.id,
+    });
+    expect(routes("task.reported_complete")).toEqual({ a: true, b: false });
+    store.reviewTaskForSession({
+      ...a.credential, idempotency_key: "review-accept", task_id: reported.id,
+      expected_version: reported.version, outcome: "accept", summary: "accepted",
+    });
+    expect(routes("task.accepted")).toEqual({ a: false, b: true });
+    expect(routes("session.joined")).toEqual({ a: false, b: false });
+  });
+
+  test("with --addressed the doorbell passes over unaddressed events and rings for its own mail", () => {
+    const { handle } = startWithCredentialFile("addressed-listener");
+    const peer = store.startSession({ root_path: root, actor: "addressed-peer" });
+    const anchor = headAnchor(handle.workspace.id);
+    store.appendReportForSession({
+      ...peer.credential, idempotency_key: "noise", kind: "observation", body: "general chatter",
+    });
+    const args = (after: EventCursor) => [
+      "wait", "--session", handle.session.id, "--after-anchor", JSON.stringify(after),
+      "--wait-ms", "0", "--db", databasePath,
+    ];
+
+    const quiet = runHost([...args(anchor), "--addressed"]);
+    expect(quiet.receipt).toMatchObject({
+      status: "idle", skipped_own_events: 0, skipped_unaddressed_events: 1,
+      next_anchor: headAnchor(handle.workspace.id),
+    });
+    expect(runHost(args(anchor)).receipt).toMatchObject({ status: "ready", next_anchor: anchor });
+    expect(runHost(args(anchor)).receipt).not.toHaveProperty("skipped_unaddressed_events");
+
+    store.appendReportForSession({
+      ...peer.credential, idempotency_key: "mail", kind: "observation",
+      body: "addressed-private-body-marker", to_session_id: handle.session.id,
+    });
+    const mail = runHost([...args(quiet.receipt.next_anchor), "--addressed"]);
+    expect(mail.receipt).toMatchObject({
+      status: "ready", next_anchor: quiet.receipt.next_anchor, skipped_unaddressed_events: 0,
+    });
+    expect(mail.stdout).not.toContain("addressed-private-body-marker");
   });
 });
 
