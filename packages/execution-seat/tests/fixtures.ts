@@ -22,6 +22,11 @@ export const CODEX_ROOT = "019a0000-0000-7000-8000-000000000001";
 export const CODEX_CHILD = "019a0000-0000-7000-8000-000000000002";
 export const CODEX_GRANDCHILD = "019a0000-0000-7000-8000-000000000003";
 export const CODEX_FORK = "019a0000-0000-7000-8000-000000000004";
+export const CODEX_SIBLING = "019a0000-0000-7000-8000-000000000005";
+export const CODEX_SOLO = "019a0000-0000-7000-8000-000000000006";
+export const CODEX_TURN_A = "019a0000-0000-7000-8000-0000000000a1";
+export const CODEX_TURN_B = "019a0000-0000-7000-8000-0000000000b1";
+export const PHASES = ["Review", "Verify"] as const;
 
 const jsonl = (lines: object[]) => `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`;
 
@@ -98,9 +103,11 @@ export function writeClaudeProject(root: string): string {
     join(run, "journal.jsonl"),
     jsonl([
       { type: "launched" },
-      { type: "started", agentId: "awfok01", key: "k1", label: MARKERS[4], phase: MARKERS[3] },
-      { type: "started", agentId: "awffail02", key: "k2", label: MARKERS[4], phase: MARKERS[3] },
-      { type: "started", agentId: "awfopen03", key: "k3" },
+      { type: "started", agentId: "awfok01", key: "k1", label: MARKERS[4], phase: PHASES[0] },
+      { type: "started", agentId: "awffail02", key: "k2", label: MARKERS[4], phase: PHASES[1] },
+      // Too long, and a path: neither is a phase title, so both are dropped.
+      { type: "started", agentId: "awfopen03", key: "k3", phase: `${MARKERS[3]} reads like a whole sentence` },
+      { type: "started", agentId: "awfopen03", key: "k3", phase: `${MARKERS[3]}/src` },
       { type: "result", agentId: "awfok01", key: "k1", result: MARKERS[5] },
       { type: "failed", agentId: "awffail02", key: "k2" },
     ]),
@@ -126,12 +133,24 @@ function sessionMeta(id: string, extra: Record<string, unknown> = {}) {
   };
 }
 
-function turnContext(at: string, model: string, effort: string) {
-  return { timestamp: at, type: "turn_context", payload: { turn_id: "t", cwd: MARKERS[9], model, effort } };
+function turnContext(at: string, model: string, effort: string, rootTurn = CODEX_TURN_A) {
+  return { timestamp: at, type: "turn_context", payload: { turn_id: rootTurn, root_turn_id: rootTurn, cwd: MARKERS[9], model, effort } };
 }
 
-/** Root, child, grandchild and fork rollouts. Returns their paths. */
-export function writeCodexSessions(root: string): { root: string; child: string; grandchild: string; fork: string } {
+export interface CodexPaths {
+  root: string;
+  /** Spawned with `sibling` under root turn A: together they form a spawn group. */
+  child: string;
+  sibling: string;
+  /** Spawned alone under root turn B. */
+  solo: string;
+  /** Spawned by `child` under root turn A, alone. */
+  grandchild: string;
+  fork: string;
+}
+
+/** Root, three children, a grandchild and a fork. Returns their paths. */
+export function writeCodexSessions(root: string): CodexPaths {
   const day = join(root, "sessions", "2026", "10", "17");
   mkdirSync(day, { recursive: true });
   const path = (id: string) => join(day, `rollout-2026-10-17T10-00-00-${id}.jsonl`);
@@ -141,14 +160,14 @@ export function writeCodexSessions(root: string): { root: string; child: string;
       sessionMeta(CODEX_ROOT),
       { timestamp: "2026-10-17T10:00:01.000Z", type: "response_item", payload: { type: "message", content: MARKERS[0] } },
       turnContext("2026-10-17T10:00:02.000Z", "gpt-6-astra", "max"),
-      turnContext("2026-10-17T10:05:00.000Z", "gpt-6-astra", "max"),
+      turnContext("2026-10-17T10:05:00.000Z", "gpt-6-astra", "max", CODEX_TURN_B),
       {
         timestamp: "2026-10-17T10:06:00.000Z",
         type: "event_msg",
         payload: { type: "thread_settings_applied", thread_settings: { model: "gpt-6-astra", model_provider_id: "openai", reasoning_effort: "ultra", cwd: MARKERS[9] } },
       },
-      turnContext("2026-10-17T10:06:01.000Z", "gpt-6-astra", "ultra"),
-      turnContext("2026-10-17T10:09:00.000Z", "gpt-6-astra", "max"),
+      turnContext("2026-10-17T10:06:01.000Z", "gpt-6-astra", "ultra", CODEX_TURN_B),
+      turnContext("2026-10-17T10:09:00.000Z", "gpt-6-astra", "max", CODEX_TURN_B),
       { timestamp: "2026-10-17T10:09:30.000Z", type: "response_item", payload: { type: "message", content: MARKERS[1] } },
     ]),
   );
@@ -159,7 +178,20 @@ export function writeCodexSessions(root: string): { root: string; child: string;
   });
   writeFileSync(
     path(CODEX_CHILD),
-    jsonl([sessionMeta(CODEX_CHILD, spawn(CODEX_ROOT, 1)), turnContext("2026-10-17T10:02:00.000Z", "gpt-6-astra", "high")]),
+    jsonl([
+      sessionMeta(CODEX_CHILD, spawn(CODEX_ROOT, 1)),
+      turnContext("2026-10-17T10:02:00.000Z", "gpt-6-astra", "high"),
+      // A follow-up under a later root turn does not change where the child was spawned.
+      turnContext("2026-10-17T10:07:00.000Z", "gpt-6-astra", "high", CODEX_TURN_B),
+    ]),
+  );
+  writeFileSync(
+    path(CODEX_SIBLING),
+    jsonl([sessionMeta(CODEX_SIBLING, spawn(CODEX_ROOT, 1)), turnContext("2026-10-17T10:02:01.000Z", "gpt-6-astra", "high")]),
+  );
+  writeFileSync(
+    path(CODEX_SOLO),
+    jsonl([sessionMeta(CODEX_SOLO, spawn(CODEX_ROOT, 1)), turnContext("2026-10-17T10:05:30.000Z", "gpt-6-astra", "low", CODEX_TURN_B)]),
   );
   writeFileSync(
     path(CODEX_GRANDCHILD),
@@ -169,7 +201,14 @@ export function writeCodexSessions(root: string): { root: string; child: string;
     path(CODEX_FORK),
     jsonl([sessionMeta(CODEX_FORK, { forked_from_id: CODEX_ROOT }), turnContext("2026-10-17T11:00:00.000Z", "gpt-6-astra", "max")]),
   );
-  return { root: path(CODEX_ROOT), child: path(CODEX_CHILD), grandchild: path(CODEX_GRANDCHILD), fork: path(CODEX_FORK) };
+  return {
+    root: path(CODEX_ROOT),
+    child: path(CODEX_CHILD),
+    sibling: path(CODEX_SIBLING),
+    solo: path(CODEX_SOLO),
+    grandchild: path(CODEX_GRANDCHILD),
+    fork: path(CODEX_FORK),
+  };
 }
 
 export function expectNoMarkers(text: string): string[] {

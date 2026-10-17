@@ -5,6 +5,8 @@ import type { SettingsEntry } from "./types.js";
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:\-\[\]]{0,127}$/;
 const REF = /^[A-Za-z0-9][A-Za-z0-9_\-]{0,127}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PHASE = /^[A-Za-z0-9](?:[A-Za-z0-9 _\-]{0,30}[A-Za-z0-9_\-])?$/;
+export const MAX_PHASES = 16;
 
 /** A short identifier-like token such as a model name, effort level or agent type. */
 export function token(value: unknown): string | null {
@@ -14,6 +16,21 @@ export function token(value: unknown): string | null {
 /** A native reference such as an agent id or workflow run id. */
 export function ref(value: unknown): string | null {
   return typeof value === "string" && REF.test(value) ? value : null;
+}
+
+/** A short phase title: letters, digits, spaces, `_` and `-`, at most 32 characters. Stricter than a token. */
+export function phase(value: unknown): string | null {
+  return typeof value === "string" && PHASE.test(value) ? value : null;
+}
+
+/** Distinct phase titles in first-seen order, at most MAX_PHASES. Anything else is dropped. */
+export function phases(values: readonly unknown[], seed: readonly string[] = []): string[] {
+  const out = [...seed];
+  for (const value of values) {
+    const title = phase(value);
+    if (title && !out.includes(title) && out.length < MAX_PHASES) out.push(title);
+  }
+  return out;
 }
 
 export function uuid(value: unknown): string | null {

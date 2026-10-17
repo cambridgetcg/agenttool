@@ -2,7 +2,8 @@
  * Codex reader. Reads structural fields only: the first `session_meta`
  * (`id`, `session_id`, `parent_thread_id`, `forked_from_id`, `cli_version`,
  * `model_provider`, and `thread_spawn` depth and role), `turn_context` model
- * and effort, `thread_settings_applied` model and effort, and timestamps.
+ * and effort, a child's first `root_turn_id`, `thread_settings_applied` model
+ * and effort, and timestamps.
  * Account ids, nicknames, paths, instructions and message content are never copied.
  */
 import { SeatError } from "./errors.js";
@@ -19,6 +20,8 @@ export interface CodexRollout {
   forked_from_id: string | null;
   depth: number | null;
   agent_role: string | null;
+  /** For a spawned thread: `root_turn_id` of its first turn, the root thread's turn it was spawned under. */
+  spawn_turn: string | null;
   version: string | null;
   provider: string | null;
   started_at: string | null;
@@ -28,11 +31,13 @@ export interface CodexRollout {
 
 export function readCodexRollout(path: string): CodexRollout {
   const state: {
-    meta: Omit<CodexRollout, "started_at" | "last_at" | "settings"> | null;
+    meta: Omit<CodexRollout, "spawn_turn" | "started_at" | "last_at" | "settings"> | null;
+    spawnTurn: string | null;
+    turns: number;
     provider: string | null;
     started: string | null;
     last: string | null;
-  } = { meta: null, provider: null, started: null, last: null };
+  } = { meta: null, spawnTurn: null, turns: 0, provider: null, started: null, last: null };
   const settings: SettingsEntry[] = [];
   const seen = (line: Record<string, unknown>) => {
     const at = timestamp(line.timestamp);
@@ -68,6 +73,8 @@ export function readCodexRollout(path: string): CodexRollout {
     }
     if (!at || !payload) return;
     if (line.type === "turn_context") {
+      // Later turns of a child can sit under other root turns; only the first one says where it was spawned.
+      if (state.turns++ === 0 && state.meta?.parent_thread_id) state.spawnTurn = uuid(payload.root_turn_id);
       const model = token(payload.model);
       if (!model) return;
       pushSetting(settings, {
@@ -94,5 +101,5 @@ export function readCodexRollout(path: string): CodexRollout {
     if (line) seen(line);
   }
   if (!state.meta) throw new SeatError("native_unrecognised", "a Codex rollout starts with a session_meta line");
-  return { ...state.meta, started_at: state.started, last_at: state.last, settings };
+  return { ...state.meta, spawn_turn: state.spawnTurn, started_at: state.started, last_at: state.last, settings };
 }

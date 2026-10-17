@@ -48,6 +48,10 @@ test("binding and promotion follow the identity rules", () => {
   const refused = cli("bind", child.seat_id, "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff");
   expect(refused.code).toBe(1);
   expect(JSON.parse(refused.err).error).toBe("child_inherits_identity");
+  // A workflow member is promoted through the seat that orchestrates its group.
+  const member = JSON.parse(cli("promote", seatId, "awfok01").out);
+  expect(member).toMatchObject({ relation: "child", persistence: "recorded", identity_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" });
+  expect(member.group_id).not.toBeNull();
 });
 
 test("explains itself and rejects unknown commands", () => {

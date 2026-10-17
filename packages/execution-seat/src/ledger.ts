@@ -6,7 +6,7 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { SeatError } from "./errors.js";
-import { earliest, latest, nonNegativeInt, ref, requireUuid, sameSettings, timestamp, token, uuid } from "./fields.js";
+import { earliest, latest, nonNegativeInt, phases, ref, requireUuid, sameSettings, timestamp, token, uuid } from "./fields.js";
 import { assertPrivateStateFiles, preparePrivateHome, resolveSeatHome } from "./home.js";
 import {
   GROUP_TYPE,
@@ -149,6 +149,7 @@ export function normalizeRow(row: SummaryRow): SummaryRow {
   return {
     child_ref: childRef,
     parent_ref: ref(row.parent_ref),
+    spawn_turn: ref(row.spawn_turn),
     relation: "child",
     depth: nonNegativeInt(row.depth),
     agent_type: token(row.agent_type),
@@ -286,6 +287,11 @@ export class SeatLedger {
   }
 
   getSeat(seatId: string, depth = 0): ExecutionSeat | null {
+    return this.foldSeat(seatId, depth)?.seat ?? null;
+  }
+
+  /** Fold a seat's entries. `grouped` maps a child ref whose row moved to a group onto that group. */
+  private foldSeat(seatId: string, depth = 0): { seat: ExecutionSeat; grouped: Map<string, string> } | null {
     const entries = this.entries(seatId);
     const open = entries[0];
     if (!open || open.kind !== "seat.open") return null;
@@ -310,6 +316,7 @@ export class SeatLedger {
       end_reason: null,
     };
     const children = new Map<string, SummaryRow>();
+    const grouped = new Map<string, string>();
     for (const { kind, body } of entries.slice(1)) {
       switch (kind) {
         case "seat.observed":
@@ -347,10 +354,17 @@ export class SeatLedger {
           }
           break;
         case "seat.child": {
-          const row = body as unknown as SummaryRow;
+          const row = normalizeRow(body as unknown as SummaryRow);
           children.set(row.child_ref, mergeRow(children.get(row.child_ref), row));
           break;
         }
+        case "seat.child_grouped":
+          children.delete(String(body.child_ref));
+          grouped.set(String(body.child_ref), String(body.group_id));
+          break;
+        case "seat.group":
+          seat.group_id ??= String(body.group_id);
+          break;
       }
     }
     seat.children = [...children.values()];
@@ -359,7 +373,7 @@ export class SeatLedger {
       seat.identity_id = this.getSeat(seat.parent_seat_id, depth + 1)?.identity_id ?? null;
       seat.signing_key_id = null;
     }
-    return seat;
+    return { seat, grouped };
   }
 
   listSeats(options: { limit?: number; after?: number } = {}): Page<ExecutionSeat> {
@@ -476,7 +490,12 @@ export class SeatLedger {
   recordChild(seatId: string, row: SummaryRow): boolean {
     const next = normalizeRow(row);
     return this.transaction(() => {
-      const current = this.requireSeat(seatId).children.find((child) => child.child_ref === next.child_ref);
+      const folded = this.foldSeat(seatId);
+      if (!folded) throw new SeatError("seat_unknown", "no seat has that id");
+      if (folded.grouped.has(next.child_ref)) {
+        throw new SeatError("child_grouped", "this child's row moved to a group; record it as a member there");
+      }
+      const current = folded.seat.children.find((child) => child.child_ref === next.child_ref);
       const merged = mergeRow(current, next);
       if (current && JSON.stringify(current) === JSON.stringify(merged)) return false;
       this.append(seatId, "seat.child", merged as unknown as Body);
@@ -517,6 +536,26 @@ export class SeatLedger {
     return seat;
   }
 
+  /**
+   * Move a child's row from a seat's `children` into a group that seat orchestrates. The row keeps
+   * its `seat_id` and gone marker; a promoted child's own record gains the `group_id`.
+   */
+  moveChildToGroup(seatId: string, groupId: string, childRef: string): boolean {
+    return this.transaction(() => {
+      const seat = this.requireSeat(seatId);
+      const group = this.requireGroup(groupId);
+      if (group.orchestrator_seat_id !== seat.seat_id) {
+        throw new SeatError("invalid_group", "a child row moves only into a group its own seat orchestrates");
+      }
+      const row = seat.children.find((child) => child.child_ref === childRef);
+      if (!row) return false;
+      this.recordMember(groupId, row);
+      this.append(seatId, "seat.child_grouped", { child_ref: row.child_ref, group_id: groupId });
+      if (row.seat_id && !this.requireSeat(row.seat_id).group_id) this.append(row.seat_id, "seat.group", { group_id: groupId });
+      return true;
+    });
+  }
+
   // ── groups ─────────────────────────────────────────────────────────────
 
   openGroup(input: OpenGroupInput): { group: ExecutionSeatGroup; created: boolean } {
@@ -537,7 +576,7 @@ export class SeatLedger {
         parent_group_id: parentGroup?.group_id ?? null,
         native_ref: native,
         name: token(input.name),
-        phases: (input.phases ?? []).map(token).filter((phase): phase is string => phase !== null),
+        phases: phases(input.phases ?? []),
         started_at: timestamp(input.started_at),
       });
       this.db
@@ -561,7 +600,7 @@ export class SeatLedger {
       identity_id: null,
       native_ref: b.native_ref as NativeRef,
       name: (b.name as string | null) ?? null,
-      phases: (b.phases as string[]) ?? [],
+      phases: phases((b.phases as string[]) ?? []),
       members: [],
       deliverables: [],
       started_at: (b.started_at as string | null) ?? null,
@@ -571,8 +610,10 @@ export class SeatLedger {
     const members = new Map<string, SummaryRow>();
     for (const { kind, body } of entries.slice(1)) {
       if (kind === "group.member") {
-        const row = body as unknown as SummaryRow;
+        const row = normalizeRow(body as unknown as SummaryRow);
         members.set(row.child_ref, mergeRow(members.get(row.child_ref), row));
+      } else if (kind === "group.phases") {
+        group.phases = phases(body.phases as string[], group.phases);
       } else if (kind === "group.deliverable") {
         group.deliverables.push(body as unknown as Deliverable);
       } else if (kind === "group.end" && !group.ended_at) {
@@ -597,6 +638,17 @@ export class SeatLedger {
       .query("SELECT group_id FROM seat_groups WHERE orchestrator_seat_id = ? ORDER BY open_seq")
       .all(orchestratorSeatId) as { group_id: string }[];
     return rows.map((row) => this.requireGroup(row.group_id));
+  }
+
+  /** Add phase titles the group has not recorded yet. Returns whether any were added. */
+  recordPhases(groupId: string, titles: readonly string[]): boolean {
+    return this.transaction(() => {
+      const current = this.requireGroup(groupId).phases;
+      const added = phases(titles, current).slice(current.length);
+      if (added.length === 0) return false;
+      this.append(groupId, "group.phases", { phases: added });
+      return true;
+    });
   }
 
   recordMember(groupId: string, row: SummaryRow): boolean {

@@ -2,13 +2,14 @@
  * Claude Code reader. Reads structural fields only: session ids, timestamps,
  * `message.model`, `effort`, `version`, `thinking_drop` reasons, the
  * `continued-in` pointer, subagent meta (`agentType`, `spawnDepth`,
- * `parentAgentId`, `finished`) and workflow journal event types.
- * Message content, descriptions, labels, phases and results are never copied.
+ * `parentAgentId`, `finished`), workflow journal event types and the run's
+ * short phase titles. Message content, descriptions, labels, a member's own
+ * phase and results are never copied.
  */
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { SeatError } from "./errors.js";
-import { attachEvidence, earliest, latest, nonNegativeInt, pushSetting, ref, timestamp, token, uuid } from "./fields.js";
+import { attachEvidence, earliest, latest, nonNegativeInt, phases, pushSetting, ref, timestamp, token, uuid } from "./fields.js";
 import { object, parseObject, readSmallJson, scanLines } from "./lines.js";
 import type { EndState, SettingsEntry } from "./types.js";
 
@@ -35,11 +36,17 @@ export interface ClaudeChild {
   end_state: EndState;
 }
 
+export interface ClaudeWorkflowRun {
+  run_id: string;
+  /** Distinct phase titles from the journal's `started` events, filtered by `phase()`. */
+  phases: string[];
+}
+
 export interface ClaudeSession {
   session_id: string;
   transcript: ClaudeTranscript;
   children: ClaudeChild[];
-  workflow_run_ids: string[];
+  workflow_runs: ClaudeWorkflowRun[];
 }
 
 const AGENT_FILE = /^agent-([A-Za-z0-9_-]{1,128})\.jsonl$/;
@@ -134,19 +141,26 @@ function readChild(directory: string, file: string, runId: string | null, journa
   };
 }
 
-/** `started`, `result` and `failed` event types by agent id. Results and labels are not read. */
-function readJournal(path: string): Map<string, EndState> {
+/**
+ * `started`, `result` and `failed` event types by agent id, and the run's phase titles.
+ * Results and labels are not read, and a phase is not tied to the agent that ran in it.
+ */
+function readJournal(path: string): { states: Map<string, EndState>; phases: string[] } {
   const states = new Map<string, EndState>();
-  if (!existsSync(path)) return states;
+  const titles: unknown[] = [];
+  if (!existsSync(path)) return { states, phases: [] };
   scanLines(path, (raw) => {
     const line = parseObject(raw);
     const agentId = ref(line?.agentId);
     if (!line || !agentId) return;
     if (line.type === "result") states.set(agentId, "result");
     else if (line.type === "failed") states.set(agentId, "failed");
-    else if (line.type === "started" && !states.has(agentId)) states.set(agentId, "unknown");
+    else if (line.type === "started") {
+      if (!states.has(agentId)) states.set(agentId, "unknown");
+      if (line.phase !== undefined) titles.push(line.phase);
+    }
   });
-  return states;
+  return { states, phases: phases(titles) };
 }
 
 /** Read a main transcript `<project>/<session>.jsonl` and its `<session>/subagents/` tree. */
@@ -157,7 +171,7 @@ export function readClaudeSession(transcriptPath: string): ClaudeSession {
   const transcript = readClaudeTranscript(transcriptPath);
   const subagents = join(dirname(transcriptPath), stem, "subagents");
   const children: ClaudeChild[] = [];
-  const runs: string[] = [];
+  const runs: ClaudeWorkflowRun[] = [];
   for (const file of listDirectory(subagents)) {
     const child = readChild(subagents, file, null, new Map());
     if (child) children.push(child);
@@ -167,11 +181,11 @@ export function readClaudeSession(transcriptPath: string): ClaudeSession {
     if (!RUN_DIR.test(run)) continue;
     const directory = join(workflows, run);
     const journal = readJournal(join(directory, "journal.jsonl"));
-    runs.push(run);
+    runs.push({ run_id: run, phases: journal.phases });
     for (const file of listDirectory(directory)) {
-      const child = readChild(directory, file, run, journal);
+      const child = readChild(directory, file, run, journal.states);
       if (child) children.push(child);
     }
   }
-  return { session_id: sessionId, transcript, children, workflow_run_ids: runs };
+  return { session_id: sessionId, transcript, children, workflow_runs: runs };
 }

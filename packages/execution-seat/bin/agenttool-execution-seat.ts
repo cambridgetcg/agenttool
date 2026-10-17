@@ -18,13 +18,14 @@ Usage:
   agenttool-execution-seat group <group_id>
   agenttool-execution-seat groups <orchestrator_seat_id>
   agenttool-execution-seat bind <seat_id> <identity_id> [<signing_key_id>]
-  agenttool-execution-seat promote <seat_id> <child_ref> [recorded|durable]
+  agenttool-execution-seat promote <seat_id> <child_ref> [recorded|durable]   a child row, or a member of one of the seat's groups
   agenttool-execution-seat home
 
 Options:
   --home <dir>   ledger directory (default: $${SEAT_HOME_ENV}, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat)
 
 Reads structural fields only. Message content, descriptions, labels and results are never stored.
+A run keeps its short phase titles; a member's own phase is not kept.
 A binding is a declaration, not a proof; a seat grants nothing.
 `;
 
@@ -128,7 +129,16 @@ export function run(argv: string[], io: Io, env: Record<string, string | undefin
           if (!seatId || !childRef || (level !== "recorded" && level !== "durable")) {
             throw new SeatError("usage", "promote <seat_id> <child_ref> [recorded|durable]");
           }
-          print(ledger.promoteChild(seatId, childRef, level as Exclude<Persistence, "ephemeral">));
+          const target = level as Exclude<Persistence, "ephemeral">;
+          const seat = ledger.getSeat(seatId);
+          if (seat && !seat.children.some((row) => row.child_ref === childRef)) {
+            const group = ledger.groupsFor(seat.seat_id).find((g) => g.members.some((row) => row.child_ref === childRef));
+            if (group) {
+              print(ledger.promoteMember(group.group_id, childRef, target));
+              return 0;
+            }
+          }
+          print(ledger.promoteChild(seatId, childRef, target));
           return 0;
         }
         default:

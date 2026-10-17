@@ -21,6 +21,7 @@ function claudeRow(child: ClaudeChild): SummaryRow {
   return {
     child_ref: child.agent_id,
     parent_ref: child.parent_agent_id,
+    spawn_turn: null,
     relation: "child",
     depth: child.depth,
     agent_type: child.agent_type,
@@ -80,13 +81,15 @@ export function ingestClaudeSession(ledger: SeatLedger, transcriptPath: string):
       if (ledger.recordChild(seat.seat_id, { ...row, native_gone_at: now })) result.rows_marked_gone += 1;
     }
 
-    const runs = new Set(session.workflow_run_ids);
-    for (const run of session.workflow_run_ids) {
-      const { group } = ledger.openGroup({
+    const runs = new Set(session.workflow_runs.map((run) => run.run_id));
+    for (const run of session.workflow_runs) {
+      const { group, created: opened } = ledger.openGroup({
         kind: "workflow",
         orchestrator_seat_id: seat.seat_id,
-        native_ref: { session_id: session.session_id, workflow_run_id: run },
+        native_ref: { session_id: session.session_id, workflow_run_id: run.run_id },
+        phases: run.phases,
       });
+      if (!opened) ledger.recordPhases(group.group_id, run.phases);
       result.group_ids.push(group.group_id);
     }
     for (const group of ledger.groupsFor(seat.seat_id)) {
@@ -104,6 +107,33 @@ export function ingestClaudeSession(ledger: SeatLedger, transcriptPath: string):
   });
 }
 
+/**
+ * Place a spawned thread's row. Two or more threads spawned by one parent thread under one root
+ * turn form a `spawn` group, and every matching row moves there. A thread spawned alone stays a
+ * row under the root seat.
+ */
+function recordSpawnedThread(
+  ledger: SeatLedger,
+  seatId: string,
+  rootThread: string,
+  row: SummaryRow,
+): { recorded: boolean; group_id: string | null } {
+  const parentThread = row.parent_ref ?? rootThread;
+  const sibling = (other: SummaryRow) =>
+    other.child_ref !== row.child_ref && other.spawn_turn === row.spawn_turn && (other.parent_ref ?? rootThread) === parentThread;
+  const native = row.spawn_turn ? { thread_id: parentThread, turn_id: row.spawn_turn } : null;
+  let group = native ? ledger.findGroup("spawn", native) : null;
+  const rows = () => ledger.getSeat(seatId)?.children ?? [];
+  if (native && !group && rows().some(sibling)) {
+    group = ledger.openGroup({ kind: "spawn", orchestrator_seat_id: seatId, native_ref: native }).group;
+  }
+  if (!group) return { recorded: ledger.recordChild(seatId, row), group_id: null };
+  for (const other of rows()) {
+    if (other.child_ref === row.child_ref || sibling(other)) ledger.moveChildToGroup(seatId, group.group_id, other.child_ref);
+  }
+  return { recorded: ledger.recordMember(group.group_id, row), group_id: group.group_id };
+}
+
 export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): IngestResult {
   const rollout = readCodexRollout(rolloutPath);
   return ledger.transaction(() => {
@@ -114,9 +144,10 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
       const { seat, created } = ledger.openSeat({
         harness: CODEX, native_ref: { thread_id: root, session_id: root }, persistence: "durable",
       });
-      const recorded = ledger.recordChild(seat.seat_id, {
+      const placed = recordSpawnedThread(ledger, seat.seat_id, root, {
         child_ref: rollout.thread_id,
         parent_ref: rollout.parent_thread_id !== root ? rollout.parent_thread_id : null,
+        spawn_turn: rollout.spawn_turn,
         relation: "child",
         depth: rollout.depth,
         agent_type: rollout.agent_role,
@@ -127,7 +158,14 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
         seat_id: null,
         native_gone_at: null,
       });
-      return { ...empty, seat_id: seat.seat_id, created, child_ref: rollout.thread_id, rows_recorded: recorded ? 1 : 0 };
+      return {
+        ...empty,
+        seat_id: seat.seat_id,
+        created,
+        child_ref: rollout.thread_id,
+        rows_recorded: placed.recorded ? 1 : 0,
+        group_ids: placed.group_id ? [placed.group_id] : [],
+      };
     }
     const { seat, created } = ledger.openSeat({
       harness: CODEX,

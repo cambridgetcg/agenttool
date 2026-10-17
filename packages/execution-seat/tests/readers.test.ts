@@ -4,7 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readClaudeSession, readClaudeTranscript } from "../src/claude-code.js";
 import { readCodexRollout } from "../src/codex.js";
-import { CLAUDE_NEXT, CLAUDE_SESSION, CODEX_CHILD, CODEX_ROOT, expectNoMarkers, writeClaudeProject, writeCodexSessions } from "./fixtures.js";
+import {
+  CLAUDE_NEXT,
+  CLAUDE_SESSION,
+  CODEX_CHILD,
+  CODEX_ROOT,
+  CODEX_TURN_A,
+  expectNoMarkers,
+  PHASES,
+  writeClaudeProject,
+  writeCodexSessions,
+} from "./fixtures.js";
 
 let directory: string;
 
@@ -34,9 +44,10 @@ describe("Claude Code reader", () => {
     expect(session.transcript.settings.every((entry) => entry.provider === null && entry.basis === "transcript")).toBe(true);
   });
 
-  test("reads children and workflow members as structure only", () => {
+  test("reads children and workflow members as structure only, and a run's short phase titles", () => {
     const session = readClaudeSession(writeClaudeProject(directory));
-    expect(session.workflow_run_ids).toEqual(["wf_run0001-abc"]);
+    // The over-long and path-like phases are dropped; labels and a member's own phase are never read.
+    expect(session.workflow_runs).toEqual([{ run_id: "wf_run0001-abc", phases: [...PHASES] }]);
     const byId = Object.fromEntries(session.children.map((child) => [child.agent_id, child]));
     expect(byId.aplain01).toMatchObject({ workflow_run_id: null, depth: 1, agent_type: "general-purpose", end_state: "result" });
     expect(byId.anested02).toMatchObject({ parent_agent_id: "aplain01", depth: 2, end_state: "unknown" });
@@ -60,7 +71,7 @@ describe("Codex reader", () => {
   test("keeps the thread id across effort changes and reads provider from the rollout", () => {
     const rollout = readCodexRollout(writeCodexSessions(directory).root);
     expect(rollout).toMatchObject({
-      thread_id: CODEX_ROOT, session_id: CODEX_ROOT, parent_thread_id: null, forked_from_id: null,
+      thread_id: CODEX_ROOT, session_id: CODEX_ROOT, parent_thread_id: null, forked_from_id: null, spawn_turn: null,
       version: "0.162.1", provider: "openai", started_at: "2026-10-17T10:00:00.000Z", last_at: "2026-10-17T10:09:30.000Z",
     });
     expect(rollout.settings.map((entry) => [entry.at, entry.effort, entry.provider, entry.basis])).toEqual([
@@ -74,7 +85,10 @@ describe("Codex reader", () => {
   test("reads thread_spawn lineage without nicknames, paths or account ids", () => {
     const paths = writeCodexSessions(directory);
     const child = readCodexRollout(paths.child);
-    expect(child).toMatchObject({ thread_id: CODEX_CHILD, session_id: CODEX_ROOT, parent_thread_id: CODEX_ROOT, depth: 1, agent_role: "explorer" });
+    // The spawn turn is the first turn's root turn, even though a later turn sits under another.
+    expect(child).toMatchObject({
+      thread_id: CODEX_CHILD, session_id: CODEX_ROOT, parent_thread_id: CODEX_ROOT, depth: 1, agent_role: "explorer", spawn_turn: CODEX_TURN_A,
+    });
     const fork = readCodexRollout(paths.fork);
     expect(fork.forked_from_id).toBe(CODEX_ROOT);
     expect(expectNoMarkers(JSON.stringify([child, fork, readCodexRollout(paths.grandchild)]))).toEqual([]);

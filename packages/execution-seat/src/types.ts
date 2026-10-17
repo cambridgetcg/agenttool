@@ -7,6 +7,7 @@ export type Relation = "fork" | "continuation" | "child";
 export type Persistence = "ephemeral" | "recorded" | "durable";
 export type Basis = "transcript" | "hook" | "rollout" | "declared";
 export type EndState = "result" | "failed" | "unknown";
+/** `spawn`: two or more Codex threads spawned by one parent thread under one root turn. */
 export type GroupKind = "workflow" | "spawn" | "declared";
 export type GroupOutcome = "completed" | "failed" | "stopped" | "unknown";
 export type DeliverableKind = "commit" | "pr" | "collab_event" | "artifact";
@@ -30,6 +31,11 @@ export interface SettingsEntry {
 export interface SummaryRow {
   child_ref: string;
   parent_ref: string | null;
+  /**
+   * The native top-level turn the child was spawned under (Codex: `root_turn_id` of the
+   * child's first turn). An opaque lineage id, not a label. Null when the harness records none.
+   */
+  spawn_turn: string | null;
   relation: "child";
   depth: number | null;
   agent_type: string | null;
@@ -76,8 +82,9 @@ export interface ExecutionSeatGroup {
   parent_group_id: string | null;
   identity_id: string | null;
   native_ref: NativeRef;
-  /** Left null and empty by the native readers until decided whether a run's name counts as content. */
+  /** Set only when the orchestrator declares one. The native readers never infer a name. */
   name: string | null;
+  /** Short phase titles of the run, in first-seen order. A member's own phase is not kept. */
   phases: string[];
   members: SummaryRow[];
   deliverables: Deliverable[];

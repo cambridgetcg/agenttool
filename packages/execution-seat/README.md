@@ -12,7 +12,7 @@ An execution seat records that a runtime acted for an identity. This package kee
 - its native handle;
 - a model and effort timeline, which grows only when a value changes;
 - L1 summary rows for short-lived children;
-- group records for workflow runs.
+- group records for Claude Code workflow runs, and for Codex threads spawned together.
 
 It reads native files and never writes them. Nothing is sent anywhere.
 
@@ -38,10 +38,12 @@ The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HO
   - timestamps;
   - model, effort and provider tokens;
   - Claude Code `agentType`, `spawnDepth`, `parentAgentId` and `finished`;
-  - Codex `thread_spawn` depth and role;
-  - workflow journal event types.
+  - Codex `thread_spawn` depth and role, and a child's first `root_turn_id`;
+  - workflow journal event types;
+  - a workflow run's phase titles, when each is at most 32 letters, digits, spaces, `_` or `-` (at most 16 per run).
 
-  Message content, task descriptions, workflow labels and phases, results, nicknames, paths, account ids and instructions are never stored. A token that does not look like an identifier becomes null.
+  Message content, task descriptions, workflow labels, a member's own phase, results, nicknames, paths, account ids and instructions are never stored. A token that does not look like an identifier becomes null.
+- **Groups.** A Claude Code workflow run is one group. Two or more Codex threads that one parent thread spawned under the same root turn form a `spawn` group, and their rows move there; a thread spawned alone stays a row under its root seat. A group's `name` is set only when the orchestrator declares one.
 - **Provider.** It is recorded only when the native file names it. Claude Code transcripts do not, so their provider stays null.
 - **Reasoning continuity.** It is never claimed. A Claude Code `thinking_drop` reason is kept as evidence on the timeline entry for that model.
 - **Append-only.** Triggers refuse every update and delete. Summary rows outlive native transcripts (R2). When a later scan finds a transcript gone, it sets `native_gone_at`; it never deletes the row.
@@ -53,15 +55,15 @@ The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HO
 
 - **Hooks.** No Claude Code hook writes to the ledger automatically yet. That is S2, together with collab `seat_ref` and the SessionEnd mapping.
 - **Forks.** A Claude Code `--fork-session` or `/branch` leaves no marker in the transcript that this reader recognises, so forks are linked only when declared. A Codex fork is read from `forked_from_id`.
-- **Codex groups.** Codex spawned threads become rows under their root seat. Whether they also form a group is still open.
-- **Run names.** A workflow run's `name` and `phases` stay empty until it is decided whether they count as content.
+- **Nested groups.** A spawn group started by a thread that is itself a group member does not yet set `parent_group_id`.
 - **Group endings.** A workflow group's end and outcome are recorded only through `endGroup`. The journal is not read as proof that a run ended.
 
-**Observed on 2026-10-17:** a trial ingest of one Mac's 98 Claude Code transcripts and 393 Codex rollouts finished in about 20 seconds with no errors. It produced:
+**Observed on 2026-10-17:** a trial ingest of one Mac's 98 Claude Code transcripts and 396 Codex rollouts finished in about 17 seconds with no errors. It produced:
 
 - 175 seats;
-- 571 child rows;
-- 402 workflow groups with 3,987 members;
-- a ledger of about 3.6 MB.
+- 284 child rows (255 Claude Code, 29 Codex);
+- 405 workflow groups with 4,048 members, 101 of them with phase titles;
+- 79 Codex spawn groups with 290 members;
+- a ledger of about 6 MB, including its write-ahead log.
 
-Ingesting again appended nothing.
+Ingesting again added nothing for Codex. The only new entries came from Claude Code sessions that were still running. Re-ingesting into the ledger from the earlier trial, which predates spawn groups, gave the same counts.

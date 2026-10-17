@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DATABASE_FILE } from "../src/home.js";
@@ -13,7 +13,11 @@ import {
   CODEX_FORK,
   CODEX_GRANDCHILD,
   CODEX_ROOT,
+  CODEX_SIBLING,
+  CODEX_SOLO,
+  CODEX_TURN_A,
   expectNoMarkers,
+  PHASES,
   writeClaudeProject,
   writeCodexSessions,
 } from "./fixtures.js";
@@ -181,7 +185,7 @@ describe("groups", () => {
     const [group] = ledger.groupsFor(first.seat_id);
     expect(group).toMatchObject({
       type: "execution-seat-group/v1", kind: "workflow", orchestrator_seat_id: first.seat_id, identity_id: IDENTITY,
-      native_ref: { session_id: CLAUDE_SESSION, workflow_run_id: "wf_run0001-abc" }, name: null, phases: [],
+      native_ref: { session_id: CLAUDE_SESSION, workflow_run_id: "wf_run0001-abc" }, name: null, phases: [...PHASES],
       started_at: "2026-10-17T09:10:00.000Z", ended_at: null, outcome: null,
     });
     const states = Object.fromEntries(group!.members.map((row) => [row.child_ref, [row.end_state, row.ended_at]]));
@@ -190,6 +194,25 @@ describe("groups", () => {
       awffail02: ["failed", "2026-10-17T09:11:00.000Z"],
       awfopen03: ["unknown", null],
     });
+  });
+
+  test("a run's phases grow when the journal gains one, and re-ingesting adds none", () => {
+    const transcript = writeClaudeProject(directory);
+    const first = ingestClaudeSession(ledger, transcript);
+    const journal = join(directory, "projects", "-Users-someone", CLAUDE_SESSION, "subagents", "workflows", "wf_run0001-abc", "journal.jsonl");
+    appendFileSync(journal, `${JSON.stringify({ type: "started", agentId: "awfok01", key: "k4", phase: "Ship" })}\n`);
+    ingestClaudeSession(ledger, transcript);
+    const [group] = ledger.groupsFor(first.seat_id);
+    expect(group?.phases).toEqual([...PHASES, "Ship"]);
+    expect(ledger.recordPhases(group!.group_id, ["Review", "Ship"])).toBe(false);
+  });
+
+  test("a group's name is set only when declared", () => {
+    const { seat } = ledger.openSeat({ harness: "declared-harness", native_ref: { run: "r1" } });
+    const { group } = ledger.openGroup({
+      kind: "declared", orchestrator_seat_id: seat.seat_id, native_ref: { run: "g1" }, name: "review-changes", phases: ["Review", "a/path"],
+    });
+    expect(group).toMatchObject({ name: "review-changes", phases: ["Review"] });
   });
 
   test("a deliverable is a pointer, and the member that produced it is promoted", () => {
@@ -208,22 +231,63 @@ describe("groups", () => {
 });
 
 describe("Codex ingest", () => {
-  test("spawned threads are rows under the root seat; a fork is a new seat with a parent", () => {
+  test("a thread spawned alone is a row under the root seat; a fork is a new seat with a parent", () => {
     const paths = writeCodexSessions(directory);
     const child = ingestCodexRollout(ledger, paths.child);
     const grandchild = ingestCodexRollout(ledger, paths.grandchild);
+    const solo = ingestCodexRollout(ledger, paths.solo);
     const root = ingestCodexRollout(ledger, paths.root);
-    expect(child.seat_id).toBe(root.seat_id);
-    expect(grandchild.seat_id).toBe(root.seat_id);
+    expect([child.seat_id, grandchild.seat_id, solo.seat_id]).toEqual([root.seat_id, root.seat_id, root.seat_id]);
     expect(root.created).toBe(false);
     const seat = ledger.findSeat("codex", { thread_id: CODEX_ROOT })!;
     expect(seat.settings.map((e) => e.effort)).toEqual(["max", "ultra", "max"]);
     expect(seat.harness.version).toBe("0.162.1");
     const rows = Object.fromEntries(seat.children.map((row) => [row.child_ref, row]));
-    expect(rows[CODEX_CHILD]).toMatchObject({ parent_ref: null, depth: 1, agent_type: "explorer", end_state: "unknown" });
-    expect(rows[CODEX_GRANDCHILD]).toMatchObject({ parent_ref: CODEX_CHILD, depth: 2 });
+    expect(rows[CODEX_CHILD]).toMatchObject({ parent_ref: null, spawn_turn: CODEX_TURN_A, depth: 1, agent_type: "explorer", end_state: "unknown" });
+    expect(rows[CODEX_GRANDCHILD]).toMatchObject({ parent_ref: CODEX_CHILD, spawn_turn: CODEX_TURN_A, depth: 2 });
+    expect(ledger.groupsFor(root.seat_id)).toEqual([]);
     const fork = ingestCodexRollout(ledger, paths.fork);
     expect(ledger.getSeat(fork.seat_id)).toMatchObject({ parent_seat_id: root.seat_id, relation: "fork", native_ref: { thread_id: CODEX_FORK } });
+  });
+
+  test("two threads spawned under one parent turn form a spawn group, in either ingest order", () => {
+    const paths = writeCodexSessions(directory);
+    for (const [name, order] of [["forward", [paths.child, paths.sibling]], ["reverse", [paths.sibling, paths.child]]] as const) {
+      const other = SeatLedger.open(join(directory, `state-${name}`));
+      try {
+        for (const path of [...order, paths.grandchild, paths.solo, paths.root]) ingestCodexRollout(other, path);
+        const seat = other.findSeat("codex", { thread_id: CODEX_ROOT })!;
+        // Only the threads spawned alone stay rows; the grandchild shares turn A but has another parent.
+        expect(seat.children.map((row) => row.child_ref).sort()).toEqual([CODEX_GRANDCHILD, CODEX_SOLO].sort());
+        const groups = other.groupsFor(seat.seat_id);
+        expect(groups).toHaveLength(1);
+        expect(groups[0]).toMatchObject({
+          kind: "spawn", orchestrator_seat_id: seat.seat_id, native_ref: { thread_id: CODEX_ROOT, turn_id: CODEX_TURN_A },
+          name: null, phases: [], started_at: "2026-10-17T10:00:00.000Z",
+        });
+        expect(groups[0]!.members.map((row) => row.child_ref).sort()).toEqual([CODEX_CHILD, CODEX_SIBLING].sort());
+      } finally {
+        other.close();
+      }
+    }
+  });
+
+  test("grouping keeps a promoted child's seat, and re-ingesting appends nothing", () => {
+    const paths = writeCodexSessions(directory);
+    const root = ingestCodexRollout(ledger, paths.child);
+    const promoted = ledger.promoteChild(root.seat_id, CODEX_CHILD);
+    expect(promoted.group_id).toBeNull();
+    const sibling = ingestCodexRollout(ledger, paths.sibling);
+    expect(sibling.group_ids).toHaveLength(1);
+    const groupId = sibling.group_ids[0]!;
+    expect(ledger.getGroup(groupId)?.members.find((row) => row.child_ref === CODEX_CHILD)?.seat_id).toBe(promoted.seat_id);
+    expect(ledger.getSeat(promoted.seat_id)?.group_id).toBe(groupId);
+    expect(() => ledger.recordChild(root.seat_id, ledger.getGroup(groupId)!.members[0]!)).toThrow("moved to a group");
+    const count = () => (new Database(join(home, DATABASE_FILE), { readonly: true }).query("SELECT COUNT(*) AS n FROM entries").get() as { n: number }).n;
+    const before = count();
+    expect(ingestCodexRollout(ledger, paths.child)).toMatchObject({ rows_recorded: 0, group_ids: [groupId] });
+    ingestCodexRollout(ledger, paths.sibling);
+    expect(count()).toBe(before);
   });
 });
 
