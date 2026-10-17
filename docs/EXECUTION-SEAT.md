@@ -30,8 +30,7 @@ Yu answered the open questions in the identity review:
 7. **Order of unification:** execution seat first, then one pin book for the trust stores, then a canonical-bytes registry.
 8. **A child seat inherits only its parent's `identity_id`.** It does not inherit the signing key, grants, collab sessions, persistence level or anything else.
 9. **A group run gets its own record**, much as a group project would. See [Group record](#group-record-draft).
-
-What a child's summary row holds, and how long it is kept, is still under discussion. See [Summary rows](#summary-rows-open).
+10. **Summary rows are L1, kept as R2.** A child's summary row holds lineage and settings, but no labels. It lasts as long as its parent or group record, and outlives the native transcript. See [Summary rows](#summary-rows).
 
 ## What a seat is
 
@@ -132,7 +131,7 @@ Subagents are short-lived child seats. These levels are a proposal for the desig
 
 | Level | Stored as | Default for | Readable by |
 |---|---|---|---|
-| `ephemeral` | a [summary row](#summary-rows-open) in the parent's `children`, or in a group's `members` | Claude Code subagents and Codex spawned threads | whoever can read the parent or group |
+| `ephemeral` | a [summary row](#summary-rows) in the parent's `children`, or in a group's `members` | Claude Code subagents and Codex spawned threads | whoever can read the parent or group |
 | `recorded` | its own record in the local ledger | a child that claims a collab task, makes a commit or sends a mission event | local peers |
 | `durable` | its own record, eligible for publication, and able to hold its own collab session | top-level sessions, forks and long-running background agents | as published |
 
@@ -141,7 +140,9 @@ Subagents are short-lived child seats. These levels are a proposal for the desig
 - **Retention** follows the native transcript policy.
 - **No authority.** A persistence level grants nothing.
 
-## Summary rows (open)
+## Summary rows
+
+**Decided (2026-10-17): L1 contents, R2 retention.** No cap is set on rows, in line with decision 4. The options below are kept as the record of that choice.
 
 A summary row is what remains of an `ephemeral` child. It is one entry in the parent's `children`, or in a group's `members`.
 
@@ -175,11 +176,11 @@ A row never copies content: no task description, prompt, result or tool output.
 - **Codex.** The oldest rollout is from 2026-09-03. No automatic cleanup has been observed, but Codex's retention settings have not been checked.
 - **Size.** The 4,224 Claude subagent transcripts take 3.4 GB, with a median of 576 KB each. An L1 row is over 2,000 times smaller than the transcript it summarises.
 
-Questions for the discussion:
+Why L1 and R2:
 
-- Is L1 enough, or is the orchestrator's label (L2) worth keeping? Labels are short, but a model writes them, so they can carry content.
-- Should a row outlive its native transcript (R2), or follow it (R1)?
-- If R2, given decision 4, should rows have no cap either?
+- **Cheap.** L1 rows cost little.
+- **Complete.** Lineage stays whole after native cleanup.
+- **No content.** Labels (L2) are written by a model and can carry content, so they are left out.
 
 ## Group record (draft)
 
@@ -197,7 +198,7 @@ A group run gets its own record, much as a group project would. Draft `execution
   "name": "review-changes",
   "phases": ["Review", "Verify"],
   "members": [
-    { "seat_id": null, "child_ref": "<agent id>", "phase": "Review", "end_state": "result", "settings": [] }
+    { "seat_id": null, "child_ref": "<agent id>", "depth": 1, "end_state": "result", "settings": [] }
   ],
   "deliverables": [{ "kind": "commit", "ref": "9405412" }],
   "started_at": "2026-10-17T10:02:11Z",
