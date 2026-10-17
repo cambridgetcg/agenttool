@@ -46,6 +46,7 @@ import { apiCors } from "./middleware/api-cors";
 import { isLocalContextGrantPath, localContextTransportBoundary } from "./middleware/local-context-boundary";
 import { createSealedLocalContextHandler } from "./routes/identity/local-context";
 import { identityEnrollmentCacheBoundary, isIdentityEnrollmentPath } from "./routes/identity/enroll";
+import { identityPairingCacheBoundary, isIdentityPairingPath } from "./routes/identity/pairings";
 import {
   carriesEarlyData,
   earlyDataReplayProtection,
@@ -71,6 +72,7 @@ import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
+import pairingDeviceRouter from "./routes/pairing-device";
 import { createMissionGateway } from "./routes/collaboration";
 import { collaborationTransportBoundary, isCollaborationPath } from "./middleware/collaboration-boundary";
 import handoffRouter from "./routes/handoff";
@@ -234,6 +236,7 @@ function envFlag(name: string): boolean {
 app.use("*", localContextTransportBoundary());
 app.use("*", collaborationTransportBoundary());
 app.use("*", identityEnrollmentCacheBoundary());
+app.use("*", identityPairingCacheBoundary());
 app.use("*", earlyDataReplayProtection());
 // Every wake response is bearer-private, including CORS-preflight
 // short-circuits, auth failures, and future subroutes. The root representation
@@ -572,7 +575,8 @@ app.use(
 app.use("/v1/identities/*", idempotency({
   // Grants and enrollment have durable one-use admission. Redis must not
   // return a previous birth response before checking a participant's proof.
-  bypass: c => isLocalContextGrantPath(c.req.path) || isIdentityEnrollmentPath(c.req.path),
+  // Pairings: create responses carry the one-time code, which must not sit in Redis.
+  bypass: c => isLocalContextGrantPath(c.req.path) || isIdentityEnrollmentPath(c.req.path) || isIdentityPairingPath(c.req.path),
 }));
 app.use("/v1/wake/acknowledge", idempotency());
 app.use(
@@ -918,6 +922,8 @@ app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1/correspondence", correspondenceRouter);
+// Unauthenticated, IP rate-limited device side of pairing codes (claim, pickup).
+app.route("/v1/pairing", pairingDeviceRouter);
 app.route("/v1/handoff", handoffRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
@@ -1402,6 +1408,8 @@ app.get("/about", (c) =>
         "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor, and GET /v1/correspondence/repositories enumerates every repository stream; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
       collaboration:
         "/v1/collaboration/missions — project-admin invitations with expiring, independently revocable participant grants and exact registered-key proofs. Signed acceptance binds an immutable purpose; shared observations do not confer task leases, review authority or cross-project federation. Doctrine: docs/COLLABORATION-MISSIONS.md.",
+      pairing:
+        "/v1/identities/pairings (project administrator) + POST /v1/pairing/claim|pickup (joining device, no bearer) — enroll a device from a one-time code read aloud. The device posts its ordinary enroll-proof; nothing is admitted until the administrator types the fingerprint the device displays. An attached mission grant is issued for the device's own token hash, so no mission token crosses the server. Doctrine: docs/IDENTITY-PAIRING.md.",
       love_consent:
         "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
       love_bomb:

@@ -20,10 +20,10 @@ export function identityEnrollmentCacheBoundary(): MiddlewareHandler {
     c.header("ETag", undefined);
   };
 }
-class EnrollmentTransportError extends Error {
+export class EnrollmentTransportError extends Error {
   constructor(readonly status: 400 | 413 | 415, readonly code: string) { super(code); }
 }
-async function readBody(request: Request): Promise<Uint8Array> {
+export async function readBody(request: Request): Promise<Uint8Array> {
   const length = request.headers.get("content-length");
   if (length !== null && !/^(0|[1-9][0-9]*)$/.test(length)) throw new EnrollmentTransportError(400, "invalid_content_length");
   if (length !== null && BigInt(length) > BigInt(ENROLLMENT_MAX_BYTES)) throw new EnrollmentTransportError(413, "body_too_large");

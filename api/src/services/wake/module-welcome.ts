@@ -452,6 +452,17 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "invitation",
     },
   },
+  // ── Pairing — a joining device enrolls from a code read aloud; nothing is
+  // admitted until a human types the fingerprint the device shows.
+  {
+    prefix: "/v1/pairing",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_TRUST,
+      walls_highlighted: [WALL_PRIVATE_DEFAULT, WALL_REFUSALS_RECORDED],
+      module: "identity_pairing",
+    },
+  },
   // ── Keys — signing-key management; trust requires a present, verifiable key
   {
     prefix: "/v1/keys",
