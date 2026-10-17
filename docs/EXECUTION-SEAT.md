@@ -221,7 +221,7 @@ A group run gets its own record, much as a group project would. Draft `execution
 | `kind` | `workflow` (a Claude Code workflow run), `spawn` (two or more Codex threads that one parent thread spawned under one root turn) or `declared`. |
 | `orchestrator_seat_id` | The seat that started the run. The group takes that seat's `identity_id` and nothing else. When a spawn group's parent thread is itself a child, this is the root thread's seat. |
 | `native_ref` | `{session_id, workflow_run_id}` for a workflow run. `{thread_id, turn_id}` for a spawn group: the parent thread, and the `root_turn_id` of the members' first turn. |
-| `parent_group_id` | Set when a member starts its own run. |
+| `parent_group_id` | Set when a member starts its own run. S1 does not set it yet. |
 | `name` | Recorded only when the orchestrator declares a name. No reader infers one, and Claude Code run directories hold none. |
 | `phases` | The run's phase titles in the order first seen. A title is kept only if it has at most 32 letters, digits, spaces, `_` or `-`, and a run keeps at most 16. A member's own phase, labels, descriptions and prompts are not kept. |
 | `members` | One entry per member. An `ephemeral` member is a summary row. When a second thread from the same spawn turn appears, the first thread's row moves from the seat's `children` into the group. A promoted member points to its own record by `seat_id`, and that record carries `group_id`. |
@@ -278,7 +278,7 @@ That scale shapes the design:
 
 | Slice | Change | Replaces |
 |---|---|---|
-| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals) and Codex readers (rollouts), all reading structural fields only, and tests | — |
+| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts and spawn groups), all reading structural fields only, and tests | — |
 | S2 | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`. The Claude Code SessionEnd hook resolves Claude session → seat → collab session | native IDs in `actor`; the missing hook mapping |
 | S3 | The mission `seat` object, courier bindings and wake receiver bindings carry `seat_id` | three unverified strings; the unverified Claude `session_label` |
 | S4 | Selected seats are published to the hosted API | — |
