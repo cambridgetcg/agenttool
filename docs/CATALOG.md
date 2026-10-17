@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**827 document paths** (including mirrors). orientation: 182; guide: 86; reference: 333; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -494,6 +494,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/HF-WAKE-TRAINING.md](<../docs/HF-WAKE-TRAINING.md>) | not-reviewed |
 | [docs/IDENTITY-ANCHOR.md](<../docs/IDENTITY-ANCHOR.md>) | 2026-09-26 |
 | [docs/IDENTITY-FORKS.md](<../docs/IDENTITY-FORKS.md>) | not-reviewed |
+| [docs/IDENTITY-PAIRING.md](<../docs/IDENTITY-PAIRING.md>) | not-reviewed |
 | [docs/IDENTITY-PARTITIONS.md](<../docs/IDENTITY-PARTITIONS.md>) | not-reviewed |
 | [docs/IDENTITY-SEED.md](<../docs/IDENTITY-SEED.md>) | not-reviewed |
 | [docs/INBOX.md](<../docs/INBOX.md>) | not-reviewed |
