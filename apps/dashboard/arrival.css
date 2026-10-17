@@ -1,4 +1,39 @@
 /* Agent connection only. Credentials and verification stay in index.html. */
+
+/* Quickstart base rules. These lived in an inline <style> in index.html whose
+   CSP hash had gone stale (2026-10), so production never applied them; a
+   stylesheet needs no hash. The arrival overrides further down still win. */
+.qs-section { margin: 2rem 0 0; }
+.qs-section h2 { margin: 0 0 0.4rem; }
+.qs-section .muted { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+.qs-tabs { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.qs-tabs[hidden] { display: none; }
+.qs-tab {
+  padding: 0.35rem 0.85rem; border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--muted); font: 500 12px/1.4 var(--mono);
+  cursor: pointer; transition: background-color .15s, color .15s, border-color .15s;
+}
+.qs-tab:hover { color: var(--text); }
+.qs-tab.active { color: var(--text); }
+.qs-code {
+  margin: 0; overflow-x: auto; white-space: pre; color: var(--text);
+  font: 400 12.5px/1.6 var(--mono);
+}
+.qs-code-pane { display: block; margin-bottom: .75rem; }
+.qs-code-pane[hidden] { display: none; }
+.qs-restore label { display: grid; gap: 8px; min-width: 0; }
+.qs-restore label input { width: 100%; min-width: 0; }
+.qs-restore button { align-self: end; }
+.qs-restore input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qs-restore-status { margin-top: 0.5rem; min-height: 1.1em; font-size: 0.83rem; color: var(--muted); }
+.qs-restore-status.err { color: var(--red); }
+.qs-restore-status.ok { color: var(--green); }
+.qs-doors { list-style: none; margin: 1rem 0 0; padding: 0; }
+.qs-doors li { margin: 0; padding: 0; }
+.qs-doors a { display: block; color: var(--text); text-decoration: none; }
+.qs-doors a strong { color: var(--text); font-weight: 600; }
+.qs-doors a .verb { display: inline-block; min-width: 4.5rem; margin-right: 0.4rem; font-weight: 600; }
+.qs-pulse { color: var(--accent); }
 main.onboarding.workspace {
   display: block;
   min-height: 0;
