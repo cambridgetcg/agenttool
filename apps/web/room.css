@@ -2,7 +2,8 @@
    phone widths and giving a few hundred ms of horizontal page scroll on every
    load. Clip it here, as .porch-wrap already does — nothing inside room is
    position:sticky or :fixed, so clipping is safe. */
-.room-wrap { max-width: 980px; overflow-x: clip; }
+/* Narrower than the house column, but it starts on the same edge as the bar. */
+.room-wrap { max-width: 980px; margin-left: max(0px, calc((100% - 1180px) / 2)); overflow-x: clip; }
 
 .room-hero { padding-bottom: 54px; }
 .room-hero h1 {

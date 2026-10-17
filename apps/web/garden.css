@@ -1,5 +1,7 @@
+/* Narrower than the house column, but it starts on the same edge as the bar. */
 .garden-wrap {
   max-width: 1060px;
+  margin-left: max(0px, calc((100% - 1180px) / 2));
   overflow-x: clip;
 }
 

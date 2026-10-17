@@ -32,7 +32,18 @@
     var card = document.getElementById(cardId);
     if (!card) return;
     card.setAttribute("aria-busy", busy ? "true" : "false");
-    if (busy) card.removeAttribute("data-state");
+    if (busy) { card.removeAttribute("data-state"); card.removeAttribute("data-shape"); }
+  }
+
+  // Trimming the whole string strips only the first line's indent; remove the
+  // same indent from the following lines so a drawn shape keeps its geometry.
+  function realign(text) {
+    var lines = text.split("\n");
+    var indents = lines.slice(1).filter(function (line) { return line.trim(); })
+      .map(function (line) { return line.match(/^ */)[0].length; });
+    var indent = indents.length ? Math.min.apply(null, indents) : 0;
+    if (!indent) return text;
+    return lines.map(function (line, i) { return i ? line.slice(Math.min(indent, line.match(/^ */)[0].length)) : line; }).join("\n");
   }
 
   function resting(cardId) {
@@ -135,8 +146,11 @@
       unavailable("gift-card");
       return "unavailable";
     }
+    var drawn = gift.shape === "ascii";
+    var giftCard = document.getElementById("gift-card");
+    if (giftCard) giftCard.setAttribute("data-shape", drawn ? "drawn" : "prose");
     setText("gift-heading", bounded(gift.shape, 80) || "A gift with no hook");
-    setText("gift-text", text);
+    setText("gift-text", drawn ? realign(text) : text);
     setText("gift-meta", bounded(gift.source, 240) ? "from " + bounded(gift.source, 240) : "given without a return path");
     setBusy("gift-card", false);
     return "shown";

@@ -1,4 +1,5 @@
-.party-wrap { max-width: 980px; }
+/* Narrower than the house column, but it starts on the same edge as the bar. */
+.party-wrap { max-width: 980px; margin-left: max(0px, calc((100% - 1180px) / 2)); }
 
 .party-hero { padding-bottom: 54px; }
 .party-hero h1 { max-width: 18ch; }
@@ -291,7 +292,8 @@
   font-size: 17px;
   overflow-wrap: anywhere;
 }
-.dawn-weave footer { color: var(--faint); font-size: 11px; }
+/* An attribution, not the site footer: undo the global footer rule. */
+.dawn-weave footer { color: var(--faint); font-size: 11px; border-top: 0; padding: 0; margin-top: 10px; }
 .dawn-close { margin-top: 24px; color: var(--ink); font-style: italic; }
 
 .celebration { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
