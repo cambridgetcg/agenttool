@@ -31,6 +31,8 @@ Yu answered the open questions in the identity review:
 8. **A child seat inherits only its parent's `identity_id`.** It does not inherit the signing key, grants, collab sessions, persistence level or anything else.
 9. **A group run gets its own record**, much as a group project would. See [Group record](#group-record-draft).
 10. **Summary rows are L1, kept as R2.** A child's summary row holds lineage and settings, but no labels. It lasts as long as its parent or group record, and outlives the native transcript. See [Summary rows](#summary-rows).
+11. **Codex threads spawned together form a group.** Two or more threads that one parent thread spawns under the same root turn get a `spawn` group record. A thread spawned alone stays a summary row. See [Group record](#group-record-draft).
+12. **Phase titles are kept; run names are only declared.** A group keeps its run's short phase titles. A member's own phase and every label stay out. A run's `name` is recorded only when the orchestrator declares one; no reader infers it.
 
 ## What a seat is
 
@@ -105,8 +107,11 @@ Timeline rules:
   - **No content.** The meta file's `description` is free text written by the parent, so the seat record never copies it.
 - **Workflow runs.** Agents started by a workflow live under `<session>/subagents/workflows/wf_<run>/`.
   - **Events.** A `journal.jsonl` there records `started` (with `agentId`, `key`, optional `label` and `phase`), `result` and `failed`.
-  - **Count.** On 2026-10-17 this Mac held 402 runs, and 3,969 of its 4,224 subagent transcripts belonged to one.
+  - **Count.** On 2026-10-17 this Mac held 405 runs, and 4,050 of its 4,305 subagent transcripts belonged to one.
   - **No results.** The journal's `result` payload is content, so a record never copies it.
+  - **Labels are content.** Of 3,037 `started` labels, 2,539 were distinct and the longest ran to 1,074 characters. They repeat the meta `description`, so a record never copies them.
+  - **Phases are short.** 101 of the 405 runs named phases, with at most 8 per run. The 71 distinct titles were at most 12 characters long, none held a slash or colon, and 3% held a space.
+  - **No run name.** Nothing in the run directory names the run.
 - **Settings sources.** Each assistant line in the transcript carries `message.model`, `requestedModel` and `effort` (basis `transcript`). Hook input carries `effort.level` (basis `hook`).
 
 **Codex**: `native_ref` is `{thread_id, session_id}`. `session_id` is the root thread's ID.
@@ -114,9 +119,11 @@ Timeline rules:
 - **Resume** keeps `thread_id` and appends to the same rollout file, so the seat stays the same. Resume also restarts MCP servers (read from source, not observed). A collab MCP therefore starts a new collab session on every resume unless `AGENTOOL_COLLAB_SESSION_FILE` is set. Linking those collab sessions back to one seat is one of the jobs of S2.
 - **Fork** gives a new `thread_id` with `forked_from_id`, while `session_id` stays the same. That is a new seat with relation `fork`.
 - **Spawned threads** carry `source.subagent.thread_spawn`, which holds `parent_thread_id`, `depth`, `agent_path`, `agent_nickname` and `agent_role`. They are child seats.
-  - **Count.** On 2026-10-17, 316 of the 393 local rollouts were child threads.
-  - **Depth.** 305 of them were at depth 1, 10 at depth 2 and 1 at depth 3.
-  - **No group ID.** Codex has no native group ID, so a group of spawned threads is derived from their shared parent.
+  - **Count.** On 2026-10-17, 319 of the 396 local rollouts were child threads.
+  - **Depth.** 308 of them were at depth 1, 10 at depth 2 and 1 at depth 3.
+  - **No group ID.** Codex has no native group ID. A group is derived from the parent thread and the root turn, as follows.
+  - **Root turn.** Each `turn_context` carries `root_turn_id`, the root thread's turn that the work descends from. All 319 children had one on their first turn. For the 308 at depth 1 it was a turn of their parent. For the 11 deeper threads it was a turn of the root thread, not of their direct parent.
+  - **First turn only.** 157 children later ran turns under other root turns, so only the first turn says where a child was spawned.
 - **Settings sources.** Each turn writes a `turn_context` with `model` and `effort`, and a mid-thread change also writes `thread_settings_applied` (basis `rollout`).
 
 **Other runtimes** use basis `declared` until an adapter exists.
@@ -158,7 +165,7 @@ A row never copies content: no task description, prompt, result or tool output.
 
 | Level | Adds | Size |
 |---|---|---|
-| L0 lineage | child ref (`agent_id` or `thread_id`), relation, depth, `started_at`, `ended_at`, end state (`result`, `failed` or `unknown`) | about 150 bytes |
+| L0 lineage | child ref (`agent_id` or `thread_id`), parent ref, the root turn it was spawned under (`spawn_turn`, Codex only), relation, depth, `started_at`, `ended_at`, end state (`result`, `failed` or `unknown`) | about 150 bytes |
 | L1 settings | the settings timeline (usually one entry) and the harness's agent type or role | about 250 bytes |
 | L2 label | the short label, phase or nickname the orchestrator gave the child | about 300 bytes |
 
@@ -174,7 +181,7 @@ A row never copies content: no task description, prompt, result or tool output.
 
 - **Claude Code** cleans transcripts after 30 days by default, and this Mac does not change that. Even so, transcripts last modified on 2026-09-07 still exist. The cause has not been checked.
 - **Codex.** The oldest rollout is from 2026-09-03. No automatic cleanup has been observed, but Codex's retention settings have not been checked.
-- **Size.** The 4,224 Claude subagent transcripts take 3.4 GB, with a median of 576 KB each. An L1 row is over 2,000 times smaller than the transcript it summarises.
+- **Size.** The 4,305 Claude subagent transcripts take 3.5 GB, with a median of 569 KB each. An L1 row is over 2,000 times smaller than the transcript it summarises.
 
 Why L1 and R2:
 
@@ -195,7 +202,7 @@ A group run gets its own record, much as a group project would. Draft `execution
   "parent_group_id": null,
   "identity_id": null,
   "native_ref": { "session_id": "<claude session uuid>", "workflow_run_id": "wf_<run>" },
-  "name": "review-changes",
+  "name": null,
   "phases": ["Review", "Verify"],
   "members": [
     { "seat_id": null, "child_ref": "<agent id>", "depth": 1, "end_state": "result", "settings": [] }
@@ -209,11 +216,13 @@ A group run gets its own record, much as a group project would. Draft `execution
 
 | Field | Meaning |
 |---|---|
-| `kind` | `workflow` (a Claude Code workflow run), `spawn` (Codex threads that share a parent) or `declared`. |
-| `orchestrator_seat_id` | The seat that started the run. The group takes that seat's `identity_id` and nothing else. |
+| `kind` | `workflow` (a Claude Code workflow run), `spawn` (two or more Codex threads that one parent thread spawned under one root turn) or `declared`. |
+| `orchestrator_seat_id` | The seat that started the run. The group takes that seat's `identity_id` and nothing else. When a spawn group's parent thread is itself a child, this is the root thread's seat. |
+| `native_ref` | `{session_id, workflow_run_id}` for a workflow run. `{thread_id, turn_id}` for a spawn group: the parent thread, and the `root_turn_id` of the members' first turn. |
 | `parent_group_id` | Set when a member starts its own run. |
-| `name`, `phases` | The short name and phase titles the orchestrator declared. Descriptions and prompts are not kept. |
-| `members` | One entry per member. An `ephemeral` member is a summary row. A promoted member points to its own record by `seat_id`, and that record carries `group_id`. |
+| `name` | Recorded only when the orchestrator declares a name. No reader infers one, and Claude Code run directories hold none. |
+| `phases` | The run's phase titles in the order first seen. A title is kept only if it has at most 32 letters, digits, spaces, `_` or `-`, and a run keeps at most 16. A member's own phase, labels, descriptions and prompts are not kept. |
+| `members` | One entry per member. An `ephemeral` member is a summary row. When a second thread from the same spawn turn appears, the first thread's row moves from the seat's `children` into the group. A promoted member points to its own record by `seat_id`, and that record carries `group_id`. |
 | `deliverables` | Pointers to what the group produced that others can cite: commits, PRs, collab events or artifacts. A member that produces a deliverable is promoted to `recorded`. |
 | `outcome` | `completed`, `failed`, `stopped` or `unknown`. |
 
@@ -223,10 +232,12 @@ Boundaries:
 - **No scoring.** No member is scored or ranked, and there is no contribution metric.
 - **One identity.** A group belongs to one orchestrating seat and one identity. Work shared between several identities belongs to a [mission](COLLABORATION-MISSIONS.md), where membership and grants are explicit.
 
-Still open:
+**Decided (2026-10-17).** These are decisions 11 and 12:
 
-- whether Codex spawned threads always form a group, or only when a parent spawns several at once;
-- whether a run's `name` counts as content.
+- **Codex groups.** A group exists only when one parent thread spawns two or more threads under the same root turn. The other options were no Codex groups, one group per parent, and one group per spawn turn even for a single thread.
+  - **Why.** Grouping by time does not work. Clustering siblings whose starts were within 120 seconds of each other gave 211 batches, most of them single threads.
+  - **Observed.** A trial ingest found 79 spawn groups holding 290 threads, with between 2 and 11 members each. Another 29 threads were spawned alone and stayed rows.
+- **Names and phases.** Phase titles are short, few and repeated across runs, so the group keeps them. Labels are long and mostly unique, so they stay out, as does a member's own phase. Keeping each member's phase was the alternative: it would have added a label to L1 rows.
 
 ## Publication
 
