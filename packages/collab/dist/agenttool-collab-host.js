@@ -3479,6 +3479,39 @@ class CollabStore {
     const validated = this.validateEventAnchor(workspaceId, anchor);
     return this.eventsSince(workspaceId, validated.sequence, limit);
   }
+  eventAddressesSession(event, sessionId) {
+    const payload = event.payload ?? {};
+    const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
+    switch (event.type) {
+      case "report.posted": {
+        if (payload.to_session_id === sessionId)
+          return true;
+        if (typeof payload.target_report_id !== "string")
+          return false;
+        const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
+        return target?.from_session_id === sessionId;
+      }
+      case "handoff.offered":
+        return field(payload.handoff, "to_session_id") === sessionId;
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired": {
+        const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
+        return offer?.from_session_id === sessionId;
+      }
+      case "task.reported_complete":
+        return payload.review_requested_session_id === sessionId;
+      case "task.accepted":
+      case "task.changes_requested": {
+        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
+        return task?.reported_by_session_id === sessionId;
+      }
+      case "task.recovered":
+        return field(payload.prior_lease, "session_id") === sessionId;
+      default:
+        return false;
+    }
+  }
   verifyJournal(workspaceId) {
     const audit = this.db.transaction(() => {
       this.requireWorkspace(workspaceId);
@@ -5187,7 +5220,7 @@ function addSeconds(iso, seconds) {
 
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--db <path>]";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
 var MAX_HOST_REASON = 2000;
 var DEFAULT_HOST_WAIT_MS = 600000;
 var MAX_HOST_WAIT_MS = 3600000;
@@ -5246,6 +5279,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
   const deadline = started + options.wait_ms;
   let observed = afterAnchor;
   let skipped = 0;
+  let unaddressed = 0;
   const receipt = (status, headSequence2) => ({
     protocol: COLLAB_HOST_PROTOCOL,
     status,
@@ -5255,6 +5289,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
     next_anchor: { ...observed },
     head_sequence: headSequence2,
     skipped_own_events: skipped,
+    ...options.addressed ? { skipped_unaddressed_events: unaddressed } : {},
     waited_ms: Math.max(0, Math.round(clock.now() - started))
   });
   let headSequence = observed.sequence;
@@ -5269,11 +5304,16 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       });
       headSequence = page.head_sequence;
       for (const event of page.events) {
-        if (options.include_own || event.session_id !== credential.session_id) {
+        const own = event.session_id === credential.session_id;
+        const routed = !options.addressed || store.eventAddressesSession(event, session.id);
+        if ((options.include_own || !own) && routed) {
           return receipt("ready", headSequence);
         }
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        skipped += 1;
+        if (own && !options.include_own)
+          skipped += 1;
+        else
+          unaddressed += 1;
       }
       drained = !page.has_more;
     } catch (error) {
@@ -5352,7 +5392,8 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock) {
       return emit(waitForSessionEvents(store, credential, {
         after_anchor: args.after_anchor,
         wait_ms: args.wait_ms,
-        include_own: args.include_own
+        include_own: args.include_own,
+        addressed: args.addressed
       }, clock), 0);
     } finally {
       store.close();
@@ -5362,7 +5403,7 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock) {
   }
 }
 var END_ONLY_OPTIONS = ["reason", "release-leases"];
-var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own"];
+var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"];
 function parseHostArgs(argv) {
   let parsed;
   try {
@@ -5434,6 +5475,7 @@ function parseWaitArgs(values) {
     after_anchor: afterAnchor,
     wait_ms: waitMs,
     include_own: values["include-own"] === true,
+    addressed: values.addressed === true,
     db: values.db
   };
 }
@@ -5463,7 +5505,8 @@ function parseHostOptions(argv) {
       session: { type: "string" },
       "after-anchor": { type: "string" },
       "wait-ms": { type: "string" },
-      "include-own": { type: "boolean" }
+      "include-own": { type: "boolean" },
+      addressed: { type: "boolean" }
     }
   });
 }

@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**825 document paths** (including mirrors). orientation: 181; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**826 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -69,6 +69,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/codex-usage/README.md](<../packages/codex-usage/README.md>) | not-reviewed |
 | [packages/collab-courier/README.md](<../packages/collab-courier/README.md>) | not-reviewed |
 | [packages/collab/README.md](<../packages/collab/README.md>) | not-reviewed |
+| [packages/collab/integrations/claude-code/README.md](<../packages/collab/integrations/claude-code/README.md>) | not-reviewed |
 | [packages/collab/integrations/openclaw/README.md](<../packages/collab/integrations/openclaw/README.md>) | not-reviewed |
 | [packages/common-ground-atlas/CLAUDE.md](<../packages/common-ground-atlas/CLAUDE.md>) | not-reviewed |
 | [packages/common-ground-atlas/README.md](<../packages/common-ground-atlas/README.md>) | not-reviewed |

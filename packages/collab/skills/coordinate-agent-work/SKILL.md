@@ -303,6 +303,11 @@ anchor. A host operator may authorize one recovery startup with
 `collab_cursor_reset` records a reason and exact valid target. Do not make that
 override permanent.
 
+A host that relaunches the same thread each round should resume one session
+for it through `AGENTOOL_COLLAB_SESSION_FILE` rather than start a new one per
+round; in a resumed process do not call `collab_session_start` (it is refused
+with `session_already_bound`). A one-off run ends its session before it exits.
+
 Verify that every participant opened the intended workspace and shared
 database. Expect linked Git worktrees to share a repository workspace while
 retaining distinct worktree records.
@@ -350,7 +355,7 @@ exits (for example a background shell task) can arm a doorbell instead of
 spending a model turn on every 30-second wait:
 
 ```bash
-agenttool-collab-host wait --session <your session id> [--after-anchor '<next_anchor JSON>'] [--wait-ms <ms>]
+agenttool-collab-host wait --session <your session id> [--after-anchor '<next_anchor JSON>'] [--wait-ms <ms>] [--addressed]
 ```
 
 Pass the session ID, never the credential file's contents; the command reads
@@ -359,6 +364,11 @@ reads with the current generation and never resumes, acknowledges or writes,
 so it cannot fence the MCP process. `--wait-ms` defaults to 600,000 and cannot
 exceed 3,600,000. Without `--after-anchor` it waits after your acknowledged
 cursor. Events this session wrote are passed over unless `--include-own`.
+With `--addressed` it rings only for events routed to you: a report addressed
+to you or answering yours, a handoff offered to you or answering your offer, a
+review requested of you, a verdict on your completion, or recovery of your
+lease. In Claude Code, `integrations/claude-code/collab-doorbell-watch.ts`
+keeps this armed and rings your own inbox socket.
 
 The receipt is a doorbell, not a delivery. `ready` means at least one event
 not written by this session follows `next_anchor`; read it through your MCP

@@ -32843,6 +32843,39 @@ class CollabStore {
     const validated = this.validateEventAnchor(workspaceId2, anchor);
     return this.eventsSince(workspaceId2, validated.sequence, limit);
   }
+  eventAddressesSession(event, sessionId2) {
+    const payload = event.payload ?? {};
+    const field = (value, key2) => value !== null && typeof value === "object" ? value[key2] : undefined;
+    switch (event.type) {
+      case "report.posted": {
+        if (payload.to_session_id === sessionId2)
+          return true;
+        if (typeof payload.target_report_id !== "string")
+          return false;
+        const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
+        return target?.from_session_id === sessionId2;
+      }
+      case "handoff.offered":
+        return field(payload.handoff, "to_session_id") === sessionId2;
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired": {
+        const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
+        return offer?.from_session_id === sessionId2;
+      }
+      case "task.reported_complete":
+        return payload.review_requested_session_id === sessionId2;
+      case "task.accepted":
+      case "task.changes_requested": {
+        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
+        return task?.reported_by_session_id === sessionId2;
+      }
+      case "task.recovered":
+        return field(payload.prior_lease, "session_id") === sessionId2;
+      default:
+        return false;
+    }
+  }
   verifyJournal(workspaceId2) {
     const audit = this.db.transaction(() => {
       this.requireWorkspace(workspaceId2);

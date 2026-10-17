@@ -4983,6 +4983,14 @@
       "canonical_path": "packages/collab/README.md"
     },
     {
+      "path": "packages/collab/integrations/claude-code/README.md",
+      "title": "Claude Code collab doorbell (unreleased)",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/collab/integrations/claude-code/README.md"
+    },
+    {
       "path": "packages/collab/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
       "title": "Coordinate Agent Work from Hermes",
       "type": "guide",

@@ -4288,6 +4288,50 @@ export class CollabStore {
     return this.eventsSince(workspaceId, validated.sequence, limit);
   }
 
+  /**
+   * Whether an event's routing fields name this session: a report addressed to
+   * it or answering one of its reports, a handoff offered to it or answering
+   * its offer, a review it was asked for, a verdict on its completion, or the
+   * recovery of its expired lease. Report bodies and other free text are never
+   * inspected. Addressing is routing, not access control: every session can
+   * still read the event.
+   */
+  eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
+    const payload = (event.payload ?? {}) as Record<string, unknown>;
+    const field = (value: unknown, key: string) =>
+      value !== null && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
+    switch (event.type) {
+      case "report.posted": {
+        if (payload.to_session_id === sessionId) return true;
+        if (typeof payload.target_report_id !== "string") return false;
+        const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`)
+          .get(payload.target_report_id) as { from_session_id: string | null } | null;
+        return target?.from_session_id === sessionId;
+      }
+      case "handoff.offered":
+        return field(payload.handoff, "to_session_id") === sessionId;
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired": {
+        const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`)
+          .get(event.entity_id) as { from_session_id: string | null } | null;
+        return offer?.from_session_id === sessionId;
+      }
+      case "task.reported_complete":
+        return payload.review_requested_session_id === sessionId;
+      case "task.accepted":
+      case "task.changes_requested": {
+        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`)
+          .get(event.workspace_id, event.entity_id) as { reported_by_session_id: string | null } | null;
+        return task?.reported_by_session_id === sessionId;
+      }
+      case "task.recovered":
+        return field(payload.prior_lease, "session_id") === sessionId;
+      default:
+        return false;
+    }
+  }
+
   verifyJournal(workspaceId: string): boolean {
     const audit = this.db.transaction(() => {
       this.requireWorkspace(workspaceId);
