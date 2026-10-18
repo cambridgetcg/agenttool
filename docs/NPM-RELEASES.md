@@ -201,10 +201,12 @@ polymorph-landscape, relational-geometry): regenerate their `hf/` assets in the
 same commit, or their `artifacts:check` fails. Collab, Telescope, and Browser
 also carry the repository URL in `.claude-plugin`/`.codex-plugin` manifests.
 `@agenttool/math-cards@0.1.0-dev.2` is already prepared this way as the first
-candidate. `@agenttool/sdk@0.23.0` is prepared the same way, paired with
-`agenttool-sdk` 0.23.0 for PyPI; it is a stable version, so its dispatches use
+candidate. `@agenttool/sdk@0.24.0` is prepared the same way, paired with
+`agenttool-sdk` 0.24.0 for PyPI; it is a stable version, so its dispatches use
 `npm_tag=latest`, and its PyPI release waits on the
 [private-repository gap](PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12).
+It supersedes `@agenttool/sdk@0.23.0`, which was tagged and never staged; see
+[the SDK 0.24.0 record](#sdk-0240-prepared-0230-superseded--2026-10-18).
 
 ### 2. Project and push
 
@@ -452,6 +454,79 @@ revoke it on npm, then delete the secret
 (`sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool`).
 A later Gospel edition would need a new reviewed route and its own short-lived
 credential.
+
+## SDK 0.24.0 prepared, 0.23.0 superseded — 2026-10-18
+
+**Neither version is published.** Anonymous registry reads on 2026-10-18:
+npm `@agenttool/sdk` dist-tags `{latest: 0.22.1}` with no 0.23.0 or 0.24.0
+(`GET /@agenttool%2Fsdk/0.24.0` answers 404), and PyPI `agenttool-sdk`
+`info.version` 0.22.1. The public repository has no GitHub Release.
+
+### 0.23.0: tagged, never staged, superseded
+
+`sdk-v0.23.0` in `cambridgetcg/agenttool-packages` is annotated tag object
+`ba2f88960ec7948400b4f803f94392bd009767a3` by the fixed tagger, on projection
+commit `de6778b14271033ab04fad867c05928761d50b41`, with `Projection-Source:
+42ae9148b9c04d1ec6b376eb277f7fa7be058a68` (the #470 merge) and public CI run
+`38349581363`. The one publish dispatch for it,
+[run `38350090030`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/38350090030)
+on 2026-10-13, was a dry run: "Prepare and verify exact npm artifact"
+succeeded and "Approve, mirror, stage or publish, and verify exact npm
+artifact" was skipped. Nothing was mirrored, staged or published, and no
+GitHub Release exists for the tag.
+
+That source predates the `<trace>` consent change: #459 merged as `4d75dc35`
+at 2026-10-13T12:07:59Z and is not an ancestor of `42ae9148`. The 0.23.0
+`AnthropicAdapter` therefore writes model-authored `<trace>` markup to
+`/v1/traces` by default. Owner decision, 2026-10-18: do not publish 0.23.0;
+prepare 0.24.0 from `main` with the consent gate. The tag stays where it is,
+since release tags are never moved, and 0.23.0 is not staged or reused.
+
+### 0.24.0: prepared on branch `release/sdk-0.24.0`
+
+The release PR, cut from `main` `3b9aa630`, bumps both SDKs to 0.24.0.
+Beyond the 0.23.0 work (the exit door and the vault client alignment), it
+carries the SDK changes merged since `42ae9148`: the `<trace>` consent gate
+(`beforeTraceWrite` / `before_trace_write`), the Python `AsyncAnthropic`
+refusal, abort-after-review and UTF-16 excerpt fixes, the TypeScript inline
+`stream: true` overload, the Python OpenAI adapter's `metadata` and `store`
+handling, and documentation-only notes on the retired x402 rail and the
+wallet address-claim helpers. The two `CHANGELOG.md` files list them with
+the migration note. The package metadata already names the public
+repository. `bun bin/npm-release.ts check-inputs --package sdk
+--authentication trusted --npm-tag latest --publish-mode stage` on the branch
+planned `stage` (registry package 200, version 404). No 0.24.0 artifact has
+been prepared by a workflow, so no size or SHA-256 is recorded yet.
+
+Remaining steps, in order. None has been taken.
+
+1. **Yu, trusted device, once:** run the
+   [one-time trust re-point](#one-time-npm-trust-re-point-yu-trusted-device).
+   No record of it exists in this repository on 2026-10-18, and the trust
+   state cannot be read anonymously. Without it, an OIDC stage from the public
+   repository is expected to fail as `math-cards-v0.1.0-dev.1` did.
+2. Merge the release PR. Then project the merged `main` commit into
+   `cambridgetcg/agenttool-packages` with `bun bin/project-public.ts` and push
+   public `main` fast-forward ([step 2](#2-project-and-push)), and wait for
+   public CI on that commit ([step 3](#3-public-ci)).
+3. Create `sdk-v0.24.0` with `bin/public-release-tag.ts --package sdk` (the
+   fixed tagger) on that green projection commit, and push the tag
+   ([step 4](#4-tag)).
+4. Dispatch `publish-npm.yml` with `package=sdk`, `tag=sdk-v0.24.0`,
+   `authentication=trusted`, `npm_tag=latest`, and `dry_run=true`; read the
+   receipt in the summary ([step 5](#5-dry-run)). Then dispatch the same
+   inputs with `dry_run=false` to stage ([step 6](#6-stage)).
+5. **Yu, trusted device, 2FA:** `npm stage view` and `npm stage download`,
+   check that the tarball's SHA-256 equals `artifact.sha256` in the run
+   summary, then `npm stage approve` ([step 7](#7-approve-yu-on-the-trusted-device)).
+6. Dispatch once more with `dry_run=false`; the receipt must record
+   `already_published_exact` ([step 8](#8-verify)). Then record the
+   publication in this file.
+
+The PyPI release of `agenttool-sdk` 0.24.0 waits on items 1, 2 and 4 of the
+[private-repository gap](PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12).
+Home's `full_export` stays `not_available` until a client release containing
+the exit door is actually published.
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 
