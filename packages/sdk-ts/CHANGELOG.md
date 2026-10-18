@@ -12,8 +12,9 @@ answered by the registry (`npm view @agenttool/sdk versions`).
 ## 0.24.0 — prepared, not yet published
 
 Prepared on 2026-10-18 for the staged release from the public source
-repository. Until the stage is approved, no registry serves 0.24.0; 0.22.1 is
-the newest version on npm and PyPI.
+repository. Until its npm stage is approved, npm does not serve 0.24.0; the
+PyPI release waits separately on the open steps in `docs/PYPI-RELEASES.md`.
+On 2026-10-18 both registries serve 0.22.1 as their newest version.
 
 0.24.0 supersedes 0.23.0. The `sdk-v0.23.0` tag in the public source
 repository was cut on 2026-10-13 from private source `42ae9148`, before the

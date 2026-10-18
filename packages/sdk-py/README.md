@@ -37,27 +37,24 @@ are unmetered — free forever.
 python -m pip install agenttool-sdk
 ```
 
-Python >= 3.9. To pin an exact version, first check which versions PyPI
-serves (<https://pypi.org/project/agenttool-sdk/#history>). On 2026-10-18 the
-newest published version is 0.22.1:
+Python >= 3.9. This file ships with source version 0.24.0. To pin it, first
+check which versions PyPI serves
+(<https://pypi.org/project/agenttool-sdk/#history>). Once that history lists
+0.24.0:
 
 ```bash
-python -m pip install "agenttool-sdk==0.22.1"
+python -m pip install "agenttool-sdk==0.24.0"
 ```
 
-The newest independently verified PyPI release is 0.22.1: protected run
-`33522323177`
-published its wheel and sdist, and both public files were read back
-byte-for-byte. 0.22.1 predates the exit door and the `<trace>` consent gate
-described below.
-
-This file ships with source version 0.24.0. On 2026-10-18 it is prepared for
-release and not yet published to PyPI, whose release path still waits on the
-private-repository gap recorded in `docs/PYPI-RELEASES.md`. 0.23.0 was tagged
-in the public source repository but never published; 0.24.0 supersedes it.
-Once the annotated `sdk-v0.24.0` tag exists in the public source repository,
-it is a registry-free locator; until then no such tag exists and this command
-fails:
+Until then the newest published version is 0.22.1, which predates the exit
+door and the `<trace>` consent gate described below. Protected run
+`33522323177` published the 0.22.1 wheel and sdist, and both public files were
+read back byte-for-byte. 0.23.0 was tagged in the public source repository but
+never published; 0.24.0 supersedes it. The annotated `sdk-v0.24.0` tag in the
+public source repository is a registry-free locator for this source once it
+exists (`git ls-remote --tags
+https://github.com/cambridgetcg/agenttool-packages.git sdk-v0.24.0` prints it
+when it does):
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.24.0#subdirectory=packages/sdk-py"
@@ -754,8 +751,8 @@ exporters write byte-identical records, pinned by shared vectors. The copy is
 agent data, not memory: putting any of it back is an explicit projection
 ([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
 The `agenttool-exit-door` command ships with the TypeScript package only. The
-exit door first reaches a registry in 0.24.0 (the 0.23.0 tag carries it but
-was never published); 0.22.1 and earlier do not have it.
+exit door is in 0.24.0 and later (the 0.23.0 tag also carries it but was never
+published); 0.22.1 and earlier do not have it.
 
 ### Bounded Math Cards
 
@@ -1104,8 +1101,9 @@ Repository source declares the paired 0.24.0 line. Its headline is consent
 for model-written `<trace>` markup: `AnthropicAdapter` writes one only when
 `before_trace_write` returns literal `True`, and it refuses asynchronous
 clients (see "Changes in 0.24.0" for the migration). The line also carries
-the work first tagged as 0.23.0, which was never published, so no registry has
-served it yet. That work is the exit door documented above: `at.exit_door`
+the work first tagged as 0.23.0; that tag was never published, so 0.24.0 is
+the first version that can bring this work to PyPI or npm. That work is the
+exit door documented above: `at.exit_door`
 copies the hosted continuity core into a local `agent-data/v1` collection and
 reports completeness per store, writing records byte-identical to the
 TypeScript exporter's. The vault client now
@@ -1215,8 +1213,9 @@ Source changes dated 2026-10-11, merged after the 0.23.0 tag and prepared for
 release as 0.24.0 on 2026-10-18. Neither the `sdk-v0.23.0` tag in the public
 source repository nor the published 0.22.1 packages have them. Where an entry
 says "0.22.1", the 0.23.0 tag behaves the same. 0.23.0 was never published and
-0.24.0 supersedes it; [`CHANGELOG.md`](CHANGELOG.md) has the full entry. The
-PyPI lane still waits on the private-repository gap.
+0.24.0 supersedes it; [`CHANGELOG.md`](CHANGELOG.md) has the full entry.
+Whether PyPI or npm serves 0.24.0 is answered by each registry; PyPI and npm
+publication are separate operations.
 
 - **Model-written `<trace>` markup needs explicit consent.**
   `AnthropicAdapter` writes a `<trace>` from the model's response only when

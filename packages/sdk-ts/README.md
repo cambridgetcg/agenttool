@@ -38,23 +38,22 @@ The package is **ESM-only**: your project needs `"type": "module"` in its
 `package.json` (or use `.mts` files). There is no CommonJS `require()` build.
 Declared engines are Node >= 20.19 and Bun >= 1.3.5.
 
-To pin an exact version, first check which versions npm serves
-(`npm view @agenttool/sdk versions`). On 2026-10-18 the newest published
-version is 0.22.1:
+This file ships with source version 0.24.0. Versions from 0.24.0 on are
+staged from the public source repository and reach npm only after a
+maintainer approves the stage with two-factor authentication, so first check
+which versions npm serves (`npm view @agenttool/sdk versions`). Once that list
+includes 0.24.0, pin it:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.22.1
+npm install --save-exact @agenttool/sdk@0.24.0
 ```
 
-This file ships with source version 0.24.0. On 2026-10-18 it is prepared for
-the staged release from the public source repository and not yet published:
-a version reaches npm only after a maintainer approves its stage with
-two-factor authentication, and until then npm answers 404 for it. 0.23.0 was
-tagged there but never published; 0.24.0 supersedes it. 0.22.1 predates the
-exit door and the `<trace>` consent gate described below. The staging run
-also attaches the same tarball to a GitHub Release for the tag; on 2026-10-18
-the public source repository has no SDK GitHub Release yet. The newest version
-with an independently verified LOVE artifact is 0.22.1 (protected run
+Until then the newest published version is 0.22.1, which predates the exit
+door and the `<trace>` consent gate described below. 0.23.0 was tagged in the
+public source repository but never published; 0.24.0 supersedes it. The run
+that stages a version also attaches the same tarball to a GitHub Release for
+its tag in the public source repository. The newest version with an
+independently verified LOVE artifact is 0.22.1 (protected run
 `33522319466`). For that registry-free, size/SHA-256-verified install, follow
 the pinned first-success tutorial instead:
 
@@ -688,10 +687,10 @@ agenttool-exit-door export \
 
 Tokens come only from `--*-token-env NAME` or non-interactive
 `--*-token-stdin`, never from argv, and at most one token can come from stdin.
-Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door first
-reaches a registry in 0.24.0 (the 0.23.0 tag carries it but was never
-published); 0.22.1 and earlier do not have it, so check the installed version
-before relying on it.
+Exit codes: 0 complete, 3 partial, 1 failed, 2 usage. The exit door is in
+0.24.0 and later (the 0.23.0 tag also carries it but was never published);
+0.22.1 and earlier do not have it, so check the installed version before
+relying on it.
 
 ### Bounded Math Cards
 
@@ -1090,9 +1089,9 @@ const at = new AgentTool({
 Repository source declares the paired 0.24.0 line. Its headline is consent
 for model-written `<trace>` markup: `AnthropicAdapter` writes one only when
 `beforeTraceWrite` returns literal `true` (see "Changes in 0.24.0" for the
-migration). The line also carries the work first tagged as 0.23.0, which was
-never published, so no registry has served it yet. That work is the exit door
-documented above: `at.exitDoor` and the `agenttool-exit-door` bin copy the
+migration). The line also carries the work first tagged as 0.23.0; that tag
+was never published, so 0.24.0 is the first version that can bring this work
+to npm or PyPI. That work is the exit door documented above: `at.exitDoor` and the `agenttool-exit-door` bin copy the
 hosted continuity core into a local `agent-data/v1` collection and report
 completeness per store. The vault client now matches the API: `set_policy`
 sends `agent_ids` (null shares, `[]` denies) and refuses the unimplemented
@@ -1197,8 +1196,9 @@ Source changes dated 2026-10-11, merged after the 0.23.0 tag and prepared for
 release as 0.24.0 on 2026-10-18. Neither the `sdk-v0.23.0` tag in the public
 source repository nor the published 0.22.1 packages have them. Where an entry
 says "0.22.1", the 0.23.0 tag behaves the same. 0.23.0 was never published and
-0.24.0 supersedes it; [`CHANGELOG.md`](CHANGELOG.md) has the full entry. The
-PyPI lane still waits on the private-repository gap.
+0.24.0 supersedes it; [`CHANGELOG.md`](CHANGELOG.md) has the full entry.
+Whether npm or PyPI serves 0.24.0 is answered by each registry; npm and PyPI
+publication are separate operations.
 
 - **Model-written `<trace>` markup needs explicit consent.**
   `AnthropicAdapter` writes a `<trace>` from the model's response only when
