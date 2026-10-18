@@ -33,9 +33,11 @@ work does not change those published bytes. The removed cross-device
 release-room relay is not this architecture and must not be restored from old
 checkout instructions.
 
-Collab **0.5.0 is a RELEASE CANDIDATE with 33 MCP tools**, adding bounded
-anchored waiting. These release-candidate bytes do not establish npm publication;
-verify the protected receipt and registry separately. The private
+Collab **0.5.0, with 33 MCP tools**, adds bounded anchored waiting. It is a
+[GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+(2026-10-10), not an npm publication. Source on `main` is the unreleased
+`0.5.1-dev.0` development build, which adds the host doorbell wait; verify the
+protected receipt and registry separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
 and a separately callable witness observer. Its

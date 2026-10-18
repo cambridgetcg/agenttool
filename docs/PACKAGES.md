@@ -71,13 +71,16 @@ those are not current publication status. Collab 0.4.0 has a
 [verified GitHub/npm release receipt](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
-not assertions about mutable registry tags. Current Collab source is the
-**0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
-These release-candidate bytes do not establish npm publication; verify the
-protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
+not assertions about mutable registry tags. Public 0.4.0 remains the unchanged
+32-tool npm release.
 **Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
 public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
+**Update, 2026-10-18.** Current Collab source on `main` is the unreleased
+**0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
+event waiting, plus the host doorbell wait. A development version is not a
+release; the next npm candidate is 0.5.1 through the
+[public release path](NPM-RELEASES.md#public-release-path-from-2026-10-12).
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback

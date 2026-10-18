@@ -2,13 +2,19 @@
 
 > **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source repository).
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
-> **Code:** `src/{store,mcp,protocol}.ts`.
+> **Code:** `src/{store,mcp,protocol,version}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
 
-**RELEASE CANDIDATE: 0.5.0, 33 MCP tools.** Public 0.4.0 remains
-the unchanged 32-tool witness-awareness release; installing it does not supply
-`collab_events_wait`. This preparation is not evidence of 0.5.0 publication or
-native-harness activation; verify exact release receipts separately.
+**DEVELOPMENT BUILD: 0.5.1-dev.0, 33 MCP tools. Unreleased.** Collab 0.5.0
+is released on GitHub only, as the
+[`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
+still the 32-tool 0.4.0, which does not supply `collab_events_wait`. In
+behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-doorbell-wait-unreleased)
+and its addressed mode with the Claude Code watcher. The next npm candidate is
+0.5.1 through the [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12).
+This source is not evidence of 0.5.1 publication or native-harness activation;
+verify exact release receipts separately.
 
 Local-first coordination for independent coding-agent sessions. It gives
 Codex, Claude Code, Hermes Agent, and other local MCP clients one SQLite-backed
@@ -353,6 +359,9 @@ is not an MCP tool.
 
 ### Host doorbell wait (unreleased)
 
+This arrived after 0.5.0 and is in the 0.5.1-dev.0 development build only; no
+released Collab archive contains it.
+
 `agenttool-collab-host wait` lets a host wait between model turns, for
 example as a background command whose exit wakes the agent, instead of
 spending a turn on each 30-second `collab_events_wait`:
@@ -671,7 +680,7 @@ selected Hermes profile. Its workflow keeps the credential-bound and
 self-declared presence planes separate and never asks the model to read a
 session credential file. Hermes Kanban remains Hermes's dispatcher; the local
 Collab journal does not automatically mirror it, spawn or wake agents, or
-infer external authority. The 0.5.0 adapter also names
+infer external authority. Since 0.5.0 the adapter also names
 `mcp_agenttool_collab_events_wait` for finite observation while running.
 
 [The explicit OpenClaw example](integrations/openclaw/README.md) describes a
@@ -733,14 +742,28 @@ npm/GitHub artifact with SHA-256
 `1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51`.
 This is a historical receipt, not a fresh registry or deployed-host check.
 
-**RELEASE CANDIDATE: 0.5.0.** These release-candidate bytes do not establish npm
-publication; verify the protected receipt and registry separately. It keeps
-journal schema 3 and adds bounded anchored observation as the 33rd tool, review
-routing (`review_requested_session_id`), review confidence, `release_leases` on
-session end, the `agenttool-collab-host` bin, host-commit acceptance, and the
-bound `collab_next` refusal of a differing `after_sequence`. These source changes do not themselves publish, upload, deploy,
-configure a native harness, activate a Telegram channel or second device, or
-contact a chain.
+Version 0.5.0 is released on GitHub, not npm. The
+[`collab-v0.5.0` GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+on `cambridgetcg/agenttool-collab` (2026-10-10) carries the 390,363-byte
+archive recorded in the [release receipts](https://docs.agenttool.dev/NPM-RELEASES.md),
+built from source revision `bc71e87e`. The archive was prepared locally, not by
+the protected workflow. Its bundled README still calls 0.5.0 a release
+candidate, because that text was frozen at the tag. It keeps journal schema 3
+and adds bounded anchored observation as the 33rd tool, review routing
+(`review_requested_session_id`), review confidence, `release_leases` on session
+end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
+`collab_next` refusal of a differing `after_sequence`.
+
+**DEVELOPMENT BUILD: 0.5.1-dev.0.** This main-branch source follows 0.5.0 and is
+unreleased. It keeps journal schema 3 and the 33 MCP tools, and adds the
+`agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
+Claude Code doorbell watcher. The MCP server reports `0.5.1-dev.0` in
+`serverInfo` and at the start of its instructions, both read from
+`src/version.ts`, so this build cannot announce itself as the 0.5.0 release.
+The next npm candidate is 0.5.1 through the public staged release path. A
+development version is not a release, and these source changes do not
+themselves publish, upload, deploy, configure a native harness, activate a
+Telegram channel or second device, or contact a chain.
 Collab remains local plaintext software, not a hosted service, remote relay,
 VPN, private model channel, chain client, anchoring bridge, or LOVE release.
 Local pack inspection creates no release authority or public artifact.

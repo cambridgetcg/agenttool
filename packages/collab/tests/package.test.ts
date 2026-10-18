@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const packageRoot = join(import.meta.dir, "..");
 
@@ -79,9 +80,11 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.5.0");
+    expect(COLLAB_PACKAGE_VERSION).toBe("0.5.1-dev.0");
+    expect(packageManifest.version).toBe(COLLAB_PACKAGE_VERSION);
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
+    expect(codex.interface.longDescription).toStartWith(`Collab ${packageManifest.version}`);
     expect(codex.skills).toBe("./skills/");
     expect(codex.mcpServers["agenttool-collab"]).toEqual({
       type: "stdio",
@@ -143,7 +146,18 @@ describe("cross-host package", () => {
     }
   });
 
-  test("keeps release-candidate host guidance bounded and non-lifecycle", async () => {
+  test("derives the MCP serverInfo version and instruction prefix from one constant", async () => {
+    // events-wait.test.ts checks the committed bundle's live handshake, and
+    // check:mcp-bundle keeps that bundle equal to a fresh build of this source.
+    const mcpSource = await Bun.file(join(packageRoot, "src", "mcp.ts")).text();
+    expect(mcpSource).toContain('{ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }');
+    expect(mcpSource).toContain("`Collab ${COLLAB_PACKAGE_VERSION}: ");
+    expect(mcpSource).not.toMatch(/Collab \d+\.\d+\.\d+/);
+    expect(mcpSource).not.toMatch(/version: "\d+\.\d+\.\d+/);
+  });
+
+  test("labels host guidance with the exact version and keeps it bounded and non-lifecycle", async () => {
+    const version = (await json("package.json")).version as string;
     for (const path of [
       "README.md",
       "skills/coordinate-agent-work/SKILL.md",
@@ -151,10 +165,15 @@ describe("cross-host package", () => {
       "integrations/openclaw/README.md",
     ]) {
       const text = await Bun.file(join(packageRoot, path)).text();
-      for (const term of ["RELEASE CANDIDATE", "0.5.0", "0.4.0", "33", "32", "collab_events_wait",
+      for (const term of [version, "0.5.0", "0.4.0", "33", "32", "collab_events_wait",
         "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
         "event_too_large", "event_read_busy", "last_seen", "persona"]) {
         expect(text).toContain(term);
+      }
+      if (version.includes("-dev.")) {
+        // A development build is not a release candidate and must say so.
+        expect(text).toContain("DEVELOPMENT BUILD");
+        expect(text).not.toContain("RELEASE CANDIDATE");
       }
     }
     const openclaw = await Bun.file(join(packageRoot, "integrations/openclaw/README.md")).text();

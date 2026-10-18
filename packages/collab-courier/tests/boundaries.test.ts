@@ -18,7 +18,7 @@ test('receipt cursor stays exact beyond safe JS integer',()=>{expect(decimal('90
 
 test('strict binding rejects extra authority, credentials, endpoints, recipients and filter rebinding',async()=>{
   const f=fixture(1);try {
-    for(const version of ['0.4.0','0.5.0'] as const)expect(parseBinding({...f.b,local:{...f.b.local,version}}).local.version).toBe(version);
+    for(const version of ['0.4.0','0.5.0','0.5.1-dev.0'] as const)expect(parseBinding({...f.b,local:{...f.b.local,version}}).local.version).toBe(version);
     for(const mutate of [(b:any)=>b.extra='secret',(b:any)=>b.correspondence.token='secret',(b:any)=>b.correspondence.baseUrl='http://fixture.invalid',(b:any)=>b.correspondence.baseUrl='https://secret@fixture.invalid',(b:any)=>b.destinations.push({...b.destinations[0]}),(b:any)=>b.local.binary='bun',(b:any)=>b.local.version='0.6.0']){
       const b=structuredClone(f.b);mutate(b);expect(()=>parseBinding(b)).toThrow();
     }
