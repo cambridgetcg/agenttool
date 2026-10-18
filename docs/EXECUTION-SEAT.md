@@ -171,11 +171,13 @@ Defaults:
 
 - **Not lifetime.** A child that runs for hours but that nobody cites stays a row. How long a child runs says nothing about whether anyone must cite it.
 - **Claude Code subagents and collab.** A subagent shares its parent's MCP connection, so its collab writes go out under the parent's collab session and `seat_ref`, and collab cannot tell them apart. The `PostToolUse` hook input can: inside a subagent it carries `agent_id` (observed 2026-10-17). That is how a write is attributed to the child.
-- **Codex spawned threads and collab.** Read from the openai/codex source at `ce0323f`, not observed:
-  - **Own MCP servers.** Each spawned thread builds its own MCP runtime, so it starts its own MCP servers.
-  - **No thread id.** The MCP launch code adds no thread id to a server's environment. `CODEX_THREAD_ID` is set for shell commands. The launcher's default variable allowlist lives in a crate this checkout does not include.
+- **Codex spawned threads and collab.** Observed on codex-cli 0.162.1 on 2026-10-18 with a stand-in MCP server and logging hooks, and read in the openai/codex source at `ce0323f`:
+  - **Own MCP servers.** Each spawned thread starts its own MCP server processes.
+  - **No thread id.** Neither MCP servers nor hook commands get a thread id in their environment. `CODEX_THREAD_ID` is set only for shell commands.
   - **One seat ref for all.** A spawned thread's collab session can therefore name only what its host configured, the same for every thread.
-  - **Hooks.** Codex hooks (behind `features.hooks`) carry a spawned thread's id as `agent_id` in `PostToolUse`. That would attribute a write the way the Claude Code hook does. The exact input keys are in a crate this checkout does not include.
+  - **Hooks attribute it.** In a spawned thread, `PostToolUse` carries `agent_id` (the thread id) and `agent_type`. Its `session_id` is the parent session, and its `transcript_path` is the spawned thread's own rollout, which already exists. That attributes a collab write the way the Claude Code hook does.
+  - **Tool names.** Codex writes `-` in an MCP server name as `_`, so the `agenttool-collab` server's tools arrive as `mcp__agenttool_collab__collab_…`.
+  - **Hook trust.** Codex runs a configured hook only once it is trusted. Until then, `codex exec` skips it without a warning.
 - **The whole chain.** Promoting a nested child first promotes each ancestor between it and the top-level seat, so a promoted seat's `parent_seat_id` is always its direct parent. An ancestor promoted this way gets trigger `lineage`.
 - **The row stays.** A promoted child's row stays in its parent or group, and gains the child's `seat_id`.
 - **No demotion.** A seat never moves back down a level.
