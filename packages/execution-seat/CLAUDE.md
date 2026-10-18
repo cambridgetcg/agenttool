@@ -20,7 +20,8 @@ Keep these boundaries load-bearing:
 - never write, rename or delete a native transcript or rollout;
 - never update or delete a ledger row; corrections are new entries;
 - a child seat takes only its parent's `identity_id`, never a key or a grant;
-- persistence never moves down;
+- a record opens as `recorded`; `durable` means published, and nothing here publishes;
+- promotion walks the chain, so `parent_seat_id` is always the direct parent;
 - an end is recorded only when seen; a resume is a new `seat.resumed` entry, never an edit;
 - a hook prints nothing to stdout and always exits 0, and reads only the allowlisted hook fields;
 - never infer a provider from a harness, or claim reasoning continued across a model change;

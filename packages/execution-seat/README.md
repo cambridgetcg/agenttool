@@ -25,6 +25,7 @@ bun bin/agenttool-execution-seat.ts ingest claude ~/.claude/projects/<project>/<
 bun bin/agenttool-execution-seat.ts ingest codex ~/.codex/sessions/<y>/<m>/<d>/rollout-<…>.jsonl
 bun bin/agenttool-execution-seat.ts find claude-code <session_id>
 bun bin/agenttool-execution-seat.ts list --limit 20
+bun bin/agenttool-execution-seat.ts promote <seat_id> <child_ref> --trigger manual
 ```
 
 The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat`. The directory must be mode 0700 and its files 0600; wider modes are refused, never repaired.
@@ -80,7 +81,8 @@ Limits:
 - **Reasoning continuity.** It is never claimed. A Claude Code `thinking_drop` reason is kept as evidence on the timeline entry for that model.
 - **Append-only.** Triggers refuse every update and delete. Summary rows outlive native transcripts (R2). When a later scan finds a transcript gone, it sets `native_gone_at`; it never deletes the row.
 - **Ends.** An end is recorded only when one is seen, by a SessionEnd hook or from a child's own state. A later `seat.resumed` reopens the seat; the end stays in the ledger.
-- **Persistence** only moves up: `ephemeral` → `recorded` → `durable`. A member that produces a group deliverable is promoted to `recorded`.
+- **Persistence says who can cite a seat.** A child starts as an `ephemeral` row. Every seat record, including a top-level session, fork or continuation, opens as `recorded`. Nothing here sets `durable`, because `durable` means published.
+- **Promotion.** `promote` gives a child row its own `recorded` record and keeps the row, which gains the new `seat_id`. The record's `promotion` names the trigger: `deliverable` (a group deliverable it produced), `collab_write`, `mission_event` or `manual`. A nested child's ancestors are promoted first with trigger `lineage`, so `parent_seat_id` is always the direct parent. A chain whose parent row is missing is refused.
 - **No cap.** There is no limit on seats per identity, and lists paginate.
 - **Native ids are stored** because mapping a native session to a seat needs them. The ledger is therefore owner-only and local. Publication (S4) is separate work.
 
