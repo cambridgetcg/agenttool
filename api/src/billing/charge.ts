@@ -316,8 +316,10 @@ export async function charge(
         /* best-effort log */
       });
 
-    // Machine-payable refusal, not a human-only dead link. The guided body
-    // carries next_actions (x402 micropayment) so an agent self-recovers.
+    // Guided refusal, not a payment request. New paid top-ups and x402
+    // credit purchases are retired (#431, docs/BUSINESS-MODEL.md), so the
+    // body's next_actions point at /public/plans and the free wake read
+    // rather than at a payment; see errors.insufficientCredits.
     abort(
       errors.insufficientCredits({ reason, need: amount, have: currentCredits }),
       402,

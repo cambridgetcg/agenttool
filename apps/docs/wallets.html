@@ -189,7 +189,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Debit the wallet for a tool or operation. Most operations <code>charge()</code> automatically; this is for explicit ledger entries.</p>
+          <p class="endpoint-desc"><strong>Resting on the hosted service:</strong> spend enforces hourly and daily policy limits through Redis counters, and the hosted API deploys with workers disabled, which leaves it without them. Spend there returns <code>503 wallet_spend_resting</code> with <code>next_actions</code> before validation, ownership lookup, or any debit. Balances, policies and transaction history stay readable. On a self-run deployment with workers enabled, the retained route debits the wallet for an explicit ledger entry, subject to its spending policy. Most metered operations <code>charge()</code> project credits instead; those are a separate ledger.</p>
         </div>
       </div>
 
@@ -277,7 +277,8 @@
         </div>
       </div>
 
-      <h2 id="escrow">Escrow — agent-to-agent settlement</h2>
+      <h2 id="escrow">Escrow — create, release and refund are resting</h2>
+      <p><strong>Resting (2026-10-18):</strong> generic escrow money movement is resting. <code>POST /v1/escrows</code>, <code>POST /v1/escrows/:id/release</code> and <code>POST /v1/escrows/:id/refund</code> return <code>503 escrow_resting</code> with <code>next_actions</code> before validation or any database work, so no balance is locked, released or refunded. Existing escrows stay readable through <code>GET /v1/escrows</code> and <code>GET /v1/escrows/:id</code>; accept and dispute still change status without moving balance. An existing funded or disputed escrow that has to settle while this rests needs manual operator recovery, and no automatic deadline refund runs. Workflow-managed marketplace escrows settle through their own marketplace paths and are not affected. The descriptions below are the retained behaviour for a reviewed reopening.</p>
 
       <div class="endpoint" id="post-escrow">
         <div class="endpoint-header">
@@ -286,7 +287,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Lock wallet balance units in a creator-controlled payment hold. The creator may preassign an active same-project wallet, or leave it unassigned for another project's bearer to accept. Generic escrow proves neither an agreed deliverable nor bilateral worker authorization for cancellation or release. For retry-safe creation, send a caller-chosen <code>Idempotency-Key</code> of 8–256 visible ASCII characters without spaces: the same project, key, and fields resolve the same escrow and return its current row with 201 and <code>Idempotent-Replay: true</code>; changed fields return 409. Clients do not invent a key automatically.</p>
+          <p class="endpoint-desc">Currently returns <code>503 escrow_resting</code>. The retained path: lock wallet balance units in a creator-controlled payment hold. The creator may preassign an active same-project wallet, or leave it unassigned for another project's bearer to accept. Generic escrow proves neither an agreed deliverable nor bilateral worker authorization for cancellation or release. For retry-safe creation, send a caller-chosen <code>Idempotency-Key</code> of 8–256 visible ASCII characters without spaces: the same project, key, and fields resolve the same escrow and return its current row with 201 and <code>Idempotent-Replay: true</code>; changed fields return 409. Clients do not invent a key automatically.</p>
         </div>
       </div>
 
@@ -297,7 +298,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">The creator project's bearer authorizes release; this route verifies no worker signature. Funds settle to the assigned worker wallet.</p>
+          <p class="endpoint-desc">Currently returns <code>503 escrow_resting</code>. The retained path: the creator project's bearer authorizes release; this route verifies no worker signature. Funds settle to the assigned worker wallet.</p>
         </div>
       </div>
 

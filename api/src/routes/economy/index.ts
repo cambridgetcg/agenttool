@@ -4,10 +4,12 @@
  *
  *  Path layout (crypto-only; Stripe billing layer dropped 2026-05-17):
  *    /v1/wallets/...                       — wallet CRUD + fund + spend + policy + transactions
+ *                                             (spend: 503 wallet_spend_resting without Redis)
  *    /v1/wallets/:id/deposit-address       — crypto deposit addresses (disclosure resting)
  *    /v1/wallets/:id/onchain/{challenge,verify} — sovereign wallet binding (EIP-191)
  *    /v1/wallets/:id/{payout,payouts}      — outgoing crypto transfers
- *    /v1/escrows/...                        — escrow lifecycle
+ *    /v1/escrows/...                        — escrow lifecycle (create/release/refund resting:
+ *                                             503 escrow_resting)
  *    /v1/billing/crypto-webhook/:chain      — public, signature-verified inbound
  *                                             crypto transfer ingestion (mounted at parent)
  *

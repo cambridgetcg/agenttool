@@ -100,6 +100,18 @@ export function escrowIdempotencyKeySha256(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
 
+/** Generic create/release/refund are resting at the HTTP boundary
+ * (services/economy/config.ts genericEscrowMoneyMovementAllowed(); contract:
+ * docs/SAFETY-BOUNDARIES.md, "Generic escrow and wallet spend — resting").
+ * This service is kept intact for a reviewed reopening, which must first:
+ *   - apply the creator wallet's spending policy here (per-transaction,
+ *     hourly/daily, allowed-recipient, and approval-threshold limits that
+ *     spendFromWallet enforces in services/economy/wallets.ts). Creating an
+ *     escrow debits the wallet but currently checks no policy;
+ *   - drop the `redis` argument from create/release/refund/expireOverdue.
+ *     None of them calls Redis; the routes' getRedis() argument only made
+ *     production 503 with an unnamed redis_disabled body.
+ * expireOverdue has no scheduler, so no automatic deadline refund runs. */
 export async function createEscrow(
   db: DB,
   redis: Redis,

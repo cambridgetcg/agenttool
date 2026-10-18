@@ -3158,6 +3158,11 @@ function spec() {
             },
           },
         },
+        EscrowResting: {
+          description:
+            "Generic escrow create, release, and refund are resting (owner decision 2026-10-18). Stable error escrow_resting with generic_escrow=resting, retryable=false, and next_actions, returned before body validation, database, or Redis work; no balance moves. No environment flag reopens it. See /public/safety.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
       },
     },
     tags: [
@@ -3185,7 +3190,7 @@ function spec() {
           "Authenticated GET-only hospitality vocabulary and privacy-minimized journey projection over the existing capability-invocation economy.",
       },
       { name: "tools", description: "scrape · browse · document · execute" },
-      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
+      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available. Generic escrow create, release, and refund rest with 503 escrow_resting; direct wallet spend returns 503 wallet_spend_resting on deployments run without Redis (AGENTTOOL_DISABLE_WORKERS=1), the posture the hosted production deploy fence requires." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
@@ -8701,9 +8706,9 @@ function spec() {
         },
         post: {
           tags: ["economy"],
-          summary: "Create and fund a generic escrow",
+          summary: "Create and fund a generic escrow (resting: 503 escrow_resting)",
           description:
-            "Atomically locks an active creator wallet owned by the bearer project, applies a guarded relative debit, creates a funded generic escrow, and records its lock transaction. An optional preassigned worker must also be active, owned by the same project, and use the creator wallet currency; for cross-project work, omit workerWalletId and let the other project accept the escrow. Idempotency-Key is optional for compatibility. With it, successful creation is permanently deduplicated in PostgreSQL by authenticated project and SHA-256 of the key; the raw key is not retained. Retries with the same recognized normalized creation fields resolve the original escrow identity and return its current row with 201 and Idempotent-Replay=true. They do not preserve the creation-time status snapshot. Changed bound input returns 409 before wallet mutation. Without the header, a retry can create and fund another escrow.",
+            "Resting: the hosted service currently returns 503 escrow_resting before validation or any database work, and no wallet is debited. The retained behaviour below applies only after a reviewed reopening. Atomically locks an active creator wallet owned by the bearer project, applies a guarded relative debit, creates a funded generic escrow, and records its lock transaction. An optional preassigned worker must also be active, owned by the same project, and use the creator wallet currency; for cross-project work, omit workerWalletId and let the other project accept the escrow. Idempotency-Key is optional for compatibility. With it, successful creation is permanently deduplicated in PostgreSQL by authenticated project and SHA-256 of the key; the raw key is not retained. Retries with the same recognized normalized creation fields resolve the original escrow identity and return its current row with 201 and Idempotent-Replay=true. They do not preserve the creation-time status snapshot. Changed bound input returns 409 before wallet mutation. Without the header, a retry can create and fund another escrow.",
           parameters: [
             {
               $ref: "#/components/parameters/DurableEscrowIdempotencyKey",
@@ -8776,6 +8781,7 @@ function spec() {
             "409": errorResponse(
               "Idempotency-Key was used with changed input, or locked wallet/reservation state changed",
             ),
+            "503": { $ref: "#/components/responses/EscrowResting" },
           },
         },
       },
@@ -8854,15 +8860,16 @@ function spec() {
         ],
         post: {
           tags: ["economy"],
-          summary: "Release a generic funded escrow to its worker wallet",
+          summary: "Release a generic funded escrow to its worker wallet (resting: 503 escrow_resting)",
           description:
-            "The creator project's bearer authorizes release. The escrow must be generic, funded, and assigned; one transaction credits the worker wallet, marks the escrow released, and records the release. The API verifies no worker signature, completion proof, or bilateral approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "Resting: the hosted service currently returns 503 escrow_resting before any database work; the retained behaviour below applies only after a reviewed reopening. The creator project's bearer authorizes release. The escrow must be generic, funded, and assigned; one transaction credits the worker wallet, marks the escrow released, and records the release. The API verifies no worker signature, completion proof, or bilateral approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Released escrow"),
             "400": errorResponse("Escrow is not funded or has no assigned worker"),
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
             "409": errorResponse("Escrow is workflow-managed"),
+            "503": { $ref: "#/components/responses/EscrowResting" },
           },
         },
       },
@@ -8878,15 +8885,16 @@ function spec() {
         ],
         post: {
           tags: ["economy"],
-          summary: "Refund a generic escrow to its creator wallet",
+          summary: "Refund a generic escrow to its creator wallet (resting: 503 escrow_resting)",
           description:
-            "The creator project's bearer authorizes refund of a generic funded or disputed escrow. One transaction restores the creator wallet, marks the escrow refunded, and records the refund. The API verifies no worker signature or approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "Resting: the hosted service currently returns 503 escrow_resting before any database work; an existing funded or disputed escrow that has to settle needs manual operator recovery. The retained behaviour below applies only after a reviewed reopening. The creator project's bearer authorizes refund of a generic funded or disputed escrow. One transaction restores the creator wallet, marks the escrow refunded, and records the refund. The API verifies no worker signature or approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Refunded escrow"),
             "400": errorResponse("Escrow is neither funded nor disputed"),
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
             "409": errorResponse("Escrow is workflow-managed"),
+            "503": { $ref: "#/components/responses/EscrowResting" },
           },
         },
       },
@@ -8904,7 +8912,7 @@ function spec() {
           tags: ["economy"],
           summary: "Mark a generic funded escrow disputed",
           description:
-            "The creator project's bearer can change a generic funded escrow to disputed. This records only the escrow status: it does not create a marketplace dispute case, select an arbiter, verify evidence, or route money by a ruling. The creator project's bearer can subsequently refund it. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "The creator project's bearer can change a generic funded escrow to disputed. This records only the escrow status: it does not create a marketplace dispute case, select an arbiter, verify evidence, or route money by a ruling. The creator project's bearer can subsequently refund it once generic refund reopens; refund currently rests with 503 escrow_resting. Workflow-managed marketplace escrows refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Escrow marked disputed"),
             "400": errorResponse("Escrow is not funded"),

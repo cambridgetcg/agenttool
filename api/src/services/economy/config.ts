@@ -114,6 +114,27 @@ export function depositAddressDisclosureAllowed(): boolean {
   return false;
 }
 
+/** Generic escrow money movement — POST /v1/escrows, /:id/release and
+ * /:id/refund — is resting (owner decision, 2026-10-18), the way payout
+ * admission and deposit-address disclosure rest. The routes refuse with
+ * stable 503 escrow_resting before body validation, database, or Redis work.
+ * Before this was named, all three already returned an unnamed 503 whenever
+ * workers were disabled: the routes called getRedis(), and the bin/deploy.sh
+ * fence requires AGENTTOOL_DISABLE_WORKERS=1 on every production machine.
+ * This names that status quo rather than changing it.
+ *
+ * No environment flag can reopen it. A reviewed reopening must first make
+ * createEscrow apply the wallet spending policy that spendFromWallet enforces
+ * (see services/economy/escrow.ts) and drop the unused Redis argument.
+ * Accept, dispute, and reads move no balance and are not gated here, nor are
+ * workflow-managed marketplace escrows, which settle through their own
+ * services. Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow and wallet
+ * spend — resting"); policy: docs/BUSINESS-MODEL.md.
+ */
+export function genericEscrowMoneyMovementAllowed(): boolean {
+  return false;
+}
+
 /** CRYPTO_WEBHOOK_ALLOW_UNSIGNED applies only outside a production runtime
  * (NODE_ENV=production or FLY_APP_NAME set). Read at request time. */
 export function unsignedDepositWebhooksAllowed(): boolean {

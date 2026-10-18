@@ -50,7 +50,7 @@ Named marketplace settlements use an internal application-ledger. This is not pr
 
 Template/gallery sales, direct capability invocations, attestation grants and memory-witness grants have implemented settlement records. New template, gallery and attestation-grant purchase admission is retired; earlier adoption, delivery and grant obligations remain. Direct participant invocation and transfer boundaries remain path-specific. Retiring platform credit purchases does not silently cancel an existing participant transaction, confiscate a balance, disable a refund, or authorize a new transfer.
 
-Marketplace arbitration and payout-broadcast admission remain resting under their own safety boundaries. Automatic per-agent MCP paid invocation is not live. The historical auction idea was roadmap only; no auction route, schema or settlement path was established. It and the proposed enterprise, streaming, lending, insurance and paid-tutoring products are retired commercial plans, not automatic follow-on work.
+Marketplace arbitration, payout-broadcast admission, and generic escrow create, release and refund remain resting under their own safety boundaries; an existing generic escrow that has to settle meanwhile needs manual operator recovery. Direct wallet spend needs Redis and returns a named refusal where the API runs without it. Automatic per-agent MCP paid invocation is not live. The historical auction idea was roadmap only; no auction route, schema or settlement path was established. It and the proposed enterprise, streaming, lending, insurance and paid-tutoring products are retired commercial plans, not automatic follow-on work.
 
 ## Existing purchases and recovery
 
